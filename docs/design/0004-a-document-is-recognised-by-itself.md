@@ -58,3 +58,37 @@ place carries across a re-save far more often than it otherwise would, and that
 when it cannot be carried the app starts them at the beginning rather than putting
 them somewhere that might be wrong. That is deliberate, and it is the app's rule
 everywhere: a place that might be wrong is worse than no place at all.
+
+## Recognising it from its table of contents, rather than from every page
+
+A book is recognised by reading a small part of it: the packing list every ebook
+carries at the end, which names each piece inside it and records a small check
+number for each one. Change a single sentence anywhere in the book and one of
+those check numbers changes, so the packing list identifies the book without the
+book having to be read through.
+
+**The reason this was worth changing is a number the owner would have felt every
+time.** Reading the whole of the owner's own novel to recognise it took **14.4
+seconds**, during which the app was frozen — not slow, frozen, because the work
+and the drawing happen in the same place, so not even a spinner could appear.
+Reading only the packing list takes well under a tenth of a second. It is a
+hundred and seventy times less work for an answer that is, in the way that
+matters here, the same answer.
+
+**What it buys beyond speed.** Ebooks get re-packed: a converter, a different
+tool, a re-download from the same shop, all produce a file made of different
+bytes holding exactly the same book. Reading every page said those were different
+books, and the owner's place in one meant nothing to the other. The packing list
+says they are the same book, so the place carries over. The engineering record
+had already admitted this weakness in the old rule; it is now gone rather than
+noted.
+
+**What it gives up.** Two files that hold the same pieces are now the same book,
+even if they differ in ways nothing in this app can see. In practice that is what
+was wanted. The case where it would be wrong — someone deliberately building two
+different books that claim the same pieces — needs intent, and the books here are
+the owner's own.
+
+There is also a smaller, duller cost: the few books already on the shelf were
+recognised by the old rule and are not recognised by the new one. They are added
+again, which takes a moment and loses nothing, and it happens once.
