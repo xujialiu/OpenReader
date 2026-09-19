@@ -34,9 +34,10 @@ Node test environment simulates.
 
 ## What is tested here, today
 
-- `spike/hermes-support.test.ts` — the probes of notes/NOTES.md items 1 and 2.
-  It does **not** answer them; it runs on V8. What it checks is that the probes
-  assert the right cases and that a probe reports a crash instead of causing one.
+- `app-config.test.ts` — the ADR decisions that live in `app.config.ts` and
+  `package.json` rather than in code, where nothing would notice them being
+  undone. The UIScene plugin of ADR 0018 is one of them: deleting its line
+  breaks the app at launch, on a native build, far from the line.
 - `core/providers/import-boundary.test.ts` — lints source text against the real
   `eslint.config.js` and fails if ADR 0013's import boundary stops being
   enforced. A rule nothing checks is found broken at the worst possible moment.

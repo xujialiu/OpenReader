@@ -17,19 +17,6 @@ language detector with two megabytes of data.
 These two components, not the provider layer, are the bulk of this project. They
 will be written by adapting Zotero's own implementation, which is open source.
 
-## Consequences
-
-Choosing EPUB first (ADR 0007) is what makes this tractable: two of the three
-repair layers the plugin needed for Zotero's segmenter — 457 lines putting back
-a page's first line, 94 lines detecting equation source embedded at font size
-zero — are PDF-only and need not be written yet. The third, rejoining a
-paragraph cut mid-sentence, is 154 lines and is still needed.
-
-The existing repair layers and the `test/fixtures/` directory, which holds real
-constructed cases for CJK, Romanian diacritics, angle brackets and numbers, are
-the test suite for the new segmenter. They are the accumulated record of where
-sentence splitting actually goes wrong, and are worth more than the code.
-
 ## The segmenter and the engine are borrowed differently
 
 "Adapting Zotero's implementation" means something different for each of the

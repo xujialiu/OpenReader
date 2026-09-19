@@ -1,3 +1,15 @@
+/**
+ * Registers the TypeScript loader that Expo uses to require the local config
+ * plugin below. Expo reads this file itself, but a plugin it resolves from a
+ * path is loaded through plain `require`, which cannot read `.ts` — so without
+ * this line `./plugins/with-ui-scene-lifecycle.ts` is simply not found.
+ *
+ * It must stay above every other import: the loader has to be registered before
+ * anything tries to resolve a TypeScript file through it. It is a build-time
+ * shim and reaches nothing in the app.
+ */
+import 'tsx/cjs';
+
 import type { ExpoConfig } from 'expo/config';
 
 /**
@@ -79,16 +91,22 @@ const config: ExpoConfig = {
      * ADR 0018. Adopts the UIScene life cycle, without which iOS 27 kills the
      * app at launch before any JavaScript runs — every other entry in this list
      * is moot until this one has run. Expo SDK 57.0.24 ships the scene delegate
-     * in its own pod and wires it up nowhere; the plugin is roughly twenty
-     * lines of doing that.
+     * in its own pod and wires it up nowhere; the plugin is three edits to the
+     * generated project that do that.
      *
      * It takes no options on purpose. There is one correct way to adopt the
-     * scene life cycle and nothing here that a reader should be choosing
-     * between. Delete this line and the plugin together once Expo's prebuild
-     * template writes `UIApplicationSceneManifest` itself — the plugin prints a
-     * warning at prebuild time when it detects that day has come.
+     * scene life cycle and nothing here a reader should be choosing between.
+     *
+     * Delete this line and the plugin together once Expo's prebuild template
+     * adopts the scene life cycle itself. Nothing has to be remembered for that
+     * to happen: each of the plugin's three edits asserts that the generated
+     * project still looks the way it expects and **fails the prebuild** when it
+     * does not, so the day Expo changes the template is the day the build stops
+     * and says so. A warning would have been the wrong tool — a prebuild prints
+     * hundreds of lines, and the failure being guarded against is a launch-time
+     * crash whose entire signal is one symbol name in a crash report.
      */
-    './plugins/with-ui-scene-lifecycle',
+    './plugins/with-ui-scene-lifecycle.ts',
 
     [
       'react-native-audio-api',

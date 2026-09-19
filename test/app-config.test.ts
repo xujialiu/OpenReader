@@ -106,3 +106,22 @@ describe('ADR 0001: ios/ and android/ are generated, never committed', () => {
     expect(config.android?.package).toBeDefined();
   });
 });
+
+describe('ADR 0018: the app adopts the UIScene life cycle', () => {
+  it('keeps the scene plugin in the config', () => {
+    // Without it iOS 27 kills the app at launch, before any JavaScript, with no
+    // error beyond a crash report naming
+    // _UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption. Nothing
+    // else in this suite runs against a native build, so this line disappearing
+    // would next be noticed by a person watching an app fail to open.
+    expect(plugin('./plugins/with-ui-scene-lifecycle.ts')).toEqual({});
+  });
+
+  it('keeps the TypeScript loader that lets Expo require that plugin', () => {
+    // Expo reads app.config.ts itself, but loads a path-resolved plugin through
+    // plain `require`, which cannot read .ts. Dropping `tsx` turns the line
+    // above into a plugin that is silently not found.
+    const dependencies = { ...manifest.dependencies, ...manifest.devDependencies } as Record<string, string>;
+    expect(dependencies['tsx']).toBeDefined();
+  });
+});

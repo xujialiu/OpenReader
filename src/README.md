@@ -17,7 +17,6 @@ The split that matters is `core/` against everything else.
 | [`renderer/`](renderer/) | The bridge to epub.js in a WebView, and the highlighter inside it. | ADR 0011, 0005 |
 | [`now-playing/`](now-playing/) | Lock screen and headphone controls: our module on iOS, the library's on Android. | ADR 0016 |
 | [`keys/`](keys/) | Provider API keys in the Keychain. | ADR 0002 |
-| [`spike/`](spike/) | The day-one engine spike. Deleted when its notes items are struck. | notes/NOTES.md 1, 2 |
 
 Dependencies point inwards: `playback/`, `renderer/`, `now-playing/` and
 `keys/` may import from `core/`, and `core/` may import from none of them.

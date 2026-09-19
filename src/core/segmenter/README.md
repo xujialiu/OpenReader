@@ -28,8 +28,8 @@ what was avoided here.
 `unicode-segmenter` is a dependency for the word and grapheme work that
 `Intl.Segmenter` would otherwise do, and it is **required, not optional**:
 measured on Hermes 250829098.0.17 (the engine React Native 0.86.3 bundles),
-`Intl.Segmenter is not a function`. See `src/spike/hermes-support.ts`, which is
-what measured it. Import it from `unicode-segmenter/intl-polyfill`.
+`Intl.Segmenter is not a function`. See notes/NOTES_2026-09-19.md, which is the
+record of that measurement. Import it from `unicode-segmenter/intl-polyfill`.
 
 ## The repair layer that is still needed
 

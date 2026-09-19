@@ -61,7 +61,8 @@ With only `expo-module.config.json` present and no podspec and no Swift:
   and, unlike every real module, **no `podspecPath`** — and neither prebuild nor
   pod install treats the absence as an error.
 - The app builds, installs and runs with it in place (Xcode 27.0, iOS 27.0
-  simulator — with the separate UIScene fix described in `src/spike/`).
+  simulator — with the separate UIScene fix of ADR 0018, without which no build
+  of this app launches at all).
 
 So an `apple` platform declared with nothing behind it is tolerated rather than
 merely untested. That is worth knowing because it also means autolinking will

@@ -53,14 +53,21 @@ corrected in place, because its conclusion was the opposite of the decision.)
 
 Hermes was checked for the features the ported code depends on. Unicode
 property escapes (`\p{L}`, `\p{Script=Han}`), which `align.ts` and
-`speech-text.ts` require, are supported. Two remain unresolved and belong on a
-day-one spike rather than in an assumption:
+`speech-text.ts` require, are supported. Two could not be settled by reading and
+went to a day-one spike instead of into an assumption. **Both were measured on
+2026-09-19 and both are supported** — Hermes 250829098.0.17, the engine React
+Native 0.86.3 bundles:
 
-- `String.prototype.normalize('NFKC')` has a history of crashing on Hermes and
-  is not mentioned in recent release notes. It is used in two places.
-- `TextDecoder` — the Hermes release notes of 2026-06-05 say it now ships with
-  the engine; an older Hermes issue says it does not. Which is true of the
-  Hermes actually bundled in React Native 0.86 was not established.
+- `String.prototype.normalize('NFKC')`, which has a history of crashing on
+  Hermes and is not mentioned in recent release notes, works.
+- `TextDecoder`, which the Hermes release notes of 2026-06-05 said ships with
+  the engine and an older issue said does not, is present and correct.
+
+So nothing in the ported code needs a polyfill or a JavaScriptCore decision, and
+this ADR loses the two risks it was carrying. The measurement — including what
+it found that nobody had asked about, that Hermes has no `Intl.Segmenter` at all
+— is in `notes/NOTES_2026-09-19.md`, which is the record; this is a pointer to
+it (ADR 0015).
 
 ## The deployment target is iOS 17.2, not the platform minimum
 

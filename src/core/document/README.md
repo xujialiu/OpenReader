@@ -68,8 +68,9 @@ utterance" means a different place on each side.
 Text anchors must be Unicode-normalised on **both** the storing and the matching
 side. Zotero normalises EPUB text to NFC, and an exact comparison against a
 document that happens to be NFD fails silently — the plugin has been bitten by
-this once. That is why `src/spike/hermes-support.ts` probes NFC and NFD as well
-as the NFKC the notes ask about.
+this once. That is why the day-one engine spike probed NFC and NFD as well as
+the NFKC the notes asked about. Both are supported on Hermes 250829098.0.17; see
+notes/NOTES_2026-09-19.md.
 
 `core/align.ts` — 292 lines of longest-common-subsequence matching with bridging,
 written for the same class of problem when a provider reports words that differ
