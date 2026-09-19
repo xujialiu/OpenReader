@@ -4,12 +4,12 @@
 
 Four places. Putting something in the wrong one is how it stops being read.
 
-| | Who reads it | What it holds |
-| --- | --- | --- |
+|                | Who reads it                   | What it holds                                                        |
+| -------------- | ------------------------------ | -------------------------------------------------------------------- |
 | `docs/design/` | Someone who does not read code | The trade-off: what was chosen, what was given up, and who it is for |
-| `docs/adr/` | Someone who does | The technical decision, and the measured facts behind it |
-| `notes/` | The author, later | What was measured, when |
-| `CONTEXT.md` | Everyone | The glossary, and nothing else |
+| `docs/adr/`    | Someone who does               | The technical decision, and the measured facts behind it             |
+| `notes/`       | The author, later              | What was measured, when                                              |
+| `CONTEXT.md`   | Everyone                       | The glossary, and nothing else                                       |
 
 ## `docs/design/` — the product argument
 
@@ -79,3 +79,25 @@ than batching it. Documentation in this repository has been wrong four times in
 one day — each time because reality moved and the file that described it did
 not. Every one was fixed while the context was still in hand; none was left for
 a later sweep.
+
+# Testing on the device
+
+## Silence the simulator before playing anything
+
+Turn the simulator's volume all the way down **before** the first `play`, not
+after someone hears it. The simulator plays through the machine's own speakers,
+and this work happens at every hour.
+
+## Play only while measuring, then stop
+
+Stop playback the moment the thing being tested is established. Never leave a
+reading running while writing up, taking screenshots or thinking.
+
+The cost is not the audio, it is the transcript: a reading that keeps going keeps
+producing clip fetches, position corrections and log lines, and an agent watching
+the device reads all of them. That is the owner's tokens spent on nothing.
+
+This is not an argument for testing less. A measurement that needs a minute of
+continuous reading — highlight drift, memory over a long session — needs the
+minute. Take it, and **stop as soon as the numbers are in hand**. What is ruled
+out is idle playback, not measured playback.

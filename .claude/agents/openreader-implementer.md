@@ -23,6 +23,11 @@ So: **a green test run is not evidence.** Neither is reading the source of a dep
 
 ## How to establish something is true
 
+- **Silence the simulator before the first `play`, and stop playback as soon as the
+  measurement is in hand.** It plays through the machine's speakers at every hour,
+  and a reading left running keeps producing cues and log lines you then read —
+  the owner's tokens spent on nothing. A minute of drift measurement still gets
+  its minute; idle playback does not.
 - **Measure it.** `xcrun simctl io 13D669CF-ADBD-470C-9D6C-C3B03B9746E9 screenshot <path>` works; Metro is on 8081; the owner's 33 MB, 2,077-section book and a small fixture are both on the device at "On My iPhone".
 - **Prove an assertion is not vacuous.** Break the thing it guards, watch the test fail, put it back. An assertion nobody has seen fail is a comment.
 - **Quote what you read**, with file and line, when it decides something. "The library does X" is not checkable; `node_modules/…/File.js:23` is.
