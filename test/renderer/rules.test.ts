@@ -215,6 +215,87 @@ describe('the two halves stay in separate files (README.md)', () => {
   });
 });
 
+describe('nothing that does not survive a render is remembered', () => {
+  /**
+   * The defect a device run found on 2026-09-19, and the one this whole file exists
+   * to stop coming back: the word highlight painted nothing while every step of the
+   * chain looked correct from the inside. `blocks` had held `parts`, `element` and
+   * `contents` — DOM references — across renders. epub.js replaces a section's
+   * document as the reader pages through it, which is what a paginated reader does,
+   * so a correct `Range` was built in a document that had lost its browsing context
+   * and `build()` refused it with no message.
+   */
+  it('keeps only the text, the CFI and the section in the durable record', () => {
+    const program = code('highlighter.ts');
+    expect(program).toMatch(/blocks\.set\(id, \{ text: [^}]*cfi: [^}]*section: [^}]*\}\)/);
+    expect(program).not.toMatch(/blocks\.set\([^)]*\b(parts|element|contents)\s*:/);
+  });
+
+  it('resolves the DOM against the live document instead', () => {
+    // Walked once per document, not once per word: `maps` is keyed by the document,
+    // so a document epub.js has replaced is simply not in it.
+    const program = code('highlighter.ts');
+    expect(program).toContain('maps.set(contents.document, map)');
+    expect(program).toContain('var live = liveBlock(range.block)');
+    expect(program).toContain('var dom = live.document.createRange()');
+  });
+
+  it('asks defaultView, which is the question isConnected cannot answer', () => {
+    // A detached document still owns its nodes and they still report themselves
+    // connected to it. Losing the browsing context is the thing that can be seen.
+    expect(code('highlighter.ts')).not.toContain('isConnected');
+    expect(code('highlighter.ts')).toContain('contents.document.defaultView');
+  });
+
+  it('says so out loud when it cannot draw a highlight', () => {
+    // The one step in the chain that was silent, which is why a defect in the thing
+    // this project exists to do took a device run to find rather than arriving as a
+    // message. Philosophy rule 1.
+    const program = code('highlighter.ts');
+    expect(program).toContain('report(why(state.utteranceRanges))');
+    expect(program).toContain('report(why(ranges))');
+  });
+});
+
+describe('the highlight actually paints', () => {
+  /**
+   * **`user-select: none` silently stops `::highlight()` painting.** Measured on a
+   * device, 2026-09-19, and written down nowhere else — not in the CSS Custom
+   * Highlight API's documentation and not in the library's.
+   *
+   * Nothing about it looks like a failure: `CSS.highlights` accepts the `Highlight`,
+   * `::highlight()` parses into `cssRules`, the `Range` covers exactly the right
+   * word, and the page stays blank. It cost a run through the DOM, the CFIs, the
+   * coordinate chain, the multi-column layout and the iframe's sandbox before the
+   * cause was found, and it is the single line between a working highlight and a
+   * reader that paints nothing.
+   */
+  it('declares the text selectable, which is what makes ::highlight() paint', () => {
+    const program = code('highlighter.ts');
+    expect(program).toContain('-webkit-user-select: text !important');
+    expect(program).toContain('user-select: text !important');
+    // The property that actually suppresses the iOS long-press menu stays, which is
+    // the part `enableSelection: false` was really buying.
+    expect(program).toContain('-webkit-touch-callout: none !important');
+  });
+
+  it('is still fighting something, so the rule is still needed', () => {
+    // The library's template applies `body { user-select: none }` through
+    // `rendition.themes.default` whenever `enableSelection` is false, which is its
+    // default and the app's. If that ever goes, this stylesheet is merely harmless.
+    expect(library('template.js')).toContain("'user-select': 'none'");
+  });
+
+  it('installs the stylesheet before any highlight is registered', () => {
+    // Order is load-bearing: flipping `user-select` after a `Highlight` is already
+    // registered does not repaint it — the device run needed a re-register to see
+    // anything. Nothing re-registers at runtime, so the rule has to be there first.
+    const program = code('highlighter.ts');
+    expect(program).toContain('ensureStyle(contents.document)');
+    expect(program).toContain('ensureStyle(win.document)');
+  });
+});
+
 describe('what was read out of @epubjs-react-native/core rather than its documentation', () => {
   it('still forwards the parsed object, not the WebView event', () => {
     // `onWebViewMessage?: (event: any) => void` and the parameter is called `event`,

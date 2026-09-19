@@ -17,10 +17,20 @@
  * ## What it owns
  *
  * - **The Blocks.** epub.js hands us a DOM (ADR 0011) and `core/` cannot see one,
- *   so the walk that turns a rendered section into Blocks lives here. It keeps the
- *   text nodes each Block's text was built from, which is the last step of the
- *   coordinate chain in `cursor.ts`: a code-unit offset into a Block's text is a
- *   node and an offset into it.
+ *   so the walk that turns a rendered section into Blocks lives here, along with
+ *   the last step of `cursor.ts`'s coordinate chain: a code-unit offset into a
+ *   Block's text is a text node and an offset into it.
+ *
+ *   **What is remembered across renders is text and a CFI, and nothing else.**
+ *   epub.js replaces a section's document as the reader pages through it, so a
+ *   remembered node, element or `Contents` is a reference into a document that may
+ *   already have lost its browsing context — and `isConnected` does not say so,
+ *   because a detached document still owns its nodes and they still report
+ *   themselves connected to it. The text nodes are therefore resolved against the
+ *   live document at paint time, cached per document rather than per Block, so the
+ *   walk happens once when a section renders and never per word. A device run found
+ *   the other way round: a correct `Range` built in a dead document, painting
+ *   nothing, and every step looking right from the inside.
  * - **The clock between corrections.** One position correction arrives about once
  *   a second; `requestAnimationFrame` interpolates against a start time in
  *   between. Nothing crosses the bridge per word (ADR 0005).
@@ -66,9 +76,44 @@ export const DEFAULT_HIGHLIGHT: HighlightStyles = {
   word: 'background-color: rgba(255, 168, 0, 0.62);',
 };
 
+/**
+ * **`user-select: none` stops `::highlight()` painting, silently.** Measured on a
+ * device, 2026-09-19, and written down nowhere else.
+ *
+ * `@epubjs-react-native/core`'s template calls `rendition.themes.default({ body:
+ * { 'user-select': 'none', '-webkit-user-select': 'none', '-webkit-touch-callout':
+ * 'none', … } })` whenever `enableSelection` is false — which is its default, and
+ * the app's. WebKit paints a custom highlight through the same machinery it paints
+ * a selection with, so text the document has declared unselectable gets no
+ * highlight geometry and nothing is drawn.
+ *
+ * Nothing about it looks like a failure. `CSS.highlights` accepts the `Highlight`,
+ * `::highlight()` parses into `cssRules`, the `Range` is over exactly the right
+ * word, the registry reports the right size, and the page stays blank. The same
+ * `Highlight` in a sibling iframe without the rule paints immediately; that pair of
+ * screenshots is how this was found, after the DOM, the CFIs, the coordinate chain,
+ * the multi-column layout and the iframe's sandbox had each been eliminated.
+ *
+ * So the highlighter declares the selectability its own highlight requires, with
+ * `!important` because the library's declarations carry no weight of their own and
+ * because this stylesheet is appended after them. `-webkit-touch-callout: none`
+ * stays: it is the property that actually suppresses the iOS long-press menu, which
+ * is what `enableSelection: false` was buying. What it does not restore is the
+ * whole of that setting — text becomes selectable by long-press again — and that
+ * is the right trade, because the highlight is why the app exists (ADR 0005) and
+ * ADR 0001 raised the deployment floor to 17.2 to have it.
+ */
+const SELECTABLE =
+  'html, body, body * {\n' +
+  '  -webkit-user-select: text !important;\n' +
+  '  user-select: text !important;\n' +
+  '  -webkit-touch-callout: none !important;\n' +
+  '}\n';
+
 /** The stylesheet the program installs in each rendered section. The Utterance rule comes first so that the word, registered second, paints over it. */
 export function highlightCss(styles: HighlightStyles): string {
   return (
+    SELECTABLE +
     '::highlight(' + UTTERANCE_HIGHLIGHT + ') { ' + styles.utterance + ' }\n' +
     '::highlight(' + WORD_HIGHLIGHT + ') { ' + styles.word + ' }\n'
   );
@@ -138,11 +183,27 @@ ${constants}
     return true;
   }
 
-  /* Block id -> { text, parts, element, contents, cfi }. \`parts\` is the text
-     nodes the text was built from, each with its offset in that text and the
-     length it had: a code-unit offset into a Block becomes a node and an offset
-     into it, which is the last step of cursor.ts's coordinate chain. */
+  /* Block id -> { text, cfi, section }. **What survives a render, and nothing
+     else.**
+
+     epub.js replaces a section's document as the reader pages through it — that
+     is what a paginated reader does — so a remembered text node, element or
+     Contents is a reference into a document that may already have lost its
+     browsing context. \`isConnected\` does not say so: a detached document still
+     owns its nodes and they still report themselves connected to it. The question
+     it cannot answer is \`ownerDocument.defaultView\`, and the answer to *that*
+     was how this file once built a correct Range in a dead document and painted
+     nothing while looking right from the inside.
+
+     So the durable record is text and a CFI — which is what ADR 0008 already
+     committed this project to as the thing that identifies a place — and the DOM
+     is resolved against the live document at paint time. */
   var blocks = new Map();
+  /* The other half: document -> (Block id -> the walked Block, with the text nodes
+     its offsets index into). Keyed by the document, so a document epub.js has
+     replaced is simply not in here and the next paint walks the live one instead
+     of trusting a dead one. Walked once per document, not once per word. */
+  var maps = new WeakMap();
   /* Spine index -> the ids it contributed, so re-rendering a section replaces
      its Blocks instead of accumulating them. */
   var bySection = new Map();
@@ -224,7 +285,25 @@ ${constants}
     return found;
   }
 
-  function describe(contents) {
+  function ensureStyle(doc) {
+    /* The one DOM mutation this file makes, once per document, because a
+       ::highlight() rule has to live in the document it styles. */
+    if (doc.getElementById(STYLE_ID)) return;
+    var style = doc.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = CSS_TEXT;
+    (doc.head || doc.documentElement).appendChild(style);
+  }
+
+  /* ---- what a document holds, resolved once per document ---- */
+
+  /* Walk a live document, record what survives of each Block and tell the React
+     Native side about them. Idempotent per document: a document already in \`maps\`
+     has nothing new in it, and a re-render is a *different* document. */
+  function adopt(contents) {
+    if (maps.has(contents.document)) return;
+    ensureStyle(contents.document);
+
     var index = contents.sectionIndex;
     var section = null;
     try {
@@ -239,6 +318,7 @@ ${constants}
     if (previous) for (i = 0; i < previous.length; i++) blocks.delete(previous[i]);
 
     var found = walk(contents);
+    var map = new Map();
     var ids = [];
     var reported = [];
     for (i = 0; i < found.length; i++) {
@@ -253,13 +333,10 @@ ${constants}
       } catch (error) {
         cfi = '';
       }
-      blocks.set(id, {
-        text: found[i].text,
-        parts: found[i].parts,
-        element: found[i].element,
-        contents: contents,
-        cfi: cfi
-      });
+      /* The durable half: text, CFI, section. No node, no element, no Contents. */
+      blocks.set(id, { text: found[i].text, cfi: cfi, section: index });
+      /* The perishable half, under this document's own key. */
+      map.set(id, found[i]);
       ids.push(id);
       reported.push({
         id: id,
@@ -270,8 +347,40 @@ ${constants}
         cfi: cfi
       });
     }
+    maps.set(contents.document, map);
     bySection.set(index, ids);
     post({ type: BLOCKS, sectionIndex: index, section: href, blocks: reported });
+  }
+
+  /* The rendered Contents for a section, or null — which is the ordinary "the
+     reading ran ahead of the page" case. */
+  function liveContents(section) {
+    var list = rendition.getContents();
+    for (var i = 0; i < list.length; i++) {
+      var contents = list[i];
+      if (!contents || contents.sectionIndex !== section) continue;
+      /* The question \`isConnected\` cannot answer. A document epub.js has replaced
+         still owns its nodes and they still report themselves connected to it;
+         what it has lost is its browsing context. */
+      if (!contents.document || !contents.document.defaultView) continue;
+      adopt(contents);
+      return contents;
+    }
+    return null;
+  }
+
+  /* A Block as it exists **now**: the live document's own text nodes for it, and
+     the live text they hold. Resolved on every paint rather than remembered, which
+     is what makes the question "is this document still alive" stop existing. */
+  function liveBlock(id) {
+    var record = blocks.get(id);
+    if (!record) return null;
+    var contents = liveContents(record.section);
+    if (!contents) return null;
+    var map = maps.get(contents.document);
+    var found = map ? map.get(id) : null;
+    if (!found) return null;
+    return { document: contents.document, parts: found.parts, text: found.text };
   }
 
   /* ---- the highlights ---- */
@@ -279,6 +388,9 @@ ${constants}
   function registryFor(win) {
     var found = registries.get(win.document);
     if (found) return found;
+    /* Belt and braces, and cheap: a highlight registered in a document with no
+       ::highlight() rule in it paints nothing and reports nothing. */
+    ensureStyle(win.document);
     /* Registration order is paint order for overlapping custom highlights, so the
        Utterance goes in first and the word paints over it. Both objects are made
        once and then mutated: a delete followed by a set would move the word to the
@@ -312,8 +424,8 @@ ${constants}
     put(installed.word, []);
   }
 
-  function partAt(record, offset, atEnd) {
-    var parts = record.parts;
+  function partAt(live, offset, atEnd) {
+    var parts = live.parts;
     for (var i = 0; i < parts.length; i++) {
       var from = parts[i].at;
       var to = from + parts[i].len;
@@ -323,22 +435,15 @@ ${constants}
   }
 
   function domRange(range) {
-    var record = blocks.get(range.block);
-    /* Not rendered. Ordinary: the reading runs ahead of the page, and epub.js
-       destroys a section's iframe when it leaves the screen. */
-    if (!record) return null;
-    var parts = record.parts;
-    for (var i = 0; i < parts.length; i++) {
-      /* The Block's text was built from these nodes. If one has been detached or
-         rewritten, every offset past it means something else — which is exactly
-         how a highlight lands three paragraphs away. Remembering the length is
-         what makes that detectable rather than silent. */
-      if (!parts[i].node.isConnected || parts[i].node.data.length !== parts[i].len) return null;
-    }
-    var from = partAt(record, range.start, false);
-    var to = partAt(record, range.end, true);
+    /* Resolved against the live document, every time. There is no stale-node check
+       here because there is nothing stale to check: these nodes were found in a
+       document that had a browsing context a moment ago. */
+    var live = liveBlock(range.block);
+    if (!live) return null;
+    var from = partAt(live, range.start, false);
+    var to = partAt(live, range.end, true);
     if (!from || !to) return null;
-    var dom = record.contents.document.createRange();
+    var dom = live.document.createRange();
     dom.setStart(from.node, range.start - from.at);
     dom.setEnd(to.node, range.end - to.at);
     return dom;
@@ -361,26 +466,47 @@ ${constants}
     return { ranges: built, window: doc.defaultView };
   }
 
-  /* ADR 0008: text is the arbiter of whether a locator is correct. The Block text
-     here came out of the DOM; the text in the message came out of the Utterance
-     that was segmented from it. They disagree only if the two sides are looking at
-     different documents, and then a highlight would land somewhere plausible and
-     wrong. */
+  /* ADR 0008: text is the arbiter of whether a locator is correct. The text
+     compared here is the **live** document's, walked a moment ago; the text in the
+     message came out of the Utterance that was segmented from it. They disagree
+     only when the two sides are looking at different documents, and then a
+     highlight would land somewhere plausible and wrong. */
   function mismatch(ranges) {
     for (var i = 0; i < ranges.length; i++) {
-      var record = blocks.get(ranges[i].block);
-      if (!record) continue;
-      if (record.text.slice(ranges[i].start, ranges[i].end) !== ranges[i].text) {
+      var live = liveBlock(ranges[i].block);
+      if (!live) continue;
+      if (live.text.slice(ranges[i].start, ranges[i].end) !== ranges[i].text) {
         return 'Block ' + ranges[i].block + ' does not hold the text that was sent for it';
       }
     }
     return null;
   }
 
+  /* Why a highlight could not be drawn, in words fit for a status bar.
+     Silence here is what let a Range built in a dead document look correct from
+     the inside while painting nothing — it took a device run to find, because the
+     one step in the chain that failed was the one that said nothing. */
+  function why(ranges) {
+    for (var i = 0; i < ranges.length; i++) {
+      var id = ranges[i].block;
+      var record = blocks.get(id);
+      if (!record) return 'Block ' + id + ' has not been reported: no rendered section holds it';
+      if (!liveContents(record.section)) {
+        return 'Block ' + id + ' is in section ' + record.section + ', which is not on the page';
+      }
+      if (!liveBlock(id)) return 'Block ' + id + ' was not found in the rendered section';
+    }
+    return 'the Utterance covers no Block';
+  }
+
   function showUtterance() {
     var built = build(state.utteranceRanges);
     if (!built) {
       clearHighlights();
+      /* Reported, not swallowed. Philosophy rule 1, and the reason the problem
+         message exists: once per Utterance, so a reading that is ahead of the page
+         says so once rather than sixty times a second. */
+      report(why(state.utteranceRanges));
       return false;
     }
     var registry = registryFor(built.window);
@@ -392,7 +518,10 @@ ${constants}
 
   function showWord(ranges) {
     var built = build(ranges);
-    if (!built) return;
+    if (!built) {
+      report(why(ranges));
+      return;
+    }
     var registry = registryFor(built.window);
     moveTo(registry);
     put(registry.word, built.ranges);
@@ -470,24 +599,27 @@ ${constants}
 
   /* ---- a section arriving, or arriving again ---- */
 
+  /* Whether the Utterance being read lives in this section. Asked so that a
+     section rendering while the reading is elsewhere neither re-installs nor
+     reports: that is the reader turning a page, not a problem. */
+  function covers(section, ranges) {
+    for (var i = 0; i < ranges.length; i++) {
+      var record = blocks.get(ranges[i].block);
+      if (record && record.section === section) return true;
+    }
+    return false;
+  }
+
   function attach(contents) {
-    if (!contents || !contents.document) return;
-    /* The marker is also how an already-walked document is recognised. epub.js
-       builds a fresh document every time it renders a section, so a document
-       carrying it has nothing new in it. */
-    if (contents.document.getElementById(STYLE_ID)) return;
-    var style = contents.document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS_TEXT;
-    (contents.document.head || contents.document.documentElement).appendChild(style);
+    if (!contents || !contents.document || !contents.document.defaultView) return;
+    var known = maps.has(contents.document);
+    adopt(contents);
+    if (known) return;
 
-    describe(contents);
-
-    /* The section that just rendered may be the one being read: its iframe is new,
-       so every remembered text node is gone and the highlight has to be built
-       again. Never revealed from here — a reveal that caused this render would
-       reveal for ever. */
-    if (state && showUtterance()) {
+    /* The section that just rendered may be the one being read: its document is
+       new, so the highlight has to be built against it. Never revealed from here —
+       a reveal that caused this render would reveal for ever. */
+    if (state && covers(contents.sectionIndex, state.utteranceRanges) && showUtterance()) {
       showAt(state.next - 1);
       start();
     }

@@ -127,13 +127,46 @@ than by a list of tag names, because CONTEXT.md's definition is "a run of text
 the document itself presents as one unit" and an EPUB is as likely to lay its
 paragraphs out in `<div>`s as in `<p>`s.
 
+## Two things a device found that nothing here could have
+
+Both are recorded because each fails as *nothing happening*, and both took a
+screenshot to find.
+
+**`user-select: none` silently stops `::highlight()` painting.** WebKit paints a
+custom highlight through the machinery it paints a selection with, so text the
+document has declared unselectable gets no highlight geometry. The library's
+template applies `body { user-select: none }` through `rendition.themes.default`
+whenever `enableSelection` is false — its default, and the app's. Nothing about it
+looks like a failure: `CSS.highlights` accepts the `Highlight`, `::highlight()`
+parses into `cssRules`, the `Range` covers exactly the right word, and the page
+stays blank. `highlighter.ts` therefore declares the selectability its own
+highlight needs, keeping `-webkit-touch-callout: none`, which is the property that
+actually suppresses the iOS long-press menu. The cost is that text is selectable
+by long-press again; the highlight is why the app exists.
+
+**Nothing that does not survive a render may be remembered.** epub.js replaces a
+section's document as the reader pages through it, so a remembered text node,
+element or `Contents` is a reference into a document that may already have lost
+its browsing context — and `isConnected` does not say so, because a detached
+document still owns its nodes and they still report themselves connected to it.
+`ownerDocument.defaultView` is the question that answers it. The durable record is
+therefore text and a CFI, which is what ADR 0008 already made the thing that
+identifies a place, and the text nodes are resolved against the live document at
+paint time, walked once per document and never per word.
+
 ## What rests on running the app
 
-The whole of the WebView side. There is no coverage of the DOM walk, of a `Range`
-built from a Block offset, of `::highlight()` actually painting, of the loop, or
-of `rendition.display()` bringing a Block into view — `test/README.md` is
-explicit that ADR 0011 puts this inside Safari's JavaScript, "which no Node test
-environment simulates", and a DOM mock would prove the mock was called. The
-numbers ADR 0005 cares about — the correction cadence of one second watched
-against a real highlight, and the output latency of `../playback/rate.ts` — wait
-on the same device session as notes/NOTES.md item 4.
+The whole of the WebView side. There is no automated coverage of the DOM walk, of
+a `Range` built from a Block offset, of `::highlight()` painting, of the loop, or
+of `rendition.display()` bringing a Block into view — `test/README.md` is explicit
+that ADR 0011 puts this inside Safari's JavaScript, "which no Node test
+environment simulates", and a DOM mock would prove the mock was called.
+
+What has been seen, on the simulator, with a temporary harness driving the bridge
+from a synthetic `ClipCue`: the Utterance painted at utterance level, the word
+painted on top of it, a `PositionCorrection` moving the word highlight onto the
+word it names, and — from **one** `onClip` message and no further bridge traffic —
+`requestAnimationFrame` advancing exactly two words over eight seconds at four
+seconds a word. The numbers ADR 0005 cares about, the one-second correction cadence
+watched against a real voice and the output latency of `../playback/rate.ts`, still
+wait on the device session of notes/NOTES.md item 4.
