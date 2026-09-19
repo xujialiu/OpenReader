@@ -10,8 +10,18 @@ unchanged.
 Its tests import their subject by relative path — `test/core/providers/speechify.test.ts`
 opens with `from '../../../src/core/providers/speechify'`. So the copied layer
 lands at `src/core/providers/` under the same `test/core/providers/` as there, and
-no import needs editing. The same holds for `test/core/align.test.ts`,
-`test/core/wav.test.ts` and `test/core/webdav.test.ts`.
+**no import path needs editing**. That is what matching the layout buys, and it is
+narrower than "the tests arrive unchanged".
+
+Measured on the first files to actually come across, 2026-09-19:
+`test/core/timeout.test.ts`, `single-flight.test.ts` and `headers.test.ts` landed
+verbatim; `align.test.ts` needed two wording edits for `CONTEXT.md`'s avoid-list
+(`segment` → Utterance) and nothing else; `wav.test.ts` needed real edits, because
+one case imported `core/silence` — a file nobody has ported — and the rest asserted
+on a `Blob` that `pcm16ToWav` no longer returns (ADR 0013). `speech-text.ts` had no
+test here at all: its coverage lived in the plugin's `test/read-aloud/`, above the
+platform-free tree, and only the cases that touch nothing but `speech-text` could
+follow.
 
 Verified rather than assumed: `vitest` 5.0.1, from this project's
 `node_modules`, was run against that repository's suite —
