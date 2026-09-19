@@ -82,6 +82,40 @@ Controls are never disabled at boundaries — Zotero's popup carries no `disable
 prop on any of the five (`reader.js:38694-38740`), and the plugin's own player
 disables them only when no session is open (`addon/content/player-controls.js:58`).
 
+## Where a paragraph begins, read off the spans
+
+A paragraph is a Block, and the four skips are `src/playback/navigation.ts`: pure
+functions over the Utterance list returning the index for `seek`. The rule they
+need is "the Utterance that starts a paragraph", and it is **not** "the first
+Utterance whose first span's Block differs from the one before it", because the
+repair layer can weld a sentence across two Blocks (`segmenter/rejoin.ts`). It is:
+
+> the first Utterance to speak any character of a Block — the one that begins in a
+> Block the reading has not been in yet.
+
+Which is already written, in `gap.ts`'s `startsNewBlock`, so `navigation.ts` calls
+it instead of restating it. That is the load-bearing part: the extra 200 ms of
+silence the reader *hears* at a paragraph and the Utterance the paragraph button
+*lands on* are then one boundary rather than two sources of one fact.
+
+The span invariant that makes it well defined: `blockRuns` partitions the Blocks
+into contiguous ascending runs, `sentenceSpans` cuts each run's text into ordered
+non-overlapping spans, and `spansIn` maps a span to the members it intersects in
+ascending order — so across the whole list
+`utterances[i].spans[0].block >= utterances[i - 1].spans[last].block`, with
+equality exactly when the Utterance begins *inside* a Block whose first characters
+an earlier Utterance already spoke. There is therefore no Utterance boundary at
+that Block's start and nothing for a skip to seek to: the Block folds into the
+paragraph the repair layer welded it to, which is the conclusion the repair layer
+had already reached about the document.
+
+One case the data cannot answer, recorded rather than guessed at. If a run's
+Blocks were welded but no single Utterance spans the join — a `maxLength` cap
+cutting at the inserted space, or a splitter that chose to end a sentence there —
+the join leaves no trace in the spans at all, and both this and `gap.ts` read it as
+an ordinary paragraph boundary. Nothing outside the segmenter's own tests passes
+`maxLength` today, and the two agreeing is the property worth keeping either way.
+
 ## The overlay moves the centring target
 
 ADR 0011 centres the spoken Utterance against `rendition.manager.container`'s
@@ -169,3 +203,52 @@ not invent a narrower product limit, because a second limit that disagrees with
 `rate.ts` is a second thing to keep true. `READING_RATES` (`src/app/settings.ts:84`,
 `[1, 1.5, 2, 2.5, 3]`) is replaced, and `rate.ts`'s comment that "the app's range
 is 1.5–3×" is stale in two directions and goes with it.
+
+The floor is the one place the stepper is narrower than the engine: it stops at
+0.50 while `MIN_PLAYBACK_RATE` stays 0.25, because a rate restored from a file or
+synced from the desktop plugin is clamped by the engine and not by what a button
+can reach. That is one limit with two audiences, not two limits.
+
+**The step is walked on an integer grid, in hundredths.** 0.05 is not
+representable in binary, so repeated addition accumulates: `1.7 + 0.05` is
+`1.7500000000000002`, which no decimal literal denotes, is unequal to the `1.75` a
+settings file holds, is displayed with sixteen digits, and is divided into every
+Word Timing by `scaleTimings`. So the position is an integer, the arithmetic is on
+the integer, and the rate is one division at the end — `n / 100` is a single
+correctly-rounded operation on two exactly-representable integers and yields the
+identical double to writing the literal. Seventy presses from 0.50 land exactly on
+4.00, and every value in between satisfies `Number(v.toFixed(2)) === v`, which is
+the test.
+
+## Real Word Timings do not fit inside the audio, and the receiver is what clamps
+
+Measured 2026-09-19 at 23:24, the first time this project's timing arithmetic was
+run on timings a server actually produced (notes/NOTES_2026-09-19.md has the
+tables). Three sentences per provider through the real `prepareClip`,
+`scaleTimings`, `heardSeconds` and `engine.ts`'s `cue()`.
+
+No real timing was out of order, overlapping, zero-length, or past the end of its
+text. Two assumptions were wrong anyway:
+
+- **Kokoro-FastAPI's last word ends 0.109–0.156 s past the end of the audio it
+  sent**, on every clip, and its first word can start at −0.0068 s. The 19:05
+  entry's proposed fix — drop the timing for a full stop, which is not Speakable —
+  does not reach it: `core/align.ts` already folds a punctuation-only server word
+  into the word before it, so the overrun now lives inside the last real word's
+  `end`.
+- **Fish Audio is the other way**, ending 0.194–0.281 s early on the same
+  sentences, and leaves silences of up to **0.480 s between two timings** at a
+  comma where Kokoro leaves none at all.
+
+Neither is corrected in `playback/`. A Provider's number is the measurement, and
+clamping one here is the estimate ADR 0005 forbids; `ClipCue` says so at the seam
+instead, and the receiver holds its interpolation inside `[0, duration]` and treats
+a gap between two timings as "the previous word stays lit". That is right for both
+providers, where either provider's own shape would be wrong for the other.
+
+It is also bounded rather than accumulating, which is why it is a caveat and not a
+breach of PHILOSOPHY rule 2: `scaleTimings` divides the timing and `heardSeconds`
+divides the duration by the *same* clamped rate, so the sign of the comparison
+cannot change with the rate — only the magnitude, as `overshoot / rate`. One
+measurement at 1.00× settles 1.50× and 3.00×, and the next `ClipCue` at the buffer
+boundary re-anchors everything.

@@ -49,6 +49,23 @@ export interface ClipCue {
    * `null` means the Provider reported no Word Timings, so the Utterance is
    * highlighted whole (ADR 0005's Highlight Level). It is never a partial array
    * and never an estimate: a timing is reported or it is not (philosophy rule 1).
+   *
+   * **These are not guaranteed to fit inside `duration`, and a receiver must not
+   * assume they do.** Measured against real speech from two Providers
+   * (notes/NOTES_2026-09-19.md, 23:24): Kokoro-FastAPI's first word can start
+   * **before zero** — −0.0068 s — and its last word ends **0.109 to 0.156 s past
+   * the end of the audio it sent**, because the server times a trailing full stop
+   * that makes no sound and the aligner folds that into the last real word. Fish
+   * Audio was the other way on the same sentences, ending 0.19 to 0.28 s early,
+   * and it leaves real silences of up to 0.48 s *between* two timings at a comma.
+   *
+   * Nothing on this side rewrites them: a Provider's number is the measurement
+   * and clamping it here would be the estimate ADR 0005 forbids. So the receiver
+   * holds the interpolation inside `[0, duration]` itself, and treats a gap
+   * between two timings as "the previous word stays lit" rather than as an error.
+   * The discrepancy is bounded and per Clip — one sixth of a second at the end of
+   * a sentence, divided by the rate — and is not drift: the next `ClipCue`
+   * arrives at the buffer boundary and re-anchors everything.
    */
   words: Timestamp[] | null;
   /** How long the Clip's speech lasts as it will be heard, in seconds. The gap that follows it is not included: the highlight belongs on the words, not on the pause. */

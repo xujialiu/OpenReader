@@ -3,7 +3,8 @@
  *
  * Speed is applied here and nowhere else (ADR 0009). A Provider is never asked
  * to speak faster — `SynthesisOptions` has no speed parameter — so every Clip
- * arrives at Natural Pace and the owner's 1.5–3× is a pitch-preserving
+ * arrives at Natural Pace and the owner's speed, which the stepper below
+ * exposes as 0.50 to 4.00 (ADR 0020), is a pitch-preserving
  * time-stretch on the source node. The cache key is provider, voice and text
  * and deliberately not speed, which is the decisive reason: put speed in the
  * key and nudging 1.5× to 1.6× throws away every Clip the owner has paid for.
@@ -41,8 +42,13 @@ export const MAX_PLAYBACK_RATE = 4;
 
 /**
  * Below this, `heardSeconds` divides by something small enough to turn a
- * rounding error into a visible offset, and nothing in the app asks for it: the
- * app's range is 1.5–3× and the slowest a reader plausibly wants is half speed.
+ * rounding error into a visible offset.
+ *
+ * It is the floor on what the engine will accept, not on what is offered: the
+ * stepper stops at `MIN_STEPPER_RATE`, which is half speed, because that is the
+ * slowest a reader plausibly wants. The two differ on purpose — a setting
+ * restored from a file, or synced from the desktop plugin, is clamped by this
+ * and not by what a button can reach.
  */
 export const MIN_PLAYBACK_RATE = 0.25;
 
@@ -53,6 +59,78 @@ export const NATURAL_PACE = 1;
 export function clampRate(rate: number): number {
   if (!Number.isFinite(rate)) return NATURAL_PACE;
   return Math.min(MAX_PLAYBACK_RATE, Math.max(MIN_PLAYBACK_RATE, rate));
+}
+
+/**
+ * The stepper's grid, in **hundredths of a rate**, which is the whole of how
+ * floating point is kept out of it.
+ *
+ * 0.05 is not representable in binary, so walking the range by repeated addition
+ * accumulates: `1.7 + 0.05` is `1.7500000000000002`, and from there every value
+ * is a number no decimal literal denotes — displayed as `1.7500000000000002×`,
+ * unequal to the `1.75` a settings file holds, and multiplied into every Word
+ * Timing by `scaleTimings`. So the position on the grid is an integer, arithmetic
+ * happens on the integer, and the rate is one division at the end. `n / 100` is a
+ * single correctly-rounded operation on two exactly-representable integers, so it
+ * yields the identical double to writing the two-decimal literal — 0.05 is still
+ * not representable, but no value the stepper produces is ever the sum of two of
+ * them.
+ *
+ * The ceiling is `MAX_PLAYBACK_RATE` rather than a copy of 4: ADR 0020 is
+ * explicit that the stepper does not invent a narrower product limit, "because a
+ * second limit that disagrees with `rate.ts` is a second thing to keep true". It
+ * is rounded *down* onto the grid so that every reachable value is on it and none
+ * is above the native ceiling.
+ */
+const PER_RATE = 100;
+const STEP = 5;
+const FLOOR = 50;
+const CEILING = Math.floor((MAX_PLAYBACK_RATE * PER_RATE) / STEP) * STEP;
+
+/** 0.05, the step ADR 0020 settles on: fine enough that holding the button is a slider and coarse enough that one press is audible. */
+export const RATE_STEP = STEP / PER_RATE;
+
+/** Half speed. A product floor, above `MIN_PLAYBACK_RATE` on purpose — see there. */
+export const MIN_STEPPER_RATE = FLOOR / PER_RATE;
+
+/** 4.00 — the native time-stretcher's own ceiling, not a second opinion about it. */
+export const MAX_STEPPER_RATE = CEILING / PER_RATE;
+
+/** Where a rate sits on the grid: the nearest step, inside the offered range, with a broken setting reading as Natural Pace the way `clampRate` does. */
+function stepsOf(rate: number): number {
+  const from = Number.isFinite(rate) ? rate : NATURAL_PACE;
+  const grid = Math.round((from * PER_RATE) / STEP) * STEP;
+  return Math.min(CEILING, Math.max(FLOOR, grid));
+}
+
+/**
+ * The nearest offered rate to `rate`.
+ *
+ * A rate arriving from anywhere else — a settings file, the desktop plugin's own
+ * `[1, 1.5, 2, 2.5, 3]`, a value stepped by an older build — is put on the grid
+ * before it is stepped, so that one press moves by exactly one step instead of
+ * first correcting by 0.02 and then moving.
+ */
+export function snapRate(rate: number): number {
+  return stepsOf(rate) / PER_RATE;
+}
+
+/**
+ * `steps` steps from `rate`, clamped to the offered range.
+ *
+ * ±1 is one press; the holding-to-repeat of ADR 0020 is the caller's timer, and a
+ * caller that coalesces a burst of presses passes the count. At either end this
+ * returns that end rather than nothing, which is what lets a held button settle
+ * rather than needing to know when to stop.
+ *
+ * Every value it can return satisfies `clampRate(v) === v`: the offered range is
+ * inside the engine's, so the number the owner is shown is the number the node
+ * and the Word Timings are both given. A stepper that could exceed the clamp
+ * would show one speed and play another, which is drift with a straight face.
+ */
+export function stepRate(rate: number, steps: number): number {
+  const by = Number.isFinite(steps) ? Math.trunc(steps) : 0;
+  return Math.min(CEILING, Math.max(FLOOR, stepsOf(rate) + by * STEP)) / PER_RATE;
 }
 
 /** Content seconds as they will be heard at `rate`. A 3-second Clip lasts 1.5 seconds at 2×. */
