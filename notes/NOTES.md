@@ -62,3 +62,14 @@ fails in a way that looks like something else.
 5. The stable version installed is a maintenance branch, not the development
    line. Two notification improvements that landed after it forked are not in it,
    and neither fixes the defect in ADR 0016.
+6. **`pitchCorrection: true` must be passed when the source node is created**, or
+   `playbackRate` is a resampler. The WSOLA time-stretch ADR 0009 requires is in
+   the library — `common/cpp/audioapi/dsp/WsolaTimeStretcher.{h,cpp}`, native on
+   both platforms — but it is opt-in per node:
+   `pitchCorrection_(options.pitchCorrection)`, with the source's own comment
+   "late init to avoid unnecessary allocation when pitch correction is not used".
+   Omitting it raises no error and changes no API; the book is simply read in a
+   rising voice, which sounds like a bad provider or a wrong sample rate rather
+   than like a missing flag. `createBufferQueueSource({ pitchCorrection: true })`.
+   `WsolaTimeStretcher::MAX_PLAYBACK_RATE` is 4, so the app's 1.5–3× is in range
+   and clamping is not a concern.
