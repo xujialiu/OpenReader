@@ -77,6 +77,73 @@ written for the same class of problem when a provider reports words that differ
 from the ones it was given — is what matches an anchor that does not match
 exactly.
 
+## What a store keeps
+
+One **Library entry** per Document: its identity, its format, its title, its
+Reading Position and its Voice (ADR 0010). ADR 0003 shapes the record even though
+no WebDAV is built here, because two of the three properties it verified apply
+from the first line.
+
+- **The version lives on the file, and a parser rejects a file whose `version` is
+  higher than it knows and leaves it alone.** `parseLibrary` returns
+  `{ ok: false, reason: 'newer' }` and no entries at all. Not "reads the fields it
+  recognises" — a newer writer may have changed what those fields mean.
+- **New information goes in a new file, never a new field.** So every key this
+  build does not know is *named* in `ignored` rather than dropped in silence.
+  Silent stripping is the defect ADR 0003 found in the existing positions file,
+  and a caller looking at a non-empty `ignored` is looking at a file some other
+  writer knows more about than this one does. A version 2 adds a sibling file
+  keyed by Document Id — which is what makes the Document Id the join, and why it
+  comes from the bytes rather than from a device.
+
+Parsing is defensive and asymmetrically so: a malformed file costs everything, a
+malformed entry costs that entry, a malformed field costs that field. An
+unreadable Voice must not cost the owner a Reading Position.
+
+## What is here
+
+```ts
+documentIdOf(bytes) → DocumentId                          // `sha256:` + 64 hex
+readPackageIdentifiers(opf) → { all, unique }              // dc:identifier, by regex
+identifyDocument(bytes, format, publication?) → DocumentIdentity
+matchIdentities(a, b) → 'same-bytes' | 'same-publication' | 'different'
+
+createTextAnchor(text, start, end) → TextAnchor            // NFC, with context
+matchAnchor(anchor, text) → AnchorMatch | null
+
+createLocator(format, text) → Locator                      // the renderer only
+readLocator(locator, format) → string | null               // and only that renderer
+readingPositionAt(locator, text, start, end) → ReadingPosition
+resolveReadingPosition(position, placeReader) → PositionResolution
+
+serializeLibrary(entries) → string
+parseLibrary(text) → LibraryParse
+```
+
+`DOCUMENT_FORMATS` is the list ADR 0007 is about: adding `'pdf'` to it is what
+adding PDF looks like from here.
+
+A `Locator`'s two properties are keyed by symbols this directory does not export,
+so nothing outside it can read one or build one by hand — ADR 0007's "opaque to
+everything except the renderer that produced it", enforced by the compiler rather
+than asked for. One consequence is a trap worth knowing: `JSON.stringify` skips
+symbol keys, so a locator written straight to a file is `{}` and says nothing
+about having lost anything. `serializeLibrary` is the only thing that should
+write one.
+
+`resolveReadingPosition` returns `verified` (the locator resolved and the text
+agrees), `recovered` (it did not, and the anchor was found elsewhere — `because`
+says which, so a caller can write the new locator back), or `unresolved`. **There
+is no fourth outcome and no best guess.** Starting a Document again is a
+disappointment the owner can see and explain; resuming three paragraphs out is
+the thing the app exists to prevent.
+
+The digest is ours, in `sha256.ts`, and that is a decision rather than an
+oversight: `expo-crypto` is a platform import this directory may not make,
+`crypto.subtle` is not among the globals measured on this Hermes and is
+asynchronous besides, and Node having one that Hermes may not would mean the
+tests proved something about Node.
+
 ## Open, and blocking
 
 notes/NOTES.md item 3: the CFI round-trip against Zotero, **both directions**,
