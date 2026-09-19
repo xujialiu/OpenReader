@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Provider API keys, copied from the Zotero-TTS plugin's settings for testing.
+# Never committed: PHILOSOPHY rule 3 says a key goes to the provider it belongs
+# to and nowhere else, and a key in git history has gone somewhere else forever.
+/.secrets
