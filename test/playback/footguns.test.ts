@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
+import { pin } from '../structural';
+
 /**
  * The five footguns in `notes/NOTES.md`, checked against the source text.
  *
@@ -171,7 +173,14 @@ describe('footgun 6: pitchCorrection is opt-in per node', () => {
     // larger number.
     expect(code('rate.ts')).toContain('MAX_PLAYBACK_RATE = 4');
     expect(code('engine.ts')).toMatch(/graph\?\.setRate\(rate\)/);
-    expect(code('engine.ts')).toMatch(/rate = clampRate\(/);
+    // Both clamps, spelled out. `rate = clampRate(` matched the initialiser too,
+    // so the one that matters — the owner's new rate, arriving from the stepper —
+    // could become `rate = next` with this rule still green: the node would clamp
+    // to 4 on the audio thread while `scaleTimings` divided the Word Timings by
+    // the larger number, which is drift, and it is the drift this project exists
+    // to prevent.
+    pin(code('engine.ts'), 'rate = clampRate(next);', 'engine.ts, setRate');
+    pin(code('engine.ts'), 'let rate = clampRate(deps.rate ?? NATURAL_PACE);', 'engine.ts, the initialiser');
   });
 });
 
@@ -185,8 +194,12 @@ describe('ADR 0012: the clock is the source node’s, never the context’s', ()
 
   it('takes the position from onPositionChanged on the node', () => {
     const graph = code('audio-graph.ts');
-    expect(graph).toMatch(/node\.onPositionChanged\s*=/);
-    expect(graph).toMatch(/node\.onPositionChangedInterval\s*=/);
+    // The handler itself, not any assignment to the property: `dispose()` writes
+    // `node.onPositionChanged = null` too, so the pattern was answered by the
+    // teardown and the only clock this app has could be unwired with this rule
+    // still green — silently, since a node with no position handler raises nothing.
+    pin(graph, 'node.onPositionChanged = (event) => {', 'audio-graph.ts');
+    pin(graph, 'node.onPositionChangedInterval = POSITION_INTERVAL_MS;', 'audio-graph.ts');
     expect(graph).toContain('handlers.onPosition(event.value)');
   });
 

@@ -4,7 +4,18 @@ import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 import { BLOCKS_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from '../../src/renderer/messages';
-import { appearanceCss, highlightCall, highlighterSource, themeCss } from '../../src/renderer/highlighter';
+import {
+  appearanceCss,
+  DEFAULT_HIGHLIGHT,
+  HIGHLIGHTER,
+  highlightCall,
+  highlightCss,
+  highlighterSource,
+  themeCss,
+  UTTERANCE_HIGHLIGHT,
+  WORD_HIGHLIGHT,
+} from '../../src/renderer/highlighter';
+import { pin } from '../structural';
 
 /**
  * The three things ADR 0005 says this directory must never do, checked against the
@@ -100,8 +111,19 @@ describe('never send a position update per word across the bridge (ADR 0005)', (
   it('interpolates inside the WebView instead, against a start time', () => {
     // The whole Word Timing array goes over once; `requestAnimationFrame` fills in
     // between corrections. That is where the three-to-five-words-a-second live.
-    expect(code('highlighter.ts')).toContain('requestAnimationFrame');
-    expect(highlighterSource()).toContain('window.requestAnimationFrame(tick)');
+    //
+    // Two calls, scoped to the two functions that make them, because a search of
+    // the program finds four `requestAnimationFrame`s and `window.requestAnimationFrame(tick)`
+    // twice — and the two fail differently: without the first the loop never
+    // starts and the highlight moves only on the once-a-second correction;
+    // without the second it runs for exactly one frame.
+    const program = code('highlighter.ts');
+    pin(fn(program, 'start'), 'frame = window.requestAnimationFrame(tick);', 'highlighter.ts, function start');
+    pin(
+      fn(program, 'tick'),
+      'if (state.next < words.length) frame = window.requestAnimationFrame(tick);',
+      'highlighter.ts, function tick',
+    );
   });
 
   it('agrees with cursor.ts about which word is current, by running the same scan', () => {
@@ -181,10 +203,23 @@ describe('never put playback position in React state (ADR 0005)', () => {
 });
 
 describe('never highlight by mutating the DOM, and never check whether you can (ADR 0005, 0001)', () => {
-  it('uses the CSS Custom Highlight API', () => {
-    expect(code('highlighter.ts')).toContain('CSS.highlights.set(');
-    expect(code('highlighter.ts')).toContain('new win.Highlight()');
-    expect(code('highlighter.ts')).toContain('::highlight(');
+  it('uses the CSS Custom Highlight API, for the sentence and for the word', () => {
+    // Two `Highlight` objects, two registrations and two rules — and each pair is
+    // the sentence and the word, so a whole-file search for any of the three
+    // spellings is answered by whichever half survives. Losing the word half is
+    // losing what ADR 0005 says the app exists for, and it paints nothing rather
+    // than reporting anything.
+    const registry = fn(code('highlighter.ts'), 'registryFor');
+    pin(registry, 'var utterance = new win.Highlight();', 'highlighter.ts, function registryFor');
+    pin(registry, 'var word = new win.Highlight();', 'highlighter.ts, function registryFor');
+    pin(registry, 'win.CSS.highlights.set(UTTERANCE, utterance);', 'highlighter.ts, function registryFor');
+    pin(registry, 'win.CSS.highlights.set(WORD, word);', 'highlighter.ts, function registryFor');
+
+    // And the rules those two names paint through. The stylesheet is built on this
+    // side of the bridge, so the argument is a value a test can read.
+    const css = highlightCss(DEFAULT_HIGHLIGHT);
+    pin(css, '::highlight(' + UTTERANCE_HIGHLIGHT + ') {', 'the stylesheet highlightCss builds');
+    pin(css, '::highlight(' + WORD_HIGHLIGHT + ') {', 'the stylesheet highlightCss builds');
   });
 
   it('has no capability check and no fallback around it', () => {
@@ -318,8 +353,16 @@ describe('nothing that does not survive a render is remembered', () => {
   it('asks defaultView, which is the question isConnected cannot answer', () => {
     // A detached document still owns its nodes and they still report themselves
     // connected to it. Losing the browsing context is the thing that can be seen.
-    expect(code('highlighter.ts')).not.toContain('isConnected');
-    expect(code('highlighter.ts')).toContain('contents.document.defaultView');
+    //
+    // Both gates, each scoped: the question is asked in the two places a document
+    // enters the program, and a whole-file search is answered by either one. They
+    // are not redundant — `liveContents` refuses a dead document for a Block the
+    // reading is on *now*, and `attach` refuses to adopt one at all, which is what
+    // keeps a dead document out of `maps` in the first place.
+    const program = code('highlighter.ts');
+    expect(program).not.toContain('isConnected');
+    pin(fn(program, 'liveContents'), 'if (!contents.document || !contents.document.defaultView) continue;', 'highlighter.ts, function liveContents');
+    pin(fn(program, 'attach'), 'if (!contents || !contents.document || !contents.document.defaultView) return;', 'highlighter.ts, function attach');
   });
 
   it('says so out loud when it cannot draw a highlight', () => {
@@ -346,12 +389,37 @@ describe('the highlight actually paints', () => {
    * reader that paints nothing.
    */
   it('declares the text selectable, which is what makes ::highlight() paint', () => {
-    const program = code('highlighter.ts');
-    expect(program).toContain('-webkit-user-select: text !important');
-    expect(program).toContain('user-select: text !important');
-    // The property that actually suppresses the iOS long-press menu stays, which is
-    // the part `enableSelection: false` was really buying.
-    expect(program).toContain('-webkit-touch-callout: none !important');
+    /**
+     * **The assertion that was vacuous, and the most expensive one in the file to
+     * have been.** `user-select: text !important` is a substring of
+     * `-webkit-user-select: text !important`, so a whole-file `toContain` for the
+     * standard property was answered by the prefixed line: the standard property —
+     * the one Safari on iOS 17.2 actually honours, and the single line between a
+     * working highlight and a reader that paints nothing — could be deleted with
+     * all 122 renderer assertions still passing. Confirmed by deleting it,
+     * 2026-09-20.
+     *
+     * So the stylesheet is checked as a value rather than as a search: the rule the
+     * highlight needs has exactly these three declarations, in this order, and
+     * anything added, removed or renamed in it fails.
+     */
+    const css = highlightCss(DEFAULT_HIGHLIGHT);
+    const selectable = css.slice(0, css.indexOf('}') + 1);
+    expect(selectable.split('\n')).toEqual([
+      'html, body, body * {',
+      '  -webkit-user-select: text !important;',
+      // The one that was deletable. `-webkit-user-select` alone does not restore
+      // selectability on the iOS WebKit this app ships against.
+      '  user-select: text !important;',
+      // The property that actually suppresses the iOS long-press menu stays, which
+      // is the part `enableSelection: false` was really buying.
+      '  -webkit-touch-callout: none !important;',
+      '}',
+    ]);
+    // And it is the first rule in the sheet, because the ::highlight() rules that
+    // follow are what it exists to let paint.
+    pin(css, 'html, body, body * {', 'the stylesheet highlightCss builds');
+    expect(css.indexOf('html, body, body * {')).toBe(0);
   });
 
   it('is still fighting something, so the rule is still needed', () => {
@@ -388,9 +456,15 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     // A constant subtracted once would be wrong the moment the player collapsed to
     // one button, and the centring runs once per Utterance on the Clip cue — so a
     // stale offset is not corrected by the next frame or by anything else.
+    // Scoped to that branch, and it has to be: `covered = ` matches the
+    // declaration `var covered = 0;` as well as the assignment, so the assignment
+    // could go with this rule still green — and `covered` would then stay 0 for
+    // ever, which is the defect the `visible / 2` rule above exists to prevent,
+    // arriving through the other half of the same arithmetic.
     const program = code('highlighter.ts');
-    expect(program).toContain("message.kind === 'inset'");
-    expect(program).toContain('covered = ');
+    pin(program, "message.kind === 'inset'", 'highlighter.ts');
+    const inset = program.slice(program.indexOf("message.kind === 'inset'"));
+    pin(inset.slice(0, inset.indexOf('return;')), 'covered = ', "highlighter.ts, the 'inset' branch");
   });
 
   it('sends the inset again once the program says it has installed', () => {
@@ -405,6 +479,32 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     const document = bridge.slice(bridge.indexOf('message.type === DOCUMENT_MESSAGE'));
     const branch = document.slice(0, document.indexOf('return;'));
     expect(branch).toContain("send({ kind: 'inset', bottomPx: inset.current })");
+  });
+
+  /**
+   * The premise of the rule above, which was recorded as an argument and has never
+   * been watched — `notes/NOTES_2026-09-20.md` at 01:45 lists the re-send as
+   * "asserted, and **never observed working**", because the message it recovers is
+   * one lost before the WebView loads and that was not reproduced on the device.
+   *
+   * The loss itself needs no device. `highlightCall` is `window.X && window.X(…)`,
+   * which is an expression, and what it does when `window.X` is not there yet is
+   * the whole of why the re-send exists. Run both ways here: nothing thrown and
+   * nothing recorded when the program is absent, and the same string delivering the
+   * message once it is present.
+   */
+  it('loses a message sent before the program installs, and says nothing about it', () => {
+    const call = highlightCall({ kind: 'inset', bottomPx: 190 });
+
+    const early: Record<string, unknown> = {};
+    expect(() => vm.runInNewContext(call, { window: early })).not.toThrow();
+    // Not a no-op that reported something either: an empty window is left empty.
+    expect(Object.keys(early)).toEqual([]);
+
+    const seen: unknown[] = [];
+    const installed: Record<string, unknown> = { [HIGHLIGHTER]: (message: unknown) => seen.push(message) };
+    vm.runInNewContext(call, { window: installed });
+    expect(seen).toEqual([{ kind: 'inset', bottomPx: 190 }]);
   });
 
   it('does not scroll when the inset changes, because that would move the text under the reader', () => {
@@ -493,8 +593,14 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     // epub.js resizes each section's iframe from the section's own ResizeObserver,
     // whose callback is a `requestAnimationFrame` — so the geometry is a frame or
     // more away and a centring on this frame aims at where the sentence was.
+    // Two waits, and each is a different case: nothing to measure yet, and
+    // something measured that has not stopped moving. A search of the function
+    // finds either, so both are pinned — without the first a document that has not
+    // laid out yet is never centred at all, and without the second the window
+    // closes after one frame.
     const settle = fn(code('highlighter.ts'), 'settle');
-    expect(settle).toContain('window.requestAnimationFrame(');
+    pin(settle, 'if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, null, 0); });', 'highlighter.ts, function settle');
+    pin(settle, 'window.requestAnimationFrame(function () {\n      settle(left - 1, box.top, steady);', 'highlighter.ts, function settle');
     expect(settle).toContain('Math.abs(box.top - was) < 1');
     // Every frame of the window, not once at the end: the first version centred
     // once and left the Utterance 4,285 px out when the text **shrank**, because a
@@ -676,7 +782,13 @@ describe('what was read out of @epubjs-react-native/core rather than its documen
     // Which is why the program sweeps `rendition.getContents()` as it installs: the
     // first section's `rendered` event has already been and gone by then.
     expect(library('View.js')).toContain('book.current?.injectJavaScript(injectedJavascript)');
-    expect(highlighterSource()).toContain('sweep();');
+    // Scoped to the program's own installation, above `dispatch`: `sweep();`
+    // appears twice, the second time in the Clip cue, where the 04:43 rule below
+    // asserts it — so a whole-program search is answered by the wrong one, and the
+    // installation sweep going takes the first rendered section's Blocks with it.
+    const program = highlighterSource();
+    const install = program.slice(program.indexOf('post({ type: DOCUMENT'), program.indexOf('function dispatch('));
+    pin(install, 'sweep();', 'the highlighter program, between the document message and dispatch()');
   });
 
   it('still exposes the escape hatch and the CFI move the bridge is built on', () => {

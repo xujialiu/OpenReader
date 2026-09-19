@@ -8,6 +8,7 @@ import {
   READING_SCALES,
   DEFAULT_HIGHLIGHT,
 } from '../../src/renderer/highlighter';
+import { pin } from '../structural';
 
 /**
  * The stylesheet **Appearance** installs, which is the only thing the sheet
@@ -70,7 +71,13 @@ describe('Appearance as a stylesheet', () => {
     }
     // The selectability the highlight needs is in the other half of the sheet, and
     // that half is not built from anything the owner chose.
-    expect(highlightCss(DEFAULT_HIGHLIGHT)).toContain('user-select: text !important;');
+    //
+    // The leading newline and indent are load-bearing: `user-select: text
+    // !important;` is a substring of the `-webkit-` line above it, so the bare
+    // marker was answered by that line and the standard property — the one iOS
+    // Safari honours — could be deleted with this rule still green. The exhaustive
+    // form of this is in `rules.test.ts`.
+    pin(highlightCss(DEFAULT_HIGHLIGHT), '\n  user-select: text !important;', 'the stylesheet highlightCss builds');
   });
 
   it('builds nothing at all from a font it does not know, rather than a rule out of the name', () => {

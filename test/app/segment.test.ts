@@ -103,6 +103,47 @@ describe('firstUtteranceOfSection', () => {
     expect(firstUtteranceOfSection(utterances, sectioned, 1)).toBeNull();
     expect(firstUtteranceOfSection([], sectioned, 3)).toBeNull();
   });
+
+  /**
+   * **The invariant this function's `spans[0]` rests on, asserted where it is
+   * relied on.** The 2026-09-20 01:22 mutation sweep found that reading `spans[0]`
+   * rather than the last span is unobservable, and recorded the reason as an
+   * argument: `rejoin.ts` refuses to weld two Blocks from different sections, so
+   * every span of an Utterance carries the same section. That argument was left
+   * standing on a test in another directory, about a **different** field — the
+   * href — and on nothing at all at this call site, which reads the spine index.
+   *
+   * The case below is the only one where the two spellings could disagree: a Block
+   * that ends mid-sentence at the end of one section and a Block that continues it
+   * at the start of the next. Welded, that Utterance would begin in section 3 and
+   * end in section 4, and `firstUtteranceOfSection(4)` would answer with an
+   * Utterance whose text starts a section earlier — a chapter tap landing on the
+   * end of the previous chapter, which is the silent landing ADR 0008 is about.
+   */
+  it('produces no Utterance that begins in one section and ends in another', () => {
+    const straddling = [
+      { text: 'and the door closed behind', section: 'ch1.xhtml', sectionIndex: 3, role: 'paragraph' as const },
+      { text: 'him, or so he thought.', section: 'ch2.xhtml', sectionIndex: 4, role: 'paragraph' as const },
+    ];
+    // The weld is real and it is the section that stops it: the same two Blocks in
+    // one section become one Utterance, so this is not a case sentencex refuses
+    // anyway.
+    const welded = segmentDocument(
+      straddling.map((block) => ({ ...block, section: 'ch1.xhtml', sectionIndex: 3 })),
+      'en',
+    );
+    expect(welded.map((one) => one.spans.map((span) => span.block))).toEqual([[0, 1]]);
+
+    const found = segmentDocument(straddling, 'en');
+    for (const utterance of found) {
+      const sections = utterance.spans.map((span) => straddling[span.block].sectionIndex);
+      expect(new Set(sections).size, utterance.text).toBe(1);
+    }
+    // Which is what makes the two readings the same answer, at this call site, on
+    // the field this call site uses.
+    expect(firstUtteranceOfSection(found, straddling, 4)).toBe(1);
+    expect(found[1].text).toBe('him, or so he thought.');
+  });
 });
 
 /**

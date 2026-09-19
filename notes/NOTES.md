@@ -117,3 +117,133 @@ fails in a way that looks like something else.
    Bluetooth route that ADR 0012 names is not exposed anywhere. Both are
    constant offsets rather than drift, so the highlight takes one latency
    parameter and the device session supplies it.
+
+## What rests on reasoning alone — collected 2026-09-20
+
+Three agents each ended a session by listing what they had argued rather than
+measured. **Those three lists had never been collected**, so nobody could read
+"where is this app actually unproven" off anything. This is that collection, out of
+`NOTES_2026-09-19.md`, `NOTES_2026-09-20.md` and the ADRs, with what would settle
+each item and roughly what settling it costs.
+
+It is not a to-do list. Several items are unprovable here by construction and say
+so; the value is in knowing which. Closing one means moving it into the list above
+or striking it here with the day's log named.
+
+### Closed in the 06:38 pass, from Node
+
+- ~~**A message sent to the WebView before its program installs is lost silently.**~~
+  The premise of the re-sent `inset` that 01:45 called "asserted, and never observed
+  working". Settled in a `vm` context: nothing thrown, nothing reported, window
+  untouched. `NOTES_2026-09-20.md`, 06:38.
+- ~~**`firstUtteranceOfSection` reading `spans[0]` rather than the last span is
+  unobservable.**~~ The 01:22 sweep's one survivor. The invariant it rests on is now
+  asserted at the call site, on the field the call site uses — and the measurement
+  found that it also rests on `ReportedBlock.section` being populated, which nothing
+  was checking. Same entry.
+
+### Needs the device, or hardware the device does not have
+
+- **The literal lock screen has never been seen.** `SBSLockDevice` is refused by
+  SpringBoard, DeviceHub has no window, `simctl` has no lock subcommand, and the HID
+  path Simulator's own menu uses is a host-side private API (04:13; ADR 0016). What
+  stands in for it is SpringBoard's own log holding our item and our rate. *Would
+  establish it:* one real iPhone, one screenshot. *Cost:* minutes, once there is a
+  device — nothing on this machine will do it.
+- **The headphone remote is untested by construction.** The `togglePlayPause` command
+  it sends is tested from another process; the radio is not (04:13; ADR 0016).
+  *Would establish it:* a real device and a pair of AirPods. *Cost:* minutes, same
+  precondition.
+- **Locked-screen playback, as distinct from backgrounded playback.** `NOTES.md` item
+  4 above is answered for 17 minutes backgrounded on the simulator; locking is a
+  stricter state and the screen was never locked (04:43). *Would establish it:* the
+  same run on a real device with the screen locked. *Cost:* 60–90 minutes of a real
+  device, unattended.
+- **A real device's power management.** Everything above was a simulator, which
+  suspends nothing. *Would establish it:* the same run, same device. *Cost:* the same
+  60–90 minutes — one run answers both.
+- **iOS's touch-to-click step.** Every tap measured on 2026-09-20 was a `click`
+  dispatched into the section's document, because no harness on this machine can
+  deliver a physical touch (00:59, 02:50, 03:50). The hit-test guard, the tapped
+  word, the contents row and the chips were all driven that way. *Would establish
+  it:* one tap, by a finger or by XCUITest. *Cost:* minutes on a device; an
+  afternoon if it is to be a UI test that runs again.
+- **No button on the Appearance sheet was ever pressed.** The rows were driven
+  through the `onChange` the chips call (02:50). *Would establish it:* the same tap.
+  *Cost:* as above, and the same run covers both.
+- **The React Native process's memory slope is not trustworthy.** 0.345 MB per
+  Utterance against ADR 0011's 0.104, with the temporary harness running *inside*
+  that process holding six thousand log lines and rewriting a file twice a second
+  (05:52). The WebKit column, which is the one the change could have ruined, is
+  inside noise of ADR 0011's. *Would establish it:* the same 18-minute reading driven
+  from outside the app process. *Cost:* one device session, plus writing the
+  out-of-process driver — the 03:50 Objective-C harness is the shape of it.
+- **Three of the four resume refusals have never been on a screen** —
+  `ambiguous`, `anchor-not-matchable`, `no-utterance` (05:57). Their resolution is
+  tested in `cursor.ts`'s suite; what is unseen is the sentence rendered. *Would
+  establish it:* three Library files written to produce each, three opens. *Cost:*
+  under an hour, no new mechanism — the same trick the other two were seen with.
+- **The 40 ms Hermes digest in ADR 0004 is a prediction**, scaled from a Node
+  measurement and a Hermes throughput; and the two `FileHandle` reads that precede it
+  are covered by no measurement at all. *Would establish it:* open one real book on
+  the device and log the time around `documentId`. *Cost:* minutes, inside any
+  device session.
+- **Glyph coverage in the system font** (00:59) is device-only and is not a property
+  of the code. Recorded so it is not looked for in the suite.
+- **Whether *Piper – Neural TTS*'s system-wide voices emit word markers** — item 6
+  above. *Would establish it:* install it on a real device and ask
+  `AVSpeechSynthesizer` for its voices and their markers. *Cost:* an hour, and if
+  the answer is yes it is free offline neural voices with Word Timings.
+
+### Needs neither the device nor hardware, and nobody has done it
+
+- **The CFI round-trip against Zotero, both directions** — item 3 above, and ADR
+  0007 calls it a separate open question. What is in doubt is not whether a CFI
+  resolves but whether it resolves to the *right text*: Zotero's own generator and
+  resolver disagree about text steps, which is why the desktop plugin never
+  generates one. *Would establish it:* one EPUB, a position stored from the plugin
+  and resolved in an epub.js reader, and a CFI from standard epub.js handed to
+  Zotero's `toDisplayedRange`, comparing the text each lands on. *Cost:* a bounded
+  afternoon with Zotero running; no device, no simulator. **This is the largest
+  unproven thing in the project that is cheap to settle.**
+- **Sentence-splitting quality on real books** — item 7 above. What is being judged
+  is the polyfill's output rather than the platform's, and it is the first
+  segmenter, not the final one. *Would establish it:* run the plugin's
+  `test/fixtures/` cases plus a chapter of the owner's own book and read the output.
+  *Cost:* an afternoon, all in Node.
+- **Android's `MediaSession` half is not written**, and deliberately — there is no
+  Android device and no emulator on this machine, so a path written here would be a
+  path that has never run (ADR 0016). *Would establish it:* an emulator. *Cost:* a
+  day, and it is a feature rather than a proof.
+- **One unexplained import-boundary test failure** (2026-09-19 11:59), once, during a
+  concurrent Xcode build, never reproduced. The suite now asserts that the lint
+  override resolves, so a recurrence names its cause. *Would establish it:* nothing
+  to do but leave the assertion in place.
+- **Project-level iOS deployment configs stay at 16.4** while the app target is at
+  17.2, so a target added later — a widget, a share extension — would inherit 16.4
+  (2026-09-19 11:59). No such target exists, so the consequence is predicted.
+  *Would establish it:* add one and watch it, or read the generated `pbxproj`.
+  *Cost:* minutes, but only worth spending when a second target is wanted.
+
+### Argued rather than asserted, and the argument is the right answer
+
+- **Pausing from the lock screen re-opens the player** and **the player floats rather
+  than pushing** were listed at 01:45 as not asserted. The first is asserted now
+  (`test/now-playing/module.test.ts`); the second is a style whose evidence is the
+  01:11 measurement — not a pixel moved, either way — and an assertion on it would
+  restate the stylesheet.
+- **The stepper's hold cadence** is three constants (01:15); an assertion on them
+  restates them.
+- **`goToSection`'s already-rendered branch** was listed at 01:45 as neither proved
+  nor asserted. It ran at 05:54, after eighteen minutes of reading made the state
+  reachable.
+- **The hit-test box guard can only ever be structural** (01:00, 01:45). It needs a
+  hit-test, a layout and a box, all of which live in Safari, and `test/README.md`
+  forbids a mock. The suite holds a tripwire over four properties of the line; the
+  proof is the log, taken twice, with and without it. Calling the tripwire a proof
+  is the one thing not to do.
+- **ADR 0020's timing overrun is bounded rather than accumulating.** One measurement
+  at 1.00× is argued to settle 1.50× and 3.00×, because `scaleTimings` and
+  `heardSeconds` divide by the *same* clamped rate — and that identity is asserted
+  in `test/playback/rate.test.ts`, which is what makes the argument a short one
+  rather than a hope.

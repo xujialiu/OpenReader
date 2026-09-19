@@ -72,6 +72,29 @@ Node test environment simulates.
   so when ADR 0019 let another app hand this one a Document to **open**. The
   property it now states is that nothing in `src/` **opens** a URL.
 
+## structural.ts — the one rule about reading source text
+
+Several of the files above guard a one-line invariant by reading the source and
+asserting a marker is there. They have to: `::highlight()` and the Swift are on
+the other side of a boundary no Node test crosses, and a mock would prove the
+mock was called.
+
+`expect(code(file)).toContain(marker)` has a defect that caught five authors in
+five different files, one of them at the cost of the most expensive bug this
+project has had: **a marker that occurs twice makes the assertion vacuous**, because
+the whole-file search still matches the other occurrence after the guarded line is
+deleted. A mechanical sweep of all 1,080 tests found ten real instances (ADR 0024).
+
+So a rule that names one line calls `pin(text, marker, where)`, which throws when
+the marker is absent **and** when it occurs more than once, naming the lines that
+made it ambiguous. `pinCount` is for the rules where a count above one is the
+property. Where the marker has to be narrowed to one line, the scoping is the
+caller's: this file's own helpers slice a `function` of the WebView program, a
+`private func` of the Swift, or one line to another, because those conventions
+differ by language and belong beside the rules that use them.
+
+`test/structural.test.ts` watches both refusals fire.
+
 ## setup.ts
 
 Loaded before every test file. The plugin's version installs its en-US Fluent
