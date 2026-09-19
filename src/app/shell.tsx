@@ -1,9 +1,10 @@
 /**
- * The four screens of ADR 0019, and the one way back from each of them.
+ * The screens of ADR 0019, and the one way back from each of them.
  *
  * ```
  * Library ──┬─→ Reader ──→ (Appearance, a sheet over it)
- *           └─→ Settings
+ *           └─→ Settings ──┬─→ General
+ *                          └─→ Providers ──→ one Provider
  * ```
  *
  * `Library` is the initial route. The route list and the shell's own context are
@@ -34,8 +35,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { APP_NAME } from '../../app-name';
 
 import { INK } from './controls';
+import { GeneralScreen } from './general-screen';
 import { LibraryScreen } from './library-screen';
 import { useHandedOverDocuments, type HandedOverFile } from './opened-document';
+import { ProviderScreen } from './provider-screen';
+import { ProvidersScreen } from './providers-screen';
 import { ReaderScreen } from './reader-screen';
 import { navigationRef, ShellContext, type RootStackParamList, type Shell } from './routes';
 import { DEFAULT_SETTINGS, type AppSettings } from './settings';
@@ -47,7 +51,18 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export function OpenReader() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const library = useLibrary();
-  const shell = useMemo<Shell>(() => ({ settings, setSettings, library }), [settings, library]);
+  /**
+   * How many credentials have been written this session. `routes.ts` says what
+   * it is for; what it is *not* is a credential, or even whether there is one —
+   * a number that only ever goes up, held here because the screen that writes
+   * and the screens that have to notice are never the same screen.
+   */
+  const [secretsWritten, setSecretsWritten] = useState(0);
+  const noteSecretWritten = useCallback(() => setSecretsWritten((was) => was + 1), []);
+  const shell = useMemo<Shell>(
+    () => ({ settings, setSettings, library, secretsWritten, noteSecretWritten }),
+    [settings, library, secretsWritten, noteSecretWritten],
+  );
 
   /**
    * A book arriving from Files, Mail or a messaging app: into the Library, and
@@ -98,6 +113,10 @@ export function OpenReader() {
             <Stack.Screen name="Library" component={LibraryScreen} options={{ title: APP_NAME }} />
             <Stack.Screen name="Reader" component={ReaderScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+            <Stack.Screen name="General" component={GeneralScreen} options={{ title: 'General', headerBackTitle: 'Settings' }} />
+            <Stack.Screen name="Providers" component={ProvidersScreen} options={{ title: 'Providers', headerBackTitle: 'Settings' }} />
+            {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
+            <Stack.Screen name="Provider" component={ProviderScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </ReaderProvider>

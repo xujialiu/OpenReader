@@ -24,7 +24,7 @@ import { Action, Choice, INK, Note } from './controls';
 import type { OpenDocument } from './document';
 import { useReaderFileSystem } from './reader-file-system';
 import { PROVIDER_LABELS, READING_RATES, readiness, readinessSentence, type AppSettings } from './settings';
-import type { KeyPresence } from './use-provider-key';
+import type { SecretPresence } from './use-provider-secrets';
 import { useReading, type ReadingStatus } from './use-reading';
 
 /**
@@ -52,7 +52,16 @@ export interface ReadingViewProps {
    * nothing to claim, and "the Keychain would not say" is a third answer that is
    * worth showing rather than reading as "no key" (`src/keys/refusal.ts`).
    */
-  keyPresence: KeyPresence;
+  keyPresence: SecretPresence;
+  /**
+   * The shell's count of credential writes, passed straight to `useReading`.
+   *
+   * Here rather than read from the shell inside this component because every
+   * other thing it shows arrives as a prop from `reader-screen.tsx`, and a
+   * component that takes its settings from one place and its credentials from
+   * another is one that can show the two disagreeing.
+   */
+  credentialsWrittenAt: number;
   /**
    * The CFI to open at, out of the stored Reading Position, or null for a
    * Document that has not been read.
@@ -114,10 +123,19 @@ function highlightLine(status: ReadingStatus): string | null {
   return null;
 }
 
-export function ReadingView({ document, settings, keyPresence, resumeAt, onRate, onReached, onTitle }: ReadingViewProps) {
+export function ReadingView({
+  document,
+  settings,
+  keyPresence,
+  credentialsWrittenAt,
+  resumeAt,
+  onRate,
+  onReached,
+  onTitle,
+}: ReadingViewProps) {
   const fileSystem = useReaderFileSystem;
   const { getMeta } = useReader();
-  const reading = useReading(settings, keyPresence.state === 'held');
+  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt });
   const [displayError, setDisplayError] = useState<string | null>(null);
   /**
    * The size to give `<Reader>`, in points, measured rather than inherited.

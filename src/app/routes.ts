@@ -1,5 +1,5 @@
 /**
- * The four screens by name, and the two things every one of them can reach.
+ * The screens by name, and the things every one of them can reach.
  *
  * Split out of `shell.tsx` for one reason: the shell imports every screen and
  * every screen needs the route list and the shell's own context. Left in one
@@ -19,14 +19,30 @@ import { createContext, useContext } from 'react';
 
 import { APP_NAME } from '../../app-name';
 import type { DocumentId } from '../core/document';
+import type { ProviderId } from '../core/providers/types';
 
 import type { AppSettings } from './settings';
 import type { Library } from './use-library';
 
+/**
+ * `Settings` is a list of two, and `Providers` opens **one Provider at a time**
+ * (ADR 0019). A route per Provider rather than one screen with a picker at the
+ * top, because the picker is what the split exists to remove: the fields that do
+ * not apply are not clutter, they are questions the owner cannot answer and
+ * cannot tell are not being asked of them (`docs/design/0019`).
+ *
+ * `Provider` takes the Provider's **id** and nothing else, for the same reason
+ * `Reader` takes a Document Id: a native stack serialises its route params, so
+ * what crosses has to be a name that still means the same thing after a state
+ * restore.
+ */
 export type RootStackParamList = {
   Library: undefined;
   Reader: { id: DocumentId };
   Settings: undefined;
+  General: undefined;
+  Providers: undefined;
+  Provider: { id: ProviderId };
 };
 
 export type ScreenProps<Route extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, Route>;
@@ -53,6 +69,25 @@ export interface Shell {
   settings: AppSettings;
   setSettings(next: AppSettings): void;
   library: Library;
+  /**
+   * How many times a credential has been written to the Keychain this session.
+   *
+   * A counter and not the credential, and not even whether there is one: what it
+   * carries is that the Keychain changed, which is the one fact every screen
+   * needs and none of them can observe. The Library, the Reader beneath the
+   * stack and the Provider screen being typed into are all mounted at once, and
+   * only the last of them writes — so without this the first two go on showing
+   * what was true when they mounted, and the Reader's Play button stays disabled
+   * for a key that is now saved.
+   *
+   * `use-reading.ts` reads it too, and for a stronger reason: an engine built
+   * around a credential that has since been replaced will keep using the old one
+   * until something else rebuilds it. Pasting the right gateway token and still
+   * getting a 403 is exactly the invisible failure this project's rules forbid.
+   */
+  secretsWritten: number;
+  /** Called by `use-provider-secrets.ts` after a save or a forget, and by nothing else. */
+  noteSecretWritten(): void;
 }
 
 export const ShellContext = createContext<Shell | null>(null);

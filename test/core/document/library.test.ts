@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { LIBRARY_VERSION, parseLibrary, serializeLibrary, type LibraryEntry } from '../../../src/core/document/library';
 import { createLocator, readLocator, readingPositionAt } from '../../../src/core/document/position';
 import { documentIdOf, type DocumentFormat } from '../../../src/core/document/identity';
+import { bytesAsArchive } from '../../../src/core/document/zip';
+
+import { epub, opf } from './zip-fixture';
 
 /**
  * What a store persists per Document, and what it does with a file it does not
@@ -13,7 +16,13 @@ import { documentIdOf, type DocumentFormat } from '../../../src/core/document/id
  * most here are the ones about a file this build did not write.
  */
 
-const ID = documentIdOf(new TextEncoder().encode('a small book'));
+/**
+ * A genuinely computed id, not a hand-written one, so that what this suite
+ * round-trips through a file is the shape `documentIdOf` actually produces. Since
+ * ADR 0004's amendment that means a real archive: the id is over a ZIP's central
+ * directory, and arbitrary bytes have none.
+ */
+const ID = documentIdOf(bytesAsArchive(epub(opf('    <dc:title>A Small Book</dc:title>'))));
 const BLOCK = 'The quick brown fox jumps over the lazy dog. And then it stopped.';
 
 const entry = (over: Partial<LibraryEntry> = {}): LibraryEntry => ({
@@ -101,7 +110,8 @@ describe('parseLibrary, round trip', () => {
   });
 
   it('writes what it read back to the same bytes', () => {
-    const text = serializeLibrary([entry(), entry({ id: documentIdOf(new TextEncoder().encode('another')), position: null, voice: null })]);
+    const another = documentIdOf(bytesAsArchive(epub(opf('    <dc:title>Another Book</dc:title>'))));
+    const text = serializeLibrary([entry(), entry({ id: another, position: null, voice: null })]);
     const parsed = parseLibrary(text);
     expect(parsed.ok && serializeLibrary(parsed.entries)).toBe(text);
   });

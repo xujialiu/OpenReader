@@ -49,6 +49,12 @@ _Avoid_: engine, backend, service, vendor, TTS
 One named speaker a provider offers. A voice belongs to exactly one provider.
 _Avoid_: model, speaker, persona
 
+**Gateway Headers**:
+The credential a provider reached at an address of the owner's own needs in
+order to get past whatever guards that address. It belongs to one provider, as
+a key does, and is never sent to another.
+_Avoid_: auth headers, token, proxy headers, custom headers, access token
+
 **Clip**:
 The audio a provider returns for one utterance.
 _Avoid_: segment audio, blob, buffer, track

@@ -4,150 +4,149 @@ import {
   asDocumentFormat,
   asDocumentId,
   documentIdOf,
+  documentManifest,
   identifyDocument,
   matchIdentities,
   readPackageIdentifiers,
   type DocumentFormat,
 } from '../../../src/core/document/identity';
+import { sha256Hex } from '../../../src/core/document/sha256';
+import { bytesAsArchive } from '../../../src/core/document/zip';
+
+import { UUID, crc32, epub, namedEpub, opf, utf8, zip } from './zip-fixture';
 
 /**
- * ADR 0004, against real bytes.
+ * ADR 0004, against real archives.
  *
- * The bytes are built here rather than read from a fixture on disk, because
+ * The archives are built by `zip-fixture.ts` rather than read from disk, because
  * `src/core/` has no file system by design and this layer's tests have none
- * either. `epub()` below writes an actual ZIP — store-only, correct CRCs — so
- * "the same Document re-compressed" is a genuinely different byte stream rather
- * than a string with a character changed, which is the whole situation ADR 0004
- * records the second identifier to cover.
+ * either. They are genuine ZIPs — correct CRCs, real deflate — so "the same book
+ * re-compressed" is a genuinely different byte stream and not a string with a
+ * character changed. That case is the headline of ADR 0004's amendment, and it
+ * cannot be faked.
  */
 
-const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);
-
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    table[i] = c >>> 0;
-  }
-  return table;
-})();
-
-function crc32(bytes: Uint8Array): number {
-  let c = 0xffffffff;
-  for (const byte of bytes) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
+const archive = (bytes: Uint8Array) => bytesAsArchive(bytes);
+const named = `    <dc:identifier id="pub-id">${UUID}</dc:identifier>`;
 
 /**
- * A store-only ZIP. `comment` lands in the end-of-central-directory record,
- * which is how a "re-saved" copy is produced: the same entries, the same
- * `dc:identifier`, different bytes.
+ * The same book as another tool would leave it: the same publication identifier,
+ * a package document whose bytes are not the same. **Not** a copy with a
+ * different archive comment, which is what this used to be — under the amended
+ * rule that is the *same* Document, and there is a test below that says so.
  */
-function zip(entries: readonly { name: string; data: Uint8Array }[], comment = ''): Uint8Array {
-  const local: Uint8Array[] = [];
-  const central: Uint8Array[] = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const name = utf8(entry.name);
-    const crc = crc32(entry.data);
-    const header = new Uint8Array(30 + name.length);
-    const h = new DataView(header.buffer);
-    h.setUint32(0, 0x04034b50, true);
-    h.setUint16(4, 20, true);
-    h.setUint16(8, 0, true); // stored
-    h.setUint32(14, crc, true);
-    h.setUint32(18, entry.data.length, true);
-    h.setUint32(22, entry.data.length, true);
-    h.setUint16(26, name.length, true);
-    header.set(name, 30);
-    local.push(header, entry.data);
-
-    const record = new Uint8Array(46 + name.length);
-    const c = new DataView(record.buffer);
-    c.setUint32(0, 0x02014b50, true);
-    c.setUint16(4, 20, true);
-    c.setUint16(6, 20, true);
-    c.setUint16(10, 0, true);
-    c.setUint32(16, crc, true);
-    c.setUint32(20, entry.data.length, true);
-    c.setUint32(24, entry.data.length, true);
-    c.setUint16(28, name.length, true);
-    c.setUint32(42, offset, true);
-    record.set(name, 46);
-    central.push(record);
-    offset += header.length + entry.data.length;
-  }
-  const directory = concat(central);
-  const commentBytes = utf8(comment);
-  const end = new Uint8Array(22 + commentBytes.length);
-  const e = new DataView(end.buffer);
-  e.setUint32(0, 0x06054b50, true);
-  e.setUint16(8, entries.length, true);
-  e.setUint16(10, entries.length, true);
-  e.setUint32(12, directory.length, true);
-  e.setUint32(16, offset, true);
-  e.setUint16(20, commentBytes.length, true);
-  end.set(commentBytes, 22);
-  return concat([...local, directory, end]);
-}
-
-function concat(parts: readonly Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
-  let at = 0;
-  for (const part of parts) {
-    out.set(part, at);
-    at += part.length;
-  }
-  return out;
-}
-
-const CONTAINER = `<?xml version="1.0"?>
-<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
-  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
-</container>`;
-
-/** An EPUB: the uncompressed `mimetype` entry first, the container, and the package document. */
-const epub = (opf: string, comment = ''): Uint8Array =>
-  zip(
-    [
-      { name: 'mimetype', data: utf8('application/epub+zip') },
-      { name: 'META-INF/container.xml', data: utf8(CONTAINER) },
-      { name: 'OEBPS/content.opf', data: utf8(opf) },
-    ],
-    comment,
-  );
-
-const opf = (metadata: string, packageAttributes = ' unique-identifier="pub-id"'): string => `<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0"${packageAttributes}>
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-${metadata}
-    <dc:title>A Small Book</dc:title>
-    <dc:language>en</dc:language>
-  </metadata>
-  <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest>
-  <spine><itemref idref="nav"/></spine>
-</package>`;
-
-const UUID = 'urn:uuid:9f1b2c3d-1111-4000-8000-abcdefabcdef';
+const converted = (metadata: string): Uint8Array => epub(`${opf(metadata)}\n<!-- repacked by another tool -->`);
 
 describe('documentIdOf', () => {
-  it('names a Document by its own bytes, self-describing', () => {
-    const id = documentIdOf(epub(opf(`    <dc:identifier id="pub-id">${UUID}</dc:identifier>`)));
+  it('names a Document from its manifest, self-describing', () => {
+    const id = documentIdOf(archive(namedEpub()));
     expect(id.startsWith(DOCUMENT_ID_PREFIX)).toBe(true);
     expect(id).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
-  it('gives the same name to the same bytes and a different one to different bytes', () => {
-    const one = epub(opf(`    <dc:identifier id="pub-id">${UUID}</dc:identifier>`));
-    expect(documentIdOf(one)).toBe(documentIdOf(epub(opf(`    <dc:identifier id="pub-id">${UUID}</dc:identifier>`))));
-    expect(documentIdOf(one)).not.toBe(documentIdOf(epub(opf(`    <dc:identifier id="pub-id">${UUID}</dc:identifier>`), 'resaved')));
+  it('is not a digest of the file', () => {
+    const bytes = namedEpub();
+    expect(documentIdOf(archive(bytes))).not.toBe(`${DOCUMENT_ID_PREFIX}${sha256Hex(bytes)}`);
+  });
+
+  it('gives the same name to the same members and a different one when a member changes', () => {
+    expect(documentIdOf(archive(namedEpub()))).toBe(documentIdOf(archive(namedEpub())));
+    expect(documentIdOf(archive(namedEpub()))).not.toBe(documentIdOf(archive(converted(named))));
+  });
+
+  /**
+   * **The measured property ADR 0004 turns on**, at fixture scale: a ZIP's CRC-32
+   * is over each member's uncompressed bytes, so three files of three different
+   * lengths carrying the same members are one Document. Re-run on the owner's own
+   * 34,453,009-byte book in notes/NOTES_2026-09-19.md, where the same three rows
+   * hold and the ids are equal.
+   */
+  it('is the same id for the same book repacked at another compression level', () => {
+    const stored = namedEpub();
+    const light = namedEpub({ level: 1 });
+    const heavy = namedEpub({ level: 9 });
+    expect(new Set([stored.length, light.length, heavy.length]).size).toBe(3);
+    expect(new Set([sha256Hex(stored), sha256Hex(light), sha256Hex(heavy)]).size).toBe(3);
+    expect(new Set([documentIdOf(archive(stored)), documentIdOf(archive(light)), documentIdOf(archive(heavy))]).size).toBe(1);
+  });
+
+  /** ADR 0004: "A repacker may emit members in a different order; document order is not part of what makes a book this book." */
+  it('is the same id when the members are in a different order', () => {
+    expect(documentIdOf(archive(namedEpub({ reverse: true })))).toBe(documentIdOf(archive(namedEpub())));
+  });
+
+  /**
+   * The case sorting by name alone does not settle. A ZIP may legally hold two
+   * members of the same name, and their order would then be whatever the packer
+   * did — so the order of two lines of the digest would be, which is the one
+   * thing the sort is there to remove. The sort breaks the tie on the contents.
+   */
+  it('is the same id when two members share a name and are written in either order', () => {
+    const entries = [
+      { name: 'OEBPS/one.xhtml', data: utf8('the first of two') },
+      { name: 'OEBPS/one.xhtml', data: utf8('the second of two') },
+    ];
+    expect(documentIdOf(archive(zip(entries, { reverse: true })))).toBe(documentIdOf(archive(zip(entries))));
+  });
+
+  /**
+   * An archive comment is a place tools write their own name. It says nothing
+   * about what is in the book, and under the rule this replaced it renamed it.
+   */
+  it('is not changed by an archive comment', () => {
+    expect(documentIdOf(archive(namedEpub({ comment: 'stamped by another tool' })))).toBe(documentIdOf(archive(namedEpub())));
+  });
+
+  it('changes when a member is renamed, and when one is added', () => {
+    const one = utf8('a chapter');
+    const original = documentIdOf(archive(zip([{ name: 'OEBPS/one.xhtml', data: one }])));
+    expect(documentIdOf(archive(zip([{ name: 'OEBPS/two.xhtml', data: one }])))).not.toBe(original);
+    expect(documentIdOf(archive(zip([{ name: 'OEBPS/one.xhtml', data: one }, { name: 'OEBPS/two.xhtml', data: one }])))).not.toBe(original);
+  });
+
+  /**
+   * ADR 0004: "Both throw rather than falling back to a whole-file hash, because
+   * a silent fallback would mean the same book has two possible ids depending on
+   * a code path — which is the one thing an identity may not have." So the
+   * assertion is not only that it throws: it is that no id comes back.
+   */
+  it('refuses a file that is not an archive rather than naming it anyway', () => {
+    const notAnArchive = utf8('This is a text file with an epub extension, and it is comfortably longer than a record.');
+    expect(() => documentIdOf(archive(notAnArchive))).toThrow(/no end-of-central-directory record/);
+  });
+});
+
+describe('documentManifest', () => {
+  /**
+   * The rule itself, in one assertion, which is why `documentManifest` is
+   * exported: the version line, the sort, the NUL framing and the decimal
+   * numbers are four separate decisions, and watching one hex string change
+   * would not say which of them moved.
+   *
+   * `epub-zip-v1` is written out here rather than imported, so that changing
+   * `DOCUMENT_ID_RULE` — which renames every Document in the owner's Library —
+   * fails a test instead of passing quietly.
+   */
+  it('is the version line, then one line per member, sorted by name', () => {
+    const one = utf8('one');
+    const two = utf8('two');
+    const manifest = documentManifest(archive(zip([{ name: 'b.txt', data: two }, { name: 'a.txt', data: one }])));
+    expect(new TextDecoder().decode(manifest)).toBe(`epub-zip-v1\na.txt\u0000${crc32(one)}\u00003\nb.txt\u0000${crc32(two)}\u00003\n`);
+  });
+
+  /** A NUL sorts below every byte a name can hold, which is what puts a directory's own entry before the entries under it. */
+  it('sorts by the bytes of the name, so the order does not depend on a decoder', () => {
+    const data = utf8('x');
+    const manifest = new TextDecoder().decode(
+      documentManifest(archive(zip([{ name: 'OEBPS/b', data }, { name: 'OEBPS/a/b', data }, { name: 'OEBPS/a', data }]))),
+    );
+    expect(manifest.split('\n').map((line) => line.split('\u0000')[0])).toEqual(['epub-zip-v1', 'OEBPS/a', 'OEBPS/a/b', 'OEBPS/b', '']);
   });
 });
 
 describe('asDocumentId', () => {
   it('accepts what documentIdOf produced and refuses everything else', () => {
-    expect(asDocumentId(documentIdOf(utf8('x')))).not.toBeNull();
+    expect(asDocumentId(documentIdOf(archive(namedEpub())))).not.toBeNull();
     expect(asDocumentId(`${DOCUMENT_ID_PREFIX}${'a'.repeat(64)}`)).not.toBeNull();
     // A bare digest, the wrong length, upper case, another algorithm, or not a string at all.
     expect(asDocumentId('a'.repeat(64))).toBeNull();
@@ -226,34 +225,34 @@ describe('readPackageIdentifiers', () => {
 });
 
 describe('identifyDocument', () => {
-  const bytes = epub(opf(`    <dc:identifier id="pub-id">${UUID}</dc:identifier>`));
+  const bytes = namedEpub();
 
   it('records the Document Id, the format and the secondary identifier together', () => {
-    const identity = identifyDocument(bytes, 'epub', readPackageIdentifiers(opf(`    <dc:identifier id="pub-id">${UUID}</dc:identifier>`)));
+    const identity = identifyDocument(archive(bytes), 'epub', readPackageIdentifiers(opf(named)));
     expect(identity).toEqual({
-      id: documentIdOf(bytes),
+      id: documentIdOf(archive(bytes)),
       format: 'epub',
       publicationId: UUID,
       publicationIdSource: 'unique-identifier',
     });
   });
 
-  it('is still an identity when dc:identifier is absent — the bytes are enough', () => {
+  it('is still an identity when dc:identifier is absent — the manifest is enough', () => {
     const plain = epub(opf('    <dc:creator>Nobody</dc:creator>'));
-    const identity = identifyDocument(plain, 'epub', readPackageIdentifiers(opf('    <dc:creator>Nobody</dc:creator>')));
+    const identity = identifyDocument(archive(plain), 'epub', readPackageIdentifiers(opf('    <dc:creator>Nobody</dc:creator>')));
     expect(identity.publicationId).toBeNull();
     expect(identity.publicationIdSource).toBe('none');
-    expect(identity.id).toBe(documentIdOf(plain));
+    expect(identity.id).toBe(documentIdOf(archive(plain)));
   });
 
   it('is still an identity when the package document could not be read at all', () => {
-    expect(identifyDocument(bytes, 'epub').publicationIdSource).toBe('none');
-    expect(identifyDocument(bytes, 'epub', null).publicationIdSource).toBe('none');
+    expect(identifyDocument(archive(bytes), 'epub').publicationIdSource).toBe('none');
+    expect(identifyDocument(archive(bytes), 'epub', null).publicationIdSource).toBe('none');
   });
 
   it('says so when one identifier is declared and nothing names it', () => {
     const text = opf(`    <dc:identifier>${UUID}</dc:identifier>`, '');
-    expect(identifyDocument(bytes, 'epub', readPackageIdentifiers(text))).toMatchObject({
+    expect(identifyDocument(archive(bytes), 'epub', readPackageIdentifiers(text))).toMatchObject({
       publicationId: UUID,
       publicationIdSource: 'only',
     });
@@ -265,7 +264,7 @@ describe('identifyDocument', () => {
     <dc:identifier>${UUID}</dc:identifier>`,
       '',
     );
-    expect(identifyDocument(bytes, 'epub', readPackageIdentifiers(text))).toMatchObject({
+    expect(identifyDocument(archive(bytes), 'epub', readPackageIdentifiers(text))).toMatchObject({
       publicationId: 'urn:isbn:9780000000001',
       publicationIdSource: 'first-of-several',
     });
@@ -273,19 +272,25 @@ describe('identifyDocument', () => {
 });
 
 describe('matchIdentities', () => {
-  const identity = (bytes: Uint8Array, text: string) => identifyDocument(bytes, 'epub', readPackageIdentifiers(text));
-  const named = `    <dc:identifier id="pub-id">${UUID}</dc:identifier>`;
+  const identity = (bytes: Uint8Array, text: string) => identifyDocument(archive(bytes), 'epub', readPackageIdentifiers(text));
 
-  it('calls the same bytes the same Document, definitively', () => {
-    const a = identity(epub(opf(named)), opf(named));
-    const b = identity(epub(opf(named)), opf(named));
-    expect(matchIdentities(a, b)).toBe('same-bytes');
+  it('calls the same members the same Document, definitively', () => {
+    const a = identity(namedEpub(), opf(named));
+    const b = identity(namedEpub(), opf(named));
+    expect(matchIdentities(a, b)).toBe('same-contents');
   });
 
-  /** The failure ADR 0004 records the second identifier to cover: a re-saved copy changes the Document Id and keeps `dc:identifier`. */
-  it('recognises a re-saved copy through its unambiguous publication identifier', () => {
-    const a = identity(epub(opf(named)), opf(named));
-    const b = identity(epub(opf(named), 'resaved by another tool'), opf(named));
+  /** A repack is the *same* Document now, not a candidate to be confirmed by `dc:identifier`. That is ADR 0004's amendment. */
+  it('calls a copy repacked at another compression level the same Document', () => {
+    const a = identity(namedEpub(), opf(named));
+    const b = identity(namedEpub({ level: 9 }), opf(named));
+    expect(matchIdentities(a, b)).toBe('same-contents');
+  });
+
+  /** The failure the second identifier is recorded to cover: a tool that rewrote the package document changed the id and kept `dc:identifier`. */
+  it('recognises a converted copy through its unambiguous publication identifier', () => {
+    const a = identity(namedEpub(), opf(named));
+    const b = identity(converted(named), opf(named));
     expect(a.id).not.toBe(b.id);
     expect(matchIdentities(a, b)).toBe('same-publication');
   });
@@ -296,16 +301,16 @@ describe('matchIdentities', () => {
     <dc:identifier>${UUID}</dc:identifier>`,
       '',
     );
-    const a = identity(epub(opf(named)), several);
-    const b = identity(epub(opf(named), 'resaved'), several);
+    const a = identity(namedEpub(), several);
+    const b = identity(converted(named), several);
     expect(a.publicationId).toBe(b.publicationId);
     expect(matchIdentities(a, b)).toBe('different');
   });
 
   it('refuses two Documents with no identifier, which would otherwise both be null', () => {
     const none = opf('    <dc:creator>Nobody</dc:creator>');
-    const a = identity(epub(opf(named)), none);
-    const b = identity(epub(opf(named), 'resaved'), none);
+    const a = identity(namedEpub(), none);
+    const b = identity(converted(named), none);
     expect(matchIdentities(a, b)).toBe('different');
   });
 
@@ -316,8 +321,8 @@ describe('matchIdentities', () => {
    * and its own galley proof — are not one Document.
    */
   it('refuses two Documents of different formats that share an identifier', () => {
-    const a = identity(epub(opf(named)), opf(named));
-    const b = identity(epub(opf(named), 'resaved'), opf(named));
+    const a = identity(namedEpub(), opf(named));
+    const b = identity(converted(named), opf(named));
     expect(matchIdentities(a, b)).toBe('same-publication');
     expect(matchIdentities(a, { ...b, format: 'pdf' as DocumentFormat })).toBe('different');
   });

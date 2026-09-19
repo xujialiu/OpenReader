@@ -72,6 +72,30 @@ export function keyIsRequired(provider: ProviderId): boolean {
 }
 
 /**
+ * Whether this section is offered a **gateway headers** field.
+ *
+ * Exactly the two sections of `ProviderSettings` that carry `headers?`, which is
+ * exactly where `createProvider` parses it — `factory.ts` calls
+ * `parseHeaderList` for `compatible` and for `local` and for nothing else. That
+ * is the whole rule, and it is philosophy rule 6 from the other side: a field on
+ * any other Provider's screen would be typed into and do nothing.
+ *
+ * Both rather than only the local engine, because the thing a gateway sits in
+ * front of is a server, and an address that speaks OpenAI's API is as likely to
+ * be the owner's own as one that speaks an engine's. The owner's desktop export
+ * settles it as a fact rather than a guess: it carries the same header text
+ * under three separate service keys, one of which is the OpenAI-compatible one.
+ *
+ * The two entries are separate, so the text typed for one never reaches the
+ * other — philosophy rule 3, which the desktop export does not keep, since one
+ * copy of a token under three keys is one token that three services could be
+ * sent.
+ */
+export function headersAreOffered(provider: ProviderId): boolean {
+  return provider === 'local' || provider === 'compatible';
+}
+
+/**
  * The speeds the player offers.
  *
  * 1.5–3× is what the app is built for (ADR 0009, and `docs/PHILOSOPHY.md` is
@@ -88,10 +112,15 @@ export const READING_RATES: readonly number[] = [1, 1.5, 2, 2.5, 3];
  *
  * It is **not** stored anywhere. Shared Settings live in the Sync Folder
  * (ADR 0003) and `src/core/sync/` is not written yet, so the honest thing is to
- * keep them in memory and have the sheet say so — rather than inventing a
- * private store now that the folder will have to argue with later. The API key is
- * the exception and is in the Keychain, because ADR 0002 says where a key lives
- * and nothing about that waits on sync.
+ * keep them in memory and have the screen say so — rather than inventing a
+ * private store now that the folder will have to argue with later.
+ *
+ * **The credentials are the exception, and that is why they are not in here.**
+ * The API key and the gateway headers are in the Keychain, because ADR 0002 says
+ * where a credential lives and nothing about that waits on sync — and because
+ * this object's eventual home is a file on a server the owner syncs through,
+ * which philosophy rule 3 says is not where a Provider's credential goes. So
+ * there is no `headers` field below, and the absence is the decision.
  *
  * The two sections that speak OpenAI's API keep their own model and address, as
  * `ProviderSettings` does: nothing typed for one is ever sent to the other.
@@ -193,26 +222,77 @@ export function readiness(settings: AppSettings, hasKey: boolean): Readiness {
   return missing.length === 0 ? { ready: true } : { ready: false, missing };
 }
 
+/** "an API key, a model and a Voice" — the one place the commas and the final "and" are decided. */
+export function andList(items: readonly string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
 /** "OpenAI needs an API key, a model and a Voice." */
 export function readinessSentence(provider: ProviderId, missing: readonly string[]): string {
   const label = PROVIDER_LABELS[provider];
   if (missing.length === 0) return `${label} is ready.`;
-  if (missing.length === 1) return `${label} needs ${missing[0]}.`;
-  return `${label} needs ${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}.`;
+  return `${label} needs ${andList(missing)}.`;
 }
 
 /**
- * The settings `createProvider` reads, with the key in the one section it
- * belongs to.
+ * What a Provider's own screen holds, for the row in the list that has to say
+ * what is behind it before it is tapped.
  *
- * Every section is filled in because `ProviderSettings` describes all four and
- * the factory reads one; the three that are not selected get no key. That is not
- * defensive tidiness — it is philosophy rule 3 in the only place it can be
- * enforced, since this is the single call that turns a typed credential into
- * something a Provider can use.
+ * Not `readiness`, and the difference matters: `readiness` says what is
+ * *missing* for the Provider in use, which is a question about the Keychain and
+ * the settings as they are now. This says what the screen is *for*, which is
+ * true whether or not the Provider has ever been used, and is what a list of six
+ * rows can honestly show without six Keychain lookups.
+ *
+ * The Voice is deliberately absent. There is one Voice and it belongs to the
+ * Provider in use (ADR 0010, CONTEXT.md), so it is not something a Provider that
+ * is not in use holds.
+ *
+ * The last two lines are derived from the predicates above rather than written
+ * out, so a Provider that gains a key field or a headers field cannot end up
+ * with a row that does not mention it.
  */
-export function providerSettings(settings: AppSettings, key: string): ProviderSettings {
-  const keyFor = (provider: ProviderId): string => (settings.provider === provider ? key : '');
+export function providerFields(provider: ProviderId): readonly string[] {
+  const fields: string[] = [];
+  if (provider === 'local') fields.push('an engine');
+  if (provider === 'local' || provider === 'compatible') fields.push('the address of the server');
+  if (provider === 'openai-official' || provider === 'compatible') fields.push('a model');
+  if (keyIsOffered(provider)) fields.push(keyIsRequired(provider) ? 'an API key' : 'an API key if the server wants one');
+  if (headersAreOffered(provider)) fields.push('the headers of a gateway in front of it');
+  return fields;
+}
+
+/**
+ * The owner's credentials for the Provider that is about to be built, read out
+ * of the Keychain at the moment they are needed and never held anywhere else
+ * (ADR 0002, ADR 0019).
+ *
+ * Two, because there are two: a key, and the gateway headers in front of a
+ * server of the owner's own. Both are the empty string where the Provider has
+ * none, which is what each one's own refusal is there to judge — a Provider that
+ * requires a key answers 401, and a gateway that requires a token answers 403.
+ */
+export interface ProviderSecrets {
+  key: string;
+  /** The field as the owner typed it. `core/headers.ts` parses it; nothing here does. */
+  headers: string;
+}
+
+/**
+ * The settings `createProvider` reads, with each credential in the one section
+ * it belongs to.
+ *
+ * Every section is filled in because `ProviderSettings` describes all five and
+ * the factory reads one; the four that are not selected get no key and no
+ * headers. That is not defensive tidiness — it is philosophy rule 3 in the only
+ * place it can be enforced, since this is the single call that turns a typed
+ * credential into something a Provider can use.
+ */
+export function providerSettings(settings: AppSettings, secrets: ProviderSecrets): ProviderSettings {
+  const keyFor = (provider: ProviderId): string => (settings.provider === provider ? secrets.key : '');
+  const headersFor = (provider: ProviderId): string => (settings.provider === provider ? secrets.headers : '');
 
   return {
     'openai-official': { apiKey: keyFor('openai-official'), model: settings.openai.model.trim() },
@@ -220,6 +300,7 @@ export function providerSettings(settings: AppSettings, key: string): ProviderSe
       baseURL: settings.compatible.baseURL.trim(),
       apiKey: keyFor('compatible'),
       model: settings.compatible.model.trim(),
+      headers: headersFor('compatible'),
     },
     speechify: { apiKey: keyFor('speechify') },
     // `freeOnly` is on and is not yet a setting: a missing or unknown `model`
@@ -229,11 +310,14 @@ export function providerSettings(settings: AppSettings, key: string): ProviderSe
     // of ADR 0010's per-document Voice — has no field yet either, and an empty
     // field is a field with no ids rather than a special case.
     fish: { apiKey: keyFor('fish'), freeOnly: true, voices: '' },
-    // No key and no headers: the local engines take neither an API key nor, yet,
-    // the gateway headers `kokoro.ts` accepts for a server behind Cloudflare
-    // Access. A setting the app does not offer is better than one that claims to
-    // do something (philosophy rule 6).
-    local: { engine: settings.local.engine, baseURL: settings.local.baseURL.trim() },
+    // No key — a server of the owner's own is reached by address (ADR 0014) —
+    // but headers, because that address can be behind a gateway that wants a
+    // service token of its own, and `factory.ts` has passed
+    // `parseHeaderList(settings.local.headers)` to the engine since the layer
+    // was ported. Until this line there was no field to fill it from, which is
+    // the whole of why a Kokoro behind Cloudflare Access answered 403
+    // (notes/NOTES_2026-09-19.md, 22:48).
+    local: { engine: settings.local.engine, baseURL: settings.local.baseURL.trim(), headers: headersFor('local') },
   };
 }
 

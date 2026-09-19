@@ -1,9 +1,9 @@
 /**
  * SHA-256 over a `Uint8Array`, in plain JavaScript.
  *
- * ADR 0004 makes a document's identity a hash of its own bytes, so something
- * here has to compute one, and every obvious way of not writing this file is
- * closed:
+ * ADR 0004 makes a document's identity a digest over the archive's own manifest,
+ * so something here has to compute one, and every obvious way of not writing this
+ * file is closed:
  *
  * - `expo-crypto` is a platform import, which `src/core/` may not make
  *   (`eslint.config.js`, ADR 0013). Taking a digest as an injected dependency
@@ -40,9 +40,10 @@ const rotr = (x: number, n: number): number => ((x >>> n) | (x << (32 - n))) >>>
 /**
  * The digest of `bytes`, lowercase hex, 64 characters.
  *
- * Whole 64-byte blocks are read straight out of the caller's array — a book is
- * tens of megabytes and copying it to append nine bytes of padding is a copy
- * nobody needs. Only the tail is built.
+ * Whole 64-byte blocks are read straight out of the caller's array — copying the
+ * input to append nine bytes of padding is a copy nobody needs. Only the tail is
+ * built. That mattered more when a Document Id was a digest of the whole 34 MB
+ * file; it is kept because the argument has not changed, only the input.
  */
 export function sha256Hex(bytes: Uint8Array): string {
   const h = H0.slice();

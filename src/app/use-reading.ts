@@ -39,7 +39,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createLocator, readingPositionAt, type ReadingPosition } from '../core/document';
 import { createProvider } from '../core/providers/factory';
 import type { Utterance } from '../core/segmenter';
-import { readProviderKey } from '../keys/store';
+import { readGatewayHeaders, readProviderKey } from '../keys/store';
 import { createPlaybackEngine, type PlaybackEngine, type ReaderClock } from '../playback';
 import {
   useReaderBridge,
@@ -52,6 +52,7 @@ import {
 import { documentLanguage, samePrefix, segmentDocument } from './segment';
 import {
   engineIdentity,
+  headersAreOffered,
   keyIsOffered,
   keyIsRequired,
   providerDeps,
@@ -131,7 +132,24 @@ function describe(problem: unknown): string {
   return problem instanceof Error ? problem.message : String(problem);
 }
 
-export function useReading(settings: AppSettings, hasKey: boolean): Reading {
+/**
+ * What the screen knows about the owner's credentials, which is deliberately not
+ * the credentials.
+ *
+ * `hasKey` decides what `readiness` may claim; the value itself is read from the
+ * Keychain in `build` and handed straight on (ADR 0002). `writtenAt` is the
+ * shell's count of credential writes and is here for one reason: an engine built
+ * around a key or a gateway token that has since been replaced would go on using
+ * the old one, so pasting the right token and still being refused would look
+ * exactly like pasting the wrong one.
+ */
+export interface KnownCredentials {
+  hasKey: boolean;
+  writtenAt: number;
+}
+
+export function useReading(settings: AppSettings, credentials: KnownCredentials): Reading {
+  const { hasKey, writtenAt } = credentials;
   const [status, setStatus] = useState<ReadingStatus>(NOTHING_YET);
 
   const engineRef = useRef<PlaybackEngine | null>(null);
@@ -348,14 +366,37 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
         }));
         return null;
       }
-      if (lookup.outcome === 'found') key = lookup.key;
+      if (lookup.outcome === 'found') key = lookup.secret;
       else if (keyIsRequired(settings.provider)) {
         setStatus((was) => ({ ...was, note: readinessSentence(settings.provider, ['an API key']) }));
         return null;
       }
     }
 
-    const provider = createProvider(settings.provider, providerSettings(settings, key), providerDeps);
+    /**
+     * The gateway headers, read the same way and at the same moment as the key
+     * (ADR 0019). Absent is not a failure and never can be: a server that is
+     * behind nothing wants none, and one that is behind something answers for
+     * itself — a 403 from the gateway rather than a guess from here.
+     */
+    let gatewayHeaders = '';
+    if (headersAreOffered(settings.provider)) {
+      const lookup = await readGatewayHeaders(settings.provider);
+      if (lookup.outcome === 'refused') {
+        setStatus((was) => ({
+          ...was,
+          note: `The Keychain would not hand over the gateway headers: ${lookup.refusal.message}`,
+        }));
+        return null;
+      }
+      if (lookup.outcome === 'found') gatewayHeaders = lookup.secret;
+    }
+
+    const provider = createProvider(
+      settings.provider,
+      providerSettings(settings, { key, headers: gatewayHeaders }),
+      providerDeps,
+    );
     const engine = createPlaybackEngine({
       provider,
       // Fixed for the engine's lifetime, because a Voice belongs to a document
@@ -449,13 +490,22 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
   }, [settings.rate]);
 
   /**
-   * A different Provider, Voice or address is a different engine.
+   * A different Provider, Voice or address is a different engine — and so is the
+   * same one with a credential that has since been written.
+   *
+   * The credential is not in `engineIdentity`, and cannot be: it is not in
+   * `AppSettings`, because it is in the Keychain (ADR 0002, ADR 0019). So the
+   * count of writes stands in for it. It is coarser than comparing the values —
+   * a save that changes nothing still rebuilds — and that is the right way
+   * round, because the cost is one rebuild of an engine whose Clips are already
+   * in the memory cache, and the alternative is a 403 the owner has just fixed
+   * and cannot clear.
    *
    * The work is all in the cleanup, which is the point: it runs when the identity
    * changes and when the screen goes away, and it is the only place the audio
    * session is given back.
    */
-  const identity = engineIdentity(settings);
+  const identity = `${engineIdentity(settings)}@${writtenAt}`;
   useEffect(
     () => () => {
       const engine = engineRef.current;

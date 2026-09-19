@@ -6,10 +6,13 @@
  * Five questions, five files, and the order they appear in is the order they
  * depend on each other.
  *
- * - `identity.ts` — ADR 0004. A Document Id from the bytes, `dc:identifier`
- *   beside it as a secondary match, and the format recorded rather than assumed
- *   (ADR 0007). Nothing here opens a file: the identity function takes a
- *   `Uint8Array` and the caller reads the file.
+ * - `identity.ts` — ADR 0004. A Document Id over the archive's own manifest,
+ *   `dc:identifier` beside it as a secondary match, and the format recorded
+ *   rather than assumed (ADR 0007).
+ * - `zip.ts` — the manifest: a ZIP's central directory, and the seam that gets
+ *   at it. Nothing here opens a file — the caller passes `ArchiveBytes`, a
+ *   length and a function returning one range, so the 220,092 bytes an id needs
+ *   are the only bytes anyone reads.
  * - `sha256.ts` — the digest that makes the above computable with no platform
  *   API and no dependency, so a test under Node hashes what the app hashes.
  * - `anchor.ts` — ADR 0008's text anchor, and the matching that decides whether
@@ -33,9 +36,11 @@
 export {
   DOCUMENT_FORMATS,
   DOCUMENT_ID_PREFIX,
+  DOCUMENT_ID_RULE,
   asDocumentFormat,
   asDocumentId,
   documentIdOf,
+  documentManifest,
   identifyDocument,
   matchIdentities,
   readPackageIdentifiers,
@@ -46,6 +51,8 @@ export {
   type PackageIdentifiers,
   type PublicationIdSource,
 } from './identity';
+
+export { ARCHIVE_TAIL, bytesAsArchive, readCentralDirectory, type ArchiveBytes, type ZipMember } from './zip';
 
 export { sha256Hex } from './sha256';
 

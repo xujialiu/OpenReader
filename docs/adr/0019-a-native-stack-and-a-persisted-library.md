@@ -273,6 +273,155 @@ from the installed Expo's own `bundledNativeModules.json` rather than from npm
 latest. `test/app-config.test.ts` reads that same file, so it asserts the rule
 rather than a number that would have to be edited at the next upgrade.
 
+## Settings is three routes, and choosing a Provider is not a side effect of looking at one
+
+`Settings` is a list of two rows. `General` holds what is true of the whole app
+and holds nothing yet, and says so — the same choice the Appearance sheet made
+above, for the same reason. `Providers` lists every Provider and opens one per
+route, `Provider: { id }`, whose title is that Provider's own name.
+
+Three decisions inside that, each of which could have gone the other way:
+
+- **The Providers list does not select.** Tapping a row opens it; making it the
+  one that reads is a press on the Provider's own screen, where what it needs is
+  visible at the moment of choosing. A list that selected on tap would make
+  "look at what Fish Audio wants" and "stop reading with Kokoro" the same
+  gesture, and the second is the one the owner would not notice having made.
+- **The Voice section appears only on the Provider in use.** There is one Voice
+  and it belongs to the Provider that is reading (ADR 0010, CONTEXT.md), and
+  `providerSettings` puts a credential in the section of the Provider the
+  settings name and in no other (philosophy rule 3) — so asking a Provider that
+  is not in use for its Voices would be asking with an empty key. The address,
+  the model and the credentials of a Provider that is not in use are all still
+  editable, and are kept for when it is.
+- **A row says what is behind it, not just its name.** `providerFields` derives
+  that sentence from the same predicates the screen asks — `keyIsOffered`,
+  `headersAreOffered` — so a Provider that gains a field cannot end up with a row
+  that does not mention it. The row for the Provider in use carries `readiness`
+  instead, which is the only row that can: it is the only one whose key has been
+  looked up.
+
+The draft still commits on unmount, and it now lives on the Provider screen
+rather than on the Settings screen, because that is the screen that edits.
+Nothing on the list screens is editable, so nothing on them is a draft.
+
+## The gateway headers are a credential, so they are in the Keychain and not in the settings
+
+`ProviderSettings['local']` is `{ engine, baseURL, headers? }` and `factory.ts`
+has passed `parseHeaderList(settings.local.headers)` to the engine since the
+layer was ported. **No settings field held it.** That one gap is why the owner's
+own Kokoro answered 403 (notes/NOTES_2026-09-19.md, 22:48), and why no highlight
+this app had ever painted on a device had been following a real voice — the
+19:05 and 23:24 entries ran real timings through the real consumers, but under
+Node, with no screen and no audio hardware at the end of them.
+
+The field exists now, on `local` and on `compatible` — exactly the two sections
+`ProviderSettings` declares `headers?` on, which is exactly where the factory
+parses it. Not on the other three: a field there would be typed into and do
+nothing, which philosophy rule 6 forbids. `compatible` gets one rather than only
+the local engine because the thing a gateway sits in front of is a *server*, and
+an address that speaks OpenAI's API is as likely to be the owner's own as one
+that speaks an engine's — the owner's desktop export settles that as a fact
+rather than a guess, since it carries the same header text under three separate
+service keys.
+
+**Where the value lives was the decision, and it is the Keychain.** ADR 0002 puts
+an API key there; this is not an API key, so the argument has to be made again
+rather than inherited. It is made on ADR 0002's own three grounds, each of which
+holds:
+
+1. **It is a bearer credential.** A Cloudflare Access service token is a client
+   id and a secret, and it opens everything behind that Access application, not
+   only a speech server.
+2. **It is needed on the synthesis path with the screen locked.** Same as a key,
+   so the same accessibility: `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`, readable
+   during locked background playback, never migrated to another device.
+3. **The alternative destination is not "a settings file", it is ADR 0003's Sync
+   Folder.** `AppSettings` says in its own comment that its eventual home is the
+   owner's own sync folder. Philosophy rule 3 is that a credential goes to the
+   Provider it belongs to and to nowhere else, and a sync server is somewhere
+   else. The desktop plugin does put this text in its exported settings, and its
+   settings export is what its WebDAV upload sends — which is precisely the shape
+   ADR 0002 already declined to copy for API keys.
+
+Size is not the argument but is worth recording: the owner's header text is 151
+characters, against the roughly 2 KB above which Keychain values have
+historically been refused.
+
+**What ADR 0002 does not cover, and this adds.** A key is one opaque string; this
+is several `Name: value` pairs, and the names are not secret. They go into the
+entry with the values anyway, because the owner pastes the pairs as one thing and
+splitting the secret half out would mean two fields for one paste. So a second
+entry *kind* beside `provider-key.<id>`: `gateway-headers.<id>`, one per
+Provider, through the same `SecureStoreOptions` object — two option objects would
+be two places for the service name to drift, and `test/keys/provider-key.test.ts`
+asserts that exactly one accessibility is named in the file. One entry per
+Provider is what makes philosophy rule 3 true of headers as well as of keys: the
+text typed on one Provider's screen cannot reach another's, which is not true of
+the desktop export's one copy under three keys. The price is that an owner behind
+one gateway with two services pastes the same token twice, and that is the same
+price ADR 0002's "one key per entry" already charges.
+
+The field is **not** `secure`. That is deliberate and it is the one place the two
+credentials are treated differently: a dotted line over `Name: value` pairs tells
+the owner nothing about whether they pasted a client id where a secret belonged,
+and the name half has to be readable for the field to be checkable at all. What
+is stored is never read back out to the screen, so the field is empty unless it
+is being typed into — the same rule the key field already follows.
+
+## A credential written on one screen has to reach two others
+
+The Library, the Reader beneath the stack and the Provider screen being typed
+into are all mounted at once, and only the last of them writes. Two consequences,
+and the second is worse than the first:
+
+- The Reader's `keyPresence` was looked up when it mounted, so pasting a key and
+  coming back left Play disabled for a key that was saved. The ADR chose a native
+  stack precisely so that Reader → Settings → back does not remount the Reader,
+  which is what makes this reachable.
+- An engine already built around a credential that has since been replaced goes
+  on using the old one. Pasting the right gateway token and still being refused
+  looks exactly like pasting the wrong one, and nothing on the screen separates
+  them.
+
+So the shell holds `secretsWritten`, a count of writes — not a credential, and
+not even whether there is one. `use-provider-secrets.ts` re-looks when it
+changes and bumps it after every save and forget; `use-reading.ts` folds it into
+the engine identity beside `engineIdentity(settings)`. It is coarser than
+comparing values, since a save that changes nothing still rebuilds, and that is
+the right way round: the cost is one rebuild of an engine whose Clips are already
+in the memory cache, against a refusal the owner has just fixed and cannot clear.
+
+## What the device said
+
+Measured on the simulator against the owner's own servers and 仙逆, and written
+up in full at notes/NOTES_2026-09-19.md, 00:00 and 00:05.
+
+- **The mutation.** Gateway headers removed from the Keychain, nothing else
+  changed: `Kokoro speech: the server rejected the credentials (403)`, and no
+  Clip arrives. Saved: 68 voices, 8 of them `zh`, and audio.
+- **Kokoro's Chinese voices report no Word Timings** and the screen says so —
+  `w=0/0`, the whole Utterance painted, nothing estimated (ADR 0005). Exactly the
+  empty `timestamps` array of the 22:48 entry, now arriving through the app.
+- **Fish Audio highlights per character on Chinese.** Six samples across 89 s:
+  the painted character was the one the audio clock named in four of them, one
+  character early in one and two characters early in one — worst case 0.31 s,
+  never late. About one character of that is the instrument: the expected
+  character was printed by a text node refreshed 10 times a second against a
+  highlight repainting at 60.
+- **The anchor does not drift.** The Clip's audio position against wall clock
+  since its cue stayed within ±6 ms over 65 s (Kokoro) and within +12…+28 ms over
+  89 s (Fish), with no trend in either.
+- **The clock is the audio's.** Content position advanced at **1.4999×** in both
+  runs against a playback rate of 1.5 — which is what ADR 0012 asks for and what
+  `AudioContext.currentTime` could not have produced.
+
+One thing seen and left: `The highlight could not be drawn: Block 1.1 is in
+section 7, which is not on the page` appeared once during the Fish run, and the
+highlight went on being correct for another minute. The note is sticky, so the
+screen says it happened rather than that it is still true. `src/renderer/` was not
+this task's to edit.
+
 ## What this does not decide
 
 Where the Library file is _synced_ to. ADR 0003 owns that, and this ADR

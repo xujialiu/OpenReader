@@ -2,11 +2,11 @@
  * Opening a **Document**: where one comes from, what it is called, and how it
  * is recognised again.
  *
- * Here, and not below. ADR 0004 settles it for the whole project — a hash needs
- * the file's bytes, `src/core/` may not import a file system, so "the identity
- * function takes a `Uint8Array` and the caller reads the file". This is the
- * caller. `src/core/` never learns that a file system exists, and everything
- * below this line receives content rather than a path.
+ * Here, and not below. ADR 0004 settles it for the whole project — naming a
+ * Document needs its bytes and `src/core/` may not import a file system, so the
+ * identity function is handed a way to read ranges and the caller owns the file.
+ * This is the caller. `src/core/` never learns that a file system exists, and
+ * everything below this line receives content rather than a path.
  *
  * A Document arrives one of two ways, and what differs is only whether the file
  * it arrives as is **ours to take** or the owner's to leave alone.
@@ -29,7 +29,7 @@
  * exactly where it was.
  */
 
-import { File } from 'expo-file-system';
+import { File, FileMode } from 'expo-file-system';
 
 import { identifyDocument, type DocumentIdentity } from '../core/document';
 
@@ -124,18 +124,40 @@ export async function addDocument(source: File, options: { move: boolean }): Pro
    * owner reads in the meantime.
    */
   const named = titleFromFileName(source.name);
-  const bytes = await source.bytes();
+
   /**
-   * **This is the expensive line, and the cost was measured rather than
-   * guessed.** `documentIdOf` is SHA-256 in plain JavaScript (ADR 0004 says why
-   * it cannot be anything else here), and on Hermes it runs at about 2.4 MB a
-   * second: 14,362 ms and 14,399 ms on two runs over the owner's 34,453,009-byte
-   * novel, against 1 ms for a 2,567-byte fixture (notes/NOTES_2026-09-19.md,
-   * 22:10). The JavaScript thread is held for all of it, so the app is frozen —
-   * not slow, frozen — for fourteen seconds when a book that size is added. Once
-   * per Document; opening one again costs nothing.
+   * **The file is read in ranges, and never whole.** ADR 0004's amendment: a
+   * Document Id is a digest of the archive's own central directory, which for
+   * the owner's 34,453,009-byte novel is 220,092 bytes. Reading the whole file
+   * here would throw that away at the caller — it is the line that held the
+   * JavaScript thread for 14,362 ms and froze the app while a book was added.
+   *
+   * Three things about the handle, each of which fails as something else:
+   *
+   * - `FileMode.ReadOnly` explicitly, because the default for a `file://` path
+   *   is `ReadWrite`, and that demands write access to a file the owner may have
+   *   opened in place — theirs, not ours (philosophy rule 8).
+   * - The length comes from the `File` and not the handle: `File.size` is a
+   *   `number`, while `FileHandle.size` and `.offset` are `number | null`.
+   * - The handle is closed **before** `keepDocument`, which moves or copies over
+   *   the very file it is open on.
    */
-  const identity = identifyDocument(bytes, 'epub');
+  const handle = source.open(FileMode.ReadOnly);
+  let identity;
+  try {
+    identity = identifyDocument(
+      {
+        size: source.size,
+        read: (offset, length) => {
+          handle.offset = offset;
+          return handle.readBytes(length);
+        },
+      },
+      'epub',
+    );
+  } finally {
+    handle.close();
+  }
 
   keepDocument(identity.id, identity.format, source, options);
   return { identity, title: named };

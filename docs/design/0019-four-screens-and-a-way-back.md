@@ -27,6 +27,25 @@ time, so that the key, the model and the voice for a provider are on a screen of
 their own with that provider's name at the top — rather than every provider's
 fields stacked on one long panel where five sixths of them do not apply.
 
+_General_ is, for now, empty, and it says so: the one thing it will hold is
+whether the app is light or dark, and that has not been built. An entry that
+admits it is empty is better than a switch that does nothing, and better than no
+entry at all — the second would leave the owner wondering where such a thing
+would ever go. The reading speed is deliberately not in it, even though it is
+true of the whole app, because it is judged by listening to the change and so
+belongs beside the book.
+
+Each row in _Providers_ says what is behind it before it is tapped — "holds an
+API key and a model", "holds an engine, the address of the server and the
+headers of a gate in front of it" — and the one being used says instead what it
+still needs before it can read anything. **Tapping a provider does not start
+using it.** Looking at what a service would want and switching the voice that is
+reading are two different intentions, and the second is the one an owner would
+not notice having made. So there is a button, on the provider's own screen,
+where what that provider needs is in front of them at the moment they choose.
+Choosing gives up the voice, because a voice belongs to one service and no
+other.
+
 **Appearance opens upward from the reader.** It is a short list that rises from
 the bottom of the screen over the page, so the text stays visible behind it and
 the effect of a change is seen as it is made. It holds one item for now.
@@ -84,14 +103,68 @@ one entry, because a document is recognised by what is in it rather than by
 where it came from. The second add changes nothing except which end of the shelf
 it sits at.
 
-**Adding a very large book takes about fifteen seconds, and the app does nothing
-while it does.** Recognising a document means reading all of it, and for the
-owner's 34-megabyte novel that is fourteen seconds during which the app cannot
-draw, cannot animate and cannot say what it is doing — it looks stopped. It is
-paid once, when the book is added; opening it again afterwards is instant. It is
-recorded here rather than hidden because an app that looks stopped is the one
-thing this project's own rules say not to ship quietly, and because the fix is a
-piece of work in its own right rather than a line in this one.
+**Adding a very large book used to take about fifteen seconds, and no longer
+does.** Recognising a document meant reading all of it, and for the owner's
+34-megabyte novel that was fourteen seconds during which the app could not draw,
+could not animate and could not say what it was doing — it looked stopped. That
+was recorded here rather than hidden, and it has since been fixed by changing
+what a book is recognised *by*: a book now carries a short list of everything
+inside it, and reading that list is enough. The full measurement is in the
+decision that owns it.
+
+One thing the owner gains and one thing they lose. They gain that the same book
+repacked — the same text, saved again by different software — is now recognised
+as the book they were already reading, instead of arriving as a stranger. They
+lose the guarantee that anything at all can be added: a file that is not really
+a book, or one packed in a way this version cannot read, is now **refused by
+name** rather than quietly given an identity it might not keep. The shelf says
+which file was turned away and why, and nothing is added.
+
+**A voice of your own can now be reached through a locked door.** The owner runs
+a speech engine on a machine of their own, and that machine is not open to the
+internet: something stands in front of it and turns away anything that does not
+present a pass. Until this piece of work there was nowhere in the app to put that
+pass, so the app could not reach the one voice the owner does not pay per word
+for — and, quietly, no highlight the app had ever drawn on a phone had been
+following a real voice. Every one had been driven by timings written for a test.
+There is now a field for it, on the screen of the provider it belongs to, and it
+is the difference between the app being refused at that door and the app reading
+the book aloud.
+
+The field is offered to the two kinds of provider that are an address the owner
+typed, and to none of the three that are a company's service. A field that does
+nothing is worse than no field: it is a question the owner will answer carefully
+and then wonder about.
+
+**The pass is kept where a password is kept, not where a preference is kept.**
+This is the one decision here that costs the owner something. Everything else
+they set is meant, one day, to follow them between their devices through a folder
+they own; a pass that opens their own machine is not something to copy into a
+folder and send to a third place, so it stays on the one phone, in the store the
+phone keeps passwords in. Three consequences the owner will actually meet:
+
+- It survives closing the app, when nothing else on those screens does yet.
+- It does **not** follow them to another device. On a second phone it is typed
+  again.
+- An owner whose one door stands in front of two services types the pass twice,
+  once for each. That is deliberate. The alternative is one copy that three
+  services could be sent, which is the promise this app makes about API keys and
+  should not quietly break for this.
+
+It is shown as ordinary text while it is being typed, unlike the API key beside
+it, and that is not an oversight. A pass of this kind is a name and a value
+together, and a row of dots would hide the half the owner needs to read back to
+check they pasted the right thing into the right place. Once saved it is never
+shown again — the field is empty unless it is being typed into.
+
+**A credential saved in one place now takes effect everywhere at once.** Saving a
+key or a pass while a book is open used to change nothing the open book could
+see: it went on believing there was no key, so the play button stayed dead, and
+if it had already been refused at the door it went on being refused with the
+right pass sitting in the phone. Both are now impossible. The cost is that saving
+a credential stops whatever is being read, because what it was reading with has
+changed — which is the same thing that already happens when the address of a
+server is edited.
 
 **Settings keeps what you typed when you leave it.** The panel it replaces had a
 Done button; a screen has a back arrow and a swipe, and either of those throwing

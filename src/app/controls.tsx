@@ -102,6 +102,7 @@ export function Field({
   hint,
   secure,
   keyboard,
+  lines,
 }: {
   label: string;
   value: string;
@@ -110,12 +111,24 @@ export function Field({
   hint?: ReactNode;
   secure?: boolean;
   keyboard?: 'url';
+  /**
+   * More than one line, for a field whose content has line breaks in it — the
+   * gateway headers are `Name: value` pairs and the owner may paste them one to
+   * a line.
+   *
+   * It is not combined with `secure`, and cannot be: iOS ignores
+   * `secureTextEntry` on a multiline input and React Native warns that the pair
+   * is unsupported. The field that needs several lines is the one whose content
+   * has to be readable to be checked at all, so nothing is lost here — see
+   * `provider-screen.tsx`.
+   */
+  lines?: number;
 }) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, lines ? { height: 22 * lines + 20, textAlignVertical: 'top' } : null]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -124,6 +137,8 @@ export function Field({
         autoCorrect={false}
         spellCheck={false}
         secureTextEntry={secure}
+        multiline={lines !== undefined}
+        numberOfLines={lines}
         keyboardType={keyboard === 'url' ? 'url' : 'default'}
       />
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
@@ -176,6 +191,30 @@ export function DocumentRow({ title, progress, onPress }: { title: string; progr
       <Text style={styles.rowProgress} numberOfLines={2}>
         {progress}
       </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * A row that opens another screen: what is behind it, and one line saying what
+ * is there.
+ *
+ * The same shape as a Document's row on purpose — Settings is now a list of the
+ * same kind as the Library (ADR 0019), and two list idioms in one app would be
+ * two things to learn. The chevron is a character in the system font and not an
+ * icon, for the reason `HeaderButton` gives: there is no icon set in this
+ * binary.
+ */
+export function SettingRow({ title, detail, onPress }: { title: string; detail: string; onPress(): void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+      <View style={styles.rowHead}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.chevron}>›</Text>
+      </View>
+      <Text style={styles.rowProgress}>{detail}</Text>
     </Pressable>
   );
 }
@@ -236,4 +275,6 @@ const styles = StyleSheet.create({
   },
   rowProgress: { color: INK.quiet, fontSize: 13, lineHeight: 18 },
   rowTitle: { color: INK.text, fontSize: 16, fontWeight: '600' },
+  rowHead: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  chevron: { color: INK.quiet, fontSize: 20, lineHeight: 22 },
 });

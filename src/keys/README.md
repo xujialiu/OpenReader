@@ -1,6 +1,15 @@
-# src/keys — ADR 0002
+# src/keys — ADR 0002, ADR 0019
 
-A provider's API key, in the Keychain. Nothing else.
+A provider's credentials, in the Keychain. Nothing else.
+
+**Two kinds, since ADR 0019.** The API key ADR 0002 names, and the **gateway
+headers**: the `Name: value` pairs that get past whatever guards a server of the
+owner's own. The second is not an API key and the argument for putting it here
+is made again rather than inherited — it is a bearer credential, it is needed on
+the synthesis path with the screen locked, and the place it would otherwise live
+is the settings, whose stated destination is the owner's own sync folder. A
+credential goes to the provider it belongs to and nowhere else, and a sync server
+is somewhere else.
 
 The owner supplies their own keys, stored on the device and sent only to the
 provider they belong to. There is no server of ours, no proxy, no subscription
@@ -24,16 +33,20 @@ one of the failure modes that note says are invisible on a desk.
 
 ## Two more facts from the ADR
 
-**One key per entry.** Keychain values have historically been refused above
+**One secret per entry.** Keychain values have historically been refused above
 roughly 2 KB, which no API key approaches but a single JSON blob holding every
-provider's key eventually would.
+provider's key eventually would. Two secrets for one provider is the same
+argument, so they are two entries under two prefixes — and one entry per provider
+per kind is what makes "a credential goes only to the provider it belongs to"
+true of the headers as well as of the key.
 
 **Keychain entries survive an app uninstall on iOS**, so removing a key has to be
 an explicit action in the app.
 
-## Keys never reach the provider layer as a side effect
+## Credentials never reach the provider layer as a side effect
 
-A key is a setting, handed to `createProvider(id, settings, deps)`. The provider
+A key is a setting, handed to `createProvider(id, settings, deps)`. So are the
+gateway headers, which the factory parses on the way in. The provider
 layer does not read the Keychain and `eslint.config.js` forbids it from importing
 `expo-secure-store` at all (ADR 0013). That is what keeps the provider tests
 runnable under Node.
@@ -69,9 +82,12 @@ That is a deferral with a known price, not an oversight.
 
 Three files, split where the native module is.
 
-- `store.ts` — the three operations, and the only file in OpenReader that touches
-  the Keychain.
-- `entry-name.ts` — a Provider id becomes a Keychain entry name.
+- `store.ts` — the three operations, twice over, and the only file in OpenReader
+  that touches the Keychain. One options object serves every call: two would be
+  two places for the service name to drift, and `test/keys/provider-key.test.ts`
+  asserts that exactly one accessibility is named in the file.
+- `entry-name.ts` — a Provider id becomes a Keychain entry name, under one prefix
+  per kind of secret.
 - `refusal.ts` — what the Keychain said when it would not answer.
 
 The split is not decoration. `store.ts` cannot be imported under Node, because
@@ -82,13 +98,13 @@ their values come from that native module, so they are checked as source text �
 the same tool `test/app-config.test.ts` already uses on `app.config.ts`, for the
 same reason.
 
-**Reading a key has three outcomes, not two.** `found`, `absent` and `refused`:
+**Reading a secret has three outcomes, not two.** `found`, `absent` and `refused`:
 `getItemAsync` resolves `null` for "there is no entry" and rejects for
 everything else, and collapsing the second into the first is how the 2 a.m.
 failure becomes indistinguishable from an owner who never entered a key
 (philosophy rule 1).
 
-**Saving a key deletes the entry first.** Not defensiveness. iOS's `set` adds
+**Saving a secret deletes the entry first.** Not defensiveness. iOS's `set` adds
 the item with the accessibility it was given, but on `errSecDuplicateItem` it
 falls through to an update of `kSecValueData` alone — so an entry keeps the
 accessibility it was *created* with, however many times the key is saved again.

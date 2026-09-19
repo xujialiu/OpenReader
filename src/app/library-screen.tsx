@@ -37,7 +37,7 @@ import { documentFile } from './library';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
 import { PROVIDER_LABELS, readiness, readinessSentence } from './settings';
-import { useProviderKey } from './use-provider-key';
+import { useProviderKey } from './use-provider-secrets';
 
 /** How much of the last Utterance a row shows. Two lines of it at this size; more would push the next Document off the screen. */
 const QUOTATION = 90;
@@ -59,10 +59,29 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     try {
       const picked = await pickDocument();
       if (!picked) return;
-      // Moved, not copied: iOS already made this copy in the app's temporary
-      // directory before JavaScript saw it (`document.ts`).
-      const entry = await library.add(picked, { move: true });
-      navigation.navigate('Reader', { id: entry.id });
+      try {
+        // Moved, not copied: iOS already made this copy in the app's temporary
+        // directory before JavaScript saw it (`document.ts`).
+        const entry = await library.add(picked, { move: true });
+        navigation.navigate('Reader', { id: entry.id });
+      } catch (refused) {
+        /**
+         * Naming a Document can now **refuse** (ADR 0004's amendment): a file
+         * that is not a ZIP, or one this build cannot read the directory of, is
+         * turned away rather than given an id, because a fallback would mean one
+         * book with two possible ids depending on which path named it.
+         *
+         * So the file's own name goes in the sentence. The reason arrives from
+         * `zip.ts` already in the owner's words — it says what is wrong with the
+         * file — but it says nothing about *which* file, and a banner over a
+         * shelf of books that does not name one is a sentence about nothing.
+         * Nothing is added and the shelf is unchanged, which is also said,
+         * because the alternative reading is that something half-happened.
+         */
+        library.report(
+          `“${picked.name}” was not added: ${refused instanceof Error ? refused.message : String(refused)}`,
+        );
+      }
     } catch (problem) {
       library.report(problem instanceof Error ? problem.message : String(problem));
     } finally {

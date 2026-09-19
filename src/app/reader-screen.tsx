@@ -30,11 +30,11 @@ import { HeaderButton, INK, Note } from './controls';
 import { openDocument, type OpenDocument } from './document';
 import { ReadingView } from './reading-view';
 import { useShell, type ScreenProps } from './routes';
-import { useProviderKey } from './use-provider-key';
+import { useProviderKey } from './use-provider-secrets';
 
 export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const { id } = route.params;
-  const { settings, setSettings, library } = useShell();
+  const { settings, setSettings, library, secretsWritten } = useShell();
   const entry = useMemo(() => library.entries.find((one) => one.id === id) ?? null, [library.entries, id]);
 
   /**
@@ -124,6 +124,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
           document={opened.document}
           settings={settings}
           keyPresence={key.presence}
+          credentialsWrittenAt={secretsWritten}
           resumeAt={opened.resumeAt}
           onRate={setRate}
           onReached={reached}

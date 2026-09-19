@@ -5,22 +5,59 @@ down, and what parts the document says it has.
 
 ## Identity: content, not a library key (ADR 0004)
 
-A **Document Id** is derived from the document's own bytes and metadata: a hash
-of the file, with the EPUB's `dc:identifier` as a secondary match. **Not** the
-Zotero `{ libraryID, itemKey }` pair the desktop plugin uses — the phone has no
-Zotero library and cannot produce one.
+A **Document Id** is `sha256:` and a digest over the **archive's own central
+directory** — `(name, CRC-32 of the uncompressed bytes, uncompressed size)` per
+member, members sorted by name, behind the version line `epub-zip-v1` — with the
+EPUB's `dc:identifier` as a secondary match. **Not** the Zotero
+`{ libraryID, itemKey }` pair the desktop plugin uses — the phone has no Zotero
+library and cannot produce one.
 
-Both are recorded, with **the hash authoritative**, because each covers the
-other's failure: a hash is unambiguous but changes when a file is re-saved or
-re-compressed, and `dc:identifier` survives re-saving but is often missing or
-duplicated in real EPUBs.
+**Not a hash of the file**, which is what this was until ADR 0004 was amended.
+Two reasons, and the second is the better one:
+
+- Hashing the owner's 34,453,009-byte novel on Hermes took **14,362 ms**, with
+  the JavaScript thread held for all of it, so not even a spinner could be drawn.
+  The manifest is 220,092 bytes to read and 94,876 to digest.
+- A ZIP's CRC-32 is over each member's **uncompressed** bytes, so **the id
+  survives re-compression**. The same book repacked at another deflate level — a
+  converter, a different shop — is the same Document. Under the old rule it was a
+  different one, and the owner's place in it was lost.
+
+Both are recorded, with **the digest authoritative**, because each covers the
+other's failure: the digest is unambiguous but changes when any member's contents
+change, and `dc:identifier` survives that but is often missing or duplicated in
+real EPUBs.
 
 The boundary this draws, stated rather than discovered: a document imported by
 hand that is not also in Zotero has **no desktop counterpart**, so cross-product
 position sync does nothing for it. That is the design.
 
-The bytes arrive as bytes. Nothing here reads a file — `expo-file-system` lives
-above `core/`, and hashing a `Uint8Array` is what makes this testable under Node.
+### The seam: a byte-range reader, not a `Uint8Array`
+
+Nothing here reads a file — `expo-file-system` lives above `core/` (ADR 0013) —
+but the caller no longer hands over the bytes either. It passes `ArchiveBytes`:
+a length, and a `read(offset, length)` that returns **exactly** that many bytes.
+Reading 220,092 bytes instead of 34,453,009 is the entire point, and a function
+taking the whole file's `Uint8Array` would have thrown that away one line before
+it was called. `zip.ts` says why this shape and not the three others considered.
+
+It is synchronous because `FileHandle.readBytes` is, and a test implements it
+over a `Uint8Array` in four lines (`bytesAsArchive`), so the range arithmetic the
+device runs is the range arithmetic the tests run.
+
+### Everything it cannot read, it refuses
+
+No end-of-central-directory record; ZIP64, in the end record or in a member's
+size; a split archive; a directory that does not end where the end record says;
+a member record with no header, or one that runs past the directory; a count that
+does not match the records; a NUL in a member name; **a reader that returns fewer
+bytes than it was asked for** — `readBytes` is `read(upToCount:)` and is
+documented to.
+
+None of them falls back to hashing the file. ADR 0004: "a silent fallback would
+mean the same book has two possible ids depending on a code path — which is the
+one thing an identity may not have." A short read is in that list for the same
+reason, and it is the one a reviewer would have called defensive.
 
 ## Format stays pluggable (ADR 0007)
 
@@ -103,10 +140,13 @@ unreadable Voice must not cost the owner a Reading Position.
 ## What is here
 
 ```ts
-documentIdOf(bytes) → DocumentId                          // `sha256:` + 64 hex
+readCentralDirectory(archive) → ZipMember[]                // (name bytes, crc32, uncompressed size)
+bytesAsArchive(bytes) → ArchiveBytes                       // for a caller that holds the whole archive
+documentManifest(archive) → Uint8Array                     // the exact bytes the id is a digest of
+documentIdOf(archive) → DocumentId                         // `sha256:` + 64 hex, over that manifest
 readPackageIdentifiers(opf) → { all, unique }              // dc:identifier, by regex
-identifyDocument(bytes, format, publication?) → DocumentIdentity
-matchIdentities(a, b) → 'same-bytes' | 'same-publication' | 'different'
+identifyDocument(archive, format, publication?) → DocumentIdentity
+matchIdentities(a, b) → 'same-contents' | 'same-publication' | 'different'
 
 createTextAnchor(text, start, end) → TextAnchor            // NFC, with context
 matchAnchor(anchor, text) → AnchorMatch | null
@@ -146,6 +186,11 @@ oversight: `expo-crypto` is a platform import this directory may not make,
 `crypto.subtle` is not among the globals measured on this Hermes and is
 asynchronous besides, and Node having one that Hermes may not would mean the
 tests proved something about Node.
+
+It is also the slowest thing here, which is why the amount handed to it matters:
+it runs at about **2.4 MB/s on Hermes** and 275 MB/s under Node on the same code,
+so the 94,876-byte manifest is ~40 ms on the device where the 34 MB file was
+14,362 ms (notes/NOTES_2026-09-19.md, 23:56).
 
 ## The contents list, and how precisely it can say where you are (ADR 0020)
 
