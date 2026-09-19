@@ -14,17 +14,24 @@
  * — that is deliberate, and it is not permission.
  */
 
-export { useReaderBridge, type ReaderBridge, type ReaderBridgeOptions } from './reader-bridge';
+export {
+  useReaderBridge,
+  type ReaderBridge,
+  type ReaderBridgeOptions,
+  type RenderedSection,
+} from './reader-bridge';
 
 export { DEFAULT_HIGHLIGHT, UTTERANCE_HIGHLIGHT, WORD_HIGHLIGHT, type HighlightStyles } from './highlighter';
 
 export {
   BLOCKS_MESSAGE,
+  DOCUMENT_MESSAGE,
   PROBLEM_MESSAGE,
   type AnchoredRange,
   type BlockRange,
   type BlocksMessage,
   type CorrectMessage,
+  type DocumentMessage,
   type HighlightMessage,
   type ProblemMessage,
   type ReportedBlock,

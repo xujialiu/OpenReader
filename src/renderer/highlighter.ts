@@ -48,7 +48,7 @@
  */
 
 import type { HighlightMessage } from './messages';
-import { BLOCKS_MESSAGE, PROBLEM_MESSAGE } from './messages';
+import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE } from './messages';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
 export const UTTERANCE_HIGHLIGHT = 'ownreader-utterance';
@@ -154,6 +154,7 @@ export function highlighterSource(styles: HighlightStyles = DEFAULT_HIGHLIGHT): 
     'var WORD = ' + JSON.stringify(WORD_HIGHLIGHT) + ';\n' +
     'var UTTERANCE = ' + JSON.stringify(UTTERANCE_HIGHLIGHT) + ';\n' +
     'var BLOCKS = ' + JSON.stringify(BLOCKS_MESSAGE) + ';\n' +
+    'var DOCUMENT = ' + JSON.stringify(DOCUMENT_MESSAGE) + ';\n' +
     'var PROBLEM = ' + JSON.stringify(PROBLEM_MESSAGE) + ';\n' +
     'var CSS_TEXT = ' + JSON.stringify(highlightCss(styles)) + ';\n' +
     'var STYLE_ID = "ownreader-highlight";\n';
@@ -641,6 +642,19 @@ ${constants}
   }
 
   rendition.on('rendered', sweep);
+  /* And again whenever the reading position moves. A section can be on the page
+     without this program having seen a 'rendered' event for it — the event fires
+     from inside epub.js's own hook chain, and a display() that replaces the view
+     can resolve without it reaching a listener registered later. Sweeping on the
+     move as well makes the invariant the one that matters: what is on the page
+     has been reported. Both are idempotent per document, so the second sweep
+     costs one lookup per rendered view. */
+  rendition.on('relocated', sweep);
+  /* The shape of the document, once and before any section reports, so the app
+     never has to act on a section without knowing whether another follows it.
+     The spine's length is set by the unpack that a rendition cannot exist
+     without, so by here it is a number. */
+  post({ type: DOCUMENT, spine: book.spine.length });
   /* Installed from the library's onReady, which fires after rendition.display()
      resolved — so the first section has already rendered and its 'rendered' event
      has already been and gone. */

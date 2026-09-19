@@ -35,6 +35,9 @@ export const BLOCKS_MESSAGE = 'ownreader:blocks';
 /** The `type` of the problem message. Same constraint. */
 export const PROBLEM_MESSAGE = 'ownreader:problem';
 
+/** The `type` of the document message. Same constraint. */
+export const DOCUMENT_MESSAGE = 'ownreader:document';
+
 /**
  * A **Block** as the WebView found it in the rendered document.
  *
@@ -72,13 +75,41 @@ export interface ReportedBlock extends Block {
   cfi: string;
 }
 
-/** One rendered section's Blocks, in the order the document presents them. Sent again for the same section when epub.js re-renders it. */
+/**
+ * One rendered section's Blocks, in the order the document presents them. Sent
+ * again for the same section when epub.js re-renders it.
+ *
+ * **An empty `blocks` is a real answer, not a missing one.** A cover page is a
+ * `<svg><image/></svg>` and nothing else — which is how most EPUBs begin — so a
+ * section that rendered and holds no text is ordinary, and it is a different
+ * thing from a document that has not rendered yet. Both look like "no Blocks" to
+ * anyone counting them, so this message is sent either way and the count is not
+ * what tells them apart.
+ */
 export interface BlocksMessage {
   type: typeof BLOCKS_MESSAGE;
   sectionIndex: number;
   /** The spine item's href. */
   section: string;
   blocks: ReportedBlock[];
+}
+
+/**
+ * The shape of the document, sent once when the program installs itself.
+ *
+ * Its own message rather than a field on every `BlocksMessage`, because how long
+ * the spine is is a fact about the **document** and would otherwise be repeated
+ * once per section — two thousand times, for the book that made this necessary.
+ *
+ * Only this side can know it: `book.spine` lives in the WebView. The app needs it
+ * to tell "the next section" from "there is no next section", which is what lets
+ * a Play that walks forward looking for text stop and say it reached the end
+ * instead of waiting for a section that will never render.
+ */
+export interface DocumentMessage {
+  type: typeof DOCUMENT_MESSAGE;
+  /** How many spine items the document has. */
+  spine: number;
 }
 
 /**
@@ -97,7 +128,7 @@ export interface ProblemMessage {
   detail: string;
 }
 
-export type WebViewMessage = BlocksMessage | ProblemMessage;
+export type WebViewMessage = BlocksMessage | DocumentMessage | ProblemMessage;
 
 /** A half-open range of one Block's own text, in UTF-16 code units. */
 export interface BlockRange {

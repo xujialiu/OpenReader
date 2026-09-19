@@ -37,6 +37,7 @@ import { correctMessage, speakMessage } from './cursor';
 import { DEFAULT_HIGHLIGHT, highlightCall, highlighterSource, type HighlightStyles } from './highlighter';
 import {
   BLOCKS_MESSAGE,
+  DOCUMENT_MESSAGE,
   PROBLEM_MESSAGE,
   type HighlightMessage,
   type ProblemMessage,
@@ -44,6 +45,24 @@ import {
   type SpeakMessage,
   type WebViewMessage,
 } from './messages';
+
+/**
+ * The section epub.js has just rendered, and how long the document's spine is.
+ *
+ * Reported beside the Blocks because **a section that yielded none still
+ * rendered**, and the two are different things to be told. A cover page is a
+ * `<svg><image/></svg>` with no text in it, which is how most EPUBs begin; a
+ * screen that only counts Blocks cannot tell it from a document that has not
+ * started, and says the wrong one of the two for ever.
+ */
+export interface RenderedSection {
+  /** The spine index. */
+  index: number;
+  /** The spine item's href — what the document itself calls this section. */
+  href: string;
+  /** How many spine items the document has, so that "the next section" and "there is no next section" can be told apart. */
+  spine: number;
+}
 
 export interface ReaderBridgeOptions {
   /**
@@ -53,8 +72,11 @@ export interface ReaderBridgeOptions {
    *
    * Segment them and hand the Utterances back with `setUtterances`, passing this
    * very array: `UtteranceSpan.block` is an index into it.
+   *
+   * `section` is the one that just rendered, and it arrives even when it
+   * contributed no Blocks at all.
    */
-  onBlocks?(blocks: readonly ReportedBlock[]): void;
+  onBlocks?(blocks: readonly ReportedBlock[], section: RenderedSection): void;
   /** A highlight the WebView could not draw. Rare, and never a guess: see `ProblemMessage`. */
   onProblem?(problem: ProblemMessage): void;
   /**
@@ -108,6 +130,20 @@ export interface ReaderBridge {
    */
   goTo(cfi: string): void;
   /**
+   * Move the document to a spine item by index.
+   *
+   * The second way in, and it exists because the first one cannot reach a section
+   * the app has never seen: a section that has not rendered has reported no Block
+   * and therefore has no CFI. epub.js's `Spine.get` takes a CFI, an href **or an
+   * index**, and `rendition.display` hands its target straight to it, so the
+   * index goes through the same call `goTo` uses (read out of the bundled
+   * epub.js, which the library documents no more than the rest of it).
+   *
+   * It is a move of the page, so only something the owner asked for should call
+   * it.
+   */
+  goToSection(index: number): void;
+  /**
    * Spread onto `<Reader>`. `injectedJavascript` installs the highlighter once,
    * from the library's own `onReady`; `onWebViewMessage` receives what the
    * highlighter posts back.
@@ -131,7 +167,7 @@ export interface ReaderBridge {
 function asMessage(event: unknown): WebViewMessage | null {
   if (typeof event !== 'object' || event === null) return null;
   const type = (event as { type?: unknown }).type;
-  if (type !== BLOCKS_MESSAGE && type !== PROBLEM_MESSAGE) return null;
+  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== PROBLEM_MESSAGE) return null;
   return event as WebViewMessage;
 }
 
@@ -154,6 +190,11 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   const blocks = useRef<BlockIndex>(EMPTY_BLOCKS);
   /** The Clip the WebView is showing, so a correction can be matched against it and clamped to its duration. */
   const cued = useRef<SpeakMessage | null>(null);
+  /**
+   * How many spine items the document has, from the message the program posts as
+   * it installs. Zero until it arrives, which it does before any section reports.
+   */
+  const spine = useRef(0);
 
   const send = useCallback(
     (message: HighlightMessage) => {
@@ -205,11 +246,25 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [goToLocation],
   );
 
+  const goToSection = useCallback(
+    (index: number) => {
+      // `goToLocation` interpolates its argument into `rendition.display('…')`,
+      // and epub.js's `Spine.get` reads a target that is not a CFI and is not NaN
+      // as a spine index. So the index travels as its own decimal spelling.
+      goToLocation(String(index));
+    },
+    [goToLocation],
+  );
+
   const onWebViewMessage = useCallback((event: unknown) => {
     const message = asMessage(event);
     if (!message) return;
     if (message.type === PROBLEM_MESSAGE) {
       latest.current.onProblem?.(message);
+      return;
+    }
+    if (message.type === DOCUMENT_MESSAGE) {
+      spine.current = message.spine;
       return;
     }
     const next = withSection(blocks.current, message);
@@ -218,7 +273,11 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     // for that would be the renderer's most expensive habit.
     if (next === blocks.current) return;
     blocks.current = next;
-    latest.current.onBlocks?.(next.blocks);
+    latest.current.onBlocks?.(next.blocks, {
+      index: message.sectionIndex,
+      href: message.section,
+      spine: spine.current,
+    });
   }, []);
 
   const injectedJavascript = useMemo(
@@ -232,7 +291,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, hold, clear, goTo, readerProps }),
-    [clock, setUtterances, hold, clear, goTo, readerProps],
+    () => ({ clock, setUtterances, hold, clear, goTo, goToSection, readerProps }),
+    [clock, setUtterances, hold, clear, goTo, goToSection, readerProps],
   );
 }

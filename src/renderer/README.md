@@ -99,7 +99,7 @@ The split is where the platform is, and it is the whole of the test strategy.
 | --- | --- |
 | `cursor.ts` | A Word Timing into a place in the document, and which word is current at time *t*. Three coordinate systems and every decision the renderer makes. |
 | `blocks.ts` | The Blocks the WebView has reported, in reading order — sections arrive out of it and more than once. |
-| `messages.ts` | The protocol between the two halves. Types, and the two message names that must not collide with the library's own. |
+| `messages.ts` | The protocol between the two halves. Types, and the three message names that must not collide with the library's own. |
 
 | Runs in Safari's JavaScript, not tested here | |
 | --- | --- |

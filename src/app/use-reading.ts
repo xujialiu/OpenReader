@@ -40,7 +40,13 @@ import { createProvider } from '../core/providers/factory';
 import type { Utterance } from '../core/segmenter';
 import { readProviderKey } from '../keys/store';
 import { createPlaybackEngine, type PlaybackEngine, type ReaderClock } from '../playback';
-import { useReaderBridge, type ProblemMessage, type ReaderBridge, type ReportedBlock } from '../renderer';
+import {
+  useReaderBridge,
+  type ProblemMessage,
+  type ReaderBridge,
+  type RenderedSection,
+  type ReportedBlock,
+} from '../renderer';
 
 import { documentLanguage, samePrefix, segmentDocument } from './segment';
 import {
@@ -64,6 +70,17 @@ export interface ReadingStatus {
   utterance: number | null;
   /** How many Utterances the renderer has reported text for so far. It grows as epub.js renders further sections. */
   known: number;
+  /**
+   * The section the renderer reported last, or null before any has rendered.
+   *
+   * Here because `known === 0` is two different states and the screen was saying
+   * the wrong one of them for ever. Null is a document that has not started; a
+   * section with `known === 0` is a section that rendered and holds no text — a
+   * cover page, which is how most EPUBs begin.
+   */
+  rendered: RenderedSection | null;
+  /** True while Play is walking the document forward to the first section that has text in it. */
+  seeking: boolean;
   /** The Highlight Level of the Clip now playing, taken from whether it carried Word Timings. Null until one is playing. */
   level: HighlightLevel | null;
   /** What the Provider says of itself before any Clip has proved it (`capabilities.wordTimestamps`). Null until one is built. */
@@ -78,6 +95,8 @@ const NOTHING_YET: ReadingStatus = {
   playing: false,
   utterance: null,
   known: 0,
+  rendered: null,
+  seeking: false,
   level: null,
   reportsWordTimings: null,
   language: null,
@@ -112,6 +131,15 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
   const pendingRef = useRef<readonly Utterance[] | null>(null);
   /** The Utterance being read, outside React state, so the callbacks below are never one render behind. */
   const atRef = useRef<number | null>(null);
+  /** The section the renderer reported last, for the same reason: `play` reads it at the moment it is pressed. */
+  const renderedRef = useRef<RenderedSection | null>(null);
+  /**
+   * Play was pressed with nothing to read.
+   *
+   * It stays true while the document is walked forward to the first section that
+   * has text, and is cleared by the effect that starts the reading there.
+   */
+  const seekingRef = useRef(false);
   const languageRef = useRef('en');
 
   const report = useCallback((problem: unknown) => {
@@ -193,14 +221,52 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
     engine?.load(next, atRef.current ?? 0);
   }, []);
 
+  /**
+   * One spine item on, or the end of the document.
+   *
+   * Only ever called for a Play that is looking for text (see `play`). Moving the
+   * page is something the owner asks for: a document is opened on its cover
+   * because that is where it begins, and being taken off it unasked is not a
+   * feature.
+   */
+  const seek = useCallback((from: RenderedSection) => {
+    const next = from.index + 1;
+    if (next < from.spine) {
+      bridgeRef.current?.goToSection(next);
+      return;
+    }
+    seekingRef.current = false;
+    setStatus((was) => ({
+      ...was,
+      seeking: false,
+      note:
+        'Play reached the last section of this document without finding one with text in it. ' +
+        'There is nothing here that can be read aloud.',
+    }));
+  }, []);
+
   /** The Blocks of every section rendered so far, as Utterances — for the renderer, which draws them, and for the engine, which speaks them. */
   const handleBlocks = useCallback(
-    (reported: readonly ReportedBlock[]) => {
+    (reported: readonly ReportedBlock[], section: RenderedSection) => {
       const next = segmentDocument(reported, languageRef.current);
       // Both, and the very array `onBlocks` gave us: `UtteranceSpan.block` is an
       // index into it, and passing a copy is how the two get out of step.
       bridgeRef.current?.setUtterances(next, reported);
-      setStatus((was) => ({ ...was, known: next.length }));
+      renderedRef.current = section;
+      setStatus((was) => ({ ...was, known: next.length, rendered: section }));
+
+      /**
+       * A section that rendered and holds nothing to read. A cover page is a
+       * `<svg><image/></svg>` and no text at all, which is how most EPUBs begin,
+       * so this is ordinary rather than a failure — there is nothing to segment
+       * and nothing to hand the engine. The screen says which of the two "no
+       * Utterances" states this is (`ReadingStatus.rendered`), and the page moves
+       * on only if Play asked it to.
+       */
+      if (next.length === 0) {
+        if (seekingRef.current) seek(section);
+        return;
+      }
 
       if (engineRef.current?.snapshot().playing) {
         pendingRef.current = next;
@@ -208,7 +274,7 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
       }
       adopt(next);
     },
-    [adopt],
+    [adopt, seek],
   );
 
   const handleProblem = useCallback((problem: ProblemMessage) => {
@@ -283,6 +349,27 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
   }, [settings, hasKey, clock, report]);
 
   const play = useCallback(() => {
+    /**
+     * Play, pressed with nothing to read.
+     *
+     * A cover page carries no Utterance, so there is nothing to build an engine
+     * for and nothing to speak — and a Play that does nothing at all is the dead
+     * end this exists to remove. What the owner meant by pressing it is "read
+     * this book", so the document is walked forward, a spine item at a time, to
+     * the first section that has text, and the reading starts there (the effect
+     * below). Nothing moves the page before this press: the cover may be exactly
+     * what the owner wanted to look at.
+     */
+    if (loadedRef.current.length === 0) {
+      seekingRef.current = true;
+      setStatus((was) => ({ ...was, seeking: true, note: null }));
+      const rendered = renderedRef.current;
+      // Nothing has rendered yet, so there is nothing to move on from. The first
+      // section to report finds the flag set and carries on from there.
+      if (rendered) seek(rendered);
+      return;
+    }
+
     if (engineRef.current) {
       engineRef.current.play();
       setStatus((was) => ({ ...was, playing: true, note: null }));
@@ -296,7 +383,22 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
       engine.play();
       setStatus((was) => ({ ...was, playing: true }));
     }, report);
-  }, [build, report]);
+  }, [build, report, seek]);
+
+  /**
+   * The section Play was looking for has arrived with text in it, so the reading
+   * starts there.
+   *
+   * From an effect for the same reason as the Clip-boundary one above: the
+   * Utterances arrive inside the renderer's own message handler, and building a
+   * Provider and an audio session is not work to do from inside it.
+   */
+  useEffect(() => {
+    if (!seekingRef.current || loadedRef.current.length === 0) return;
+    seekingRef.current = false;
+    setStatus((was) => ({ ...was, seeking: false }));
+    play();
+  }, [status.known, play]);
 
   const pause = useCallback(() => {
     engineRef.current?.pause();
@@ -337,9 +439,17 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
       engineRef.current = null;
       buildingRef.current = null;
       atRef.current = null;
+      seekingRef.current = false;
       void engine?.dispose();
       bridgeRef.current?.clear();
-      setStatus((was) => ({ ...was, playing: false, utterance: null, level: null, reportsWordTimings: null }));
+      setStatus((was) => ({
+        ...was,
+        playing: false,
+        utterance: null,
+        level: null,
+        reportsWordTimings: null,
+        seeking: false,
+      }));
     },
     [identity],
   );

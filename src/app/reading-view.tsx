@@ -40,7 +40,16 @@ export interface ReadingViewProps {
   onRate(rate: number): void;
 }
 
-/** Where the reading is, in one sentence. */
+/**
+ * Where the reading is, in one sentence.
+ *
+ * The two "no Utterances" states are kept apart, because they were one sentence
+ * and it was false in the commoner of the two. Nothing having rendered is a
+ * document that has not started. A section having rendered and yielded nothing is
+ * a **cover page** — a `<svg><image/></svg>` with no text in it, which is how most
+ * EPUBs begin — and telling the owner to wait for it is a dead end they cannot
+ * leave, because the thing they are waiting for has already happened.
+ */
 function readingLine(status: ReadingStatus, settings: AppSettings): string {
   if (status.utterance !== null) {
     const level = status.level === 'word' ? 'the word' : 'the whole Utterance';
@@ -48,8 +57,10 @@ function readingLine(status: ReadingStatus, settings: AppSettings): string {
     return status.playing ? `Reading ${where}, highlighting ${level}.` : `Paused at ${where}.`;
   }
   if (status.playing) return `Waiting for the first Clip from ${PROVIDER_LABELS[settings.provider]}.`;
-  if (status.known === 0) return 'Waiting for the document to render its first section.';
-  return `${status.known} Utterances ready.`;
+  if (status.known > 0) return `${status.known} Utterances ready.`;
+  if (!status.rendered) return 'Waiting for the document to render its first section.';
+  if (status.seeking) return 'Looking for the first section of this document with text in it.';
+  return `${status.rendered.href} has no text to read — a cover page usually has none. Play moves to the first section that has.`;
 }
 
 /**
