@@ -63,3 +63,40 @@ would count differently. That is what forces ADR 0008.
 
 Text containing at least one letter or digit. Text that is not speakable is
 never sent to a provider; it becomes silence. Not "valid", not "non-empty".
+
+## What is here
+
+```ts
+segmentBlocks(blocks, language, { splitSentences, rejoin?, maxLength? }) → Utterance[]
+segmentBlock(text, language, options) → Utterance[]   // one block, spans all `block: 0`
+isSpeakable(text) → boolean
+```
+
+An `Utterance` is `{ text, spans, speakable }`. `text` is what a provider is
+asked for and what a word timing's `charStart`/`charEnd` index into, trimmed of
+whitespace at both ends so that a clip's cache identity — provider, voice and
+text — does not distinguish `Hello. ` from `Hello.`.
+
+Each span is `{ block, start, end, textOffset }`. `start` and `end` are
+**UTF-16 code-unit offsets into that block's own text**, the convention
+`core/align.ts` and `core/speech-text.ts` already use and the one a `Range` is
+built from (ADR 0005), and the relation between a span and the text is exact:
+
+```
+text.slice(span.textOffset, span.textOffset + span.end - span.start)
+  === blocks[span.block].text.slice(span.start, span.end)
+```
+
+So a word timing becomes a `Range` by finding the span that holds its offset,
+subtracting `textOffset` and adding `start`. Almost every utterance has one
+span; more than one means the repair layer put back a sentence the markup had
+cut, and the highlight is one highlight over several ranges, which is what the
+CSS Custom Highlight API takes. No offset is ever derived from a splitter's own
+indices — see `sentences.ts`.
+
+The splitter is a parameter, not an import. `sentences.ts` defines the seam,
+`sentencex.ts` binds the pinned upstream release, and `index.ts` imports
+neither, because ADR 0006 calls `sentencex` the first segmenter and not the
+final one. `sentencex.ts` and `notes/NOTES_2026-09-19.md` carry why the pin is
+where it is; `rejoin.ts` carries the argument for the repair layer and for each
+of its refusals.
