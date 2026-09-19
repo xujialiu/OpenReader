@@ -32,9 +32,19 @@ Bluetooth or AirPlay), and the fact that Apple explicitly permits the periodic
 observer to fire less often than requested. The error accumulates, so a highlight
 that is correct at the start of a sentence lags by the end of it.
 
-An audio graph has nothing to interpolate: `AudioContext.currentTime` is the
-hardware sample clock. The drift does not need mitigating because it does not
-exist.
+An audio graph has nothing to interpolate: the source node reports the position
+**within the content it has played**, computed from its own read index plus the
+duration of the buffers already consumed. That value already advances at the
+playback rate, so there is no rate factor to apply and no wall clock to drift
+against.
+
+**Take the position from the source node, not from the context.**
+`AudioContext.currentTime` counts rendered frames over the sample rate — it is a
+wall clock and is **not** scaled by playback rate, so using it to drive
+highlighting reintroduces exactly the drift this decision exists to avoid, in
+proportion to the 1.5–3× the app actually runs at. The node's own position
+callback is the correct source for both the highlight cursor and the elapsed time
+shown on the lock screen.
 
 Gapless playback comes with it. A file player must contend with per-clip encoder
 padding — 576 samples for LAME MP3, 2112 for Apple's AAC, and TTS providers do
@@ -46,18 +56,19 @@ files, so there is no seam to remove.
 
 The cost is system integration, and it is the reverse trade: `expo-audio` gets
 lock-screen controls, Now Playing metadata, headphone controls and CarPlay for
-free because it *is* the system player, while `react-native-audio-api` ships a
-`PlaybackNotificationManager` that is younger and less verified. Whether it
-suffices is being checked; the answer does not change this decision, because
-lock-screen integration is separable.
+free because it *is* the system player. The audio graph's own lock-screen layer
+was audited and is not sufficient — see ADR 0016, which is the supplementary
+module that answers it. That was foreseeable and does not weaken this decision,
+because lock-screen integration turned out to be genuinely separable.
 
-**That separability is the reason this choice is safe.**
-`MPRemoteCommandCenter.shared()` and `MPNowPlayingInfoCenter.default()` are
-global singletons, independent of whatever renders the audio. If the built-in
-support falls short, a small supplementary native module can own the command
-centre and the Now Playing metadata alongside the audio graph, without modifying
-the library or waiting upstream. Bounded work, not a dependency on someone else.
+In exchange the graph exposes `AVAudioSession`'s mode, so `.spokenAudio` — the
+correct mode for a reader, and unreachable through `expo-audio`, which never sets
+the mode at all — is available.
 
-In exchange the graph also exposes `AVAudioSession`'s mode, so `.spokenAudio` —
-the correct mode for a reader, and unreachable through `expo-audio`, which never
-sets the mode at all — is available.
+The engine half of this choice has a real-world confirmation rather than only a
+maintainer's endorsement: a reported defect where this node played at roughly 3×
+with heavy static on iOS was raised by someone streaming 24 kHz PCM chunks from a
+TTS service into it — this app's architecture almost exactly — traced to a race
+between the audio thread pool and the JavaScript thread, and fixed in 0.13.0.
+The version adopted here is later than that fix, and the reporter confirmed it
+clean on a physical device.

@@ -69,9 +69,10 @@ when a clip starts, let `requestAnimationFrame` inside the WebView interpolate
 against a start time, and send a position correction about once a second for
 drift. One message per second, not one per word.
 
-The clock the interpolation is corrected against is the audio graph's own
-`AudioContext.currentTime`, the hardware sample counter — see ADR 0012, which
-chose the playback engine for exactly this reason.
+The clock the interpolation is corrected against is the **source node's own
+content position** — see ADR 0012, which chose the playback engine for exactly
+this reason, and which explains why the audio context's clock is the wrong one to
+read despite looking like the obvious choice.
 
 One detail that is easy to get wrong regardless: provider timings are reported at
 1.0× and must be scaled by the playback rate, which in this app is 1.5–3×.
