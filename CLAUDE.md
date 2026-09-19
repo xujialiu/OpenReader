@@ -6,12 +6,12 @@ Four places. Putting something in the wrong one is how it stops being read.
 
 | | Who reads it | What it holds |
 | --- | --- | --- |
-| `design/` | Someone who does not read code | The trade-off: what was chosen, what was given up, and who it is for |
+| `docs/design/` | Someone who does not read code | The trade-off: what was chosen, what was given up, and who it is for |
 | `docs/adr/` | Someone who does | The technical decision, and the measured facts behind it |
 | `notes/` | The author, later | What was measured, when |
 | `CONTEXT.md` | Everyone | The glossary, and nothing else |
 
-## `design/` — the product argument
+## `docs/design/` — the product argument
 
 A product manager must be able to read any file here end to end and understand
 what was decided and what it costs, **without knowing what a WebView, a sample
@@ -39,7 +39,7 @@ status is one thing, recorded once.
 
 ## The two are paired by number
 
-`design/0002-…` and `docs/adr/0002-…` are the same decision written for two
+`docs/design/0002-…` and `docs/adr/0002-…` are the same decision written for two
 readers. Same number, same slug where it reads naturally.
 
 Not every decision has both halves. A purely technical one (adopting a platform

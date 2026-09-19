@@ -4,12 +4,12 @@ status: accepted
 
 # Decisions, findings and the product argument are recorded separately
 
-This repo keeps three: `design/` for the trade-off as someone who does not read
+This repo keeps three: `docs/design/` for the trade-off as someone who does not read
 code would need it, `docs/adr/` for the technical decision and the measured facts
 that forced it, and dated files in `notes/` for what was measured and when.
 `CONTEXT.md` is a glossary and holds none of them.
 
-`design/` and `docs/adr/` are paired by number — `design/0002-…` and
+`docs/design/` and `docs/adr/` are paired by number — `docs/design/0002-…` and
 `docs/adr/0002-…` are one decision written for two readers — and not every
 decision has both halves. The rule for which half a sentence belongs to is
 mechanical: strip every API name, file path, type, library and version from it,

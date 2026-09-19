@@ -6,7 +6,7 @@ Every file here is one decision: what was chosen, what was turned down, and what
 that costs the person using the app. You should be able to read any of them end
 to end without knowing what a WebView or a sample rate is. If you hit a sentence
 that needs one, that is a defect in the file — the engineering half of the same
-decision lives in [`../docs/adr/`](../docs/adr/) and that is where such a
+decision lives in [`../adr/`](../adr/) and that is where such a
 sentence belongs.
 
 ## What the app is
@@ -21,7 +21,7 @@ owner's, the sync server is the owner's, and the documents stay the owner's.
 
 ## The one claim
 
-From [`../docs/PHILOSOPHY.md`](../docs/PHILOSOPHY.md), which is the yardstick
+From [`../docs/PHILOSOPHY.md`](../PHILOSOPHY.md), which is the yardstick
 everything here is measured against:
 
 > **The highlight does not drift.** This is why the app exists. Playback
@@ -36,7 +36,7 @@ explains a cost being paid, that is usually what it is being paid for.
 
 ## How to read a decision
 
-Each file is numbered, and the same number in `../docs/adr/` is the same
+Each file is numbered, and the same number in `../adr/` is the same
 decision written for engineers. Not every decision has both halves: a purely
 technical one has no file here, a purely product one has none there. A number is
 spent on a decision, not on a file, so a gap is not a mistake.
@@ -45,9 +45,9 @@ Three other places hold things that are deliberately **not** here:
 
 | | |
 | --- | --- |
-| [`../docs/PHILOSOPHY.md`](../docs/PHILOSOPHY.md) | The yardstick. What the app is for, and what stays out of it |
-| [`../CONTEXT.md`](../CONTEXT.md) | The glossary. What each word means, and which words to avoid |
-| [`../notes/`](../notes/) | What was measured, and when |
+| [`../docs/PHILOSOPHY.md`](../PHILOSOPHY.md) | The yardstick. What the app is for, and what stays out of it |
+| [`../CONTEXT.md`](../../CONTEXT.md) | The glossary. What each word means, and which words to avoid |
+| [`../notes/`](../../notes/) | What was measured, and when |
 
 The glossary is worth ten minutes before anything else. The words in it are
 used strictly — a **Document** is one file the owner reads, an **Utterance** is
