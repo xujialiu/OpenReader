@@ -13,6 +13,9 @@ Its contract changes: a synthesis result is **raw PCM samples with a sample rate
 not an encoded audio blob, with a decode path kept as a fallback for providers
 that cannot emit PCM.
 
+The product argument is in
+`docs/design/0013-provider-support-is-copied-and-asks-for-raw-sound.md`.
+
 ## Why copy rather than share
 
 The layer is about 3,000 lines and roughly 95% portable as it stands — its

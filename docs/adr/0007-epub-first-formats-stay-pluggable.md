@@ -12,6 +12,8 @@ renderer that produced it.
 This is recorded because several designs look over-general for an EPUB-only app
 and a later reader would be tempted to simplify them.
 
+The product argument is in `docs/design/0007-epub-first-other-formats-later.md`.
+
 ## Consequences
 
 Deferring PDF defers the hardest problem in the project rather than solving it.

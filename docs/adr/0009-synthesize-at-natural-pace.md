@@ -11,6 +11,8 @@ clip is played, by a pitch-preserving time-stretch.
 This carries over a decision the desktop plugin reached by removing a feature it
 already had: `SynthesisOptions` has no speed parameter at all.
 
+The product argument is in `docs/design/0009-changing-reading-speed-is-free.md`.
+
 ## Why
 
 Asking the provider for a speed compounds with the player's own stretch, so the

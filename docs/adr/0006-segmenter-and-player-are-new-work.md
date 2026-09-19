@@ -4,6 +4,9 @@ status: accepted
 
 # The sentence segmenter and the playback engine are new work
 
+*The product argument — what this is for and what it gives up — is
+`docs/design/0006-sentences-and-playback-are-built-from-scratch.md`.*
+
 Neither exists in the Zotero-TTS plugin, and a reader of that codebase would
 reasonably assume both do. The plugin's own notes open by saying so: "The native
 player, sentence segmentation, prefetching, and word/sentence highlighting are

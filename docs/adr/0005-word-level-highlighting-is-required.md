@@ -4,6 +4,9 @@ status: accepted
 
 # Word-level highlight sync is a requirement, not a stretch goal
 
+*The product argument — what this is for and what it gives up — is
+`docs/design/0005-word-level-highlighting-is-required.md`.*
+
 Speech is highlighted word by word, to the same standard as the desktop plugin,
 and this was chosen deliberately over the cheaper option of highlighting only
 the current utterance.

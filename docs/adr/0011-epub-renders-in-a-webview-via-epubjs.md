@@ -10,6 +10,42 @@ them from a CDN, so it works fully offline, and it exposes CFI-range annotations
 `goToLocation(cfi)` and — the part that matters most — an `injectJavascript()`
 escape hatch.
 
+The product argument is in `docs/design/0011-the-page-follows-the-voice.md`.
+
+## The reader scrolls continuously, centred on the Utterance being spoken
+
+The reader is mounted with `flow: 'scrolled-continuous'`, which selects epub.js's
+`continuous` manager, and the page is scrolled so that the Utterance being spoken
+sits **centred** rather than merely somewhere on screen. Paginated layout — the
+library's own default, and what the highlighter was built against — is rejected.
+
+Three things about it belong on the record.
+
+**It adds no traffic across the bridge.** The scroll is driven by the Clip cue the
+renderer already receives when an Utterance starts speaking — the `follow` path in
+`renderer/reader-bridge.ts`, which fires once per Utterance and never per word. No
+new message in either direction, and in particular nothing at the
+`requestAnimationFrame` rate that ADR 0005 exists to keep off the bridge.
+
+**It costs memory, and the cost is being measured rather than assumed.**
+`scrolled-continuous` keeps several sections alive at once instead of swapping one
+view per page turn. The 33 MB, 2,077-spine-item book in
+`notes/NOTES_2026-09-19.md` is what makes that real rather than theoretical — a
+book that size is the owner's ordinary reading, not an edge case. The measurement
+is outstanding work; if it comes back bad, the part of this that moves is the
+several-sections-alive cost, not the centring.
+
+**The word highlight was verified under paginated layout and must be re-verified
+under this one.** Both findings behind the highlighter painting at all — that a
+Block record must not hold DOM nodes across renders, because epub.js replaces the
+document a Block was walked from, and that `user-select: none` silently stops
+`::highlight()` from painting — were gathered in the multicol iframe a paginated
+reader builds (`notes/NOTES_2026-09-19.md`, 16:08). The evidence was collected in
+the layout that has now changed, so none of it carries over to the layout that
+ships. Re-running it on a device is outstanding work, not a formality: the second
+finding was found only by bisecting where the highlight painted, and nothing about
+the failure resembled its cause.
+
 ## Why not Readium, which is better maintained
 
 Readium's `ts-toolkit` is actively released while epub.js's stable npm build

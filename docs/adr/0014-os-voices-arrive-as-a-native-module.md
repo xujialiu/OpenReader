@@ -10,6 +10,8 @@ they come through a native module built on
 `AVSpeechSynthesizer.write(_:toBufferCallback:toMarkerCallback:)`, **not** through
 `expo-speech`.
 
+The product argument is in `docs/design/0014-the-phones-own-voices-come-later.md`.
+
 ## Why not expo-speech, which is already there and does work
 
 `expo-speech` does report word boundaries on iOS — `onBoundary({ charIndex,
@@ -36,9 +38,6 @@ including from every paid remote provider. A provider reports the words it
 believes it spoke; a marker reports which sample the word starts at. And because
 the timings travel with the audio rather than arriving as events, they still line
 up after caching, seeking, pausing and replaying.
-
-Given ADR 0012 was chosen specifically because drift made a competing product
-unusable, this is the path most aligned with what the app is for.
 
 ## Consequences
 

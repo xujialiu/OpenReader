@@ -4,6 +4,9 @@ status: proposed
 
 # Target React Native and Expo rather than native iOS
 
+*The product argument — what this is for and what it gives up — is
+`docs/design/0001-one-app-for-iphone-and-android.md`.*
+
 Android is a hard requirement, which rules out a SwiftUI-only app. Among the
 cross-platform options, React Native wins on one specific asset rather than on
 general merit: the TTS provider layer of the Zotero-TTS plugin is about 3,000
@@ -80,11 +83,9 @@ would need a fallback that wraps each word in an element instead — which is th
 per-word DOM mutation that ADR 0005 exists to avoid, so the fallback would be a
 second implementation of the hardest part of the app, written to be worse.
 
-Raising the floor deletes that path entirely. While the app is built for its
-author, on the author's own devices, the floor costs nothing: it is not a market
-to be served, it is one person's phone. If it ever needs lowering for a wider
-audience, adding a fallback to a working app is easier than having maintained a
-second rendering path from the start.
+Raising the floor deletes that path entirely. If it ever needs lowering for a
+wider audience, adding a fallback to a working app is easier than having
+maintained a second rendering path from the start.
 
 A practical consequence worth noting: the installed simulator runtime is iOS 27.0,
 so the floor could not have been tested anyway without downloading an older

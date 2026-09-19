@@ -13,15 +13,17 @@ through `expo-audio`'s `AudioPlaylist`, which queues one file per sentence in an
 since August 2025 and the maintainer has said so, v5 is a different, commercial
 package at €99 a month, and neither ships an Expo config plugin.
 
+The product argument is in `docs/design/0012-the-highlight-must-never-drift.md`.
+
 ## Why not the obvious choice
 
 `expo-audio` is the default in an Expo app, needs no extra native dependency, and
 its lock-screen support is verifiable line by line in the SDK 57 Swift sources.
-It was still rejected, and the reason is not technical taste — it is first-hand
-product experience. **The author used ElevenReader and abandoned it for Speechify
-because its word highlighting drifted out of sync with the audio.** Drift is not
-a detail to be traded away here; it is the specific defect that made a competitor
-unusable for this reader.
+It was still rejected, and not on technical taste. ADR 0005 makes word-level sync
+a requirement rather than a stretch goal, which fixes the acceptable drift at well
+under 100 ms for the length of a book; the design file records the product history
+that made it non-negotiable. What follows is why a file player cannot hold that
+budget.
 
 A file player can only report where it thinks it is, sampled at intervals, with
 the position between samples interpolated from the wall clock. Three error

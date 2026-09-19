@@ -9,8 +9,7 @@ pricing or key console, and no provider pricing anywhere in the app or its
 screenshots. Instructions for obtaining a key are static text; the walkthrough
 itself lives in the repository and on the project's site.
 
-This will look like an omission to anyone who later tries to improve onboarding.
-It is not.
+The product argument is in `docs/design/0017-no-link-to-a-providers-signup.md`.
 
 ## Why
 

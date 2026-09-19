@@ -10,6 +10,8 @@ utterance with enough surrounding context to find it again. Resolving a position
 uses the locator first, then compares the text actually found against the
 anchor, and falls back to searching for the anchor when they disagree.
 
+The product argument is in `docs/design/0008-resuming-where-you-actually-stopped.md`.
+
 ## Why not the CFI alone
 
 Two facts make a bare CFI unsafe across products. Zotero's reader resolves CFIs

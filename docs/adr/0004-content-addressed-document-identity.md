@@ -4,6 +4,9 @@ status: accepted
 
 # Identify documents by their content, not by a library's key
 
+*The product argument — what this is for and what it gives up — is
+`docs/design/0004-a-document-is-recognised-by-itself.md`.*
+
 A document is identified by an id derived from its own bytes and metadata — a
 hash of the file, with the EPUB's `dc:identifier` as a secondary match — and
 not by the Zotero `{ libraryID, itemKey }` pair the desktop plugin uses. The

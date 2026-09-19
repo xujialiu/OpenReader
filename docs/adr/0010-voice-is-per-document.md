@@ -9,6 +9,8 @@ time inherits whatever the global default is at that moment, and from then on it
 keeps its own — changing the global default does not change a document already
 being read.
 
+The product argument is in `docs/design/0010-each-document-keeps-its-own-voice.md`.
+
 ## Why this reverses the desktop plugin
 
 The Zotero-TTS plugin advertises the opposite as a feature: "One voice and speed
@@ -22,10 +24,6 @@ owner has already paid for, and which makes pre-synthesizing a whole book
 something that a moment's curiosity about a new voice can throw away. Binding
 the voice to the document decouples the two: the global default steers new
 documents, and a book already underway is untouched.
-
-It also suits books better than it suits papers. A novel wants one narrator
-throughout; a paper does not care. A single global voice forces a choice between
-keeping a book's narrator and trying a new voice anywhere.
 
 ## Consequences
 

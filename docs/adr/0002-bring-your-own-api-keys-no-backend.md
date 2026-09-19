@@ -4,6 +4,9 @@ status: accepted
 
 # Bring your own API keys; no backend
 
+*The product argument — what this is for and what it gives up — is
+`docs/design/0002-bring-your-own-provider-no-subscription.md`.*
+
 The owner supplies their own provider API keys, which are stored on the device
 and sent only to the provider they belong to. There is no server of ours, no
 proxy, no subscription and no hosted tier.
@@ -14,11 +17,6 @@ your money without you knowing" — and it keeps the project something one
 person maintains rather than operates.
 
 ## Consequences
-
-The audience is capped at people willing to obtain an API key, which is
-effectively technical users. That is acceptable while the app is built for its
-author and open-sourced later; it would have to change before the app could
-serve a general audience.
 
 Synthesized audio is cached **in memory only**, and there is deliberately no
 disk cache. The obvious argument for one — that without it every re-listen

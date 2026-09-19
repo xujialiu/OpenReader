@@ -4,11 +4,12 @@ status: accepted
 
 # Sync over the owner's WebDAV, in the desktop plugin's own folder
 
+*The product argument — what this is for and what it gives up — is
+`docs/design/0003-your-place-follows-you-on-storage-you-own.md`.*
+
 Reading positions and shared settings sync through a WebDAV server the owner
 already runs, in the same folder the Zotero-TTS desktop plugin uses, so that a
 position reached on the desktop can be resumed on the phone and the reverse.
-Sync is the reason this app exists at all: the owner left Speechify
-specifically because it could not sync.
 
 WebDAV is chosen over iCloud, which would exclude Android, and over a server
 of ours, which ADR 0002 rules out. It also reuses work that is already done and

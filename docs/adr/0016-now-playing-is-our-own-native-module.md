@@ -10,6 +10,9 @@ small native module of our own — roughly 130 lines of Swift — which owns
 `PlaybackNotificationManager` is **never called on iOS**. Android keeps the
 library's implementation.
 
+The product argument is in
+`docs/design/0016-the-lock-screen-controls-are-our-own.md`.
+
 ## Why, when the library ships one
 
 Its iOS layer was read line by line and has three defects that point straight at
