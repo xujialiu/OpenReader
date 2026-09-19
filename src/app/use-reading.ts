@@ -1,0 +1,348 @@
+/**
+ * Where the six modules meet: Blocks in, Utterances out, a Provider built from
+ * the owner's settings, and **one clock** feeding the highlight.
+ *
+ * The integration is that last part, and it is two lines: the renderer's bridge
+ * implements `ReaderClock`, and that clock is what `createPlaybackEngine` is
+ * given. Nothing interpolates a position on the React Native side, nothing reads
+ * a wall clock, and nothing estimates a Word Timing — the engine scales the
+ * Provider's timings once per Clip and the WebView interpolates against
+ * `requestAnimationFrame` between corrections (ADR 0005, ADR 0012). That is the
+ * whole of "the highlight does not drift".
+ *
+ * Almost nothing is decided here. The order things happen in is:
+ *
+ * 1. the renderer reports **Blocks** (`onBlocks`),
+ * 2. `segment.ts` turns them into **Utterances**,
+ * 3. `settings.ts` turns the owner's settings and the key into a **Provider**,
+ * 4. the engine plays the Utterances and drives the clock the renderer reads.
+ *
+ * Each of those steps is a call into a module that owns it. What is left here —
+ * and the only thing worth reading twice — is *when* the engine is given a new
+ * Utterance list, because the list grows while the reading is under way. See
+ * `adopt`.
+ *
+ * ## Two rules this file obeys and could quietly break
+ *
+ * - **No playback position in React state** (ADR 0005). `onPosition` touches no
+ *   state at all; it hands the correction to the bridge and returns. The one
+ *   thing the screen learns from the clock is which Utterance a Clip belongs to
+ *   and at which Highlight Level it is drawn — once per sentence, which is
+ *   seconds apart, not the once-a-second position and certainly not per word.
+ * - **The key is a setting** (ADR 0002). It is read from the Keychain here and
+ *   passed to `createProvider` through `providerSettings`. No Provider reaches
+ *   for it, and it is never held in React state.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { createProvider } from '../core/providers/factory';
+import type { Utterance } from '../core/segmenter';
+import { readProviderKey } from '../keys/store';
+import { createPlaybackEngine, type PlaybackEngine, type ReaderClock } from '../playback';
+import { useReaderBridge, type ProblemMessage, type ReaderBridge, type ReportedBlock } from '../renderer';
+
+import { documentLanguage, samePrefix, segmentDocument } from './segment';
+import {
+  engineIdentity,
+  keyIsOffered,
+  keyIsRequired,
+  providerDeps,
+  providerSettings,
+  readiness,
+  readinessSentence,
+  type AppSettings,
+} from './settings';
+
+/** How much text is marked as it is spoken (CONTEXT.md). Which one is in use is the Provider's answer, never a preference. */
+export type HighlightLevel = 'word' | 'utterance';
+
+/** Everything the player bar and the status line show. Nothing in here changes more than once per Utterance. */
+export interface ReadingStatus {
+  playing: boolean;
+  /** The Utterance the Clip now playing speaks, or null before the first one. */
+  utterance: number | null;
+  /** How many Utterances the renderer has reported text for so far. It grows as epub.js renders further sections. */
+  known: number;
+  /** The Highlight Level of the Clip now playing, taken from whether it carried Word Timings. Null until one is playing. */
+  level: HighlightLevel | null;
+  /** What the Provider says of itself before any Clip has proved it (`capabilities.wordTimestamps`). Null until one is built. */
+  reportsWordTimings: boolean | null;
+  /** The language the Utterances were split with, and whether the document declared it. */
+  language: { language: string; declared: boolean } | null;
+  /** The last thing that went wrong or was refused, in the words whatever refused it used. Shown, never swallowed (philosophy rule 1). */
+  note: string | null;
+}
+
+const NOTHING_YET: ReadingStatus = {
+  playing: false,
+  utterance: null,
+  known: 0,
+  level: null,
+  reportsWordTimings: null,
+  language: null,
+  note: null,
+};
+
+export interface Reading {
+  /** Spread `bridge.readerProps` onto `<Reader>`; everything else the screen needs is here. */
+  bridge: ReaderBridge;
+  status: ReadingStatus;
+  /** The document is open and epub.js has displayed it. `language` is the EPUB's own `dc:language`, which is never sniffed (ADR 0006). */
+  opened(language: string | null | undefined): void;
+  play(): void;
+  pause(): void;
+}
+
+/** Whatever refused, in its own words. A `SynthesisError`'s message already names the address it tried and asks the one question there is. */
+function describe(problem: unknown): string {
+  return problem instanceof Error ? problem.message : String(problem);
+}
+
+export function useReading(settings: AppSettings, hasKey: boolean): Reading {
+  const [status, setStatus] = useState<ReadingStatus>(NOTHING_YET);
+
+  const engineRef = useRef<PlaybackEngine | null>(null);
+  const bridgeRef = useRef<ReaderBridge | null>(null);
+  /** Being built: a second press of play must not build a second engine and a second audio session. */
+  const buildingRef = useRef<Promise<PlaybackEngine | null> | null>(null);
+  /** The Utterances the engine holds. Its indices are what every cue and every correction is about. */
+  const loadedRef = useRef<readonly Utterance[]>([]);
+  /** Utterances a new section produced while the reading was under way. Applied at the next Clip boundary; see `adopt`. */
+  const pendingRef = useRef<readonly Utterance[] | null>(null);
+  /** The Utterance being read, outside React state, so the callbacks below are never one render behind. */
+  const atRef = useRef<number | null>(null);
+  const languageRef = useRef('en');
+
+  const report = useCallback((problem: unknown) => {
+    setStatus((was) => ({ ...was, note: describe(problem) }));
+  }, []);
+
+  /**
+   * The clock, and there is one.
+   *
+   * Stable for the engine's whole life, and it reads `bridgeRef` at call time
+   * rather than closing over a bridge: the engine outlives any one render, and a
+   * captured bridge would be the one from the render that built it.
+   *
+   * ADR 0016's lock screen is the second reader of this same clock, which is why
+   * the elapsed time and the highlight cannot disagree. It is not built yet; when
+   * it is, it is another line in `onPosition` and not another clock.
+   */
+  const clock = useMemo<ReaderClock>(
+    () => ({
+      onClip(cue) {
+        bridgeRef.current?.clock.onClip(cue);
+        atRef.current = cue.utterance;
+        // Once per Clip. `cue.words === null` is the Provider reporting no Word
+        // Timings, which is the whole of the Highlight Level (ADR 0005): the
+        // Utterance is highlighted, nothing is estimated, and the screen says
+        // which of the two is on the page rather than leaving the owner to
+        // wonder.
+        setStatus((was) => ({ ...was, utterance: cue.utterance, level: cue.words ? 'word' : 'utterance' }));
+      },
+      onPosition(correction) {
+        bridgeRef.current?.clock.onPosition(correction);
+      },
+    }),
+    [],
+  );
+
+  /**
+   * Give the engine a longer Utterance list.
+   *
+   * The list grows because epub.js renders one section at a time and the renderer
+   * reports every Block it has, in full, each time that changes — so the book is
+   * segmented again and the result is longer than what the engine holds.
+   *
+   * `load` is destructive: it clears the queue and re-anchors the clock. That is
+   * why this is called at a **Clip boundary** and from an effect rather than from
+   * the cue itself — at the boundary the Clip's own offset is zero, so restarting
+   * it costs a fraction of a second and nothing in quota, because the Clip is in
+   * the memory cache (ADR 0002, philosophy rule 4). Calling it from inside
+   * `onClip` would re-enter the engine while its own `drain` is mid-await.
+   *
+   * If the prefix changed, the indices the engine and the WebView are holding
+   * mean other sentences (see `samePrefix`), and the reading stops and says so.
+   * A highlight three paragraphs from the voice is precisely what this project
+   * exists to prevent, and guessing which sentence was meant would be an
+   * estimate (philosophy rule 1).
+   */
+  const adopt = useCallback((next: readonly Utterance[]) => {
+    const engine = engineRef.current;
+    const renumbered = !samePrefix(loadedRef.current, next);
+    loadedRef.current = next;
+
+    if (renumbered) {
+      engine?.pause();
+      bridgeRef.current?.clear();
+      engine?.load(next, 0);
+      atRef.current = null;
+      setStatus((was) => ({
+        ...was,
+        playing: false,
+        utterance: null,
+        level: null,
+        note:
+          'The document rendered its sections out of reading order, so the Utterances were renumbered. ' +
+          'The reading stopped here rather than carry on from a number that now means a different sentence.',
+      }));
+      return;
+    }
+
+    engine?.load(next, atRef.current ?? 0);
+  }, []);
+
+  /** The Blocks of every section rendered so far, as Utterances — for the renderer, which draws them, and for the engine, which speaks them. */
+  const handleBlocks = useCallback(
+    (reported: readonly ReportedBlock[]) => {
+      const next = segmentDocument(reported, languageRef.current);
+      // Both, and the very array `onBlocks` gave us: `UtteranceSpan.block` is an
+      // index into it, and passing a copy is how the two get out of step.
+      bridgeRef.current?.setUtterances(next, reported);
+      setStatus((was) => ({ ...was, known: next.length }));
+
+      if (engineRef.current?.snapshot().playing) {
+        pendingRef.current = next;
+        return;
+      }
+      adopt(next);
+    },
+    [adopt],
+  );
+
+  const handleProblem = useCallback((problem: ProblemMessage) => {
+    setStatus((was) => ({ ...was, note: `The highlight could not be drawn: ${problem.detail}` }));
+  }, []);
+
+  const bridge = useReaderBridge({ onBlocks: handleBlocks, onProblem: handleProblem });
+
+  useEffect(() => {
+    bridgeRef.current = bridge;
+  }, [bridge]);
+
+  /**
+   * The Utterances a section produced mid-reading, applied now that a Clip has
+   * just started. `status.utterance` changing is the boundary, and an effect is
+   * the one place that is outside the engine's own call stack.
+   */
+  useEffect(() => {
+    const next = pendingRef.current;
+    if (!next) return;
+    pendingRef.current = null;
+    adopt(next);
+  }, [status.utterance, adopt]);
+
+  /**
+   * Build the Provider and the engine, reading the key at the moment it is
+   * needed.
+   *
+   * Returns null having said why. `readiness` covers everything the owner can
+   * see; the Keychain refusing is the one thing it cannot, and that is reported
+   * as a refusal rather than flattened into "no key" (`src/keys/refusal.ts`
+   * exists for exactly that distinction).
+   */
+  const build = useCallback(async (): Promise<PlaybackEngine | null> => {
+    const ready = readiness(settings, hasKey);
+    if (!ready.ready) {
+      setStatus((was) => ({ ...was, note: readinessSentence(settings.provider, ready.missing) }));
+      return null;
+    }
+
+    let key = '';
+    if (keyIsOffered(settings.provider)) {
+      const lookup = await readProviderKey(settings.provider);
+      if (lookup.outcome === 'refused') {
+        setStatus((was) => ({
+          ...was,
+          note: `The Keychain would not hand over the key: ${lookup.refusal.message}`,
+        }));
+        return null;
+      }
+      if (lookup.outcome === 'found') key = lookup.key;
+      else if (keyIsRequired(settings.provider)) {
+        setStatus((was) => ({ ...was, note: readinessSentence(settings.provider, ['an API key']) }));
+        return null;
+      }
+    }
+
+    const provider = createProvider(settings.provider, providerSettings(settings, key), providerDeps);
+    const engine = createPlaybackEngine({
+      provider,
+      // Fixed for the engine's lifetime, because a Voice belongs to a document
+      // (ADR 0010) and a Clip's cache identity includes it.
+      voice: settings.voice,
+      clock,
+      onError: report,
+      rate: settings.rate,
+    });
+    engineRef.current = engine;
+    engine.load(loadedRef.current, 0);
+    setStatus((was) => ({ ...was, reportsWordTimings: provider.capabilities.wordTimestamps, note: null }));
+    return engine;
+  }, [settings, hasKey, clock, report]);
+
+  const play = useCallback(() => {
+    if (engineRef.current) {
+      engineRef.current.play();
+      setStatus((was) => ({ ...was, playing: true, note: null }));
+      return;
+    }
+    buildingRef.current ??= build().finally(() => {
+      buildingRef.current = null;
+    });
+    void buildingRef.current.then((engine) => {
+      if (!engine) return;
+      engine.play();
+      setStatus((was) => ({ ...was, playing: true }));
+    }, report);
+  }, [build, report]);
+
+  const pause = useCallback(() => {
+    engineRef.current?.pause();
+    // Not a third clock message: a pause stops the position stream, and a WebView
+    // still interpolating against `requestAnimationFrame` would run the highlight
+    // ahead of silence (`reader-bridge.ts`).
+    bridgeRef.current?.hold();
+    setStatus((was) => ({ ...was, playing: false }));
+  }, []);
+
+  const opened = useCallback((declared: string | null | undefined) => {
+    const language = documentLanguage(declared);
+    languageRef.current = language.language;
+    setStatus((was) => ({ ...was, language }));
+  }, []);
+
+  /**
+   * The speed, live. This is the whole of the 1.5–3×: one parameter on the source
+   * node, applied at playback and never asked of a Provider (ADR 0009). The
+   * engine re-sends the Word Timing array scaled by the new rate, which is the
+   * step ADR 0005 calls the single easiest way to reintroduce drift.
+   */
+  useEffect(() => {
+    engineRef.current?.setRate(settings.rate);
+  }, [settings.rate]);
+
+  /**
+   * A different Provider, Voice or address is a different engine.
+   *
+   * The work is all in the cleanup, which is the point: it runs when the identity
+   * changes and when the screen goes away, and it is the only place the audio
+   * session is given back.
+   */
+  const identity = engineIdentity(settings);
+  useEffect(
+    () => () => {
+      const engine = engineRef.current;
+      engineRef.current = null;
+      buildingRef.current = null;
+      atRef.current = null;
+      void engine?.dispose();
+      bridgeRef.current?.clear();
+      setStatus((was) => ({ ...was, playing: false, utterance: null, level: null, reportsWordTimings: null }));
+    },
+    [identity],
+  );
+
+  return { bridge, status, opened, play, pause };
+}

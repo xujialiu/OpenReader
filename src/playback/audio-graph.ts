@@ -26,6 +26,14 @@ import { framesFor } from './gap';
 import { resampleLinear } from './pcm';
 import { POSITION_INTERVAL_MS } from './reader-clock';
 
+/**
+ * The offset that tells the native queue node to leave its read index where it
+ * is: `AudioBufferQueueSourceNode::start(when, offset)` returns early for any
+ * `offset < 0`. It is the wrapper's own default and the wrapper rejects it; see
+ * `resume` below.
+ */
+const KEEP_READ_INDEX = -1;
+
 export interface AudioGraphHandlers {
   /** The source node's content position, straight from `onPositionChanged`. The only clock this app has. */
   onPosition(position: number): void;
@@ -139,6 +147,17 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
   node.connect(context.destination);
 
   /**
+   * The same node, as the JSI object the wrapper holds, for the one call the
+   * wrapper cannot make (see `resume`).
+   *
+   * `node` is `protected` on `AudioNode`, which is a TypeScript keyword and not
+   * a runtime one, so this is a cast and not a trick — and it is written here,
+   * once, rather than at the call site, so that there is one place to look when
+   * `react-native-audio-api` is upgraded past the 0.13.5 this was read from.
+   */
+  const nativeNode = (node as unknown as { node: { start(when: number, offset: number): void } }).node;
+
+  /**
    * THE CLOCK. The position comes from the **source node**, never from
    * `AudioContext.currentTime` — which counts rendered frames over the sample
    * rate, making it a wall clock that is *not* scaled by the playback rate, so
@@ -229,7 +248,30 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
       // index", so this both starts and resumes. Native `start` sets the state to
       // SCHEDULED with `startTime_ = 0`, which the next render quantum turns
       // into PLAYING, so calling it while already playing is a no-op.
-      node.start();
+      //
+      // It cannot be called through the wrapper, which is why this reaches past
+      // it. The wrapper is, verbatim from
+      // node_modules/react-native-audio-api/lib/module/core/AudioBufferQueueSourceNode.js
+      // (0.13.5):
+      //
+      //   start(when = 0, offset = -1) {
+      //     if (when < 0) throw new RangeError(...);
+      //     if (offset && offset < 0) throw new RangeError(`offset must be a finite non-negative number: ${offset}`);
+      //     this.node.start(when, offset);
+      //   }
+      //
+      // — so its own default is the one value its own guard rejects, and
+      // `node.start()` throws every time. It is reported (`onError`) rather than
+      // silent, which is how the first device run found it: "offset must be a
+      // finite non-negative number: -1" and not one Clip played.
+      //
+      // Every offset the guard admits is >= 0, and the native node reads those
+      // as "move the read index there" — `AudioBufferQueueSourceNode::start`
+      // returns early only when `offset < 0` and otherwise assigns
+      // `vReadIndex_ = sampleRate * offset`. The engine calls `resume()` again on
+      // every enqueue while playing, so an offset of 0 would restart the Clip
+      // being spoken each time a new one arrived. There is no third value.
+      nativeNode.start(0, KEEP_READ_INDEX);
     },
 
     pause() {
