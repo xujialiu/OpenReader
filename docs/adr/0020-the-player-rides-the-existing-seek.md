@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The player rides the seek that already exists
@@ -24,6 +24,179 @@ playing, deliberately without a `resume()`. `src/app/use-reading.ts` exposes
 reaches it. Exposing it is most of this ADR.
 
 The only control that is not a seek is the speed, which is `engine`'s rate.
+
+## Built, 2026-09-20 — what the ADR did not know
+
+Everything below this heading was added after the player was built and measured on
+the device. Measurements are in `notes/NOTES_2026-09-20.md`; what is here is what
+they forced.
+
+### The hit-test snaps, so "no text node" is not a thing the platform will say
+
+This ADR said "a tap that lands on no text node does nothing" and assumed the
+hit-test would say so. **It does not.** `caretPositionFromPoint` — and
+`caretRangeFromPoint` beside it — answers with *the nearest caret position*, not
+with the position at the point. Measured: a click at (2.0, 23.4), inside the
+body's own left padding and over no text at all, returned a text node in the
+heading beside it and moved the reading to that heading's Utterance. At (1, 1) the
+same, with `elementFromPoint` returning `HTML` and the heading's own box measured
+at 33.5/21.4/368.5/59.4.
+
+So the tap carries a second test: **the point must lie inside the box of the Block
+it resolved to.** The Block's box rather than the character's, deliberately — a tap
+between two lines of a paragraph, or past the end of a short last line, is inside
+the paragraph and is an ordinary "read from about here"; a tap in the margin, or on
+the empty page below the last paragraph, is inside nothing and does nothing. The
+before/after pair is in the notes.
+
+Both spellings of the hit-test are called, standard first. That is not a capability
+check with a second behaviour behind it — they return the same node and the same
+offset — and neither being present is reported rather than swallowed.
+
+### What crosses, and in which direction
+
+- `TapMessage` carries **a Block id and a code-unit offset into that Block**, never
+  an Utterance: the WebView does not have the Utterance list. `cursor.ts`'s
+  `utteranceAt` resolves it on the React Native side, which is where the rest of
+  the coordinate chain already lives, and it is a pure function with tests.
+- Its three answers, in order: the span that **contains** the offset (half-open,
+  so a boundary belongs to the sentence it starts); otherwise the nearest span
+  **ending at or before** it, which is the sentence a tapped space follows;
+  otherwise the first span starting after it, for a Block's leading whitespace.
+  Null anywhere else, and null means the bridge makes no call at all.
+- The half-open end is only observable where two spans are **adjacent**, which is
+  every sentence boundary in Chinese and none in English: `sentencex` trims the
+  space between two English sentences and leaves a one-character gap between their
+  spans. The test is Chinese for that reason.
+- `DocumentMessage.hrefs` ships as specified. Measured on the device: **2,077
+  hrefs** on the owner's book, beside `toc` of 15 top-level navigation entries.
+
+### The overlay's height is a message, and it is not re-centred on arrival
+
+`InsetMessage` carries the player's own measured height in CSS pixels, which are
+React Native points because the library's template sets `initial-scale=1.0`.
+`centre()` subtracts it from `clientHeight` and aims at the middle of what is left.
+
+**Nothing is re-centred when the inset changes**, and that is the decision rather
+than an omission: the player collapsing moves the middle of the visible text, and
+scrolling to the new middle would move the text under the reader — the one thing
+floating the player over the page exists to prevent. Measured: the spoken
+Utterance's top stayed at **263.96 px** through expand → collapse → expand, not a
+pixel either way. The new inset applies from the next Utterance.
+
+Measured centring error after the change, read out of the registered `Highlight`'s
+own ranges on the owner's book, `clientHeight` 758:
+
+| player | inset | error vs the visible middle | error vs the container's middle |
+| --- | --- | --- | --- |
+| expanded | 267.67 | +0.090, +0.277, +0.065 px | −133.74, −133.56, −133.77 px |
+| collapsed | 44.0 | +0.575, +0.766 px | −21.43, −21.23 px |
+
+The baseline was 0.05–0.97 px over four Utterances (2026-09-19, 20:05). It is
+preserved in both states. The right-hand column is half the inset, which is what
+the sentence being spoken would have been pushed down by without the change.
+
+One consequence of the message being lost is guarded: the player measures itself
+before the WebView has finished loading, and `highlightCall` into a function that
+does not exist yet is a silent no-op — so the bridge keeps the last inset and sends
+it again when the document message says the program has installed.
+
+The inset is the height of the **band** the player occupies, not of the area it
+paints. Collapsed, the button sits at one end of a band that is mostly clear, and
+the centring aims at a scalar; the error that costs is one button's height of extra
+margin at the bottom, in the direction that keeps the spoken sentence visible.
+
+### The debounce is guarded twice, and the second guard is the one that carries it
+
+600 ms, Zotero's own number. Measured on the device: five presses of
+previous-sentence produce **one** `engine.seek`, 612 ms later, while the highlight
+moves on every press. With the debounce removed and nothing else changed, the same
+five presses produce **five** seeks in 24 ms — five restarts and five synthesis
+requests, four of them thrown away.
+
+Removing only the `clearTimeout` still produced one seek, because the first timer
+to fire takes the pending target and leaves null behind for the rest. Worth stating
+so that neither half is removed as redundant: the timer keeps one call, the payload
+keeps one target, and a caller that pressed five times has moved five sentences
+because each press counts from the **pending** position rather than from where the
+engine still is.
+
+The highlight moving immediately is `bridge.show`: the same `SpeakMessage` the
+clock sends, with `words: null` and a zero duration. The WebView's own loop starts
+only when there are words, so nothing spins and nothing is estimated — the sentence
+is lit whole until its Clip arrives and replaces it with the real timings.
+
+### A contents tap is two steps, and the second one has a case the first misses
+
+The page moves first and always; the reading follows when the section reports its
+Blocks. Measured: a tap 496 chapters ahead put the page on spine item 500 and the
+reading on Utterance 165 — that section's first — four seconds later.
+
+The case that is not obvious: **a section that has already rendered reports nothing
+again.** `blocks.ts` returns its index unchanged when a section's text has not
+changed, so `onBlocks` never fires and a listener waiting for it would wait for
+ever. So the first step asks whether the app already holds an Utterance for that
+section and seeks now if it does; only an unrendered section is waited for. A
+section that has reported and holds no text — a volume's title page, of which the
+owner's book has thirteen — is finished with rather than waited for.
+
+That second step also adopts the longer Utterance list **immediately** rather than
+at the next Clip boundary, which is the one exception to the rule in
+`use-reading.ts`'s `adopt`. The deferral exists so that a section arriving
+mid-reading does not restart the sentence being spoken; here the owner has asked to
+leave that sentence, and the Utterance being seeked to exists only in the new list.
+
+### The voice list asks for everything but the Voice
+
+`configuredProviders` lists a Provider when `missingBeforeVoice` is empty — which
+is `readiness` without the Voice, including the model. A Provider that could list
+its voices but not speak with them would be a trap: the picker offers it, the owner
+picks, and Play stops on "OpenAI needs a model". Measured against the real Keychain
+on the device: `["fish", "local"]`.
+
+**`local` is offered on a first run, and that is the default address rather than an
+accident.** `DEFAULT_SETTINGS.local.baseURL` is the local engine's own default, so
+the one Provider needing no credential is configured out of the box; tapping it
+says what the server said, which is the honest outcome when there is no server
+there.
+
+The Voice's **locale** is shown beside it only once that Provider's list has been
+asked for. It is not a property of the id — three of the five Providers report no
+locale at all — and fetching a list so that a caption could be complete would be
+spending the owner's quota on a caption (philosophy rule 4). Lists are cached per
+Provider for the session, because Speechify paginates and Fish merges up to three
+sources.
+
+### The stepper repeats by taking more steps, not by repeating faster
+
+Every rate change re-sends the whole Word Timing array to the WebView
+(`engine.setRate` → `cue` + `correct`), so a held button is a message cadence on
+the bridge that ADR 0005 is about. The repeat is held at eight a second and the
+**number of steps per repeat** grows instead — one for the first eight repeats,
+then three — which is what `stepRate`'s count parameter exists for. Measured: one
+tap is 1.50 → 1.55, and a hold of about 2.5 s is 1.50 → 3.15, with 1.50 → 3.00
+inside the first two seconds.
+
+### Where the player's own state lives
+
+`collapsed` belongs to the reader screen, beside the two sheets' visibility, and
+not to the player. The reason is decision 4: **pausing re-opens the player**, and
+the pause is the screen's — a state inside the player would have to be told about a
+pause that happened anywhere else. Measured through the button's own handler:
+collapsed and paused → press → playing and still collapsed; press again → paused
+and open.
+
+The status line and the notes are **inside** the player, which the layout above
+does not mention. Philosophy rule 1 is honest signals and a player that cannot say
+whether it is highlighting the word or the sentence leaves the owner to guess at
+the one thing this app is for; putting them in the player means collapsing hides
+them with everything else, which is what collapsing is for.
+
+### One more thing the engine had to be told
+
+`build()` loads the engine at the Reading Position rather than at 0. A word tapped
+or a chapter chosen **before Play was ever pressed** has already moved it, and
+loading at 0 would silently read the book from its beginning instead.
 
 ## Tap-to-seek, and why it cannot be a long press
 

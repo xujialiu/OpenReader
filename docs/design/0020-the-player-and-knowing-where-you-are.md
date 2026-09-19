@@ -150,6 +150,71 @@ does, you land slightly early rather than somewhere unpredictable.
 empty and says so. It is not an error and nothing else stops working — tapping a
 sentence still reads from there, which is the other half of knowing where you are.
 
+## A tap has to land on the words, and the phone disagreed
+
+Tapping blank space does nothing — that was decided above, and building it turned
+out to need one more rule.
+
+Asked where a tap landed, the phone does not answer "on nothing". It answers with
+the nearest words. So a tap in the margin beside a chapter title came back as a tap
+*on* that title, and the reading jumped to it. Nobody had pointed at anything.
+
+The rule that fixes it is that a tap has to land inside the paragraph it would read
+from. Between two lines of a paragraph still counts — that is the paragraph. Past
+the end of a short last line still counts. The margin, the gap between two
+paragraphs and the empty page below the last one do not, and there the tap does
+nothing, which is what was promised.
+
+**The alternative was to let the phone's answer stand** and read the nearest
+sentence to wherever you touched. It was turned down for the reason the blank was
+made inert in the first place: a gesture that is easy to miss must not move your
+place in the book when you miss it. Reading something you did not point at is
+worse than reading nothing.
+
+## The player says what it is doing, and hiding it hides that too
+
+The strip carries one line saying which sentence is being read, of how many, and
+whether the highlight is following the word or lighting the whole sentence —
+because on some voices only the whole sentence can be lit, and a reader watching
+that happen deserves to be told rather than left to wonder whether something is
+broken. Anything that has gone wrong, or anything still missing before the app can
+speak at all, is written underneath it in the same place.
+
+Collapsing the player hides those too. That is deliberate and it is what collapsing
+is for: it is the gesture for "I want the page and nothing else". The single button
+that remains says nothing, because the moment there is something to say the reader
+can press it and get everything back.
+
+## What the voice line can say, and what it costs to say more
+
+Above the play button is the service that is reading and the voice it is reading
+with. What it cannot always add is the language that voice speaks — because half
+the services do not say, and the only way to find out is to ask that service for
+its list, which is a request made against the reader's own account.
+
+So the language appears once you have opened the voice list for that service, and
+not before. Asking on your behalf so that a caption could be complete would be
+spending your money on a caption.
+
+Choosing a voice from a different service switches to that service, because a voice
+belongs to one service and choosing between them is the same act.
+
+And a service that has been given its key but is still missing something else it
+needs — a model, say — is **not** offered in the list. It could tell you its
+voices; it could not then read with them, and offering it would be a trap: you
+would choose, press play, and be told that something is missing. The list is a list
+of things that will work.
+
+## Tapping a chapter you have not been to takes a moment
+
+The page goes there straight away. The reading follows a second or two later, once
+the app has laid that chapter out and can tell where its first sentence is — there
+is nothing to start reading from until then.
+
+A volume's title page has no words on it at all. Tapping it takes you there, which
+is what you asked for, and nothing is read: there is nothing to read. It is a place
+in the book rather than a failure.
+
 ## What is deliberately not here
 
 **Anything that rewrites your place without you asking.** Every control in this

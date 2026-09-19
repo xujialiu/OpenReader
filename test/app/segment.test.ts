@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Block } from '../../src/core/segmenter';
-import { documentLanguage, samePrefix, segmentDocument } from '../../src/app/segment';
+import { documentLanguage, firstUtteranceOfSection, samePrefix, segmentDocument } from '../../src/app/segment';
 
 /**
  * The splitter is bound here and nowhere else (ADR 0006), and the app segments
@@ -65,5 +65,42 @@ describe('samePrefix', () => {
 
   it('compares the text rather than the objects, because the list is built again each time', () => {
     expect(samePrefix(first, first.map((utterance) => ({ ...utterance })))).toBe(true);
+  });
+});
+
+/**
+ * The second half of a contents tap (ADR 0020).
+ *
+ * `goToSection` moves the page; the reading can only follow once that section has
+ * reported its Blocks, and this is the index it follows to. Getting it wrong means
+ * tapping a chapter and being read a different one, which is the confidently wrong
+ * answer ADR 0020 calls the expensive defect.
+ */
+describe('firstUtteranceOfSection', () => {
+  /** Two Blocks per section, as `blocks.ts` concatenates them: by spine index, in reading order. */
+  const sectioned = [
+    { text: 'Cover art.', sectionIndex: 0 },
+    { text: 'Chapter one begins. It runs on.', sectionIndex: 3 },
+    { text: 'Chapter two begins.', sectionIndex: 4 },
+  ];
+  const utterances = segmentDocument(sectioned, 'en');
+
+  it('finds the first Utterance of the section asked for, not the first of the document', () => {
+    expect(utterances.map((one) => one.text)).toEqual([
+      'Cover art.',
+      'Chapter one begins.',
+      'It runs on.',
+      'Chapter two begins.',
+    ]);
+    expect(firstUtteranceOfSection(utterances, sectioned, 0)).toBe(0);
+    expect(firstUtteranceOfSection(utterances, sectioned, 3)).toBe(1);
+    expect(firstUtteranceOfSection(utterances, sectioned, 4)).toBe(3);
+  });
+
+  it('answers null for a section that has no text, which is an ordinary destination', () => {
+    // A volume's title page is a real row in the contents and carries nothing to
+    // read; the owner's book has thirteen of them. The page still moves there.
+    expect(firstUtteranceOfSection(utterances, sectioned, 1)).toBeNull();
+    expect(firstUtteranceOfSection([], sectioned, 3)).toBeNull();
   });
 });

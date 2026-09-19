@@ -162,6 +162,71 @@ export function wordIndexAt(words: readonly WordCue[], elapsedMs: number): numbe
   return index;
 }
 
+/**
+ * The Utterance a tapped place in a Block belongs to, or null (ADR 0020).
+ *
+ * The other direction of this file's coordinate chain, and the whole of
+ * tap-to-seek on this side of the bridge: the WebView hit-tests the tapped point
+ * to a text node and reports the Block's own code-unit offset (`TapMessage`), and
+ * this answers with the index to hand to `engine.seek`. **No new coordinate
+ * system** — ADR 0020 is explicit that the tap is located the way a Word Timing
+ * already is, and the span invariant that makes a Word Timing well defined is the
+ * one that makes this well defined.
+ *
+ * Three answers, in this order, and the order is the decision:
+ *
+ * 1. **A span that contains the offset.** Half-open, `start <= offset < end`, the
+ *    same convention as every other range in this file — so a tap exactly on the
+ *    boundary between two sentences belongs to the second, which is the one whose
+ *    first character was tapped.
+ * 2. **Otherwise the nearest span that ends at or before it**, which is the
+ *    sentence the tapped character *follows*. `sentenceSpans` cuts a Block's text
+ *    into ordered non-overlapping spans and the whitespace it trims between two
+ *    sentences is in no span at all, so this case is a tap on a space, and the
+ *    honest reading of "read from here" is the sentence that space ends.
+ * 3. **Otherwise the first span that starts after it** — a tap in a Block's
+ *    leading whitespace, where there is no sentence before it to read from.
+ *
+ * Null where the Block contributes to no Utterance at all (the caller is holding a
+ * Block array the Utterances were not segmented from, or the tap landed in a Block
+ * of nothing but whitespace) and for an offset that is not a number. Null means
+ * the tap does nothing, which is what the design file requires of a tap that lands
+ * on nothing — never a guess at a neighbouring sentence.
+ *
+ * Containment is decided over the whole list rather than returned from the first
+ * span that looks close, because the fallbacks would otherwise beat a containing
+ * span that comes later in the same Block.
+ */
+export function utteranceAt(
+  utterances: readonly Utterance[],
+  blockIds: readonly string[],
+  block: string,
+  offset: number,
+): number | null {
+  if (!Number.isFinite(offset)) return null;
+  let before: number | null = null;
+  /** How far into the Block the best `before` candidate reaches, so a later span wins only by being nearer. */
+  let beforeEnd = -1;
+  let after: number | null = null;
+  let afterStart = Infinity;
+
+  for (let index = 0; index < utterances.length; index++) {
+    for (const span of utterances[index].spans) {
+      if (blockIds[span.block] !== block) continue;
+      if (offset >= span.start && offset < span.end) return index;
+      if (span.end <= offset && span.end > beforeEnd) {
+        before = index;
+        beforeEnd = span.end;
+      }
+      if (span.start > offset && span.start < afterStart) {
+        after = index;
+        afterStart = span.start;
+      }
+    }
+  }
+  return before ?? after;
+}
+
 /** Heard milliseconds since a Clip's speech began, bounded by the speech's own length: the highlight belongs on the words, not on the gap that follows them. */
 export function clampElapsed(elapsedMs: number, durationMs: number): number {
   if (!Number.isFinite(elapsedMs)) return 0;

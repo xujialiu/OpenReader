@@ -1,0 +1,277 @@
+/**
+ * **Voice**: the Voices the owner can actually use, and nothing else (ADR 0020).
+ *
+ * A service that has not been given its key or its address cannot say what Voices
+ * it has, so it is not listed at all — and if none has been set up, the list is
+ * empty apart from a line pointing at Settings.
+ *
+ * **The alternative was to list everything and grey out what is not ready**, so
+ * that someone could see other services exist. It was turned down: this app is for
+ * one owner, who knows what they have signed up for, and a list mostly full of
+ * things that cannot be picked is a worse list than a short one that works. The
+ * cost is that nothing here advertises a service that has not been configured —
+ * discovering what is supported happens in Settings. That is the owner's decision
+ * and the design file carries the argument; it is not to be re-litigated by adding
+ * the greyed-out rows back.
+ *
+ * ## Three levels, and the middle one is always there
+ *
+ * Provider, then locale, then Voice. Half the Providers have no locale — OpenAI,
+ * any OpenAI-compatible server and Kokoro report `multilingual` for every Voice —
+ * and for those the middle level is **one entry reading "multilingual"** rather
+ * than being skipped, so that choosing a Voice is the same act whoever is speaking
+ * (`voices.ts` is the grouping, and the argument).
+ *
+ * Nothing is fetched until a Provider is tapped. A Voice list is a request against
+ * the owner's own account (philosophy rule 4), and it is cached for the session
+ * afterwards because Speechify paginates and Fish merges up to three sources.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import type { ProviderId } from '../core/providers/types';
+
+import { INK, Note } from './controls';
+import { PROVIDER_LABELS, type AppSettings } from './settings';
+import type { VoiceLists } from './use-voices';
+import { levelOfVoice, voiceLevels } from './voices';
+
+export interface VoiceSheetProps {
+  visible: boolean;
+  onClose(): void;
+  settings: AppSettings;
+  lists: VoiceLists;
+  /** Read with this Provider and this Voice. Both at once: a Voice belongs to exactly one Provider (CONTEXT.md). */
+  onChoose(provider: ProviderId, voice: string): void;
+}
+
+/**
+ * The sheet is the modal; the picker inside it is **mounted when it opens**, which
+ * is how it starts on the Provider in use without an effect that resets two states
+ * as the sheet appears. A picker that kept its state between opens would show
+ * whatever was last looked at rather than what is reading.
+ */
+export function VoiceSheet({ visible, onClose, settings, lists, onChoose }: VoiceSheetProps) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.behind} onPress={onClose} accessibilityLabel="Close the Voice list" />
+      {visible ? <VoicePicker onClose={onClose} settings={settings} lists={lists} onChoose={onChoose} /> : null}
+    </Modal>
+  );
+}
+
+function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProps, 'visible'>) {
+  /** Which Provider's Voices are being looked at. The one in use, until another is tapped. */
+  const [looking, setLooking] = useState<ProviderId>(settings.provider);
+  /** Which locale is open. Null means none has been chosen yet, and the Voice in use decides. */
+  const [locale, setLocale] = useState<string | null>(null);
+
+  const voices = lists.voicesOf(looking);
+  const levels = useMemo(() => voiceLevels(voices ?? []), [voices]);
+  const inUse = looking === settings.provider ? levelOfVoice(levels, settings.voice) : null;
+  const open = locale ?? inUse ?? levels[0]?.locale ?? null;
+
+  /**
+   * Opening the sheet asks the Provider in use for its Voices, if it has not been
+   * asked this session.
+   *
+   * The one fetch that is not a tap, and it is the owner's own act: they opened the
+   * Voice list, which is a request to see the Voices. Nothing is fetched for the
+   * four Providers they are not looking at.
+   */
+  const askRef = useRef(lists);
+  useEffect(() => {
+    askRef.current = lists;
+  }, [lists]);
+  useEffect(() => {
+    if (!askRef.current.voicesOf(settings.provider)) askRef.current.ask(settings.provider);
+    // On mount, which is on opening. Through a ref because `lists` is a fresh object
+    // every render and depending on it would ask again on every one of them.
+  }, [settings.provider]);
+
+  /**
+   * The locale row, scrolled to the level in use as it lays out.
+   *
+   * Only while the owner has not chosen one themselves: scrolling the row back
+   * under a finger that has just tapped a chip would be the picker arguing with
+   * them.
+   */
+  const localeRow = useRef<ScrollView | null>(null);
+  const scrollToChosen = useCallback(
+    (x: number) => {
+      if (locale !== null) return;
+      localeRow.current?.scrollTo({ x: Math.max(0, x - 16), animated: false });
+    },
+    [locale],
+  );
+
+  const configured = lists.configured;
+
+  return (
+    <>
+      <View style={styles.sheet}>
+        <View style={styles.grip} />
+        <Text style={styles.title}>Voice</Text>
+
+        {configured === null ? (
+          <Note>Looking in the Keychain for what has been set up…</Note>
+        ) : configured.length === 0 ? (
+          <Note attention>
+            No service has been set up yet, so there is no Voice to choose. Settings → Providers is where a key or the
+            address of a server goes; until one is there, nothing can be spoken.
+          </Note>
+        ) : (
+          <>
+            <View style={styles.providers}>
+              {configured.map((provider) => (
+                <Chip
+                  key={provider}
+                  label={PROVIDER_LABELS[provider]}
+                  chosen={provider === looking}
+                  onPress={() => {
+                    setLooking(provider);
+                    setLocale(null);
+                    if (!lists.voicesOf(provider)) lists.ask(provider);
+                  }}
+                />
+              ))}
+            </View>
+
+            {lists.asking === looking ? <Note>Asking {PROVIDER_LABELS[looking]} for its Voices…</Note> : null}
+
+            {levels.length > 0 ? (
+              <ScrollView
+                horizontal
+                ref={localeRow}
+                style={styles.locales}
+                contentContainerStyle={styles.localesBody}
+                showsHorizontalScrollIndicator={false}
+              >
+                {levels.map((level) => (
+                  <Chip
+                    key={level.locale}
+                    label={level.label}
+                    chosen={level.locale === open}
+                    onPress={() => setLocale(level.locale)}
+                    /**
+                     * The level in use can be the fortieth of them — Fish Audio
+                     * publishes voices in forty-odd locales — so the row is scrolled
+                     * to it rather than left at "multilingual". Same reason the
+                     * contents list opens at the chapter being read: a picker that
+                     * opens somewhere else does not show you what you have chosen.
+                     * The x is measured because a chip's width is its label's.
+                     */
+                    onMeasured={level.locale === open ? scrollToChosen : undefined}
+                  />
+                ))}
+              </ScrollView>
+            ) : null}
+
+            <ScrollView style={styles.voices}>
+              {levels
+                .filter((level) => level.locale === open)
+                .flatMap((level) => level.voices)
+                .map((voice) => {
+                  const chosen = looking === settings.provider && voice.id === settings.voice;
+                  return (
+                    <Pressable
+                      key={voice.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: chosen }}
+                      onPress={() => {
+                        onChoose(looking, voice.id);
+                        onClose();
+                      }}
+                      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                    >
+                      <Text style={[styles.rowLabel, chosen && styles.rowLabelChosen]} numberOfLines={1}>
+                        {voice.label}
+                      </Text>
+                      <Text style={styles.rowId} numberOfLines={1}>
+                        {voice.id}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+            </ScrollView>
+          </>
+        )}
+
+        {lists.note ? <Note attention>{lists.note}</Note> : null}
+        {lists.refusals.map((refusal) => (
+          <Note key={refusal} attention>
+            {refusal}
+          </Note>
+        ))}
+
+        <Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.done, pressed && styles.pressed]}>
+          <Text style={styles.doneLabel}>Done</Text>
+        </Pressable>
+      </View>
+    </>
+  );
+}
+
+function Chip({
+  label,
+  chosen,
+  onPress,
+  onMeasured,
+}: {
+  label: string;
+  chosen: boolean;
+  onPress(): void;
+  /** Where this chip starts, once it has been laid out. Only the chosen one is asked. */
+  onMeasured?(x: number): void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected: chosen }}
+      onPress={onPress}
+      onLayout={onMeasured ? (event) => onMeasured(event.nativeEvent.layout.x) : undefined}
+      style={({ pressed }) => [styles.chip, chosen && styles.chipChosen, pressed && styles.pressed]}
+    >
+      <Text style={[styles.chipLabel, chosen && styles.chipLabelChosen]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  behind: { flex: 1 },
+  chip: {
+    backgroundColor: INK.page,
+    borderColor: INK.line,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  chipChosen: { backgroundColor: INK.text, borderColor: INK.text },
+  chipLabel: { color: INK.text, fontSize: 14 },
+  chipLabelChosen: { color: INK.page, fontWeight: '600' },
+  done: { alignItems: 'center', backgroundColor: INK.text, borderRadius: 10, marginHorizontal: 16, paddingVertical: 12 },
+  doneLabel: { color: INK.page, fontSize: 15, fontWeight: '600' },
+  grip: { alignSelf: 'center', backgroundColor: INK.line, borderRadius: 3, height: 5, marginBottom: 6, width: 40 },
+  locales: { flexGrow: 0 },
+  localesBody: { gap: 8, paddingHorizontal: 16 },
+  pressed: { opacity: 0.65 },
+  providers: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
+  row: { borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth, gap: 2, paddingHorizontal: 16, paddingVertical: 12 },
+  rowId: { color: INK.quiet, fontSize: 12 },
+  rowLabel: { color: INK.text, fontSize: 15, fontWeight: '600' },
+  rowLabelChosen: { color: INK.reading },
+  sheet: {
+    backgroundColor: INK.panel,
+    borderTopColor: INK.line,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+    paddingBottom: 32,
+    paddingTop: 10,
+  },
+  title: { color: INK.text, fontSize: 18, fontWeight: '700', paddingHorizontal: 16 },
+  voices: { height: 260 },
+});

@@ -33,12 +33,13 @@ import type { Utterance } from '../core/segmenter';
 import type { ClipCue, PositionCorrection, ReaderClock } from '../playback/reader-clock';
 
 import { blockIds, EMPTY_BLOCKS, withSection, type BlockIndex } from './blocks';
-import { correctMessage, speakMessage } from './cursor';
+import { correctMessage, speakMessage, utteranceAt } from './cursor';
 import { DEFAULT_HIGHLIGHT, highlightCall, highlighterSource, type HighlightStyles } from './highlighter';
 import {
   BLOCKS_MESSAGE,
   DOCUMENT_MESSAGE,
   PROBLEM_MESSAGE,
+  TAP_MESSAGE,
   type HighlightMessage,
   type ProblemMessage,
   type ReportedBlock,
@@ -64,6 +65,28 @@ export interface RenderedSection {
   spine: number;
 }
 
+/**
+ * What the document itself is, reported once as the program installs.
+ *
+ * Two facts about the **document** rather than about a section, which is why they
+ * are one message and not a field repeated on every `BlocksMessage` — two thousand
+ * times, for the book that made this necessary. Only the WebView can know either:
+ * `book.spine` lives there.
+ */
+export interface ReportedDocument {
+  /** How many spine items the document has. */
+  spine: number;
+  /**
+   * Every spine item's href, in spine order, in the spine's own spelling.
+   *
+   * The contents list is built out of this and the navigation (ADR 0020):
+   * `core/document/contents.ts`'s `contentsOf` takes exactly this array as its
+   * `spine` argument, and without it every row of the list is unreachable and the
+   * current row is null.
+   */
+  hrefs: readonly string[];
+}
+
 export interface ReaderBridgeOptions {
   /**
    * Every **Block** the document has rendered so far, in reading order, each time
@@ -77,6 +100,26 @@ export interface ReaderBridgeOptions {
    * contributed no Blocks at all.
    */
   onBlocks?(blocks: readonly ReportedBlock[], section: RenderedSection): void;
+  /**
+   * The shape of the document, once, before any section reports its Blocks.
+   *
+   * A callback rather than a value to read during render, for the same reason as
+   * `onBlocks`: nothing this hook returns is reactive, because there is no
+   * `useState` in this file at all (ADR 0005).
+   */
+  onDocument?(document: ReportedDocument): void;
+  /**
+   * The owner tapped a word, and this is the **Utterance** to read from —
+   * resolved here rather than reported raw, because the tap arrives as a place in
+   * a Block (`TapMessage`) and the Utterances and the Block ids are both already
+   * in this file's refs. `cursor.ts` owns the arithmetic and is tested; this is
+   * the call site.
+   *
+   * It is not called at all for a tap that landed on no text, or on text no
+   * Utterance covers. Tapping blank space does nothing (docs/design/0020), and
+   * "nothing" is the absence of this call rather than a null passed to it.
+   */
+  onTap?(utterance: number): void;
   /** A highlight the WebView could not draw. Rare, and never a guess: see `ProblemMessage`. */
   onProblem?(problem: ProblemMessage): void;
   /**
@@ -116,6 +159,30 @@ export interface ReaderBridge {
    * would make it possible.
    */
   setUtterances(utterances: readonly Utterance[], blocks: readonly ReportedBlock[]): void;
+  /**
+   * Draw this Utterance's highlight now, at **utterance level and with no words**,
+   * and follow the page to it.
+   *
+   * What a skip button paints before its Clip exists. ADR 0020 requires rapid
+   * presses to coalesce — five taps must not be five synthesis requests, which is
+   * Zotero's own 600 ms debounce — while the highlight moves on every press. The
+   * debounced `seek` is the caller's; this is the immediate half, and it is the
+   * same `SpeakMessage` the clock sends, with `words: null` and a zero duration.
+   * The WebView's own loop starts only when there are words, so nothing spins and
+   * nothing is estimated (ADR 0005): the sentence is lit whole until its Clip
+   * arrives and replaces this with the real timings.
+   */
+  show(utterance: number): void;
+  /**
+   * How much of the bottom of the page the player is covering, in points.
+   *
+   * The centring's input, not a style: ADR 0011 centres against the scroll
+   * container's height and ADR 0020's player floats over the bottom of it, so the
+   * visible middle is not the container's middle — and the covered height changes
+   * when the player collapses and expands. Send it whenever the player's own
+   * layout changes; see `InsetMessage`.
+   */
+  setInset(bottomPx: number): void;
   /**
    * Freeze the highlight where it is. Call it when the engine is paused.
    *
@@ -180,7 +247,9 @@ export interface ReaderBridge {
 function asMessage(event: unknown): WebViewMessage | null {
   if (typeof event !== 'object' || event === null) return null;
   const type = (event as { type?: unknown }).type;
-  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== PROBLEM_MESSAGE) return null;
+  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== PROBLEM_MESSAGE && type !== TAP_MESSAGE) {
+    return null;
+  }
   return event as WebViewMessage;
 }
 
@@ -208,6 +277,19 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    * it installs. Zero until it arrives, which it does before any section reports.
    */
   const spine = useRef(0);
+  /**
+   * The last inset sent, kept so it can be sent **again** when the program says it
+   * has installed.
+   *
+   * The player measures itself as it lays out, which is before the WebView has
+   * finished loading its own template — and `highlightCall` is a call into a
+   * function that is not there yet, so that first message is a no-op that nothing
+   * reports. Losing it would leave the centring aiming at the middle of a
+   * container whose bottom is covered, silently, until the player happened to
+   * change size. The document message is the one signal that the program exists,
+   * so it is what re-sends this.
+   */
+  const inset = useRef(0);
 
   const send = useCallback(
     (message: HighlightMessage) => {
@@ -243,6 +325,37 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     ids.current = blockIds(reported);
   }, []);
 
+  const show = useCallback(
+    (utterance: number) => {
+      const message = speakMessage(
+        // No words and no duration: nothing is known about the Clip yet, and this
+        // is the Highlight Level the absence of Word Timings already means (ADR
+        // 0005). Nothing here estimates one.
+        { utterance, words: null, duration: 0, rate: 1 },
+        utterances.current,
+        ids.current,
+        { reveal: latest.current.follow !== false },
+      );
+      if (!message) return;
+      // `cued` so that a correction still arriving for the Utterance that *was*
+      // playing is recognised as stale and dropped, rather than repainting the
+      // sentence the owner has just skipped away from.
+      cued.current = message;
+      send(message);
+    },
+    [send],
+  );
+
+  const setInset = useCallback(
+    (bottomPx: number) => {
+      const covered = Number.isFinite(bottomPx) && bottomPx > 0 ? bottomPx : 0;
+      if (covered === inset.current) return;
+      inset.current = covered;
+      send({ kind: 'inset', bottomPx: covered });
+    },
+    [send],
+  );
+
   const hold = useCallback(() => {
     send({ kind: 'hold' });
   }, [send]);
@@ -269,29 +382,42 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [goToLocation],
   );
 
-  const onWebViewMessage = useCallback((event: unknown) => {
-    const message = asMessage(event);
-    if (!message) return;
-    if (message.type === PROBLEM_MESSAGE) {
-      latest.current.onProblem?.(message);
-      return;
-    }
-    if (message.type === DOCUMENT_MESSAGE) {
-      spine.current = message.spine;
-      return;
-    }
-    const next = withSection(blocks.current, message);
-    // Unchanged means epub.js rendered a section whose text is the same, which
-    // happens whenever the reader crosses back into one. Re-segmenting the book
-    // for that would be the renderer's most expensive habit.
-    if (next === blocks.current) return;
-    blocks.current = next;
-    latest.current.onBlocks?.(next.blocks, {
-      index: message.sectionIndex,
-      href: message.section,
-      spine: spine.current,
-    });
-  }, []);
+  const onWebViewMessage = useCallback(
+    (event: unknown) => {
+      const message = asMessage(event);
+      if (!message) return;
+      if (message.type === PROBLEM_MESSAGE) {
+        latest.current.onProblem?.(message);
+        return;
+      }
+      if (message.type === DOCUMENT_MESSAGE) {
+        spine.current = message.spine;
+        // The program has installed, so the inset it may have missed goes again.
+        if (inset.current > 0) send({ kind: 'inset', bottomPx: inset.current });
+        latest.current.onDocument?.({ spine: message.spine, hrefs: message.hrefs });
+        return;
+      }
+      if (message.type === TAP_MESSAGE) {
+        const at = utteranceAt(utterances.current, ids.current, message.block, message.offset);
+        // Null is a tap on text no Utterance covers, which is the same as a tap on
+        // nothing: it does nothing, and says nothing (docs/design/0020).
+        if (at !== null) latest.current.onTap?.(at);
+        return;
+      }
+      const next = withSection(blocks.current, message);
+      // Unchanged means epub.js rendered a section whose text is the same, which
+      // happens whenever the reader crosses back into one. Re-segmenting the book
+      // for that would be the renderer's most expensive habit.
+      if (next === blocks.current) return;
+      blocks.current = next;
+      latest.current.onBlocks?.(next.blocks, {
+        index: message.sectionIndex,
+        href: message.section,
+        spine: spine.current,
+      });
+    },
+    [send],
+  );
 
   const injectedJavascript = useMemo(
     () => highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT),
@@ -313,7 +439,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, hold, clear, goTo, goToSection, readerProps }),
-    [clock, setUtterances, hold, clear, goTo, goToSection, readerProps],
+    () => ({ clock, setUtterances, show, setInset, hold, clear, goTo, goToSection, readerProps }),
+    [clock, setUtterances, show, setInset, hold, clear, goTo, goToSection, readerProps],
   );
 }

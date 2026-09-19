@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   andList,
+  configuredProviders,
   DEFAULT_SETTINGS,
   headersAreOffered,
   providerFields,
@@ -11,8 +12,8 @@ import {
   engineIdentity,
   keyIsOffered,
   keyIsRequired,
+  missingBeforeVoice,
   PROVIDER_ORDER,
-  READING_RATES,
   type AppSettings,
 } from '../../src/app/settings';
 import { createProvider } from '../../src/core/providers/factory';
@@ -157,11 +158,76 @@ describe('what the owner is offered', () => {
     expect(keyIsRequired('speechify')).toBe(true);
   });
 
-  it('offers the 1.5–3× the app is built for, and Natural Pace to compare it against', () => {
-    expect(READING_RATES).toContain(1);
-    expect(READING_RATES).toContain(1.5);
-    expect(READING_RATES).toContain(3);
-    expect(Math.max(...READING_RATES)).toBe(3);
+});
+
+/**
+ * The Voice list of ADR 0020 shows **only the Providers the owner has set up**, and
+ * it is the list a Voice is chosen from — so the Voice cannot be one of the things
+ * it asks for, and everything else has to be.
+ *
+ * The greyed-out alternative was turned down by the owner and the cost is in
+ * `docs/design/0020`; what is checked here is the rule that replaced it, which is
+ * that a Provider appears exactly when it could be read with once a Voice is
+ * picked. A Provider that could list its voices but not speak with them would be a
+ * trap: the picker offers it, the owner picks, and Play stops on a missing model.
+ */
+describe('which Providers a Voice can be chosen from', () => {
+  /**
+   * Nothing typed anywhere, including the address the app ships with — see the last
+   * assertion, which is what that default costs.
+   */
+  const nothingSet: AppSettings = {
+    ...DEFAULT_SETTINGS,
+    voice: '',
+    openai: { model: '' },
+    compatible: { baseURL: '', model: '' },
+    local: { ...DEFAULT_SETTINGS.local, baseURL: '' },
+  };
+  const none = () => false;
+  const all = () => true;
+
+  it('leaves the Voice out of what a Provider is asked for, and nothing else', () => {
+    const withModel: AppSettings = { ...nothingSet, openai: { model: 'gpt-4o-mini-tts' } };
+    expect(missingBeforeVoice(withModel, 'openai-official', true)).toEqual([]);
+    expect(readiness({ ...withModel, provider: 'openai-official' }, true)).toEqual({ ready: false, missing: ['a Voice'] });
+    expect(missingBeforeVoice(withModel, 'openai-official', false)).toEqual(['an API key']);
+  });
+
+  it('lists nothing at all when no key is saved and no address is typed', () => {
+    expect(configuredProviders(nothingSet, none)).toEqual([]);
+  });
+
+  it('lists a hosted service as soon as its key is there, and a server of your own only once it has an address', () => {
+    expect(configuredProviders(nothingSet, all)).toEqual(['speechify', 'fish']);
+    const local: AppSettings = { ...nothingSet, local: { ...nothingSet.local, baseURL: 'http://127.0.0.1:8880' } };
+    expect(configuredProviders(local, none)).toEqual(['local']);
+  });
+
+  it('keeps a key-holding Provider out of the list while the thing it also needs is missing', () => {
+    // OpenAI can list its voices with nothing but a key (ADR 0020 measured the 401),
+    // and is still not offered: choosing one of those voices would leave the reading
+    // stopped on "OpenAI needs a model".
+    expect(configuredProviders(nothingSet, (provider) => provider === 'openai-official')).toEqual([]);
+    const model: AppSettings = { ...nothingSet, openai: { model: 'gpt-4o-mini-tts' } };
+    expect(configuredProviders(model, (provider) => provider === 'openai-official')).toEqual(['openai-official']);
+  });
+
+  it('offers a server of your own out of the box, because the app ships with its address', () => {
+    // Not an accident to be tidied: `DEFAULT_SETTINGS.local.baseURL` is the local
+    // engine's own default, so the one Provider needing no credential is the one
+    // offered on a first run — and tapping it says what the server said, which is
+    // the honest outcome when there is no server there.
+    expect(configuredProviders({ ...DEFAULT_SETTINGS, voice: '' }, none)).toEqual(['local']);
+  });
+
+  it('keeps the list in the order the Providers are offered in', () => {
+    const everything: AppSettings = {
+      ...nothingSet,
+      openai: { model: 'a' },
+      compatible: { baseURL: 'https://example.invalid', model: 'a' },
+      local: { ...nothingSet.local, baseURL: 'http://127.0.0.1:8880' },
+    };
+    expect(configuredProviders(everything, all)).toEqual([...PROVIDER_ORDER]);
   });
 });
 

@@ -96,18 +96,6 @@ export function headersAreOffered(provider: ProviderId): boolean {
 }
 
 /**
- * The speeds the player offers.
- *
- * 1.5–3× is what the app is built for (ADR 0009, and `docs/PHILOSOPHY.md` is
- * about what happens to a highlight at those speeds). 1.0× is here as well, and
- * not as a courtesy: Natural Pace is what a Provider's Word Timings are reported
- * against, so reading the same page at 1× and at 3× is how the scaling of
- * `rate.ts` is checked at all. Every one of these is inside `clampRate`'s bounds,
- * which is the engine's business and not this list's.
- */
-export const READING_RATES: readonly number[] = [1, 1.5, 2, 2.5, 3];
-
-/**
  * Everything the owner has set. One object, held for the session.
  *
  * It is **not** stored anywhere. Shared Settings live in the Sync Folder
@@ -185,9 +173,31 @@ export type Readiness = { readonly ready: true } | { readonly ready: false; read
  * moment it is needed and handed straight to `providerSettings`.
  */
 export function readiness(settings: AppSettings, hasKey: boolean): Readiness {
+  const missing = [...missingBeforeVoice(settings, settings.provider, hasKey)];
+  // Last, because it is the one thing every section needs and reads oddly first.
+  if (!settings.voice.trim()) missing.push('a Voice');
+  return missing.length === 0 ? { ready: true } : { ready: false, missing };
+}
+
+/**
+ * What a Provider still needs before it could be read with, **leaving the Voice
+ * out**.
+ *
+ * Split from `readiness` for one caller, and the split is the decision: the voice
+ * list of ADR 0020 shows only the Providers the owner has set up, and it is the
+ * list a Voice is *chosen* from — so the Voice cannot be one of the things it asks
+ * for. Everything else is, including the model. A Provider that could list its
+ * voices but not speak with them would be a trap: the picker would offer it, the
+ * owner would pick, and the reading would stop on "OpenAI needs a model" at the
+ * first press of Play.
+ *
+ * It takes the Provider explicitly rather than reading `settings.provider`,
+ * because the whole point is asking about one that is not in use.
+ */
+export function missingBeforeVoice(settings: AppSettings, provider: ProviderId, hasKey: boolean): readonly string[] {
   const missing: string[] = [];
 
-  switch (settings.provider) {
+  switch (provider) {
     case 'openai-official':
       if (!hasKey) missing.push('an API key');
       if (!settings.openai.model.trim()) missing.push('a model');
@@ -216,10 +226,26 @@ export function readiness(settings: AppSettings, hasKey: boolean): Readiness {
       break;
   }
 
-  // Last, because it is the one thing every section needs and reads oddly first.
-  if (!settings.voice.trim()) missing.push('a Voice');
+  return missing;
+}
 
-  return missing.length === 0 ? { ready: true } : { ready: false, missing };
+/**
+ * The Providers the owner has actually set up, in `PROVIDER_ORDER`.
+ *
+ * This is the voice list of ADR 0020 and docs/design/0020: **only configured
+ * Providers appear at all**, and when none is the list is empty apart from a line
+ * pointing at Settings. That was chosen over listing everything greyed out — this
+ * app is for one owner, who knows what they have signed up for, and a list mostly
+ * full of things that cannot be picked is a worse list than a short one that
+ * works. The cost, stated in the design file, is that nothing in the reading
+ * screen advertises a service that has not been configured.
+ *
+ * `hasKey` is asked per Provider rather than passed as one boolean, because the
+ * Keychain holds one entry per Provider and the answer differs between them. The
+ * key itself never comes near this function.
+ */
+export function configuredProviders(settings: AppSettings, hasKey: (provider: ProviderId) => boolean): readonly ProviderId[] {
+  return PROVIDER_ORDER.filter((provider) => missingBeforeVoice(settings, provider, hasKey(provider)).length === 0);
 }
 
 /** "an API key, a model and a Voice" — the one place the commas and the final "and" are decided. */

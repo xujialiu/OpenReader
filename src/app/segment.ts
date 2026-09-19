@@ -41,6 +41,41 @@ export function documentLanguage(declared: string | null | undefined): { languag
   return language ? { language, declared: true } : { language: 'en', declared: false };
 }
 
+/** The one thing this file needs of a reported Block: which spine item it came from. Structural, so a `ReportedBlock` goes straight in and nothing here imports the renderer. */
+export interface SectionedBlock {
+  sectionIndex: number;
+}
+
+/**
+ * The first Utterance of a spine item, or null when it has none.
+ *
+ * The second half of a contents tap (ADR 0020). `goToSection` moves the **page**
+ * and nothing else; seeking the reading to that chapter can only happen once the
+ * section has rendered and reported its Blocks, because until then the section
+ * contributes no Utterance and there is no index to seek to. So a contents tap is
+ * two steps, and this is what the second one needs.
+ *
+ * The **first span's** Block decides which section an Utterance belongs to, and
+ * that is unambiguous rather than a choice: `rejoin.ts` refuses to weld two Blocks
+ * from different sections, so every Utterance lies entirely within one.
+ *
+ * Null is ordinary and not a failure. A volume's title page is a real destination
+ * with no text on it — the owner's book puts one at the start of each of its
+ * thirteen volumes — and a cover page is a `<svg><image/></svg>`. The page has
+ * still moved there, which is what the tap asked for.
+ */
+export function firstUtteranceOfSection(
+  utterances: readonly Utterance[],
+  blocks: readonly SectionedBlock[],
+  section: number,
+): number | null {
+  for (let at = 0; at < utterances.length; at++) {
+    const span = utterances[at].spans[0];
+    if (span && blocks[span.block]?.sectionIndex === section) return at;
+  }
+  return null;
+}
+
 /**
  * Whether `next` continues `loaded` rather than renumbering it.
  *

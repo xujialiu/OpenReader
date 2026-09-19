@@ -11,6 +11,7 @@ import {
   correctMessage,
   rangesOf,
   speakMessage,
+  utteranceAt,
   utteranceRanges,
   wordCues,
   wordIndexAt,
@@ -340,5 +341,92 @@ describe('correctMessage', () => {
     // correction that still does not match the cue is stale.
     expect(correctMessage(correction({ utterance: 7 }), cued())).toBeNull();
     expect(correctMessage(correction(), null)).toBeNull();
+  });
+});
+
+/**
+ * The other direction: a place in a Block becoming an Utterance (ADR 0020).
+ *
+ * Tap-to-seek is the half of "where am I" that replaced the progress bar, and the
+ * whole of it on this side of the bridge is this one function — the WebView
+ * hit-tests a point to a text node and reports a Block offset, and this says which
+ * sentence to read from. Getting it wrong reads out the wrong sentence, which is
+ * the same class of defect as a drifting highlight and just as silent.
+ */
+describe('a tapped place becoming an Utterance', () => {
+  const blocks: Block[] = [{ text: 'Hello there. Goodbye now.' }];
+
+  it('reads from the sentence the tapped character is in', () => {
+    const utterances = segment(blocks);
+    expect(utterances.map((one) => one.text)).toEqual(['Hello there.', 'Goodbye now.']);
+    // The first character of each, the last character of each, and the middle.
+    expect(utteranceAt(utterances, ids(1), '0.0', 0)).toBe(0);
+    expect(utteranceAt(utterances, ids(1), '0.0', 11)).toBe(0);
+    expect(utteranceAt(utterances, ids(1), '0.0', 13)).toBe(1);
+    expect(utteranceAt(utterances, ids(1), '0.0', 24)).toBe(1);
+  });
+
+  it('gives the boundary between two sentences to the second, whose first character it is', () => {
+    // Chinese, because the two spans have to be **adjacent** for the question to
+    // arise at all: English leaves a trimmed space between them and an inclusive end
+    // would be indistinguishable. Here sentence one is [0, 4) and sentence two
+    // begins at 4 with no gap, so offset 4 belongs to exactly one of them — and an
+    // inclusive end would give it to both, first match winning, which is the one
+    // before. Every sentence boundary in the owner's book is this shape.
+    const adjacent = segmentBlocks([{ text: '第一句。第二句。' }], 'zh', options);
+    expect(adjacent.map((one) => one.text)).toEqual(['第一句。', '第二句。']);
+    expect(adjacent[0].spans[0]).toEqual({ block: 0, start: 0, end: 4, textOffset: 0 });
+    expect(adjacent[1].spans[0]).toEqual({ block: 0, start: 4, end: 8, textOffset: 0 });
+    expect(utteranceAt(adjacent, ids(1), '0.0', 3)).toBe(0);
+    expect(utteranceAt(adjacent, ids(1), '0.0', 4)).toBe(1);
+  });
+
+  it('gives the space between two sentences to the sentence it ends', () => {
+    const utterances = segment(blocks);
+    // Offset 12 is the space `sentencex` trimmed off the end of the first sentence,
+    // so it is in the Block and in no span. It belongs to what it follows: tapping
+    // just after a full stop reads that sentence again rather than nothing.
+    expect(utterances[0].spans[0]).toEqual({ block: 0, start: 0, end: 12, textOffset: 0 });
+    expect(utterances[1].spans[0]).toEqual({ block: 0, start: 13, end: 25, textOffset: 0 });
+    expect(utteranceAt(utterances, ids(1), '0.0', 12)).toBe(0);
+  });
+
+  it('gives a Block’s leading whitespace to the sentence that follows it, there being none before', () => {
+    const indented: Block[] = [{ text: '\n   Hello there.' }];
+    const utterances = segment(indented);
+    expect(utterances[0].spans[0].start).toBeGreaterThan(0);
+    expect(utteranceAt(utterances, ids(1), '0.0', 0)).toBe(0);
+  });
+
+  it('finds the Utterance in the Block that was tapped, not the one at that offset elsewhere', () => {
+    const two: Block[] = [{ text: 'One two three.' }, { text: 'Four five six.' }];
+    const utterances = segment(two);
+    expect(utteranceAt(utterances, ids(2), '0.0', 4)).toBe(0);
+    expect(utteranceAt(utterances, ids(2), '0.1', 4)).toBe(1);
+  });
+
+  it('answers with the Utterance that welded two Blocks, wherever in them the tap landed', () => {
+    // The repair layer joins a sentence the markup cut in two (`rejoin.ts`), so one
+    // Utterance has two spans in two Blocks. Tapping either half is the same sentence.
+    const cut: Block[] = [{ text: 'A sentence the markup' }, { text: 'cut in two.' }];
+    const utterances = segment(cut);
+    expect(utterances).toHaveLength(1);
+    expect(utterances[0].spans).toHaveLength(2);
+    expect(utteranceAt(utterances, ids(2), '0.0', 3)).toBe(0);
+    expect(utteranceAt(utterances, ids(2), '0.1', 3)).toBe(0);
+  });
+
+  it('does nothing for a Block no Utterance covers, and for an offset that is not a number', () => {
+    const utterances = segment(blocks);
+    // A tap on a Block the caller does not hold is the same as a tap on blank space:
+    // null, which the bridge turns into no call at all rather than into a guess at a
+    // neighbouring sentence.
+    expect(utteranceAt(utterances, ids(1), '0.9', 3)).toBeNull();
+    expect(utteranceAt([], ids(1), '0.0', 0)).toBeNull();
+    // `NaN` falls out of the comparisons on its own; `Infinity` does not — every
+    // span ends at or before it, so without the guard the answer would be the last
+    // Utterance of the Block, confidently.
+    expect(utteranceAt(utterances, ids(1), '0.0', Number.NaN)).toBeNull();
+    expect(utteranceAt(utterances, ids(1), '0.0', Number.POSITIVE_INFINITY)).toBeNull();
   });
 });

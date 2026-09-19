@@ -40,16 +40,25 @@ import { createLocator, readingPositionAt, type ReadingPosition } from '../core/
 import { createProvider } from '../core/providers/factory';
 import type { Utterance } from '../core/segmenter';
 import { readGatewayHeaders, readProviderKey } from '../keys/store';
-import { createPlaybackEngine, type PlaybackEngine, type ReaderClock } from '../playback';
+import {
+  createPlaybackEngine,
+  nextParagraph,
+  nextSentence,
+  previousParagraph,
+  previousSentence,
+  type PlaybackEngine,
+  type ReaderClock,
+} from '../playback';
 import {
   useReaderBridge,
   type ProblemMessage,
   type ReaderBridge,
   type RenderedSection,
   type ReportedBlock,
+  type ReportedDocument,
 } from '../renderer';
 
-import { documentLanguage, samePrefix, segmentDocument } from './segment';
+import { documentLanguage, firstUtteranceOfSection, samePrefix, segmentDocument } from './segment';
 import {
   engineIdentity,
   headersAreOffered,
@@ -64,6 +73,26 @@ import {
 
 /** How much text is marked as it is spoken (CONTEXT.md). Which one is in use is the Provider's answer, never a preference. */
 export type HighlightLevel = 'word' | 'utterance';
+
+/**
+ * The four skip buttons, by name.
+ *
+ * Names and not indices because the arithmetic belongs to `playback/navigation.ts`
+ * — which is written, tested and has the one divergence from Zotero in it — and a
+ * screen that computed its own target would be a second copy of that rule.
+ */
+export type SkipTarget = 'previous-paragraph' | 'previous-sentence' | 'next-sentence' | 'next-paragraph';
+
+/**
+ * How long a burst of skip presses is gathered before one seek goes out.
+ *
+ * **600 ms, which is Zotero's own number** (`SKIP_DEBOUNCE_DELAY`,
+ * `reader.js:39904`, applied at `:40222`), and it is here for the reason ADR 0020
+ * gives: five taps must not be five synthesis requests. The highlight moves on
+ * every press — `bridge.show` paints it at once — and only the synthesis waits, so
+ * the debounce costs nothing a reader can see.
+ */
+const SKIP_DEBOUNCE_MS = 600;
 
 /** Everything the player bar and the status line show. Nothing in here changes more than once per Utterance. */
 export interface ReadingStatus {
@@ -89,6 +118,24 @@ export interface ReadingStatus {
   reportsWordTimings: boolean | null;
   /** The language the Utterances were split with, and whether the document declared it. */
   language: { language: string; declared: boolean } | null;
+  /**
+   * The spine item the **reading** is in, or null before a Clip has played.
+   *
+   * Not `rendered.index`, which is the last section epub.js happened to render —
+   * under a continuous layout that is routinely a section ahead of or behind the
+   * one being spoken. This is the section of the Block the current Utterance's
+   * first span came from, which is the number `contentsOf`'s `currentRow` takes
+   * (ADR 0020), and it is the only granularity the contents can resolve at.
+   */
+  section: number | null;
+  /**
+   * Every spine item's href, in spine order, from the document message.
+   *
+   * Empty until it arrives. It is here rather than behind a callback of its own
+   * because the contents list is built from it and a list cannot read a ref: it
+   * crosses once per document, so the one re-render it costs is one.
+   */
+  spineHrefs: readonly string[];
   /** The last thing that went wrong or was refused, in the words whatever refused it used. Shown, never swallowed (philosophy rule 1). */
   note: string | null;
 }
@@ -102,6 +149,8 @@ const NOTHING_YET: ReadingStatus = {
   level: null,
   reportsWordTimings: null,
   language: null,
+  section: null,
+  spineHrefs: [],
   note: null,
 };
 
@@ -113,6 +162,32 @@ export interface Reading {
   opened(language: string | null | undefined): void;
   play(): void;
   pause(): void;
+  /**
+   * Read from this Utterance (ADR 0020).
+   *
+   * What tapping a word and tapping a contents row both end in, and what the four
+   * skips below are: **six controls, one seek**, which is ADR 0020's whole
+   * argument. The highlight moves at once and the synthesis is debounced by
+   * `SKIP_DEBOUNCE_MS`.
+   *
+   * It does not resume a paused reading and it does not pause a playing one: the
+   * engine's own `seek` is `restart(); pump()` with deliberately no `resume()`, so
+   * navigating while paused moves the highlight and leaves the silence alone —
+   * which is Zotero's behaviour, verified in its source (ADR 0020).
+   */
+  seekTo(utterance: number): void;
+  /** One of the four skips, computed by `playback/navigation.ts` from where the reading is. */
+  skip(target: SkipTarget): void;
+  /**
+   * A contents row: move the page to a spine item, and read from its first
+   * Utterance.
+   *
+   * **Two steps** (ADR 0020). `goToSection` moves the page only; the Utterance to
+   * read from does not exist until that section has rendered and reported its
+   * Blocks, so the second step waits for them — unless the section has already
+   * rendered, in which case it happens now.
+   */
+  goToSection(section: number): void;
   /**
    * Where speech has got to, as a **Reading Position** (ADR 0008), or null
    * before a Clip has played.
@@ -181,9 +256,43 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
    */
   const seekingRef = useRef(false);
   const languageRef = useRef('en');
+  /**
+   * The Utterance a burst of presses has arrived at, waiting for
+   * `SKIP_DEBOUNCE_MS` to run out.
+   *
+   * The **base** the next press counts from as well as the payload of the pending
+   * seek, which is what makes five presses of previous-sentence go back five
+   * sentences rather than one. It cannot be `atRef`: a Clip boundary inside the
+   * 600 ms would move that, and the timer would then seek to wherever the engine
+   * had got to instead of where the owner pointed.
+   */
+  const pendingSeekRef = useRef<number | null>(null);
+  const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * The spine item a contents tap is waiting on, or null.
+   *
+   * The second half of that tap: the page has been moved and the reading cannot
+   * follow until the section reports its Blocks, because until then it has no
+   * Utterance to seek to (`firstUtteranceOfSection`).
+   */
+  const pendingSectionRef = useRef<number | null>(null);
 
   const report = useCallback((problem: unknown) => {
     setStatus((was) => ({ ...was, note: describe(problem) }));
+  }, []);
+
+  /**
+   * The spine item an Utterance is in, or null.
+   *
+   * The Block its first span came from, and that Block's `sectionIndex` — which is
+   * the number the renderer already sends beside every Block, so nothing here
+   * decodes a CFI or picks a spine index out of a Block id. ADR 0020 records why
+   * both of those were refused.
+   */
+  const sectionOf = useCallback((utterance: number): number | null => {
+    const span = loadedRef.current[utterance]?.spans[0];
+    if (!span) return null;
+    return blocksRef.current[span.block]?.sectionIndex ?? null;
   }, []);
 
   /**
@@ -207,13 +316,18 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
         // Utterance is highlighted, nothing is estimated, and the screen says
         // which of the two is on the page rather than leaving the owner to
         // wonder.
-        setStatus((was) => ({ ...was, utterance: cue.utterance, level: cue.words ? 'word' : 'utterance' }));
+        setStatus((was) => ({
+          ...was,
+          utterance: cue.utterance,
+          level: cue.words ? 'word' : 'utterance',
+          section: sectionOf(cue.utterance),
+        }));
       },
       onPosition(correction) {
         bridgeRef.current?.clock.onPosition(correction);
       },
     }),
-    [],
+    [sectionOf],
   );
 
   /**
@@ -269,7 +383,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
    * because that is where it begins, and being taken off it unasked is not a
    * feature.
    */
-  const seek = useCallback((from: RenderedSection) => {
+  const walkForward = useCallback((from: RenderedSection) => {
     const next = from.index + 1;
     if (next < from.spine) {
       bridgeRef.current?.goToSection(next);
@@ -284,6 +398,112 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
         'There is nothing here that can be read aloud.',
     }));
   }, []);
+
+  /**
+   * Read from an Utterance: the one call every control in the player ends in
+   * (ADR 0020).
+   *
+   * Two things happen, and the split between them is the whole of this function.
+   * The **highlight moves now**, through `bridge.show`, which paints the Utterance
+   * whole and scrolls the page to it without knowing anything about a Clip. The
+   * **seek waits** `SKIP_DEBOUNCE_MS`, so that a burst of presses is one synthesis
+   * request rather than five (ADR 0020, and Zotero's own 600 ms).
+   *
+   * `atRef` is moved at once as well, and that is not bookkeeping: it is where the
+   * engine is told to start when it is built (`build`) and where `adopt` re-anchors
+   * a longer list, so tapping a word before ever pressing Play and then pressing it
+   * reads from the word rather than from the top of the document.
+   *
+   * Nothing here resumes or pauses. `engine.seek` is `restart(); pump()` with no
+   * `resume()` in it, so a paused reading stays paused with its highlight moved,
+   * which is what Zotero does and what ADR 0020 requires.
+   */
+  const seekTo = useCallback((utterance: number) => {
+    const list = loadedRef.current;
+    // Nothing loaded is not a position to clamp into: `navigation.ts` throws on it
+    // rather than fabricate one, and there is nothing here to seek either.
+    if (list.length === 0) return;
+    const at = Math.min(list.length - 1, Math.max(0, Math.trunc(utterance)));
+    pendingSeekRef.current = at;
+    atRef.current = at;
+    bridgeRef.current?.show(at);
+    // The Utterance, but not the Highlight Level: whether the Clip that is about to
+    // be fetched carries Word Timings is not known yet, and the last Clip's answer
+    // is the honest thing to keep showing until it is.
+    setStatus((was) => ({ ...was, utterance: at, section: sectionOf(at) }));
+
+    if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
+    seekTimerRef.current = setTimeout(() => {
+      seekTimerRef.current = null;
+      const target = pendingSeekRef.current;
+      pendingSeekRef.current = null;
+      if (target === null) return;
+      // No engine is not a failure to report: the owner has pointed at a sentence
+      // without having pressed Play, `atRef` holds it, and the engine that gets
+      // built will be loaded there.
+      engineRef.current?.seek(target);
+    }, SKIP_DEBOUNCE_MS);
+  }, [sectionOf]);
+
+  /**
+   * One of the four skips.
+   *
+   * The arithmetic is `playback/navigation.ts`'s and none of it is repeated here —
+   * including the one divergence from Zotero, that previous-paragraph restarts the
+   * paragraph you are in before stepping back to the one before it.
+   *
+   * It counts from the **pending** position rather than from the engine's, which is
+   * what makes five presses of previous-sentence go back five sentences: the seek
+   * has not happened yet, and the position the owner is aiming from is the one the
+   * previous press moved the highlight to.
+   */
+  const skip = useCallback(
+    (target: SkipTarget) => {
+      const list = loadedRef.current;
+      if (list.length === 0) return;
+      const from = pendingSeekRef.current ?? atRef.current ?? 0;
+      if (target === 'previous-sentence') seekTo(previousSentence(list, from));
+      else if (target === 'next-sentence') seekTo(nextSentence(list, from));
+      else if (target === 'previous-paragraph') seekTo(previousParagraph(list, from));
+      else seekTo(nextParagraph(list, from));
+    },
+    [seekTo],
+  );
+
+  /**
+   * A contents row, which is **two steps** (ADR 0020).
+   *
+   * The page moves first and always, because that is what a contents tap most
+   * obviously means and it works for a row whose spine item has no text on it at
+   * all — a volume's title page, which the owner's book has thirteen of.
+   *
+   * The reading follows if it can. When the section has already rendered, its
+   * Utterances are in hand and the seek happens now. When it has not, there is no
+   * index to seek to yet — the section contributes no Utterance until it reports its
+   * Blocks — so the target is remembered and `handleBlocks` finishes the job. That
+   * second case is the common one and is why this is two steps rather than one.
+   */
+  const goToSection = useCallback(
+    (section: number) => {
+      bridgeRef.current?.goToSection(section);
+      const already = firstUtteranceOfSection(loadedRef.current, blocksRef.current, section);
+      if (already !== null) {
+        pendingSectionRef.current = null;
+        seekTo(already);
+        return;
+      }
+      /**
+       * A section that has already reported its Blocks and yielded no Utterance is
+       * finished with, not waited for: the page has moved to it and there is nothing
+       * on it to read. Waiting would be waiting for ever — the renderer reports a
+       * section again only when its text has changed (`blocks.ts`), so a title page
+       * that rendered empty will never report a second time.
+       */
+      const reported = blocksRef.current.some((block) => block.sectionIndex === section);
+      pendingSectionRef.current = reported ? null : section;
+    },
+    [seekTo],
+  );
 
   /** The Blocks of every section rendered so far, as Utterances — for the renderer, which draws them, and for the engine, which speaks them. */
   const handleBlocks = useCallback(
@@ -305,8 +525,35 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
        * on only if Play asked it to.
        */
       if (next.length === 0) {
-        if (seekingRef.current) seek(section);
+        if (seekingRef.current) walkForward(section);
+        if (pendingSectionRef.current === section.index) pendingSectionRef.current = null;
         return;
+      }
+
+      /**
+       * The second step of a contents tap: the section the owner asked for has
+       * rendered, so the reading can follow the page to it.
+       *
+       * The longer list is adopted **now** rather than at the next Clip boundary,
+       * which is the deferral below and the exception to it. That deferral exists so
+       * that a section arriving mid-reading does not restart the sentence being
+       * spoken; here the owner has asked to leave that sentence, so there is nothing
+       * to protect. And the Utterance being seeked to exists only in the new list —
+       * deferring would seek into the old one and land somewhere else entirely.
+       */
+      const wanted = pendingSectionRef.current;
+      if (wanted === section.index) {
+        pendingSectionRef.current = null;
+        const first = firstUtteranceOfSection(next, reported, wanted);
+        if (first !== null) {
+          // Before `adopt`, because `adopt` re-anchors the engine at `atRef` and
+          // anchoring it at the old position would fetch a Clip nobody is waiting for.
+          atRef.current = first;
+          pendingRef.current = null;
+          adopt(next);
+          seekTo(first);
+          return;
+        }
       }
 
       if (engineRef.current?.snapshot().playing) {
@@ -315,14 +562,30 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
       }
       adopt(next);
     },
-    [adopt, seek],
+    [adopt, walkForward, seekTo],
   );
 
   const handleProblem = useCallback((problem: ProblemMessage) => {
     setStatus((was) => ({ ...was, note: `The highlight could not be drawn: ${problem.detail}` }));
   }, []);
 
-  const bridge = useReaderBridge({ onBlocks: handleBlocks, onProblem: handleProblem });
+  /**
+   * The shape of the document, once. The hrefs are what the contents list is built
+   * from and without them every row of it is unreachable (ADR 0020).
+   */
+  const handleDocument = useCallback((document: ReportedDocument) => {
+    setStatus((was) => ({ ...was, spineHrefs: document.hrefs }));
+  }, []);
+
+  const bridge = useReaderBridge({
+    onBlocks: handleBlocks,
+    onDocument: handleDocument,
+    // A tap on a word is a seek and nothing else. The bridge has already turned the
+    // tapped place into an Utterance (`cursor.ts`'s `utteranceAt`) and calls this
+    // only when there was one, so a tap on blank space arrives as no call at all.
+    onTap: seekTo,
+    onProblem: handleProblem,
+  });
 
   useEffect(() => {
     bridgeRef.current = bridge;
@@ -407,7 +670,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
       rate: settings.rate,
     });
     engineRef.current = engine;
-    engine.load(loadedRef.current, 0);
+    // Where the reading has been pointed, not the top of the document: a word tapped
+    // or a chapter chosen before Play was ever pressed has already moved `atRef`, and
+    // loading at 0 would silently read the book from its beginning instead (ADR 0020).
+    engine.load(loadedRef.current, atRef.current ?? 0);
     setStatus((was) => ({ ...was, reportsWordTimings: provider.capabilities.wordTimestamps, note: null }));
     return engine;
   }, [settings, hasKey, clock, report]);
@@ -430,7 +696,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
       const rendered = renderedRef.current;
       // Nothing has rendered yet, so there is nothing to move on from. The first
       // section to report finds the flag set and carries on from there.
-      if (rendered) seek(rendered);
+      if (rendered) walkForward(rendered);
       return;
     }
 
@@ -447,7 +713,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
       engine.play();
       setStatus((was) => ({ ...was, playing: true }));
     }, report);
-  }, [build, report, seek]);
+  }, [build, report, walkForward]);
 
   /**
    * The section Play was looking for has arrived with text in it, so the reading
@@ -513,6 +779,12 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
       buildingRef.current = null;
       atRef.current = null;
       seekingRef.current = false;
+      // A skip's 600 ms could otherwise fire into an engine that has been disposed,
+      // or into the next one built around a different Provider.
+      if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
+      seekTimerRef.current = null;
+      pendingSeekRef.current = null;
+      pendingSectionRef.current = null;
       void engine?.dispose();
       bridgeRef.current?.clear();
       setStatus((was) => ({
@@ -556,5 +828,5 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
     return readingPositionAt(createLocator('epub', block.cfi), block.text, span.start, span.end);
   }, []);
 
-  return { bridge, status, opened, play, pause, readingPosition };
+  return { bridge, status, opened, play, pause, seekTo, skip, goToSection, readingPosition };
 }

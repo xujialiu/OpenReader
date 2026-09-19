@@ -24,6 +24,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { ReadingPosition } from '../core/document';
 import { readLocator } from '../core/document';
+import type { ProviderId } from '../core/providers/types';
 
 import { AppearanceSheet } from './appearance-sheet';
 import { HeaderButton, INK, Note } from './controls';
@@ -103,6 +104,16 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   }, [navigation, title]);
 
   const setRate = useCallback((rate: number) => setSettings({ ...settings, rate }), [settings, setSettings]);
+  /**
+   * A Provider and a Voice at once, because a Voice belongs to exactly one Provider
+   * (CONTEXT.md, ADR 0010) — so choosing one from another Provider's list is
+   * choosing that Provider too. `use-reading.ts` throws the engine away and builds
+   * another, which is what `engineIdentity` is for.
+   */
+  const setVoice = useCallback(
+    (provider: ProviderId, voice: string) => setSettings({ ...settings, provider, voice }),
+    [settings, setSettings],
+  );
   const reached = useCallback((position: ReadingPosition) => library.reached(id, position), [library, id]);
   /** What the EPUB calls itself, once epub.js has read its metadata. A file name is not a title. */
   const titled = useCallback((said: string) => library.retitled(id, said), [library, id]);
@@ -127,6 +138,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
           credentialsWrittenAt={secretsWritten}
           resumeAt={opened.resumeAt}
           onRate={setRate}
+          onVoice={setVoice}
           onReached={reached}
           onTitle={titled}
         />

@@ -1,31 +1,53 @@
 /**
- * The reader screen: the document, and the three controls that act on it.
+ * The reader screen: the document, and the player floating over it.
  *
- * Play, pause, speed. There is nothing else here because there is nothing else
- * to be honest about yet — and what there is says what it is doing: which
- * Utterance is being read, at which **Highlight Level**, in which language, and
- * what the last thing to refuse said. `docs/PHILOSOPHY.md` rule 1 is honest
- * signals, and a player that cannot say whether it is highlighting the word or
- * the sentence leaves the owner to guess at exactly the thing this app is for.
+ * The controls are `player.tsx` and the two sheets beside it; what is here is the
+ * wiring, and three things worth reading twice.
  *
- * It is mounted per Document, keyed by it, so that opening another one starts
- * with a new bridge, a new engine and none of the previous book's Blocks. The
- * renderer keeps its section index outside React (`blocks.ts`), and a remount is
- * the honest way to clear it.
+ * **The player floats.** The document fills the screen and the player is
+ * positioned over the bottom of it, so the text does not reflow when the player
+ * appears, goes, collapses or expands (ADR 0020). Nothing about `<Reader>`'s size
+ * mentions the player, which is what makes that true rather than nearly true.
+ *
+ * **Which means the centring has to be told.** ADR 0011 centres the spoken
+ * Utterance against the scroll container's own height, and the player now covers
+ * the bottom of that container — so the middle of the *visible* text is not the
+ * middle of the container, and the difference changes when the player collapses.
+ * The player measures itself and the height goes straight to the renderer
+ * (`bridge.setInset`). It is a live coupling, not a constant: the centring runs
+ * once per Utterance on the Clip cue, so an offset that went stale is not
+ * corrected by anything.
+ *
+ * **It says what it is doing.** Which Utterance is being read, at which Highlight
+ * Level, and what the last thing to refuse said. `docs/PHILOSOPHY.md` rule 1 is
+ * honest signals, and a player that cannot say whether it is highlighting the word
+ * or the sentence leaves the owner to guess at exactly the thing this app is for.
+ * Those lines live inside the player so that collapsing hides them with the rest.
+ *
+ * It is mounted per Document, keyed by it, so that opening another one starts with
+ * a new bridge, a new engine and none of the previous book's Blocks. The renderer
+ * keeps its section index outside React (`blocks.ts`), and a remount is the honest
+ * way to clear it.
  */
 
 import { Reader, useReader } from '@epubjs-react-native/core';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import type { ReadingPosition } from '../core/document';
+import type { NavigationEntry } from '../core/document/contents';
+import type { ProviderId } from '../core/providers/types';
 
-import { Action, Choice, INK, Note } from './controls';
+import { ContentsSheet } from './contents-sheet';
+import { INK } from './controls';
 import type { OpenDocument } from './document';
+import { Player } from './player';
 import { useReaderFileSystem } from './reader-file-system';
-import { PROVIDER_LABELS, READING_RATES, readiness, readinessSentence, type AppSettings } from './settings';
+import { PROVIDER_LABELS, readiness, readinessSentence, type AppSettings } from './settings';
 import type { SecretPresence } from './use-provider-secrets';
 import { useReading, type ReadingStatus } from './use-reading';
+import { useVoiceLists } from './use-voices';
+import { VoiceSheet } from './voice-sheet';
 
 /**
  * How often a Reading Position is written to the Library while the reading is
@@ -73,6 +95,8 @@ export interface ReadingViewProps {
    */
   resumeAt: string | null;
   onRate(rate: number): void;
+  /** A Provider and a Voice together: a Voice belongs to exactly one Provider (CONTEXT.md, ADR 0010). */
+  onVoice(provider: ProviderId, voice: string): void;
   /** Where speech got to. Called on a Clip boundary at most every `POSITION_INTERVAL_MS`, and once more on the way out. */
   onReached(position: ReadingPosition): void;
   /** What the EPUB calls itself, once epub.js has its metadata. */
@@ -96,7 +120,7 @@ function readingLine(status: ReadingStatus, settings: AppSettings): string {
     return status.playing ? `Reading ${where}, highlighting ${level}.` : `Paused at ${where}.`;
   }
   if (status.playing) return `Waiting for the first Clip from ${PROVIDER_LABELS[settings.provider]}.`;
-  if (status.known > 0) return `${status.known} Utterances ready.`;
+  if (status.known > 0) return `${status.known} Utterances ready. Tap a word to read from there.`;
   if (!status.rendered) return 'Waiting for the document to render its first section.';
   if (status.seeking) return 'Looking for the first section of this document with text in it.';
   return `${status.rendered.href} has no text to read — a cover page usually has none. Play moves to the first section that has.`;
@@ -130,13 +154,25 @@ export function ReadingView({
   credentialsWrittenAt,
   resumeAt,
   onRate,
+  onVoice,
   onReached,
   onTitle,
 }: ReadingViewProps) {
   const fileSystem = useReaderFileSystem;
-  const { getMeta } = useReader();
+  /**
+   * `toc` as well as `getMeta` now. The library's own template already posts the
+   * whole navigation at load and stores it here; nothing in `src/` had read it. It
+   * is the other half of the contents list, the first half being the spine's hrefs
+   * from the document message.
+   */
+  const { getMeta, toc } = useReader();
   const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt });
+  const voices = useVoiceLists(settings);
   const [displayError, setDisplayError] = useState<string | null>(null);
+  const [contentsOpen, setContentsOpen] = useState(false);
+  const [voicesOpen, setVoicesOpen] = useState(false);
+  /** Down to one button, or the whole strip. Here rather than in the player because pausing re-opens it, and the pause is this screen's. */
+  const [collapsed, setCollapsed] = useState(false);
   /**
    * The size to give `<Reader>`, in points, measured rather than inherited.
    *
@@ -147,6 +183,9 @@ export function ReadingView({
    * the section, the highlighter walks it and reports its Blocks, and the page
    * is blank. It looks like a rendering failure and is a layout one, which is
    * why this is measured and passed as numbers.
+   *
+   * It is measured on the element the document fills, which the player is *over*
+   * rather than beside — so this number does not change when the player does.
    */
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const measure = useCallback((event: LayoutChangeEvent) => {
@@ -208,9 +247,54 @@ export function ReadingView({
   );
 
   const ready = readiness(settings, keyPresence.state === 'held');
-  const highlight = highlightLine(status);
   // Nothing is claimed about a key while the Keychain is still being asked.
   const sayWhatIsMissing = !ready.ready && keyPresence.state !== 'unknown';
+
+  /**
+   * Everything the owner has to act on, in one list, so the player draws it without
+   * deciding anything. Order is worst first: what is missing before the app can
+   * speak at all, then what refused, then what it is doing to the highlight.
+   */
+  const notes = useMemo(() => {
+    const said: string[] = [];
+    if (sayWhatIsMissing && !ready.ready) {
+      said.push(
+        `${readinessSentence(settings.provider, ready.missing)} There is no zero-key path: nothing can be spoken until Settings has what it asks for.`,
+      );
+    }
+    if (keyPresence.state === 'refused') {
+      said.push(`The Keychain would not say whether a key is saved: ${keyPresence.message}`);
+    }
+    if (displayError) said.push(`The document would not display: ${displayError}`);
+    if (status.note) said.push(status.note);
+    const highlight = highlightLine(status);
+    if (highlight) said.push(highlight);
+    return said;
+  }, [sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status]);
+
+  /**
+   * The Voice's locale, when it is known — which is only once the Provider's list
+   * has been asked for. See `player.tsx`'s `voiceLine`.
+   */
+  const voiceLocale = useMemo(() => {
+    const listed = voices.voicesOf(settings.provider);
+    return listed?.find((voice) => voice.id === settings.voice)?.locale ?? null;
+  }, [voices, settings.provider, settings.voice]);
+
+  /**
+   * Where the contents list marks: the section the **reading** is in, or the last
+   * one the renderer put on the page when nothing has been read yet. The second is
+   * coarser and is said to be — it is the page's answer, not the voice's — and it is
+   * better than opening the list at the top of a two-thousand-chapter book.
+   */
+  const at = status.section ?? status.rendered?.index ?? null;
+
+  const chooseVoice = useCallback(
+    (provider: ProviderId, voice: string) => {
+      onVoice(provider, voice);
+    },
+    [onVoice],
+  );
 
   return (
     <View style={styles.screen}>
@@ -240,42 +324,43 @@ export function ReadingView({
         )}
       </View>
 
-      <View style={styles.bar}>
-        <View style={styles.transport}>
-          <Action
-            label={status.playing ? 'Pause' : 'Play'}
-            primary
-            onPress={status.playing ? reading.pause : reading.play}
-            disabled={!ready.ready && !status.playing}
-          />
-          <Choice options={READING_RATES} value={settings.rate} onChange={onRate} labelOf={(rate) => `${rate}×`} />
-        </View>
+      <Player
+        settings={settings}
+        playing={status.playing}
+        collapsed={collapsed}
+        onCollapsed={setCollapsed}
+        enabled={ready.ready || status.playing}
+        voiceLocale={voiceLocale}
+        reading={readingLine(status, settings)}
+        notes={notes}
+        onPlay={reading.play}
+        onPause={reading.pause}
+        onSkip={reading.skip}
+        onRate={onRate}
+        onContents={() => setContentsOpen(true)}
+        onVoices={() => setVoicesOpen(true)}
+        onHeight={reading.bridge.setInset}
+      />
 
-        <Text style={styles.reading}>{readingLine(status, settings)}</Text>
+      <ContentsSheet
+        visible={contentsOpen}
+        onClose={() => setContentsOpen(false)}
+        // The library types its own entries with a `parent` that is an unreliable id
+        // and `subitems: any[]`; `NavigationEntry` is the structural subset
+        // `core/document/contents.ts` will trust, and nesting comes from `subitems`.
+        navigation={toc as readonly NavigationEntry[]}
+        spineHrefs={status.spineHrefs}
+        section={at}
+        onGo={reading.goToSection}
+      />
 
-        {sayWhatIsMissing && !ready.ready ? (
-          <Note attention>
-            {readinessSentence(settings.provider, ready.missing)} There is no zero-key path: nothing can be spoken until
-            Settings has what it asks for.
-          </Note>
-        ) : null}
-
-        {keyPresence.state === 'refused' ? (
-          <Note attention>The Keychain would not say whether a key is saved: {keyPresence.message}</Note>
-        ) : null}
-
-        {highlight ? <Note>{highlight}</Note> : null}
-
-        <Note>
-          {PROVIDER_LABELS[settings.provider]} · {settings.voice || 'no Voice'} ·{' '}
-          {status.language
-            ? `${status.language.language}${status.language.declared ? '' : ' (the document declares no language)'}`
-            : 'language unknown until the document opens'}
-        </Note>
-
-        {displayError ? <Note attention>The document would not display: {displayError}</Note> : null}
-        {status.note ? <Note attention>{status.note}</Note> : null}
-      </View>
+      <VoiceSheet
+        visible={voicesOpen}
+        onClose={() => setVoicesOpen(false)}
+        settings={settings}
+        lists={voices}
+        onChoose={chooseVoice}
+      />
     </View>
   );
 }
@@ -290,19 +375,8 @@ function Waiting({ words }: { words: string }) {
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    backgroundColor: INK.panel,
-    borderTopColor: INK.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-    paddingBottom: 28,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
   document: { backgroundColor: INK.page, flex: 1 },
-  reading: { color: INK.reading, fontSize: 15, fontWeight: '600' },
   screen: { backgroundColor: INK.page, flex: 1 },
-  transport: { alignItems: 'center', flexDirection: 'row', gap: 12 },
   waiting: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 32 },
   waitingWords: { color: INK.quiet, fontSize: 15 },
 });

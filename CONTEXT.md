@@ -23,6 +23,11 @@ rather than from any library that holds it, so that two devices recognise the
 same document without a shared catalogue.
 _Avoid_: content id, hash, key, ISBN
 
+**Contents**:
+A document's own list of its parts, as rows a reader can open — the volumes and
+chapters a book names for itself. A row may name a place that has no text on it.
+_Avoid_: table of contents, TOC, navigation, index, outline, chapter list
+
 **Block**:
 A run of text the document itself presents as one unit — a paragraph, a
 heading, a list item.

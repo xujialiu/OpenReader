@@ -39,6 +39,13 @@
  *   the `Range`s that were just painted and the scroll container's own box, and it
  *   runs once per Utterance on the Clip cue the bridge already sends — no message
  *   of its own, and nothing at the `requestAnimationFrame` rate (ADR 0005).
+ *   Centred in what can be *seen*: ADR 0020's player floats over the bottom of
+ *   that container and tells this file how much it covers.
+ * - **Where a tap landed.** The only thing here that starts on the page rather
+ *   than arriving from the app: a tap hit-tests to a text node, the enclosing
+ *   Block's id and the offset within it cross the bridge, and the app turns that
+ *   into an Utterance to read from (ADR 0020). It is a `click` and not a long
+ *   press, for the reason `SELECTABLE` below exists.
  * - **The clock between corrections.** One position correction arrives about once
  *   a second; `requestAnimationFrame` interpolates against a start time in
  *   between. Nothing crosses the bridge per word (ADR 0005).
@@ -56,7 +63,7 @@
  */
 
 import type { HighlightMessage } from './messages';
-import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE } from './messages';
+import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from './messages';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
 export const UTTERANCE_HIGHLIGHT = 'openreader-utterance';
@@ -163,6 +170,7 @@ export function highlighterSource(styles: HighlightStyles = DEFAULT_HIGHLIGHT): 
     'var UTTERANCE = ' + JSON.stringify(UTTERANCE_HIGHLIGHT) + ';\n' +
     'var BLOCKS = ' + JSON.stringify(BLOCKS_MESSAGE) + ';\n' +
     'var DOCUMENT = ' + JSON.stringify(DOCUMENT_MESSAGE) + ';\n' +
+    'var TAP = ' + JSON.stringify(TAP_MESSAGE) + ';\n' +
     'var PROBLEM = ' + JSON.stringify(PROBLEM_MESSAGE) + ';\n' +
     'var CSS_TEXT = ' + JSON.stringify(highlightCss(styles)) + ';\n' +
     'var STYLE_ID = "openreader-highlight";\n';
@@ -223,6 +231,10 @@ ${constants}
   var registries = new WeakMap();
   var state = null;
   var frame = 0;
+  /* How much of the bottom of the scroll container the player is covering, in CSS
+     pixels, from the 'inset' message. Zero until it says otherwise, which is the
+     geometry that was true before ADR 0020's player existed. See centre(). */
+  var covered = 0;
 
   /* ---- the walk: a rendered section as Blocks ---- */
 
@@ -305,6 +317,101 @@ ${constants}
     (doc.head || doc.documentElement).appendChild(style);
   }
 
+  /* ---- tapping a word (ADR 0020) ---- */
+
+  /* The tapped point as a text node and an offset into it.
+
+     Two spellings of one operation: caretPositionFromPoint is the standard and
+     WebKit ships it, caretRangeFromPoint is WebKit's original name and is what an
+     older one has. They answer with the same node and the same offset, so this is
+     not a capability check with a second behaviour behind it — it is one behaviour
+     with two names, and neither being there is reported rather than swallowed. */
+  function caretAt(doc, x, y) {
+    if (doc.caretPositionFromPoint) {
+      var position = doc.caretPositionFromPoint(x, y);
+      return position ? { node: position.offsetNode, offset: position.offset } : null;
+    }
+    if (doc.caretRangeFromPoint) {
+      var range = doc.caretRangeFromPoint(x, y);
+      return range ? { node: range.startContainer, offset: range.startOffset } : null;
+    }
+    report('this WebKit has neither caretPositionFromPoint nor caretRangeFromPoint, so a tap cannot be located');
+    return null;
+  }
+
+  /* Which walked Block a live text node belongs to, and where in that Block's own
+     text the offset lands.
+
+     A linear walk of the document's Blocks rather than a node -> Block index:
+     \`parts\` already holds the very nodes the Block's text was built from, a
+     reverse map would be a second structure keyed by nodes in a document epub.js
+     will replace, and this runs once per tap rather than once per frame. */
+  function blockOffsetOf(doc, node, within) {
+    var map = maps.get(doc);
+    if (!map) return null;
+    var answer = null;
+    map.forEach(function (found, id) {
+      if (answer) return;
+      for (var i = 0; i < found.parts.length; i++) {
+        if (found.parts[i].node !== node) continue;
+        /* Clamped to the part's own length: a caret at the very end of a text node
+           reports its length as the offset, which is one past the last character
+           and belongs to the next part if there is one. */
+        var at = within < found.parts[i].len ? within : found.parts[i].len;
+        answer = { block: id, offset: found.parts[i].at + at, element: found.element };
+        return;
+      }
+    });
+    return answer;
+  }
+
+  /* Whether the tap actually landed **on** the Block it resolved to.
+
+     This is what makes tapping blank space do nothing, and it is needed because
+     the caret hit-test alone does not say so: **caretPositionFromPoint snaps to
+     the nearest text** rather than answering null off the text. Measured on the
+     device — a click at (2.0, 23.4), in the body's left padding beside the first
+     heading, returned a text node in that heading and moved the reading to its
+     first Utterance. The design file's whole objection to a gesture in the blank
+     is that missing it would move your place in the book, so the blank has to be
+     blank.
+
+     The **Block's own box**, and not the character's: a tap between two lines of a
+     paragraph, or past the end of a short last line, is inside the paragraph and is
+     an ordinary "read from about here". A tap in the margin, or on the empty page
+     below the last paragraph, is inside nothing. */
+  function inside(element, x, y) {
+    if (!element || !element.getBoundingClientRect) return false;
+    var box = element.getBoundingClientRect();
+    return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+  }
+
+  /* A tap on the page: report where it landed and let the app decide, because the
+     Utterances are on the other side of the bridge (see TapMessage).
+
+     A tap that hit-tests to anything but a text node posts **nothing** — tapping
+     blank space does nothing, and in particular it is not a toggle for the
+     player's visibility (docs/design/0020). A tap in the gap between two
+     paragraphs hit-tests to the element that owns the gap and not to text, which
+     is what makes that the ordinary case rather than a special one.
+
+     It is a click and not a long press: the long press on text is iOS's selection
+     gesture and taking it would mean \`user-select: none\`, which silently stops
+     ::highlight() from painting (see this file's header, and the 20:10 note). */
+  function tapped(event) {
+    var node = event.target;
+    var doc = node && node.ownerDocument ? node.ownerDocument : null;
+    if (!doc || !doc.defaultView) return;
+    var caret = caretAt(doc, event.clientX, event.clientY);
+    /* nodeType 3 is a text node. An element means the point is over layout that
+       holds no text of its own. */
+    if (!caret || !caret.node || caret.node.nodeType !== 3) return;
+    var place = blockOffsetOf(doc, caret.node, caret.offset);
+    if (!place) return;
+    if (!inside(place.element, event.clientX, event.clientY)) return;
+    post({ type: TAP, block: place.block, offset: place.offset });
+  }
+
   /* ---- what a document holds, resolved once per document ---- */
 
   /* Walk a live document, record what survives of each Block and tell the React
@@ -313,6 +420,11 @@ ${constants}
   function adopt(contents) {
     if (maps.has(contents.document)) return;
     ensureStyle(contents.document);
+    /* Once per document, beside the stylesheet and for the same reason: a
+       ::highlight() rule and a tap listener both have to live in the document they
+       act on, and this function is already the one place that runs once per
+       document. A document epub.js destroys takes its listener with it. */
+    contents.document.addEventListener('click', tapped, false);
 
     var index = contents.sectionIndex;
     var section = null;
@@ -641,7 +753,20 @@ ${constants}
     if (!box) return false;
     var bounds = view.getBoundingClientRect();
     var height = view.clientHeight;
-    var move = (box.top + box.bottom) / 2 - bounds.top - height / 2;
+    /* The middle of what can be **seen**, not the middle of the container.
+       ADR 0020's player floats over the bottom of this container so that the text
+       never reflows when it appears; the price is that centring against
+       \`clientHeight\` would aim at a point the player is standing on and hold the
+       sentence being spoken behind it. \`covered\` is the player's own measured
+       height, and it changes when the player collapses and expands — which is why
+       it is an input here rather than a constant subtracted once.
+
+       An inset at least as tall as the container leaves nothing to centre in, and
+       then this is the same arithmetic as the tall-Utterance branch below: the
+       Utterance's top goes to the top of the viewport. */
+    var visible = height - covered;
+    if (visible < 0) visible = 0;
+    var move = (box.top + box.bottom) / 2 - bounds.top - visible / 2;
     /* Unless the Utterance is taller than the screen, where centring its middle
        would push its opening words off the top — and those are the words about to
        be spoken. Then its start goes to the top of the screen instead, and the
@@ -755,11 +880,38 @@ ${constants}
      has been reported. Both are idempotent per document, so the second sweep
      costs one lookup per rendered view. */
   rendition.on('relocated', sweep);
+  /* Every spine item's href, in spine order and in the spine's own spelling.
+
+     The contents list cannot exist without it (ADR 0020): a row is a navigation
+     entry, a navigation entry is an href, and the only thing a row can be seeked
+     to is a spine index. \`adopt\` already reads one of these per section, so this
+     is the same accessor in a loop rather than a new mechanism.
+
+     Unmodified — not resolved, not decoded, not trimmed. epub.js resolves neither
+     the navigation's hrefs nor the spine's against anything, and
+     \`core/document/contents.ts\` matches the two as strings; a spelling tidied here
+     would match neither side. A spine item that will not resolve contributes the
+     empty string, which that lookup ignores, rather than shortening the array and
+     shifting every index after it. */
+  function spineHrefs() {
+    var hrefs = [];
+    for (var i = 0; i < book.spine.length; i++) {
+      var item = null;
+      try {
+        item = book.spine.get(i);
+      } catch (error) {
+        item = null;
+      }
+      hrefs.push(item && item.href ? item.href : '');
+    }
+    return hrefs;
+  }
+
   /* The shape of the document, once and before any section reports, so the app
      never has to act on a section without knowing whether another follows it.
      The spine's length is set by the unpack that a rendition cannot exist
      without, so by here it is a number. */
-  post({ type: DOCUMENT, spine: book.spine.length });
+  post({ type: DOCUMENT, spine: book.spine.length, hrefs: spineHrefs() });
   /* Installed from the library's onReady, which fires after rendition.display()
      resolved — so the first section has already rendered and its 'rendered' event
      has already been and gone. */
@@ -768,6 +920,19 @@ ${constants}
   /* ---- the one entry point ---- */
 
   function dispatch(message) {
+    if (message.kind === 'inset') {
+      /* Geometry, not a highlight. It comes through this entry point because there
+         is exactly one, and a second injected function would be a second thing to
+         keep installed and to check for.
+
+         **Nothing is re-centred here**, deliberately. The player collapsing changes
+         where the middle of the visible text is, and scrolling to the new middle
+         would move the text under the reader — which is the one thing ADR 0020's
+         floating player exists to prevent. So the new inset applies to the next
+         Utterance, and the sentence being spoken stays where it is. */
+      covered = typeof message.bottomPx === 'number' && isFinite(message.bottomPx) && message.bottomPx > 0 ? message.bottomPx : 0;
+      return;
+    }
     if (message.kind === 'clear') {
       stop();
       state = null;

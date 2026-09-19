@@ -3,7 +3,7 @@ import vm from 'node:vm';
 
 import { describe, expect, it } from 'vitest';
 
-import { BLOCKS_MESSAGE, PROBLEM_MESSAGE } from '../../src/renderer/messages';
+import { BLOCKS_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from '../../src/renderer/messages';
 import { highlightCall, highlighterSource } from '../../src/renderer/highlighter';
 
 /**
@@ -362,6 +362,97 @@ describe('the highlight actually paints', () => {
     const program = code('highlighter.ts');
     expect(program).toContain('ensureStyle(contents.document)');
     expect(program).toContain('ensureStyle(win.document)');
+  });
+});
+
+describe('the player floats over the page, and the centring is told (ADR 0020)', () => {
+  it('centres in what can be seen rather than in the container', () => {
+    // ADR 0011 centres against `clientHeight`; ADR 0020's player covers the bottom
+    // of that container. Centring against the full height aims at a point the player
+    // is standing on, and the sentence being spoken sits behind it — which fails as
+    // "the highlight is off screen", not as an error.
+    const program = code('highlighter.ts');
+    const centre = fn(program, 'centre');
+    expect(centre).toContain('var visible = height - covered;');
+    expect(centre).toContain('visible / 2');
+    expect(centre).not.toContain('height / 2');
+  });
+
+  it('takes the covered height as a message, because it changes when the player collapses', () => {
+    // A constant subtracted once would be wrong the moment the player collapsed to
+    // one button, and the centring runs once per Utterance on the Clip cue — so a
+    // stale offset is not corrected by the next frame or by anything else.
+    const program = code('highlighter.ts');
+    expect(program).toContain("message.kind === 'inset'");
+    expect(program).toContain('covered = ');
+  });
+
+  it('does not scroll when the inset changes, because that would move the text under the reader', () => {
+    // The one thing the floating player exists to prevent. The new inset applies to
+    // the next Utterance; the sentence being spoken stays where it is.
+    const program = code('highlighter.ts');
+    const inset = program.slice(program.indexOf("message.kind === 'inset'"));
+    const branch = inset.slice(0, inset.indexOf('return;'));
+    expect(branch).not.toMatch(/centre|scrollBy|follow\(/);
+  });
+});
+
+describe('tapping a word reads from there, and it is a tap (ADR 0020)', () => {
+  it('listens for a click and for nothing that would take the platform’s long press', () => {
+    // A long press on text is iOS's selection gesture, and suppressing it means
+    // `user-select: none` — which silently stops ::highlight() from painting
+    // (notes/NOTES_2026-09-19.md, 20:10, bisected on the device). So the long press
+    // stays the platform's, and none of these is listened for.
+    const program = code('highlighter.ts');
+    expect(program).toContain("addEventListener('click', tapped, false)");
+    for (const gesture of ['touchstart', 'touchend', 'contextmenu', 'selectstart', 'longpress', 'mousedown']) {
+      expect({ gesture, listened: program.includes("'" + gesture + "'") }).toEqual({ gesture, listened: false });
+    }
+    expect(program).not.toContain('user-select: none');
+  });
+
+  it('posts nothing when the tap hit-tests to anything but a text node', () => {
+    // Tapping blank space does nothing, and in particular it is not a toggle for the
+    // player's visibility (docs/design/0020). nodeType 3 is a text node.
+    const program = code('highlighter.ts');
+    const tapped = fn(program, 'tapped');
+    expect(tapped).toContain('caret.node.nodeType !== 3');
+    expect(tapped).toContain('if (!place) return;');
+    expect(tapped).toContain('type: TAP');
+    expect(TAP_MESSAGE).toBe('openreader:tap');
+  });
+
+  it('reports a place in a Block rather than an Utterance, the Utterances being on the other side', () => {
+    // The WebView does not have the Utterance list. It reports the Block's own
+    // coordinate system — the same UTF-16 offsets every other message uses — and
+    // `cursor.ts`'s `utteranceAt` resolves it where the Utterances are.
+    const program = code('highlighter.ts');
+    expect(fn(program, 'blockOffsetOf')).toContain('found.parts[i].at + at');
+    expect(code('reader-bridge.ts')).toContain('utteranceAt(utterances.current, ids.current, message.block, message.offset)');
+  });
+});
+
+describe('the spine’s hrefs cross once, unmodified (ADR 0020)', () => {
+  it('sends them with the document message rather than one per rendered section', () => {
+    // A row of the contents list is an href and the only thing it can be seeked to
+    // is a spine index, so the list cannot exist without this table —
+    // `RenderedSection.href` delivers one per section as it renders, far too late for
+    // a list that opens before most of 2,077 sections have.
+    const program = code('highlighter.ts');
+    expect(program).toContain('post({ type: DOCUMENT, spine: book.spine.length, hrefs: spineHrefs() });');
+    expect(program.match(/type: DOCUMENT/g)).toHaveLength(1);
+  });
+
+  it('reports each href exactly as the spine spells it', () => {
+    // epub.js resolves neither the navigation's hrefs nor the spine's against
+    // anything, and `core/document/contents.ts` matches the two as strings. A
+    // spelling tidied here would match neither side, and every row would resolve to
+    // null — which that file reports as all-or-nothing for exactly this reason.
+    const spine = fn(code('highlighter.ts'), 'spineHrefs');
+    expect(spine).toContain('item && item.href ? item.href : ');
+    for (const rewrite of ['decodeURI', 'encodeURI', 'resolve', 'replace', 'trim', 'toLowerCase']) {
+      expect({ rewrite, used: spine.includes(rewrite) }).toEqual({ rewrite, used: false });
+    }
   });
 });
 

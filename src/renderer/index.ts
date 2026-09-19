@@ -19,6 +19,7 @@ export {
   type ReaderBridge,
   type ReaderBridgeOptions,
   type RenderedSection,
+  type ReportedDocument,
 } from './reader-bridge';
 
 export { DEFAULT_HIGHLIGHT, UTTERANCE_HIGHLIGHT, WORD_HIGHLIGHT, type HighlightStyles } from './highlighter';
@@ -27,15 +28,18 @@ export {
   BLOCKS_MESSAGE,
   DOCUMENT_MESSAGE,
   PROBLEM_MESSAGE,
+  TAP_MESSAGE,
   type AnchoredRange,
   type BlockRange,
   type BlocksMessage,
   type CorrectMessage,
   type DocumentMessage,
   type HighlightMessage,
+  type InsetMessage,
   type ProblemMessage,
   type ReportedBlock,
   type SpeakMessage,
+  type TapMessage,
   type WordCue,
 } from './messages';
 
@@ -47,6 +51,7 @@ export {
   correctMessage,
   rangesOf,
   speakMessage,
+  utteranceAt,
   utteranceRanges,
   wordCues,
   wordIndexAt,

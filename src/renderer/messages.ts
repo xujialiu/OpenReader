@@ -38,6 +38,9 @@ export const PROBLEM_MESSAGE = 'openreader:problem';
 /** The `type` of the document message. Same constraint. */
 export const DOCUMENT_MESSAGE = 'openreader:document';
 
+/** The `type` of the tap message. Same constraint. */
+export const TAP_MESSAGE = 'openreader:tap';
+
 /**
  * A **Block** as the WebView found it in the rendered document.
  *
@@ -110,6 +113,56 @@ export interface DocumentMessage {
   type: typeof DOCUMENT_MESSAGE;
   /** How many spine items the document has. */
   spine: number;
+  /**
+   * Every spine item's href, in spine order, **in the spine's own spelling**:
+   * the manifest href relative to the package document, exactly as
+   * `book.spine.get(index).href` gives it, unresolved and unmodified.
+   *
+   * Here because the Contents cannot be reached without it (ADR 0020). A row of
+   * the contents list is a navigation entry, a navigation entry is an href, and
+   * the only thing a row can be seeked to is a **spine index** — so turning one
+   * into the other needs this table, and `core/document/contents.ts` matches the
+   * two hrefs as strings. Unmodified is the load-bearing part: epub.js resolves
+   * neither spelling against anything, so any tidying here would be a third
+   * spelling that matches neither side.
+   *
+   * It cannot arrive any other way. `RenderedSection.href` delivers one per
+   * section as it renders, which is far too late for a list that opens before
+   * most sections have rendered — 2,077 of them on the book this was measured
+   * against, where the list has to work on the first tap. Measured there: 2,077
+   * hrefs, 50,812 UTF-8 bytes as a JSON array, once per document.
+   */
+  hrefs: string[];
+}
+
+/**
+ * The owner tapped a word: read from there (ADR 0020).
+ *
+ * **A tap and deliberately not a long press.** A long press on text is iOS's
+ * selection gesture, and suppressing it means `user-select: none`, which silently
+ * stops `::highlight()` from painting — bisected on the device under this exact
+ * layout (`notes/NOTES_2026-09-19.md`, 20:10: `text` paints, `none` draws nothing
+ * with the same Ranges registered, `text` paints again). So the long press belongs
+ * to the platform and this is a `click`.
+ *
+ * It carries a place in the document and **not** an Utterance index, because the
+ * WebView does not have the Utterance list: it hit-tests the tapped point to a
+ * text node, finds which Block that node belongs to, and reports the Block's own
+ * coordinate system — the same UTF-16 code-unit offset every other message in this
+ * file is written in. `cursor.ts`'s `utteranceAt` turns it into an index on the
+ * React Native side, which is where the Utterances are and where the rest of the
+ * coordinate chain already lives.
+ *
+ * A tap that hit-tests to no text node posts nothing at all: the design file is
+ * explicit that tapping blank space does nothing, and in particular that it is not
+ * a toggle for the player's visibility.
+ */
+export interface TapMessage {
+  type: typeof TAP_MESSAGE;
+  /** `ReportedBlock.id` of the Block the tapped text node belongs to. */
+  block: string;
+  /** Where the tap landed in that Block's own text, in UTF-16 code units. */
+  offset: number;
 }
 
 /**
@@ -128,7 +181,7 @@ export interface ProblemMessage {
   detail: string;
 }
 
-export type WebViewMessage = BlocksMessage | DocumentMessage | ProblemMessage;
+export type WebViewMessage = BlocksMessage | DocumentMessage | ProblemMessage | TapMessage;
 
 /** A half-open range of one Block's own text, in UTF-16 code units. */
 export interface BlockRange {
@@ -245,4 +298,30 @@ export interface ClearMessage {
   kind: 'clear';
 }
 
-export type HighlightMessage = SpeakMessage | CorrectMessage | HoldMessage | ClearMessage;
+/**
+ * How much of the bottom of the scroll container the player is covering.
+ *
+ * ADR 0011 centres the spoken Utterance against `rendition.manager.container`'s
+ * `clientHeight`. ADR 0020's player **floats over** that container rather than
+ * pushing it up — so the text never reflows when the player appears, and so the
+ * visual centre of the *uncovered* text is not the container's centre. This is the
+ * number that difference is made of.
+ *
+ * **It is an input to the centring and not a constant**, which is the whole reason
+ * it is a message. The covered height changes when the player collapses to one
+ * button and when it expands again, and the centring runs once per Utterance on
+ * the Clip cue — so an offset that went stale is not corrected by the next frame,
+ * or by anything else. The player measures itself and sends this whenever its own
+ * layout changes.
+ *
+ * In CSS pixels of the top document, which are React Native points: the library's
+ * template sets `width=device-width, initial-scale=1.0`, so the two units are the
+ * same and no conversion belongs anywhere.
+ */
+export interface InsetMessage {
+  kind: 'inset';
+  /** The covered height at the bottom, in CSS pixels. Zero when nothing covers the text. */
+  bottomPx: number;
+}
+
+export type HighlightMessage = SpeakMessage | CorrectMessage | HoldMessage | ClearMessage | InsetMessage;
