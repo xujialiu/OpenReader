@@ -97,7 +97,18 @@ The cost is not the audio, it is the transcript: a reading that keeps going keep
 producing clip fetches, position corrections and log lines, and an agent watching
 the device reads all of them. That is the owner's tokens spent on nothing.
 
-This is not an argument for testing less. A measurement that needs a minute of
-continuous reading — highlight drift, memory over a long session — needs the
-minute. Take it, and **stop as soon as the numbers are in hand**. What is ruled
-out is idle playback, not measured playback.
+## The length of a test comes from what it establishes
+
+**Derive the duration; do not pick a safe one.** Five seconds is enough to show
+that the highlight follows a real voice, that a Provider's audio plays at all,
+that the word lands on the right word. Running a minute to establish any of
+those is fifty-five seconds of transcript bought for nothing.
+
+Some things genuinely need the long run, and those get it without argument:
+whether the highlight **drifts** cannot be seen in five seconds, and neither can
+memory over a session or what happens when the app is backgrounded. Run those
+for as long as they actually need.
+
+So the question before every test is which of the two it is. Say in the report
+how long it ran and why that long — a duration nobody can justify afterwards was
+guessed.
