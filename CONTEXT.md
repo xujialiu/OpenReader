@@ -100,6 +100,13 @@ The wall-clock time an entry was last written, together with which device
 wrote it, used to decide which of two copies of an entry wins.
 _Avoid_: timestamp, ts, version, clock
 
+**Appearance**:
+How the text of a document is set: which font it is shown in and how big. It
+belongs to the owner rather than to a document, so it is the same in every one
+of them, and both parts start out following whatever the document itself asked
+for.
+_Avoid_: theme, style, typography, display settings, font settings
+
 **Shared Settings**:
 The settings all of the owner's devices agree on, merged setting by setting so
 that two devices changing different settings both keep their change.

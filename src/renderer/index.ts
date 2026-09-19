@@ -22,7 +22,18 @@ export {
   type ReportedDocument,
 } from './reader-bridge';
 
-export { DEFAULT_HIGHLIGHT, UTTERANCE_HIGHLIGHT, WORD_HIGHLIGHT, type HighlightStyles } from './highlighter';
+export {
+  appearanceCss,
+  DEFAULT_HIGHLIGHT,
+  DOCUMENT_APPEARANCE,
+  READING_FONTS,
+  READING_SCALES,
+  UTTERANCE_HIGHLIGHT,
+  WORD_HIGHLIGHT,
+  type Appearance,
+  type HighlightStyles,
+  type ReadingFont,
+} from './highlighter';
 
 export {
   BLOCKS_MESSAGE,
@@ -30,6 +41,7 @@ export {
   PROBLEM_MESSAGE,
   TAP_MESSAGE,
   type AnchoredRange,
+  type AppearanceMessage,
   type BlockRange,
   type BlocksMessage,
   type CorrectMessage,
@@ -50,10 +62,15 @@ export {
   clampElapsed,
   correctMessage,
   rangesOf,
+  reportedPlaces,
+  resolveResume,
+  resumeSentence,
   speakMessage,
   utteranceAt,
   utteranceRanges,
   wordCues,
   wordIndexAt,
+  type Resume,
+  type ResumeFailure,
   type SpeakOptions,
 } from './cursor';

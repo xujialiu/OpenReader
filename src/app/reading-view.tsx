@@ -34,7 +34,7 @@ import { Reader, useReader } from '@epubjs-react-native/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
-import type { ReadingPosition } from '../core/document';
+import { readLocator, type ReadingPosition } from '../core/document';
 import type { NavigationEntry } from '../core/document/contents';
 import type { ProviderId } from '../core/providers/types';
 
@@ -85,15 +85,22 @@ export interface ReadingViewProps {
    */
   credentialsWrittenAt: number;
   /**
-   * The CFI to open at, out of the stored Reading Position, or null for a
-   * Document that has not been read.
+   * Where the reading stopped (ADR 0008), or null for a Document that has not
+   * been read. **The whole position, not the CFI**, because it does two things
+   * and they are not the same thing.
    *
-   * It goes to `<Reader initialLocation>`, which the library applies inside its
-   * own `onReady` — before it injects the highlighter, so the section that
-   * reports its Blocks first is the one the owner was left in rather than the
-   * cover.
+   * Its locator goes to `<Reader initialLocation>`, which the library applies
+   * inside its own `onReady` — before it injects the highlighter, so the section
+   * that reports its Blocks first is the one the owner was left in rather than
+   * the cover. That moves the **page**.
+   *
+   * Its anchor is what moves the **reading**: `use-reading.ts` resolves it
+   * against the Blocks as they report and hands the Utterance to the engine. The
+   * two halves were written together by `readingPositionAt` precisely so that
+   * they describe one place, and splitting them here — a CFI to the page and
+   * nothing to the voice — is what ADR 0019 recorded as not done.
    */
-  resumeAt: string | null;
+  position: ReadingPosition | null;
   onRate(rate: number): void;
   /** A Provider and a Voice together: a Voice belongs to exactly one Provider (CONTEXT.md, ADR 0010). */
   onVoice(provider: ProviderId, voice: string): void;
@@ -152,7 +159,7 @@ export function ReadingView({
   settings,
   keyPresence,
   credentialsWrittenAt,
-  resumeAt,
+  position,
   onRate,
   onVoice,
   onReached,
@@ -166,7 +173,16 @@ export function ReadingView({
    * from the document message.
    */
   const { getMeta, toc } = useReader();
-  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt });
+  /**
+   * `readLocator` rather than reaching into the position: a `Locator` is opaque
+   * by construction (ADR 0007) and this is its one door — it hands back the CFI
+   * only if the locator really is one this Document's format can resolve.
+   */
+  const resumeAt = useMemo(
+    () => (position ? readLocator(position.locator, document.identity.format) : null),
+    [position, document.identity.format],
+  );
+  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position);
   const voices = useVoiceLists(settings);
   const [displayError, setDisplayError] = useState<string | null>(null);
   const [contentsOpen, setContentsOpen] = useState(false);
@@ -267,6 +283,9 @@ export function ReadingView({
     }
     if (displayError) said.push(`The document would not display: ${displayError}`);
     if (status.note) said.push(status.note);
+    // After what refused and before what is being done to the highlight: where the
+    // reading came back to is neither an error nor a property of the Provider.
+    if (status.resume) said.push(status.resume);
     const highlight = highlightLine(status);
     if (highlight) said.push(highlight);
     return said;

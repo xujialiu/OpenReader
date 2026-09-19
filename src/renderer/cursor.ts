@@ -36,6 +36,13 @@
  * — or the whole Utterance — is several `Range`s, which is exactly what the CSS
  * Custom Highlight API takes.
  *
+ * The chain is walked backwards twice, by the two things that start on the page
+ * rather than in the engine: a **tap** (`utteranceAt`) and **coming back to a
+ * book** (`resolveResume`). The second one starts further out still — at a CFI
+ * and a quotation written down in a previous session — and it goes through
+ * `utteranceAt` rather than beside it, because a third way of saying "this
+ * offset in this Block is that sentence" is a third way for them to disagree.
+ *
  * ## The units
  *
  * `ClipCue.words` arrive **already scaled for the playback rate**: `rate.ts`
@@ -44,11 +51,13 @@
  * milliseconds and nothing else. There is no rate in it.
  */
 
+import type { AnchorAgreement, LocatorProblem, Place, PlaceReader, ReadingPosition } from '../core/document';
+import { createLocator, readLocator, resolveReadingPosition } from '../core/document';
 import type { Timestamp } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
 import type { ClipCue, PositionCorrection } from '../playback/reader-clock';
 
-import type { AnchoredRange, BlockRange, CorrectMessage, SpeakMessage, WordCue } from './messages';
+import type { AnchoredRange, BlockRange, CorrectMessage, ReportedBlock, SpeakMessage, WordCue } from './messages';
 
 /**
  * The Block ranges a half-open run of an Utterance's text covers.
@@ -293,3 +302,148 @@ export function correctMessage(correction: PositionCorrection, cued: SpeakMessag
     hold: correction.inGap,
   };
 }
+
+/* ---- coming back to a book: a Reading Position as an Utterance to read from ---- */
+
+/**
+ * The Blocks the renderer has reported, as the document a Reading Position is
+ * resolved against (ADR 0008).
+ *
+ * `position.ts` says the implementation of `PlaceReader` is "the renderer, which
+ * is the only thing that can turn a CFI into text", and this is it: a Block
+ * already carries the two things a `Place` is, its element CFI and its verbatim
+ * text, so there is nothing to compute and nothing to ask the WebView for.
+ *
+ * **A Block epub.js could give no CFI for is not offered as a place.** Its `cfi`
+ * is the empty string (`highlighter.ts` catches `cfiFromNode` and records `''`),
+ * and a place that cannot be named is a place a resolution could not report back:
+ * `resolveReadingPosition` answers with the `Locator` of what it found, and two
+ * nameless Blocks would be one locator meaning either of them. Leaving them out
+ * loses an Utterance that could in principle have been resumed to, and keeps the
+ * answer unambiguous, which ADR 0008 ranks first.
+ */
+export function reportedPlaces(blocks: readonly ReportedBlock[]): PlaceReader {
+  return {
+    textAt(locator) {
+      const cfi = readLocator(locator, 'epub');
+      // An empty locator matches the Blocks that have no CFI rather than none of
+      // them, which is the one way this lookup could answer with the wrong text.
+      if (!cfi) return null;
+      return blocks.find((block) => block.cfi === cfi)?.text ?? null;
+    },
+    *places(): Iterable<Place> {
+      for (const block of blocks) {
+        if (block.cfi) yield { locator: createLocator('epub', block.cfi), text: block.text };
+      }
+    },
+  };
+}
+
+/** Why a stored Reading Position did not name an Utterance. */
+export type ResumeFailure =
+  /** The anchor is nowhere in the Blocks reported so far, or nowhere that agrees well enough. */
+  | 'not-found'
+  /** Two places matched equally well and nothing distinguishes them. Refused rather than picked (ADR 0008). */
+  | 'ambiguous'
+  /** The quotation holds no letter or digit — a scene break — so only an exact character match could ever have found it. */
+  | 'anchor-not-matchable'
+  /** The place was found and no Utterance covers it: the Block is there and contributed none. */
+  | 'no-utterance';
+
+/**
+ * What a stored Reading Position came to, against the document as it has
+ * rendered so far.
+ *
+ * `resumed` carries the Utterance to read from and nothing else the caller has
+ * to interpret. `lost` carries no number at all, deliberately: ADR 0005 refuses
+ * to estimate a Word Timing for the same reason ADR 0008 refuses to resume three
+ * paragraphs away, and "the first Utterance of what has rendered" is a decision
+ * for the caller to make openly rather than one to disguise as a resolution.
+ */
+export type Resume =
+  | {
+      outcome: 'resumed';
+      utterance: number;
+      agreement: AnchorAgreement;
+      /**
+       * Null when the stored locator named the place it claimed. Otherwise what
+       * was wrong with it — the anchor found the place somewhere else, which is
+       * the case ADR 0008's whole design exists for.
+       */
+      moved: LocatorProblem | null;
+    }
+  | {
+      outcome: 'lost';
+      /** What the locator did, or null where it resolved and the Blocks simply hold no Utterance there. */
+      because: LocatorProblem | null;
+      why: ResumeFailure;
+    };
+
+/**
+ * The Utterance a stored Reading Position names, or why it names none.
+ *
+ * The join ADR 0019 left out: `readingPositionAt` writes a CFI and a text
+ * anchor, `resolveReadingPosition` turns those back into a place and an offset
+ * in that place's text, and `utteranceAt` — the same function a tap goes through
+ * — turns an offset in a Block into an Utterance index. **No new coordinate
+ * system**, and in particular no Utterance number is ever stored: ADR 0008
+ * refuses one because a different segmenter renumbers every sentence in the
+ * book, which is exactly what makes this three steps rather than a lookup.
+ *
+ * `'epub'` is not an assumption: these Blocks came out of the epub.js renderer,
+ * so their CFIs are an EPUB dialect by construction.
+ */
+export function resolveResume(
+  position: ReadingPosition,
+  utterances: readonly Utterance[],
+  blocks: readonly ReportedBlock[],
+): Resume {
+  const resolution = resolveReadingPosition(position, reportedPlaces(blocks));
+  if (resolution.outcome === 'unresolved') {
+    return { outcome: 'lost', because: resolution.because, why: resolution.search };
+  }
+
+  const moved = resolution.outcome === 'recovered' ? resolution.because : null;
+  const cfi = readLocator(resolution.locator, 'epub');
+  const found = cfi ? blocks.find((block) => block.cfi === cfi) : undefined;
+  const at = found
+    ? utteranceAt(utterances, blocks.map((block) => block.id), found.id, resolution.start)
+    : null;
+  // The text was found and nothing speaks it: a Block of whitespace, or a Block
+  // array the Utterances were not segmented from. Neither is a place to resume
+  // at, and neither is a reason to pick a neighbouring sentence.
+  if (at === null) return { outcome: 'lost', because: moved, why: 'no-utterance' };
+  return { outcome: 'resumed', utterance: at, agreement: resolution.agreement, moved };
+}
+
+/**
+ * What the reader is told about the place it came back to, in one sentence.
+ *
+ * Here rather than on the screen because the vocabulary is this file's: the
+ * distinctions it draws — the locator was right, the locator had moved, nothing
+ * was found — are `PositionResolution`'s own, and a screen restating them is a
+ * second place for them to drift. It is philosophy rule 1 in its smallest form:
+ * a bookmark that might be wrong says so.
+ */
+export function resumeSentence(resume: Resume): string {
+  if (resume.outcome === 'resumed') {
+    if (resume.moved !== null) {
+      return (
+        'The paragraph this book was left in is not where it was, so the sentence was found by its own text instead. ' +
+        'The reading starts at that sentence.'
+      );
+    }
+    if (resume.agreement === 'aligned') {
+      return 'Resumed at the sentence the reading stopped on, whose wording has changed a little since it was noted.';
+    }
+    return 'Resumed at the sentence the reading stopped on.';
+  }
+  return `${LOST_BECAUSE[resume.why]} The reading starts at the top of this section rather than at a guess.`;
+}
+
+const LOST_BECAUSE: Readonly<Record<ResumeFailure, string>> = {
+  'not-found': 'The sentence this book was left on is not in the text that has rendered.',
+  ambiguous: 'The sentence this book was left on appears in more than one place, and nothing here can choose between them.',
+  'anchor-not-matchable': 'The place this book was left at was not on any words, so there is nothing to find it by.',
+  'no-utterance': 'The place this book was left at is on the page and holds nothing that can be read aloud.',
+};

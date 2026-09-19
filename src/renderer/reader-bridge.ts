@@ -34,7 +34,15 @@ import type { ClipCue, PositionCorrection, ReaderClock } from '../playback/reade
 
 import { blockIds, EMPTY_BLOCKS, withSection, type BlockIndex } from './blocks';
 import { correctMessage, speakMessage, utteranceAt } from './cursor';
-import { DEFAULT_HIGHLIGHT, highlightCall, highlighterSource, type HighlightStyles } from './highlighter';
+import {
+  appearanceCss,
+  DEFAULT_HIGHLIGHT,
+  DOCUMENT_APPEARANCE,
+  highlightCall,
+  highlighterSource,
+  type Appearance,
+  type HighlightStyles,
+} from './highlighter';
 import {
   BLOCKS_MESSAGE,
   DOCUMENT_MESSAGE,
@@ -138,6 +146,16 @@ export interface ReaderBridgeOptions {
    * installed once, so changing this afterwards changes nothing.
    */
   styles?: HighlightStyles;
+  /**
+   * How the document's text is set (ADR 0019), as the book opens.
+   *
+   * Fixed at mount for the same reason as `styles` and with one difference that
+   * matters: this one **does** change while the book is open, and it changes
+   * through `setAppearance` rather than through this. What this value is for is
+   * the first paint — a book opened with an override already chosen is laid out
+   * that way rather than reflowing once the first message arrives.
+   */
+  appearance?: Appearance;
 }
 
 export interface ReaderBridge {
@@ -183,6 +201,20 @@ export interface ReaderBridge {
    * layout changes; see `InsetMessage`.
    */
   setInset(bottomPx: number): void;
+  /**
+   * How the document's text is set: the owner's Appearance (ADR 0019).
+   *
+   * A message and not a remount. The program is installed once, at page load, so
+   * a rebuilt source string changes nothing on a book that is already open — and
+   * a remount would reparse the EPUB and lose the highlight to change a font
+   * size, which is the opposite of what the sheet exists for: Appearance is
+   * presented *over* the reader so the text stays visible while the change is
+   * judged.
+   *
+   * The WebView restyles every rendered section and then **re-centres** the
+   * Utterance being spoken, because a change that reflows the text moves it.
+   */
+  setAppearance(appearance: Appearance): void;
   /**
    * Freeze the highlight where it is. Call it when the engine is paused.
    *
@@ -290,6 +322,18 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    * so it is what re-sends this.
    */
   const inset = useRef(0);
+  /**
+   * What was baked into the program at mount, and what the owner has chosen
+   * since.
+   *
+   * The pair exists so that the document message re-sends an Appearance the
+   * program may have missed — the same trap as the inset above — **without**
+   * sending one that is already in the source it was built from. The first is a
+   * book laid out in the wrong font until something else happens; the second is
+   * an injection and a reflow per document for nothing.
+   */
+  const installed = useRef(options.appearance ?? DOCUMENT_APPEARANCE);
+  const appearance = useRef(options.appearance ?? DOCUMENT_APPEARANCE);
 
   const send = useCallback(
     (message: HighlightMessage) => {
@@ -356,6 +400,14 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [send],
   );
 
+  const setAppearance = useCallback(
+    (next: Appearance) => {
+      appearance.current = next;
+      send({ kind: 'appearance', css: appearanceCss(next) });
+    },
+    [send],
+  );
+
   const hold = useCallback(() => {
     send({ kind: 'hold' });
   }, [send]);
@@ -392,8 +444,11 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       }
       if (message.type === DOCUMENT_MESSAGE) {
         spine.current = message.spine;
-        // The program has installed, so the inset it may have missed goes again.
+        // The program has installed, so the two things it may have missed go again.
         if (inset.current > 0) send({ kind: 'inset', bottomPx: inset.current });
+        if (appearance.current !== installed.current) {
+          send({ kind: 'appearance', css: appearanceCss(appearance.current) });
+        }
         latest.current.onDocument?.({ spine: message.spine, hrefs: message.hrefs });
         return;
       }
@@ -419,9 +474,20 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [send],
   );
 
+  /**
+   * The program, built once.
+   *
+   * Deliberately not rebuilt when `styles` or `appearance` change: the WebView
+   * evaluates `injectedJavascript` at page load and the program's first line
+   * refuses a second installation, so a new string would be a new prop that
+   * changes nothing on the device — a false sense that a setting had been applied
+   * (`notes/NOTES_2026-09-20.md`, 01:01). Appearance changes through
+   * `setAppearance`, and the two halves are told apart by `installed` above.
+   */
   const injectedJavascript = useMemo(
-    () => highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT),
-    [options.styles],
+    () => highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DOCUMENT_APPEARANCE),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
   const readerProps = useMemo<ReaderBridge['readerProps']>(
@@ -439,7 +505,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, show, setInset, hold, clear, goTo, goToSection, readerProps }),
-    [clock, setUtterances, show, setInset, hold, clear, goTo, goToSection, readerProps],
+    () => ({ clock, setUtterances, show, setInset, setAppearance, hold, clear, goTo, goToSection, readerProps }),
+    [clock, setUtterances, show, setInset, setAppearance, hold, clear, goTo, goToSection, readerProps],
   );
 }

@@ -29,7 +29,7 @@ import { APP_NAME } from '../../app-name';
 import type { DocumentId, LibraryEntry, ReadingPosition } from '../core/document';
 
 import { addDocument } from './document';
-import { readLibrary, thisDevice, writeLibrary, type LoadedLibrary } from './library';
+import { migrateDocumentIds, readLibrary, thisDevice, writeLibrary, type LoadedLibrary } from './library';
 
 /** What the Library screen shows and what the Reader route resolves a Document Id against. */
 export interface Library {
@@ -92,9 +92,19 @@ export function useLibrary(): Library {
       const loaded = readLibrary();
       loadedRef.current = loaded;
       deviceRef.current = thisDevice();
-      entriesRef.current = [...loaded.entries].sort(byNewestFirst);
+      /**
+       * Before anything reads an entry, because an entry named under the rule ADR
+       * 0004 replaced points at a file this build will not find by name — and the
+       * owner's answer to that would be to add the book again, which costs them
+       * the Reading Position that is the whole point of the entry (`document-ids.ts`).
+       *
+       * It reads nothing on any launch after the first: `library-id-rule` records
+       * which rule the files are named under, and a match returns at once.
+       */
+      const migration = migrateDocumentIds(loaded);
+      entriesRef.current = [...migration.entries].sort(byNewestFirst);
       setEntries(entriesRef.current);
-      setNote(loaded.note ?? problemSentence(loaded));
+      setNote(migration.note ?? loaded.note ?? problemSentence(loaded));
     } catch (problem) {
       setNote(`The Library could not be opened: ${describe(problem)}`);
     } finally {

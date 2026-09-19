@@ -40,7 +40,7 @@
  * (`missing` below), per the design file: a file that is temporarily unreachable
  * is not the same as one the owner threw away.
  *
- * ## Three things in this directory, and only one of them is shared
+ * ## Four things in this directory, and only one of them is shared
  *
  * - `library.json` — the Library, exactly as `serializeLibrary` writes it. This
  *   is the file ADR 0003 may one day sync, and it holds nothing device-local.
@@ -50,13 +50,30 @@
  *   bookmark is not in the Library file: it means nothing anywhere else. It must
  *   survive a relaunch or the Stamp says nothing, which is why it is written
  *   down rather than generated per session.
+ * - `library-id-rule` — which **Document Id rule** the names in `library/` were
+ *   computed by (ADR 0004). Also device-local: it describes the files on this
+ *   disk. A new file rather than a field, which is ADR 0003's rule for growth and
+ *   is here the only shape available — an id from the old rule is
+ *   indistinguishable from one from this rule, so nothing *inside* the Library
+ *   could ever say which named an entry.
  */
 
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File, FileMode, Paths } from 'expo-file-system';
 
 import { APP_NAME } from '../../app-name';
 
-import { serializeLibrary, parseLibrary, type DocumentId, type DocumentFormat, type LibraryEntry, type LibraryProblem } from '../core/document';
+import {
+  DOCUMENT_ID_RULE,
+  documentIdOf,
+  serializeLibrary,
+  parseLibrary,
+  type DocumentId,
+  type DocumentFormat,
+  type LibraryEntry,
+  type LibraryProblem,
+} from '../core/document';
+
+import { migrationSentence, planIdMigration } from './document-ids';
 
 /** The Library itself. One file, rewritten whole (ADR 0019). */
 const LIBRARY_FILE = 'library.json';
@@ -66,6 +83,27 @@ const BOOKS_DIRECTORY = 'library';
 
 /** The device half of a Stamp. */
 const DEVICE_FILE = 'this-device';
+
+/**
+ * Which **Document Id rule** the files in `library/` are named under
+ * (`DOCUMENT_ID_RULE`, ADR 0004).
+ *
+ * A file of its own rather than a field, which is ADR 0003's rule for how this
+ * format grows — and here it is also the only shape that works. An id computed
+ * by the rule ADR 0004 replaced "has exactly the shape of one from this rule and
+ * cannot be told apart from it", so nothing in the Library file could ever say
+ * which rule named an entry. Something outside it has to.
+ *
+ * It is device-local, like `this-device` and for the same reason: it describes
+ * the files on **this** disk, and syncing it would be syncing a fact that is
+ * false everywhere else.
+ *
+ * Absent means "unknown", which is what a Library written before this file
+ * existed looks like, so the migration runs. Present and equal to the current
+ * rule means every file is already named by it and nothing is read at all — which
+ * is what stops a 34 MB book being opened and digested at every launch for ever.
+ */
+const ID_RULE_FILE = 'library-id-rule';
 
 /**
  * A Document Id as a file name: `sha256:abc…` → `sha256-abc….epub`.
@@ -189,6 +227,113 @@ export function writeLibrary(entries: readonly LibraryEntry[], loaded: LoadedLib
     );
   }
   new File(Paths.document, LIBRARY_FILE).write(serializeLibrary(entries));
+}
+
+/**
+ * The Document Id of the bytes stored under this entry's **current** id, or null
+ * where they cannot be read.
+ *
+ * The same two ranges and the same digest as adding a book (`document.ts`), and
+ * for the same reason it is not a whole-file read: ADR 0004's amendment makes an
+ * id 220,092 bytes of the owner's 34 MB novel rather than all of it.
+ *
+ * Null covers both a file that is not there and one `documentIdOf` **refuses** —
+ * a file that is not a ZIP, a ZIP64 archive, a short read. ADR 0004 refuses
+ * rather than falling back, so a refusal is an answer: this entry is left exactly
+ * as it is, and the plan says how many were.
+ */
+function identifyStored(entry: LibraryEntry): DocumentId | null {
+  const file = documentFile(entry.id, entry.format);
+  if (!file.exists) return null;
+  const handle = file.open(FileMode.ReadOnly);
+  try {
+    return documentIdOf({
+      size: file.size,
+      read: (offset, length) => {
+        handle.offset = offset;
+        return handle.readBytes(length);
+      },
+    });
+  } catch {
+    return null;
+  } finally {
+    handle.close();
+  }
+}
+
+/** What the migration did, for the caller that holds the entries. */
+export interface IdMigration {
+  entries: readonly LibraryEntry[];
+  /** What the owner is told, or null where there was nothing to tell them. */
+  note: string | null;
+}
+
+/**
+ * Bring a Library written under an older **Document Id rule** up to this one
+ * (ADR 0004).
+ *
+ * Runs at launch, before anything reads an entry, and does nothing at all on
+ * every launch after the first: the rule file records which rule the files are
+ * named under, and a match means not one byte is read.
+ *
+ * `planIdMigration` decides and this performs, in the order that file says:
+ * identify everything, then move every file, then write the Library **once**.
+ *
+ * It refuses to run at all on a Library this build may not write — ADR 0003's
+ * frozen file, or one carrying keys this parser does not know. Renaming the files
+ * of a Library that cannot be rewritten would point every migrated entry at
+ * nothing, which is the worst outcome available here; and the rule file is left
+ * unwritten, so an updated build finds the work still to do.
+ */
+export function migrateDocumentIds(loaded: LoadedLibrary): IdMigration {
+  const unchanged: IdMigration = { entries: loaded.entries, note: null };
+  const rule = new File(Paths.document, ID_RULE_FILE);
+  let recorded: string | null = null;
+  try {
+    if (rule.exists) recorded = rule.textSync().trim();
+  } catch {
+    // Unreadable is the same as absent: the migration is safe to run again, and
+    // refusing to launch over a file whose whole job is to say "already done"
+    // would be the wrong way round.
+    recorded = null;
+  }
+  if (recorded === DOCUMENT_ID_RULE) return unchanged;
+  if (loaded.frozen || loaded.ignored.length > 0) return unchanged;
+
+  const plan = planIdMigration(loaded.entries, identifyStored);
+  if (plan.entries === loaded.entries) {
+    // Nothing was named by an older rule — a first launch, or a shelf that is
+    // empty. The rule is recorded anyway, so this is the last launch that reads
+    // a book to find out.
+    writeIdRule(rule);
+    return unchanged;
+  }
+
+  try {
+    for (const rename of plan.renames) {
+      documentFile(rename.from, rename.format).moveSync(documentFile(rename.to, rename.format), { overwrite: true });
+    }
+    writeLibrary(plan.entries, loaded);
+  } catch (problem) {
+    return {
+      entries: plan.entries,
+      note:
+        `The books on the shelf were renamed to match the way a document is now recognised, and the Library file could ` +
+        `not be written: ${describe(problem)} The Library on screen and the file on disk have stopped agreeing.`,
+    };
+  }
+  writeIdRule(rule);
+  return { entries: plan.entries, note: migrationSentence(plan) };
+}
+
+/** Last, and only after the Library has been written: this file is what says the work does not have to be done again. */
+function writeIdRule(rule: File): void {
+  try {
+    rule.write(DOCUMENT_ID_RULE);
+  } catch {
+    // Not worth a sentence to the owner. The cost of failing to record it is that
+    // the next launch reads the shelf's files again and finds nothing to do.
+  }
 }
 
 /**

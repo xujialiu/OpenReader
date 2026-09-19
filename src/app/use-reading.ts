@@ -50,6 +50,8 @@ import {
   type ReaderClock,
 } from '../playback';
 import {
+  resolveResume,
+  resumeSentence,
   useReaderBridge,
   type ProblemMessage,
   type ReaderBridge,
@@ -138,6 +140,20 @@ export interface ReadingStatus {
   spineHrefs: readonly string[];
   /** The last thing that went wrong or was refused, in the words whatever refused it used. Shown, never swallowed (philosophy rule 1). */
   note: string | null;
+  /**
+   * What became of the Document's stored Reading Position (ADR 0008), in one
+   * sentence, or null for a Document that had none.
+   *
+   * Its own field rather than a second use of `note`, because `note` means
+   * something went wrong and a resume that worked is the ordinary case. ADR 0011
+   * records what widening a channel like that costs: "widening it to also mean
+   * 'the page was rebuilt' is how a protocol starts lying."
+   *
+   * It changes at most twice in a Document's life — once when the position
+   * resolves, once if it is given up on — so it costs the re-renders a Reading
+   * Position itself is kept out of state to avoid (ADR 0005).
+   */
+  resume: string | null;
 }
 
 const NOTHING_YET: ReadingStatus = {
@@ -152,6 +168,7 @@ const NOTHING_YET: ReadingStatus = {
   section: null,
   spineHrefs: [],
   note: null,
+  resume: null,
 };
 
 export interface Reading {
@@ -223,7 +240,14 @@ export interface KnownCredentials {
   writtenAt: number;
 }
 
-export function useReading(settings: AppSettings, credentials: KnownCredentials): Reading {
+/**
+ * @param resume the Document's stored Reading Position, or null for one that has
+ * not been read. Taken once, at mount: this hook is mounted per Document
+ * (`reading-view.tsx` keys it by the Document Id) and the position is rewritten
+ * every few sentences while the reading runs, so a value that kept arriving
+ * would be the reading chasing its own tail.
+ */
+export function useReading(settings: AppSettings, credentials: KnownCredentials, resume: ReadingPosition | null): Reading {
   const { hasKey, writtenAt } = credentials;
   const [status, setStatus] = useState<ReadingStatus>(NOTHING_YET);
 
@@ -276,9 +300,52 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
    * Utterance to seek to (`firstUtteranceOfSection`).
    */
   const pendingSectionRef = useRef<number | null>(null);
+  /**
+   * The stored Reading Position, until an Utterance has been found for it.
+   *
+   * It cannot be resolved at mount: the anchor is matched against **Blocks**, and
+   * no section has reported any yet. So it waits here and every `onBlocks` tries
+   * again — the first sections to render are the ones around the stored CFI,
+   * because `<Reader initialLocation>` was given that CFI, but a cover page and a
+   * chapter epub.js renders on the way can arrive first.
+   */
+  const resumeRef = useRef<ReadingPosition | null>(resume);
+  /**
+   * The sentence to show if the resume is given up on, from the last attempt
+   * that failed.
+   *
+   * Held rather than shown at once, because a failure is not final while the
+   * document is still rendering: saying "that sentence is not in this book" of a
+   * book that has rendered its cover and nothing else would be false, and would
+   * be replaced a second later by the resume working. It is only true at the
+   * moment the owner asks for something else.
+   */
+  const resumeLostRef = useRef<string | null>(null);
 
   const report = useCallback((problem: unknown) => {
     setStatus((was) => ({ ...was, note: describe(problem) }));
+  }, []);
+
+  /**
+   * Something else has decided where to read, so the stored Reading Position
+   * stops competing for it.
+   *
+   * A press of Play, a tapped word, a skip, a contents row. Without this, a
+   * position that resolved late — the section it names rendering thirty seconds
+   * into a 2,077-section book — would take the reading away from wherever the
+   * owner had just put it, which is the "silent landing three paragraphs away"
+   * ADR 0008 exists to prevent, arriving by the back door.
+   */
+  const abandonResume = useCallback(() => {
+    if (!resumeRef.current) return;
+    resumeRef.current = null;
+    const lost = resumeLostRef.current;
+    setStatus((was) => ({
+      ...was,
+      resume:
+        lost ??
+        'The place this book was left at had not rendered yet when the reading was asked to start, so it starts here instead.',
+    }));
   }, []);
 
   /**
@@ -423,6 +490,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
     // Nothing loaded is not a position to clamp into: `navigation.ts` throws on it
     // rather than fabricate one, and there is nothing here to seek either.
     if (list.length === 0) return;
+    // A word tapped, a skip, a contents row: the owner has pointed somewhere, so
+    // the bookmark is done asking. The resume's own call clears the ref first, so
+    // this is a no-op on that path.
+    abandonResume();
     const at = Math.min(list.length - 1, Math.max(0, Math.trunc(utterance)));
     pendingSeekRef.current = at;
     atRef.current = at;
@@ -443,7 +514,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
       // built will be loaded there.
       engineRef.current?.seek(target);
     }, SKIP_DEBOUNCE_MS);
-  }, [sectionOf]);
+  }, [sectionOf, abandonResume]);
 
   /**
    * One of the four skips.
@@ -531,6 +602,38 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
       }
 
       /**
+       * **Coming back to a book.** The stored Reading Position is a CFI and a
+       * quotation (ADR 0008); the Utterance it names cannot exist until the
+       * Blocks it quotes have been reported, which is now.
+       *
+       * Tried on every report until it lands, because the first section to render
+       * is not always the one the position names — a cover renders first and
+       * yields nothing, and the section `initialLocation` asked for arrives when
+       * epub.js has displayed it. A report that fails leaves the position
+       * pending and keeps its sentence for `abandonResume`.
+       *
+       * The same order as the contents tap below and for the same two reasons:
+       * `adopt` re-anchors the engine at `atRef`, and the Utterance being seeked
+       * to exists only in the new list.
+       */
+      const stored = resumeRef.current;
+      if (stored) {
+        const found = resolveResume(stored, next, reported);
+        if (found.outcome === 'resumed') {
+          resumeRef.current = null;
+          resumeLostRef.current = null;
+          const sentence = resumeSentence(found);
+          atRef.current = found.utterance;
+          pendingRef.current = null;
+          adopt(next);
+          seekTo(found.utterance);
+          setStatus((was) => ({ ...was, resume: sentence }));
+          return;
+        }
+        resumeLostRef.current = resumeSentence(found);
+      }
+
+      /**
        * The second step of a contents tap: the section the owner asked for has
        * rendered, so the reading can follow the page to it.
        *
@@ -578,6 +681,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
   }, []);
 
   const bridge = useReaderBridge({
+    // Fixed at mount, because the program is installed once: the owner's current
+    // choice is what a book opens laid out in, and every change after that is a
+    // message (`setAppearance`).
+    appearance: settings.appearance,
     onBlocks: handleBlocks,
     onDocument: handleDocument,
     // A tap on a word is a seek and nothing else. The bridge has already turned the
@@ -679,6 +786,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
   }, [settings, hasKey, clock, report]);
 
   const play = useCallback(() => {
+    // Play is the owner saying "read from here", and here is wherever the reading
+    // is now. A bookmark that has not resolved by this point has lost its claim.
+    abandonResume();
     /**
      * Play, pressed with nothing to read.
      *
@@ -713,7 +823,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
       engine.play();
       setStatus((was) => ({ ...was, playing: true }));
     }, report);
-  }, [build, report, walkForward]);
+  }, [build, report, walkForward, abandonResume]);
 
   /**
    * The section Play was looking for has arrived with text in it, so the reading
@@ -754,6 +864,23 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials)
   useEffect(() => {
     engineRef.current?.setRate(settings.rate);
   }, [settings.rate]);
+
+  /**
+   * How the text is set, live (ADR 0019).
+   *
+   * Beside the rate and shaped like it, and they are the two settings that reach
+   * the open document without rebuilding anything. The difference is where they
+   * land: the rate is a parameter of the audio graph, this is a stylesheet in the
+   * WebView. Neither is in `engineIdentity`, so neither costs a Clip.
+   *
+   * It fires on mount as well, into a WebView whose program is very likely not
+   * installed yet. That message is lost and nothing is wrong: the same value is
+   * baked into the program's own source, and `reader-bridge.ts` re-sends only an
+   * Appearance that has since been changed.
+   */
+  useEffect(() => {
+    bridgeRef.current?.setAppearance(settings.appearance);
+  }, [settings.appearance]);
 
   /**
    * A different Provider, Voice or address is a different engine — and so is the

@@ -23,7 +23,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'reac
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { ReadingPosition } from '../core/document';
-import { readLocator } from '../core/document';
 import type { ProviderId } from '../core/providers/types';
 
 import { AppearanceSheet } from './appearance-sheet';
@@ -41,13 +40,15 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   /**
    * The bytes, and where to open them, decided together.
    *
-   * One state and not two, because the CFI has to be the one the entry held
-   * **when the Document was opened** — the Reading Position is rewritten every
-   * ten seconds while the reading runs, and `<Reader initialLocation>` is read
-   * by the renderer inside its own `onReady`, so a value that kept changing
-   * would either do nothing or move the page under the owner.
+   * One state and not two, because the Reading Position has to be the one the
+   * entry held **when the Document was opened** — it is rewritten every ten
+   * seconds while the reading runs, and both the things it is used for happen
+   * once, at the open: the renderer reads its CFI inside its own `onReady`, and
+   * `use-reading.ts` resolves its anchor against the first Blocks to arrive. A
+   * value that kept changing would either do nothing or move the reading under
+   * the owner.
    */
-  const [opened, setOpened] = useState<{ document: OpenDocument; resumeAt: string | null } | null>(null);
+  const [opened, setOpened] = useState<{ document: OpenDocument; position: ReadingPosition | null } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [appearance, setAppearance] = useState(false);
   const key = useProviderKey(settings.provider);
@@ -78,10 +79,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
     // remembers, so there is nothing to pick out of it.
     openDocument(entry, entry.title)
       .then((document) => {
-        // `readLocator` rather than reaching into the position: a `Locator` is
-        // opaque by construction (ADR 0007) and this is its one door — it hands
-        // back the CFI only if the locator really is an EPUB one.
-        if (alive) setOpened({ document, resumeAt: entry.position ? readLocator(entry.position.locator, entry.format) : null });
+        if (alive) setOpened({ document, position: entry.position });
       })
       .catch((problem: unknown) => {
         if (alive) setNote(problem instanceof Error ? problem.message : String(problem));
@@ -136,7 +134,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
           settings={settings}
           keyPresence={key.presence}
           credentialsWrittenAt={secretsWritten}
-          resumeAt={opened.resumeAt}
+          position={opened.position}
           onRate={setRate}
           onVoice={setVoice}
           onReached={reached}
@@ -155,7 +153,19 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
         </View>
       )}
 
-      <AppearanceSheet visible={appearance} onClose={() => setAppearance(false)} document={title} />
+      {/*
+        * The Appearance is the app's and not this book's (`settings.ts`), so it is
+        * written back into the same settings every other screen edits — and it
+        * reaches the page through the bridge rather than by remounting anything,
+        * which is what keeps the text behind the sheet visible while it changes.
+        */}
+      <AppearanceSheet
+        visible={appearance}
+        onClose={() => setAppearance(false)}
+        document={title}
+        appearance={settings.appearance}
+        onChange={(next) => setSettings({ ...settings, appearance: next })}
+      />
     </View>
   );
 }

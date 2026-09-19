@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
+import { createLocator, readingPositionAt, type ReadingPosition } from '../../src/core/document';
 import type { Timestamp } from '../../src/core/providers/types';
 import { segmentBlocks, type Block, type Utterance } from '../../src/core/segmenter';
 import { splitWithSentencex } from '../../src/core/segmenter/sentencex';
 import type { ClipCue, PositionCorrection } from '../../src/playback/reader-clock';
-import type { SpeakMessage } from '../../src/renderer/messages';
+import type { ReportedBlock, SpeakMessage } from '../../src/renderer/messages';
 import {
   anchoredRangesOf,
   clampElapsed,
   correctMessage,
   rangesOf,
+  reportedPlaces,
+  resolveResume,
+  resumeSentence,
   speakMessage,
   utteranceAt,
   utteranceRanges,
@@ -428,5 +432,156 @@ describe('a tapped place becoming an Utterance', () => {
     // Utterance of the Block, confidently.
     expect(utteranceAt(utterances, ids(1), '0.0', Number.NaN)).toBeNull();
     expect(utteranceAt(utterances, ids(1), '0.0', Number.POSITIVE_INFINITY)).toBeNull();
+  });
+});
+
+describe('a stored Reading Position becoming an Utterance to read from (ADR 0008, 0019)', () => {
+  /**
+   * The join ADR 0019 said was missing: "playback does not resume *at* that
+   * Utterance. The page is where it was; Play starts from the first Utterance of
+   * what has rendered."
+   *
+   * The fixtures go the whole way round rather than starting from a hand-written
+   * anchor — the position is built by the very call `use-reading.ts` makes,
+   * `readingPositionAt(locator, block.text, span.start, span.end)` — because an
+   * anchor written by hand is a restatement of the belief being tested.
+   */
+
+  /** Blocks as the renderer reports them: an id, a section and an element CFI (`messages.ts`). */
+  function reported(texts: readonly string[], cfis?: readonly string[]): ReportedBlock[] {
+    return texts.map((text, at) => ({
+      id: '0.' + at,
+      text,
+      role: 'paragraph' as const,
+      section: 'chapter.xhtml',
+      sectionIndex: 0,
+      cfi: cfis ? cfis[at] : 'epubcfi(/6/2!/4/' + (at * 2 + 2) + ')',
+    }));
+  }
+
+  /** The Reading Position `use-reading.ts` writes for an Utterance: the Block's CFI, the Block's own text, the Utterance's span in it. */
+  function positionOf(utterances: readonly Utterance[], blocks: readonly ReportedBlock[], at: number): ReadingPosition {
+    const span = utterances[at].spans[0];
+    const block = blocks[span.block];
+    return readingPositionAt(createLocator('epub', block.cfi), block.text, span.start, span.end);
+  }
+
+  const paragraph = 'One sentence here. A second sentence follows it. And a third ends the paragraph.';
+
+  it('comes back to the sentence, not to the top of the paragraph it is in', () => {
+    // The defect this exists to fix, as a number: three sentences in one Block, so
+    // "the first Utterance of what has rendered" and "where the reading stopped"
+    // are 0 and 2 — and only one of them is right.
+    const blocks = reported([paragraph]);
+    const utterances = segment(blocks);
+    expect(utterances).toHaveLength(3);
+    const resume = resolveResume(positionOf(utterances, blocks, 2), utterances, blocks);
+    expect(resume).toEqual({ outcome: 'resumed', utterance: 2, agreement: 'exact', moved: null });
+  });
+
+  it('comes back to the right sentence when the Blocks before it have been renumbered', () => {
+    // The Utterance index is not stored and this is why (ADR 0008): the same book
+    // with one more Block in front of the one that was quoted numbers every
+    // sentence differently, and the anchor still names one place.
+    const first = reported([paragraph]);
+    const written = positionOf(segment(first), first, 2);
+
+    const later = reported(['A chapter heading.', paragraph]);
+    const utterances = segment(later);
+    // Same sentence, different number: 2 before, 3 now.
+    expect(utterances[3].text).toBe('And a third ends the paragraph.');
+    expect(resolveResume(written, utterances, later)).toMatchObject({ outcome: 'resumed', utterance: 3 });
+  });
+
+  it('finds the sentence by its text when the locator no longer names it', () => {
+    // The case ADR 0008's whole design exists for: a CFI that resolves to nothing,
+    // or to the wrong node, must not be trusted on its own.
+    const blocks = reported([paragraph]);
+    const utterances = segment(blocks);
+    const written = positionOf(utterances, blocks, 1);
+    const moved = reported([paragraph], ['epubcfi(/6/2!/4/88)']);
+    expect(resolveResume(written, utterances, moved)).toEqual({
+      outcome: 'resumed',
+      utterance: 1,
+      agreement: 'exact',
+      moved: 'locator-did-not-resolve',
+    });
+  });
+
+  it('refuses rather than guessing when the locator resolves to other text', () => {
+    // The exact failure ADR 0008 exists for, from the other side: the CFI *does*
+    // resolve, and the words there are not the words that were quoted. Zotero's own
+    // reader lands on that node silently; this one refuses. Philosophy rule 1: "a
+    // bookmark that might be wrong is worse than no bookmark". There is no
+    // `utterance` on the answer at all, so no caller can read one off it.
+    const blocks = reported([paragraph]);
+    // The same CFI, different text — the second Block array `reported` builds numbers
+    // its CFIs the same way, which is what makes the locator resolve here.
+    const elsewhere = reported(['Some completely different words about nothing at all.']);
+    const written = positionOf(segment(blocks), blocks, 1);
+    const resume = resolveResume(written, segment(elsewhere), elsewhere);
+    expect(resume).toEqual({ outcome: 'lost', because: 'text-disagreed', why: 'not-found' });
+    expect(resume).not.toHaveProperty('utterance');
+  });
+
+  it('refuses when the locator names nothing at all either', () => {
+    const blocks = reported([paragraph]);
+    const written = positionOf(segment(blocks), blocks, 1);
+    const elsewhere = reported(['Some completely different words about nothing at all.'], ['epubcfi(/6/8!/4/2)']);
+    expect(resolveResume(written, segment(elsewhere), elsewhere)).toEqual({
+      outcome: 'lost',
+      because: 'locator-did-not-resolve',
+      why: 'not-found',
+    });
+  });
+
+  it('refuses when two places match it equally well', () => {
+    // Two identical paragraphs, and the anchor's context is empty because the
+    // Utterance *is* the Block — which ADR 0019 records as the ordinary shape on the
+    // owner's Chinese novel, not a corner case. Nothing may choose between them.
+    const twice = reported(['He said nothing.', 'He said nothing.'], ['epubcfi(/6/2!/4/2)', 'epubcfi(/6/2!/4/4)']);
+    const utterances = segment(twice);
+    const written = readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/99)'), twice[0].text, 0, twice[0].text.length);
+    expect(resolveResume(written, utterances, twice)).toEqual({
+      outcome: 'lost',
+      because: 'locator-did-not-resolve',
+      why: 'ambiguous',
+    });
+  });
+
+  it('refuses a Block that has no CFI rather than naming a place it cannot name', () => {
+    // `highlighter.ts` records `cfi: ''` where `cfiFromNode` threw. Two of those
+    // would be one locator meaning either Block, so they are not offered as places
+    // — and a stored locator that is somehow empty must not match them.
+    const nameless = reported([paragraph], ['']);
+    const utterances = segment(nameless);
+    expect([...reportedPlaces(nameless).places()]).toHaveLength(0);
+    expect(reportedPlaces(nameless).textAt(createLocator('epub', ''))).toBeNull();
+    const written = readingPositionAt(createLocator('epub', ''), paragraph, 19, 48);
+    expect(resolveResume(written, utterances, nameless)).toMatchObject({ outcome: 'lost' });
+  });
+
+  it('refuses a place whose Block has nothing to read aloud', () => {
+    // The text is there and no Utterance covers it, which is not the same failure as
+    // not finding it — and is still not a reason to pick the sentence next door.
+    const blocks = reported([paragraph]);
+    const written = positionOf(segment(blocks), blocks, 1);
+    expect(resolveResume(written, [], blocks)).toEqual({
+      outcome: 'lost',
+      because: null,
+      why: 'no-utterance',
+    });
+  });
+
+  it('says which of the three happened, in words the player can show', () => {
+    const blocks = reported([paragraph]);
+    const utterances = segment(blocks);
+    const plain = resumeSentence(resolveResume(positionOf(utterances, blocks, 2), utterances, blocks));
+    const moved = resumeSentence(resolveResume(positionOf(utterances, blocks, 2), utterances, reported([paragraph], ['epubcfi(/9/9)'])));
+    const lost = resumeSentence({ outcome: 'lost', because: 'locator-did-not-resolve', why: 'not-found' });
+    expect(plain).toBe('Resumed at the sentence the reading stopped on.');
+    expect(moved).toContain('found by its own text');
+    expect(lost).toContain('starts at the top of this section');
+    expect(new Set([plain, moved, lost]).size).toBe(3);
   });
 });

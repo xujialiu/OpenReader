@@ -90,5 +90,24 @@ different books that claim the same pieces — needs intent, and the books here 
 the owner's own.
 
 There is also a smaller, duller cost: the few books already on the shelf were
-recognised by the old rule and are not recognised by the new one. They are added
-again, which takes a moment and loses nothing, and it happens once.
+recognised by the old rule and are not recognised by the new one.
+
+The first answer to that was "add them again", and it was wrong in a way worth
+recording, because it reads as free and is not. Adding a book again makes a
+**second** entry for it. The owner's place is on the first one, which nothing will
+ever match again — so the shelf ends up with the same book twice, and the copy
+that knows where the reading got to is the copy that can no longer be opened.
+Losing a place is the failure this whole app exists to prevent, and it would have
+been the app itself doing it.
+
+So the shelf is brought over instead, once, the first time the app opens after the
+change. Each book keeps its entry and everything on it: where the reading got to,
+what the book turned out to call itself, which voice was reading it. Only the name
+the app files it under changes. It takes about a tenth of a second for a shelf of
+three, including a thirty-four megabyte novel, and every launch after that costs
+nothing at all — the app writes down which rule it used and does not look again.
+
+Two of the owner's books can also turn out to be the same book: two downloads of
+one novel, packed differently, which the old rule called two documents and this one
+calls one. Those become a single entry, and the one kept is the one read most
+recently. The other's file is not left behind on the device.

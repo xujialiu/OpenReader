@@ -60,7 +60,7 @@ describe('a burst of skip presses is one synthesis request (ADR 0020)', () => {
    */
   it('reaches the engine from exactly one place, and that place is the timer', () => {
     const reading = code('use-reading.ts');
-    const seekTo = within(reading, 'const seekTo = useCallback(', '}, [sectionOf]);');
+    const seekTo = within(reading, 'const seekTo = useCallback(', '}, [sectionOf');
     // One call into the engine in the whole file, and it is inside this timer.
     expect(reading.match(/\.seek\(/g)).toHaveLength(1);
     expect(seekTo).toContain('setTimeout(');
@@ -74,7 +74,7 @@ describe('a burst of skip presses is one synthesis request (ADR 0020)', () => {
     // because the first timer to fire takes the pending target and leaves null
     // behind for the rest — so neither half can be dropped as redundant on the
     // evidence of the other. The timer keeps one call; the payload keeps one target.
-    const seekTo = within(code('use-reading.ts'), 'const seekTo = useCallback(', '}, [sectionOf]);');
+    const seekTo = within(code('use-reading.ts'), 'const seekTo = useCallback(', '}, [sectionOf');
     expect(seekTo).toContain('if (seekTimerRef.current) clearTimeout(seekTimerRef.current);');
     expect(seekTo).toContain('const target = pendingSeekRef.current;');
     expect(seekTo).toContain('pendingSeekRef.current = null;');
@@ -121,5 +121,43 @@ describe('the contents open at the chapter being read (ADR 0020)', () => {
     // drops the prop rather than saying so.
     expect(sheet).toContain('getItemLayout=');
     expect(sheet).toContain('currentRow(contents, { sectionIndex: section })');
+  });
+});
+
+describe('coming back to a book resumes the reading, not only the page (ADR 0008, 0019)', () => {
+  /**
+   * ADR 0019 recorded this as the thing it had not done: "playback does not resume
+   * *at* that Utterance. The page is where it was; Play starts from the first
+   * Utterance of what has rendered." The resolution itself is `cursor.ts`'s and is
+   * tested there. What cannot be tested there is the **order** the three lines are
+   * in here, and getting that wrong is silent: the page is right, the highlight is
+   * right for an instant, and the voice starts somewhere else.
+   */
+  it('finds the Utterance in one place, and that place is where the Blocks arrive', () => {
+    const reading = code('use-reading.ts');
+    expect(reading.match(/resolveResume\(/g)).toHaveLength(1);
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, seekTo]');
+    expect(blocks).toContain('resolveResume(stored, next, reported)');
+  });
+
+  it('anchors the engine at the resumed Utterance before the longer list is adopted', () => {
+    // `adopt` re-anchors the engine at `atRef` (`engine?.load(next, atRef.current ?? 0)`),
+    // so setting it afterwards loads the engine at the old position and then seeks —
+    // which fetches a Clip nobody is waiting for, at the owner's expense. The
+    // contents tap two branches below has the same ordering for the same reason.
+    const resume = within(code('use-reading.ts'), 'const stored = resumeRef.current;', 'resumeLostRef.current = resumeSentence(found);');
+    expect(resume.indexOf('atRef.current = found.utterance;')).toBeLessThan(resume.indexOf('adopt(next);'));
+    expect(resume.indexOf('adopt(next);')).toBeLessThan(resume.indexOf('seekTo(found.utterance);'));
+  });
+
+  it('stops competing the moment the owner points somewhere else', () => {
+    // A 2,077-section book can report the section a position names half a minute
+    // after the reader opened it. Without this the bookmark would take the reading
+    // away from wherever the owner had just put it — ADR 0008's "silent landing
+    // three paragraphs away", arriving late instead of wrong.
+    const reading = code('use-reading.ts');
+    expect(within(reading, 'const seekTo = useCallback(', '}, [sectionOf')).toContain('abandonResume();');
+    expect(within(reading, 'const play = useCallback(', '}, [build, report, walkForward')).toContain('abandonResume();');
+    expect(within(reading, 'const abandonResume = useCallback(', '}, []);')).toContain('resumeRef.current = null;');
   });
 });

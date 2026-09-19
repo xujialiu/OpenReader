@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 import { BLOCKS_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from '../../src/renderer/messages';
-import { highlightCall, highlighterSource } from '../../src/renderer/highlighter';
+import { appearanceCss, highlightCall, highlighterSource } from '../../src/renderer/highlighter';
 
 /**
  * The three things ADR 0005 says this directory must never do, checked against the
@@ -218,8 +218,12 @@ describe('never highlight by mutating the DOM, and never check whether you can (
       'textContent =',
     ]) {
       if (mutation === 'textContent =') {
-        // The one exception, and it is the stylesheet's own text.
-        expect(program).toContain('style.textContent = CSS_TEXT');
+        // The one exception, and it is the stylesheet's own text. It stopped being
+        // a constant when Appearance arrived — the owner changes the font while the
+        // book is open — so the assertion is that the text is those two strings and
+        // nothing built from anything else.
+        expect(program).toContain('var wanted = CSS_TEXT + APPEARANCE;');
+        expect(program).toContain('if (style.textContent !== wanted) style.textContent = wanted;');
         continue;
       }
       expect(program).not.toContain(mutation);
@@ -408,6 +412,61 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     const inset = program.slice(program.indexOf("message.kind === 'inset'"));
     const branch = inset.slice(0, inset.indexOf('return;'));
     expect(branch).not.toMatch(/centre|scrollBy|follow\(/);
+  });
+});
+
+describe('Appearance reaches an open book, and the reading stays in the middle (ADR 0019)', () => {
+  it('is a message, not a rebuilt program, because the program is installed once', () => {
+    // `injectedJavascript` is evaluated at page load and the program's first line
+    // refuses a second installation, so a source string rebuilt for a new font
+    // changes nothing on a book that is already open — it fails as a setting that
+    // appears to do nothing, which is exactly how the 01:01 note was bought.
+    const bridge = code('reader-bridge.ts');
+    expect(bridge).toContain("send({ kind: 'appearance', css: appearanceCss(next) })");
+    // Built once, from the first render's options, and never rebuilt.
+    expect(bridge).toContain('highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DOCUMENT_APPEARANCE)');
+    expect(bridge).not.toContain('[options.styles]');
+  });
+
+  it('bakes the owner’s choice into the program as well, so a book opens laid out in it', () => {
+    const chosen = highlighterSource(undefined, { font: 'serif', scale: 150 });
+    expect(chosen).toContain('var APPEARANCE = ' + JSON.stringify(appearanceCss({ font: 'serif', scale: 150 })));
+    expect(highlighterSource()).toContain('var APPEARANCE = "";');
+  });
+
+  it('restyles every rendered section and then re-centres, because the text has moved', () => {
+    // The opposite of the `inset` message, and the difference is the whole of it:
+    // the player collapsing moves not one character (01:11), and a font change
+    // moves every one of them — so the sentence being spoken is no longer where it
+    // was put.
+    const program = code('highlighter.ts');
+    const branch = program.slice(program.indexOf("message.kind === 'appearance'"), program.indexOf("message.kind === 'clear'"));
+    expect(branch).toContain('restyle();');
+    expect(branch).toContain('settle(SETTLE_FRAMES, null, 0);');
+    expect(fn(program, 'restyle')).toContain('ensureStyle(list[i].document)');
+  });
+
+  it('waits for the reflow instead of measuring a box that is about to move', () => {
+    // epub.js resizes each section's iframe from the section's own ResizeObserver,
+    // whose callback is a `requestAnimationFrame` — so the geometry is a frame or
+    // more away and a centring on this frame aims at where the sentence was.
+    const settle = fn(code('highlighter.ts'), 'settle');
+    expect(settle).toContain('window.requestAnimationFrame(');
+    expect(settle).toContain('Math.abs(box.top - was) < 1');
+    // Every frame of the window, not once at the end: the first version centred
+    // once and left the Utterance 4,285 px out when the text **shrank**, because a
+    // page can look settled for a frame while epub.js is still relaying its views.
+    expect(settle.indexOf('centre(built);')).toBeLessThan(settle.indexOf('if (steady >= 3'));
+    // The library's own observer, read rather than trusted.
+    expect(library('epubjs.js')).toContain('new ResizeObserver((t) => {\n            requestAnimationFrame(this.resizeCheck.bind(this));');
+  });
+
+  it('still scrolls from one place, so Appearance did not put a scroll on the frame path', () => {
+    const program = code('highlighter.ts');
+    expect(program.match(/scrollBy\(/g)).toHaveLength(1);
+    for (const perWord of ['tick', 'showWord', 'showAt', 'start']) {
+      expect({ perWord, scrolls: /centre|scrollBy|settle/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
+    }
   });
 });
 

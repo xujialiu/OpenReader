@@ -57,9 +57,20 @@
  *   of the app, written to be worse — raising the floor deleted it rather than
  *   deferring it (ADR 0005).
  *
- * The one DOM mutation it makes is a `<style>` element per rendered section,
+ * - **How the text is set.** The owner's **Appearance** (ADR 0019, ADR 0021)
+ *   arrives as finished CSS and goes into the same stylesheet as the highlight
+ *   rules, because one `<style>` element is enough and a second would be a second
+ *   thing to keep installed. A change reflows every line in the book, so the
+ *   Utterance being spoken is brought back to the middle afterwards — which is
+ *   the opposite of what the `inset` message does, and the difference is that the
+ *   player collapsing moves not one character while a font change moves all of
+ *   them.
+ *
+ * The one DOM mutation it makes is a `<style>` element per rendered document,
  * because a `::highlight()` rule has to live in the document it styles. That is
- * once per section, not once per word, and it changes no text.
+ * once per document, not once per word, and it changes no text — an Appearance
+ * change rewrites that element's contents and renumbers nothing, so no Block's
+ * text, offset, span or CFI moves.
  */
 
 import type { HighlightMessage } from './messages';
@@ -90,6 +101,99 @@ export const DEFAULT_HIGHLIGHT: HighlightStyles = {
   utterance: 'background-color: rgba(255, 196, 0, 0.22);',
   word: 'background-color: rgba(255, 168, 0, 0.62);',
 };
+
+/**
+ * The fonts **Appearance** offers, as the owner reads them and as CSS names
+ * them.
+ *
+ * A fixed list and not a field the owner types, which is what makes
+ * `appearanceCss` unable to inject anything: a stack here is written by this
+ * file, and an id that is not in this list produces no rule at all rather than a
+ * rule built out of whatever the id said.
+ *
+ * Each stack ends in a generic family so that something is always found, and
+ * none of them names a CJK face. That is deliberate: WebKit falls through a stack
+ * per script, so a Chinese book under "Serif" is laid out in the system's own
+ * serif CJK face rather than in a font that has no glyphs for it — which is the
+ * behaviour a list of four Latin faces could not have given it.
+ */
+export const READING_FONTS = [
+  { id: 'system', label: 'System', stack: '-apple-system, system-ui, sans-serif' },
+  { id: 'serif', label: 'Serif', stack: 'Georgia, "Times New Roman", serif' },
+  { id: 'sans', label: 'Sans-serif', stack: 'Helvetica, Arial, sans-serif' },
+] as const;
+
+/** One of `READING_FONTS`. Not a free string: see that list. */
+export type ReadingFont = (typeof READING_FONTS)[number]['id'];
+
+/**
+ * How the document's text is set: **Appearance** (ADR 0019), which is the sheet
+ * over the reader.
+ *
+ * **Null is "follow the document", and it is the default for both.** A book that
+ * ships its own typography keeps it until the owner overrides it — an EPUB's
+ * stylesheet is part of what its publisher made, and a reader that silently
+ * replaces it has decided something nobody asked it to decide.
+ *
+ * `scale` is a percentage of what the document asked for rather than a size in
+ * points, for the same reason: the owner is saying "bigger than this book set
+ * it", not "eighteen points regardless of what it set".
+ */
+export interface Appearance {
+  font: ReadingFont | null;
+  scale: number | null;
+}
+
+/** Follow the document in both, which is what a Document is read as until the owner says otherwise. */
+export const DOCUMENT_APPEARANCE: Appearance = { font: null, scale: null };
+
+/**
+ * The percentages the sheet offers, and the bounds `appearanceCss` clamps to.
+ *
+ * There is no 100 in the list: "the size this book chose" is `null`, and a second
+ * spelling of it would be a row that looks like a choice and changes nothing —
+ * which philosophy rule 6 is about.
+ */
+export const READING_SCALES = [75, 90, 110, 125, 150, 175, 200] as const;
+const MIN_SCALE = 50;
+const MAX_SCALE = 400;
+
+/**
+ * Appearance as CSS, or the empty string where the document's own typography is
+ * being followed.
+ *
+ * Two rules at most, and they are the two the sheet offers. It cannot produce a
+ * third: the font is looked up in `READING_FONTS` rather than interpolated, and
+ * the size is a number that is clamped — so nothing an owner could type reaches
+ * a stylesheet, and in particular **nothing here can declare `user-select`**,
+ * which silently stops `::highlight()` from painting (see `SELECTABLE`). That is
+ * asserted in `test/renderer/rules.test.ts` rather than left to care.
+ *
+ * `!important` because an EPUB's own stylesheet is loaded into the same document
+ * and is as entitled to `p { font-family: … }` as this is; the owner's override
+ * is the later word and has to win. `html` carries the size and `body` is pinned
+ * to the root's rather than scaled again — a percentage resolves against the
+ * parent's computed size, so a second percentage would multiply, and a book that
+ * sets a size on `body` would otherwise keep it.
+ *
+ * **What it cannot do, stated rather than discovered:** a book that sets an
+ * absolute size on its paragraphs rather than on its body keeps that size, because
+ * an inherited root size is not what those paragraphs are reading. Neither of the
+ * two books this was measured against does (`notes/NOTES_2026-09-20.md`).
+ */
+export function appearanceCss(appearance: Appearance): string {
+  let css = '';
+  if (appearance.scale !== null && Number.isFinite(appearance.scale)) {
+    const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(appearance.scale)));
+    css += 'html { font-size: ' + scale + '% !important; }\n' + 'body { font-size: 100% !important; }\n';
+  }
+  const font = READING_FONTS.find((one) => one.id === appearance.font);
+  // The descendants too, and not only the two roots: `font-family` inherits, so a
+  // book with `div { font-family: … }` in its own stylesheet — which the owner's
+  // novel has — would keep its own face everywhere the text actually is.
+  if (font) css += 'html, body, body * { font-family: ' + font.stack + ' !important; }\n';
+  return css;
+}
 
 /**
  * **`user-select: none` stops `::highlight()` painting, silently.** Measured on a
@@ -164,7 +268,10 @@ export function highlightCall(message: HighlightMessage): string {
  * `@epubjs-react-native/core` injects `injectedJavascript` from its `onReady`
  * handler and a book that reports ready twice would otherwise get two loops.
  */
-export function highlighterSource(styles: HighlightStyles = DEFAULT_HIGHLIGHT): string {
+export function highlighterSource(
+  styles: HighlightStyles = DEFAULT_HIGHLIGHT,
+  appearance: Appearance = DOCUMENT_APPEARANCE,
+): string {
   const constants =
     'var WORD = ' + JSON.stringify(WORD_HIGHLIGHT) + ';\n' +
     'var UTTERANCE = ' + JSON.stringify(UTTERANCE_HIGHLIGHT) + ';\n' +
@@ -173,6 +280,13 @@ export function highlighterSource(styles: HighlightStyles = DEFAULT_HIGHLIGHT): 
     'var TAP = ' + JSON.stringify(TAP_MESSAGE) + ';\n' +
     'var PROBLEM = ' + JSON.stringify(PROBLEM_MESSAGE) + ';\n' +
     'var CSS_TEXT = ' + JSON.stringify(highlightCss(styles)) + ';\n' +
+    /* The one that changes while the document is open, which is why it is a `var`
+       the Appearance message reassigns rather than another constant. The owner's
+       choice is baked in here as well as sent, so a book opened with an override
+       already set is laid out that way on its first paint instead of reflowing
+       once the message arrives. */
+    'var APPEARANCE = ' + JSON.stringify(appearanceCss(appearance)) + ';\n' +
+    'var SETTLE_FRAMES = 60;\n' +
     'var STYLE_ID = "openreader-highlight";\n';
 
   return `(function () {
@@ -311,13 +425,28 @@ ${constants}
   }
 
   function ensureStyle(doc) {
-    /* The one DOM mutation this file makes, once per document, because a
-       ::highlight() rule has to live in the document it styles. */
-    if (doc.getElementById(STYLE_ID)) return;
-    var style = doc.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS_TEXT;
-    (doc.head || doc.documentElement).appendChild(style);
+    /* The one DOM mutation this file makes, and one element per document: the
+       ::highlight() rules and the owner's Appearance are the same stylesheet
+       because they have to live in the document they style and there is no reason
+       for two. Its text is not a constant any more — Appearance changes while the
+       book is open — so this both creates and updates. */
+    var style = doc.getElementById(STYLE_ID);
+    if (!style) {
+      style = doc.createElement('style');
+      style.id = STYLE_ID;
+      (doc.head || doc.documentElement).appendChild(style);
+    }
+    var wanted = CSS_TEXT + APPEARANCE;
+    if (style.textContent !== wanted) style.textContent = wanted;
+  }
+
+  /* Every section on the page, restyled. Called when Appearance changes; a
+     section that renders afterwards gets it from adopt() like any other. */
+  function restyle() {
+    var list = rendition.getContents();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].document && list[i].document.defaultView) ensureStyle(list[i].document);
+    }
   }
 
   /* ---- tapping a word (ADR 0020) ---- */
@@ -798,6 +927,53 @@ ${constants}
     if (centre(built)) state.centred.add(doc);
   }
 
+  /* The text has reflowed under an Appearance change, so the sentence being
+     spoken is no longer where it was centred — a font change moves every line in
+     the book, and the one the owner is listening to with it.
+
+     **Not on this frame.** epub.js resizes each section's iframe from the
+     section's own ResizeObserver, whose callback is
+     \`requestAnimationFrame(this.resizeCheck.bind(this))\` — read out of the
+     bundled epub.js — so the geometry a re-centre needs is a frame or more away,
+     and centring against a box that is about to move aims at where the sentence
+     was. So the box is measured every frame until it stops moving and the
+     centring is the last measurement.
+
+     **And on every frame of the window, not once at the end.** The first version
+     waited for two frames with the same geometry and then centred once; it held
+     the Utterance to 0.758 px when the text grew and left it **4,285 px** out when
+     the text shrank, because a page can look settled for a frame while epub.js is
+     still resizing iframes and the continuous manager has yet to re-lay the views
+     out. Centring every frame converges on whatever the layout ends up doing
+     instead of guessing when to look, and it is nearly free: centre() scrolls only
+     when the move is at least a pixel, so a settled page costs one measurement a
+     frame and no scroll at all.
+
+     \`SETTLE_FRAMES\` is a cap and not a duration: it exists so that a document
+     whose layout never settles cannot hold a frame loop open. The loop leaves
+     early — three frames in which nothing moved — so its value is what a
+     pathological document costs and not what an ordinary one does. Nothing is
+     centred at all when nothing is being read: there is no Utterance to hold in
+     the middle, and scrolling a page the owner is reading with their eyes is the
+     thing ADR 0020's floating player exists not to do. */
+  function settle(left, was, still) {
+    if (!state || !state.follow) return;
+    var built = build(state.utteranceRanges);
+    var box = built ? boxOf(built) : null;
+    if (!built || !box) {
+      if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, null, 0); });
+      return;
+    }
+    /* \`box.top\` is measured in the viewport, so it stops changing exactly when
+       centre() stops scrolling — which is the convergence this waits for. */
+    var steady = was !== null && Math.abs(box.top - was) < 1 ? still + 1 : 0;
+    centre(built);
+    if (steady >= 3 || left <= 0) return;
+    window.requestAnimationFrame(function () {
+      settle(left - 1, box.top, steady);
+    });
+  }
+
   /* The page following the voice, for the Utterance now starting. \`built\` is
      what showUtterance() just painted, or null.
 
@@ -994,6 +1170,24 @@ ${constants}
          floating player exists to prevent. So the new inset applies to the next
          Utterance, and the sentence being spoken stays where it is. */
       covered = typeof message.bottomPx === 'number' && isFinite(message.bottomPx) && message.bottomPx > 0 ? message.bottomPx : 0;
+      return;
+    }
+    if (message.kind === 'appearance') {
+      /* How the text is set, from the Appearance sheet (ADR 0019). It arrives as
+         finished CSS rather than as a font and a size, so that what a rule may
+         say is decided once, on the side that can be tested — \`appearanceCss\`
+         builds it out of a fixed list and a clamped number, and in particular
+         cannot declare \`user-select\`, which would silently stop the highlight
+         painting.
+
+         The page is restyled and then re-centred, because a change that reflows
+         the text moves the sentence being spoken away from the middle. That is
+         the opposite of what the 'inset' message does above, and the difference
+         is the whole of it: the player collapsing does not move a single
+         character, and a font change moves every one of them. */
+      APPEARANCE = typeof message.css === 'string' ? message.css : '';
+      restyle();
+      settle(SETTLE_FRAMES, null, 0);
       return;
     }
     if (message.kind === 'clear') {

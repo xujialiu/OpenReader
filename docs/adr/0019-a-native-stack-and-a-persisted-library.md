@@ -133,11 +133,57 @@ reason it forbids a position in state.
 own `onReady` and before it injects the highlighter — so the first section to
 report its Blocks is the one the owner was left in rather than the cover.
 
-**What is not done:** playback does not resume *at* that Utterance. The page is
-where it was; Play starts from the first Utterance of what has rendered.
-Resolving the anchor back to an index against freshly reported Blocks is
-`resolveReadingPosition`'s job and it is not wired up, which is stated here rather
-than left to be discovered by someone who expects it.
+**Read back a second time, as the Utterance to read from.** This ADR recorded
+that it was not: "playback does not resume *at* that Utterance. The page is where
+it was; Play starts from the first Utterance of what has rendered." It now does,
+and the join is three steps with no new coordinate system in it —
+`resolveReadingPosition` turns the locator and the anchor into a place and an
+offset into that place's text, and `utteranceAt` turns an offset in a Block into
+an Utterance index, which is the same function a tapped word already goes
+through. `resolveResume` in `src/renderer/cursor.ts` is the whole of it.
+
+Four things about it that are decisions rather than plumbing:
+
+- **The Blocks are the document it resolves against.** A `ReportedBlock` already
+  carries the two halves of a `Place` — its element CFI and its verbatim text — so
+  `reportedPlaces` is a view over them and nothing is asked of the WebView. A
+  Block epub.js could give **no** CFI for is left out: two nameless Blocks would be
+  one locator meaning either of them, and an answer that cannot be named cannot be
+  reported back.
+- **It is tried on every report until it lands.** It cannot be resolved at mount —
+  the anchor is matched against Blocks and none has been reported yet — and the
+  first section to render is not always the one the position names: a cover renders
+  first and yields nothing, and the section `initialLocation` asked for arrives when
+  epub.js has displayed it. On the 2,077-section novel that is twenty seconds away.
+- **Anything else deciding where to read ends the bookmark's claim.** A press of
+  Play, a tapped word, a skip, a contents row. Without that, a position resolving
+  late would take the reading away from wherever the owner had just put it — which
+  is ADR 0008's "silent landing three paragraphs away" arriving by the back door,
+  late instead of wrong. The sentence it would have said is kept and shown at the
+  moment it is given up on, rather than shown on the first failed attempt: a book
+  that has rendered its cover and nothing else has not failed yet, and saying so
+  would be false for a second and then replaced.
+- **There is no fourth outcome.** `resolveResume` answers with an Utterance or
+  with why there is none, and the "why" carries no number at all — so no caller can
+  read a best guess off it. Starting at the first Utterance of what has rendered is
+  then a decision the screen makes openly, and says: `ReadingStatus.resume` is one
+  sentence, its own field rather than a second meaning for `note`, changing at most
+  twice in a Document's life.
+
+**What it cost, measured** (notes/NOTES_2026-09-20.md, 03:01–03:04). The fixture
+came back on Utterance 4 of 18 with the stored sentence painted and the voice
+starting on it; 仙逆 came back on Utterance 166 of 234, which is 第492章贪狼之行,
+the same index the 01:13 contents measurement reached by tapping. With the join
+mutated out, both fall back to exactly what this ADR recorded: the page in the
+right place, `utterance` null, "18 Utterances ready. Tap a word to read from
+there."
+
+**One thing this makes worse, and it is not new.** The cleanup on
+`engineIdentity(settings)` clears `atRef`, so choosing a different Provider or
+Voice discards where the reading had been pointed — including a place it had just
+resumed to. That was true of a tapped word before today and is simply worth more
+now. Not changed here: the cleanup is the one place the audio session is given
+back, and moving what it clears belongs to whoever next touches it.
 
 ## The Library shows a quotation, not a percentage
 

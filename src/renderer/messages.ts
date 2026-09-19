@@ -324,4 +324,36 @@ export interface InsetMessage {
   bottomPx: number;
 }
 
-export type HighlightMessage = SpeakMessage | CorrectMessage | HoldMessage | ClearMessage | InsetMessage;
+/**
+ * How the document's text is set: the owner's **Appearance** (ADR 0019), as the
+ * stylesheet the WebView installs.
+ *
+ * It carries finished CSS rather than a font and a size, and that is the
+ * decision. What a rule may say is then settled in one place, on the side that
+ * can be tested: `appearanceCss` builds it from a fixed list of font stacks and
+ * a clamped percentage, so nothing an owner chose can become a declaration of
+ * its own — and in particular nothing here can declare `user-select`, which
+ * silently stops `::highlight()` from painting (`highlighter.ts`). The WebView
+ * half puts the string in a `<style>` element and never reads it.
+ *
+ * It is a message and not part of the program's own source because the program
+ * is installed **once**, at page load: `injectedJavascript` is evaluated when the
+ * WebView loads and the program refuses a second installation, so a source string
+ * rebuilt for a new font would change nothing at all on a book that is already
+ * open (`notes/NOTES_2026-09-20.md`, 01:01). The owner's current choice is baked
+ * into that source *as well*, so a book opened with an override set is laid out
+ * that way on its first paint.
+ */
+export interface AppearanceMessage {
+  kind: 'appearance';
+  /** CSS declarations for the document's roots, or the empty string to follow the document's own typography. */
+  css: string;
+}
+
+export type HighlightMessage =
+  | SpeakMessage
+  | CorrectMessage
+  | HoldMessage
+  | ClearMessage
+  | InsetMessage
+  | AppearanceMessage;

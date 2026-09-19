@@ -110,6 +110,14 @@ a position correction is sent about **once a second** for drift.
 One message per second, not one per word. The scroll that keeps the Utterance
 centred rides on the first of those two and adds no third.
 
+Two other messages cross, and neither is on the frame path: how much of the page
+the player is covering, which is the centring's own input (ADR 0020), and the
+owner's **Appearance** — the font and size the document is set in, as a
+stylesheet the program installs (ADR 0021). Appearance is a message and not a
+rebuilt program because `injectedJavascript` is evaluated at page load and the
+program refuses a second installation, so a new source string would change
+nothing on a book that is already open.
+
 The clock those corrections carry is the source node's own content position — see
 [`../playback/`](../playback/) and ADR 0012 for why the audio context's clock is
 the wrong one to read despite looking like the obvious choice.
@@ -141,9 +149,9 @@ The split is where the platform is, and it is the whole of the test strategy.
 
 | Runs under Node, tested in `test/renderer/` | |
 | --- | --- |
-| `cursor.ts` | A Word Timing into a place in the document, and which word is current at time *t*. Three coordinate systems and every decision the renderer makes. |
+| `cursor.ts` | A Word Timing into a place in the document, and which word is current at time *t*. Three coordinate systems and every decision the renderer makes — plus the two walks back along that chain, a tapped point and a stored Reading Position, into the Utterance to read from. |
 | `blocks.ts` | The Blocks the WebView has reported, in reading order — sections arrive out of it and more than once. |
-| `messages.ts` | The protocol between the two halves. Types, and the three message names that must not collide with the library's own. |
+| `messages.ts` | The protocol between the two halves. Types, and the four message names that must not collide with the library's own. |
 
 | Runs in Safari's JavaScript, not tested here | |
 | --- | --- |

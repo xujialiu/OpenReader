@@ -19,6 +19,10 @@
  */
 
 import { COMPATIBLE_LABEL } from '../core/providers/compatible';
+// The renderer's, because it is the renderer that paints it — and imported from
+// the file rather than from the directory's index, which would drag the bridge
+// and React Native into a module whose whole point is that neither is here.
+import { DOCUMENT_APPEARANCE, type Appearance } from '../renderer/highlighter';
 import type { ProviderDeps, ProviderSettings } from '../core/providers/factory';
 import { getLocalEngine, LOCAL_ENGINES } from '../core/providers/local/registry';
 import type { ProviderId } from '../core/providers/types';
@@ -141,6 +145,17 @@ export interface AppSettings {
   voice: string;
   /** The reading speed. Applied at playback and nowhere else; a Provider is never asked for it (ADR 0009). */
   rate: number;
+  /**
+   * How the document's text is set: the **Appearance** sheet (ADR 0019).
+   *
+   * **Per app and not per Document**, which is the one thing about it that could
+   * have gone either way. A Voice belongs to a document (ADR 0010) because it is
+   * a property of *that book being read*; how big the text is belongs to the
+   * owner's eyes, and they do not change between books. The cost is that a book
+   * whose own typography the owner liked has to be put back by hand — which is
+   * what "follow the document" being the default makes rare.
+   */
+  appearance: Appearance;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -154,6 +169,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   local: { engine: LOCAL_ENGINES[0].id, baseURL: LOCAL_ENGINES[0].defaultBaseURL },
   voice: '',
   rate: 1.5,
+  // Follow the document, in both. A book that ships its own typography keeps it
+  // until the owner overrides it (`highlighter.ts`'s `Appearance`).
+  appearance: DOCUMENT_APPEARANCE,
 };
 
 /**
@@ -354,7 +372,10 @@ export function providerSettings(settings: AppSettings, secrets: ProviderSecrets
  * Voice is fixed for an engine's lifetime (ADR 0010) — so the engine is thrown
  * away and built again. The rate is deliberately absent: it is a live parameter
  * of the graph (`setRate`) and putting it here would rebuild the engine, and
- * re-spend the quota, every time the owner nudged the speed.
+ * re-spend the quota, every time the owner nudged the speed. The Appearance is
+ * absent for a stronger reason: it is not the engine's at all. It changes what
+ * the page looks like and not one character of what is spoken, so an engine
+ * rebuilt for it would re-spend the quota to change a font.
  */
 export function engineIdentity(settings: AppSettings): string {
   return JSON.stringify([

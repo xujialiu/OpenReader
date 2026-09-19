@@ -246,6 +246,60 @@ held three books and nothing was synced (`src/core/sync/` is empty), so they are
 re-added. Doing this after positions have synced between devices would have cost
 a great deal more, which is why it was done at once rather than scheduled.
 
+**Amended: they are renamed, not re-added, because re-adding loses the place.**
+"Re-added" is cheap to write and it is not free to do. A re-added book is a *new*
+entry with `position: null`; the owner's place is on the old entry, which nothing
+will ever match again, so the shelf ends with two rows for one book and the row
+that knows where the reading got to can never be opened at it. Losing a place is
+the one failure this project is named after.
+
+Renaming keeps the entry and everything on it — the Reading Position, the title
+epub.js read out of the book, the Voice — and moves only its id. Nothing is
+re-read, re-picked or hashed at 34 MB: the bytes are already on disk under the old
+name and the new name is a pure function of them. `src/app/document-ids.ts`
+decides and `src/app/library.ts` performs.
+
+**Which rule the files were named under is a fourth file, `Documents/library-id-rule`.**
+It has to be outside the Library file, and not by preference: the paragraph above
+says an id from the old rule "has exactly the shape of one from this rule and
+cannot be told apart from it", so nothing *inside* the Library could ever say which
+rule named an entry. It is device-local, like `this-device`, because it describes
+the files on this disk. Absent means unknown, which is what a Library written
+before it existed looks like. It is also what makes this self-maintaining: the next
+change to `DOCUMENT_ID_RULE` makes the recorded rule stop matching, and the
+migration runs again by itself.
+
+**Two entries can collapse into one.** The old rule was a digest of the whole file,
+so the same book repacked at another compression level had two ids and could sit
+on the shelf twice — the table above, three files and one id, arriving on the
+shelf. The newer **Stamp** wins, which is the rule the Library already sorts and
+merges by. The loser's file is moved too, and moved **first**, so that the
+survivor's own bytes are what is left at the destination and nothing is orphaned
+on disk under a name nothing names.
+
+**The order, and what a crash in the middle costs.** Identify everything, then move
+every file, then write the Library **once**. Identifying is the slow part and
+changes nothing, so a crash during it leaves the Library as it was and the
+migration runs again. What is left is a window between the first move and the
+Library write, which is a handful of `rename` calls wide. A crash inside it leaves
+an entry naming a file now stored under its new name: the Library screen says "The
+file for this book is not on this device any more", the bytes are still there, and
+adding the book again re-attaches them at the cost of that one book's position. A
+journal file would close the window and was not built — a second file and a second
+set of failures to reason about, to protect a few microseconds of a migration that
+runs once per change to a rule that has changed once.
+
+It refuses to run at all on a Library this build may not write — ADR 0003's frozen
+file, or one carrying keys this parser does not know — because renaming the files
+of a Library that cannot be rewritten points every migrated entry at nothing. The
+rule file is then left unwritten, so an updated build finds the work still to do.
+
+**Measured on the device** (notes/NOTES_2026-09-20.md, 03:00 and 03:24): **101 ms**
+over five entries including the 34 MB novel, **89–92 ms** over three, and **1 ms**
+on every launch after the first, where the recorded rule matches and not one byte
+is read. Against ADR 0019's 14,362 ms for a single whole-file hash, the whole shelf
+now costs less than a tenth of a second, once.
+
 **The `sha256:` prefix stays, and it does not distinguish the two rules.** An id
 from the old rule has exactly the shape of one from this rule, so an old entry in
 the Library file parses, opens the file it names, and is simply never matched by a

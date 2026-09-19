@@ -49,6 +49,18 @@ owner would find that a place kept on the phone lands slightly off on the
 computer — and the drift would grow the further into a document they were, so the
 feature would be least reliable exactly where a long novel makes it most valuable.
 
+## Coming back to the sentence, and not just to the page
+
+For a while the app did half of this and looked like it did all of it. Opening a
+book went to the right page, with the right paragraph in the middle of the screen
+— and then pressing play started reading from the top of the chapter. Everything
+the owner could see was right, so the failure only announced itself in the one
+moment it mattered, out loud, in the wrong place.
+
+Both halves are now done, and they are one thing rather than two: the app comes
+back to the sentence it stopped on, shows it marked before anything is played, and
+says in one line that it did. Pressing play reads that sentence.
+
 ## What this costs
 
 Two things stored per document instead of one, and a slower resume in the case
@@ -58,6 +70,15 @@ And a failure the owner will occasionally see: sometimes the app will say it is 
 sure where they were. That is the decision working, not a defect, and it follows
 the rule the whole project is held to — the app never invents a fact it does not
 have.
+
+There is one more, and it is a race rather than a refusal. A very long book takes
+time to lay out the part the place is in — twenty seconds or so for the owner's
+own novel — and until it has, there is nothing to match the saved words against.
+If the owner presses play, taps a word or picks a chapter before that, the app
+reads from there and says that the saved place had not arrived yet. It does not
+wait, and it does not quietly move the reading once the place turns up: being
+dragged somewhere else a few seconds after you asked to start is worse than
+starting where you asked.
 
 ## The retreat, if the crossing turns out not to work
 
