@@ -4,6 +4,7 @@ import {
   CONCURRENT_FETCHES,
   enqueueCeiling,
   fetchWindow,
+  hasRunOut,
   READ_AHEAD_UTTERANCES,
   type UtteranceState,
 } from '../../src/playback/read-ahead';
@@ -108,5 +109,44 @@ describe('enqueueCeiling', () => {
     // and enqueued in one pass: the whole book in memory as float samples.
     const window = fetchWindow({ cursor: 0, total: 5000, inFlight: 0, stateOf: nothing(), concurrency: 5000 });
     expect(Math.max(...window)).toBe(enqueueCeiling(0));
+  });
+});
+
+/**
+ * Running out of text, told apart from waiting for some.
+ *
+ * Inside the engine the two are indistinguishable — footgun 3: a drained buffer
+ * queue renders silence and stays in the playing state either way. One ends by
+ * itself and the other never does, and on 2026-09-20 at 04:43 the second was
+ * six minutes of silence with the app still reporting `playing`.
+ */
+describe('hasRunOut', () => {
+  /** Everything spoken, the queue consumed, nothing outstanding, still playing. */
+  const exhausted = { playing: true, nextToEnqueue: 108, total: 108, queued: 0, fetching: 0 };
+
+  it('is the state the 04:43 reading sat in', () => {
+    expect(hasRunOut(exhausted)).toBe(true);
+  });
+
+  it('is not a pause, which empties nothing and means nothing', () => {
+    expect(hasRunOut({ ...exhausted, playing: false })).toBe(false);
+  });
+
+  it('is not a queue that has simply not caught up', () => {
+    expect(hasRunOut({ ...exhausted, nextToEnqueue: 107 })).toBe(false);
+  });
+
+  it('is not a sentence still waiting to be heard', () => {
+    expect(hasRunOut({ ...exhausted, queued: 1 })).toBe(false);
+  });
+
+  it('is not a Provider being slow, which is a stall that ends by itself', () => {
+    expect(hasRunOut({ ...exhausted, fetching: 1 })).toBe(false);
+  });
+
+  it('is true again after the list grew and was spoken through', () => {
+    // What `extend` arms: more text, read to the end of *that*, and it is the
+    // same state again rather than a thing that can only be said once.
+    expect(hasRunOut({ ...exhausted, nextToEnqueue: 130, total: 130 })).toBe(true);
   });
 });

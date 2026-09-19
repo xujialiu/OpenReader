@@ -73,7 +73,11 @@ From notes/NOTES.md. Each fails in a way that looks like something else.
    state and resumes on the next buffer, as long as `stop()` and `pause()` are
    never called. But do **not** call `suspend()` while backgrounded: a stopped
    engine under an active playback session is what puts the app at risk of being
-   suspended.
+   suspended. **And because it is safe, it is silent**: running out of text and
+   waiting for a Provider look identical from in here, one of them ends by itself
+   and the other never does, and the second was six minutes of silence with the
+   app still reporting `playing` (ADR 0023). `onOutOfText` says which it is, on
+   `read-ahead.ts`'s four conditions.
 4. **Never call the library's `PlaybackNotificationManager` on iOS** — see
    [`../now-playing/`](../now-playing/) and ADR 0016. If `show()` is never
    called, the library never claims the command centre, and there is no contest
@@ -108,7 +112,7 @@ The split is where the platform is, and it is the whole of the test strategy.
 | `timeline.ts` | The content position as "so far into Utterance 41". ADR 0012's argument, in arithmetic. |
 | `rate.ts` | The playback rate, and everything that has to be scaled by it — above all the Word Timings. The stepper of ADR 0020 is here too, on an integer grid. |
 | `navigation.ts` | The four skip targets (ADR 0020). Six controls are six ways of naming one Utterance, so each is an index handed to the `seek` that already exists. |
-| `read-ahead.ts` | Three Utterances ahead, two fetches at a time, as one pure function. |
+| `read-ahead.ts` | Three Utterances ahead, two fetches at a time, as one pure function — and the four conditions that tell running out of text from waiting for some. |
 | `gap.ts` | The gap timer, which here is silence appended to the Utterance's own buffer. |
 | `pcm.ts` | 16-bit little-endian mono into float samples, and the one resampling. |
 | `clip-cache.ts` | Provider + Voice + text, and never speed. |

@@ -216,3 +216,78 @@ describe('the directory boundaries', () => {
     expect(allCode()).not.toMatch(/\bspeed\b\s*:/);
   });
 });
+
+describe('footgun 3 again: the engine says when the silence is permanent', () => {
+  /**
+   * The other half of footgun 3, and the one it took a device run to see. A drained
+   * queue renders silence and stays in the playing state — which is right, and which
+   * means running out of text and waiting for a Provider look identical from inside
+   * the engine. On 2026-09-20 at 04:43 the first of those lasted six minutes with the
+   * app reporting `playing=true` and saying nothing.
+   */
+  const engine = code('engine.ts');
+
+  /** One member of the returned object, from its opening line to the `},` that closes it. */
+  const member = (name: string): string => {
+    const start = engine.indexOf(name);
+    if (start < 0) throw new Error('engine.ts has no ' + name);
+    const end = engine.indexOf('\n    },', start);
+    if (end < 0) throw new Error('no close after ' + name);
+    return engine.slice(start, end);
+  };
+
+  it('asks after every pump, which is where a consumed buffer lands', () => {
+    // `onBufferEnded` ends in `pump()`, and the last buffer ending is the moment
+    // there is nothing left. Asking anywhere else would be asking before the queue
+    // was empty or not at all.
+    expect(engine).toMatch(/function pump\(\): void \{[\s\S]*?void drain\(\);\s*outOfText\(\);\s*\}/);
+    expect(engine).toMatch(/function onBufferEnded\([\s\S]*?pump\(\);\s*\}/);
+  });
+
+  it('decides with read-ahead.ts’s four conditions rather than its own', () => {
+    expect(engine).toContain('if (!hasRunOut(state)) return;');
+    expect(engine).toContain('deps.onOutOfText?.(utterances.length);');
+  });
+
+  it('says it once, and is armed again by anything that gives the engine somewhere to go', () => {
+    // Without the guard it would fire on every pump for as long as the silence
+    // lasted — a sentence that arrives once is a report, one that arrives forty
+    // times a minute is noise nobody reads.
+    expect(member('function outOfText()')).toContain('if (announced || disposed) return;');
+    expect(member('function restart(')).toContain('announced = false;');
+    expect(member('extend(list) {')).toContain('if (list.length > utterances.length) announced = false;');
+  });
+});
+
+describe('a longer Utterance list restarts nothing (notes/NOTES_2026-09-20.md, 04:43)', () => {
+  const engine = code('engine.ts');
+  const extend = engine.slice(engine.indexOf('extend(list) {'), engine.indexOf('\n    },', engine.indexOf('extend(list) {')));
+
+  it('slices the member this section is about, and no more', () => {
+    expect(extend).toContain('extend(list) {');
+    expect(extend).not.toContain('play()');
+    expect(extend).not.toContain('load(list, from = 0)');
+  });
+
+  it('never clears the queue, re-anchors the clock or invalidates a fetch', () => {
+    // `load` does all three, and that is why the app used to hold a longer list back
+    // until the next Clip boundary — a boundary that is itself a Clip starting, and
+    // so one that never comes when the engine has run out. Restarting here would put
+    // the deadlock back and restart the sentence being spoken on the way.
+    expect(extend).not.toContain('restart(');
+    expect(extend).not.toContain('generation++');
+    expect(extend).not.toContain('timeline.reset()');
+    expect(extend).not.toContain('graph?.clear()');
+  });
+
+  it('takes the longer list and lets the read-ahead walk into it', () => {
+    expect(extend).toContain('utterances = list;');
+    expect(extend).toContain('pump();');
+  });
+
+  it('leaves load destructive, because the renumbering case needs it to be', () => {
+    // A document that rendered out of reading order renumbers every index the queue
+    // and the WebView are holding; there the clearing is the point.
+    expect(engine.slice(engine.indexOf('load(list, from = 0) {'))).toMatch(/load\(list, from = 0\) \{[\s\S]*?generation\+\+;[\s\S]*?restart\(from\);/);
+  });
+});

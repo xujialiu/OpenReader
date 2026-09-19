@@ -80,6 +80,46 @@ export function fetchWindow(input: FetchWindowInput): number[] {
   return start;
 }
 
+/** What the engine knows about itself when it asks whether there is anything left to play. */
+export interface RunOutInput {
+  /** Whether the reading is running. A paused engine with an empty queue is a pause, which is not news. */
+  playing: boolean;
+  /** The next Utterance the queue would take. Equal to `total` once every one of them is on it. */
+  nextToEnqueue: number;
+  /** How many Utterances the engine holds. */
+  total: number;
+  /** Buffers enqueued and not yet consumed. */
+  queued: number;
+  /** Synthesis requests in flight. */
+  fetching: number;
+}
+
+/**
+ * Whether the reading has run out of text, as opposed to waiting for some.
+ *
+ * The distinction is the whole of this function and it is not obvious from
+ * inside the engine, because **the two look identical there**: a drained buffer
+ * queue renders silence and stays in the playing state either way
+ * (notes/NOTES.md footgun 3). One of them fixes itself a second later and the
+ * other never does, and telling the owner the wrong one is either a sentence
+ * that flashes up at every slow Provider response or six minutes of silence with
+ * nothing said (notes/NOTES_2026-09-20.md, 04:43).
+ *
+ * All four conditions, and each rules out an ordinary moment:
+ *
+ * - **Playing.** A pause empties nothing but means nothing either.
+ * - **Everything enqueued.** Short of that the queue simply has not caught up.
+ * - **The queue consumed.** A buffer still on it is a sentence still to be heard.
+ * - **Nothing in flight.** A fetch outstanding is a Provider being slow, which is
+ *   a stall the reader hears and which ends by itself.
+ */
+export function hasRunOut(input: RunOutInput): boolean {
+  if (!input.playing) return false;
+  if (input.nextToEnqueue < input.total) return false;
+  if (input.queued > 0) return false;
+  return input.fetching === 0;
+}
+
 /**
  * The last Utterance the queue may hold a buffer for, given where the reading
  * is. The same bound as the fetch window, applied to enqueueing rather than

@@ -141,10 +141,10 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
   });
 
   it('anchors the engine at the resumed Utterance before the longer list is adopted', () => {
-    // `adopt` re-anchors the engine at `atRef` (`engine?.load(next, atRef.current ?? 0)`),
-    // so setting it afterwards loads the engine at the old position and then seeks —
-    // which fetches a Clip nobody is waiting for, at the owner's expense. The
-    // contents tap two branches below has the same ordering for the same reason.
+    // The Utterance being seeked to exists only in the new list, so `adopt` has to
+    // have handed it to the engine before `seekTo` names it — seeking into the old
+    // list lands somewhere else entirely. The contents tap two branches below has
+    // the same ordering for the same reason.
     const resume = within(code('use-reading.ts'), 'const stored = resumeRef.current;', 'resumeLostRef.current = resumeSentence(found);');
     expect(resume.indexOf('atRef.current = found.utterance;')).toBeLessThan(resume.indexOf('adopt(next);'));
     expect(resume.indexOf('adopt(next);')).toBeLessThan(resume.indexOf('seekTo(found.utterance);'));
@@ -159,5 +159,52 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     expect(within(reading, 'const seekTo = useCallback(', '}, [sectionOf')).toContain('abandonResume();');
     expect(within(reading, 'const play = useCallback(', '}, [build, report, walkForward')).toContain('abandonResume();');
     expect(within(reading, 'const abandonResume = useCallback(', '}, []);')).toContain('resumeRef.current = null;');
+  });
+});
+
+describe('a section that arrives mid-reading reaches the engine at once (notes/NOTES_2026-09-20.md, 04:43)', () => {
+  /**
+   * The list used to be held back until the next Clip boundary, because the only
+   * way to give the engine a new one was the destructive `load`. The boundary is a
+   * Clip *starting*, and no Clip starts when the engine has run out of text — so
+   * the one moment a longer list was most needed was the one moment it could never
+   * be applied. `extend` restarts nothing, so there is nothing left to wait for.
+   */
+  const reading = code('use-reading.ts');
+
+  it('hands a longer list over through extend, not load', () => {
+    const adopt = within(reading, 'const adopt = useCallback(', '}, []);');
+    expect(adopt).toContain('engine?.extend(next);');
+    // The one `load` left is the renumbering branch, where clearing is the point.
+    expect(adopt).toContain('engine?.load(next, 0);');
+    expect(adopt.indexOf('engine?.load(next, 0);')).toBeLessThan(adopt.indexOf('engine?.extend(next);'));
+  });
+
+  it('holds nothing back for a Clip boundary', () => {
+    // The whole deferral, gone: a ref to park the list in, and the effect that
+    // applied it when `status.utterance` changed. Either one back is the deadlock
+    // back, and it would not fail — it would go quiet.
+    expect(reading).not.toContain('pendingRef');
+    expect(reading).not.toMatch(/useEffect\([^)]*\[status\.utterance, adopt\]\)/);
+  });
+
+  it('is told when the engine has nothing left, and stops only at the end of the book', () => {
+    // The engine cannot stop itself: a drained queue renders silence and stays in
+    // the playing state (notes/NOTES.md footgun 3). Stopping anywhere but the last
+    // spine item would stop a reading that is about to be fed.
+    expect(reading).toContain('onOutOfText: ranOutOfText,');
+    const ranOut = within(reading, 'const ranOutOfText = useCallback(', '}, []);');
+    expect(ranOut).toContain('outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0)');
+    expect(ranOut).toContain('if (ended) {');
+    expect(ranOut).toContain('engineRef.current?.pause();');
+    expect(ranOut).toContain('playing: ended ? false : was.playing');
+  });
+
+  it('marks the furthest section reported, not the last one to report', () => {
+    // Sections render out of order, so the last to report is routinely behind the
+    // furthest — and a document's last spine items are where the sections that
+    // render with no text in them live.
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, seekTo],');
+    expect(blocks).toContain('furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);');
   });
 });

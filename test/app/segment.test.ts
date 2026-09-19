@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Block } from '../../src/core/segmenter';
-import { documentLanguage, firstUtteranceOfSection, samePrefix, segmentDocument } from '../../src/app/segment';
+import { documentLanguage, firstUtteranceOfSection, outOfTextSentence, samePrefix, segmentDocument } from '../../src/app/segment';
 
 /**
  * The splitter is bound here and nowhere else (ADR 0006), and the app segments
@@ -102,5 +102,44 @@ describe('firstUtteranceOfSection', () => {
     // read; the owner's book has thirteen of them. The page still moves there.
     expect(firstUtteranceOfSection(utterances, sectioned, 1)).toBeNull();
     expect(firstUtteranceOfSection([], sectioned, 3)).toBeNull();
+  });
+});
+
+/**
+ * The two ends of a reading, which are not the same thing to say.
+ *
+ * On 2026-09-20 at 04:43 the reading stopped at the end of the sections epub.js
+ * had rendered, with 2,073 of the owner's 2,077 spine items still ahead of it,
+ * and said nothing at all. Now it says something — and the sentence has to be the
+ * right one of two, because "that was the last of this document" on a book with
+ * two thousand chapters left in it would be a worse lie than the silence.
+ */
+describe('outOfTextSentence', () => {
+  it('is the end of the book at the last spine item', () => {
+    const answer = outOfTextSentence(11, 12);
+    expect(answer.ended).toBe(true);
+    expect(answer.sentence).toContain('the end of the book');
+  });
+
+  it('is not the end of the book with sections still to render', () => {
+    // The 04:43 state: spine item 4 of 2,077.
+    const answer = outOfTextSentence(4, 2077);
+    expect(answer.ended).toBe(false);
+    expect(answer.sentence).toContain('waiting for more of it');
+    expect(answer.sentence).not.toContain('the end of the book');
+  });
+
+  it('is never the end of a document that has not said how long it is', () => {
+    // The spine arrives in its own message and is zero until it does. A document
+    // of unknown length is not a document that has finished.
+    expect(outOfTextSentence(-1, 0).ended).toBe(false);
+    expect(outOfTextSentence(40, 0).ended).toBe(false);
+  });
+
+  it('reads the furthest section reported, not a count of sections with text in them', () => {
+    // A colophon that rendered and held nothing still moves the furthest mark, and
+    // the end of a book is exactly where those live.
+    expect(outOfTextSentence(2076, 2077).ended).toBe(true);
+    expect(outOfTextSentence(2075, 2077).ended).toBe(false);
   });
 });

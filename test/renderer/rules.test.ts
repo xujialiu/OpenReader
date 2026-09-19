@@ -688,3 +688,135 @@ describe('what was read out of @epubjs-react-native/core rather than its documen
     expect(code('reader-bridge.ts')).toContain('injectJavascript, goToLocation } = useReader()');
   });
 });
+
+describe('the reading is fed by the reading, not by the scroll (notes/NOTES_2026-09-20.md, 04:43)', () => {
+  /**
+   * The chain that closed on itself: more text needs epub.js to render the next
+   * spine item; the continuous manager appends one when its own `onScroll` finds
+   * the scroll within `settings.offset` of the bottom; and the only thing that
+   * scrolls while a book is read aloud is `centre()`, which stops at the sentence
+   * being spoken. On a document whose sections are taller than their text the
+   * reading therefore ran out with the rest of the book unrendered, and nothing
+   * was left that would make more.
+   */
+  const program = highlighterSource();
+  const ahead = fn(program, 'renderAhead');
+
+  it('slices the function this section is about, and no more', () => {
+    // The whole-file-search trap: every assertion below is scoped to renderAhead,
+    // so the slice itself is the thing that has to be right.
+    expect(ahead).toContain('function renderAhead(section) {');
+    expect(ahead).not.toContain('function covers(');
+    expect(ahead).not.toContain('function follow(');
+  });
+
+  it('is driven by the Clip cue, adding nothing to the bridge (ADR 0011)', () => {
+    // The property ADR 0011 states of the centring, and the reason it states it:
+    // the cue already arrives once per Utterance, so this costs no message.
+    const speak = program.slice(program.indexOf("message.kind === 'speak'"), program.indexOf("message.kind === 'correct'"));
+    expect(speak).toContain('renderAhead(sectionSpoken(message.utteranceRanges));');
+  });
+
+  it('first reports what is already on the page, because the library\u2019s event does not always arrive', () => {
+    // Measured on the owner's book at 05:31, in the state the 04:43 reading died
+    // in: views [3, 4d, 5d], section 5 holding a live document, `known` still 108
+    // and section 5 never adopted. `liveContents` adopts only the section it is
+    // asked about, and nothing asks about a section the reading has not reached.
+    const speak = program.slice(program.indexOf("message.kind === 'speak'"), program.indexOf("message.kind === 'correct'"));
+    expect(speak).toContain('sweep();');
+    expect(speak.indexOf('sweep();')).toBeLessThan(speak.indexOf('renderAhead('));
+  });
+
+  it('asks for one section, the one after the voice, through epub.js’s own next()', () => {
+    // Never a spine index of our own: `section.next()` is the call the manager's
+    // own check() makes, and it is what knows about a spine item that is not linear.
+    expect(ahead).toContain('var next = last.section.next();');
+    expect(ahead).not.toContain('book.spine.get(');
+  });
+
+  it('only when that section is the manager’s last view', () => {
+    // The view list is a contiguous run of spine items — append and prepend are the
+    // only things that extend it — so appending out of order would put the wrong
+    // text under the reader's thumb.
+    expect(ahead).toContain('if (!last || !last.section || last.section.index !== section) return;');
+  });
+
+  it('once per section, ever', () => {
+    // Load-bearing rather than tidy: the manager trims the view again within a
+    // second or two (ADR 0011 keeps three alive), so without this the same chapter
+    // would be fetched and parsed once per Utterance. `bySection` is the durable
+    // half and `asked` covers the window before the Blocks are reported.
+    expect(ahead).toContain('if (!next || bySection.has(next.index) || asked.has(next.index)) return;');
+    expect(ahead).toContain('asked.add(next.index);');
+    expect(program).toContain('var asked = new Set();');
+  });
+
+  it('appends through the manager’s own queue, which is what stops it racing update()', () => {
+    // Measured 2026-09-20 05:09: appended and displayed straight away, the view was
+    // taken apart by the update() a scroll had already scheduled, before its iframe
+    // had loaded — no `iframe`, `displayed` false, its promise never settling and no
+    // Blocks ever reported. epub.js's own check() appends, displays and updates
+    // inside one queued task.
+    expect(ahead).toContain('manager.q.enqueue(function () {');
+    expect(ahead).toContain('return manager.append(next).display(manager.request);');
+  });
+
+  it('sweeps itself, because epub.js’s rendered event does not arrive for this', () => {
+    // Watched for five seconds at 05:13 while the view reached `displayed`, held a
+    // live document and a paragraph, and this program had not adopted it. Same gap
+    // the 'relocated' sweep covers, same answer.
+    expect(ahead).toContain('}).then(sweep, function (error) {');
+  });
+
+  it('forgets a section it could not render, so the next cue tries again', () => {
+    // "Once per section, ever" is right for a section that rendered. Applied to one
+    // that failed it would be this defect again, one section further on: a reading
+    // stopped for good with nothing left that would ever produce more.
+    expect(ahead).toContain('asked.delete(next.index);');
+    expect(ahead.indexOf('asked.add(next.index);')).toBeLessThan(ahead.indexOf('asked.delete(next.index);'));
+  });
+
+  it('does not move the page', () => {
+    // Rendering ahead is not navigation. `rendition.display()` under the continuous
+    // manager clears every view and rebuilds from the target; it belongs to follow(),
+    // where the reading has actually arrived somewhere.
+    expect(ahead).not.toContain('rendition.display(');
+    expect(ahead).not.toContain('scrollBy');
+    expect(ahead).not.toContain('goToLocation');
+  });
+
+  it('leaves the scroll that makes the manager render, with its ignore flag off', () => {
+    // Whatever else changes, this must not: `centre()` reaches epub.js as a finger
+    // scroll does, which is what makes it append the section the reading is walking
+    // into. A scroll it was told to ignore renders nothing new.
+    expect(fn(program, 'centre')).toContain('rendition.manager.scrollBy(0, move, false)');
+  });
+});
+
+describe('a section the page has not reached is not a highlight that failed', () => {
+  const program = highlighterSource();
+
+  it('is silent only when the caller is about to bring the section on to the page', () => {
+    // Since renderAhead this happens at every section boundary of a document whose
+    // sections are taller than their text, and follow() answers it by displaying the
+    // section — so calling it a highlight that could not be drawn would leave that
+    // sentence standing while the highlight was, in fact, drawn a moment later.
+    expect(fn(program, 'showUtterance')).toContain(
+      'if (!coming || !offPage(state.utteranceRanges)) report(why(state.utteranceRanges));',
+    );
+    const speak = program.slice(program.indexOf("message.kind === 'speak'"), program.indexOf("message.kind === 'correct'"));
+    expect(speak).toContain('var shown = showUtterance(message.reveal);');
+  });
+
+  it('still reports every other reason a highlight could not be drawn', () => {
+    // A Block nobody reported, or one the rendered section no longer holds, is a
+    // real failure — the silence that let a Range built in a dead document look
+    // correct from the inside is what the problem message exists for.
+    const off = fn(program, 'offPage');
+    expect(off).toContain('if (!record || liveContents(record.section)) return false;');
+    expect(off).toContain('if (!ranges.length) return false;');
+    // attach() asks without `coming`, because a section that has arrived and still
+    // cannot be highlighted is the real thing.
+    expect(fn(program, 'attach')).toContain('var built = showUtterance();');
+  });
+});

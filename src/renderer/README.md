@@ -44,7 +44,7 @@ own scroll container. Paginated layout, which is the library's default and what
 the highlighter was first built against, is rejected: a page turn replaces the
 whole screen and throws the eye back to the top, every minute or two, for hours.
 
-Three properties of the centring, and each is a rule rather than an accident.
+Four properties of the centring, and each is a rule rather than an accident.
 
 - **It is centred, not merely on screen.** The middle of the Utterance goes to
   the middle of the viewport, measured from the `Range`s that were just painted
@@ -63,6 +63,23 @@ Three properties of the centring, and each is a rule rather than an accident.
   checks before enqueuing the `check()` that appends the next section, so a scroll
   it was told to ignore renders nothing new and the reading would run off the end
   of the rendered text.
+- **And the scroll alone is not enough, so the reading asks** (ADR 0023). The
+  manager appends the next spine item only when the scroll comes within 500 px of
+  the bottom of everything it holds, and the only thing that scrolls while a book
+  is read aloud is that centring, which stops at the sentence being spoken. A
+  section whose text ends far above its own bottom therefore runs the reading out
+  of Utterances with the rest of the book unrendered — measured at 3,072 px of
+  section holding one line of text, the scroll at 0 and 758 px of viewport, so
+  758 + 500 never reaches the bottom. `renderAhead` asks for the section after the
+  one being spoken, on the same Clip cue and so with nothing added to the bridge,
+  through the manager's own queue — which is what stops the appended view being
+  taken apart by an `update()` before its iframe has loaded — and sweeps when its
+  display resolves, because epub.js's `rendered` does not arrive for a view
+  displayed that way. Nothing keeps it alive: the manager trims it as before, the
+  Block records survive it (`blocks.ts`), and `follow()` displays it when the
+  voice arrives. The program also sweeps on every Clip cue, because a section
+  epub.js rendered by itself could otherwise sit on the page unreported — which is
+  the state the reading of 04:43 died in.
 
 **Several sections are alive at once**, which is what continuous scrolling costs
 and what paginated layout did not. The Block records are keyed by spine index and

@@ -62,7 +62,7 @@ import {
   type ReportedDocument,
 } from '../renderer';
 
-import { documentLanguage, firstUtteranceOfSection, samePrefix, segmentDocument } from './segment';
+import { documentLanguage, firstUtteranceOfSection, outOfTextSentence, samePrefix, segmentDocument } from './segment';
 import {
   engineIdentity,
   headersAreOffered,
@@ -266,12 +266,23 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const buildingRef = useRef<Promise<PlaybackEngine | null> | null>(null);
   /** The Utterances the engine holds. Its indices are what every cue and every correction is about. */
   const loadedRef = useRef<readonly Utterance[]>([]);
-  /** Utterances a new section produced while the reading was under way. Applied at the next Clip boundary; see `adopt`. */
-  const pendingRef = useRef<readonly Utterance[] | null>(null);
   /** The Utterance being read, outside React state, so the callbacks below are never one render behind. */
   const atRef = useRef<number | null>(null);
   /** The section the renderer reported last, for the same reason: `play` reads it at the moment it is pressed. */
   const renderedRef = useRef<RenderedSection | null>(null);
+  /**
+   * The **furthest** spine item that has reported its Blocks, which is not
+   * `renderedRef`: sections render out of order and the last one to report is
+   * routinely behind the furthest one.
+   *
+   * It exists to tell the two ends of a reading apart. A reading that has run out
+   * of Utterances at the last spine item has reached the end of the book, which is
+   * an ordinary thing to say; one that has run out anywhere else has run out of
+   * *rendered* text, which is the defect of 2026-09-20 04:43 and a different
+   * sentence. Counting Block `sectionIndex`es would miss a section that rendered
+   * and held no text, and the end of a book is exactly where those live.
+   */
+  const furthestSectionRef = useRef(-1);
   /**
    * The Blocks the Utterances were segmented from — the very array the renderer
    * sent, because `UtteranceSpan.block` is an index into it.
@@ -420,18 +431,23 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * reports every Block it has, in full, each time that changes — so the book is
    * segmented again and the result is longer than what the engine holds.
    *
-   * `load` is destructive: it clears the queue and re-anchors the clock. That is
-   * why this is called at a **Clip boundary** and from an effect rather than from
-   * the cue itself — at the boundary the Clip's own offset is zero, so restarting
-   * it costs a fraction of a second and nothing in quota, because the Clip is in
-   * the memory cache (ADR 0002, philosophy rule 4). Calling it from inside
-   * `onClip` would re-enter the engine while its own `drain` is mid-await.
+   * **Handed over the moment it exists, through `extend`.** It used to be held
+   * back until the next Clip boundary, because the only way to give the engine a
+   * new list was `load`, which clears the queue and re-anchors the clock and so
+   * would restart the sentence being spoken. The price of that deferral was the
+   * defect of 2026-09-20 04:43: the boundary it waited for is a Clip *starting*,
+   * and no Clip starts when the engine has run out of text — so the one moment
+   * the longer list was most needed was the one moment it could never arrive.
+   * `extend` takes nothing out from under the engine, which is also why calling
+   * it from inside the renderer's own message handler is safe where `load` was
+   * not: `drain` may be mid-await, and there is nothing here for it to lose.
    *
    * If the prefix changed, the indices the engine and the WebView are holding
    * mean other sentences (see `samePrefix`), and the reading stops and says so.
    * A highlight three paragraphs from the voice is precisely what this project
    * exists to prevent, and guessing which sentence was meant would be an
-   * estimate (philosophy rule 1).
+   * estimate (philosophy rule 1). That is the one case that still needs the
+   * destructive `load`, and it is the case where destroying is the point.
    */
   const adopt = useCallback((next: readonly Utterance[]) => {
     const engine = engineRef.current;
@@ -455,7 +471,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       return;
     }
 
-    engine?.load(next, atRef.current ?? 0);
+    engine?.extend(next);
   }, []);
 
   /**
@@ -601,6 +617,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       bridgeRef.current?.setUtterances(next, reported);
       blocksRef.current = reported;
       renderedRef.current = section;
+      furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);
       setStatus((was) => ({ ...was, known: next.length, rendered: section }));
 
       /**
@@ -628,9 +645,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        * epub.js has displayed it. A report that fails leaves the position
        * pending and keeps its sentence for `abandonResume`.
        *
-       * The same order as the contents tap below and for the same two reasons:
-       * `adopt` re-anchors the engine at `atRef`, and the Utterance being seeked
-       * to exists only in the new list.
+       * The same order as the contents tap below and for the same reason: the
+       * Utterance being seeked to exists only in the new list, so the engine has
+       * to be holding it before anything asks to be taken there.
        */
       const stored = resumeRef.current;
       if (stored) {
@@ -640,7 +657,6 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
           resumeLostRef.current = null;
           const sentence = resumeSentence(found);
           atRef.current = found.utterance;
-          pendingRef.current = null;
           adopt(next);
           seekTo(found.utterance);
           setStatus((was) => ({ ...was, resume: sentence }));
@@ -652,33 +668,19 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       /**
        * The second step of a contents tap: the section the owner asked for has
        * rendered, so the reading can follow the page to it.
-       *
-       * The longer list is adopted **now** rather than at the next Clip boundary,
-       * which is the deferral below and the exception to it. That deferral exists so
-       * that a section arriving mid-reading does not restart the sentence being
-       * spoken; here the owner has asked to leave that sentence, so there is nothing
-       * to protect. And the Utterance being seeked to exists only in the new list —
-       * deferring would seek into the old one and land somewhere else entirely.
        */
       const wanted = pendingSectionRef.current;
       if (wanted === section.index) {
         pendingSectionRef.current = null;
         const first = firstUtteranceOfSection(next, reported, wanted);
         if (first !== null) {
-          // Before `adopt`, because `adopt` re-anchors the engine at `atRef` and
-          // anchoring it at the old position would fetch a Clip nobody is waiting for.
           atRef.current = first;
-          pendingRef.current = null;
           adopt(next);
           seekTo(first);
           return;
         }
       }
 
-      if (engineRef.current?.snapshot().playing) {
-        pendingRef.current = next;
-        return;
-      }
       adopt(next);
     },
     [adopt, walkForward, seekTo],
@@ -719,16 +721,30 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [bridge]);
 
   /**
-   * The Utterances a section produced mid-reading, applied now that a Clip has
-   * just started. `status.utterance` changing is the boundary, and an effect is
-   * the one place that is outside the engine's own call stack.
+   * The engine has spoken every Utterance it holds and its queue is empty.
+   *
+   * It is the silent state of footgun 3 made audible: the node goes on rendering
+   * silence in the playing state, and before this the owner was shown nothing at
+   * all for as long as it lasted — six minutes, on the reading that found it
+   * (notes/NOTES_2026-09-20.md, 04:43).
+   *
+   * **Two states, and they are not the same thing to say.** At the last spine
+   * item the book is simply finished, and the reading stops: nothing more is
+   * coming, and a Play that sat silent would be the same defect wearing the
+   * honest sentence. Anywhere else the document has more in it than the reading
+   * was given, which after `renderAhead` should not happen — so this is the guard
+   * rather than the mechanism, and it says so without stopping, because the
+   * engine resumes by itself the moment a section reports (footgun 3, and
+   * `extend`).
    */
-  useEffect(() => {
-    const next = pendingRef.current;
-    if (!next) return;
-    pendingRef.current = null;
-    adopt(next);
-  }, [status.utterance, adopt]);
+  const ranOutOfText = useCallback(() => {
+    const { ended, sentence } = outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0);
+    if (ended) {
+      engineRef.current?.pause();
+      bridgeRef.current?.hold();
+    }
+    setStatus((was) => ({ ...was, playing: ended ? false : was.playing, note: sentence }));
+  }, []);
 
   /**
    * Build the Provider and the engine, reading the key at the moment it is
@@ -794,6 +810,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       voice: settings.voice,
       clock,
       onError: report,
+      onOutOfText: ranOutOfText,
       rate: settings.rate,
     });
     engineRef.current = engine;
@@ -803,7 +820,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     engine.load(loadedRef.current, atRef.current ?? 0);
     setStatus((was) => ({ ...was, reportsWordTimings: provider.capabilities.wordTimestamps, note: null }));
     return engine;
-  }, [settings, hasKey, clock, report]);
+  }, [settings, hasKey, clock, report, ranOutOfText]);
 
   const play = useCallback(() => {
     // Play is the owner saying "read from here", and here is wherever the reading

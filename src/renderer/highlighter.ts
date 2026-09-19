@@ -393,6 +393,11 @@ ${constants}
   /* Spine index -> the ids it contributed, so re-rendering a section replaces
      its Blocks instead of accumulating them. */
   var bySection = new Map();
+  /* Spine items epub.js has been asked for by renderAhead. \`bySection\` is the
+     durable half of the same question and cannot answer it alone: it is written
+     when the Blocks are reported, which is after the render, so a second Clip cue
+     arriving in between would ask for the same section again. */
+  var asked = new Set();
   /* The document the two highlights are registered in, so they can be taken out
      of it when the reading moves to another section. */
   var installed = null;
@@ -811,18 +816,42 @@ ${constants}
     return 'the Utterance covers no Block';
   }
 
+  /* Whether every Block of this Utterance is one we know and its section is
+     simply not rendered.
+
+     That is the ordinary "the reading has crossed into text the page has not
+     reached", and follow() answers it by displaying the section — after which
+     attach() paints the highlight, a fraction of a second later. Since
+     renderAhead() it is what happens at **every section boundary** of a document
+     whose sections are taller than their text, so calling it a highlight that
+     could not be drawn would leave that sentence standing on the screen while
+     the highlight was, in fact, drawn. Every other way build() can fail — a Block
+     nobody reported, a Block the rendered section no longer holds — is a real
+     failure and is still reported. */
+  function offPage(ranges) {
+    if (!ranges.length) return false;
+    for (var i = 0; i < ranges.length; i++) {
+      var record = blocks.get(ranges[i].block);
+      if (!record || liveContents(record.section)) return false;
+    }
+    return true;
+  }
+
   /* Returns the built ranges rather than a boolean, so that the caller which has
      just painted them measures *those* rather than building a second set to
      measure — the centring below needs the very Ranges that are on the page.
-     Null where nothing could be drawn. */
-  function showUtterance() {
+     Null where nothing could be drawn.
+
+     \`coming\` is the caller saying it is about to bring the section onto the
+     page, which only the 'speak' branch is in a position to say. */
+  function showUtterance(coming) {
     var built = build(state.utteranceRanges);
     if (!built) {
       clearHighlights();
       /* Reported, not swallowed. Philosophy rule 1, and the reason the problem
          message exists: once per Utterance, so a reading that is ahead of the page
          says so once rather than sixty times a second. */
-      report(why(state.utteranceRanges));
+      if (!coming || !offPage(state.utteranceRanges)) report(why(state.utteranceRanges));
       return null;
     }
     var registry = registryFor(built.window);
@@ -1057,6 +1086,97 @@ ${constants}
     } catch (error) {
       report('could not bring the Block into view: ' + error);
     }
+  }
+
+  /* ---- keeping the document ahead of the voice ---- */
+
+  /* The spine item the Utterance being spoken starts in, or null. Its first
+     range's Block, which is unambiguous rather than a choice: rejoin.ts refuses
+     to weld two Blocks from different sections, so an Utterance lies entirely
+     inside one. */
+  function sectionSpoken(ranges) {
+    var record = ranges && ranges.length ? blocks.get(ranges[0].block) : null;
+    return record ? record.section : null;
+  }
+
+  /* Render the section the reading is walking into, **because the reading needs
+     it** and not because the page was scrolled to it.
+
+     This is the chain that closed on itself (notes/NOTES_2026-09-20.md, 04:43).
+     More text needs epub.js to render the next spine item. The continuous
+     manager appends one from its own onScroll, and only when the scroll has come
+     within \`settings.offset\` — 500 px — of the bottom of everything it holds.
+     The only thing that scrolls while a book is being read aloud is centre(),
+     and centre() stops at the sentence being spoken. So a section whose text
+     ends far above its own bottom runs the reading out of Utterances with the
+     rest of the book still unrendered, and nothing is left that would make more:
+     measured on the fixture at 05:03, one view, scrollTop 0, clientHeight 758,
+     scrollHeight 3,072 — 758 + 500 is 1,258, and 1,258 < 3,072 for ever.
+
+     The trigger is the Clip cue, which already arrives once per Utterance and
+     already drives the centring, so **nothing is added to the bridge** — the
+     property ADR 0011 states of the centring and the reason it is stated.
+
+     Three guards, and each is what keeps this from becoming a second, slower
+     renderer racing the first:
+
+     - **One section, the one after the voice.** The reading needs the text it is
+       walking into and never a chapter beyond that.
+     - **Only when that section is the manager's last view**, and then through the
+       manager's own \`section.next()\` rather than a spine index of our own — the
+       same call its check() makes. The view list is a contiguous run of spine
+       items, because append and prepend are the only things that extend it, so
+       appending out of order would put the wrong text under the reader's thumb.
+       A last view further on than the voice means the next section is already
+       there and there is nothing to do.
+     - **Once per section, ever.** \`bySection\` is what the Blocks were reported
+       under, so a section already reported is never rendered for this again.
+       That guard is load-bearing rather than tidy: the manager trims the view
+       again within a second or two (ADR 0011 keeps three alive), and without it
+       the same chapter would be fetched and parsed once per Utterance.
+
+     Nothing here keeps the section alive, and that is deliberate. The Block
+     records survive the view being destroyed — that is what blocks.ts is for —
+     and when the voice arrives there, follow() displays it exactly as it already
+     does for text that is not on the page. So the manager goes on holding three
+     views and ADR 0011's memory figures stand. */
+  function renderAhead(section) {
+    if (section === null) return;
+    var manager = rendition.manager;
+    if (!manager || !manager.views || !manager.q) return;
+    var last = manager.views.last();
+    if (!last || !last.section || last.section.index !== section) return;
+    var next = last.section.next();
+    if (!next || bySection.has(next.index) || asked.has(next.index)) return;
+    asked.add(next.index);
+    /* **Through the manager's own queue**, which is the whole difference between
+       this working and not. Measured at 05:09 on the fixture: appended and
+       displayed straight away, the view was taken apart by the update() a scroll
+       had already scheduled before its iframe had finished loading — left with
+       \`displayed\` false, no \`iframe\`, a display() that never settled and no
+       Blocks ever reported. epub.js's own check() does not race that, because it
+       appends, displays and updates inside one queued task and the queue holds
+       the next task until the promise a task returns resolves. This is the same
+       task, asked for by the reading instead of by the scroll.
+
+       **And it sweeps itself.** epub.js emits 'rendered' from inside its own hook
+       chain and it does not arrive for a view displayed this way — watched for
+       five seconds at 05:13 while the view reached \`displayed\`, held a live
+       document and a paragraph, and this program had not adopted it. That is the
+       same gap the 'relocated' sweep below covers, so the answer is the same one:
+       what is on the page has been reported, and sweeping is idempotent per
+       document. */
+    manager.q.enqueue(function () {
+      return manager.append(next).display(manager.request);
+    }).then(sweep, function (error) {
+      /* Forgotten rather than remembered as asked, so the next Clip cue tries
+         again. "Once per section, ever" is right for a section that rendered;
+         applied to one that failed it would be this defect again, one section
+         further on — the reading stopped for good, with a sentence to show for
+         it this time and nothing that would ever produce another. */
+      asked.delete(next.index);
+      report('could not render the section the reading is walking into: ' + error);
+    });
   }
 
   /* ---- a section arriving, or arriving again ---- */
@@ -1299,8 +1419,22 @@ ${constants}
          either way — a Block whose section epub.js has not rendered still has its
          CFI here, and that is exactly the case where the reading has crossed into
          text the reader cannot see. */
-      var shown = showUtterance();
+      var shown = showUtterance(message.reveal);
       if (message.reveal) follow(shown);
+      /* **What is on the page has been reported**, checked once per Utterance —
+         and then the section after it asked for if it is missing. Neither depends
+         on where the page is or on whether this Utterance could be painted.
+
+         The sweep is here because epub.js's 'rendered' does not always reach a
+         listener, and the two events below are not enough on their own. Measured
+         on the owner's book at 05:31, in the state the 04:43 reading died in:
+         views [3, 4d, 5d] with section 5 holding a live document, \`known\` still
+         108, and section 5 never adopted — because \`liveContents\` adopts only the
+         section it is asked about, and nothing asks about a section the reading
+         has not reached. One \`rendition.getContents()\` and a WeakMap lookup per
+         rendered view, once a sentence; \`adopt\` is idempotent per document. */
+      sweep();
+      renderAhead(sectionSpoken(message.utteranceRanges));
       if (!shown) return;
       start();
       return;

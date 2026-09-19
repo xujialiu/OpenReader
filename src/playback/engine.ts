@@ -39,7 +39,7 @@ import { createClipFetcher, type PreparedClip } from './clips';
 import type { ClipCache } from './clip-cache';
 import { DEFAULT_GAP, gapContentSeconds, startsNewBlock, type GapSettings } from './gap';
 import { atTheEar, clampRate, heardSeconds, NATURAL_PACE, scaleTimings } from './rate';
-import { enqueueCeiling, fetchWindow, type UtteranceState } from './read-ahead';
+import { enqueueCeiling, fetchWindow, hasRunOut, type UtteranceState } from './read-ahead';
 import type { ReaderClock } from './reader-clock';
 import { createTimeline, type QueuedClip, type TimelinePosition } from './timeline';
 
@@ -52,6 +52,24 @@ export interface PlaybackEngineDeps {
   clock: ReaderClock;
   /** Reported, never thrown. A synthesis that failed, a decode that failed, a session that would not activate. */
   onError(error: unknown): void;
+  /**
+   * Everything the engine was given has been spoken and the queue is empty.
+   *
+   * The engine does not stop here and cannot: a drained buffer queue renders
+   * silence, stays in the playing state and resumes on the next buffer
+   * (notes/NOTES.md footgun 3), and a `stop()` to "reset" it is what breaks
+   * resumption. So running out of text looks from the inside exactly like a
+   * Provider being slow, and from the outside like nothing at all — which is how
+   * a reading sat silent and `playing` for six minutes on the owner's book
+   * (notes/NOTES_2026-09-20.md, 04:43) with nobody told.
+   *
+   * This is the engine saying it. Once per exhaustion: a longer list, a seek or a
+   * load arms it again, so a reading that is fed more text and runs out again
+   * says so again.
+   *
+   * @param known how many Utterances it had when it ran out.
+   */
+  onOutOfText?(known: number): void;
   /** Memory only (ADR 0002). Left out, the engine makes its own. */
   cache?: ClipCache;
   /** The owner's reading speed. Applied here and nowhere else (ADR 0009); a Provider is never asked for it. */
@@ -84,6 +102,28 @@ export interface PlaybackSnapshot {
 export interface PlaybackEngine {
   /** A document's Utterances in reading order, and where to start. Does not begin playing. */
   load(utterances: readonly Utterance[], from?: number): void;
+  /**
+   * The same document, with more Utterances on the end of it — and **nothing
+   * restarted**.
+   *
+   * The list grows while the reading is under way, because epub.js renders one
+   * section at a time and the app segments the whole document again each time a
+   * new one reports (`src/app/use-reading.ts`). `load` is the wrong call for
+   * that: it clears the queue and re-anchors the clock, so it restarts the
+   * sentence being spoken, and the app therefore used to hold the longer list
+   * back until the next Clip boundary. That deferral is what turned a reading
+   * that ran out of text into one that could not be rescued — the boundary it
+   * waited for is itself a Clip starting, and no Clip starts when there is
+   * nothing left to start one.
+   *
+   * Nothing here needs clearing. The caller has already established that the new
+   * list continues the old one rather than renumbering it (`samePrefix`), so
+   * every index the queue, the timeline and the WebView are holding still means
+   * the sentence it meant before; the read-ahead simply has further to go. Safe
+   * to call from inside a message handler for the same reason: `drain` may be
+   * mid-await, and this takes nothing out from under it.
+   */
+  extend(utterances: readonly Utterance[]): void;
   play(): void;
   pause(): void;
   /** Jump to an Utterance: the queue is cleared, the clock re-anchored, and the reading resumes there if it was playing. */
@@ -128,6 +168,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   let cued: number | null = null;
   /** The last position reported, kept so a rate change can re-cue from where the reading actually is. */
   let last: TimelinePosition | null = null;
+  /** Whether running out of text has already been said. Cleared by anything that gives the engine somewhere else to go. */
+  let announced = false;
 
   function stateOf(index: number): UtteranceState {
     if (prepared.has(index)) return 'ready';
@@ -142,6 +184,22 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       startFetch(index);
     }
     void drain();
+    outOfText();
+  }
+
+  /** Say, once, that there is nothing left to play. `read-ahead.ts` holds the four conditions and why each one is there. */
+  function outOfText(): void {
+    if (announced || disposed) return;
+    const state = {
+      playing,
+      nextToEnqueue,
+      total: utterances.length,
+      queued: timeline.pending(),
+      fetching: inFlight.size,
+    };
+    if (!hasRunOut(state)) return;
+    announced = true;
+    deps.onOutOfText?.(utterances.length);
   }
 
   function startFetch(index: number): void {
@@ -329,6 +387,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     failed.clear();
     cued = null;
     last = null;
+    announced = false;
     graph?.clear();
     timeline.reset();
   }
@@ -338,6 +397,18 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       generation++;
       utterances = list;
       restart(from);
+      pump();
+    },
+
+    extend(list) {
+      if (disposed) return;
+      // A longer list is somewhere else to go, so running out of text becomes a
+      // thing that can be said again if it happens again further on.
+      if (list.length > utterances.length) announced = false;
+      utterances = list;
+      // No `restart`, no `generation++`: nothing the queue, the timeline or the
+      // in-flight fetches are holding has been renumbered, so the read-ahead
+      // simply picks up where it stopped.
       pump();
     },
 

@@ -76,6 +76,41 @@ export function firstUtteranceOfSection(
   return null;
 }
 
+/** Whether the reading stopped because the book ended, and what the owner is told either way. */
+export interface OutOfText {
+  /** True when the furthest section the renderer has reported is the document's last spine item. */
+  ended: boolean;
+  sentence: string;
+}
+
+/**
+ * The engine has spoken every Utterance it was given: which of the two things
+ * that is, and how to say it.
+ *
+ * They are not the same event and must not share a sentence. Reaching the last
+ * spine item is a **book that has finished**, and the reading stops there because
+ * nothing more is coming. Running out anywhere else is the reading having
+ * outpaced what the document has rendered — the defect of 2026-09-20 04:43 — and
+ * there the reading is left running, because the engine picks up by itself the
+ * moment another section reports (notes/NOTES.md footgun 3, and the engine's
+ * `extend`).
+ *
+ * `furthest` is the **furthest** section that has reported, not the last one to
+ * report: sections render out of order, so the last to report is routinely behind.
+ * A spine of zero is a document that has not said how long it is yet, and that is
+ * never the end of a book.
+ */
+export function outOfTextSentence(furthest: number, spine: number): OutOfText {
+  const ended = spine > 0 && furthest >= spine - 1;
+  return {
+    ended,
+    sentence: ended
+      ? 'That was the last of this document. The reading has stopped at the end of the book.'
+      : 'The reading has reached the end of the text this document has reported and is waiting for more of it. ' +
+        'It carries on by itself the moment another section arrives.',
+  };
+}
+
 /**
  * Whether `next` continues `loaded` rather than renumbering it.
  *
