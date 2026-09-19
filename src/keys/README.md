@@ -64,3 +64,36 @@ before the first request, is therefore required to ship.
 It is not built, because while the app is used only by its author the consent is
 being asked of the person granting it. It is one check on the synthesis path.
 That is a deferral with a known price, not an oversight.
+
+## What is here
+
+Three files, split where the native module is.
+
+- `store.ts` — the three operations, and the only file in OwnReader that touches
+  the Keychain.
+- `entry-name.ts` — a Provider id becomes a Keychain entry name.
+- `refusal.ts` — what the Keychain said when it would not answer.
+
+The split is not decoration. `store.ts` cannot be imported under Node, because
+`expo-secure-store` resolves its native module at import time, so the halves
+that can be wrong on their own live beside it where `test/keys/provider-key.test.ts`
+can reach them. The two decisions left inside `store.ts` are one line each and
+their values come from that native module, so they are checked as source text —
+the same tool `test/app-config.test.ts` already uses on `app.config.ts`, for the
+same reason.
+
+**Reading a key has three outcomes, not two.** `found`, `absent` and `refused`:
+`getItemAsync` resolves `null` for "there is no entry" and rejects for
+everything else, and collapsing the second into the first is how the 2 a.m.
+failure becomes indistinguishable from an owner who never entered a key
+(philosophy rule 1).
+
+**Saving a key deletes the entry first.** Not defensiveness. iOS's `set` adds
+the item with the accessibility it was given, but on `errSecDuplicateItem` it
+falls through to an update of `kSecValueData` alone — so an entry keeps the
+accessibility it was *created* with, however many times the key is saved again.
+Entries survive an uninstall, so one written at `WHEN_UNLOCKED` by an earlier
+build would otherwise stay unreadable while locked on that device forever, with
+nothing the app could do about it. Deleting first makes "save the key again" the
+fix, at a price that is reported rather than hidden: a write refused after a
+successful delete leaves no key, and says so.

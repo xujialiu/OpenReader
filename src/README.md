@@ -25,8 +25,13 @@ Dependencies point inwards: `playback/`, `renderer/`, `now-playing/` and
 
 ## Nothing here is written yet
 
-Every directory below holds a README and no code. Step 1 of this project is
-the scaffold; the READMEs say what belongs where and which decision put it
-there, so that the first file in each one arrives in the right place. A stub
-that pretends to work would be worse than an empty directory, because it would
-have to be believed and then found out.
+Most directories below still hold a README and no code. The READMEs say what
+belongs where and which decision put it there, so that the first file in each
+one arrives in the right place. A stub that pretends to work would be worse than
+an empty directory, because it would have to be believed and then found out —
+which is why an empty directory here means exactly that and not "started".
+
+Code has arrived in two of them. `core/` holds the platform-free files ported
+from the Zotero-TTS plugin — `align.ts` above all, which ADR 0005 names the
+first thing to carry over. `keys/` holds the Keychain, which is small and whose
+correctness is entirely in one line of options (ADR 0002).

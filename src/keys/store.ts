@@ -1,0 +1,172 @@
+/**
+ * A Provider's API key, in the Keychain. Nothing else — ADR 0002.
+ *
+ * `expo-secure-store` is the iOS Keychain as `kSecClassGenericPassword`, and
+ * this file is the only place in OwnReader that touches it. Three operations,
+ * because ADR 0002 names three needs: the owner enters a key, the reader reads
+ * it while the screen is locked, and the owner removes it — the last one because
+ * Keychain entries survive an app uninstall, so deleting the app is not how a
+ * key goes away.
+ *
+ * Nothing here imports from `src/core/`, and nothing in `src/core/` may import
+ * this. A key reaches a Provider only as a setting a caller passes to
+ * `createProvider(id, settings, deps)`, never as a side effect of synthesis:
+ * `eslint.config.js` forbids the provider layer from importing
+ * `expo-secure-store` at all, which is what keeps its 3,200 lines of tests
+ * runnable under Node (ADR 0002, ADR 0013).
+ *
+ * This module cannot be imported under Node — `expo-secure-store` resolves the
+ * native module at import time — so the parts of it worth testing live in
+ * `entry-name.ts` and `refusal.ts` beside it.
+ */
+
+import * as SecureStore from 'expo-secure-store';
+
+import { providerKeyEntryName } from './entry-name';
+import { keychainRefusal, type KeychainRefusal } from './refusal';
+
+export type { KeychainRefusal } from './refusal';
+
+/**
+ * What reading a Provider's key found, and deliberately not `string | null`.
+ *
+ * Three outcomes, because there are three: the key is there, there is no key,
+ * or the Keychain would not say. Collapsing the last two into `null` is the
+ * mistake `refusal.ts` exists to prevent, and a union makes it one a caller
+ * cannot make by accident — `key` is unreachable without narrowing first.
+ */
+export type KeyLookup =
+  | { readonly outcome: 'found'; readonly key: string }
+  | { readonly outcome: 'absent' }
+  | { readonly outcome: 'refused'; readonly refusal: KeychainRefusal };
+
+/** What saving or forgetting a key did. Either it happened, or the Keychain refused and said why. */
+export type KeyChange = { readonly outcome: 'done' } | { readonly outcome: 'refused'; readonly refusal: KeychainRefusal };
+
+/**
+ * iOS's `kSecAttrService` for every entry written here, which the module
+ * suffixes with `:no-auth` (SecureStoreModule.swift `query(with:options:)`).
+ * Naming it is worth the one hazard it carries: the default is `app`, shared
+ * with anything else in the process using this package, and ADR 0002 makes
+ * removing a key an explicit act — which someone may one day have to perform
+ * with a Keychain viewer rather than this app.
+ *
+ * The hazard is that changing this string abandons every entry already written,
+ * and those entries outlive the app. It is effectively permanent.
+ */
+const KEYCHAIN_SERVICE = 'ownreader.provider-keys';
+
+/**
+ * The options every call below passes. The `keychainAccessible` line is the one
+ * line in `src/keys/` that cannot be wrong.
+ *
+ * The default is `WHEN_UNLOCKED` — `SecureStoreOptions` documents it and
+ * node_modules/expo-secure-store/ios/SecureStoreOptions.swift defaults the
+ * field to `.whenUnlocked` — and a `WHEN_UNLOCKED` item cannot be read while
+ * the screen is locked. That is precisely when a backgrounded reader needs the
+ * key to synthesize the next Utterance, so the default produces a reader that
+ * works on a desk and stops in a pocket. `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`
+ * is readable after the first unlock following a restart, and is still never
+ * migrated to another device (ADR 0002). It is the same requirement as the
+ * `audio` background mode in `app.config.ts`, seen from the other side.
+ *
+ * `requireAuthentication` is absent, and its absence is a decision. A key needed
+ * at 2 a.m. with the screen locked cannot sit behind a biometric prompt.
+ * `app.config.ts` sets `faceIDPermission: false` for the same reason, so the
+ * plugin writes no NSFaceIDUsageDescription — and iOS's `set` throws
+ * MissingPlistKeyException without one, so the option could not even be turned
+ * on here quietly. test/keys/provider-key.test.ts fails if it ever appears.
+ *
+ * One object for all three calls, although `keychainAccessible` is read only on
+ * a write — `attributeWith(options:)` is called from `set` and nowhere else.
+ * `keychainService` is the reason: it must be identical on every call, or a read
+ * looks in a different service and honestly reports a stored key as absent.
+ */
+const KEYCHAIN: SecureStore.SecureStoreOptions = {
+  keychainService: KEYCHAIN_SERVICE,
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+};
+
+/**
+ * Store `key` as `provider`'s API key, replacing whatever was there.
+ *
+ * The entry is deleted before it is written, and that is not belt and braces.
+ * iOS's `set` adds the item with `kSecAttrAccessible` taken from the options,
+ * but on `errSecDuplicateItem` it falls through to `update`, whose update
+ * dictionary holds `kSecValueData` alone — so an entry that already exists keeps
+ * the accessibility it was *created* with, however many times the key is saved
+ * again (SecureStoreModule.swift). Combine that with entries surviving an app
+ * uninstall (ADR 0002) and an entry written at `WHEN_UNLOCKED` by any earlier
+ * build would stay unreadable while locked on that device forever, with nothing
+ * the app could do about it. Deleting first makes "save the key again" the fix.
+ *
+ * The price is named rather than hidden: if the delete succeeds and the write is
+ * refused, the previous key is gone, and this says so. That is the right way
+ * round — the caller is a person who has just typed a key and can type it again,
+ * and the alternative is a key that cannot be read in the one place it matters.
+ */
+export async function saveProviderKey(provider: string, key: string): Promise<KeyChange> {
+  const name = providerKeyEntryName(provider);
+
+  // The empty string would be stored happily, read back as a found key, and
+  // fail as a 401 from the Provider a long way from here. Surrounding
+  // whitespace is left alone: this module writes what it is given, and tidying
+  // up a pasted credential belongs to whatever read the text field.
+  if (key === '') {
+    throw new Error(`An API key for the Provider ${JSON.stringify(provider)} cannot be the empty string.`);
+  }
+
+  try {
+    await SecureStore.deleteItemAsync(name, KEYCHAIN);
+    await SecureStore.setItemAsync(name, key, KEYCHAIN);
+    return { outcome: 'done' };
+  } catch (cause) {
+    return { outcome: 'refused', refusal: keychainRefusal(cause) };
+  }
+}
+
+/**
+ * Read `provider`'s API key.
+ *
+ * The key goes to the caller and no further. This is the call a backgrounded
+ * reader makes with the screen locked, which is why `KEYCHAIN` above says what
+ * it says, and why a refusal here is reported rather than flattened into
+ * "no key".
+ */
+export async function readProviderKey(provider: string): Promise<KeyLookup> {
+  const name = providerKeyEntryName(provider);
+
+  try {
+    // `null` is the package's documented answer for "no entry for this key".
+    // Everything that went wrong rejects instead, and that is the whole
+    // distinction `KeyLookup` keeps.
+    const key = await SecureStore.getItemAsync(name, KEYCHAIN);
+    return key === null ? { outcome: 'absent' } : { outcome: 'found', key };
+  } catch (cause) {
+    return { outcome: 'refused', refusal: keychainRefusal(cause) };
+  }
+}
+
+/**
+ * Remove `provider`'s API key from the Keychain.
+ *
+ * A first-class operation, not a convenience. Keychain entries survive an app
+ * uninstall on iOS, so removing the app is not how an owner gets rid of a key,
+ * and ADR 0002 therefore makes this something the app has to offer.
+ *
+ * `done` means no entry remains, which is not the same claim as "an entry was
+ * removed": `deleteValueWithKeyAsync` issues `SecItemDelete` for all three query
+ * shapes the package has ever written and ignores every status, so forgetting a
+ * key that was never there succeeds. Reporting that as a failure would be the
+ * false signal — what the caller asked to be true is true.
+ */
+export async function forgetProviderKey(provider: string): Promise<KeyChange> {
+  const name = providerKeyEntryName(provider);
+
+  try {
+    await SecureStore.deleteItemAsync(name, KEYCHAIN);
+    return { outcome: 'done' };
+  } catch (cause) {
+    return { outcome: 'refused', refusal: keychainRefusal(cause) };
+  }
+}
