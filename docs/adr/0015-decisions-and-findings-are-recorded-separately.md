@@ -2,11 +2,35 @@
 status: accepted
 ---
 
-# Decisions and findings are recorded separately
+# Decisions, findings and the product argument are recorded separately
 
-This repo keeps both conventions: `docs/adr/` for why the project is built the way
-it is, and dated files in `notes/` for what was measured. `CONTEXT.md` is a
-glossary and holds neither.
+This repo keeps three: `design/` for the trade-off as someone who does not read
+code would need it, `docs/adr/` for the technical decision and the measured facts
+that forced it, and dated files in `notes/` for what was measured and when.
+`CONTEXT.md` is a glossary and holds none of them.
+
+`design/` and `docs/adr/` are paired by number — `design/0002-…` and
+`docs/adr/0002-…` are one decision written for two readers — and not every
+decision has both halves. The rule for which half a sentence belongs to is
+mechanical: strip every API name, file path, type, library and version from it,
+and if it stops making sense it is an ADR sentence.
+
+## Why a third kind, when two already worked
+
+Because the two audiences were reading past each other. An ADR that opens by
+arguing which product this should be, and closes on the byte layout of a WAV
+header, is read fully by nobody: the person deciding what to build skips it for
+the header, and the person building it skims the argument they already accept.
+Splitting them costs a second file and buys each reader a document that is
+entirely for them.
+
+The risk of the split is real and worth naming, because it is the failure this
+repository would actually have: **a measured detail paraphrased away while being
+moved.** The ADRs are the most carefully written thing here, and their value is
+concentrated in sentences that read like pointless caveats — that a provider
+speaks `29.83` as words, that a library's own default is the value its own guard
+rejects on the next line. When a decision is split, those sentences do not move
+and are not rewritten. The design file is **new writing**, not a translation.
 
 ## Why not just one, as in the Zotero-TTS repo
 

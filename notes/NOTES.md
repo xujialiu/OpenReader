@@ -1,11 +1,15 @@
 # Notes
 
-Measured findings live here, in dated files (`NOTES_YYYY-MM-DD.md`) as in the
-Zotero-TTS repo. Decisions live in `docs/adr/`; see ADR 0015 for why both.
+Measured findings live in dated files beside this one
+(`NOTES_YYYY-MM-DD.md`, each entry carrying the time it was found), in the same
+shape as the Zotero-TTS repo's log. **This file is not one of them**: it is the
+standing list of things still assumed, and it is meant to shrink. See ADR 0015
+for why a measurement, a decision and a product argument each live somewhere
+different.
 
-Nothing has been built yet. What follows is the list of things assumed but **not
-verified**, accumulated while planning on 2026-09-19. Each is cheap to settle and
-expensive to get wrong later.
+What follows is what is assumed but **not verified**. Each is cheap to settle and
+expensive to get wrong later. The list was opened while planning on 2026-09-19;
+items are struck as they are answered, and the answer goes in that day's log.
 
 ## Verify before writing much code
 
