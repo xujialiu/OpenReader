@@ -1,13 +1,19 @@
 /**
- * The handful of controls the two screens are built from.
+ * The handful of controls the four screens are built from.
  *
- * Here so that the reader and the settings sheet look like one app without
- * repeating a `StyleSheet` in each, and so that there is one place to see what
- * the app is capable of showing. That is worth more than it sounds: **nothing in
- * `src/app/` imports `Linking`**, and with every control in this file that is
- * checkable by eye. ADR 0017 forbids a tappable route to any Provider's signup,
- * pricing or key console; a file of controls that cannot open a URL is how that
- * decision survives someone later "improving onboarding".
+ * Here so that the Library, the reader and the settings look like one app
+ * without repeating a `StyleSheet` in each, and so that there is one place to
+ * see what the app is capable of showing. That is worth more than it sounds:
+ * **no control in this file can open a URL**, and with every control in one file
+ * that is checkable by eye. ADR 0017 forbids a tappable route to any Provider's
+ * signup, pricing or key console; a file of controls that cannot open a URL is
+ * how that decision survives someone later "improving onboarding".
+ *
+ * The property used to be stated as "nothing in `src/app/` imports `Linking`",
+ * and it stopped being true when ADR 0019 let another app hand this one a
+ * Document: `opened-document.ts` reads the URL the app was **opened with**.
+ * Nothing opens one. `test/app/no-outgoing-links.test.ts` is where that is now
+ * checked, because it is no longer something an eye can check.
  */
 
 import type { ReactNode } from 'react';
@@ -139,6 +145,41 @@ export function Note({ children, attention }: { children: ReactNode; attention?:
   return <Text style={[styles.note, attention && styles.noteAttention]}>{children}</Text>;
 }
 
+/**
+ * A word in a navigation bar.
+ *
+ * Text and not an icon, because there is no icon set in this binary and adding
+ * one to say "add" and "settings" would be a font shipped for two glyphs. The
+ * native header draws everything around it; this is only the label and the tap.
+ */
+export function HeaderButton({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={8}
+      style={({ pressed }) => [pressed && styles.pressed, disabled && styles.disabled]}
+    >
+      <Text style={styles.headerButton}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** One Document in the Library: what it is called, and how far the reading got. */
+export function DocumentRow({ title, progress, onPress }: { title: string; progress: string; onPress(): void }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+      <Text style={styles.rowTitle} numberOfLines={2}>
+        {title}
+      </Text>
+      <Text style={styles.rowProgress} numberOfLines={2}>
+        {progress}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   action: {
     alignItems: 'center',
@@ -185,4 +226,14 @@ const styles = StyleSheet.create({
   section: { gap: 12 },
   sectionTitle: { color: INK.text, fontSize: 17, fontWeight: '700' },
   pressed: { opacity: 0.65 },
+  headerButton: { color: INK.text, fontSize: 16, fontWeight: '600' },
+  row: {
+    borderBottomColor: INK.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  rowProgress: { color: INK.quiet, fontSize: 13, lineHeight: 18 },
+  rowTitle: { color: INK.text, fontSize: 16, fontWeight: '600' },
 });

@@ -36,6 +36,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { createLocator, readingPositionAt, type ReadingPosition } from '../core/document';
 import { createProvider } from '../core/providers/factory';
 import type { Utterance } from '../core/segmenter';
 import { readProviderKey } from '../keys/store';
@@ -111,6 +112,18 @@ export interface Reading {
   opened(language: string | null | undefined): void;
   play(): void;
   pause(): void;
+  /**
+   * Where speech has got to, as a **Reading Position** (ADR 0008), or null
+   * before a Clip has played.
+   *
+   * A function and not a field, and that is the whole of its design. A Reading
+   * Position changes once per Utterance, which is often enough that putting it
+   * in `ReadingStatus` would make the screen re-render for something it does not
+   * draw — and ADR 0005's rule about playback position exists because that
+   * re-render is what blows the frame budget. Nothing here touches state; the
+   * caller asks when it is about to write the Library.
+   */
+  readingPosition(): ReadingPosition | null;
 }
 
 /** Whatever refused, in its own words. A `SynthesisError`'s message already names the address it tried and asks the one question there is. */
@@ -133,6 +146,15 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
   const atRef = useRef<number | null>(null);
   /** The section the renderer reported last, for the same reason: `play` reads it at the moment it is pressed. */
   const renderedRef = useRef<RenderedSection | null>(null);
+  /**
+   * The Blocks the Utterances were segmented from — the very array the renderer
+   * sent, because `UtteranceSpan.block` is an index into it.
+   *
+   * Kept only so that a Reading Position can be built: ADR 0008 needs the
+   * Block's CFI, the Block's own verbatim text and the Utterance's span within
+   * it, and this is the only place all three are in one hand.
+   */
+  const blocksRef = useRef<readonly ReportedBlock[]>([]);
   /**
    * Play was pressed with nothing to read.
    *
@@ -252,6 +274,7 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
       // Both, and the very array `onBlocks` gave us: `UtteranceSpan.block` is an
       // index into it, and passing a copy is how the two get out of step.
       bridgeRef.current?.setUtterances(next, reported);
+      blocksRef.current = reported;
       renderedRef.current = section;
       setStatus((was) => ({ ...was, known: next.length, rendered: section }));
 
@@ -454,5 +477,34 @@ export function useReading(settings: AppSettings, hasKey: boolean): Reading {
     [identity],
   );
 
-  return { bridge, status, opened, play, pause };
+  /**
+   * The Utterance being spoken, written down as a place in the document.
+   *
+   * The locator is the **Block's** CFI, which is an element CFI with no text
+   * step — `messages.ts` says why, and ADR 0008 says why that is the half of the
+   * dialect both readers agree on. The anchor is the Utterance's own characters
+   * quoted out of the Block's verbatim text, with context, which is what finds
+   * it again when the CFI does not resolve where it claims.
+   *
+   * The first span, when an Utterance has more than one: the repair layer joins
+   * a sentence the document's markup cut in two (`rejoin.ts`), and where speech
+   * *starts* is the place to come back to.
+   *
+   * `'epub'` is not an assumption. The CFI came out of the epub.js renderer, so
+   * it is an EPUB locator by construction; the day a second renderer exists,
+   * this reads the format from whatever produced the Block rather than from a
+   * screen that would have to be told.
+   */
+  const readingPosition = useCallback((): ReadingPosition | null => {
+    const at = atRef.current;
+    if (at === null) return null;
+    const utterance = loadedRef.current[at];
+    const span = utterance?.spans[0];
+    if (!span) return null;
+    const block = blocksRef.current[span.block];
+    if (!block) return null;
+    return readingPositionAt(createLocator('epub', block.cfi), block.text, span.start, span.end);
+  }, []);
+
+  return { bridge, status, opened, play, pause, readingPosition };
 }

@@ -15,8 +15,10 @@
  */
 
 import { Reader, useReader } from '@epubjs-react-native/core';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+
+import type { ReadingPosition } from '../core/document';
 
 import { Action, Choice, INK, Note } from './controls';
 import type { OpenDocument } from './document';
@@ -24,6 +26,20 @@ import { useReaderFileSystem } from './reader-file-system';
 import { PROVIDER_LABELS, READING_RATES, readiness, readinessSentence, type AppSettings } from './settings';
 import type { KeyPresence } from './use-provider-key';
 import { useReading, type ReadingStatus } from './use-reading';
+
+/**
+ * How often a Reading Position is written to the Library while the reading is
+ * under way, at most.
+ *
+ * ADR 0019 says the Library file is written after every change, and a Reading
+ * Position changes once an Utterance — every few seconds. Rewriting a few tens
+ * of kilobytes that often is not expensive, but it is not free either, and the
+ * thing being protected is a force-quit: at three seconds a sentence this loses
+ * at most the last three or four sentences, which is inside the paragraph the
+ * owner was listening to. Leaving the screen writes unconditionally, so the
+ * ordinary way out loses nothing at all.
+ */
+const POSITION_INTERVAL_MS = 10_000;
 
 export interface ReadingViewProps {
   document: OpenDocument;
@@ -37,7 +53,21 @@ export interface ReadingViewProps {
    * worth showing rather than reading as "no key" (`src/keys/refusal.ts`).
    */
   keyPresence: KeyPresence;
+  /**
+   * The CFI to open at, out of the stored Reading Position, or null for a
+   * Document that has not been read.
+   *
+   * It goes to `<Reader initialLocation>`, which the library applies inside its
+   * own `onReady` — before it injects the highlighter, so the section that
+   * reports its Blocks first is the one the owner was left in rather than the
+   * cover.
+   */
+  resumeAt: string | null;
   onRate(rate: number): void;
+  /** Where speech got to. Called on a Clip boundary at most every `POSITION_INTERVAL_MS`, and once more on the way out. */
+  onReached(position: ReadingPosition): void;
+  /** What the EPUB calls itself, once epub.js has its metadata. */
+  onTitle(title: string): void;
 }
 
 /**
@@ -84,7 +114,7 @@ function highlightLine(status: ReadingStatus): string | null {
   return null;
 }
 
-export function ReadingView({ document, settings, keyPresence, onRate }: ReadingViewProps) {
+export function ReadingView({ document, settings, keyPresence, resumeAt, onRate, onReached, onTitle }: ReadingViewProps) {
   const fileSystem = useReaderFileSystem;
   const { getMeta } = useReader();
   const reading = useReading(settings, keyPresence.state === 'held');
@@ -114,11 +144,52 @@ export function ReadingView({ document, settings, keyPresence, onRate }: Reading
    */
   const onReady = useCallback(() => {
     setDisplayError(null);
-    reading.opened(getMeta().language);
-  }, [getMeta, reading]);
+    const meta = getMeta();
+    reading.opened(meta.language);
+    // The book's own title, which is worth more than the file name the Library
+    // has been calling it. Ignored when the EPUB does not say (`use-library.ts`).
+    onTitle(meta.title ?? '');
+  }, [getMeta, reading, onTitle]);
+
+  /**
+   * Where speech got to, written down.
+   *
+   * The last position is kept in a ref rather than fetched at unmount, because
+   * `useReading`'s own cleanup runs first — it is registered first, being a hook
+   * of this component — and it clears the Utterance the position would be built
+   * from. So the position is taken at each Clip boundary, where everything it
+   * needs is certainly still there, and the ref is what leaving the screen
+   * writes.
+   */
+  const status = reading.status;
+  const positionRef = useRef<ReadingPosition | null>(null);
+  const onReachedRef = useRef(onReached);
+  useEffect(() => {
+    onReachedRef.current = onReached;
+  }, [onReached]);
+  const writtenAtRef = useRef(0);
+
+  const readingPosition = reading.readingPosition;
+  useEffect(() => {
+    const position = readingPosition();
+    if (!position) return;
+    positionRef.current = position;
+    const now = Date.now();
+    if (now - writtenAtRef.current < POSITION_INTERVAL_MS) return;
+    writtenAtRef.current = now;
+    onReachedRef.current(position);
+    // Once per Utterance, not once per render: `reading` is a fresh object every
+    // render and depending on it would run this on every one of them.
+  }, [status.utterance, readingPosition]);
+
+  useEffect(
+    () => () => {
+      if (positionRef.current) onReachedRef.current(positionRef.current);
+    },
+    [],
+  );
 
   const ready = readiness(settings, keyPresence.state === 'held');
-  const status = reading.status;
   const highlight = highlightLine(status);
   // Nothing is claimed about a key while the Keychain is still being asked.
   const sayWhatIsMissing = !ready.ready && keyPresence.state !== 'unknown';
@@ -133,8 +204,9 @@ export function ReadingView({ document, settings, keyPresence, onRate }: Reading
             width={size.width}
             height={size.height}
             onReady={onReady}
+            initialLocation={resumeAt ?? undefined}
             onDisplayError={setDisplayError}
-            renderLoadingFileComponent={() => <Waiting words={`Reading ${document.name}…`} />}
+            renderLoadingFileComponent={() => <Waiting words={`Reading ${document.title}…`} />}
             renderOpeningBookComponent={() => <Waiting words="Laying the document out…" />}
             /**
              * Last, and it carries more than the highlighter: `manager` and
@@ -146,7 +218,7 @@ export function ReadingView({ document, settings, keyPresence, onRate }: Reading
             {...reading.bridge.readerProps}
           />
         ) : (
-          <Waiting words={`Opening ${document.name}…`} />
+          <Waiting words={`Opening ${document.title}…`} />
         )}
       </View>
 

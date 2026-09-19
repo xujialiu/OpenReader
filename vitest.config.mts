@@ -11,7 +11,7 @@ import { defineConfig } from 'vitest/config';
  *
  * `environment: 'node'` is the right one and not a stopgap. The provider suite
  * is driven entirely by fake `fetch` implementations and injected
- * dependencies; nothing in it wants a DOM, and the parts of OwnReader that do
+ * dependencies; nothing in it wants a DOM, and the parts of OpenReader that do
  * want one live in a WebView (ADR 0011), which no JS test environment
  * simulates anyway. React Native code is not tested here at all — see
  * test/README.md.

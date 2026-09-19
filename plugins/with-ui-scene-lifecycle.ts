@@ -7,7 +7,7 @@ import { IOSConfig, withAppDelegate, withInfoPlist, type ConfigPlugin } from 'ex
  * Without this the app does not launch at all. UIKit asserts inside
  * `_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption` and the
  * process is killed with `EXC_BREAKPOINT` before a line of JavaScript runs, so
- * the failure presents as "OwnReader quit unexpectedly" and a crash report —
+ * the failure presents as "OpenReader quit unexpectedly" and a crash report —
  * not as an error with a message anyone would search for. The launch log says
  * only `UIScene life cycle is required for apps built with this SDK`.
  *
@@ -68,10 +68,11 @@ function replaceExactlyOnce(contents: string, find: string, replace: string, wha
  * cycle at all. Without it UIKit never reaches any of the code below.
  *
  * `UISceneDelegateClassName` keeps the `$(PRODUCT_MODULE_NAME)` build variable
- * rather than the expanded `OwnReader.SceneDelegate`, so that renaming the app
+ * rather than the expanded `OpenReader.SceneDelegate`, so that renaming the app
  * cannot leave the Info.plist pointing at a class that no longer exists — the
  * generated Info.plist already carries variables of this shape, and Xcode
- * expands it at build time.
+ * expands it at build time. The app was renamed from OwnReader on 2026-09-19
+ * and not a line of this plugin changed, which is the whole of what that buys.
  *
  * `UISceneClassName` is omitted on purpose: UIKit defaults to `UIWindowScene`
  * for the application role, and stating it adds a second thing to keep right.
@@ -212,10 +213,10 @@ class SceneDelegate: ExpoAppSceneDelegate {}
 `;
 
 /**
- * Writes `ios/OwnReader/SceneDelegate.swift` and adds it to the target's Sources
+ * Writes `ios/OpenReader/SceneDelegate.swift` and adds it to the target's Sources
  * build phase. Both halves are needed and only one is visible: a file on disk
  * that is not in the Xcode project compiles into nothing, and
- * `NSClassFromString("OwnReader.SceneDelegate")` then returns nil at launch —
+ * `NSClassFromString("OpenReader.SceneDelegate")` then returns nil at launch —
  * which UIKit reports as the same missing-scene-adoption assert as having no
  * manifest at all. `withBuildSourceFile` does both, which is the reason to use
  * it over writing the file directly; the hand-done version of this fix needed a

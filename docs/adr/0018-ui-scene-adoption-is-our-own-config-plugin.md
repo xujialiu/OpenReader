@@ -6,7 +6,7 @@ status: accepted
 
 iOS 27 asserts at launch unless the app adopts the scene-based life cycle. Expo
 SDK 57.0.24's prebuild template does not adopt it, so a freshly prebuilt
-OwnReader builds, installs, and is killed before it runs.
+OpenReader builds, installs, and is killed before it runs.
 `plugins/with-ui-scene-lifecycle.ts` adopts it, in three edits to the generated
 project.
 

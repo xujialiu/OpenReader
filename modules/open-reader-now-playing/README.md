@@ -1,4 +1,4 @@
-# modules/own-reader-now-playing — ADR 0016
+# modules/open-reader-now-playing — ADR 0016
 
 iOS only. Roughly 130 lines of Swift that own `MPRemoteCommandCenter` and
 `MPNowPlayingInfoCenter`.
@@ -16,10 +16,10 @@ the one place the reasoning lives. Read it first.
 
 ## What is missing, in the order it will be added
 
-1. `ios/OwnReaderNowPlaying.podspec` — until this exists, Expo's autolinking
+1. `ios/OpenReaderNowPlaying.podspec` — until this exists, Expo's autolinking
    finds no pod for the `apple` platform declared in `expo-module.config.json`.
    `expo prebuild` tolerates that; `pod install` will not.
-2. `ios/OwnReaderNowPlayingModule.swift` — the `OwnReaderNowPlayingModule` named
+2. `ios/OpenReaderNowPlayingModule.swift` — the `OpenReaderNowPlayingModule` named
    in `expo-module.config.json`. An `ExpoModulesCore.Module` that:
    - registers `play`, `pause` and — the one the library forgets —
      `togglePlayPauseCommand`, which is what AirPods single-tap and most car head
@@ -57,14 +57,19 @@ With only `expo-module.config.json` present and no podspec and no Swift:
 - `npx expo prebuild --platform ios` generates the project and succeeds.
 - `pod install` (CocoaPods 1.17.0, 250 pods) succeeds. The module contributes no
   pod — `expo-modules-autolinking search --platform apple` lists it as
-  `own-reader-now-playing` with `apple: { modules: ['OwnReaderNowPlayingModule'] }`
+  `open-reader-now-playing` with `apple: { modules: ['OpenReaderNowPlayingModule'] }`
   and, unlike every real module, **no `podspecPath`** — and neither prebuild nor
   pod install treats the absence as an error.
 - The app builds, installs and runs with it in place (Xcode 27.0, iOS 27.0
   simulator — with the separate UIScene fix of ADR 0018, without which no build
   of this app launches at all).
 
+All of it was measured before the app was renamed, under this directory's old
+name `own-reader-now-playing` and the module name `OwnReaderNowPlayingModule`.
+The names above are the current ones; nothing else about the runs differs, and
+no part of what was checked depends on the spelling.
+
 So an `apple` platform declared with nothing behind it is tolerated rather than
 merely untested. That is worth knowing because it also means autolinking will
 **not** tell you the Swift is missing: the module simply will not exist at
-runtime, and `requireNativeModule('OwnReaderNowPlaying')` will be what throws.
+runtime, and `requireNativeModule('OpenReaderNowPlaying')` will be what throws.

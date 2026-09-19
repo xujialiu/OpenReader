@@ -4,7 +4,7 @@ import { afterEach, beforeEach } from 'vitest';
  * Loaded by vitest before every test file (vitest.config.mts setupFiles), the
  * way the Zotero-TTS plugin's test/setup.ts is. That file installs the
  * plugin's en-US Fluent strings so a test asserts the sentence a user reads;
- * OwnReader has no strings yet, and when it does that belongs here too.
+ * OpenReader has no strings yet, and when it does that belongs here too.
  *
  * What it does now is the one guarantee a provider suite needs from the
  * outside: **no test reaches the network.**

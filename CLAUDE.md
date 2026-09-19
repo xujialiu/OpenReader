@@ -50,7 +50,7 @@ different decisions.
 ## `notes/` — dated, and timestamped inside
 
 One file per day, `notes/NOTES_YYYY-MM-DD.md`, opening with
-`# OwnReader — engineering log, YYYY-MM-DD`. Every entry is a heading carrying
+`# OpenReader — engineering log, YYYY-MM-DD`. Every entry is a heading carrying
 **the time it was found**, to the minute:
 
 ```markdown

@@ -1,6 +1,6 @@
 # src/core
 
-The half of OwnReader that runs under Node.
+The half of OpenReader that runs under Node.
 
 Nothing here imports React, React Native or Expo. `eslint.config.js` enforces
 that with a `no-restricted-imports` override over `src/core/**`, and

@@ -64,7 +64,7 @@ describe('ADR 0012: playback keeps going with the screen locked', () => {
     expect(plugin('react-native-audio-api')?.disableFFmpeg).toBe(false);
   });
 
-  it('asks for no microphone, because OwnReader records nothing', () => {
+  it('asks for no microphone, because OpenReader records nothing', () => {
     expect(plugin('react-native-audio-api')).not.toHaveProperty('iosMicrophonePermission');
   });
 });
@@ -100,8 +100,8 @@ describe('ADR 0012: the rejected playback libraries stay out', () => {
 
 describe('ADR 0001: ios/ and android/ are generated, never committed', () => {
   it('names the project so a prebuild is reproducible from config alone', () => {
-    expect(manifest.name).toBe('ownreader');
-    expect(config.slug).toBe('ownreader');
+    expect(manifest.name).toBe('openreader');
+    expect(config.slug).toBe('openreader');
     expect(config.ios?.bundleIdentifier).toBeDefined();
     expect(config.android?.package).toBeDefined();
   });
@@ -117,11 +117,44 @@ describe('ADR 0018: the app adopts the UIScene life cycle', () => {
     expect(plugin('./plugins/with-ui-scene-lifecycle.ts')).toEqual({});
   });
 
-  it('keeps the TypeScript loader that lets Expo require that plugin', () => {
+  it('keeps the TypeScript loader that lets Expo require either plugin', () => {
     // Expo reads app.config.ts itself, but loads a path-resolved plugin through
     // plain `require`, which cannot read .ts. Dropping `tsx` turns the line
     // above into a plugin that is silently not found.
     const dependencies = { ...manifest.dependencies, ...manifest.devDependencies } as Record<string, string>;
     expect(dependencies['tsx']).toBeDefined();
+  });
+});
+
+describe('ADR 0019: four screens, and a book can arrive from another app', () => {
+  const dependencies = { ...manifest.dependencies, ...manifest.devDependencies } as Record<string, string>;
+
+  it('keeps the plugin that declares EPUB to iOS', () => {
+    // Without it the app is absent from Files' "Open in" and from every share
+    // sheet. Nothing logs that absence and nothing else in this suite reaches a
+    // prebuild, so this line disappearing would next be noticed by a person
+    // wondering why their book will not open.
+    expect(plugin('./plugins/with-epub-document-types.ts')).toEqual({});
+  });
+
+  it('depends on the native stack and on both native packages it needs', () => {
+    // ADR 0019 rejected a hand-rolled screen switch on three counts, and two of
+    // them — the platform back gesture and the reader not being remounted — are
+    // properties of `native-stack` rendering a real UINavigationController.
+    // react-native-screens and react-native-safe-area-context are native, so
+    // losing either is a pod install and a rebuild rather than an npm install.
+    expect(dependencies['@react-navigation/native']).toBeDefined();
+    expect(dependencies['@react-navigation/native-stack']).toBeDefined();
+    expect(dependencies['react-native-screens']).toBeDefined();
+    expect(dependencies['react-native-safe-area-context']).toBeDefined();
+  });
+
+  it('pins the two native packages to the versions this SDK expects, not to npm latest', () => {
+    // Read from the installed Expo's own bundledNativeModules.json rather than
+    // written down here, so this asserts the rule ("whatever the SDK expects")
+    // and not a number that would have to be edited on every upgrade.
+    const expected = require('expo/bundledNativeModules.json') as Record<string, string>;
+    expect(dependencies['react-native-screens']).toBe(expected['react-native-screens']);
+    expect(dependencies['react-native-safe-area-context']).toBe(expected['react-native-safe-area-context']);
   });
 });

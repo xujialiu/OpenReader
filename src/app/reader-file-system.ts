@@ -27,6 +27,8 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { useCallback, useMemo } from 'react';
 
+import { APP_NAME } from '../../app-name';
+
 /**
  * What `ReaderProps.fileSystem` must return.
  *
@@ -86,14 +88,14 @@ export function useReaderFileSystem(): ReaderFileSystem {
   /**
    * Refused, and said so.
    *
-   * This is how `<Reader>` opens a book given an `http(s)` address, and OwnReader
+   * This is how `<Reader>` opens a book given an `http(s)` address, and OpenReader
    * never gives it one: a Document is a file on the owner's device, read in
    * `document.ts` and handed over as bytes. Rejecting names that decision at the
    * one place it could be quietly undone, where an implementation nothing
    * exercises would be a claim about code that has never run.
    */
   const downloadFile = useCallback(async (fromUrl: string) => {
-    throw new Error(`OwnReader reads documents from this device, so it does not download ${fromUrl}.`);
+    throw new Error(`${APP_NAME} reads documents from this device, so it does not download ${fromUrl}.`);
   }, []);
 
   const getFileInfo = useCallback(async (uri: string) => {

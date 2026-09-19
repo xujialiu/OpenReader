@@ -1,6 +1,6 @@
 ---
-name: ownreader-implementer
-description: "Implements the hard parts of OwnReader — the renderer and its injected highlighter, the playback graph, native and config-plugin work — where correctness cannot be established from the source tree and has to be measured on a device. Use for any task whose acceptance is a screenshot, a log line or a number rather than a green test run. Never commits; a reviewer verifies and commits."
+name: openreader-implementer
+description: "Implements the hard parts of OpenReader — the renderer and its injected highlighter, the playback graph, native and config-plugin work — where correctness cannot be established from the source tree and has to be measured on a device. Use for any task whose acceptance is a screenshot, a log line or a number rather than a green test run. Never commits; a reviewer verifies and commits."
 model: opus
 effort: max
 disallowedTools: Agent, Artifact, Workflow, NotebookEdit

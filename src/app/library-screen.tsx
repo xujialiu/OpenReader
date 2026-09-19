@@ -1,0 +1,156 @@
+/**
+ * The **Library**: the front door (ADR 0019).
+ *
+ * The documents the owner has already opened, most recent first, each with what
+ * it is called and how far the reading got. Tapping one opens it where it was
+ * left. Two buttons in the navigation bar: one adds a book, one opens Settings.
+ *
+ * ## What "how far the reading got" is allowed to say
+ *
+ * The **quotation** of the last Utterance spoken, and no percentage. A
+ * percentage would need epub.js to index the whole book — the step that is
+ * already the slow part of opening the 2,077-section novel — and a number
+ * arrived at any other way is an estimate, which philosophy rule 1 forbids for
+ * exactly the reason it forbids an estimated Word Timing. A sentence the owner
+ * recognises answers the question they are actually asking, which is "which of
+ * these am I in the middle of".
+ *
+ * ## An entry that cannot be opened says so, and stays
+ *
+ * The design file: "An entry that no longer points at a file says so when it is
+ * tapped rather than pretending; it is not silently removed, because a file that
+ * is temporarily unreachable is not the same as one the owner threw away." Here
+ * it says so *before* it is tapped as well, because the file is a local one and
+ * looking is free — but it is still there to tap, and tapping it still gives the
+ * sentence rather than an empty reader.
+ */
+
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+
+import { APP_NAME } from '../../app-name';
+import type { LibraryEntry } from '../core/document';
+
+import { DocumentRow, HeaderButton, INK, Note } from './controls';
+import { pickDocument } from './document';
+import { documentFile } from './library';
+import type { ScreenProps } from './routes';
+import { useShell } from './routes';
+import { PROVIDER_LABELS, readiness, readinessSentence } from './settings';
+import { useProviderKey } from './use-provider-key';
+
+/** How much of the last Utterance a row shows. Two lines of it at this size; more would push the next Document off the screen. */
+const QUOTATION = 90;
+
+function progressOf(entry: LibraryEntry, present: boolean): string {
+  if (!present) return 'The file for this book is not on this device any more. The place it was left is kept; add the book again to read it.';
+  if (!entry.position) return 'Not started.';
+  const quoted = entry.position.anchor.exact.trim().replace(/\s+/g, ' ');
+  return `Last read: “${quoted.length > QUOTATION ? `${quoted.slice(0, QUOTATION)}…` : quoted}”`;
+}
+
+export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
+  const { settings, library } = useShell();
+  const [picking, setPicking] = useState(false);
+  const key = useProviderKey(settings.provider);
+
+  const add = useCallback(async () => {
+    setPicking(true);
+    try {
+      const picked = await pickDocument();
+      if (!picked) return;
+      // Moved, not copied: iOS already made this copy in the app's temporary
+      // directory before JavaScript saw it (`document.ts`).
+      const entry = await library.add(picked, { move: true });
+      navigation.navigate('Reader', { id: entry.id });
+    } catch (problem) {
+      library.report(problem instanceof Error ? problem.message : String(problem));
+    } finally {
+      setPicking(false);
+    }
+  }, [library, navigation]);
+
+  /**
+   * The two buttons ADR 0019 puts at the top.
+   *
+   * `useLayoutEffect` rather than `useEffect`, because these are set on the
+   * native header: an effect that runs after paint shows the owner one frame of
+   * a navigation bar with no buttons in it.
+   */
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => <HeaderButton label="Settings" onPress={() => navigation.navigate('Settings')} />,
+      headerRight: () => <HeaderButton label={picking ? 'Adding…' : 'Add book'} onPress={() => void add()} disabled={picking} />,
+    });
+  }, [navigation, add, picking]);
+
+  /**
+   * Which entries still have their file, worked out once per change of the list
+   * rather than once per render.
+   *
+   * It is a `stat` per entry, and a `FlatList` re-renders its rows for reasons
+   * that have nothing to do with the Library — a scroll, a keyboard, the
+   * settings changing two screens up.
+   */
+  const present = useMemo(() => {
+    const found = new Set<string>();
+    for (const entry of library.entries) {
+      try {
+        if (documentFile(entry.id, entry.format).exists) found.add(entry.id);
+      } catch {
+        // Unreadable counts as not present, and the row says so. There is no
+        // third thing to tell the owner here.
+      }
+    }
+    return found;
+  }, [library.entries]);
+
+  const ready = readiness(settings, key.presence.state === 'held');
+
+  return (
+    <View style={styles.screen}>
+      <FlatList
+        data={library.entries}
+        keyExtractor={(entry) => entry.id}
+        renderItem={({ item }) => (
+          <DocumentRow
+            title={item.title}
+            progress={progressOf(item, present.has(item.id))}
+            onPress={() => navigation.navigate('Reader', { id: item.id })}
+          />
+        )}
+        ListHeaderComponent={library.note ? <View style={styles.banner}><Note attention>{library.note}</Note></View> : null}
+        ListEmptyComponent={
+          library.loading ? null : (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No books yet</Text>
+              <Text style={styles.emptyWords}>
+                {APP_NAME} reads an EPUB aloud through a text-to-speech Provider you choose and pay for directly, and
+                highlights the word being spoken. Add a book from this device, or open one from another app, and it
+                stays in this Library.
+              </Text>
+              {ready.ready ? (
+                <Note>
+                  {PROVIDER_LABELS[settings.provider]} is ready, reading in {settings.voice} at {settings.rate}×.
+                </Note>
+              ) : (
+                <Note attention>
+                  {readinessSentence(settings.provider, ready.missing)} There is no zero-key path: until Settings has
+                  what it asks for, a document can be read on screen and not aloud.
+                </Note>
+              )}
+            </View>
+          )
+        }
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  banner: { paddingHorizontal: 16, paddingTop: 12 },
+  empty: { alignItems: 'flex-start', gap: 12, padding: 24 },
+  emptyTitle: { color: INK.text, fontSize: 20, fontWeight: '700' },
+  emptyWords: { color: INK.quiet, fontSize: 15, lineHeight: 22 },
+  screen: { backgroundColor: INK.page, flex: 1 },
+});

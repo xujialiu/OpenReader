@@ -30,13 +30,13 @@
 import type { Block, BlockRole } from '../core/segmenter';
 
 /** The `type` of the Blocks message. Must not collide with `@epubjs-react-native/core`'s own `internalEvents`, or `View.js` swallows it instead of forwarding it to `onWebViewMessage`. */
-export const BLOCKS_MESSAGE = 'ownreader:blocks';
+export const BLOCKS_MESSAGE = 'openreader:blocks';
 
 /** The `type` of the problem message. Same constraint. */
-export const PROBLEM_MESSAGE = 'ownreader:problem';
+export const PROBLEM_MESSAGE = 'openreader:problem';
 
 /** The `type` of the document message. Same constraint. */
-export const DOCUMENT_MESSAGE = 'ownreader:document';
+export const DOCUMENT_MESSAGE = 'openreader:document';
 
 /**
  * A **Block** as the WebView found it in the rendered document.

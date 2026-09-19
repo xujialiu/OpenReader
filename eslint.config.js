@@ -27,8 +27,8 @@ const PLATFORM = [
   'expo-*/**',
   '@expo/**',
   // The local Expo module of ADR 0016 is native too.
-  '**/modules/own-reader-now-playing',
-  '**/modules/own-reader-now-playing/**',
+  '**/modules/open-reader-now-playing',
+  '**/modules/open-reader-now-playing/**',
 ];
 
 /** The layers above core, by whatever relative path is used to reach them. */
@@ -49,7 +49,7 @@ module.exports = defineConfig([
   { ignores: ['dist/*', 'ios/*', 'android/*'] },
 
   /**
-   * `src/core/` is the part of OwnReader that runs under Node. That is not a
+   * `src/core/` is the part of OpenReader that runs under Node. That is not a
    * tidiness preference: it is what lets the Zotero-TTS plugin's provider
    * suite — about 3,200 lines driven entirely by fake `fetch` implementations
    * and injected dependencies — run here unchanged, and what keeps the

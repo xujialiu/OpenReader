@@ -2,7 +2,7 @@
  * A Provider's API key, in the Keychain. Nothing else — ADR 0002.
  *
  * `expo-secure-store` is the iOS Keychain as `kSecClassGenericPassword`, and
- * this file is the only place in OwnReader that touches it. Three operations,
+ * this file is the only place in OpenReader that touches it. Three operations,
  * because ADR 0002 names three needs: the owner enters a key, the reader reads
  * it while the screen is locked, and the owner removes it — the last one because
  * Keychain entries survive an app uninstall, so deleting the app is not how a
@@ -53,8 +53,15 @@ export type KeyChange = { readonly outcome: 'done' } | { readonly outcome: 'refu
  *
  * The hazard is that changing this string abandons every entry already written,
  * and those entries outlive the app. It is effectively permanent.
+ *
+ * It has changed once, when the app was renamed from OwnReader to OpenReader,
+ * and only because that rename changed the bundle identifier in the same breath.
+ * An entry written with no keychain-sharing entitlement lives in the access group
+ * derived from the bundle identifier, so every key the old app wrote was already
+ * out of the new app's reach and this string had nothing left to abandon. That
+ * coincidence is the only circumstance in which it may change again.
  */
-const KEYCHAIN_SERVICE = 'ownreader.provider-keys';
+const KEYCHAIN_SERVICE = 'openreader.provider-keys';
 
 /**
  * The options every call below passes. The `keychainAccessible` line is the one

@@ -1,4 +1,4 @@
-import { OwnReader } from './src/app';
+import { OpenReader } from './src/app';
 
 /**
  * The reader, which is the whole app (`src/app/`).
@@ -11,5 +11,5 @@ import { OwnReader } from './src/app';
  * something at every stage, including before a document has been picked.
  */
 export default function App() {
-  return <OwnReader />;
+  return <OpenReader />;
 }

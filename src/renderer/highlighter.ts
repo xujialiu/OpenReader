@@ -59,11 +59,11 @@ import type { HighlightMessage } from './messages';
 import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE } from './messages';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
-export const UTTERANCE_HIGHLIGHT = 'ownreader-utterance';
-export const WORD_HIGHLIGHT = 'ownreader-word';
+export const UTTERANCE_HIGHLIGHT = 'openreader-utterance';
+export const WORD_HIGHLIGHT = 'openreader-word';
 
 /** The name the program installs itself under. Both halves have to agree on it, so it is written once. */
-export const HIGHLIGHTER = '__ownReaderHighlighter';
+export const HIGHLIGHTER = '__openReaderHighlighter';
 
 /**
  * How the two levels are painted.
@@ -73,9 +73,9 @@ export const HIGHLIGHTER = '__ownReaderHighlighter';
  * `-webkit-text-stroke` — and a structured type would imply the rest work.
  */
 export interface HighlightStyles {
-  /** Declarations for `::highlight(ownreader-utterance)`: the sentence being read. */
+  /** Declarations for `::highlight(openreader-utterance)`: the sentence being read. */
   utterance: string;
-  /** Declarations for `::highlight(ownreader-word)`: the word being spoken. Absent Word Timings, this is never painted. */
+  /** Declarations for `::highlight(openreader-word)`: the word being spoken. Absent Word Timings, this is never painted. */
   word: string;
 }
 
@@ -165,7 +165,7 @@ export function highlighterSource(styles: HighlightStyles = DEFAULT_HIGHLIGHT): 
     'var DOCUMENT = ' + JSON.stringify(DOCUMENT_MESSAGE) + ';\n' +
     'var PROBLEM = ' + JSON.stringify(PROBLEM_MESSAGE) + ';\n' +
     'var CSS_TEXT = ' + JSON.stringify(highlightCss(styles)) + ';\n' +
-    'var STYLE_ID = "ownreader-highlight";\n';
+    'var STYLE_ID = "openreader-highlight";\n';
 
   return `(function () {
   if (window.${HIGHLIGHTER}) return true;

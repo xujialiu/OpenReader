@@ -33,7 +33,7 @@ all 381 tests in 20 files passed, with and without that repo's own
 
 **React Native code.** Nothing in `test/` renders a component or touches a native
 module. That is not an omission to be filled in later with a different runner: the
-platform-free half of OwnReader lives in `src/core/` precisely so that the tests
+platform-free half of OpenReader lives in `src/core/` precisely so that the tests
 that matter need no simulator, and the half that is not platform-free is the half
 whose failures are invisible on a desk anyway — notes/NOTES.md item 4 wants a
 60–90 minute backgrounded session on a real device, which no test environment
@@ -55,11 +55,21 @@ Node test environment simulates.
   `package.json` rather than in code: the iOS 17.2 floor, background audio, the
   New Architecture not being switched off, and the absence of the two playback
   libraries ADR 0012 rejected.
+- `app/document-types.test.ts` — the config plugin of ADR 0019, run as a function
+  against a plain Info.plist. It is the only thing in this suite that reaches a
+  prebuild, and the symptom of getting it wrong is the app being **absent** from
+  Files' "Open in" and from every share sheet, which nothing logs. Both refusals
+  are tested as well as both writes: a guard nobody has watched fire is a comment.
+- `app/no-outgoing-links.test.ts` — ADR 0017's ban on a tappable route to a
+  Provider's signup, as a grep over `src/`. It used to be checkable by eye —
+  `controls.tsx` could say "nothing here imports `Linking`" — and stopped being
+  so when ADR 0019 let another app hand this one a Document to **open**. The
+  property it now states is that nothing in `src/` **opens** a URL.
 
 ## setup.ts
 
 Loaded before every test file. The plugin's version installs its en-US Fluent
-strings so a test asserts the sentence a user reads; OwnReader has no strings
+strings so a test asserts the sentence a user reads; OpenReader has no strings
 yet, and when it does that belongs there too.
 
 What it does now is refuse the network. Every provider takes `fetch` as an

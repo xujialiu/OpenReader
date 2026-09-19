@@ -3,7 +3,7 @@
 The JavaScript side of lock screen, Control Centre and headphone controls.
 
 Its whole job is to route: **on iOS to our own native module**
-([`modules/own-reader-now-playing/`](../../modules/own-reader-now-playing/)), and
+([`modules/open-reader-now-playing/`](../../modules/open-reader-now-playing/)), and
 **on Android to `react-native-audio-api`'s own implementation**, which ADR 0016
 calls "the better-built half".
 

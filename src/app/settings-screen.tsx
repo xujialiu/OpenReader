@@ -1,6 +1,23 @@
 /**
- * The settings sheet: which **Provider**, its key, its address, and the
- * **Voice**.
+ * **Settings**: which **Provider**, its key, its address, and the **Voice**.
+ *
+ * A screen, not a sheet (ADR 0019). What is here is what the sheet held, moved
+ * across and given the platform's navigation bar; the split ADR 0019 describes —
+ * _General_ for what is true of the whole app, _Providers_ listing the voices
+ * available and opening one at a time so that a Provider's key, model and Voice
+ * are on a screen of their own — is the next piece of work and is deliberately
+ * not half-built here. The seam it needs is two more routes in `routes.ts` and
+ * this file split along the `Section` boundaries it already has.
+ *
+ * ## The draft is committed by leaving
+ *
+ * The sheet had a Done button and the screen has a back arrow, and those are not
+ * the same thing: a back gesture that discarded what the owner typed would be a
+ * new way to lose an API key. So the draft is written back when the screen goes
+ * away, whichever way it went away. It is a draft rather than the live settings
+ * for a reason that is not tidiness — `use-reading.ts` disposes the engine and
+ * the audio session whenever `engineIdentity(settings)` changes, so editing the
+ * address live would tear the player down once per keystroke.
  *
  * ## What is deliberately not here (ADR 0017)
  *
@@ -26,9 +43,10 @@
  * address and a key work together at all.
  */
 
-import { useCallback, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { APP_NAME } from '../../app-name';
 import { createProvider } from '../core/providers/factory';
 import { LOCAL_ENGINES } from '../core/providers/local/registry';
 import type { ProviderId, VoiceInfo } from '../core/providers/types';
@@ -44,6 +62,7 @@ import {
   providerSettings,
   type AppSettings,
 } from './settings';
+import { useShell } from './routes';
 import { useProviderKey, type KeyPresence } from './use-provider-key';
 
 /** Philosophy rule 1: a request that never settles is a spinner that never stops. */
@@ -68,25 +87,36 @@ function keyLine(presence: KeyPresence, provider: ProviderId): string {
   }
 }
 
-export function SettingsSheet({
-  visible,
-  settings,
-  onDone,
-}: {
-  visible: boolean;
-  settings: AppSettings;
-  onDone(next: AppSettings): void;
-}) {
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={() => onDone(settings)}>
-      {/* Mounted only while open, so it opens on what is in force rather than on a draft from last time. */}
-      {visible ? <SettingsBody settings={settings} onDone={onDone} /> : null}
-    </Modal>
-  );
-}
-
-function SettingsBody({ settings, onDone }: { settings: AppSettings; onDone(next: AppSettings): void }) {
+export function SettingsScreen() {
+  const { settings, setSettings } = useShell();
   const [draft, setDraft] = useState<AppSettings>(settings);
+
+  /**
+   * What the owner typed, written back when they leave.
+   *
+   * Through refs, because this runs in an unmount cleanup and a cleanup closes
+   * over the render it was created in — the draft from the first render, which
+   * is the settings unchanged. The comparison is by `JSON.stringify` and that is
+   * enough here: `AppSettings` is three nested objects of strings and numbers
+   * with a fixed key order, and the only thing the comparison decides is whether
+   * to skip a `setState` that would re-render the Reader underneath for nothing.
+   */
+  const draftRef = useRef(draft);
+  const settingsRef = useRef(settings);
+  const commitRef = useRef(setSettings);
+  useEffect(() => {
+    draftRef.current = draft;
+    settingsRef.current = settings;
+    commitRef.current = setSettings;
+  }, [draft, settings, setSettings]);
+
+  useEffect(
+    () => () => {
+      if (JSON.stringify(draftRef.current) !== JSON.stringify(settingsRef.current)) commitRef.current(draftRef.current);
+    },
+    [],
+  );
+
   const key = useProviderKey(draft.provider);
   /** What is being typed into the key field. It goes to the Keychain and is not kept here after that. */
   const [typing, setTyping] = useState('');
@@ -165,17 +195,12 @@ function SettingsBody({ settings, onDone }: { settings: AppSettings; onDone(next
   const voiceLabels = new Map((voices ?? []).map((voice) => [voice.id, `${voice.label} · ${voice.locale}`]));
 
   return (
-    <View style={styles.sheet}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Settings</Text>
-        <Action label="Done" primary onPress={() => onDone(draft)} />
-      </View>
-
+    <View style={styles.screen}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <Section title="Provider">
           <Choice options={PROVIDER_ORDER} value={draft.provider} onChange={chooseProvider} labelOf={(id) => PROVIDER_LABELS[id]} />
           <Note>
-            No vendor is required or hard-coded, and there is no server of OwnReader&apos;s: the key you save is sent to
+            No vendor is required or hard-coded, and there is no server of {APP_NAME}&apos;s: the key you save is sent to
             the Provider it belongs to and to nowhere else.
           </Note>
         </Section>
@@ -323,18 +348,7 @@ function localHint(): string {
 
 const styles = StyleSheet.create({
   body: { gap: 28, paddingBottom: 64, paddingHorizontal: 20, paddingTop: 12 },
-  header: {
-    alignItems: 'center',
-    borderBottomColor: INK.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: 12,
-    paddingHorizontal: 20,
-    paddingTop: 64,
-  },
   row: { flexDirection: 'row', gap: 12 },
+  screen: { backgroundColor: INK.page, flex: 1 },
   scroll: { flex: 1 },
-  sheet: { backgroundColor: INK.page, flex: 1 },
-  title: { color: INK.text, fontSize: 24, fontWeight: '700' },
 });

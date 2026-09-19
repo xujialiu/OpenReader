@@ -69,7 +69,7 @@ That is a deferral with a known price, not an oversight.
 
 Three files, split where the native module is.
 
-- `store.ts` — the three operations, and the only file in OwnReader that touches
+- `store.ts` — the three operations, and the only file in OpenReader that touches
   the Keychain.
 - `entry-name.ts` — a Provider id becomes a Keychain entry name.
 - `refusal.ts` — what the Keychain said when it would not answer.
