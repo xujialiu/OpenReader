@@ -155,6 +155,83 @@ Two levels and 2,076 rows is a sectioned list, not a drill-down: it must mount
 scrolled to the current chapter with that row marked, because with the progress
 bar gone this is the only thing that answers "where am I".
 
+## The contents list needs one more thing on the bridge, and it is the spine's hrefs
+
+_Added with `src/core/document/contents.ts`. Measurements in
+`notes/NOTES_2026-09-19.md`, the 23:19 entry._
+
+A row's destination can only be a **spine index**, for `goToSection`. A navigation
+entry is an `href`, and turning an href into an index needs the spine's own hrefs —
+which `DocumentMessage` does not carry (`spine: number` and nothing else), and
+which `RenderedSection.href` delivers one section at a time, far too late for a
+list that opens before most sections have rendered. So the WebView must post the
+spine's hrefs in spine order, once, beside the length it already posts.
+`highlighter.ts` already reads one of them per section in `adopt`, so this is a
+field, not a mechanism. Measured: 2,077 hrefs, **50,812 UTF-8 bytes** as a JSON
+array. (The `toc` array on its own measures 241,468 bytes read out of `toc.ncx`.)
+
+Nothing can mint a **CFI** for a row: a CFI is a path into a rendered document's
+DOM. So there is no third currency, and `#fragment` is dropped — `part1.xhtml#ch3`
+seeks to the top of `part1.xhtml`.
+
+**The two hrefs are matched as strings, and that is safe for a stated reason.**
+epub.js resolves neither the navigation's hrefs (`Navigation.ncxItem` returns the
+raw `<content src>`) nor the spine's (the raw manifest href) against anything, and
+they are relative to different files. Here `OEBPS/toc.ncx` sits beside
+`OEBPS/content.opf` and the spellings are byte-identical. The lookup is epub.js's
+own table from `Spine.append` — the href, `decodeURI` of it and `encodeURI` of it,
+all three keyed to one index — with two deliberate differences: the **first**
+occurrence of a repeated href wins, because the earlier item is the one in document
+order and it keeps a row's target from going backwards as the list goes forwards;
+and neither conversion may throw, where epub.js raises `URIError` out of `unpack`
+and loses the whole book over one malformed escape. A book whose navigation lives
+in another directory therefore resolves **every** row to null rather than one, which
+is a state to report rather than a list of rows that quietly do nothing.
+
+### Where the reading is, and the granularity that is actually available
+
+Of the three ways the reading can be named — a Block id, a CFI, a spine index —
+only the **spine index** connects to a navigation entry. The Block id carries it as
+a decimal prefix (`highlighter.ts:334` mints `sectionIndex + '.' + ordinal`) and a
+CFI's first component encodes the spine position, but both are second spellings of
+a number `ReportedBlock.sectionIndex` already sends, and decoding the CFI would put
+epub.js's CFI dialect inside `src/core/` — which is exactly what ADR 0008 keeps
+out.
+
+The rule: **the row whose spine item is the latest one at or before the reading's,
+and the first such row in document order.** Written that way rather than "the last
+row at or before the reading" because the two differ on a navigation not in spine
+order, where the second returns whichever row happens to come last — an arbitrary
+answer that reads like a considered one. On the owner's book the order never goes
+backwards (0 decreases across 2,076 entries) and the two agree.
+
+It resolves at spine-item granularity **and no finer**, so the answer carries how
+coarse it is:
+
+- `exact` — one row names the spine item the reading is in.
+- `shared` — several do, and the **first** is reported. Rows sharing a spine item
+  differ only by their fragment, a fragment names an element, and where an element
+  falls needs the rendered document. Naming a later sibling while the reading is
+  above it would be the confident wrong answer this ADR calls the expensive
+  defect; the coarse answer that contains the reading is the right trade. The
+  owner's book has **zero** fragments so this never arises there — and a book that
+  puts a part's title and its chapters in one file is ordinary.
+- `before` — no row names it, so the nearest row before it is reported. Happens on
+  the owner's book exactly once: 2,077 spine items, 2,076 entries, and the one with
+  no entry is spine item 1, `Text/copyright.xhtml`. Reading it reports the cover.
+
+Two facts about the library's own data that the list must not trust. Its `Section`
+type says `id: string`; `ncxItem` computes `getAttribute('id') || false`, so a
+`navPoint` with no id yields the boolean `false`, and a navigation document's
+`navItem` falls back to the href, so two entries in one file share an id. Nesting
+therefore comes from `subitems` and never from `parent`, which is that same id. And
+`toc.ncx`'s own `<meta name="dtb:depth" content="3"/>` says three levels where the
+file has two, so the depth comes from walking the tree.
+
+Flatten and locate on all 2,076 entries: **0.772 ms** and **0.003 ms** median under
+Node on the desk — and two thirds of the flatten is building the spine table, not
+walking the tree.
+
 ## Voices: the locale dimension is missing from half the providers
 
 `VoiceInfo` is `{ id, label, locale }` with `MULTILINGUAL = 'mul'`

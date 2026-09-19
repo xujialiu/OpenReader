@@ -1,8 +1,9 @@
 /**
  * The public surface of `core/document`: what a Document is called, which format
- * it is, where the owner stopped reading, and what a store keeps.
+ * it is, where the owner stopped reading, what a store keeps, and what parts the
+ * Document says it has.
  *
- * Four questions, four files, and the order they appear in is the order they
+ * Five questions, five files, and the order they appear in is the order they
  * depend on each other.
  *
  * - `identity.ts` — ADR 0004. A Document Id from the bytes, `dc:identifier`
@@ -20,6 +21,10 @@
  * - `library.ts` — one entry per Document as a store persists it: a versioned
  *   file, parsed defensively, with ADR 0003's "reject a newer version and leave
  *   it alone" and "new information goes in a new file" designed in.
+ * - `contents.ts` — ADR 0020's contents list: the Document's own navigation
+ *   flattened into rows and sections, each row resolved to the spine item
+ *   `goToSection` takes, and the rule that says which row the reading is in —
+ *   together with what that rule cannot resolve, which is the part that matters.
  *
  * Nothing in here imports the platform, and nothing imports from the layers
  * above `core/`. `eslint.config.js` enforces both.
@@ -83,3 +88,16 @@ export {
   type Stamp,
   type VoiceChoice,
 } from './library';
+
+export {
+  EMPTY_CONTENTS,
+  contentsOf,
+  currentRow,
+  type Contents,
+  type ContentsRow,
+  type ContentsSection,
+  type CurrentRow,
+  type NavigationEntry,
+  type ReadingSpineItem,
+  type RowPrecision,
+} from './contents';

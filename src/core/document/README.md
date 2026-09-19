@@ -1,7 +1,7 @@
-# src/core/document — ADR 0004, 0007, 0008
+# src/core/document — ADR 0004, 0007, 0008, 0020
 
-What a **document** is, how it is recognised again, and how a place in one is
-written down.
+What a **document** is, how it is recognised again, how a place in one is written
+down, and what parts the document says it has.
 
 ## Identity: content, not a library key (ADR 0004)
 
@@ -118,6 +118,9 @@ resolveReadingPosition(position, placeReader) → PositionResolution
 
 serializeLibrary(entries) → string
 parseLibrary(text) → LibraryParse
+
+contentsOf(navigation, spineHrefs) → Contents               // rows + sections, in document order
+currentRow(contents, { sectionIndex }) → CurrentRow | null   // and how coarse the answer is
 ```
 
 `DOCUMENT_FORMATS` is the list ADR 0007 is about: adding `'pdf'` to it is what
@@ -143,6 +146,82 @@ oversight: `expo-crypto` is a platform import this directory may not make,
 `crypto.subtle` is not among the globals measured on this Hermes and is
 asynchronous besides, and Node having one that Hermes may not would mean the
 tests proved something about Node.
+
+## The contents list, and how precisely it can say where you are (ADR 0020)
+
+`contents.ts` turns the navigation the EPUB library already posts at load into the
+rows a list renders, and answers "which row is the reading in". ADR 0020 removed
+the progress bar, so that answer is the only thing left that says where you are —
+which is why most of the file is about how wrong it is allowed to be.
+
+**Flattening.** One row per navigation entry, in document order. A row carries its
+`depth` (what the list indents by) and the `section` it belongs to. A top-level
+entry that has entries under it **heads** a section and is still a destination of
+its own — in the owner's book each volume's entry points at a real spine item, and
+a heading that could not be tapped would make that item unreachable. A run of
+top-level entries with nothing under them is one **unheaded** section: the owner's
+book opens with two, and a book with no nesting at all must not become two
+thousand sections of one row.
+
+**The one currency out is a spine index**, for `goToSection`. Nothing here can
+mint a CFI — a CFI is a path into a rendered document's DOM, and the DOM is in the
+WebView — so a union with a CFI branch would be a stub that pretends to work.
+
+### The rule, and what it cannot resolve
+
+> The current row is the row whose spine item is the latest one at or before the
+> reading's, and the first such row in document order.
+
+`currentRow` reports how coarse that is, because the three cases are genuinely
+different and only the first is an answer:
+
+- `exact` — one row names the spine item the reading is in.
+- `shared` — several do, and the **first** is reported. Rows sharing a spine item
+  differ only by their `#fragment`; a fragment names an element, and where an
+  element falls needs the rendered document. The coarse answer that contains the
+  reading beats the precise one that might not.
+- `before` — no row names it, so the nearest row before it is reported. Ordinary:
+  the owner's book has 2,077 spine items and 2,076 entries, and the one with no
+  entry is spine item 1, `Text/copyright.xhtml`. Reading it reports the cover.
+
+It **does not read a CFI**, although a CFI's first component does encode the spine
+position: decoding it would put epub.js's CFI dialect inside `src/core/`, which is
+what ADR 0008 keeps out. And it **does not parse a Block id**, although
+`highlighter.ts` mints it as `sectionIndex + '.' + ordinal` — that would be a
+second numbering to keep in step with one that already crosses the bridge.
+`ReportedBlock.sectionIndex` is the number, and `currentRow` takes the Block
+itself so that a row index or a Block ordinal cannot be passed in its place.
+
+`#fragment` is dropped from a row's target, so `part1.xhtml#ch3` seeks to the top
+of `part1.xhtml`. Keeping it would mean handing the href to the renderer, and ADR
+0020 says the contents list adds no third currency to `goTo(cfi)` and
+`goToSection(index)`.
+
+### What `src/renderer/` must send
+
+Two things, and only one of them is new:
+
+1. **The navigation tree** — `useReader().toc`, or `onNavigationLoaded`'s `toc`.
+   Already crossing the bridge; nothing in `src/` consumed it before this.
+2. **The spine items' hrefs, in spine order** — new. `DocumentMessage` carries
+   only `spine: number` today, and `RenderedSection.href` arrives one section at a
+   time, which is too late for a list that opens before most sections have
+   rendered. Without them every row is unreachable and `Contents.unreachable`
+   equals `rows.length`, which is a state to say out loud rather than a list of
+   rows that quietly do nothing.
+
+The hrefs must be the **spine's own spelling**, the manifest href relative to the
+package document — `book.spine`'s `href`, which `highlighter.ts` already reads one
+at a time in `adopt`. Measured on the owner's book: 2,077 of them, 50,812 UTF-8
+bytes as a JSON array, once per document.
+
+The matching is by string, which is worth stating because it is the one thing that
+could quietly fail: epub.js resolves **neither** the navigation's hrefs nor the
+spine's against anything, and they are relative to different files. In the owner's
+book `OEBPS/toc.ncx` sits beside `OEBPS/content.opf` and the two spellings are
+byte-identical. A book whose navigation lives in another directory resolves
+**every** row to null — all of them, not one of them, which is why the count is on
+the result.
 
 ## Open, and blocking
 

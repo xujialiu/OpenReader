@@ -105,6 +105,51 @@ A menu of five or six preset speeds was rejected because people settle on a pace
 that is theirs and it is rarely one of the presets. Holding an arrow moves
 quickly, so a large change is still about a second.
 
+## The contents list is one list, and a volume title is a place you can go
+
+The owner's novel has thirteen volumes and two thousand chapters, so the contents
+cannot be one flat run of two thousand lines. It is one list with the volumes as
+headings and the chapters beneath them — not a menu that makes you pick a volume,
+then go back, then pick a chapter. Two thousand rows in one list is a single flick
+of a thumb; two screens is two decisions before you have got anywhere.
+
+**A volume title is itself somewhere to go**, not only a label. The book puts a
+title page at the start of each volume, and if the heading were only a heading
+that page would be the one place in the book the contents could not reach.
+
+The two entries this book opens with — its cover and its description — have no
+chapters under them, so they are plain rows rather than headings with nothing
+beneath. A book with no volumes at all is simply one list with no headings, and a
+book with volumes inside volumes indents the inner ones.
+
+## The list can be certain where you are, and when it cannot, it is vague rather than wrong
+
+Opening the contents at the chapter you are in is the whole reason the progress bar
+could go, so it matters what happens when the book does not make that answerable.
+
+On the owner's novel every chapter is its own piece of the book, so the answer is
+exact: one row, the one you are reading. Two other things can happen in other
+books, and in both the list is deliberately vaguer rather than confidently wrong.
+
+**Some books put several chapters into one piece.** Then the list can tell which
+piece you are in but not which of its chapters, and it marks the part rather than
+guessing at the chapter. Guessing would mean sometimes saying "chapter four" while
+you are reading chapter three — and a wrong answer to "where am I" is worse than a
+broad one, because you would have no way to tell it was wrong.
+
+**Some pages are not in the contents at all** — this book's copyright page is one.
+Reading such a page marks the nearest thing before it that the contents does list.
+Nothing is highlighted as if it were exact.
+
+The related cost, in the same vein: when a book's contents points at a chapter
+partway down a longer piece, tapping that row takes you to the start of the piece
+rather than to the exact line. On the owner's novel this never happens. Where it
+does, you land slightly early rather than somewhere unpredictable.
+
+**And a book with no contents at all is normal.** Some have none; the list is then
+empty and says so. It is not an error and nothing else stops working — tapping a
+sentence still reads from there, which is the other half of knowing where you are.
+
 ## What is deliberately not here
 
 **Anything that rewrites your place without you asking.** Every control in this
