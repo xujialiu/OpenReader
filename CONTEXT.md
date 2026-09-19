@@ -1,13 +1,12 @@
-# FreeReader
+# OwnReader
 
 A reader for EPUB — later PDF and HTML — that speaks the text aloud through a
 text-to-speech provider the reader's owner chooses and pays for directly, and
 that keeps its place in sync across the owner's phones, tablets and their
 desktop copy of the Zotero-TTS plugin.
 
-`FreeReader` is the project and repository name. The name shown on the App Store
-is a separate, later decision: review guideline 2.3.7 forbids prices and
-descriptive terms in an app's name, and "Free" reads as a price.
+The name says what the project is: the provider is the owner's, the keys are the
+owner's, the sync server is the owner's, and the documents stay the owner's.
 
 ## Language
 

@@ -20,12 +20,22 @@ effectively technical users. That is acceptable while the app is built for its
 author and open-sourced later; it would have to change before the app could
 serve a general audience.
 
-An on-device key with no hosted tier also makes a disk cache for synthesized
-audio a correctness matter rather than an optimisation: without one, every
-re-listen spends the owner's own quota again. Audio is nonetheless cached only
-in memory for now, deliberately — what a cached clip should be keyed to depends
-on how voices are chosen, which is not settled yet. The cost of the delay is
-understood and accepted.
+Synthesized audio is cached **in memory only**, and there is deliberately no
+disk cache. The obvious argument for one — that without it every re-listen
+re-spends the owner's own quota — does not apply, because the owner rarely
+re-listens to anything.
+
+That reframes what a disk cache would be for. Its value here is not keeping what
+has been heard; it is **synthesizing a whole book ahead of time so it can be
+listened to offline**, which is a different feature with a different design. So
+the step of caching heard audio is skipped entirely rather than deferred, and
+pre-synthesis comes later on its own terms.
+
+Two decisions it will need then, both left open: what format the audio is stored
+in — raw samples are about sixteen times larger than a low-bitrate encode, and a
+ten-hour book is the difference between 1.7 GB and 108 MB — and where it lives,
+given that what is wanted is "kept indefinitely but never backed up", which no
+JavaScript API on this platform exposes.
 
 ## How the key is stored
 
