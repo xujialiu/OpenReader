@@ -1,0 +1,253 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+import { describe, expect, it } from 'vitest';
+
+import { BLOCKS_MESSAGE, PROBLEM_MESSAGE } from '../../src/renderer/messages';
+import { highlightCall, highlighterSource } from '../../src/renderer/highlighter';
+
+/**
+ * The three things ADR 0005 says this directory must never do, checked against the
+ * source text — and the facts about `@epubjs-react-native/core` the bridge depends
+ * on, checked against the installed package.
+ *
+ * ADR 0011 puts half of this directory inside Safari's JavaScript, which no Node
+ * test environment simulates (test/README.md), so the loop, the `Range` building
+ * and the `::highlight()` painting are **not tested here and will not be**. A DOM
+ * mock would prove the mock was called. What a suite that cannot open a WebView can
+ * still do is the same thing `test/playback/footguns.test.ts` does for the playback
+ * library: read the lines that obey each rule, and fail when one of them goes.
+ *
+ * Each rule rules out the obvious implementation, and each would fail as something
+ * else — a dropped frame, a highlight a word behind, a fallback path nobody meant
+ * to write. None of them throws.
+ */
+
+const directory = new URL('../../src/renderer/', import.meta.url).pathname;
+
+const sources = new Map<string, string>(
+  readdirSync(directory)
+    .filter((name) => name.endsWith('.ts'))
+    .map((name) => [name, readFileSync(directory + name, 'utf8')]),
+);
+
+/**
+ * The code, without the comments.
+ *
+ * Needed because this directory explains each rule where it obeys it, so
+ * `updateAnnotation`, `useState` and "capability check" all appear in prose beside
+ * the lines that avoid them. A naive search would find the explanation and call it
+ * the offence.
+ */
+function code(name: string): string {
+  const text = sources.get(name);
+  if (text === undefined) throw new Error('src/renderer/' + name + ' does not exist');
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+const everyFile = (): string[] => [...sources.keys()];
+const allCode = (): string => everyFile().map(code).join('\n');
+
+/** The library's own source, read rather than trusted: every fact below was read out of it and none of it is documented. */
+const library = (path: string): string =>
+  readFileSync(new URL('../../node_modules/@epubjs-react-native/core/lib/commonjs/' + path, import.meta.url).pathname, 'utf8');
+
+describe('the comment stripper this file relies on', () => {
+  // First, so that a stripper that ate the whole file reports itself as that rather
+  // than as three rules mysteriously obeyed.
+  it('keeps code and removes prose', () => {
+    expect(code('reader-bridge.ts')).toContain('useReaderBridge');
+    // The words appear only in the comments explaining why they are never used.
+    expect(sources.get('reader-bridge.ts')).toContain('updateAnnotation');
+    expect(sources.get('reader-bridge.ts')).toContain('useState');
+    expect(code('reader-bridge.ts')).not.toContain('updateAnnotation');
+  });
+});
+
+describe('never send a position update per word across the bridge (ADR 0005)', () => {
+  it('has one place that injects, and it injects one message', () => {
+    // `postMessage` into a WebView is a script injection and an `eval` per message.
+    // One funnel means there is one thing to read to know what crosses the bridge.
+    expect(code('reader-bridge.ts').match(/injectJavascript\(/g)).toHaveLength(1);
+    expect(code('reader-bridge.ts')).toContain('injectJavascript(highlightCall(message))');
+  });
+
+  it('has nothing on the React Native side that could fire per word', () => {
+    // No clock of its own and no loop: the only things that call into the WebView
+    // are the two `ReaderClock` methods and the two commands, each once per call.
+    const bridge = code('reader-bridge.ts');
+    for (const forbidden of ['requestAnimationFrame', 'setInterval', 'setTimeout', 'forEach', 'for (', 'while (']) {
+      expect(bridge).not.toContain(forbidden);
+    }
+  });
+
+  it('interpolates inside the WebView instead, against a start time', () => {
+    // The whole Word Timing array goes over once; `requestAnimationFrame` fills in
+    // between corrections. That is where the three-to-five-words-a-second live.
+    expect(code('highlighter.ts')).toContain('requestAnimationFrame');
+    expect(highlighterSource()).toContain('window.requestAnimationFrame(tick)');
+  });
+
+  it('agrees with cursor.ts about which word is current, by running the same scan', () => {
+    // A binary search in one and a forward scan in the other would disagree on any
+    // Word Timing array a Provider did not report in order — visibly, once a second.
+    expect(code('cursor.ts')).toContain('while (index + 1 < words.length && words[index + 1].atMs <= elapsedMs)');
+    expect(highlighterSource()).toContain('while (state.next < words.length && words[state.next].atMs <= elapsed)');
+  });
+});
+
+describe('never put playback position in React state (ADR 0005)', () => {
+  it('has no React state at all', () => {
+    for (const hook of ['useState', 'useReducer', 'useSyncExternalStore']) {
+      expect(allCode()).not.toContain(hook);
+    }
+  });
+
+  it('keeps everything the clock touches in a ref', () => {
+    const bridge = code('reader-bridge.ts');
+    for (const held of ['utterances = useRef', 'ids = useRef', 'blocks = useRef', 'cued = useRef']) {
+      expect(bridge).toContain(held);
+    }
+  });
+});
+
+describe('never highlight by mutating the DOM, and never check whether you can (ADR 0005, 0001)', () => {
+  it('uses the CSS Custom Highlight API', () => {
+    expect(code('highlighter.ts')).toContain('CSS.highlights.set(');
+    expect(code('highlighter.ts')).toContain('new win.Highlight()');
+    expect(code('highlighter.ts')).toContain('::highlight(');
+  });
+
+  it('has no capability check and no fallback around it', () => {
+    // `::highlight()` arrived in Safari 17.2 and ADR 0001 raised the deployment
+    // target to 17.2 for exactly this reason. A capability check would reintroduce
+    // the per-word DOM-wrapping renderer that ADR 0005 exists to delete — a second
+    // implementation of the hardest part of the app, written to be worse.
+    const everything = allCode();
+    expect(everything).not.toMatch(/@supports/);
+    expect(everything).not.toMatch(/\bsupports\s*\(/);
+    expect(everything).not.toMatch(/typeof\s+(CSS|Highlight)\b/);
+    expect(everything).not.toMatch(/['"](Highlight|highlights)['"]\s+in\b/);
+    expect(everything).not.toMatch(/\bfallback\b/i);
+    expect(everything).not.toMatch(/\bHighlight\s*(===|!==|&&|\|\|)/);
+  });
+
+  it('mutates the DOM exactly once, for the stylesheet a ::highlight() rule has to live in', () => {
+    const program = code('highlighter.ts');
+    expect(program.match(/createElement\(/g)).toHaveLength(1);
+    expect(program).toContain("createElement('style')");
+    expect(program.match(/appendChild\(/g)).toHaveLength(1);
+    expect(program).toContain('appendChild(style)');
+    for (const mutation of [
+      'innerHTML',
+      'outerHTML',
+      'insertAdjacentHTML',
+      'createTextNode',
+      'surroundContents',
+      'replaceChild',
+      'splitText',
+      'textContent =',
+    ]) {
+      if (mutation === 'textContent =') {
+        // The one exception, and it is the stylesheet's own text.
+        expect(program).toContain('style.textContent = CSS_TEXT');
+        continue;
+      }
+      expect(program).not.toContain(mutation);
+    }
+  });
+});
+
+describe('never highlight through the library’s annotation API (ADR 0011)', () => {
+  it('names none of it', () => {
+    // `updateAnnotation` re-renders every view's annotation pane and each call is a
+    // fresh string evaluation. `injectJavascript` installs our own highlighter once.
+    for (const forbidden of ['Annotation', 'annotation', 'addMark', 'removeSelection']) {
+      expect(allCode()).not.toContain(forbidden);
+    }
+  });
+});
+
+describe('Word Timings arrive already scaled (ADR 0005, rate.ts)', () => {
+  it('has no rate in the arithmetic that builds the message', () => {
+    // rate.ts divided them, once per Clip. Dividing again is, in ADR 0005's words,
+    // the single easiest way to reintroduce drift — and it fails as a highlight
+    // that is correct at the start of a sentence and wrong by the end of it.
+    expect(code('cursor.ts')).not.toMatch(/\brate\b/);
+    expect(code('messages.ts')).not.toMatch(/\brate\b/);
+    expect(allCode()).not.toContain('playback/rate');
+  });
+});
+
+describe('the two halves stay in separate files (README.md)', () => {
+  it('lets only the bridge see the platform', () => {
+    // Nothing in the type system distinguishes Hermes from Safari, so the boundary
+    // is the file boundary. `highlighter.ts` is a string; if it could import
+    // `react-native` the string would stop being the only thing that runs over there.
+    const platform = /from\s+'(react|react-native|@epubjs-react-native\/core|expo[^']*)'/;
+    for (const name of everyFile()) {
+      const found = platform.test(code(name));
+      expect({ name, platform: found }).toEqual({ name, platform: name === 'reader-bridge.ts' });
+    }
+  });
+
+  it('keeps the WebView program parseable, since nothing else will notice a typo in it', () => {
+    // It is a string: TypeScript does not look inside it and eslint does not either.
+    // A missing bracket would first appear as a book that renders and never
+    // highlights, on a device, with no error anywhere.
+    expect(() => new vm.Script(highlighterSource(), { filename: 'highlighter.js' })).not.toThrow();
+    expect(() => new vm.Script(highlightCall({ kind: 'clear' }), { filename: 'call.js' })).not.toThrow();
+  });
+
+  it('escapes the two characters that are legal in JSON and end a statement in JavaScript', () => {
+    const separator = String.fromCharCode(0x2028);
+    const call = highlightCall({
+      kind: 'speak',
+      utterance: 0,
+      utteranceRanges: [{ block: '0.0', start: 0, end: 3, text: 'a' + separator + 'b' }],
+      words: null,
+      durationMs: 1,
+      reveal: false,
+    });
+    expect(call).not.toContain(separator);
+    expect(call).toContain('u2028');
+    expect(() => new vm.Script(call, { filename: 'call.js' })).not.toThrow();
+  });
+});
+
+describe('what was read out of @epubjs-react-native/core rather than its documentation', () => {
+  it('still forwards the parsed object, not the WebView event', () => {
+    // `onWebViewMessage?: (event: any) => void` and the parameter is called `event`,
+    // but `View.js` parses the payload first and hands over the object. `asMessage`
+    // in reader-bridge.ts depends on that and the `any` would hide it changing.
+    const view = library('View.js');
+    expect(view).toContain('JSON.parse(event.nativeEvent.data)');
+    expect(view).toContain('onWebViewMessage(parsedEvent)');
+  });
+
+  it('still forwards only messages whose type is not one of its own', () => {
+    // `if (!internalEvents.includes(type) && onWebViewMessage)`. A name collision
+    // would not be an error: the library would handle the message itself and the
+    // renderer would simply never see a Block.
+    expect(library('View.js')).toContain('!_internalEvents.default.includes(type)');
+    const internal = library('utils/internalEvents.util.js');
+    expect(internal).not.toContain(BLOCKS_MESSAGE);
+    expect(internal).not.toContain(PROBLEM_MESSAGE);
+  });
+
+  it('still installs injectedJavascript from onReady, after the first section has rendered', () => {
+    // Which is why the program sweeps `rendition.getContents()` as it installs: the
+    // first section's `rendered` event has already been and gone by then.
+    expect(library('View.js')).toContain('book.current?.injectJavaScript(injectedJavascript)');
+    expect(highlighterSource()).toContain('sweep();');
+  });
+
+  it('still exposes the escape hatch and the CFI move the bridge is built on', () => {
+    // ADR 0011 chose this library for `injectJavascript`, `goToLocation` and epub.js's
+    // CFI dialect. All three come through `useReader`.
+    const context = library('context.js');
+    expect(context).toContain('book.current?.injectJavaScript(script)');
+    expect(context).toContain("rendition.display('${targetCfi}')");
+    expect(code('reader-bridge.ts')).toContain('injectJavascript, goToLocation } = useReader()');
+  });
+});

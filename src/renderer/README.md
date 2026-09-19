@@ -86,3 +86,54 @@ The WebView side (the highlighter, injected as a string) runs in Safari's
 JavaScript, not Hermes, and may use the DOM freely. Keeping the two clearly
 apart in separate files matters more here than anywhere else in the project,
 because nothing in the type system distinguishes them.
+
+## What is here
+
+`index.ts` exports one thing worth using: `useReaderBridge`, which a reader
+screen mounts and whose `clock` is handed to `createPlaybackEngine`. Everything
+else is exported because the other half of the directory or a test needs it.
+
+The split is where the platform is, and it is the whole of the test strategy.
+
+| Runs under Node, tested in `test/renderer/` | |
+| --- | --- |
+| `cursor.ts` | A Word Timing into a place in the document, and which word is current at time *t*. Three coordinate systems and every decision the renderer makes. |
+| `blocks.ts` | The Blocks the WebView has reported, in reading order — sections arrive out of it and more than once. |
+| `messages.ts` | The protocol between the two halves. Types, and the two message names that must not collide with the library's own. |
+
+| Runs in Safari's JavaScript, not tested here | |
+| --- | --- |
+| `highlighter.ts` | The program, as a string: the DOM walk that finds Blocks, the `Range` building, `CSS.highlights`, and the `requestAnimationFrame` loop. |
+| `reader-bridge.ts` | The React Native side. `ReaderClock` in, `injectJavascript` out, Blocks and problems back. A wiring file, because every decision is in the two files above. |
+
+Every decision has been moved out of the two platform files, so what is left in
+them is a DOM walk and a sequence that need a real book to mean anything.
+`test/renderer/rules.test.ts` reads the lines that obey each of the rules above
+— the same tool `test/playback/footguns.test.ts` uses, and for the same reason:
+each of them fails as something else, so nothing else would notice one being
+undone. It also parses the injected program, which is the only thing that
+catches a typo in a 300-line string before the app runs.
+
+## Blocks, and why their text is verbatim
+
+A **Block**'s text is the concatenation of its text nodes exactly as the document
+spells them — the source file's newlines and indentation included. An offset into
+that text is turned back into a `Range` by walking the same nodes, so collapsing
+whitespace here would break the one mapping that must not drift. A Provider
+speaks the newlines without noticing.
+
+What counts as a Block is decided by the document's own computed `display` rather
+than by a list of tag names, because CONTEXT.md's definition is "a run of text
+the document itself presents as one unit" and an EPUB is as likely to lay its
+paragraphs out in `<div>`s as in `<p>`s.
+
+## What rests on running the app
+
+The whole of the WebView side. There is no coverage of the DOM walk, of a `Range`
+built from a Block offset, of `::highlight()` actually painting, of the loop, or
+of `rendition.display()` bringing a Block into view — `test/README.md` is
+explicit that ADR 0011 puts this inside Safari's JavaScript, "which no Node test
+environment simulates", and a DOM mock would prove the mock was called. The
+numbers ADR 0005 cares about — the correction cadence of one second watched
+against a real highlight, and the output latency of `../playback/rate.ts` — wait
+on the same device session as notes/NOTES.md item 4.
