@@ -7,7 +7,7 @@
  * why this file contains nothing else. Read it as a small program, not as part of
  * the app: `var`, no arrow functions, no template literals of its own, and every
  * name it touches is either its own or one the library's template already put on
- * `window` (`book`, `rendition`, `ePub`, `ReactNativeWebView`).
+ * `window` (`book`, `rendition`, `ReactNativeWebView`).
  *
  * It is installed **once**, through `injectJavascript`, and after that it is
  * called with one argument. ADR 0011: highlighting must not go through the
@@ -22,15 +22,23 @@
  *   Block's text is a text node and an offset into it.
  *
  *   **What is remembered across renders is text and a CFI, and nothing else.**
- *   epub.js replaces a section's document as the reader pages through it, so a
- *   remembered node, element or `Contents` is a reference into a document that may
- *   already have lost its browsing context — and `isConnected` does not say so,
- *   because a detached document still owns its nodes and they still report
- *   themselves connected to it. The text nodes are therefore resolved against the
- *   live document at paint time, cached per document rather than per Block, so the
- *   walk happens once when a section renders and never per word. A device run found
- *   the other way round: a correct `Range` built in a dead document, painting
- *   nothing, and every step looking right from the inside.
+ *   epub.js replaces a section's document as the reader moves through the book —
+ *   under `scrolled-continuous` several are alive at once and the manager destroys
+ *   the ones that scroll out of reach — so a remembered node, element or
+ *   `Contents` is a reference into a document that may already have lost its
+ *   browsing context, and `isConnected` does not say so, because a detached
+ *   document still owns its nodes and they still report themselves connected to
+ *   it. The text nodes are therefore resolved against the live document at paint
+ *   time, cached per document rather than per Block, so the walk happens once when
+ *   a section renders and never per word. A device run found the other way round:
+ *   a correct `Range` built in a dead document, painting nothing, and every step
+ *   looking right from the inside.
+ * - **The page following the voice.** The reader is mounted with
+ *   `flow: 'scrolled-continuous'` (ADR 0011), and when a Clip starts the document
+ *   is scrolled so the Utterance being spoken is **centred**. It is measured from
+ *   the `Range`s that were just painted and the scroll container's own box, and it
+ *   runs once per Utterance on the Clip cue the bridge already sends — no message
+ *   of its own, and nothing at the `requestAnimationFrame` rate (ADR 0005).
  * - **The clock between corrections.** One position correction arrives about once
  *   a second; `requestAnimationFrame` interpolates against a start time in
  *   between. Nothing crosses the bridge per word (ADR 0005).
@@ -187,10 +195,11 @@ ${constants}
   /* Block id -> { text, cfi, section }. **What survives a render, and nothing
      else.**
 
-     epub.js replaces a section's document as the reader pages through it — that
-     is what a paginated reader does — so a remembered text node, element or
-     Contents is a reference into a document that may already have lost its
-     browsing context. \`isConnected\` does not say so: a detached document still
+     epub.js replaces a section's document as the reader moves through the book —
+     under 'scrolled-continuous' several are alive at once and the manager
+     destroys the ones that scroll out of reach — so a remembered text node,
+     element or Contents is a reference into a document that may already have lost
+     its browsing context. \`isConnected\` does not say so: a detached document still
      owns its nodes and they still report themselves connected to it. The question
      it cannot answer is \`ownerDocument.defaultView\`, and the answer to *that*
      was how this file once built a correct Range in a dead document and painted
@@ -500,6 +509,10 @@ ${constants}
     return 'the Utterance covers no Block';
   }
 
+  /* Returns the built ranges rather than a boolean, so that the caller which has
+     just painted them measures *those* rather than building a second set to
+     measure — the centring below needs the very Ranges that are on the page.
+     Null where nothing could be drawn. */
   function showUtterance() {
     var built = build(state.utteranceRanges);
     if (!built) {
@@ -508,13 +521,13 @@ ${constants}
          message exists: once per Utterance, so a reading that is ahead of the page
          says so once rather than sixty times a second. */
       report(why(state.utteranceRanges));
-      return false;
+      return null;
     }
     var registry = registryFor(built.window);
     moveTo(registry);
     put(registry.utterance, built.ranges);
     put(registry.word, []);
-    return true;
+    return built;
   }
 
   function showWord(ranges) {
@@ -578,20 +591,106 @@ ${constants}
     if (state.next < words.length) frame = window.requestAnimationFrame(tick);
   }
 
-  /* ---- bringing the reading into view (ADR 0005) ---- */
+  /* ---- holding the Utterance in the middle of the screen (ADR 0005, ADR 0011) ---- */
 
-  function reveal(range) {
-    var record = blocks.get(range.block);
+  /* The one element that scrolls. Read off the manager rather than looked up by
+     id, because epub.js builds it itself: it is the \`epub-container\` div the
+     manager's own Stage creates *inside* the element the library's template
+     rendered to, and the template gives that outer element
+     \`overflow: hidden !important\`. Looking up '#viewer' would find the element
+     that cannot scroll. Measured on the device: className 'epub-container',
+     computed overflow-y 'scroll', identical to manager.stage.getContainer(). */
+  function scroller() {
+    var manager = rendition.manager;
+    return manager && manager.container ? manager.container : null;
+  }
+
+  /* Where an Utterance sits, measured in the top document's own coordinates.
+     A Range's client rects are relative to the section's iframe, so the iframe's
+     own rect is added: in a scrolled layout each section's iframe is as tall as
+     its text and sits at a fixed offset down the scroll, so the two together are
+     where the sentence is. Rects, not the CFI — a CFI names a Block and the
+     screen is measured in pixels. */
+  function boxOf(built) {
+    var frame = built.window.frameElement;
+    if (!frame) return null;
+    var origin = frame.getBoundingClientRect().top;
+    var top = 0;
+    var bottom = 0;
+    var found = false;
+    for (var i = 0; i < built.ranges.length; i++) {
+      var rect = built.ranges[i].getBoundingClientRect();
+      /* A Range over text that wraps to nothing — a collapsed line, or one of the
+         newlines a Block's text keeps verbatim — has no geometry to aim at. */
+      if (!rect.height) continue;
+      if (!found || origin + rect.top < top) top = origin + rect.top;
+      if (!found || origin + rect.bottom > bottom) bottom = origin + rect.bottom;
+      found = true;
+    }
+    return found ? { top: top, bottom: bottom } : null;
+  }
+
+  /* Scroll so the Utterance being spoken is **centred** — the whole of ADR 0011's
+     continuous reader, and the reason a page-turning layout was rejected. It is
+     driven by the Clip cue alone: once per Utterance, never per word, and nothing
+     extra crosses the bridge to do it (ADR 0005). */
+  function centre(built) {
+    var view = scroller();
+    if (!view) return false;
+    var box = boxOf(built);
+    if (!box) return false;
+    var bounds = view.getBoundingClientRect();
+    var height = view.clientHeight;
+    var move = (box.top + box.bottom) / 2 - bounds.top - height / 2;
+    /* Unless the Utterance is taller than the screen, where centring its middle
+       would push its opening words off the top — and those are the words about to
+       be spoken. Then its start goes to the top of the screen instead, and the
+       word highlight walks down from there. */
+    if (move > box.top - bounds.top) move = box.top - bounds.top;
+    /* Below a pixel there is nothing to see, and every scroll costs epub.js a
+       pass over its views. */
+    if (Math.abs(move) < 1) return true;
+    /* Through the manager's own scroll, and deliberately **without** its \`ignore\`
+       flag: this has to reach epub.js exactly as a finger scroll does, because
+       that is what makes the continuous manager append the section the reading is
+       about to walk into. A scroll it was told to ignore renders nothing new. */
+    rendition.manager.scrollBy(0, move, false);
+    return true;
+  }
+
+  /* Once per document per Utterance, and \`centred\` is what makes it once: a
+     centring that causes epub.js to render a section would otherwise be answered
+     by attach(), which would centre again, which would render again. It is a
+     WeakSet, so a document epub.js destroys is not held alive by having been
+     centred in — the thing the Block records exist not to hold. */
+  function centreOnce(built) {
+    if (!state || !state.follow) return;
+    var doc = built.window.document;
+    if (state.centred.has(doc)) return;
+    if (centre(built)) state.centred.add(doc);
+  }
+
+  /* The page following the voice, for the Utterance now starting. \`built\` is
+     what showUtterance() just painted, or null.
+
+     Two cases, and only the second moves the reading position: the section is on
+     the page, and it is scrolled to the middle; or it is not rendered at all —
+     the reading has run ahead of the document — and only a display() can get
+     there. The centring then happens in attach(), when the section arrives. */
+  function follow(built) {
+    if (!state) return;
+    if (built) {
+      centreOnce(built);
+      return;
+    }
+    var record = blocks.get(state.utteranceRanges[0].block);
     if (!record || !record.cfi) return;
     try {
-      var here = rendition.currentLocation();
-      if (here && here.start && here.end) {
-        var compare = ePub.CFI.prototype.compare;
-        if (compare(record.cfi, here.start.cfi) >= 0 && compare(record.cfi, here.end.cfi) <= 0) return;
-      }
-      /* epub.js's own dialect, and its own resolver (ADR 0011). Paginating lands
-         on the Block, not on the word: a Block longer than a page is revealed at
-         its start, which is never the wrong place, only a coarse one. */
+      /* epub.js's own dialect, and its own resolver (ADR 0011). Under the
+         continuous manager this clears every view and rebuilds from the target,
+         which is why it is the second case and not the first: it is what to do
+         when there is no other way to reach the text, and nothing to do when the
+         text is already on the page. */
       rendition.display(record.cfi);
     } catch (error) {
       report('could not bring the Block into view: ' + error);
@@ -618,12 +717,18 @@ ${constants}
     if (known) return;
 
     /* The section that just rendered may be the one being read: its document is
-       new, so the highlight has to be built against it. Never revealed from here —
-       a reveal that caused this render would reveal for ever. */
-    if (state && covers(contents.sectionIndex, state.utteranceRanges) && showUtterance()) {
-      showAt(state.next - 1);
-      start();
-    }
+       new, so the highlight has to be built against it. */
+    if (!state || !covers(contents.sectionIndex, state.utteranceRanges)) return;
+    var built = showUtterance();
+    if (!built) return;
+    showAt(state.next - 1);
+    /* And it arrived wherever epub.js put it, which is not the middle of the
+       screen. Two ways in: the reading ran ahead of the document and follow()
+       displayed the section, or the manager destroyed this section's view and
+       rebuilt it while the same Utterance was being spoken. Both want centring
+       now that there is something to measure. */
+    centreOnce(built);
+    start();
   }
 
   function sweep() {
@@ -684,7 +789,10 @@ ${constants}
         epoch: window.performance.now(),
         next: 0,
         held: false,
-        reported: false
+        reported: false,
+        follow: message.reveal,
+        /* The documents this Utterance has already been centred in; see centreOnce. */
+        centred: new WeakSet()
       };
       var wrong = mismatch(message.utteranceRanges);
       if (wrong) {
@@ -694,12 +802,12 @@ ${constants}
         return;
       }
       /* Whether or not the section is on screen, the state is kept: attach()
-         installs the highlight when epub.js renders it. And the reveal is
-         attempted either way — a Block whose iframe epub.js has destroyed still
-         has its CFI here, and that is exactly the case where the reading has
-         crossed into text the reader cannot see. */
+         installs the highlight when epub.js renders it. And the page is followed
+         either way — a Block whose section epub.js has not rendered still has its
+         CFI here, and that is exactly the case where the reading has crossed into
+         text the reader cannot see. */
       var shown = showUtterance();
-      if (message.reveal) reveal(message.utteranceRanges[0]);
+      if (message.reveal) follow(shown);
       if (!shown) return;
       start();
       return;

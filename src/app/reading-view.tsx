@@ -136,6 +136,13 @@ export function ReadingView({ document, settings, keyPresence, onRate }: Reading
             onDisplayError={setDisplayError}
             renderLoadingFileComponent={() => <Waiting words={`Reading ${document.name}…`} />}
             renderOpeningBookComponent={() => <Waiting words="Laying the document out…" />}
+            /**
+             * Last, and it carries more than the highlighter: `manager` and
+             * `flow` come through here too, because ADR 0011's continuous scroll
+             * and the centring that rides on it are one decision with the
+             * highlighter, and `src/renderer/` is where it is made. Setting
+             * either of them on this element would split it in half.
+             */
             {...reading.bridge.readerProps}
           />
         ) : (

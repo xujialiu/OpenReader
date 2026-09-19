@@ -48,6 +48,22 @@ function code(name: string): string {
 const everyFile = (): string[] => [...sources.keys()];
 const allCode = (): string => everyFile().map(code).join('\n');
 
+/**
+ * One function of the WebView program, from its `function` keyword to the next
+ * one at the same indentation.
+ *
+ * Crude, and it only has to hold for one file that is written in one style — but
+ * it is what lets a rule be asserted about *where* something happens rather than
+ * only about whether it appears, which is the difference between "the program
+ * scrolls" and "the program scrolls once per Utterance".
+ */
+function fn(program: string, name: string): string {
+  const from = program.indexOf('function ' + name + '(');
+  if (from < 0) throw new Error('highlighter.ts has no function ' + name);
+  const next = program.indexOf('\n  function ', from + 1);
+  return next < 0 ? program.slice(from) : program.slice(from, next);
+}
+
 /** The library's own source, read rather than trusted: every fact below was read out of it and none of it is documented. */
 const library = (path: string): string =>
   readFileSync(new URL('../../node_modules/@epubjs-react-native/core/lib/commonjs/' + path, import.meta.url).pathname, 'utf8');
@@ -93,6 +109,59 @@ describe('never send a position update per word across the bridge (ADR 0005)', (
     // Word Timing array a Provider did not report in order — visibly, once a second.
     expect(code('cursor.ts')).toContain('while (index + 1 < words.length && words[index + 1].atMs <= elapsedMs)');
     expect(highlighterSource()).toContain('while (state.next < words.length && words[state.next].atMs <= elapsed)');
+  });
+});
+
+describe('the page follows the voice, once per Utterance (ADR 0011)', () => {
+  it('mounts the reader in the layout the highlight was proved under', () => {
+    // The highlighter was re-proved on a device under *this* layout, and both
+    // findings behind it were re-measured there. Changing either of these two
+    // values does not break anything visible — it silently moves the code back
+    // to a layout nothing has been measured in since, which is the state ADR 0011
+    // describes as the evidence not carrying over.
+    // Twice each, and deliberately: the declared type and the value it is given.
+    // A search for the literal alone passes while the value is changed, because
+    // the type still names it — which is what the first version of this test did.
+    const bridge = code('reader-bridge.ts');
+    for (const spelling of ["flow: 'scrolled-continuous'", "manager: 'continuous'"]) {
+      expect({ spelling, declared: bridge.includes(spelling + ';'), given: bridge.includes(spelling + ',') }).toEqual({
+        spelling,
+        declared: true,
+        given: true,
+      });
+    }
+  });
+
+  it('scrolls in one place, and it is the Clip cue that reaches it', () => {
+    // ADR 0005 keeps the frame path off the bridge; this keeps it off the page.
+    // A scroll from `tick` would run at `requestAnimationFrame` rate, and each one
+    // costs the continuous manager a pass over its views — it would fail as a
+    // reader that stutters, not as an error.
+    const program = code('highlighter.ts');
+    expect(program.match(/scrollBy\(/g)).toHaveLength(1);
+    expect(fn(program, 'centre')).toContain('rendition.manager.scrollBy(0, move, false)');
+    for (const perWord of ['tick', 'showWord', 'showAt', 'start']) {
+      expect({ perWord, scrolls: /centre|scrollBy/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
+    }
+  });
+
+  it('does not scroll on the once-a-second correction either', () => {
+    // The correction is the second and last thing the bridge sends (ADR 0005). It
+    // moves the highlight inside an Utterance that is already centred; scrolling
+    // from it would drag the page under the reader once a second.
+    const program = code('highlighter.ts');
+    const correction = program.slice(program.indexOf("message.kind === 'correct'"));
+    expect(correction).not.toMatch(/centre|scrollBy|follow\(/);
+  });
+
+  it('centres at most once per document per Utterance', () => {
+    // A centring can make the continuous manager render a section, which reaches
+    // `attach`, which would centre again, which would render again. The WeakSet is
+    // what ends that, and it is weak because the alternative is the renderer
+    // holding a document epub.js means to destroy.
+    const program = code('highlighter.ts');
+    expect(program).toContain('centred: new WeakSet()');
+    expect(fn(program, 'centreOnce')).toContain('if (state.centred.has(doc)) return;');
   });
 });
 

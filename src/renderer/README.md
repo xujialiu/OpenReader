@@ -35,6 +35,49 @@ that can highlight an arbitrary text range and scroll it into view on command.
 Those two requirements, not the reading or the speaking, are what chose the
 playback engine and this renderer.
 
+## The page scrolls, and the Utterance being spoken is held centred (ADR 0011)
+
+The reader is mounted with `flow: 'scrolled-continuous'` and the `continuous`
+manager — `reader-bridge.ts` puts both in `readerProps`, because the layout and
+the highlighter are one decision and the centring measures against that manager's
+own scroll container. Paginated layout, which is the library's default and what
+the highlighter was first built against, is rejected: a page turn replaces the
+whole screen and throws the eye back to the top, every minute or two, for hours.
+
+Three properties of the centring, and each is a rule rather than an accident.
+
+- **It is centred, not merely on screen.** The middle of the Utterance goes to
+  the middle of the viewport, measured from the `Range`s that were just painted
+  and the container's own box. The one exception is an Utterance taller than the
+  screen, whose *start* goes to the top instead — centring its middle would push
+  the words about to be spoken off the top of the screen.
+- **It adds nothing to the bridge.** The scroll is driven by the Clip cue that
+  already arrives once per Utterance (`follow` below). There is no new message in
+  either direction and nothing at the `requestAnimationFrame` rate; ADR 0005
+  exists to keep that off the bridge. The once-a-second position correction does
+  not scroll, and neither does a word.
+- **The scroll is not hidden from epub.js.** It goes through the manager's own
+  `scrollBy` with its `ignore` flag *off*, so it reaches the continuous manager
+  exactly as a finger scroll does — which is what makes it render the section the
+  reading is about to walk into. `ignore` is the flag the manager's own `onScroll`
+  checks before enqueuing the `check()` that appends the next section, so a scroll
+  it was told to ignore renders nothing new and the reading would run off the end
+  of the rendered text.
+
+**Several sections are alive at once**, which is what continuous scrolling costs
+and what paginated layout did not. The Block records are keyed by spine index and
+survive a section being destroyed and rebuilt, and they must: measured on the
+owner's book, a text node captured from a section and looked at again after the
+reading had moved six sections on still reported `isConnected === true` while its
+`ownerDocument.defaultView` was `null`, and the section's document had been
+replaced by a new one. That is the 16:08 finding happening under this layout
+rather than under the one it was found in.
+
+The cost itself came back small. On the 2,077-spine-item book the manager holds
+**three views** and trims the rest, and the WebView process moved 259 → 269 MB
+across 250 Utterances of reading while the React Native process moved 322 →
+344 MB. ADR 0011 has the figures and what they mean for the decision.
+
 ## Three things this directory must never do
 
 Each rules out the obvious implementation.
@@ -64,7 +107,8 @@ whole word-timing array is pushed into the WebView in one message.
 `requestAnimationFrame` inside the WebView interpolates against a start time, and
 a position correction is sent about **once a second** for drift.
 
-One message per second, not one per word.
+One message per second, not one per word. The scroll that keeps the Utterance
+centred rides on the first of those two and adds no third.
 
 The clock those corrections carry is the source node's own content position — see
 [`../playback/`](../playback/) and ADR 0012 for why the audio context's clock is
@@ -104,7 +148,7 @@ The split is where the platform is, and it is the whole of the test strategy.
 | Runs in Safari's JavaScript, not tested here | |
 | --- | --- |
 | `highlighter.ts` | The program, as a string: the DOM walk that finds Blocks, the `Range` building, `CSS.highlights`, and the `requestAnimationFrame` loop. |
-| `reader-bridge.ts` | The React Native side. `ReaderClock` in, `injectJavascript` out, Blocks and problems back. A wiring file, because every decision is in the two files above. |
+| `reader-bridge.ts` | The React Native side. `ReaderClock` in, `injectJavascript` out, Blocks and problems back, and the layout the highlighter was proved under. A wiring file, because every decision is in the two files above. |
 
 Every decision has been moved out of the two platform files, so what is left in
 them is a DOM walk and a sequence that need a real book to mean anything.
@@ -145,7 +189,9 @@ actually suppresses the iOS long-press menu. The cost is that text is selectable
 by long-press again; the highlight is why the app exists.
 
 **Nothing that does not survive a render may be remembered.** epub.js replaces a
-section's document as the reader pages through it, so a remembered text node,
+section's document as the reader moves through the book — under
+`scrolled-continuous` the manager destroys the views that scroll out of reach and
+rebuilds them on the way back — so a remembered text node,
 element or `Contents` is a reference into a document that may already have lost
 its browsing context — and `isConnected` does not say so, because a detached
 document still owns its nodes and they still report themselves connected to it.
@@ -158,7 +204,7 @@ paint time, walked once per document and never per word.
 
 The whole of the WebView side. There is no automated coverage of the DOM walk, of
 a `Range` built from a Block offset, of `::highlight()` painting, of the loop, or
-of `rendition.display()` bringing a Block into view — `test/README.md` is explicit
+of the scroll that centres an Utterance — `test/README.md` is explicit
 that ADR 0011 puts this inside Safari's JavaScript, "which no Node test
 environment simulates", and a DOM mock would prove the mock was called.
 
@@ -167,6 +213,18 @@ from a synthetic `ClipCue`: the Utterance painted at utterance level, the word
 painted on top of it, a `PositionCorrection` moving the word highlight onto the
 word it names, and — from **one** `onClip` message and no further bridge traffic —
 `requestAnimationFrame` advancing exactly two words over eight seconds at four
-seconds a word. The numbers ADR 0005 cares about, the one-second correction cadence
-watched against a real voice and the output latency of `../playback/rate.ts`, still
-wait on the device session of notes/NOTES.md item 4.
+seconds a word.
+
+And under `scrolled-continuous`, on the owner's 2,077-section book, the same way:
+both highlights painting, the Utterance held within a pixel of the middle of the
+viewport, an Utterance taller than the viewport pinned to its top instead, the
+reading walking eight sections while the manager kept three views alive, and both
+of the 16:08 findings reproduced deliberately — `user-select: none` bisected until
+the highlight stopped painting and started again, and a text node from a section
+the reading had left reporting `isConnected` while its document had no
+`defaultView`. The figures are in ADR 0011 and `notes/NOTES_2026-09-19.md`.
+
+The numbers ADR 0005 cares about, the one-second correction cadence watched against
+a real voice and the output latency of `../playback/rate.ts`, still wait on the
+device session of notes/NOTES.md item 4: a synthetic cue proves the renderer, not
+the clock behind it.

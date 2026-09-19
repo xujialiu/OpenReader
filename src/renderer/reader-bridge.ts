@@ -80,11 +80,14 @@ export interface ReaderBridgeOptions {
   /** A highlight the WebView could not draw. Rare, and never a guess: see `ProblemMessage`. */
   onProblem?(problem: ProblemMessage): void;
   /**
-   * Bring each Utterance onto the page as it starts being spoken. Default true.
+   * Scroll the document so the Utterance being spoken is **centred**. Default
+   * true.
    *
    * ADR 0005 names "scroll it into view on command" as one of the two
-   * requirements that chose this renderer. It happens once per Utterance and never
-   * per word.
+   * requirements that chose this renderer, and ADR 0011 says where: the middle of
+   * the screen, not merely somewhere on it. It happens once per Utterance and
+   * never per word — the scroll is driven by the Clip cue below and adds no
+   * message of its own.
    */
   follow?: boolean;
   /**
@@ -147,10 +150,20 @@ export interface ReaderBridge {
    * Spread onto `<Reader>`. `injectedJavascript` installs the highlighter once,
    * from the library's own `onReady`; `onWebViewMessage` receives what the
    * highlighter posts back.
+   *
+   * **And the layout, because the highlighter is the half that was proved under
+   * it.** ADR 0011 mounts the reader with `flow: 'scrolled-continuous'` and the
+   * `continuous` manager, which is what makes the page scroll rather than turn,
+   * and the centring in `highlighter.ts` measures against that manager's own
+   * scroll container. The two are one decision, so they are stated in one place;
+   * a screen that spread these props and then set `flow` itself would have moved
+   * half of it.
    */
   readerProps: {
     injectedJavascript: string;
     onWebViewMessage(event: unknown): void;
+    manager: 'continuous';
+    flow: 'scrolled-continuous';
   };
 }
 
@@ -285,8 +298,17 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [options.styles],
   );
 
-  const readerProps = useMemo(
-    () => ({ injectedJavascript, onWebViewMessage }),
+  const readerProps = useMemo<ReaderBridge['readerProps']>(
+    () => ({
+      injectedJavascript,
+      onWebViewMessage,
+      // ADR 0011. `flow` picks the layout and `manager` picks the view manager
+      // that implements it; the library defaults to `'auto'` and `'default'`,
+      // which is the paginated reader this one replaces. Both are interpolated
+      // into the WebView's template at mount, so they are fixed for a document.
+      manager: 'continuous',
+      flow: 'scrolled-continuous',
+    }),
     [injectedJavascript, onWebViewMessage],
   );
 

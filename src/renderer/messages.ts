@@ -52,9 +52,9 @@ export interface ReportedBlock extends Block {
   /**
    * Stable across re-renders of the same section: the spine index and the
    * Block's ordinal within it. epub.js destroys and rebuilds a section's iframe
-   * as the reader pages through, so a DOM node reference would go stale while an
-   * id survives — the Utterances segmented from these Blocks stay valid and the
-   * highlight resumes when the section comes back.
+   * as it scrolls out of reach and back, so a DOM node reference would go stale
+   * while an id survives — the Utterances segmented from these Blocks stay valid
+   * and the highlight resumes when the section comes back.
    */
   id: string;
   /** What the document presents this Block as. Only `rejoin.ts` reads it, and `other` makes it refuse, which is the safe direction. */
@@ -194,7 +194,16 @@ export interface SpeakMessage {
   words: WordCue[] | null;
   /** How long the speech lasts as it will be heard. The interpolation is clamped to it, because the gap that follows belongs to the pause and not to the words. */
   durationMs: number;
-  /** Bring the spoken text into view if it is not on the page. Once per Utterance, never per word: paginating is not frame-path work. */
+  /**
+   * Follow the voice: scroll the document so this Utterance is **centred**
+   * (ADR 0011).
+   *
+   * Once per Utterance and never per word, which is why it rides on this message
+   * rather than having one of its own — scrolling is not frame-path work, and a
+   * message per word is what ADR 0005 exists to keep off the bridge. The
+   * measurement is the WebView's, because the only thing that knows where a
+   * sentence is on the screen is the document it is in.
+   */
   reveal: boolean;
 }
 

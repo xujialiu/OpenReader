@@ -60,16 +60,27 @@ one requirement that matters here and being well-kept does not help with that.
 
 **Continuous scrolling keeps more of the document in play at once.** Turning pages
 lets the app forget the page it just left; scrolling does not, so more of the book is
-being held at any moment and a phone has a finite amount of room to hold it in. On
-one of the owner's own novels — thousands of chapters in a single very large file —
-that limit is real rather than theoretical. It is being measured on that book, not
-estimated, and if an older phone cannot carry it this is the decision that gets
-revisited.
+being held at any moment and a phone has a finite amount of room to hold it in. That
+was measured on one of the owner's own novels — thousands of chapters in a single
+very large file — rather than estimated, and it came back cheap: the app holds three
+chapters at a time and lets the rest go, and half an hour of reading moved the
+memory it uses by a few percent. What does grow is something else, and it is not
+caused by scrolling: the app keeps every chapter's text it has ever seen and re-reads
+all of it each time a new chapter appears. Page-turning does the same, only more
+slowly, because it reaches new chapters later.
 
-**The word-by-word highlight has not yet been proved under this layout.** It was
-made to work, and the reasons it had not worked were found and fixed, under
-page-turning. Continuous scrolling changes the thing it was proved against, so the
-proof does not carry over. Until it has been run again, the highlight is treated as
-unfinished rather than done, and this file will be wrong if that is forgotten.
+**The word-by-word highlight has now been proved under this layout.** It was made to
+work, and the reasons it had not worked were found and fixed, under page-turning; and
+because continuous scrolling changes the thing it was proved against, the whole of
+that was run again on the owner's own book. The word lights up as it is spoken, the
+sentence being read sits in the middle of the screen to within the width of a hair,
+and both of the two reasons the highlight had once painted nothing were reproduced
+deliberately and confirmed still to be the reasons.
+
+**Opening that very large book sometimes shows an empty page.** Two opens out of
+three; the third was fine. Nothing is lost — pressing play, or moving to anywhere in
+the book, brings it back and reading works normally from then on — but the first
+thing the owner sees can be nothing at all, and why is not yet understood. It is
+recorded as unexplained rather than guessed at.
 
 *The engineering half of this decision is [ADR 0011](../adr/0011-epub-renders-in-a-webview-via-epubjs.md).*
