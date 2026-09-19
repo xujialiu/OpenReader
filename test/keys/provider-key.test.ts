@@ -42,9 +42,10 @@ function sourceOf(name: string): string {
 }
 
 /**
- * The Provider ids ADR 0013's copied layer uses, as they appear in the plugin's
- * `ProviderId` union. Used as data rather than imported, because
- * `src/core/providers/` has not landed yet.
+ * The Provider ids ADR 0013's copied layer uses. Used as data rather than
+ * imported from `src/core/providers/`: `src/keys/` deliberately imports nothing
+ * from `src/core/` (ADR 0002), so this list is a copy on purpose and not a
+ * shortcut waiting to be tidied.
  */
 const PROVIDER_IDS = [
   'openai-official',

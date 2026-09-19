@@ -26,9 +26,11 @@ export type CachedClip = { audio: Uint8Array };
  * *above* `core/` and `memory-cache.ts` imported it upward; here dependencies
  * point inwards, so it lives with its only implementation.
  *
- * Generic in the clip because the full provider contract has not arrived yet —
- * `providers/types.ts` holds only `Timestamp` so far. The cache never looks
- * past `audio`, so nothing is lost by letting the caller name what it stores.
+ * Generic in the clip rather than tied to `SynthesisResult`. The cache never
+ * looks past the bytes, and `SynthesisResult` is a union whose two arms name
+ * them differently (`samples` for PCM, `bytes` for an encoded container, ADR
+ * 0013) — so a caller says what it stores and the budget stays measurable
+ * either way.
  */
 export interface AudioCache<Clip extends CachedClip = CachedClip> {
   match(key: string): Promise<Clip | null>;

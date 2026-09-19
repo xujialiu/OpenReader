@@ -15,12 +15,35 @@ written.
 
 About 3,000 lines of TypeScript, roughly 95% portable as it stands, because the
 dependency injection is already complete: `createProvider(id, settings, deps)`
-takes `{ fetch, getWebSocket, newRequestId, ... }`. The only Zotero-specific
-code left in the non-system providers is two functions in `azure.ts`.
+takes the platform as an argument. The only Zotero-specific code left in the
+non-system providers is two functions in `azure.ts`.
 
 With it come about 3,200 lines of provider tests, which barely mention Zotero.
 They land in `test/core/providers/`, which is where they already live in the
 plugin, so their relative imports need no editing.
+
+### What has landed so far
+
+The OpenAI-compatible client and the three sections built on it (`openai.ts`,
+`compatible.ts`), Speechify, the local-engine registry with Kokoro-FastAPI, and
+the factory, errors, base-URL and audio-bytes pieces they share.
+
+**Not yet:** `azure.ts` and `azure-ws.ts`, which have no word timings under
+React Native (ADR 0005) and want a WebSocket dependency; `cloudflare.ts`,
+`fish.ts`, `fishspeech.ts` and `mimo.ts`, which are ordinary ports that nobody
+has needed yet; and `system/`, which is not coming at all — the operating
+system's own voices are a native module under ADR 0014, not a member of this
+layer.
+
+So `ProviderDeps` is `{ fetch }` and nothing else today. Azure would add
+`getWebSocket` and `newRequestId` back, Fish `newAbortController`; a dependency
+is listed when a provider that needs it exists, not before.
+
+The settings these providers read are declared in `factory.ts` as
+`ProviderSettings`, by the fields that are actually read. The plugin imported
+its whole `Settings` type, which reaches `createZoteroPrefs()`: type-only, so it
+erased, but one change to a value import would have pulled XPCOM in here without
+the lint boundary noticing.
 
 `core/wav.ts` comes across too, even though the PCM path bypasses most of it:
 `wavDataLength()` walks RIFF chunks instead of assuming data starts at offset
@@ -45,6 +68,24 @@ audio blob. Three reasons converge:
 *any* server speaking that protocol, including someone's self-hosted one, and
 none of those can be assumed to offer PCM. PCM is what is requested; decoding
 catches the rest. That is why `disableFFmpeg` is `false` in `app.config.ts`.
+
+So `SynthesisResult` is a union of the two, and a provider says which it has:
+
+```ts
+| { audio: 'pcm';     samples: Uint8Array; sampleRate: number; timestamps?; note? }
+| { audio: 'encoded'; bytes:   Uint8Array; mediaType: string;  timestamps?; note? }
+```
+
+`pcm` means **16-bit signed little-endian mono** at `sampleRate` hertz — the
+layout `core/wav.ts` writes. Nothing is inferred: a provider asks its server for
+PCM wherever the protocol allows it, and reports `encoded` only when what came
+back is not samples. `audio.ts` makes that one decision for all of them, from
+the server's `Content-Type` and, where a reply carries none (Kokoro's captioned
+route answers JSON), from the container signature in the bytes themselves.
+
+The field is still called `audio`, which is deliberate: it was the `Blob`'s name,
+so every site that has not been updated fails to compile instead of quietly
+type-checking against a string.
 
 ## The boundary, and how it is held
 
