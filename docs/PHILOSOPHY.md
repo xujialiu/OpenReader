@@ -45,6 +45,9 @@ inside.
 
 ## What stays out
 
-- **A library, a store, a catalogue, an account.** This reads documents you
-  already have.
+- **A store, a catalogue, an account.** This reads documents you already have.
+  There _is_ a shelf — the books you have opened, so that returning to one is a
+  tap rather than a trip through the file picker — but it lists only what you put
+  there yourself, it is not browsable for books you do not own, and emptying it
+  takes nothing away from your files.
 - **Anything that needs a server of mine to keep working.**

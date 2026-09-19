@@ -72,6 +72,12 @@ _Avoid_: rate, default speed, 1x
 
 ### Keeping place and settings
 
+**Library**:
+The documents the owner has opened, listed so that returning to one is a tap.
+It holds what the owner put there and nothing else — it is not browsable for
+documents the owner does not have, and removing an entry leaves the file alone.
+_Avoid_: shelf, catalogue, collection, bookshelf, recents
+
 **Reading Position**:
 Where speech stopped in a document. One per document, overwritten as the
 owner reads, and not something the owner creates or sees in a list.
