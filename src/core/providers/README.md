@@ -25,19 +25,59 @@ plugin, so their relative imports need no editing.
 ### What has landed so far
 
 The OpenAI-compatible client and the three sections built on it (`openai.ts`,
-`compatible.ts`), Speechify, the local-engine registry with Kokoro-FastAPI, and
-the factory, errors, base-URL and audio-bytes pieces they share.
+`compatible.ts`), Speechify, **Fish Audio**, the local-engine registry with
+Kokoro-FastAPI, and the factory, errors, base-URL and audio-bytes pieces they
+share.
+
+That completes ADR 0005's three providers that report Word Timings over plain
+HTTP — Speechify, Fish Audio and a self-hosted Kokoro — and Fish is the only one
+of the three that is a cloud service needing no server of the owner's own.
 
 **Not yet:** `azure.ts` and `azure-ws.ts`, which have no word timings under
 React Native (ADR 0005) and want a WebSocket dependency; `cloudflare.ts`,
-`fish.ts`, `fishspeech.ts` and `mimo.ts`, which are ordinary ports that nobody
-has needed yet; and `system/`, which is not coming at all — the operating
-system's own voices are a native module under ADR 0014, not a member of this
-layer.
+`fishspeech.ts` and `mimo.ts`, which are ordinary ports that nobody has needed
+yet; and `system/`, which is not coming at all — the operating system's own
+voices are a native module under ADR 0014, not a member of this layer.
 
-So `ProviderDeps` is `{ fetch }` and nothing else today. Azure would add
-`getWebSocket` and `newRequestId` back, Fish `newAbortController`; a dependency
-is listed when a provider that needs it exists, not before.
+So `ProviderDeps` is **still** `{ fetch }` and nothing else. Azure would add
+`getWebSocket` and `newRequestId` back; Fish was expected to add
+`newAbortController` and did not need to, because that dependency existed only
+to borrow an `AbortController` from a Zotero chrome window and this engine has
+one of its own (measured, notes/NOTES_2026-09-19.md). Fish's other two
+injections — the session voice cache and the pause before a retry — are not
+platform capabilities: each has a working default inside `fish.ts`, the way
+`speechify.ts` keeps its shared serial queue there, and each exists so a test
+can be fast and isolated without stubbing a global. A dependency is listed when
+a provider that needs it exists, not before.
+
+### The one thing Fish could not bring with it
+
+`src/core/fish-language-hint.ts`, which prefixed the request text with
+`[Speak in American English]` for an utterance of one to three words, because
+Fish's language detection drifts on context-poor text (`100 exp` read as
+"cn xp"). It counts words with **`Intl.Segmenter`, which this Hermes does not
+have**, so ported as it stands it would return the empty string on every call on
+the device while passing its tests under Node — the trap
+notes/NOTES_2026-09-19.md records for the segmenter polyfill, in the one shape
+that fails silently instead of throwing. The cue also carries this project's one
+forbidden failure: Fish is *not proven* to leave it unspoken, and a cue it reads
+aloud shifts every reported time by the cue's own length.
+
+So Fish sends the utterance and nothing else, and `SynthesisOptions` keeps its
+two fields. The locale the hint needs is already inside the provider — a
+published Fish voice id is `<locale>/<modelId>` — so reviving it needs a
+decision and an English language name, not a contract change.
+
+Two smaller things went with the contract rather than with Fish.
+`ListVoicesOptions` here has no `refresh`, so the plugin's superseded-generation
+bookkeeping is gone; and `TTSProvider` has no `voiceListNotices`, so there is no
+status line to put "the list may be stale" or "the library's query window cut
+this short" in. The plugin answered `[Default]` beside such a line when every
+source failed. With no line to answer beside, Fish's `listVoices` **reports**
+instead: a refused key rejects at once, a listing that found nothing but its own
+`Default` entry rejects with the reason, and a listing where one source worked
+returns what that source found. A catalogue of one voice is otherwise
+indistinguishable from a server that is down.
 
 The settings these providers read are declared in `factory.ts` as
 `ProviderSettings`, by the fields that are actually read. The plugin imported
@@ -64,10 +104,22 @@ audio blob. Three reasons converge:
   which also deletes the per-clip encoder padding that would otherwise be
   audible at every sentence boundary.
 
-**A decode path stays as the fallback.** The OpenAI-compatible provider talks to
-*any* server speaking that protocol, including someone's self-hosted one, and
-none of those can be assumed to offer PCM. PCM is what is requested; decoding
-catches the rest. That is why `disableFFmpeg` is `false` in `app.config.ts`.
+**A decode path stays as the fallback**, and two providers now use it. The
+OpenAI-compatible provider talks to *any* server speaking that protocol,
+including someone's self-hosted one, and none of those can be assumed to offer
+PCM. And **Fish Audio cannot report PCM honestly**: its word timings arrive
+inside an event stream whose own `Content-Type` is `text/event-stream`, and
+nothing in the stream or in Fish's documentation names an output sample rate, so
+`pcm` would mean guessing `PCM_SAMPLE_RATE`. A guessed rate is not a decode
+error — it is drift, because the playback clock of ADR 0012 is the samples
+consumed divided by that rate while Fish's word times arrive in real seconds. So
+Fish asks for MP3 and says `encoded`, which is the one answer that cannot put the
+highlight somewhere plausible and wrong.
+
+That qualifies ADR 0013's "every provider on the list can emit raw PCM": every
+provider on the list can emit *bytes a decoder accepts*, and all but Fish can
+emit samples at a rate they will name. PCM is what is requested; decoding catches
+the rest. That is why `disableFFmpeg` is `false` in `app.config.ts`.
 
 So `SynthesisResult` is a union of the two, and a provider says which it has:
 

@@ -46,11 +46,12 @@ export const PROVIDER_LABELS: Readonly<Record<ProviderId, string>> = {
   'openai-official': 'OpenAI',
   compatible: COMPATIBLE_LABEL,
   speechify: 'Speechify',
+  fish: 'Fish Audio',
   local: 'A server of your own',
 };
 
 /** The order the sections are offered in: the one that needs no credentials last, because it is the one with an address to type. */
-export const PROVIDER_ORDER: readonly ProviderId[] = ['openai-official', 'compatible', 'speechify', 'local'];
+export const PROVIDER_ORDER: readonly ProviderId[] = ['openai-official', 'compatible', 'speechify', 'fish', 'local'];
 
 /**
  * Whether this section has an API key at all.
@@ -67,7 +68,7 @@ export function keyIsOffered(provider: ProviderId): boolean {
 
 /** Whether a request without a key is refused before it goes out. The two hosted services; see `keyRequired` in `openai-compatible.ts`. */
 export function keyIsRequired(provider: ProviderId): boolean {
-  return provider === 'openai-official' || provider === 'speechify';
+  return provider === 'openai-official' || provider === 'speechify' || provider === 'fish';
 }
 
 /**
@@ -172,6 +173,12 @@ export function readiness(settings: AppSettings, hasKey: boolean): Readiness {
       if (!hasKey) missing.push('an API key');
       break;
 
+    // Fish needs nothing but the key: its Voice list carries the model's own
+    // Default entry, so there is no model to type and no address.
+    case 'fish':
+      if (!hasKey) missing.push('an API key');
+      break;
+
     case 'local':
       // An engine id that is in no adapter would reach `createProvider` and
       // throw there; naming it here keeps that a sentence rather than an error.
@@ -215,6 +222,13 @@ export function providerSettings(settings: AppSettings, key: string): ProviderSe
       model: settings.compatible.model.trim(),
     },
     speechify: { apiKey: keyFor('speechify') },
+    // `freeOnly` is on and is not yet a setting: a missing or unknown `model`
+    // header makes Fish fall back to the **paid** model, so the value that
+    // spends nothing is the one to state until the sheet offers the switch
+    // (philosophy rule 4, no silent spending). `voices` — the pasted model ids
+    // of ADR 0010's per-document Voice — has no field yet either, and an empty
+    // field is a field with no ids rather than a special case.
+    fish: { apiKey: keyFor('fish'), freeOnly: true, voices: '' },
     // No key and no headers: the local engines take neither an API key nor, yet,
     // the gateway headers `kokoro.ts` accepts for a server behind Cloudflare
     // Access. A setting the app does not offer is better than one that claims to

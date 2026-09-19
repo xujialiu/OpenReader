@@ -1,6 +1,7 @@
 import { parseHeaderList } from '../headers';
 import { createCompatibleProvider } from './compatible';
 import { SynthesisError } from './errors';
+import { createFishProvider } from './fish';
 import { getLocalEngine } from './local/registry';
 import { createOpenAIProvider } from './openai';
 import { createSpeechifyProvider } from './speechify';
@@ -13,12 +14,22 @@ import type { ProviderId, TTSProvider } from './types';
  */
 
 /**
- * Everything the platform has to hand in. In the plugin this also carried
- * `getWebSocket` and `newRequestId` for Azure's WebSocket route and
- * `newAbortController` for Fish; none of those providers is here, so neither
- * are they. The one that is left is the one the whole of ADR 0013 rests on:
- * a provider never reaches for a global `fetch`, which is what lets the tests
- * run under Node with no network at all.
+ * Everything the platform has to hand in — still exactly one thing.
+ *
+ * In the plugin this also carried `getWebSocket` and `newRequestId` for Azure's
+ * WebSocket route, and `newAbortController` for Fish. Azure is not here. Fish
+ * now is, and it needed **nothing added**: `newAbortController` existed only
+ * because the Zotero sandbox has no `AbortController` of its own and one had to
+ * be borrowed from a chrome window, and this engine has it (measured,
+ * notes/NOTES_2026-09-19.md). Fish's other two injections — a session voice
+ * cache and the pause before a retry — are not platform capabilities: each has
+ * a working default inside `fish.ts`, the same way `speechify.ts` keeps its
+ * shared serial queue there, and each exists so a test can be fast and
+ * isolated without stubbing a global.
+ *
+ * The one dependency that is left is the one the whole of ADR 0013 rests on: a
+ * provider never reaches for a global `fetch`, which is what lets the tests run
+ * under Node with no network at all.
  *
  * The plugin's `system` dependency — the helper process behind the operating
  * system's own voices — is gone for good rather than pending: under ADR 0014
@@ -46,6 +57,15 @@ export type ProviderSettings = {
   'openai-official': { apiKey: string; model: string; voices?: string };
   compatible: { baseURL: string; apiKey: string; model: string; voices?: string; headers?: string };
   speechify: { apiKey: string };
+  /**
+   * `freeOnly` is not optional and has no default here on purpose: a missing or
+   * unknown `model` header makes Fish fall back to the **paid** model, so the
+   * choice between `s2.1-pro-free` and `s2.1-pro` is the owner's money and is
+   * always stated (ADR 0002). The three `include…` flags are Fish's own
+   * "omitted means enabled", so a settings screen that does not offer them
+   * still gets every source.
+   */
+  fish: { apiKey: string; freeOnly: boolean; voices?: string; includeOfficial?: boolean; includeOwn?: boolean; includeManual?: boolean };
   local: { engine: string; baseURL: string; headers?: string };
 };
 
@@ -61,6 +81,12 @@ export function createProvider(id: ProviderId, settings: ProviderSettings, deps:
 
     case 'speechify':
       return createSpeechifyProvider(settings.speechify, { fetch: deps.fetch });
+
+    // The pasted model ids are a string here and a string in `FishConfig`; it is
+    // `fishVoiceIds` that finds the ids inside whatever was pasted, so an empty
+    // field is a field with no ids and not a special case.
+    case 'fish':
+      return createFishProvider({ ...settings.fish, voices: settings.fish.voices ?? '' }, { fetch: deps.fetch });
 
     case 'local': {
       const engine = getLocalEngine(settings.local.engine);

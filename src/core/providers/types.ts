@@ -7,8 +7,8 @@
  * carried as decoration.
  */
 
-/** Every provider that exists here. The plugin's `azure`, `cloudflare`, `fish`, `fishspeech`, `mimo` and `system` have not come across (ADR 0005 for Azure, ADR 0014 for the OS voices). */
-export type ProviderId = 'openai-official' | 'compatible' | 'speechify' | 'local';
+/** Every provider that exists here. The plugin's `azure`, `cloudflare`, `fishspeech`, `mimo` and `system` have not come across (ADR 0005 for Azure, ADR 0014 for the OS voices). */
+export type ProviderId = 'openai-official' | 'compatible' | 'speechify' | 'fish' | 'local';
 
 /**
  * One Word Timing: where a spoken word falls inside a clip. `start` and `end`
