@@ -9,12 +9,11 @@ expensive to get wrong later.
 
 ## Verify before writing much code
 
-1. **`String.prototype.normalize('NFKC')` on Hermes.** Load-bearing in the word
-   aligner and the bracket-stripping code. It has crashed on Hermes historically
-   and recent release notes do not mention it. One line to test.
-2. **`TextDecoder` on the Hermes bundled in React Native 0.86.** The Hermes
-   release notes of 2026-06-05 say it ships with the engine; an older issue says
-   it does not. Unresolved.
+1. ~~`String.prototype.normalize('NFKC')` on Hermes~~ — **yes.** Measured
+   2026-09-19; see `NOTES_2026-09-19.md`.
+2. ~~`TextDecoder` on Hermes~~ — **yes.** Same measurement. But `Intl.Segmenter`
+   is **absent**, which was not on this list and makes the `unicode-segmenter`
+   polyfill mandatory rather than optional.
 3. **CFI round-trip against Zotero, both directions.** Take one EPUB. Store a
    position from the desktop plugin and resolve it in an epub.js reader; generate
    a CFI with standard epub.js and hand it to Zotero's `toDisplayedRange`. Record
@@ -30,9 +29,11 @@ expensive to get wrong later.
 6. **Whether the *Piper - Neural TTS* app's system-wide voices emit word
    markers.** If they do, free offline neural voices with word timing cost this
    project nothing at all.
-7. **`Intl.Segmenter` sentence quality on real books**, against the constructed
-   cases in the plugin's `test/fixtures/` — CJK, Romanian diacritics, angle
-   brackets, numbers. It is the first segmenter, not the final one.
+7. **Sentence-splitting quality on real books**, against the constructed cases in
+   the plugin's `test/fixtures/` — CJK, Romanian diacritics, angle brackets,
+   numbers. Reworded: Hermes has no `Intl.Segmenter`, so what is being judged is
+   the polyfill's output, not the platform's. It is the first segmenter, not the
+   final one.
 
 ## Footguns found while auditing the playback library, before writing any of it
 

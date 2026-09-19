@@ -36,10 +36,20 @@ for everything else.
 
 The platform facts this is built on, as of September 2026: Expo SDK 57, React
 Native 0.86, Xcode 26.4+. The New Architecture is
-mandatory from SDK 55 — there is no opt-out. `expo-av` was removed entirely in
-SDK 55, so `expo-audio` is not a preference but the only option. Expo Go stops
-at SDK 54 on the App Store, which settles the question of a development build:
-one is needed from day one regardless of what the app does.
+mandatory from SDK 55 — there is no opt-out, and by SDK 57 there is no longer a
+config key for it either. Expo Go stops at SDK 54 on the App Store, which settles
+the question of a development build: one is needed from day one regardless of what
+the app does.
+
+Xcode 27 is not merely supported, it is a hard floor in a way "26.4+" understates:
+an app built against its SDK **refuses to launch** unless it adopts the
+scene-based life cycle, and SDK 57's generated `AppDelegate` does not. See ADR
+0018.
+
+(An earlier draft of this ADR said `expo-audio` was "not a preference but the only
+option" because `expo-av` was removed in SDK 55. That is wrong: ADR 0012 rejects
+`expo-audio` and uses an audio graph instead. The sentence is removed rather than
+corrected in place, because its conclusion was the opposite of the decision.)
 
 Hermes was checked for the features the ported code depends on. Unicode
 property escapes (`\p{L}`, `\p{Script=Han}`), which `align.ts` and

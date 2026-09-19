@@ -26,7 +26,14 @@ written.
 
 The directory discipline — no React Native imports, no playback imports — costs
 nothing today and means extracting a package later is a move, not an
-archaeological dig.
+archaeological dig. It is enforced by a lint rule rather than a convention, and
+the rule is **tested**, so the boundary cannot quietly stop working.
+
+The rule covers **all of `src/core/`**, not only the providers. Scoping it to the
+providers alone would have bought nothing: the provider tests reach for
+`core/wav` and `core/settings`, so if those could import React Native the
+providers would still be unable to run under a plain Node test runner, which is
+the whole point.
 
 The provider tests come across with it: about 3,200 lines driven entirely by fake
 `fetch` implementations and injected dependencies, which barely mention Zotero.

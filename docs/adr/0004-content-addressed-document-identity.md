@@ -33,3 +33,11 @@ A file hash is unambiguous but changes when a file is re-saved or re-compressed;
 `dc:identifier` survives re-saving but is often missing or duplicated in real
 EPUBs. Recording both, with the hash authoritative, is what makes each cover
 the other's failure.
+
+## How it is computed, given a platform-free core
+
+A hash needs the file's bytes, and reading a file needs a platform API that
+`src/core/` is forbidden to import (ADR 0013). It is resolved the same way the
+provider layer resolves `fetch`: **the identity function takes a `Uint8Array` and
+the caller reads the file.** So the identity rule stays pure and testable, and the
+file system stays outside the core.
