@@ -136,22 +136,21 @@ export function Player({
   onHeight,
 }: PlayerProps) {
   /**
-   * Play or pause, and the one place the two jobs of the collapsed button are
-   * joined: **pausing re-opens the player**.
+   * Play or pause, and nothing else.
    *
-   * It is unconditional rather than only-when-collapsed, because the assumption
-   * under it is about the pause and not about the chevron: pausing usually means
-   * the owner is about to do something else — go back a sentence, change the Voice,
-   * open the contents — so the controls arriving at that moment is convenient.
+   * **Pausing re-opens the player**, and that used to be a second line here.
+   * It moved to `reading-view.tsx`, which owns `collapsed`, when ADR 0016 gave the
+   * lock screen a pause of its own: a press on the lock screen has to leave the app
+   * in a state this screen agrees with, and the only way that stays true is for
+   * there to be one pause rather than two that were written to match.
    */
   const toggle = useCallback(() => {
     if (playing) {
       onPause();
-      onCollapsed(false);
       return;
     }
     onPlay();
-  }, [playing, onPause, onPlay, onCollapsed]);
+  }, [playing, onPause, onPlay]);
 
   const measure = useCallback(
     (event: LayoutChangeEvent) => {

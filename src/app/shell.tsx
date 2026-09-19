@@ -30,11 +30,12 @@ import { ReaderProvider } from '@epubjs-react-native/core';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Appearance, useColorScheme } from 'react-native';
 
 import { APP_NAME } from '../../app-name';
 
-import { INK } from './controls';
+import { PALETTE } from './controls';
 import { GeneralScreen } from './general-screen';
 import { LibraryScreen } from './library-screen';
 import { useHandedOverDocuments, type HandedOverFile } from './opened-document';
@@ -42,7 +43,7 @@ import { ProviderScreen } from './provider-screen';
 import { ProvidersScreen } from './providers-screen';
 import { ReaderScreen } from './reader-screen';
 import { navigationRef, ShellContext, type RootStackParamList, type Shell } from './routes';
-import { DEFAULT_SETTINGS, type AppSettings } from './settings';
+import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { SettingsScreen } from './settings-screen';
 import { useLibrary } from './use-library';
 
@@ -87,6 +88,33 @@ export function OpenReader() {
   );
   useHandedOverDocuments(arrived);
 
+  /**
+   * The theme, resolved once for the whole app (ADR 0022).
+   *
+   * `useColorScheme()` is only consulted for `'system'` — `resolveTheme` decides —
+   * so an owner who chose Light keeps it whatever the phone does at sunset.
+   */
+  const scheme = resolveTheme(settings.theme, useColorScheme());
+
+  /**
+   * Tell UIKit, which is what actually repaints.
+   *
+   * `INK`'s colours are iOS dynamic colours, and a dynamic colour is resolved from
+   * the trait collection of the view it is drawn in — so forcing a theme is
+   * forcing the **window's** `overrideUserInterfaceStyle`, which is exactly what
+   * this call does (`RCTAppearance.mm` walks `connectedScenes`, which is why it
+   * still works under the UIScene life cycle of ADR 0018). Nothing re-renders;
+   * every screen repaints itself.
+   *
+   * `'unspecified'` gives the window back to the system rather than pinning it to
+   * whatever the system happened to be when Follow was chosen — it is the value
+   * `RCTConvert` maps to `UIUserInterfaceStyleUnspecified`, and the one
+   * `useColorScheme()` then reports until the system answers.
+   */
+  useEffect(() => {
+    Appearance.setColorScheme(settings.theme === 'system' ? 'unspecified' : settings.theme);
+  }, [settings.theme]);
+
   return (
     <ShellContext.Provider value={shell}>
       {/*
@@ -99,15 +127,21 @@ export function OpenReader() {
        * still talking to it.
        */}
       <ReaderProvider>
-        <StatusBar style="dark" />
+        {/* The clock and the battery, over `PALETTE[scheme].panel`. Stated rather
+            than left to `auto`, which reads the system's scheme and would be the
+            one thing still light when the owner has chosen Dark on a light phone. */}
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         <NavigationContainer ref={navigationRef}>
           <Stack.Navigator
             initialRouteName="Library"
             screenOptions={{
-              headerStyle: { backgroundColor: INK.panel },
-              headerTintColor: INK.text,
-              headerTitleStyle: { color: INK.text },
-              contentStyle: { backgroundColor: INK.page },
+              // Plain strings and not `INK`: the navigation library types these as
+              // `string` and will not take a dynamic colour, so this is the one
+              // place the theme is resolved in JavaScript rather than by UIKit.
+              headerStyle: { backgroundColor: PALETTE[scheme].panel },
+              headerTintColor: PALETTE[scheme].text,
+              headerTitleStyle: { color: PALETTE[scheme].text },
+              contentStyle: { backgroundColor: PALETTE[scheme].page },
             }}
           >
             <Stack.Screen name="Library" component={LibraryScreen} options={{ title: APP_NAME }} />

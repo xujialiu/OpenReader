@@ -195,6 +195,55 @@ export function appearanceCss(appearance: Appearance): string {
   return css;
 }
 
+/** Light or dark, once the owner's setting and the system's have been resolved into one (`settings.ts`'s `resolveTheme`). */
+export type ReadingScheme = 'light' | 'dark';
+
+/** The page under a dark theme. Near-black rather than black, and a text that is not pure white: an unrelieved #000/#fff pair is what makes a long reading tiring. */
+const DARK_PAGE = '#111114';
+const DARK_TEXT = '#e6e6ea';
+
+/**
+ * The theme as CSS for the document, or the empty string under a light theme.
+ *
+ * **Dark repaints the page; light leaves it alone, and the asymmetry is the
+ * decision** (`docs/design/0022`). Dark is a demand the room makes — a white page
+ * at two in the morning — and it has to win over whatever the publisher chose.
+ * Light is the absence of that demand, so a book that ships cream, or ships its
+ * own dark design, keeps it, exactly as the Appearance sheet's "follow the
+ * document" does.
+ *
+ * Two rules and two highlight overrides, and it cannot produce a third: there is
+ * no value here that comes from anything the owner typed — the argument is one of
+ * two words — so, as with `appearanceCss`, **nothing here can declare
+ * `user-select`**, which silently stops `::highlight()` from painting. That is
+ * asserted in `test/renderer/rules.test.ts` rather than left to care.
+ *
+ * `background-color: transparent` on the descendants and not only a page colour:
+ * a book that sets a white background on its own paragraphs would otherwise show
+ * white blocks on a dark page. `color` on the descendants for the same reason
+ * `appearanceCss` sets the font there — it inherits, so a rule on the two roots
+ * alone is beaten by any book with `p { color: … }` of its own.
+ *
+ * **What it cannot do, stated rather than discovered:** an image carries its own
+ * colours and is not touched, so a diagram on a white background still glares;
+ * and a book that uses colour to *mean* something loses that meaning, because
+ * every colour it set becomes one colour. Both are in `docs/design/0022`.
+ *
+ * The two `::highlight()` rules come last so they beat the ones baked into
+ * `highlightCss`, which are tuned for a light page: the word's amber at 0.62 under
+ * light text is close to unreadable, so under dark the word is painted more
+ * opaque and its text is set back to the page colour.
+ */
+export function themeCss(scheme: ReadingScheme): string {
+  if (scheme !== 'dark') return '';
+  return (
+    'html, body { background-color: ' + DARK_PAGE + ' !important; color: ' + DARK_TEXT + ' !important; }\n' +
+    'body * { color: ' + DARK_TEXT + ' !important; background-color: transparent !important; }\n' +
+    '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(255, 196, 0, 0.20); }\n' +
+    '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(255, 176, 0, 0.85); color: ' + DARK_PAGE + '; }\n'
+  );
+}
+
 /**
  * **`user-select: none` stops `::highlight()` painting, silently.** Measured on a
  * device, 2026-09-19, and written down nowhere else.
@@ -271,6 +320,7 @@ export function highlightCall(message: HighlightMessage): string {
 export function highlighterSource(
   styles: HighlightStyles = DEFAULT_HIGHLIGHT,
   appearance: Appearance = DOCUMENT_APPEARANCE,
+  scheme: ReadingScheme = 'light',
 ): string {
   const constants =
     'var WORD = ' + JSON.stringify(WORD_HIGHLIGHT) + ';\n' +
@@ -286,6 +336,10 @@ export function highlighterSource(
        already set is laid out that way on its first paint instead of reflowing
        once the message arrives. */
     'var APPEARANCE = ' + JSON.stringify(appearanceCss(appearance)) + ';\n' +
+    /* The other one that changes while the document is open, and baked in for the
+       same reason: a book opened under a dark theme is painted dark on its first
+       paint rather than flashing white until the message lands. */
+    'var THEME = ' + JSON.stringify(themeCss(scheme)) + ';\n' +
     'var SETTLE_FRAMES = 60;\n' +
     'var STYLE_ID = "openreader-highlight";\n';
 
@@ -436,7 +490,11 @@ ${constants}
       style.id = STYLE_ID;
       (doc.head || doc.documentElement).appendChild(style);
     }
-    var wanted = CSS_TEXT + APPEARANCE;
+    /* Three strings and still one element. THEME sits between them so that its
+       ::highlight() overrides beat the ones in CSS_TEXT, which are tuned for a
+       light page, while the owner's Appearance — which declares neither a colour
+       nor a highlight — stays the last word on the font and the size. */
+    var wanted = CSS_TEXT + THEME + APPEARANCE;
     if (style.textContent !== wanted) style.textContent = wanted;
   }
 
@@ -1188,6 +1246,19 @@ ${constants}
       APPEARANCE = typeof message.css === 'string' ? message.css : '';
       restyle();
       settle(SETTLE_FRAMES, null, 0);
+      return;
+    }
+    if (message.kind === 'theme') {
+      /* Light or dark, from General (ADR 0022). Finished CSS again, and built from
+         a two-word argument rather than from anything the owner typed, so it
+         cannot declare \`user-select\` either.
+
+         **Nothing is re-centred here**, and that is the difference from the
+         'appearance' message above: a colour change moves not one character, so
+         the sentence being spoken is exactly where it was. This is the 'inset'
+         case, not the font case. */
+      THEME = typeof message.css === 'string' ? message.css : '';
+      restyle();
       return;
     }
     if (message.kind === 'clear') {

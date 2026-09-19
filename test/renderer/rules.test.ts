@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 import { BLOCKS_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from '../../src/renderer/messages';
-import { appearanceCss, highlightCall, highlighterSource } from '../../src/renderer/highlighter';
+import { appearanceCss, highlightCall, highlighterSource, themeCss } from '../../src/renderer/highlighter';
 
 /**
  * The three things ADR 0005 says this directory must never do, checked against the
@@ -220,9 +220,11 @@ describe('never highlight by mutating the DOM, and never check whether you can (
       if (mutation === 'textContent =') {
         // The one exception, and it is the stylesheet's own text. It stopped being
         // a constant when Appearance arrived — the owner changes the font while the
-        // book is open — so the assertion is that the text is those two strings and
-        // nothing built from anything else.
-        expect(program).toContain('var wanted = CSS_TEXT + APPEARANCE;');
+        // book is open — and the theme (ADR 0022) is the third string in it. The
+        // assertion is that the text is those three and nothing built from anything
+        // else, and that the theme did not become a second `<style>` element out of
+        // tidiness: the count above is still one `createElement`.
+        expect(program).toContain('var wanted = CSS_TEXT + THEME + APPEARANCE;');
         expect(program).toContain('if (style.textContent !== wanted) style.textContent = wanted;');
         continue;
       }
@@ -424,7 +426,11 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     const bridge = code('reader-bridge.ts');
     expect(bridge).toContain("send({ kind: 'appearance', css: appearanceCss(next) })");
     // Built once, from the first render's options, and never rebuilt.
-    expect(bridge).toContain('highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DOCUMENT_APPEARANCE)');
+    expect(bridge).toContain(
+      "highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DOCUMENT_APPEARANCE, options.scheme ?? 'light')",
+    );
+    // The theme is the same message-not-a-rebuild, and it is the same trap.
+    expect(bridge).toContain("send({ kind: 'theme', css: themeCss(next) })");
     expect(bridge).not.toContain('[options.styles]');
   });
 
@@ -440,10 +446,47 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     // moves every one of them — so the sentence being spoken is no longer where it
     // was put.
     const program = code('highlighter.ts');
-    const branch = program.slice(program.indexOf("message.kind === 'appearance'"), program.indexOf("message.kind === 'clear'"));
+    const branch = program.slice(program.indexOf("message.kind === 'appearance'"), program.indexOf("message.kind === 'theme'"));
     expect(branch).toContain('restyle();');
     expect(branch).toContain('settle(SETTLE_FRAMES, null, 0);');
     expect(fn(program, 'restyle')).toContain('ensureStyle(list[i].document)');
+  });
+
+  it('restyles for a theme change and does NOT re-centre, because a colour moves nothing (ADR 0022)', () => {
+    // The other side of the same distinction. A font change moves every character
+    // and has to be followed; a colour change moves none of them, so re-centring
+    // would scroll the page under the reader for a repaint — which is the defect
+    // the `inset` message exists to avoid.
+    const program = code('highlighter.ts');
+    const branch = program.slice(program.indexOf("message.kind === 'theme'"), program.indexOf("message.kind === 'clear'"));
+    expect(branch).toContain('restyle();');
+    expect(branch).not.toContain('settle(');
+    expect(branch).not.toContain('centre(');
+  });
+
+  it('cannot declare user-select, in either theme (ADR 0021, ADR 0022)', () => {
+    // `user-select: none` silently stops `::highlight()` from painting, and a
+    // second builder of page CSS is a second way to reintroduce it. There is
+    // nothing an owner typed in either theme — the argument is one of two words —
+    // so this is checkable exhaustively rather than argued.
+    for (const scheme of ['light', 'dark'] as const) {
+      const css = themeCss(scheme);
+      expect(css).not.toContain('user-select');
+      for (const line of css.split('\n').filter(Boolean)) {
+        expect({ scheme, line, ok: /^(html, body|body \*|::highlight\()/.test(line) }).toEqual({ scheme, line, ok: true });
+      }
+    }
+    // Light leaves the document's own colours alone: it is the absence of a demand.
+    expect(themeCss('light')).toBe('');
+    // Dark makes one, and it reaches the descendants — colour inherits, so a rule
+    // on the two roots alone is beaten by any book with `p { color: … }` of its own.
+    expect(themeCss('dark')).toContain('body * { color:');
+    expect(themeCss('dark')).toContain('background-color: transparent !important');
+  });
+
+  it('bakes the theme into the program too, so a book opens dark rather than flashing white', () => {
+    expect(highlighterSource(undefined, undefined, 'dark')).toContain('var THEME = ' + JSON.stringify(themeCss('dark')));
+    expect(highlighterSource()).toContain('var THEME = "";');
   });
 
   it('waits for the reflow instead of measuring a box that is about to move', () => {

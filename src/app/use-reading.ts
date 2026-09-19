@@ -35,11 +35,13 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useColorScheme } from 'react-native';
 
 import { createLocator, readingPositionAt, type ReadingPosition } from '../core/document';
 import { createProvider } from '../core/providers/factory';
 import type { Utterance } from '../core/segmenter';
 import { readGatewayHeaders, readProviderKey } from '../keys/store';
+import { lockScreenPosition } from '../now-playing';
 import {
   createPlaybackEngine,
   nextParagraph,
@@ -70,6 +72,7 @@ import {
   providerSettings,
   readiness,
   readinessSentence,
+  resolveTheme,
   type AppSettings,
 } from './settings';
 
@@ -249,6 +252,12 @@ export interface KnownCredentials {
  */
 export function useReading(settings: AppSettings, credentials: KnownCredentials, resume: ReadingPosition | null): Reading {
   const { hasKey, writtenAt } = credentials;
+  /**
+   * The theme the page is painted in (ADR 0022), resolved the same way the shell
+   * resolves the app's own — one function, so the chrome and the document cannot
+   * end up in different themes with a white rectangle between them.
+   */
+  const scheme = resolveTheme(settings.theme, useColorScheme());
   const [status, setStatus] = useState<ReadingStatus>(NOTHING_YET);
 
   const engineRef = useRef<PlaybackEngine | null>(null);
@@ -370,8 +379,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * captured bridge would be the one from the render that built it.
    *
    * ADR 0016's lock screen is the second reader of this same clock, which is why
-   * the elapsed time and the highlight cannot disagree. It is not built yet; when
-   * it is, it is another line in `onPosition` and not another clock.
+   * the elapsed time and the highlight cannot disagree. It is one line in
+   * `onPosition` and not another clock — everything else about it is
+   * `src/now-playing/` and `reading-view.tsx`, which knows the Document's title.
    */
   const clock = useMemo<ReaderClock>(
     () => ({
@@ -392,6 +402,12 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       },
       onPosition(correction) {
         bridgeRef.current?.clock.onPosition(correction);
+        // The second reader of the one clock (ADR 0016). `contentPosition` is the
+        // source node's own value, unchanged — the same number the highlight is
+        // corrected against, so the lock screen's elapsed time and the highlight
+        // cannot be two answers to "where are we". A wall clock here would be
+        // exactly that: the reading advances at 1.4999x against a requested 1.5.
+        lockScreenPosition(correction.contentPosition);
       },
     }),
     [sectionOf],
@@ -685,6 +701,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // choice is what a book opens laid out in, and every change after that is a
     // message (`setAppearance`).
     appearance: settings.appearance,
+    // Fixed at mount for the same reason, and it buys the same thing: a book
+    // opened under a dark theme is dark on the frame it appears rather than
+    // flashing white until the first message lands.
+    scheme,
     onBlocks: handleBlocks,
     onDocument: handleDocument,
     // A tap on a word is a seek and nothing else. The bridge has already turned the
@@ -881,6 +901,21 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   useEffect(() => {
     bridgeRef.current?.setAppearance(settings.appearance);
   }, [settings.appearance]);
+
+  /**
+   * The theme, live (ADR 0022). The third of the settings that reach an open
+   * document without rebuilding anything, beside the rate and the Appearance.
+   *
+   * Shaped like the Appearance effect and different in one way that the WebView
+   * half acts on: a colour change moves not one character, so nothing is
+   * re-centred afterwards. It fires on mount as well, into a program that is very
+   * likely not installed yet; that message is lost and nothing is wrong, because
+   * the same value was baked into the program's own source above and
+   * `reader-bridge.ts` re-sends only a theme that has since been changed.
+   */
+  useEffect(() => {
+    bridgeRef.current?.setTheme(scheme);
+  }, [scheme]);
 
   /**
    * A different Provider, Voice or address is a different engine — and so is the

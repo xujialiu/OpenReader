@@ -14,6 +14,9 @@ import {
   keyIsRequired,
   missingBeforeVoice,
   PROVIDER_ORDER,
+  resolveTheme,
+  THEME_LABELS,
+  THEME_SETTINGS,
   type AppSettings,
 } from '../../src/app/settings';
 import { createProvider } from '../../src/core/providers/factory';
@@ -353,5 +356,46 @@ describe('what a Provider’s row says is behind it', () => {
     expect(andList(['an engine'])).toBe('an engine');
     expect(andList(['an engine', 'an address'])).toBe('an engine and an address');
     expect(andList(['an engine', 'an address', 'a token'])).toBe('an engine, an address and a token');
+  });
+});
+
+/**
+ * The theme, which is the one decision in ADR 0022 that is not a stylesheet.
+ *
+ * Three settings, two themes, and three callers of the answer — the app's own
+ * colours, the status bar, and the stylesheet that reaches the page. The reason
+ * it is one function rather than a conditional at each of those is that three
+ * copies is three chances for the chrome and the document to disagree, which on a
+ * dark theme shows up as a white rectangle in the middle of a dark screen.
+ */
+describe('the theme (ADR 0022)', () => {
+  it('follows the system by default, which is the only default that is not a guess about the room', () => {
+    expect(DEFAULT_SETTINGS.theme).toBe('system');
+  });
+
+  it('keeps a chosen theme whatever the phone does at sunset', () => {
+    for (const system of ['light', 'dark', 'unspecified', null, undefined] as const) {
+      expect({ system, is: resolveTheme('light', system) }).toEqual({ system, is: 'light' });
+      expect({ system, is: resolveTheme('dark', system) }).toEqual({ system, is: 'dark' });
+    }
+  });
+
+  it('reads everything the platform can say that is not dark as light', () => {
+    // React Native answers with four things, not two: 'light', 'dark',
+    // 'unspecified' — a window whose style has been given back to the system — and
+    // null, before it has said anything at all. Light is the right reading of the
+    // last two because it is what the page already is: a wrong guess corrects to
+    // dark in a frame, while the other way round flashes a black page at someone
+    // reading in daylight.
+    expect(resolveTheme('system', 'dark')).toBe('dark');
+    expect(resolveTheme('system', 'light')).toBe('light');
+    expect(resolveTheme('system', 'unspecified')).toBe('light');
+    expect(resolveTheme('system', null)).toBe('light');
+    expect(resolveTheme('system', undefined)).toBe('light');
+  });
+
+  it('offers the two answers before the one that defers, and names each of them', () => {
+    expect(THEME_SETTINGS).toEqual(['light', 'dark', 'system']);
+    for (const setting of THEME_SETTINGS) expect(THEME_LABELS[setting].length, setting).toBeGreaterThan(0);
   });
 });

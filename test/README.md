@@ -60,6 +60,12 @@ Node test environment simulates.
   prebuild, and the symptom of getting it wrong is the app being **absent** from
   Files' "Open in" and from every share sheet, which nothing logs. Both refusals
   are tested as well as both writes: a guard nobody has watched fire is a comment.
+- `now-playing/module.test.ts` — ADR 0016's rules, read out of the Swift and out
+  of the podspec, the same tool `playback/footguns.test.ts` uses on the playback
+  library. The module cannot run here; a fake `MPNowPlayingInfoCenter` would
+  prove the fake was called. Every rule in it fails as nothing at all — a lock
+  screen that says "paused" while the book reads, a headphone tap that does
+  nothing, a pod that autolinking skipped with a warning.
 - `app/no-outgoing-links.test.ts` — ADR 0017's ban on a tappable route to a
   Provider's signup, as a grep over `src/`. It used to be checkable by eye —
   `controls.tsx` could say "nothing here imports `Linking`" — and stopped being

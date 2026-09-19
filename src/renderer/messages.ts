@@ -350,10 +350,34 @@ export interface AppearanceMessage {
   css: string;
 }
 
+/**
+ * Light or dark: the owner's **theme**, from General (ADR 0022), as the
+ * stylesheet the WebView installs.
+ *
+ * Finished CSS, for the same reason the Appearance message carries it: what a
+ * rule may say is settled on the side that can be tested. `themeCss` builds it
+ * from a two-word argument and nothing else, so nothing here can declare
+ * `user-select` — which silently stops `::highlight()` from painting.
+ *
+ * Its own message and not a second field on `AppearanceMessage`, because the two
+ * differ in the one way that matters to the reader: a font change reflows every
+ * line and has to be followed by a re-centre, and a colour change moves not one
+ * character. Merging them would mean running the settle loop for a repaint.
+ *
+ * Empty under a light theme: light does not repaint the page, it leaves the
+ * document's own colours alone (`docs/design/0022`).
+ */
+export interface ThemeMessage {
+  kind: 'theme';
+  /** CSS declarations for the document, or the empty string under a light theme. */
+  css: string;
+}
+
 export type HighlightMessage =
   | SpeakMessage
   | CorrectMessage
   | HoldMessage
   | ClearMessage
   | InsetMessage
-  | AppearanceMessage;
+  | AppearanceMessage
+  | ThemeMessage;

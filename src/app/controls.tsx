@@ -17,18 +17,85 @@
  */
 
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { DynamicColorIOS, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { ColorValue } from 'react-native';
 
+/**
+ * One colour that is two, resolved by iOS rather than by React (ADR 0022).
+ *
+ * This is what lets the **theme** reach every screen without a line changing in
+ * any of them. `DynamicColorIOS` hands back a `UIColor` with both values in it,
+ * and UIKit picks one per view from that view's own trait collection — so the
+ * `StyleSheet.create` calls below stay where they are, at module scope, and still
+ * answer differently in the two themes. The alternative was a palette in a
+ * context and every `StyleSheet.create` in `src/app/` moved inside its component,
+ * which is nine files rewritten to change a colour.
+ *
+ * It also means a theme change repaints with no React render at all: iOS
+ * re-resolves the colours when the window's `overrideUserInterfaceStyle` changes,
+ * which is what `shell.tsx` sets.
+ *
+ * **It throws off iOS**, in the house style and for the same reason as
+ * `src/now-playing/`: `DynamicColorIOS` has no Android counterpart, and the
+ * alternative — quietly handing back the light value — is a theme setting that
+ * appears in General, is tapped, and does nothing.
+ */
+/**
+ * The two columns, as plain strings.
+ *
+ * Exported because two readers need the values themselves rather than a dynamic
+ * colour: the navigation library types its header colours as `string` and will
+ * not take a `UIColor`, and the status bar is told which of the two it is over.
+ * One table, so the header and the screen under it cannot end up different
+ * greys.
+ *
+ * The dark column is not the light one inverted. The page is near-black rather
+ * than black and the text is not pure white, because an unrelieved #000/#fff pair
+ * is what makes a long reading tiring — `#111114` and `#e6e6ea` are the same pair
+ * `themeCss` paints the document with, so the page and the app around it are one
+ * surface. The amber is lightened for dark, where the light one reads as brown.
+ */
+export const PALETTE = {
+  light: {
+    page: '#ffffff',
+    panel: '#f4f4f6',
+    line: '#dcdce2',
+    text: '#16161a',
+    reading: '#b26a00',
+  },
+  dark: {
+    page: '#111114',
+    panel: '#1c1c21',
+    line: '#33333c',
+    text: '#e6e6ea',
+    reading: '#f0a828',
+  },
+} as const;
+
+function ink(light: string, dark: string): ColorValue {
+  if (Platform.OS !== 'ios') {
+    throw new Error(
+      `OpenReader's theme has no implementation on ${Platform.OS}. The app's own colours are iOS dynamic colours ` +
+        '(ADR 0022), which is what lets one stylesheet serve light and dark without every screen being rewritten. ' +
+        'Android needs its own answer — a palette in a context, or the platform\u2019s own attributes — and it is not ' +
+        'written. It is not stubbed to the light value on purpose: that would be a setting the owner can choose and ' +
+        'that does nothing.',
+    );
+  }
+  return DynamicColorIOS({ light, dark });
+}
+
+/** The app's colours, each one both of `PALETTE`'s. */
 export const INK = {
-  page: '#ffffff',
-  panel: '#f4f4f6',
-  line: '#dcdce2',
-  text: '#16161a',
-  quiet: '#5d5d68',
+  page: ink(PALETTE.light.page, PALETTE.dark.page),
+  panel: ink(PALETTE.light.panel, PALETTE.dark.panel),
+  line: ink(PALETTE.light.line, PALETTE.dark.line),
+  text: ink(PALETTE.light.text, PALETTE.dark.text),
+  quiet: ink('#5d5d68', '#9d9daa'),
   /** The reading colour, the same amber the highlighter paints with (`highlighter.ts`). */
-  reading: '#b26a00',
+  reading: ink(PALETTE.light.reading, PALETTE.dark.reading),
   /** Something the owner has to act on: a missing key, a server that did not answer. Not an alarm. */
-  attention: '#8a2f18',
+  attention: ink('#8a2f18', '#f08c6e'),
 };
 
 export function Action({

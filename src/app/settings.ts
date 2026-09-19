@@ -22,7 +22,7 @@ import { COMPATIBLE_LABEL } from '../core/providers/compatible';
 // The renderer's, because it is the renderer that paints it — and imported from
 // the file rather than from the directory's index, which would drag the bridge
 // and React Native into a module whose whole point is that neither is here.
-import { DOCUMENT_APPEARANCE, type Appearance } from '../renderer/highlighter';
+import { DOCUMENT_APPEARANCE, type Appearance, type ReadingScheme } from '../renderer/highlighter';
 import type { ProviderDeps, ProviderSettings } from '../core/providers/factory';
 import { getLocalEngine, LOCAL_ENGINES } from '../core/providers/local/registry';
 import type { ProviderId } from '../core/providers/types';
@@ -156,6 +156,66 @@ export interface AppSettings {
    * what "follow the document" being the default makes rare.
    */
   appearance: Appearance;
+  /**
+   * Light, dark, or whatever the phone is doing: the **theme** (ADR 0022).
+   *
+   * In General and not in the Appearance sheet, and the two are not the same
+   * question. Appearance is how *this book's* text is set and defaults to
+   * following the document; the theme is what the whole app looks like, in the
+   * room the owner is in, and it reaches the Library and the Settings screens as
+   * well as the page.
+   */
+  theme: ThemeSetting;
+}
+
+/**
+ * What the owner chose in General, which is one more thing than the app can
+ * actually paint: `resolveTheme` turns three into two.
+ *
+ * `'system'` is a real answer and not an absence. A phone that switches itself at
+ * sunset is a thing the owner set up on purpose, and an app that ignored it would
+ * be the one light window in a dark evening.
+ */
+export type ThemeSetting = 'light' | 'dark' | 'system';
+
+/** The three, in the order General offers them: the two answers first, then the one that defers. */
+export const THEME_SETTINGS: readonly ThemeSetting[] = ['light', 'dark', 'system'];
+
+/** What each is called on the screen. `System` names what it follows rather than what it shows, because what it shows changes. */
+export const THEME_LABELS: Readonly<Record<ThemeSetting, string>> = {
+  light: 'Light',
+  dark: 'Dark',
+  system: 'Follow the system',
+};
+
+/**
+ * The theme the app actually paints.
+ *
+ * The one decision in the theme, which is why it is a function here rather than a
+ * conditional at each of the three places that need the answer — the app's own
+ * colours, the status bar, and the stylesheet that reaches the page. Three copies
+ * of it is three chances for the chrome and the page to disagree, which on a dark
+ * theme is a white rectangle in the middle of a dark screen.
+ *
+ * `system` is resolved against what the platform reports, and **everything that
+ * is not `'dark'` resolves to light**. React Native answers with four things, not
+ * two: `'light'`, `'dark'`, `'unspecified'` — which is what a window whose style
+ * has been given back to the system reports — and `null`, before the platform has
+ * said anything at all. Light is the right reading of the last two for one
+ * reason: it is what the page already is, so a wrong guess corrects to dark in a
+ * frame, while the other way round would flash a black page at someone reading in
+ * daylight.
+ *
+ * The parameter is spelled out rather than imported: `settings.ts` imports no
+ * platform (`eslint.config.js` would not stop it here, but the rule is the same
+ * one), and these four values are the whole of React Native's `ColorSchemeName`.
+ */
+export function resolveTheme(
+  setting: ThemeSetting,
+  system: 'light' | 'dark' | 'unspecified' | null | undefined,
+): ReadingScheme {
+  if (setting === 'light' || setting === 'dark') return setting;
+  return system === 'dark' ? 'dark' : 'light';
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -172,6 +232,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Follow the document, in both. A book that ships its own typography keeps it
   // until the owner overrides it (`highlighter.ts`'s `Appearance`).
   appearance: DOCUMENT_APPEARANCE,
+  // Follow the system, which is the only default that is not a guess about the
+  // room the owner is in.
+  theme: 'system',
 };
 
 /**

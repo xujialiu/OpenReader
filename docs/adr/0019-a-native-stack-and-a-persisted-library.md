@@ -321,10 +321,11 @@ rather than a number that would have to be edited at the next upgrade.
 
 ## Settings is three routes, and choosing a Provider is not a side effect of looking at one
 
-`Settings` is a list of two rows. `General` holds what is true of the whole app
-and holds nothing yet, and says so — the same choice the Appearance sheet made
-above, for the same reason. `Providers` lists every Provider and opens one per
-route, `Provider: { id }`, whose title is that Provider's own name.
+`Settings` is a list of two rows. `General` holds what is true of the whole app;
+it held nothing and said so, and it now holds the **theme** (ADR 0022) — the one
+setting that is a fact about the room the owner is in rather than about a book.
+`Providers` lists every Provider and opens one per route, `Provider: { id }`,
+whose title is that Provider's own name.
 
 Three decisions inside that, each of which could have gone the other way:
 

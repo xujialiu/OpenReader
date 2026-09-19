@@ -107,6 +107,12 @@ of them, and both parts start out following whatever the document itself asked
 for.
 _Avoid_: theme, style, typography, display settings, font settings
 
+**Theme**:
+Whether the app is shown light or dark, including the document itself. It
+belongs to the owner rather than to a document and can defer to the phone's own
+setting, which is what it does until the owner says otherwise.
+_Avoid_: appearance, dark mode, night mode, colour scheme, skin
+
 **Shared Settings**:
 The settings all of the owner's devices agree on, merged setting by setting so
 that two devices changing different settings both keep their change.

@@ -35,7 +35,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { readLocator, type ReadingPosition } from '../core/document';
-import type { NavigationEntry } from '../core/document/contents';
+import { contentsOf, type NavigationEntry } from '../core/document/contents';
+import { chapterOf, useNowPlaying } from '../now-playing';
 import type { ProviderId } from '../core/providers/types';
 
 import { ContentsSheet } from './contents-sheet';
@@ -262,6 +263,64 @@ export function ReadingView({
     [],
   );
 
+  /**
+   * The document's contents, flattened once per document.
+   *
+   * Here rather than inside the sheet because two things read it now: the sheet,
+   * and the lock screen's second line (ADR 0016). Measured on the owner's book at
+   * 0.772 ms for all 2,076 entries, so the cost is the memo, not the work.
+   *
+   * The library types its own entries with a `parent` that is an unreliable id and
+   * `subitems: any[]`; `NavigationEntry` is the structural subset
+   * `core/document/contents.ts` will trust, and nesting comes from `subitems`.
+   */
+  const contents = useMemo(() => contentsOf(toc as readonly NavigationEntry[], status.spineHrefs), [toc, status.spineHrefs]);
+
+  /**
+   * Pause, and the one path there is.
+   *
+   * **Pausing re-opens the player** — the assumption is that the owner is about to
+   * do something else, go back a sentence or change the Voice, so the controls
+   * arriving at that moment is convenient. That line used to live in `player.tsx`,
+   * next to the button. It is here now because the lock screen has a pause too
+   * (ADR 0016), and a remote press has to leave this screen in a state it agrees
+   * with: two pauses written to behave the same is two pauses that will stop
+   * behaving the same.
+   */
+  const pause = useCallback(() => {
+    reading.pause();
+    setCollapsed(false);
+    // `reading` is a fresh object every render; its `pause` is the stable callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reading.pause]);
+
+  /**
+   * The lock screen, Control Centre and the headphone remote (ADR 0016).
+   *
+   * Four things it is told, and each one is the value this screen already has:
+   * the Document's own title, the part of the book being read, whether the
+   * reading is running, and the speed — which is also the rate iOS extrapolates
+   * the elapsed time at between the once-a-second pushes `use-reading.ts` makes
+   * from the clock.
+   *
+   * `live` is `status.utterance !== null` and not `status.playing`: an app is the
+   * system's now-playing app for as long as it holds an active audio session, so
+   * the lock screen has to survive a pause — that is the whole point of it — and
+   * cannot appear before the first Clip, because until then there is no session
+   * and a press could not reach us.
+   *
+   * `play` is `reading.play` and `pause` is the one above, which is the same
+   * handler the button calls. Nothing here is a second transport.
+   */
+  useNowPlaying({
+    title: document.title,
+    chapter: chapterOf(contents, status.section),
+    playing: status.playing,
+    rate: settings.rate,
+    live: status.utterance !== null,
+    onIntent: (intent) => (intent === 'play' ? reading.play() : pause()),
+  });
+
   const ready = readiness(settings, keyPresence.state === 'held');
   // Nothing is claimed about a key while the Keychain is still being asked.
   const sayWhatIsMissing = !ready.ready && keyPresence.state !== 'unknown';
@@ -353,7 +412,7 @@ export function ReadingView({
         reading={readingLine(status, settings)}
         notes={notes}
         onPlay={reading.play}
-        onPause={reading.pause}
+        onPause={pause}
         onSkip={reading.skip}
         onRate={onRate}
         onContents={() => setContentsOpen(true)}
@@ -364,11 +423,8 @@ export function ReadingView({
       <ContentsSheet
         visible={contentsOpen}
         onClose={() => setContentsOpen(false)}
-        // The library types its own entries with a `parent` that is an unreliable id
-        // and `subitems: any[]`; `NavigationEntry` is the structural subset
-        // `core/document/contents.ts` will trust, and nesting comes from `subitems`.
-        navigation={toc as readonly NavigationEntry[]}
-        spineHrefs={status.spineHrefs}
+        contents={contents}
+        spineKnown={status.spineHrefs.length > 0}
         section={at}
         onGo={reading.goToSection}
       />

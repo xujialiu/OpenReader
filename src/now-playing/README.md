@@ -7,6 +7,15 @@ Its whole job is to route: **on iOS to our own native module**
 **on Android to `react-native-audio-api`'s own implementation**, which ADR 0016
 calls "the better-built half".
 
+The iOS half is written. **The Android half is not, and this directory throws
+rather than doing nothing there** — `lockScreen()` refuses on any platform that
+is not iOS, in the house style of `plugins/with-ui-scene-lifecycle.ts`. The
+machine this was built on has no Android device and no emulator, so a path
+written here would be a path that has never run; and the symptom of a silent
+no-op is a lock screen with no controls on it, which no log line reports and
+which looks exactly like a lock screen that is merely broken. The refusal names
+what is missing and says to delete it once it exists.
+
 ## One owner, and it is ours (on iOS)
 
 The playback library's `PlaybackNotificationManager` is **never called on iOS**.
@@ -38,6 +47,41 @@ Three defects in the library's iOS layer, read line by line:
 The shipped iOS notification code has had no functional change in about five
 months, the maintainers list the feature as delivered, and no lock-screen work
 appears on any public roadmap. Waiting is not a plan.
+
+## What is in here
+
+`reading.ts` is the part that runs under Node, and it holds the two decisions:
+**what the lock screen's second line says**, and **what a remote button is asking
+for**. `index.ts` is the platform half — the routing, the module-level state and
+the two effects — and it is not tested here, for the reason `test/README.md`
+gives. `test/now-playing/module.test.ts` reads the lines of the Swift that obey
+each of ADR 0016's rules, the same tool `test/playback/footguns.test.ts` uses on
+the playback library, and for the same reason: every one of them fails as nothing
+at all.
+
+**The chapter is refused when it cannot be said honestly.** `chapterOf` takes the
+answer `currentRow` already gives the contents sheet and holds it to a higher
+bar, because the two are read differently: a marked row in a list the owner has
+just opened is read as "about here", while a line on a lock screen is read as a
+statement. So a `'before'` precision — no navigation entry names the section
+being read, and the nearest one *before* it is reported — produces nothing. That
+is ordinary rather than a malformed book: the owner's novel has 2,077 spine items
+and 2,076 entries, and reading the one with no entry reports the **cover**.
+Marking the cover in an open list is coarse; printing "封面" on a lock screen
+while chapter 41 is being read is wrong.
+
+**A toggle is resolved here and nowhere else.** `togglePlayPause` carries no
+direction, so `intentOf` resolves it against whether the reading is running —
+the one place the lock screen and the screen could disagree about what a press
+means, which is why it is a function with a test rather than a conditional inside
+a subscription. An explicit `play` or `pause` is honoured as sent, even when this
+side believes the opposite: that is what lets a disagreement correct itself
+instead of becoming permanent.
+
+**A remote press goes through the screen's own handler.** Not the engine's. The
+player's pause re-opens the player, so the coupling moved out of `player.tsx`
+and into `reading-view.tsx`, where `collapsed` lives — there is one pause, and
+the lock screen and the button both call it.
 
 ## What this layer is responsible for
 

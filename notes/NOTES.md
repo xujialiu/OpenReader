@@ -24,10 +24,19 @@ items are struck as they are answered, and the answer goes in that day's log.
    not just whether it resolves, but whether it resolves to the *right* text —
    the known failure mode is silently landing on the wrong node. Zotero uses its
    own copy of epub.js, which is why this is in doubt. See ADR 0008.
-4. **A 60–90 minute backgrounded playback session on a real device**, before any
-   UI work. The failure modes are all invisible on a desk: the audio session
-   going inactive between clips, the keychain refusing the API key while the
-   screen is locked, the buffer queue draining.
+4. ~~A 60–90 minute backgrounded playback session on a real device~~ — **the
+   three named failure modes are answered; two things are not.** 2026-09-20,
+   17 minutes backgrounded on the simulator, 10½ of them reading: the audio
+   session did not go inactive between Clips, the Keychain did not refuse the
+   key (79 Clips fetched while backgrounded), and a drained buffer queue
+   behaved as footgun 3 says — silence, still playing, no crash. Still open,
+   and narrower than it was: **the screen was never locked**, because nothing
+   on this machine can lock a simulator (see `NOTES_2026-09-20.md`, 04:13), and
+   locking is a stricter state than backgrounding; and this was a simulator, so
+   it says nothing about a real device's power management. The same run found a
+   separate defect that is not about audio at all — a reading stops at the end
+   of the sections the renderer has rendered and does not resume — recorded in
+   that day's log at 04:43.
 5. ~~Lock-screen support in `react-native-audio-api`~~ — **audited, answered.**
    Insufficient on iOS; see ADR 0016.
 6. **Whether the *Piper - Neural TTS* app's system-wide voices emit word

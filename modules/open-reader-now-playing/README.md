@@ -3,29 +3,31 @@
 iOS only. Roughly 130 lines of Swift that own `MPRemoteCommandCenter` and
 `MPNowPlayingInfoCenter`.
 
-**The Swift is not written yet**, and this directory holds only
-`expo-module.config.json`. ADR 0014 makes the same point about the OS-voices
-module: native work on both platforms should not be bundled into getting the
-first version running. This is where it goes when it is written, and the
-directory exists now so that when it is, nothing has to be rearranged.
-
 Why it exists at all, why calling both implementations is the thing that breaks,
 and what this module is responsible for are all in
 [`src/now-playing/`](../../src/now-playing/) — that is the JavaScript side and
 the one place the reasoning lives. Read it first.
 
-## What is missing, in the order it will be added
+## What is here
 
-1. `ios/OpenReaderNowPlaying.podspec` — until this exists, Expo's autolinking
-   finds no pod for the `apple` platform declared in `expo-module.config.json`.
-   `expo prebuild` tolerates that; `pod install` will not.
-2. `ios/OpenReaderNowPlayingModule.swift` — the `OpenReaderNowPlayingModule` named
-   in `expo-module.config.json`. An `ExpoModulesCore.Module` that:
+1. `ios/OpenReaderNowPlaying.podspec` — and it has to be **exactly one directory
+   deep**. `expo-modules-autolinking`'s `listFilesInDirectories` reads the
+   module's first-level directories and lists the files in each, so a podspec at
+   this directory's root is invisible to Expo while the React Native CLI still
+   finds it: `pod install` succeeds, the Swift compiles, and
+   `ExpoModulesProvider.swift` never imports the class. Its `s.name` must equal
+   its own basename, because `scripts/ios/package.rb` re-derives the path from
+   the pod name. Its `:ios` floor is **16.4 and not ADR 0001's 17.2**, because a
+   pod whose minimum exceeds the app's deployment target is skipped with a
+   *warning* and the app then runs with no lock screen — see ADR 0016.
+2. `ios/OpenReaderNowPlayingModule.swift` — the `OpenReaderNowPlayingModule`
+   named in `expo-module.config.json`. An `ExpoModulesCore.Module` that:
    - registers `play`, `pause` and — the one the library forgets —
      `togglePlayPauseCommand`, which is what AirPods single-tap and most car head
      units send;
-   - sets `isEnabled = false` on next/previous, which iOS otherwise renders as
-     dead buttons on a book reader's lock screen;
+   - sets `isEnabled = false` on the seven the library enables and this app
+     cannot answer, which iOS otherwise renders as dead buttons on a book
+     reader's lock screen;
    - writes `MPNowPlayingInfoPropertyPlaybackRate` **and**
      `MPNowPlayingInfoPropertyDefaultPlaybackRate`, the latter being the key a
      reader at 1.5–3× needs for iOS to render the rate correctly;
@@ -33,15 +35,30 @@ the one place the reasoning lives. Read it first.
      exact thing the library pins to `.paused` and cannot be told otherwise from
      JavaScript;
    - takes elapsed time as a pushed value, not a derived one — the source node's
-     content position (ADR 0012), at about once a second.
-3. `index.ts` — the typed JS surface, consumed only from
-   `src/now-playing/`. Deliberately absent for now: a stub that resolves and does
-   nothing would be indistinguishable from a lock screen that is merely broken.
+     content position (ADR 0012), at about once a second;
+   - publishes **no** `MPMediaItemPropertyPlaybackDuration`, because a book
+     synthesized a sentence at a time has no known total and inventing one is the
+     estimate philosophy rule 1 forbids. iOS therefore draws no scrub bar.
+3. `index.ts` — the typed JS surface, consumed only from `src/now-playing/`. It
+   uses `requireNativeModule` and not the optional form: the optional one hands
+   back `undefined`, every call becomes a no-op, and a lock screen that does
+   nothing looks exactly like one that is merely broken.
 
-`expo-tts-file` is worth reading before writing any of this. It does the ADR 0014
-job rather than this one, is MIT, and is a single Swift file — a reference
-implementation to read or vendor, not a dependency: it is weeks old, has one
-author and effectively no users.
+`expo-tts-file` is worth reading before extending any of this. It does the
+ADR 0014 job rather than this one, is MIT, and is a single Swift file — a
+reference implementation to read or vendor, not a dependency: it is weeks old,
+has one author and effectively no users.
+
+## Two SDK 57 facts that each cost a compile
+
+- **`Events("remoteCommand")` is not optional.** `sendEvent` is delivered only to
+  holders whose definition lists the name (`LegacyEventEmitterCompat.swift`), so
+  an undeclared event is dropped **with no warning at all**.
+- **`NativeModule<T>` cannot be extended.** In SDK 57 it is
+  `typeof ExpoGlobal.NativeModule<EventsMap>` — the *constructor* type, with the
+  events map discarded — so an interface extending it has no `addListener`, and
+  the error says so several lines from anything about inheritance. `index.ts`
+  declares its three calls and its one listener directly.
 
 ## Android is deliberately not here
 
@@ -50,9 +67,17 @@ and honours playback state correctly. It keeps Android. It does enable **no**
 controls by default — the opposite of iOS — so each one is turned on explicitly
 from `src/now-playing/`.
 
-## What has been verified about the empty module
+## What has been verified about the module
 
-With only `expo-module.config.json` present and no podspec and no Swift:
+On 2026-09-20, with the podspec and the Swift in place: `npx expo prebuild
+--platform ios` and `pod install` succeed, `ios/Podfile.lock` carries
+`OpenReaderNowPlaying (from ../modules/open-reader-now-playing/ios)`, the
+generated `ExpoModulesProvider.swift` holds `internal import OpenReaderNowPlaying`
+and `(module: OpenReaderNowPlayingModule.self, name: nil)`, and the app builds,
+installs and runs. The lock-screen behaviour that followed is in
+`notes/NOTES_2026-09-20.md`.
+
+Earlier, with only `expo-module.config.json` present and no podspec and no Swift:
 
 - `npx expo prebuild --platform ios` generates the project and succeeds.
 - `pod install` (CocoaPods 1.17.0, 250 pods) succeeds. The module contributes no

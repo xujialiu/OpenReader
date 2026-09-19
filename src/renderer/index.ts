@@ -28,11 +28,13 @@ export {
   DOCUMENT_APPEARANCE,
   READING_FONTS,
   READING_SCALES,
+  themeCss,
   UTTERANCE_HIGHLIGHT,
   WORD_HIGHLIGHT,
   type Appearance,
   type HighlightStyles,
   type ReadingFont,
+  type ReadingScheme,
 } from './highlighter';
 
 export {
@@ -52,6 +54,7 @@ export {
   type ReportedBlock,
   type SpeakMessage,
   type TapMessage,
+  type ThemeMessage,
   type WordCue,
 } from './messages';
 

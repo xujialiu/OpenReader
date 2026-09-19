@@ -40,8 +40,10 @@ import {
   DOCUMENT_APPEARANCE,
   highlightCall,
   highlighterSource,
+  themeCss,
   type Appearance,
   type HighlightStyles,
+  type ReadingScheme,
 } from './highlighter';
 import {
   BLOCKS_MESSAGE,
@@ -156,6 +158,14 @@ export interface ReaderBridgeOptions {
    * that way rather than reflowing once the first message arrives.
    */
   appearance?: Appearance;
+  /**
+   * Light or dark, as the book opens (ADR 0022).
+   *
+   * Beside `appearance` and for the same reason: this is the **first paint**, so
+   * a book opened under a dark theme is dark on the frame it appears rather than
+   * flashing white until the first message lands. It changes through `setTheme`.
+   */
+  scheme?: ReadingScheme;
 }
 
 export interface ReaderBridge {
@@ -215,6 +225,15 @@ export interface ReaderBridge {
    * Utterance being spoken, because a change that reflows the text moves it.
    */
   setAppearance(appearance: Appearance): void;
+  /**
+   * Light or dark, live (ADR 0022).
+   *
+   * Shaped like `setAppearance` and different in the one way that matters: the
+   * WebView restyles every rendered section and **does not re-centre**. A colour
+   * change moves not one character, so the sentence being spoken is exactly where
+   * it was — this is the `setInset` case, not the font case.
+   */
+  setTheme(scheme: ReadingScheme): void;
   /**
    * Freeze the highlight where it is. Call it when the engine is paused.
    *
@@ -334,6 +353,9 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    */
   const installed = useRef(options.appearance ?? DOCUMENT_APPEARANCE);
   const appearance = useRef(options.appearance ?? DOCUMENT_APPEARANCE);
+  /** The same pair for the theme, and for the same reason. */
+  const installedScheme = useRef<ReadingScheme>(options.scheme ?? 'light');
+  const scheme = useRef<ReadingScheme>(options.scheme ?? 'light');
 
   const send = useCallback(
     (message: HighlightMessage) => {
@@ -408,6 +430,14 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [send],
   );
 
+  const setTheme = useCallback(
+    (next: ReadingScheme) => {
+      scheme.current = next;
+      send({ kind: 'theme', css: themeCss(next) });
+    },
+    [send],
+  );
+
   const hold = useCallback(() => {
     send({ kind: 'hold' });
   }, [send]);
@@ -449,6 +479,9 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         if (appearance.current !== installed.current) {
           send({ kind: 'appearance', css: appearanceCss(appearance.current) });
         }
+        if (scheme.current !== installedScheme.current) {
+          send({ kind: 'theme', css: themeCss(scheme.current) });
+        }
         latest.current.onDocument?.({ spine: message.spine, hrefs: message.hrefs });
         return;
       }
@@ -485,7 +518,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    * `setAppearance`, and the two halves are told apart by `installed` above.
    */
   const injectedJavascript = useMemo(
-    () => highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DOCUMENT_APPEARANCE),
+    () => highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DOCUMENT_APPEARANCE, options.scheme ?? 'light'),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -505,7 +538,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, show, setInset, setAppearance, hold, clear, goTo, goToSection, readerProps }),
-    [clock, setUtterances, show, setInset, setAppearance, hold, clear, goTo, goToSection, readerProps],
+    () => ({ clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, readerProps }),
+    [clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, readerProps],
   );
 }

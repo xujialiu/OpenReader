@@ -31,7 +31,7 @@
 import { useMemo } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { contentsOf, currentRow, type ContentsRow, type NavigationEntry } from '../core/document/contents';
+import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
 
 import { INK, Note } from './controls';
 
@@ -41,24 +41,29 @@ const ROW_HEIGHT = 46;
 export interface ContentsSheetProps {
   visible: boolean;
   onClose(): void;
-  /** The document's navigation, as the EPUB library reports it. */
-  navigation: readonly NavigationEntry[];
-  /** Every spine item's href, in spine order, from the document message. Empty until it arrives, and then every row is unreachable. */
-  spineHrefs: readonly string[];
+  /**
+   * The document's contents, flattened.
+   *
+   * Built by the screen rather than here, because the lock screen's second line
+   * is the same answer (`src/now-playing/`'s `chapterOf`) and two flattenings of
+   * one navigation would be two numberings to keep in step.
+   */
+  contents: Contents;
+  /**
+   * Whether the spine's hrefs have arrived from the document message.
+   *
+   * Its own flag rather than the hrefs themselves, because that is all this sheet
+   * ever asked them: with no spine every row is unreachable, and "it has not
+   * arrived yet" and "it does not match" are two different sentences to show.
+   */
+  spineKnown: boolean;
   /** The spine item the reading is in, or the one on the page when nothing is being read. Null when neither is known. */
   section: number | null;
   /** Go here: a spine index. The caller does the two steps (`use-reading.ts`'s `goToSection`). */
   onGo(section: number): void;
 }
 
-export function ContentsSheet({ visible, onClose, navigation, spineHrefs, section, onGo }: ContentsSheetProps) {
-  /**
-   * Flattened once per document rather than per open. Measured on the owner's book:
-   * 0.772 ms for all 2,076 entries, two thirds of which is building the spine table
-   * — so this is cheap, and it is memoised because the alternative is doing it again
-   * every time the sheet's parent re-renders, which is once per Utterance.
-   */
-  const contents = useMemo(() => contentsOf(navigation, spineHrefs), [navigation, spineHrefs]);
+export function ContentsSheet({ visible, onClose, contents, spineKnown, section, onGo }: ContentsSheetProps) {
   const here = useMemo(
     () => (section === null ? null : currentRow(contents, { sectionIndex: section })),
     [contents, section],
@@ -81,7 +86,7 @@ export function ContentsSheet({ visible, onClose, navigation, spineHrefs, sectio
 
         {contents.rows.length > 0 && contents.unreachable === contents.rows.length ? (
           <Note attention>
-            {spineHrefs.length === 0
+            {!spineKnown
               ? 'The list of this book’s own files has not arrived yet, so no row can be opened. It arrives as the document installs.'
               : 'None of these rows names a file in this book. The contents live in a different folder from the pages, which this app matches by name — so the list can be read but not followed.'}
           </Note>
