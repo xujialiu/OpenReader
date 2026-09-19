@@ -1,7 +1,7 @@
 # Notes
 
 Measured findings live here, in dated files (`NOTES_YYYY-MM-DD.md`) as in the
-Zotero-TTS repo. Decisions live in `docs/adr/`; see ADR 0020 for why both.
+Zotero-TTS repo. Decisions live in `docs/adr/`; see ADR 0015 for why both.
 
 Nothing has been built yet. What follows is the list of things assumed but **not
 verified**, accumulated while planning on 2026-09-19. Each is cheap to settle and
