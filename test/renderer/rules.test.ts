@@ -387,6 +387,20 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     expect(program).toContain('covered = ');
   });
 
+  it('sends the inset again once the program says it has installed', () => {
+    // The player measures itself while the WebView is still loading its template, and
+    // `highlightCall` is `window.X && window.X(...)` — a call into a function that is
+    // not there yet, which does nothing and says nothing. Losing that first message
+    // leaves the centring aiming at the middle of a container whose bottom is covered
+    // and nothing reports it: the sentence is simply low on the screen until the
+    // player happens to change size. The document message is the one signal that the
+    // program exists.
+    const bridge = code('reader-bridge.ts');
+    const document = bridge.slice(bridge.indexOf('message.type === DOCUMENT_MESSAGE'));
+    const branch = document.slice(0, document.indexOf('return;'));
+    expect(branch).toContain("send({ kind: 'inset', bottomPx: inset.current })");
+  });
+
   it('does not scroll when the inset changes, because that would move the text under the reader', () => {
     // The one thing the floating player exists to prevent. The new inset applies to
     // the next Utterance; the sentence being spoken stays where it is.
@@ -422,6 +436,44 @@ describe('tapping a word reads from there, and it is a tap (ADR 0020)', () => {
     expect(TAP_MESSAGE).toBe('openreader:tap');
   });
 
+  /**
+   * **The one assertion in this file that stands in for a device run, and it can
+   * only ever be structural.**
+   *
+   * `caretPositionFromPoint` does not answer "there is no text here". It answers
+   * with the *nearest* caret position — so a click at (2.0, 23.4), in the body's own
+   * left padding and over nothing at all, came back as a caret in the heading beside
+   * it and moved the reading to that heading's Utterance
+   * (`notes/NOTES_2026-09-20.md`, 01:00). One line is the whole of the fix, and
+   * `docs/design/0020` is the whole of why it matters: a gesture that is easy to
+   * miss must not move your place in the book when you miss it.
+   *
+   * Nothing in Node can watch that line work. It needs a hit-test, a layout and a
+   * box, and ADR 0011 puts all three inside Safari's JavaScript. A DOM mock would
+   * prove the mock was called — `test/README.md` is explicit — and the measurement
+   * that *does* prove it is in the log, taken twice, with and without the line.
+   *
+   * So this reads the program's text, like every other rule in this file, and pins
+   * the three things a deletion or a defeat would each break: that the guard is
+   * there with its `return`, that nothing reaches the post without passing it, and
+   * that all four edges of the box are compared. It is a tripwire, not a proof, and
+   * calling it anything else would be the lie this repository keeps catching.
+   */
+  it('refuses a tap that landed outside the Block the hit-test snapped to', () => {
+    const program = code('highlighter.ts');
+    const tapped = fn(program, 'tapped');
+    expect(tapped).toContain('if (!inside(place.element, event.clientX, event.clientY)) return;');
+    // Order, so that the guard cannot be moved below the thing it guards.
+    expect(tapped.indexOf('inside(place.element')).toBeLessThan(tapped.indexOf('post({ type: TAP'));
+    // All four edges. Dropping either horizontal comparison lets every margin tap
+    // through, which is exactly the measurement above, on one axis.
+    expect(fn(program, 'inside')).toContain('return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;');
+    // And the guard needs the Block's own element, so what it reads that from has to
+    // carry one: without it `inside` is called with undefined and every tap dies
+    // instead, which is the same line failing the other way.
+    expect(fn(program, 'blockOffsetOf')).toContain('element: found.element');
+  });
+
   it('reports a place in a Block rather than an Utterance, the Utterances being on the other side', () => {
     // The WebView does not have the Utterance list. It reports the Block's own
     // coordinate system — the same UTF-16 offsets every other message uses — and
@@ -453,6 +505,48 @@ describe('the spine’s hrefs cross once, unmodified (ADR 0020)', () => {
     for (const rewrite of ['decodeURI', 'encodeURI', 'resolve', 'replace', 'trim', 'toLowerCase']) {
       expect({ rewrite, used: spine.includes(rewrite) }).toEqual({ rewrite, used: false });
     }
+  });
+});
+
+describe('a resize must not be able to lose the page (ADR 0011)', () => {
+  /**
+   * **The blank open**, diagnosed 2026-09-20 and measured both ways on the device.
+   *
+   * The manager's `resize` calls `this.clear()` whenever the size really changed,
+   * destroying every view; the rendition's own handler then re-displays **only if
+   * `this.location && this.location.start`**, which is not set until the opening
+   * `display()` has reported a location. A resize landing in that window leaves
+   * zero views, an empty container and `currentLocation()` answering `{}` — with
+   * the app already holding the Blocks of sections that rendered and went. That is
+   * the state recorded on 2026-09-19 at 20:44 and 22:55, on two different books.
+   *
+   * Forced on the device: with a location, two views come back in 700 ms; with the
+   * location cleared, zero views and zero children, for good. With this handler in
+   * place the same forced resize recovers on both books.
+   *
+   * Structural, like everything else in this file, and for the same reason: it
+   * needs a stage, a resize observer and a rendition, all of which live in Safari.
+   */
+  it('puts the page back when epub.js has no location to put it back from', () => {
+    const program = code('highlighter.ts');
+    expect(program).toContain("rendition.on('resized', function () {");
+    const handler = program.slice(program.indexOf("rendition.on('resized'"));
+    const body = handler.slice(0, handler.indexOf('});'));
+    // Only the case the library drops. With a location it recovers by itself, and
+    // a second display would fight it.
+    expect(body).toContain('if (rendition.location && rendition.location.start) return;');
+    // The section that was on the page, never the start of the book: on a resumed
+    // reading spine item 0 is the cover.
+    expect(body).toContain('rendition.display(onScreen);');
+    expect(body).not.toContain('rendition.display(0)');
+  });
+
+  it('remembers what was on the page, since the resize has already destroyed it', () => {
+    // By the time the handler runs, `getContents()` is empty — `clear()` has been
+    // and gone. The only usable target is one recorded before it.
+    const program = code('highlighter.ts');
+    expect(fn(program, 'sweep')).toContain('if (lowest !== null) onScreen = lowest;');
+    expect(fn(program, 'sweep')).toContain('list[i].sectionIndex < lowest');
   });
 });
 

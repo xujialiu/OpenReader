@@ -84,3 +84,34 @@ thing the owner sees can be nothing at all, and why is not yet understood. It is
 recorded as unexplained rather than guessed at.
 
 *The engineering half of this decision is [ADR 0011](../adr/0011-epub-renders-in-a-webview-via-epubjs.md).*
+
+## Sometimes a book opened to an empty page, and now it does not
+
+For a while, opening a book — usually the owner's long novel, occasionally a tiny
+test one — sometimes gave an empty page. Not an error, not a crash: a white screen,
+with the strip along the bottom cheerfully reporting how many sentences were ready
+to be read. Going anywhere in the book brought it straight back, so nothing was lost
+except the trust that opening a book works.
+
+The cause turned out to be a moment no one thinks about. When a book is opened, the
+screen settles into its final shape a beat after the words start being laid out —
+the title bar at the top arrives late and everything below it shifts. The part of
+the app that lays out the book throws the whole page away whenever the space it has
+changes, and rebuilds it from wherever the reader was. If the shape changes before
+it has worked out where the reader is, it throws the page away and has nowhere to
+rebuild from, so it rebuilds nothing.
+
+It is rare because it is a race: on a short book the reading position is worked out
+long before the screen settles, and on a two-thousand-chapter one it often is not.
+
+**The fix is to rebuild the page ourselves in that one case**, rather than to stop
+the screen from settling. Stopping this particular shift would have left the next
+one — turning the phone, or any future thing that changes how much room the book
+has — to find the same hole. The page has to survive all of them.
+
+The cost is small and worth naming: when the page does have to be rebuilt this way,
+you are put back at the **top of the chapter you were in** rather than at the exact
+line. Nothing that knew the exact line still exists at that moment. If something is
+being read aloud, the next sentence puts you back precisely; if not, you are a
+little above where you were, in a book you can see, which is the whole of what
+changed.

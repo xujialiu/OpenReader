@@ -235,6 +235,9 @@ ${constants}
      pixels, from the 'inset' message. Zero until it says otherwise, which is the
      geometry that was true before ADR 0020's player existed. See centre(). */
   var covered = 0;
+  /* The lowest spine item on the page, from the last sweep. The only thing the
+     resize recovery has to aim at; see the resize handler. */
+  var onScreen = null;
 
   /* ---- the walk: a rendered section as Blocks ---- */
 
@@ -858,7 +861,9 @@ ${constants}
 
   function sweep() {
     var list = rendition.getContents();
+    var lowest = null;
     for (var i = 0; i < list.length; i++) {
+      if (list[i] && (lowest === null || list[i].sectionIndex < lowest)) lowest = list[i].sectionIndex;
       /* A throw here would come out inside epub.js's own event emitter and take
          the rest of its listeners with it. Reported instead — which is not a
          capability check and not a fallback: there is no second way to draw a
@@ -869,7 +874,65 @@ ${constants}
         report('could not read the rendered section: ' + error);
       }
     }
+    /* The top of what is on the page, kept for the one case that has to put it
+       back — see the resize handler. Only when something is on the page: an empty
+       sweep is the blank we are recovering from, and forgetting where we were is
+       how the recovery would lose its target. */
+    if (lowest !== null) onScreen = lowest;
   }
+
+  /* ---- the blank open (notes/NOTES_2026-09-20.md, 01:51) ---- */
+
+  /* A resize destroys every view, and epub.js only puts them back if it has
+     somewhere to put them.
+
+     Read out of the bundled epub.js and then measured on the device. The stage's
+     resize observer calls the manager's \`resize\`, which — whenever the size really
+     changed — calls \`this.clear()\` and destroys every view. The rendition's own
+     handler then re-displays:
+
+         onResized(size, cfi) {
+           this.emit(RENDITION.RESIZED, ...);
+           this.location && this.location.start && this.display(cfi || this.location.start.cfi);
+         }
+
+     **\`this.location\` is set by \`reportLocation\`, which first runs when the
+     opening \`display()\` resolves.** A resize that lands in the window before that
+     — the reader's own layout settling, a navigation transition finishing — finds
+     no location, re-displays nothing, and leaves a blank page with zero views, an
+     empty container and \`currentLocation()\` answering \`{}\`. Which is exactly the
+     state recorded on 2026-09-19 at 20:44 and 22:55, on two different books, with
+     the app already holding the Blocks of sections that had rendered and gone.
+
+     Measured both ways on the device: a forced resize with a location recovers to
+     two views in 700 ms; the same resize with the location cleared leaves zero
+     views and zero children for good.
+
+     So this is the case epub.js drops, and nothing else: when it has a location it
+     recovers and this stays out of the way. Not a capability check and not a second
+     way to render — it is the only way, run when the library has declined to run
+     it. */
+  var displaying = false;
+  rendition.on('resized', function () {
+    if (rendition.location && rendition.location.start) return;
+    if (onScreen === null || displaying) return;
+    /* The section that was at the top of the page, not the start of the book: on a
+       resumed reading, spine item 0 would be the cover. Under a scrolled layout the
+       reader may have been partway into it, so they land slightly early rather than
+       somewhere unpredictable — the same trade the contents list makes, and better
+       than the nothing this replaces. */
+    displaying = true;
+    try {
+      rendition.display(onScreen);
+    } catch (error) {
+      report('could not restore the page after a resize: ' + error);
+    }
+    /* Cleared on the next paint rather than on the promise: a display that rejects
+       would otherwise wedge this shut for the life of the document. */
+    window.setTimeout(function () {
+      displaying = false;
+    }, 0);
+  });
 
   rendition.on('rendered', sweep);
   /* And again whenever the reading position moves. A section can be on the page

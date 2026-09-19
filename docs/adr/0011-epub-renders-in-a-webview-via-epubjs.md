@@ -80,22 +80,91 @@ section and is paid by a finger scroll too.
 
 ## What the big book does that this decision did not ask about
 
-**Opening it sometimes lands on a blank page.** Twice out of three opens, the
+**Opening it sometimes landed on a blank page.** Twice out of three opens, the
 2,077-spine-item book opened, sections rendered and reported their Blocks — the
 screen said "108 Utterances ready" — and the view manager then held **zero views**,
 an empty container and a `currentLocation()` of `{}`. The third open, taken with
 the same build minutes later, rendered the cover and four sections and stayed that
-way. So it is intermittent, and the mechanism is not established: an attempt to
-catch it by instrumenting the manager's `trim` and `erase` is the run that did not
-blank, so nothing was recorded. It is written down as unexplained rather than
-diagnosed.
+way. The same thing happened to a 2,567-byte fixture on one cold open of four, so
+it was never about the book's size. `rendition.display(0)` afterwards rendered
+everything; moving to any section recovered completely.
 
-What is established is that it is a defect of the open and not of the reading.
-`rendition.display(0)` afterwards renders the cover and the four sections after
-it; moving to any section recovers completely; and the reading, once moving, is
-what the figures above describe. It is also **not** the cover being unpaintable:
-under this layout the cover image paints, which the paginated run at
-`notes/NOTES_2026-09-19.md` 18:31 recorded it not doing.
+### Diagnosed, 2026-09-20: a resize with no location destroys the page
+
+**A resize clears every view, and epub.js only puts them back if it already has a
+location.** Read out of the bundled epub.js and then reproduced on the device in
+both directions.
+
+The stage's resize observer calls the view manager's `resize`, which — whenever the
+size really changed — calls `this.clear()` and destroys every view. The rendition's
+own handler is then the only thing that rebuilds them:
+
+```js
+onResized(size, cfi) {
+  this.emit(RENDITION.RESIZED, { width: size.width, height: size.height }, cfi);
+  this.location && this.location.start && this.display(cfi || this.location.start.cfi);
+}
+```
+
+`this.location` is set by `reportLocation`, which first runs when the **opening**
+`display()` resolves. A resize landing before that finds no location, re-displays
+nothing, and leaves exactly the recorded state. Four other callers of `clear()`
+exist — `destroy`, `display`, `next`, `prev` — and none of them fits: the symptom
+set includes sections having rendered and been reported *first*, which a failing
+`display` cannot produce and which `next`/`prev` are never called to produce at an
+open.
+
+Forced on the device, with everything else unchanged
+(`notes/NOTES_2026-09-20.md`, 01:51):
+
+| forced resize | at the resize | 700 ms later |
+| --- | --- | --- |
+| with a location | views 0 | **views 2** — epub.js recovers |
+| with the location cleared | views 0 | **views 0, children 0** — blank, for good |
+
+**The trigger is the reader's own layout settling.** Measured once in the wild
+(01:55): opening the owner's book laid the document element out twice, `402x874`
+and then `402x758` **1.6 s later** — the navigation header's height arriving. The
+book's opening `display()` has often not resolved within 1.6 s, and the fixture's
+always has, which is the shape of "two opens in three on the big book, one in four
+on the small one". It is rare rather than reliable: seven later opens of the same
+book laid out once and never resized.
+
+### The fix recovers rather than prevents, and why
+
+`highlighter.ts` listens for `resized` and re-displays **only when epub.js has
+declined to** — when there is no `location.start`. With a location the library
+recovers by itself and a second display would fight it.
+
+Recovering rather than preventing, because the trigger is not one thing: a header
+settling today, a rotation tomorrow, a sheet the day after. A resize is a legitimate
+event and the page has to survive every one of them; suppressing this particular
+layout change would leave the next one to find the same hole.
+
+What it costs: the target is **the lowest spine item that was on the page**, not
+the reading's exact position, because by the time the handler runs `clear()` has
+already destroyed the views and `scrollTo(0, 0)`'d the container — there is nothing
+left to read a position off. So the reader lands at the top of the section they were
+in rather than where they were in it. That is the same trade the contents list makes
+(ADR 0020: "you land slightly early rather than somewhere unpredictable") and it is
+strictly better than the blank page it replaces. When a reading is under way it
+self-corrects within one sentence, because the next Clip cue centres the Utterance.
+
+It is **silent on success**, deliberately. `ProblemMessage` means "a highlight could
+not be drawn" and widening it to also mean "the page was rebuilt" is how a protocol
+starts lying; a failed recovery still reports. The event the owner would have
+noticed — a blank page — is the thing that no longer happens.
+
+**What is not claimed.** The wild blank was never caught with the watcher
+installed, so this is a mechanism that reproduces the entire recorded symptom set
+and that no other caller of `clear()` can produce — not a recording of the original
+failure. Seven opens of the owner's book after the fix all rendered, against a
+recorded two-in-three failure rate, which is suggestive and nothing more; the
+before/after on the forced resize is the evidence.
+
+It is also **not** the cover being unpaintable: under this layout the cover image
+paints, which the paginated run at `notes/NOTES_2026-09-19.md` 18:31 recorded it
+not doing.
 
 ## Why not Readium, which is better maintained
 
