@@ -34,7 +34,17 @@ two, and the licences were checked rather than assumed:
 
 So:
 
-**The segmenter uses upstream `sentencex` directly.** What SDT adds on top of it
+**The segmenter uses upstream `sentencex` directly — pinned to 0.4.2.** The
+version matters and the pin is not tidiness: from 1.0.0 the package is a binding
+to a Rust library, `require('sentencex-' + process.platform + '-' + process.arch)`
+resolving a native `.node` addon, with binaries for darwin, linux and win32 and
+none for a phone. Hermes cannot load one and Metro cannot bundle one, so the
+releases this sentence would otherwise point at cannot run in the app at all.
+0.4.2 is the last JavaScript release, MIT, and what it costs against 1.0.31 —
+thirty languages rather than the full set, and a handful of abbreviation cases
+each way — is measured in notes/NOTES_2026-09-19.md. The decision below is
+unaffected by which release loads; that is why the answer was to pin rather than
+to port the algorithm, which would have re-opened it. What SDT adds on top of it
 is a document tree, page mappings, source anchors and text ranges — and for EPUB
 those are largely unnecessary, because epub.js already supplies a DOM. The part
 actually missing is splitting a run of text into sentences, and that part is

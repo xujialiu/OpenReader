@@ -25,11 +25,22 @@ with more than one language in it is not handled specially (ADR 0010): it is
 read in its one voice, and detecting per sentence would mean reinstating exactly
 what was avoided here.
 
-`unicode-segmenter` is a dependency for the word and grapheme work that
-`Intl.Segmenter` would otherwise do, and it is **required, not optional**:
-measured on Hermes 250829098.0.17 (the engine React Native 0.86.3 bundles),
-`Intl.Segmenter is not a function`. See notes/NOTES_2026-09-19.md, which is the
-record of that measurement. Import it from `unicode-segmenter/intl-polyfill`.
+`unicode-segmenter` is a dependency for the grapheme work that `Intl.Segmenter`
+would otherwise do, and it is **required, not optional**: measured on Hermes
+250829098.0.17 (the engine React Native 0.86.3 bundles), `Intl.Segmenter is not
+a function`.
+
+Import `graphemeSegments` from `unicode-segmenter/grapheme` — **not** from
+`unicode-segmenter/intl-polyfill`, which an earlier draft of this file
+recommended. That polyfill implements `granularity: 'grapheme'` and throws
+`TypeError` for `'word'` and for `'sentence'`. Node's own `Intl.Segmenter` is
+complete, so code written through the global passes every test here and throws
+on the device; `engine-boundary.test.ts` fails if `Intl.Segmenter` is ever named
+outside a comment. The consequence is that **no word boundaries exist on this
+engine at all**, which is why a cut inside a sentence falls on whitespace or on
+a grapheme cluster and never between words.
+
+Both measurements are in notes/NOTES_2026-09-19.md, which is the record.
 
 ## The repair layer that is still needed
 
