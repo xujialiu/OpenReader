@@ -27,7 +27,7 @@ and would eventually be thrown away.
 ## Why the native module is worth the work
 
 `AVSpeechSynthesizer.write` with a marker callback, available from iOS 16 and so
-always available above this project's 16.4 floor, returns PCM buffers **and**
+always available above this project's floor, returns PCM buffers **and**
 `AVSpeechSynthesisMarker` values carrying `byteSampleOffset` — a word boundary
 locked to an exact audio sample position.
 

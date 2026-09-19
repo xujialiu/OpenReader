@@ -35,7 +35,7 @@ the project is one native module, one WebView bridge, and shared TypeScript
 for everything else.
 
 The platform facts this is built on, as of September 2026: Expo SDK 57, React
-Native 0.86, **minimum iOS 16.4**, Xcode 26.4+. The New Architecture is
+Native 0.86, Xcode 26.4+. The New Architecture is
 mandatory from SDK 55 — there is no opt-out. `expo-av` was removed entirely in
 SDK 55, so `expo-audio` is not a preference but the only option. Expo Go stops
 at SDK 54 on the App Store, which settles the question of a development build:
@@ -51,3 +51,24 @@ day-one spike rather than in an assumption:
 - `TextDecoder` — the Hermes release notes of 2026-06-05 say it now ships with
   the engine; an older Hermes issue says it does not. Which is true of the
   Hermes actually bundled in React Native 0.86 was not established.
+
+## The deployment target is iOS 17.2, not the platform minimum
+
+Expo SDK 57 will run on iOS 16.4. This project requires **17.2** anyway, which is
+a choice rather than a constraint.
+
+The reason is the CSS Custom Highlight API, which ADR 0005 depends on to highlight
+a word without touching the DOM. It arrived in Safari 17.2. Under a 16.4 floor it
+would need a fallback that wraps each word in an element instead — which is the
+per-word DOM mutation that ADR 0005 exists to avoid, so the fallback would be a
+second implementation of the hardest part of the app, written to be worse.
+
+Raising the floor deletes that path entirely. While the app is built for its
+author, on the author's own devices, the floor costs nothing: it is not a market
+to be served, it is one person's phone. If it ever needs lowering for a wider
+audience, adding a fallback to a working app is easier than having maintained a
+second rendering path from the start.
+
+A practical consequence worth noting: the installed simulator runtime is iOS 27.0,
+so the floor could not have been tested anyway without downloading an older
+runtime specifically to exercise a path that now does not exist.

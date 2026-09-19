@@ -61,8 +61,9 @@ Three findings decide it, and each rules out the obvious implementation:
   blows the frame budget.
 - **Never highlight by mutating the DOM per word.** The CSS Custom Highlight
   API styles arbitrary `Range` objects through `::highlight()` with no markup
-  change and no reflow, and is available from Safari 17.2 — above the iOS 16.4
-  floor, so it needs a fallback, but it is the right primitive.
+  change and no reflow. It arrived in Safari 17.2, and the deployment target was
+  raised to 17.2 for exactly this reason (ADR 0001), so it is available
+  unconditionally and **there is no fallback path to write**.
 
 The design that works: push the whole word-timing array into the WebView **once**
 when a clip starts, let `requestAnimationFrame` inside the WebView interpolate
