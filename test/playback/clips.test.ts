@@ -1,0 +1,204 @@
+import { describe, expect, it } from 'vitest';
+
+import { createMemoryCache } from '../../src/core/memory-cache';
+import { SynthesisError } from '../../src/core/providers/errors';
+import type { SynthesisResult, TTSProvider } from '../../src/core/providers/types';
+import { clipCacheKey, type StoredClip } from '../../src/playback/clip-cache';
+import { createClipFetcher, prepareClip, silence } from '../../src/playback/clips';
+
+/**
+ * Where the owner's money is spent, so it is where the promises about spending
+ * it are tested: text that is not Speakable never reaches a Provider, a cached
+ * Clip is not fetched again, the same text is not fetched twice at once, and a
+ * request that never answers fails rather than hanging.
+ */
+
+const pcm = (frames: number, extra: Partial<SynthesisResult> = {}): SynthesisResult => ({
+  audio: 'pcm',
+  samples: new Uint8Array(frames * 2),
+  sampleRate: 24_000,
+  ...extra,
+} as SynthesisResult);
+
+/** A Provider that records what it was asked for. `fetch` is refused globally by test/setup.ts, so nothing here can reach the network by accident. */
+function fakeProvider(synthesize: (text: string) => Promise<SynthesisResult>) {
+  const asked: string[] = [];
+  const provider: TTSProvider = {
+    id: 'speechify',
+    capabilities: { wordTimestamps: true },
+    listVoices: async () => [],
+    synthesize: (text) => {
+      asked.push(text);
+      return synthesize(text);
+    },
+  };
+  return { provider, asked };
+}
+
+const cache = () => createMemoryCache<StoredClip>({ maxBytes: 1_000_000 });
+
+describe('prepareClip', () => {
+  it('turns pcm into samples at the rate the Provider reported', () => {
+    const clip = prepareClip(3, pcm(120));
+    expect(clip.audio).toBe('samples');
+    if (clip.audio !== 'samples') throw new Error('unreachable');
+    expect(clip.samples.length).toBe(120);
+    expect(clip.sampleRate).toBe(24_000);
+    expect(clip.utterance).toBe(3);
+  });
+
+  it('keeps encoded bytes as bytes, because the decoder is in the graph (ADR 0013)', () => {
+    const clip = prepareClip(0, { audio: 'encoded', bytes: new Uint8Array([1, 2, 3]), mediaType: 'audio/mpeg' });
+    expect(clip.audio).toBe('encoded');
+    if (clip.audio !== 'encoded') throw new Error('unreachable');
+    expect(clip.mediaType).toBe('audio/mpeg');
+  });
+
+  it('carries the Word Timings through unscaled', () => {
+    // Scaling happens once per Clip, on the way to the renderer (rate.ts).
+    const timestamps = [{ start: 0, end: 1, charStart: 0, charEnd: 4 }];
+    expect(prepareClip(0, pcm(10, { timestamps })).words).toEqual(timestamps);
+  });
+
+  it('reads an empty timings array as no timings', () => {
+    expect(prepareClip(0, pcm(10, { timestamps: [] })).words).toBeNull();
+  });
+
+  it('turns a reply with no samples into silence', () => {
+    // Speechify answers unspeakable text with zero samples and a note saying so,
+    // and AudioBuffer refuses a length of zero — "The number of frames provided
+    // (0) is less than or equal to the minimum bound" — so this has to become
+    // something playable before it reaches the graph.
+    const clip = prepareClip(5, pcm(0, { note: 'no speakable text' }));
+    expect(clip.audio).toBe('silence');
+    expect(clip.utterance).toBe(5);
+  });
+
+  it('turns an empty encoded reply into silence too', () => {
+    const clip = prepareClip(0, { audio: 'encoded', bytes: new Uint8Array(0), mediaType: 'audio/mpeg' });
+    expect(clip.audio).toBe('silence');
+  });
+});
+
+describe('silence', () => {
+  it('lasts a beat and carries no timings', () => {
+    const clip = silence(2);
+    expect(clip.audio).toBe('silence');
+    if (clip.audio !== 'silence') throw new Error('unreachable');
+    expect(clip.seconds).toBeCloseTo(0.3, 12);
+    expect(clip.words).toBeNull();
+  });
+});
+
+describe('createClipFetcher', () => {
+  it('never sends text that is not Speakable to a Provider', async () => {
+    // CONTEXT.md: "Text that is not speakable is never sent to a provider; it
+    // becomes silence." The plugin measured the price of asking anyway: 60
+    // seconds and a 502 from Speechify for `* * *`.
+    const { provider, asked } = fakeProvider(async () => pcm(10));
+    const fetcher = createClipFetcher({ provider, voice: 'ava', cache: cache() });
+    const clip = await fetcher.fetch(9, '* * *', false);
+    expect(clip.audio).toBe('silence');
+    expect(asked).toEqual([]);
+  });
+
+  it('asks the Provider once and answers from the cache afterwards', async () => {
+    const store = cache();
+    const { provider, asked } = fakeProvider(async () => pcm(24));
+    const fetcher = createClipFetcher({ provider, voice: 'ava', cache: store });
+    await fetcher.fetch(0, 'Call me Ishmael.', true);
+    await fetcher.fetch(0, 'Call me Ishmael.', true);
+    expect(asked).toEqual(['Call me Ishmael.']);
+  });
+
+  it('files the Clip under provider, voice and text', async () => {
+    const store = cache();
+    const { provider } = fakeProvider(async () => pcm(24));
+    await createClipFetcher({ provider, voice: 'ava', cache: store }).fetch(0, 'Hello.', true);
+    expect(await store.match(clipCacheKey('speechify', 'ava', 'Hello.'))).not.toBeNull();
+  });
+
+  it('answers a Voice change from the Provider rather than from another Voice’s Clip', async () => {
+    const store = cache();
+    const { provider, asked } = fakeProvider(async () => pcm(24));
+    await createClipFetcher({ provider, voice: 'ava', cache: store }).fetch(0, 'Hello.', true);
+    await createClipFetcher({ provider, voice: 'kate', cache: store }).fetch(0, 'Hello.', true);
+    expect(asked).toEqual(['Hello.', 'Hello.']);
+  });
+
+  it('synthesizes a repeated sentence once, however many Utterances ask at once', async () => {
+    // A refrain, or a heading that recurs. Two concurrent fetches of the same
+    // text would otherwise both be billed (ADR 0002, philosophy rule 4).
+    let release!: (result: SynthesisResult) => void;
+    const pending = new Promise<SynthesisResult>((resolve) => {
+      release = resolve;
+    });
+    const { provider, asked } = fakeProvider(async () => pending);
+    const fetcher = createClipFetcher({ provider, voice: 'ava', cache: cache() });
+    const first = fetcher.fetch(4, 'Nevermore.', true);
+    const second = fetcher.fetch(17, 'Nevermore.', true);
+    release(pcm(24));
+    const [a, b] = await Promise.all([first, second]);
+    expect(asked).toEqual(['Nevermore.']);
+    // One synthesis, but each caller gets its own Utterance back.
+    expect(a.utterance).toBe(4);
+    expect(b.utterance).toBe(17);
+  });
+
+  it('lets a later fetch of the same text start once the first has finished', async () => {
+    const { provider, asked } = fakeProvider(async () => pcm(24));
+    const fetcher = createClipFetcher({ provider, voice: 'ava', cache: cache() });
+    await fetcher.fetch(0, 'A.', true);
+    await fetcher.fetch(1, 'B.', true);
+    expect(asked).toEqual(['A.', 'B.']);
+  });
+
+  it('fails a request that never answers instead of hanging', async () => {
+    // Philosophy rule 1. The owner cannot tell a slow server from a dead one,
+    // and a spinner that never stops is the worst of the three.
+    const { provider } = fakeProvider(() => new Promise<SynthesisResult>(() => {}));
+    const fetcher = createClipFetcher({ provider, voice: 'ava', cache: cache(), timeoutMs: 5 });
+    await expect(fetcher.fetch(0, 'Hello.', true)).rejects.toBeInstanceOf(SynthesisError);
+  });
+
+  it('aborts the request it gave up on, so it is not left running', async () => {
+    let seen: AbortSignal | undefined;
+    const { provider } = fakeProvider(() => new Promise<SynthesisResult>(() => {}));
+    const wrapped: TTSProvider = {
+      ...provider,
+      synthesize: (text, options) => {
+        seen = options.signal;
+        return provider.synthesize(text, options);
+      },
+    };
+    const fetcher = createClipFetcher({ provider: wrapped, voice: 'ava', cache: cache(), timeoutMs: 5 });
+    await expect(fetcher.fetch(0, 'Hello.', true)).rejects.toBeInstanceOf(SynthesisError);
+    expect(seen?.aborted).toBe(true);
+  });
+
+  it('does not cache a failure, so a seek back to it asks again', async () => {
+    let calls = 0;
+    const { provider } = fakeProvider(async () => {
+      calls++;
+      if (calls === 1) throw new SynthesisError('rate-limit', 'slow down');
+      return pcm(24);
+    });
+    const fetcher = createClipFetcher({ provider, voice: 'ava', cache: cache() });
+    await expect(fetcher.fetch(0, 'Hello.', true)).rejects.toBeInstanceOf(SynthesisError);
+    expect((await fetcher.fetch(0, 'Hello.', true)).audio).toBe('samples');
+  });
+
+  it('asks for no speed, because SynthesisOptions has none (ADR 0009)', async () => {
+    let options: Record<string, unknown> | undefined;
+    const { provider } = fakeProvider(async () => pcm(24));
+    const wrapped: TTSProvider = {
+      ...provider,
+      synthesize: (text, o) => {
+        options = o as unknown as Record<string, unknown>;
+        return provider.synthesize(text, o);
+      },
+    };
+    await createClipFetcher({ provider: wrapped, voice: 'ava', cache: cache() }).fetch(0, 'Hello.', true);
+    expect(Object.keys(options ?? {}).sort()).toEqual(['signal', 'voice']);
+  });
+});

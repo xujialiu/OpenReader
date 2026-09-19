@@ -94,6 +94,49 @@ design and two open questions of its own — what format the samples are stored 
 indefinitely but never backed up" lives, which no JavaScript API on this
 platform exposes.
 
+## What is here
+
+Two things leave this directory, and `index.ts` exports those two: **the
+engine**, which a player screen drives, and **the clock**, which the renderer
+(ADR 0005) and the lock screen (ADR 0016) read. Everything else is how those two
+are built.
+
+The split is where the platform is, and it is the whole of the test strategy.
+
+| Runs under Node, tested in `test/playback/` | |
+| --- | --- |
+| `timeline.ts` | The content position as "so far into Utterance 41". ADR 0012's argument, in arithmetic. |
+| `rate.ts` | The playback rate, and everything that has to be scaled by it — above all the Word Timings. |
+| `read-ahead.ts` | Three Utterances ahead, two fetches at a time, as one pure function. |
+| `gap.ts` | The gap timer, which here is silence appended to the Utterance's own buffer. |
+| `pcm.ts` | 16-bit little-endian mono into float samples, and the one resampling. |
+| `clip-cache.ts` | Provider + Voice + text, and never speed. |
+| `clips.ts` | Cache, single-flight, timeout — and where `SynthesisResult` stops being a union. |
+| `reader-clock.ts` | The seam: two messages, and deliberately no third. Types only. |
+
+| Needs a device, not tested here | |
+| --- | --- |
+| `audio-graph.ts` | The session, the node, the buffers. The only file that imports `react-native-audio-api`. |
+| `engine.ts` | The order things happen in. Orchestration and no decisions. |
+
+Every decision has been moved out of the two platform files, so what is left in
+them is a sequence that needs a real audio device to mean anything.
+`test/README.md` is explicit that React Native code and native modules are not
+tested in this suite by design, and a fake audio library would only prove that
+the fake was called. What *is* tested about them is their source text —
+`test/playback/footguns.test.ts` reads the lines that obey each footgun, the same
+tool `test/app-config.test.ts` uses on `app.config.ts`, and for the same reason:
+each of these fails as something else, so nothing else would notice one being
+undone.
+
+One thing was read out of the library's source here that is not in notes/NOTES.md
+yet. **The queue node does not resample.** `getCurrentPosition()` divides the
+read index by the *context's* sample rate while accumulating each buffer's
+duration from that buffer's *own* rate, and `QueueBufferProcessor` is handed the
+playback rate and no sample-rate factor at all — so a buffer enqueued at any
+other rate both plays at the wrong speed and corrupts the one number the
+highlight follows. The context is therefore created at the first Clip's rate.
+
 ## Not yet measured
 
 notes/NOTES.md item 4, and it gates UI work rather than following it: a 60–90
@@ -101,3 +144,11 @@ minute backgrounded playback session on a real device. The failure modes are all
 invisible on a desk — the audio session going inactive between clips, the
 Keychain refusing the API key while the screen is locked, the buffer queue
 draining.
+
+Two numbers wait on that session. **The output latency**, which is a parameter of
+the engine and defaults to zero: the library exposes neither the device's own
+latency — 150–200 ms over Bluetooth or AirPlay — nor a usable figure for the
+WSOLA stretcher's, and both are constant offsets rather than drift, which is
+exactly why one measured number settles them and why ADR 0012's decision does not
+depend on it. And **the interval**, one second, which is ADR 0005's correction
+cadence but has not been watched against a real highlight.

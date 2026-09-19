@@ -73,3 +73,34 @@ fails in a way that looks like something else.
    than like a missing flag. `createBufferQueueSource({ pitchCorrection: true })`.
    `WsolaTimeStretcher::MAX_PLAYBACK_RATE` is 4, so the app's 1.5–3× is in range
    and clamping is not a concern.
+7. **The queue node mixes two sample-rate bases in its own position, and the
+   clock is the casualty.** Read from `AudioBufferQueueSourceNode.cpp`:
+   `vReadIndex_` is *seeded* from the buffer's own rate (line 68,
+   `buffers_.front().second->getSampleRate() * offset`) and then *divided* by
+   the context's (line 156, `sampleFrameToTime(vReadIndex_,
+   getContextSampleRate())`), while the other term, `playedBuffersDuration_`,
+   accumulates `size_ / getSampleRate()` — the buffer's rate again
+   (`utils/AudioBuffer.hpp:113`). The single-buffer `AudioBufferSourceNode`
+   beside it does the same calculation consistently, against
+   `buffer_->getSampleRate()` (line 119), which is what makes this look like an
+   oversight rather than a convention.
+
+   It is invisible whenever a buffer's rate equals the context's, and it
+   corrupts **the one number ADR 0012 rests everything on** when they differ —
+   a 24 kHz Clip in a 48 kHz context also plays at double speed, because nothing
+   in the queue path resamples. So the `AudioContext` is created at the first
+   Clip's own rate rather than the hardware's, and a later Clip that disagrees
+   is resampled before it is enqueued.
+8. **`pitchCorrection: true` makes the node play content nobody enqueued.** The
+   host object builds a ~30 ms tail buffer on the first `enqueueBuffer`, and on
+   every drain appends it *instead of* ending the last buffer — which also
+   suppresses that `onBufferEnded` until the tail has been consumed. Anything
+   deriving an Utterance boundary from buffer-end events, or summing enqueued
+   durations without absorbing the excess, drifts by 30 ms per drain.
+9. **`getLatency()` is the time-stretcher's latency, not the output device's.**
+   It is built from the WSOLA constants (`INPUT_LATENCY_MS = 20`,
+   `OUTPUT_LATENCY_MS = 10`) with a rate factor that matches neither unit
+   derivation, so it answers a question nobody asked. The 150–200 ms of a
+   Bluetooth route that ADR 0012 names is not exposed anywhere. Both are
+   constant offsets rather than drift, so the highlight takes one latency
+   parameter and the device session supplies it.
