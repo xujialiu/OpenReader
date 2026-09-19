@@ -1,11 +1,13 @@
-# Reader (working name)
+# FreeReader
 
 A reader for EPUB — later PDF and HTML — that speaks the text aloud through a
 text-to-speech provider the reader's owner chooses and pays for directly, and
 that keeps its place in sync across the owner's phones, tablets and their
 desktop copy of the Zotero-TTS plugin.
 
-The name of the product is not yet decided.
+`FreeReader` is the project and repository name. The name shown on the App Store
+is a separate, later decision: review guideline 2.3.7 forbids prices and
+descriptive terms in an app's name, and "Free" reads as a price.
 
 ## Language
 
