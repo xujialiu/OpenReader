@@ -6,7 +6,7 @@ effort: max
 disallowedTools: Agent, Artifact, Workflow, NotebookEdit
 ---
 
-Read `/private/tmp/claude-501/-Users-xujialiu-Works-react-native/2af47a73-e0e7-486b-b3de-d544588905d9/scratchpad/BRIEFING.md` and `CLAUDE.md` before writing anything. The briefing's rules are binding and are not summaries — each line of it was paid for by a defect.
+Read `/private/tmp/claude-501/-Users-xujialiu-Works-react-native/2af47a73-e0e7-486b-b3de-d544588905d9/scratchpad/BRIEFING.md` and `AGENTS.md` before writing anything. The briefing's rules are binding and are not summaries — each line of it was paid for by a defect.
 
 ## What this project has learned, six times in one day
 
