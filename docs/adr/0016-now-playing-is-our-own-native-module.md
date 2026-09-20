@@ -86,10 +86,20 @@ value. Its JavaScript surface is three calls and one event: `show(reading)`,
 **`MPMediaItemPropertyPlaybackDuration` is never written.** A book is synthesized
 a sentence at a time and only the sections the renderer has reported are even
 known, so any total would be an estimate — which is the one thing this project
-does not do (philosophy rule 1, ADR 0005). The cost is that iOS draws no scrub
-bar, which is the honest picture: there is nothing to scrub along. It is also
-what makes `changePlaybackPositionCommand` a command to disable rather than to
-implement.
+does not do (philosophy rule 1, ADR 0005). There is no duration along which a
+scrubber could seek, so `changePlaybackPositionCommand` remains disabled.
+The earlier claim that iOS draws no scrub bar was corrected by the literal
+lock-screen screenshot on 2026-09-20 at 14:36: iOS 27.0 (24A434) draws a disabled
+time strip with `--:--` at both ends. Absence of duration does not guarantee
+absence of that strip; see the engineering log for the separate invisible-icon
+measurement.
+
+The owner subsequently reported that the lock-screen controls display normally
+on a physical iPhone (2026-09-20). The missing-icon reproduction is confined to
+the simulator environments measured so far; the report did not include the
+phone model or OS version. We retain this integration rather than changing app
+behaviour to compensate for the simulator's missing animation resources. The
+observations and their limits are in the day's engineering log.
 
 The elapsed time is the source node's **content position** (ADR 0012), pushed at
 `POSITION_INTERVAL_MS` — the same value, on the same cadence, that corrects the

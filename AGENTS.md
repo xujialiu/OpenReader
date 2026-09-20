@@ -84,6 +84,9 @@ a later sweep.
 
 # Testing on the device
 
+Before running or writing device/manual tests, read
+[`test/manual-test/README.md`](test/manual-test/README.md) and reuse its scripts.
+
 ## Finish with the latest app running in the simulator
 
 After every app change, update and launch the app in the simulator from the

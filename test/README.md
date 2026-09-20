@@ -31,8 +31,10 @@ all 381 tests in 20 files passed, with and without that repo's own
 
 ## What is not tested here
 
-**React Native views.** Nothing in `test/` renders a native view or touches a native
-module. `app/voice-lifetime.test.ts` mounts the real voice-list hook with a null
+**React Native views.** The Vitest suite renders no native view and touches no native
+module. Device scripts and the separate XCTest harness live in
+[`manual-test/README.md`](manual-test/README.md); they are run explicitly against
+an installed app, outside Vitest. `app/voice-lifetime.test.ts` mounts the real voice-list hook with a null
 React component to reproduce loss across unmount/remount; native storage and the
 Provider response are test doubles. This is a hook-lifetime check, not visual QA. That is not an omission to be filled in later with a different runner: the
 platform-free half of OpenReader lives in `src/core/` precisely so that the tests
