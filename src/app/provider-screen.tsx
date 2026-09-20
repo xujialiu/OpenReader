@@ -1,8 +1,9 @@
 /** Configure while disabled; enablement locks fields. Credentials autosave only to the Keychain. */
-import { useLayoutEffect } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import type { ProviderId } from '../core/providers/types';
-import { Action, Field, INK, Note } from './controls';
+import { Action, Field, HeaderButton, INK, Note } from './controls';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
 import { headersAreOffered, keyIsOffered, PROVIDER_LABELS } from './settings';
@@ -14,8 +15,12 @@ function SecretField({ id, label, secret, locked, help }: {
   id: ProviderId; label: string; secret: ProviderSecret; locked: boolean; help?: string;
 }) {
   const input = useSecretInput(id, label, secret, locked);
+  const [revealed, setRevealed] = useState(false);
+  useFocusEffect(useCallback(() => () => setRevealed(false), []));
   return <View style={styles.field}>
-    <Field label={label} value={input.value} onChangeText={input.change} secure editable={input.editable}
+    <Field label={label} value={input.value} onChangeText={input.change} secure={!revealed} editable={input.editable}
+      accessory={label === 'API key' ? <HeaderButton label={revealed ? 'Hide API key' : 'Show API key'}
+        icon={revealed ? 'eyeOff' : 'eye'} onPress={() => setRevealed((previous) => !previous)} /> : undefined}
       placeholder="Not set" help={help} />
     {input.error ? <Note attention>{input.error}</Note> : null}
   </View>;
@@ -41,11 +46,13 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
   const model = id === 'openai-official' ? settings.openai.model : settings.compatible.model;
   return <ScrollView style={styles.screen} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
     <View style={styles.enable}>
-      <Text style={styles.enableLabel}>{connection.busy ? 'Testing…' : connection.enabled ? 'Enabled' : 'Disabled'}</Text>
+      <View style={styles.enableText}>
+        <Text style={styles.enableLabel}>{connection.busy ? 'Testing…' : connection.enabled ? 'Enabled' : 'Disabled'}</Text>
+        {connection.enabled ? <Note>Disable to edit.</Note> : null}
+      </View>
       <Switch accessibilityLabel={`Enable ${PROVIDER_LABELS[id]}`} value={connection.enabled}
         style={styles.switch} disabled={connection.busy} onValueChange={connection.toggle} />
     </View>
-    {connection.enabled ? <Note>Disable to edit.</Note> : null}
     {id === 'local' || id === 'compatible' ? <Field label="Address" value={settings[id].baseURL}
       onChangeText={(baseURL) => setSettings((previous) => ({ ...previous, [id]: { ...previous[id], baseURL } }))}
       editable={!locked} keyboard="url" placeholder="https://" /> : null}
@@ -75,6 +82,7 @@ const styles = StyleSheet.create({
   body: { padding: 20, paddingBottom: 64, gap: 20 },
   enable: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
   enableLabel: { color: INK.text, fontSize: 17 },
+  enableText: { gap: 4, flex: 1 },
   field: { gap: 4 },
   actions: { flexDirection: 'row' },
   sources: { gap: 4 },

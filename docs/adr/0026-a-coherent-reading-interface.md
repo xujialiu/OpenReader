@@ -145,3 +145,14 @@ The installed React Native iOS Switch composes `alignSelf: 'flex-start'` into it
 style. It overrides a parent's `alignItems: 'center'`, which caused the reported
 vertical offset. Both enablement and source switches explicitly set
 `alignSelf: 'center'`. No guessed translation or native-size override is needed.
+
+
+## Credential visibility is independent of editing
+
+The Enabled label and “Disable to edit.” now share a text group beside the
+switch, rather than separate siblings in the screen's 20-point gap layout.
+API-key fields use a trailing 44-point eye button with Show/Hide accessibility
+labels. Visibility is local state, initially false and reset on navigation blur;
+it only changes secureTextEntry, never editability or credential persistence.
+All API-key providers share this behavior. Extra headers retain their existing
+masked field.

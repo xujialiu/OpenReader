@@ -17,6 +17,8 @@ const paths = {
   settings: 'M4 6h8 M16 6h4 M4 12h3 M11 12h9 M4 18h9 M17 18h3 M12 3v6 M7 9v6 M17 15v6',
   book: 'M12 6c-3-2-6-2-9-1v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1v14',
   check: 'm5 12 4 4L19 6',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+  eyeOff: 'm3 3 18 18 M10.6 5.1 12 5c6.5 0 10 7 10 7a20 20 0 0 1-3 3.8 M6.2 6.2A22 22 0 0 0 2 12s3.5 7 10 7c1.7 0 3.3-.5 4.6-1.2 M9.9 9.9a3 3 0 0 0 4.2 4.2',
 } as const;
 export type IconName = keyof typeof paths;
 export function Icon({ name, color, size = 24 }: { name: IconName; color: ColorValue; size?: number }) {

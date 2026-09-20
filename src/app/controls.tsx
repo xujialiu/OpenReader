@@ -173,6 +173,7 @@ export function Field({
   secure,
   keyboard,
   lines,
+  accessory,
 }: {
   label: string;
   value: string;
@@ -183,6 +184,7 @@ export function Field({
   editable?: boolean;
   secure?: boolean;
   keyboard?: 'url';
+  accessory?: ReactNode;
   /**
    * More than one line, for a field whose content has line breaks in it — the
    * gateway headers are `Name: value` pairs and the owner may paste them one to
@@ -202,8 +204,9 @@ export function Field({
         <Text style={styles.fieldLabel}>{label}</Text>
         {help ? <HeaderButton title="?" label={`${label} help`} onPress={() => Alert.alert(label, help)} /> : null}
       </View>
+      <View style={accessory ? styles.inputWithAccessory : undefined}>
       <TextInput
-        style={[styles.input, lines ? { height: 22 * lines + 20, textAlignVertical: 'top' } : null]}
+        style={[styles.input, accessory ? styles.accessoryInput : null, lines ? { height: 22 * lines + 20, textAlignVertical: 'top' } : null]}
         accessibilityLabel={label}
         editable={editable}
         value={value}
@@ -218,6 +221,8 @@ export function Field({
         numberOfLines={lines}
         keyboardType={keyboard === 'url' ? 'url' : 'default'}
       />
+      {accessory}
+      </View>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
   );
@@ -325,6 +330,9 @@ const styles = StyleSheet.create({
   fieldHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   fieldLabel: { color: INK.text, fontSize: 14, fontWeight: '600' },
   hint: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
+  inputWithAccessory: { flexDirection: 'row', alignItems: 'center', borderColor: INK.line,
+    borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  accessoryInput: { flex: 1, minWidth: 0, borderWidth: 0 },
   input: {
     backgroundColor: INK.page,
     borderColor: INK.line,

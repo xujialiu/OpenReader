@@ -151,3 +151,16 @@ remain usable to disable the provider. Show only the short instruction
 "Disable to edit." while locked. Centre switches vertically beside their labels.
 The owner confirmed this revised arrangement. It is implemented, with existing
 settings and credentials retained across ordinary app updates.
+
+
+## Keep the editing instruction beside enablement
+
+Place “Disable to edit.” directly below the enabled label, in the same group
+as its switch. Separating it from the switch made it look like an instruction
+for the credential field alone.
+
+The credential field has an eye button: hidden initially, visible after a tap,
+and hidden again after another tap or leaving the page. Viewing remains available
+while enabled; requiring disabling just to check a saved credential would
+interrupt its availability unnecessarily. Editing still requires disabling.
+The owner confirmed this interaction.
