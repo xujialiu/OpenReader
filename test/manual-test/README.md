@@ -279,3 +279,48 @@ It uses the live voice list, so it needs the configured app key and network.
 It does not select a voice or start playback. It leaves the picker open and
 captures the list for visual review. The source-toggle combinations are covered
 by the provider tests; this mode verifies regional navigation and visibility.
+
+### Library and reader actions drawer (long press, '...', Delete)
+
+With the current Debug app connected to Metro and both `A Short Test of Reading
+Aloud` and `仙逆` in the Library:
+
+```sh
+bash test/manual-test/library-actions.sh SIMULATOR_UDID /tmp/openreader-library-actions-01
+```
+
+This uses real XCTest touches, entirely on the short English fixture. It long-
+presses the Library row and taps its `...`, checking both raise the same drawer
+(Appearance/Rename/Download/Delete) with no system alert on the `...` tap. It
+taps Delete, checks the `Delete this book?` confirmation, and **cancels** —
+this mode never removes the fixture. It renames the fixture to a long title to
+photograph the `...` button centred against a two-line row, then renames it
+back and confirms the restoration survives a relaunch. It then opens the reader
+itself and checks the Appearance/Rename/Download menu (no Delete row there) and
+that all three still open from that entry point, including the persisted
+Download view. It never presses Play. It does **not** check the Contents note:
+this fixture's nav hrefs do not match its spine (a pre-existing, unrelated
+fact — see `core/document/contents.ts`), so every row is permanently
+unreachable and `here` is always null here, regardless of position.
+
+The Contents note is checked separately, read-only, against `仙逆`, whose nav
+entries do resolve to real spine items:
+
+```sh
+xcodebuild -project /tmp/openreader-library-actions-01/ManualTests.xcodeproj \
+  -scheme LockScreenProbe -destination 'id=SIMULATOR_UDID' \
+  -derivedDataPath /tmp/openreader-library-actions-01/build \
+  -resultBundlePath /tmp/openreader-library-actions-02/result.xcresult \
+  -only-testing:LockScreenProbe/LibraryActionsProbe/testContentsExactPrecision test
+```
+
+(Reuses the project the first command generated; point `-resultBundlePath` at a
+fresh path.) It opens 仙逆, opens Contents, and requires a row to be marked
+current before asserting that neither of the two approximate-precision
+sentences appears. **Opening Contents immediately after the reader's "Choose a
+Voice" button appears is too early**: `status.rendered` (what marks the row
+when nothing has been actively read) arrives asynchronously after the WebView's
+first render message, separately from the player footer mounting, and the
+first measured run landed at the top of the 2,076-row list with nothing marked.
+The probe now waits, then retries once after closing and reopening Contents.
+Neither mode touches downloads, rename, or deletion.
