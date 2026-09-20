@@ -5,7 +5,8 @@ import {
   type SqlSession,
 } from "../../src/offline/catalog";
 
-export function testCatalog() {
+/** A real SQLite database. `observe.transaction` is called once per exclusive transaction, for the tests that count them. */
+export function testCatalog(observe?: { transaction?(): void }) {
   const db = new DatabaseSync(":memory:");
   const session: SqlSession = {
     execAsync: async (sql) => {
@@ -22,6 +23,7 @@ export function testCatalog() {
   const connection: SqlDatabase = {
     ...session,
     withExclusiveTransactionAsync: async (run) => {
+      observe?.transaction?.();
       db.exec("BEGIN");
       try {
         await run(session);

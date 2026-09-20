@@ -84,3 +84,133 @@ it("recovers a file stored before its database commit, and invalidates a missing
     close();
   }
 });
+
+/** Files that always exist and count what is done to them; `gate` holds the directory removal until released. */
+function countingFiles(gate?: Promise<void>) {
+  const calls = { remove: 0, removeDocumentFiles: 0 };
+  const files: AudioFiles = {
+    lookup: async (address) => ({
+      ...address,
+      path: `${address.key}.audio`,
+      format: "encoded",
+      size: 1,
+    }),
+    present: async () => true,
+    read: async () => null,
+    write: async () => true,
+    remove: async () => {
+      calls.remove++;
+    },
+    cleanTemporary: async () => {},
+    removeDocumentFiles: async () => {
+      await gate;
+      calls.removeDocumentFiles++;
+    },
+  };
+  return { files, calls };
+}
+const text = (i: number) => `Sentence ${i}.`;
+async function seed(repository: OfflineRepository, document: string, count: number) {
+  for (let i = 0; i < count; i++)
+    await repository.saveClip(
+      document,
+      voice,
+      text(i),
+      { audio: "encoded", bytes: new Uint8Array([1]), mediaType: "audio/mp4" },
+      () => true,
+    );
+}
+
+it("removes a document's audio with two transactions and one directory removal, however many clips it holds", async () => {
+  const counts = { transactions: 0 };
+  const { catalog, close } = testCatalog({
+    transaction: () => counts.transactions++,
+  });
+  await catalog.initialize();
+  const { files, calls } = countingFiles();
+  try {
+    const repository = new OfflineRepository(catalog, files);
+    await seed(repository, "book", 300);
+    expect((await repository.inventory("book"))[0]?.count).toBe(300);
+    counts.transactions = 0;
+    await repository.removeDocument("book");
+    expect(counts.transactions).toBe(2);
+    expect(calls).toEqual({ remove: 0, removeDocumentFiles: 1 });
+    expect(await repository.inventory("book")).toEqual([]);
+    expect(await catalog.pendingDeletes()).toEqual([]);
+    expect(await catalog.removals()).toEqual([]);
+  } finally {
+    close();
+  }
+});
+
+it("answers before an interrupted document removal is finished, then finishes it", async () => {
+  const counts = { transactions: 0 };
+  const { catalog, close } = testCatalog({
+    transaction: () => counts.transactions++,
+  });
+  await catalog.initialize();
+  let release!: () => void;
+  const { files, calls } = countingFiles(
+    new Promise<void>((resolve) => (release = resolve)),
+  );
+  try {
+    await seed(new OfflineRepository(catalog, files), "book", 300);
+    // The marking transaction ran; the app died before the files went.
+    await catalog.removeDocument(documentKey("book"));
+    counts.transactions = 0;
+    const repository = new OfflineRepository(catalog, files);
+    await repository.recover();
+    expect(calls.removeDocumentFiles).toBe(0);
+    expect(await repository.inventory("book")).toEqual([]);
+    expect(await repository.readClip("book", voice, text(0))).toBeNull();
+    release();
+    await repository.cleanup;
+    expect(calls).toEqual({ remove: 0, removeDocumentFiles: 1 });
+    expect(counts.transactions).toBe(1);
+    expect(await catalog.removals()).toEqual([]);
+    expect(await catalog.pendingDeletes()).toEqual([]);
+  } finally {
+    close();
+  }
+});
+
+it("hides selected chapters first, then removes their files and their rows in one statement per batch", async () => {
+  const counts = { transactions: 0 };
+  const { catalog, close } = testCatalog({
+    transaction: () => counts.transactions++,
+  });
+  await catalog.initialize();
+  const { files, calls } = countingFiles();
+  try {
+    const repository = new OfflineRepository(catalog, files);
+    const texts = Array.from({ length: 600 }, (_, i) => text(i));
+    await repository.savePlan("book", {
+      version: 2,
+      sections: [{ href: "0", path: "0" }],
+      preparedSections: [],
+      chapters: [
+        { id: "one", title: "One", depth: 0, parent: null, section: 0, prepared: false, texts: [] },
+      ],
+    });
+    await repository.saveSection("book", 0, [
+      { id: "one", title: "One", depth: 0, parent: null, texts },
+    ]);
+    await seed(repository, "book", 600);
+    expect((await repository.progress("book", voice))[0]?.complete).toBe(true);
+    counts.transactions = 0;
+    const seen: string[] = [];
+    await repository.deleteChapters("book", voice, ["one"], [], async () => {
+      seen.push(`hidden after ${calls.remove} removals`);
+      expect((await repository.progress("book", voice))[0]?.count).toBe(0);
+    });
+    expect(seen).toEqual(["hidden after 0 removals"]);
+    expect(calls).toEqual({ remove: 600, removeDocumentFiles: 0 });
+    // The mark, then 500 keys and 100 keys.
+    expect(counts.transactions).toBe(3);
+    expect(await catalog.pendingDeletes()).toEqual([]);
+    expect(await repository.inventory("book")).toEqual([]);
+  } finally {
+    close();
+  }
+});

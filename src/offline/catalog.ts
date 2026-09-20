@@ -84,6 +84,7 @@ export class OfflineCatalog {
       CREATE TABLE IF NOT EXISTS state(name TEXT PRIMARY KEY,value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS writes(document TEXT NOT NULL,voice TEXT NOT NULL,key TEXT NOT NULL,cancelled INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(document,voice,key));
       CREATE TABLE IF NOT EXISTS voices(document TEXT NOT NULL,key TEXT NOT NULL,provider TEXT NOT NULL,voice_id TEXT NOT NULL,label TEXT NOT NULL,PRIMARY KEY(document,key));
+      CREATE TABLE IF NOT EXISTS removals(document TEXT PRIMARY KEY);
       PRAGMA user_version = 1;
     `);
   }
@@ -357,7 +358,36 @@ export class OfflineCatalog {
       );
       for (const table of ["memberships", "chapters", "plans", "voices"])
         await tx.runAsync(`DELETE FROM ${table} WHERE document=?`, document);
+      // The document's directory goes as one; per-clip removal is for chapters.
+      await tx.runAsync("INSERT OR IGNORE INTO removals VALUES(?)", document);
     });
+  }
+  async removals(): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ document: string }>(
+      "SELECT document FROM removals",
+    );
+    return rows.map((row) => row.document);
+  }
+  async finishRemoval(document: string) {
+    await this.write(async (tx) => {
+      await tx.runAsync(
+        "DELETE FROM clips WHERE document=? AND state='deleting'",
+        document,
+      );
+      await tx.runAsync("DELETE FROM removals WHERE document=?", document);
+    });
+  }
+  /** One statement for a batch whose files are already gone. Rows left by a crash before it are found and dropped by the next cleanup. */
+  async finishDeletes(document: string, voice: string, keys: string[]) {
+    if (!keys.length) return;
+    await this.write((tx) =>
+      tx.runAsync(
+        "DELETE FROM clips WHERE document=? AND voice=? AND state='deleting' AND key IN(SELECT value FROM json_each(?))",
+        document,
+        voice,
+        JSON.stringify(keys),
+      ),
+    );
   }
   async beginWrite(document: string, voice: string, key: string) {
     await this.write((tx) =>

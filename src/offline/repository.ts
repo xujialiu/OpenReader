@@ -30,8 +30,18 @@ export interface AudioFiles {
   removeDocumentFiles(documentKey: string): Promise<void>;
 }
 
+/** Rows one DELETE takes. A JSON array of this many keys is about 34 KB. */
+const DELETE_BATCH = 500;
+
 export class OfflineRepository {
   private fileJobs = new Map<string, Promise<unknown>>();
+  /**
+   * Settles once the deletions found by the last `recover()` have removed their
+   * files and rows. Reads already leave a `deleting` row out, so nothing waits
+   * for this: the store answers as soon as pending writes are settled, and an
+   * interrupted deletion finishes here rather than in front of the first clip.
+   */
+  cleanup: Promise<void> = Promise.resolve();
   constructor(
     readonly catalog: OfflineCatalog,
     private readonly files: AudioFiles,
@@ -43,6 +53,7 @@ export class OfflineRepository {
   ): AudioAddress {
     return audioAddress(document, voice, text);
   }
+  /** File work for one document runs in order. Keyed by the document's key, so recovery, which knows only keys, joins the same queue. */
   private serialize<T>(document: string, run: () => Promise<T>): Promise<T> {
     const job = (this.fileJobs.get(document) ?? Promise.resolve()).then(run);
     this.fileJobs.set(
@@ -59,14 +70,41 @@ export class OfflineRepository {
       else if (audio) await this.catalog.commitWrite(audio);
       await this.catalog.finishWrite(job.document, job.voice, job.key);
     }
-    await this.cleanDeletions();
+    this.cleanup = this.cleanDeletions();
+    // Seen by whoever awaits `cleanup`; not an unhandled rejection otherwise.
+    void this.cleanup.catch(() => {});
   }
-  private async cleanDeletions(document?: string) {
-    for (const audio of await this.catalog.pendingDeletes()) {
-      if (document && audio.document !== document) continue;
-      await this.files.remove(audio);
-      await this.catalog.finishDelete(audio.document, audio.voice, audio.key);
+  /**
+   * Files first, rows after, one statement per batch rather than one transaction
+   * per clip. A crash between the two leaves `deleting` rows whose files are
+   * already gone; the next cleanup removes nothing and drops them.
+   */
+  private async cleanDeletions(only?: string) {
+    for (const document of await this.catalog.removals()) {
+      if (only && document !== only) continue;
+      await this.serialize(document, async () => {
+        await this.files.removeDocumentFiles(document);
+        await this.catalog.finishRemoval(document);
+      });
     }
+    const groups = new Map<string, StoredAudio[]>();
+    for (const audio of await this.catalog.pendingDeletes()) {
+      if (only && audio.document !== only) continue;
+      const key = JSON.stringify([audio.document, audio.voice]);
+      let group = groups.get(key);
+      if (!group) groups.set(key, (group = []));
+      group.push(audio);
+    }
+    for (const group of groups.values())
+      await this.serialize(group[0].document, async () => {
+        for (const audio of group) await this.files.remove(audio);
+        for (let at = 0; at < group.length; at += DELETE_BATCH)
+          await this.catalog.finishDeletes(
+            group[0].document,
+            group[0].voice,
+            group.slice(at, at + DELETE_BATCH).map((audio) => audio.key),
+          );
+      });
   }
   async tasks(): Promise<DownloadTask[]> {
     return (await this.catalog.readTasks()) ?? [];
@@ -152,10 +190,10 @@ export class OfflineRepository {
     clip: SynthesisResult,
     wanted: () => boolean,
   ): Promise<boolean> {
-    return this.serialize(document, async () => {
+    const address = this.address(document, voice, text);
+    return this.serialize(address.document, async () => {
       if (!wanted()) return false;
       await this.rememberVoice(document, voice);
-      const address = this.address(document, voice, text);
       await this.catalog.beginWrite(
         address.document,
         address.voice,
@@ -218,23 +256,26 @@ export class OfflineRepository {
   async progress(document: string, voice: OfflineVoice) {
     return this.catalog.progress(documentKey(document), voiceKey(voice));
   }
+  /**
+   * The selected chapters' audio stops being offered in the marking transaction.
+   * `hidden` runs then, before the files and rows go, so a screen can show the
+   * drop without waiting for the removal to finish.
+   */
   async deleteChapters(
     document: string,
     voice: OfflineVoice,
     selected: string[],
     keep: string[],
+    hidden?: () => Promise<void> | void,
   ) {
     const key = documentKey(document);
     await this.catalog.beginDelete(key, voiceKey(voice), selected, keep);
-    await this.serialize(document, () => this.cleanDeletions(key));
+    await hidden?.();
+    await this.cleanDeletions(key);
   }
   async removeDocument(document: string) {
-    await this.inventory(document);
     const key = documentKey(document);
     await this.catalog.removeDocument(key);
-    await this.serialize(document, async () => {
-      await this.cleanDeletions(key);
-      await this.files.removeDocumentFiles(key);
-    });
+    await this.cleanDeletions(key);
   }
 }

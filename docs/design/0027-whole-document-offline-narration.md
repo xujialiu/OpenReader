@@ -62,6 +62,8 @@ A temporary chapter failure receives a limited number of retries. If it still fa
 
 Downloaded audio stays until explicitly deleted, including after it has been heard. Manage downloads in the drawer groups saved audio by voice, shows actual occupied space and allows deletion of selected chapters or all audio for that voice. Deleting audio leaves the document and reading position intact.
 
+Deleting takes effect at once: the chapters leave the downloaded count as soon as Delete is confirmed, and the space is given back shortly after. If the app is closed in the middle of a large deletion, the rest is finished quietly after the next launch, and reading does not wait for it.
+
 Insufficient space pauses preparation and asks the owner to free space. Automatically deleting other downloads could undo preparation for a trip, so the app does not make that choice for the owner.
 
 Removing a document from the library also removes its saved audio and stops its preparation tasks. When saved audio exists, the removal confirmation explicitly states that local audio will be deleted and how much space will be freed. Removing audio alone through Manage downloads continues to preserve the document and reading position.
@@ -75,3 +77,5 @@ The owner approved this interaction design on 2026-09-20. The system may stop pr
 The owner approved maintaining saved-audio records as downloads finish and are removed. Opening a document and displaying download progress read those records, so a long document does not have to check every sentence before its reading page appears. Repeating a full check in the background was rejected because it would still do unnecessary work on every opening.
 
 For this unreleased development change, the owner explicitly chose to discard the existing offline downloads instead of carrying them forward. Documents, reading positions and credentials remain. Those old audio downloads must be prepared again. New downloads are retained across ordinary restarts and updates, and preparation alone does not count as downloaded audio. Completion is recorded only after the audio has been safely stored, and interrupted writes or deletions are reconciled without falsely showing a completed download.
+
+Reading does not depend on those records being readable. If they cannot be opened, for instance after installing an older version of the app over a newer one, reading continues over the network as if nothing had been saved, and the download drawer says what is wrong. Saved audio is used again once the records can be read.

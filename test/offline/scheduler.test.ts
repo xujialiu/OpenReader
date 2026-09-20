@@ -117,3 +117,20 @@ it.each(['paused', 'deleted'] as const)('does not synthesize a chapter %s during
   });
   await scheduler.run(); expect(f.fetch).not.toHaveBeenCalled();
 });
+
+it('resumes without loading or re-checking chapters already complete for the voice', async () => {
+  const f = fixture();
+  const plan: NarrationPlan = { version: 2, chapters: [
+    { id: 'a', title: 'A', depth: 0, parent: null, texts: [], textCount: 2, textsLoaded: false },
+    { id: 'b', title: 'B', depth: 0, parent: null, texts: [], textCount: 1, textsLoaded: false },
+  ] };
+  const loaded: string[] = []; const checked: string[] = [];
+  const scheduler = createScheduler({ tasks: () => f.tasks, plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+    completed: async () => new Set(['a']),
+    load: async (_, chapter) => { loaded.push(chapter.id); return { ...chapter, texts: chapter.id === 'a' ? ['One.', 'Two.'] : ['Three.'], textsLoaded: true }; },
+    exists: async (_, text) => { checked.push(text); return false; }, fetch: f.fetch, wait: async () => {} });
+  await scheduler.run();
+  expect(loaded).toEqual(['b']); expect(checked).toEqual(['Three.']);
+  expect(f.fetch.mock.calls.map((c) => c[1])).toEqual(['Three.']);
+  expect(f.tasks[0].state).toBe('done');
+});

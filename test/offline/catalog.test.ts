@@ -357,3 +357,63 @@ it("persists selected section text and membership without declaring the rest pre
     "Saved text.",
   ]);
 });
+
+it("records a document removal with its clips hidden, and finishes it as one statement per table", async () => {
+  const store = catalog();
+  await store.initialize();
+  await storeAudio(store, {
+    document: "book",
+    voice: "A",
+    key: "one",
+    path: "one.audio",
+    format: "encoded",
+    size: 1,
+  });
+  await store.removeDocument("book");
+  expect(await store.removals()).toEqual(["book"]);
+  expect(await store.voices("book")).toEqual([]);
+  expect((await store.pendingDeletes()).map((c) => c.key)).toEqual(["one"]);
+  await store.finishRemoval("book");
+  expect(await store.removals()).toEqual([]);
+  expect(await store.pendingDeletes()).toEqual([]);
+});
+
+it("drops a batch of deleting rows and leaves ready rows and other voices alone", async () => {
+  const store = catalog();
+  await store.initialize();
+  await prepare(store, "book", [
+    {
+      id: "one",
+      title: "One",
+      parent: null,
+      depth: 0,
+      texts: ["First", "Second"],
+      keys: ["first", "second"],
+    },
+  ]);
+  for (const [voice, key] of [
+    ["A", "first"],
+    ["A", "second"],
+    ["B", "first"],
+  ])
+    await storeAudio(store, {
+      document: "book",
+      voice,
+      key,
+      path: `${key}.audio`,
+      format: "encoded",
+      size: 1,
+    });
+  await store.beginDelete("book", "A", ["one"], []);
+  await store.finishDeletes("book", "A", ["first", "missing"]);
+  expect((await store.pendingDeletes()).map((c) => [c.voice, c.key])).toEqual([
+    ["A", "second"],
+  ]);
+  expect(await store.voices("book")).toEqual([
+    { voice: "B", count: 1, bytes: 1 },
+  ]);
+  await store.finishDeletes("book", "B", ["first"]);
+  expect(await store.voices("book")).toEqual([
+    { voice: "B", count: 1, bytes: 1 },
+  ]);
+});

@@ -11,8 +11,15 @@ import {
   payloadFile as payload,
   audioFile,
 } from "./audio-paths";
-const json = async <T>(file: File): Promise<T | null> =>
-  file.exists ? (JSON.parse(await file.text()) as T) : null;
+/** A sidecar that does not parse is audio that was not saved; it must not take the store down with it. */
+const json = async <T>(file: File): Promise<T | null> => {
+  if (!file.exists) return null;
+  try {
+    return JSON.parse(await file.text()) as T;
+  } catch {
+    return null;
+  }
+};
 
 async function lookup(address: AudioAddress): Promise<StoredAudio | null> {
   const record = await json<Partial<StoredAudio>>(metadata(address));

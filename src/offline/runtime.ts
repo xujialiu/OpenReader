@@ -174,8 +174,11 @@ const registerVoice = (voice: Pick<OfflineVoice, "provider" | "voice">) => {
 };
 const progressKey = (document: string, voice: OfflineVoice) =>
   JSON.stringify([document, voice.provider, voice.voice]);
+/** Said once: a store that fails on every utterance would otherwise re-render the reader on every utterance. */
 const reportStore = (error: unknown) => {
-  storeError = error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  if (storeError === message) return;
+  storeError = message;
   emit();
 };
 const fire = (promise: Promise<unknown>) => {
@@ -286,6 +289,29 @@ export function occupied(document: string, voice?: OfflineVoice): number {
 export const formatBytes = (bytes: number) =>
   `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
+/**
+ * Saved audio, while the store answers. A store that cannot open or recover is
+ * reported once, where downloads are managed, and the reading goes on over the
+ * network as if nothing were saved: the catalogue decides what is played from
+ * disk, never whether anything is played at all (#13).
+ */
+async function savedClip(
+  document: string,
+  voice: OfflineVoice,
+  text: string,
+): Promise<SynthesisResult | null> {
+  try {
+    const repository = await offlineRepository();
+    const saved = await repository.readClip(document, voice, text);
+    if (saved) return saved;
+    if (hasSavedVoice(document, voice.provider, voice.voice))
+      await refresh(document);
+    return null;
+  } catch (error) {
+    reportStore(error);
+    return null;
+  }
+}
 /** Credentials are read only on a miss, so saved audio works without a key or enabled provider. */
 async function synthesize(
   document: string,
@@ -293,12 +319,8 @@ async function synthesize(
   text: string,
   current: AppSettings,
 ): Promise<SynthesisResult> {
-  const saved = await (
-    await offlineRepository()
-  ).readClip(document, voice, text);
+  const saved = await savedClip(document, voice, text);
   if (saved) return saved;
-  if (hasSavedVoice(document, voice.provider, voice.voice))
-    await refresh(document);
   const key = keyOf(document, voice, text);
   let flight = flights.get(key);
   if (!flight) {
@@ -397,6 +419,13 @@ const scheduler = createScheduler({
     if (!loaded) throw new Error("Selected chapter metadata is missing.");
     return loaded;
   },
+  // One join per run, so resuming a long task does not re-check every saved text.
+  completed: async (task) =>
+    new Set(
+      (await (await offlineRepository()).progress(task.document, task.voice))
+        .filter((chapter) => chapter.complete)
+        .map((chapter) => chapter.id),
+    ),
   prepare: async (task, chapter) => {
     const section = chapter.section;
     if (section === null || section === undefined)
@@ -619,10 +648,12 @@ export async function deleteDownloaded(
       .filter((t) => t.document === document && sameVoice(t.voice, voice))
       .flatMap((t) => t.chapters),
   );
+  // Counts drop as soon as the audio is hidden; the files go afterwards.
   await (
     await offlineRepository()
-  ).deleteChapters(document, voice, chapters, [...remaining]);
-  await refresh(document);
+  ).deleteChapters(document, voice, chapters, [...remaining], () =>
+    refresh(document),
+  );
 }
 export async function removeDownloads(document: string): Promise<void> {
   tasks = tasks.filter((task) => task.document !== document);

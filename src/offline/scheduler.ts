@@ -11,6 +11,8 @@ export interface SchedulerDeps {
   fetch(task: DownloadTask, text: string, chapter: string): Promise<void>;
   load?(task: DownloadTask, chapter: Chapter): Promise<Chapter>;
   prepare?(task: DownloadTask, chapter: Chapter): Promise<Chapter>;
+  /** Chapters whose every text is already saved for the task's voice, asked once per run so resuming skips them without loading their text. */
+  completed?(task: DownloadTask): Promise<ReadonlySet<string>>;
   wait(ms: number): Promise<void>;
 }
 
@@ -33,9 +35,10 @@ export function createScheduler(deps: SchedulerDeps) {
         if (!deps.allowed()) break;
         if (!plan) { task.state = 'blocked'; task.error = 'Reopen Download to prepare the chapter list.'; await deps.changed(); continue; }
         task.state = 'downloading'; task.error = null; await deps.changed();
+        const completed = (await deps.completed?.(task)) ?? new Set<string>();
         for (const chapterId of [...task.chapters]) {
           if (!active(task)) break;
-          if (!task.chapters.includes(chapterId)) continue;
+          if (!task.chapters.includes(chapterId) || completed.has(chapterId)) continue;
           let chapter = (await deps.plan(task.document))?.chapters.find((c) => c.id === chapterId);
           if (!active(task)) break;
           if (!chapter) continue;
