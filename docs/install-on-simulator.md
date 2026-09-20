@@ -1,12 +1,15 @@
-# 将 OpenReader 更新到 iOS 模拟器
+# Update OpenReader on the iOS Simulator
 
-适用：在本地 Mac 上让模拟器运行当前工作区代码，包括未提交的修改。
-真机签名、描述文件和开发者信任见 [iPhone 安装指南](install-on-iphone.md)。
-模拟器不需要这些真机步骤，也不能安装 `iphoneos` 的构建产物。
+Use this guide to run the current working-tree code on a local Mac simulator,
+including uncommitted changes.
+For physical-device signing, provisioning profiles, and developer trust, see
+the [iPhone installation guide](install-on-iphone.md).
+The simulator does not need those physical-device steps and cannot install a
+build produced for `iphoneos`.
 
-## 先确认目标和运行方式
+## Confirm the target and run mode
 
-从仓库根目录执行：
+Run the following from the repository root:
 
 ```bash
 pwd
@@ -16,25 +19,31 @@ xcrun simctl list devices booted
 lsof -nP -iTCP:8081 -sTCP:LISTEN
 ```
 
-本文记录的目标是 iPhone 17，UDID 为
-`13D669CF-ADBD-470C-9D6C-C3B03B9746E9`。每次先查列表，下面命令中的
-`SIMULATOR_UDID` 替换为本次目标；多台模拟器启动时尤其不要盲用 `booted`。
-目标尚未启动时：
+The target recorded in this guide is an iPhone 17 with UDID
+`13D669CF-ADBD-470C-9D6C-C3B03B9746E9`. Always check the device list first and
+replace `SIMULATOR_UDID` in the commands below with the target for this run. Be
+especially careful not to use `booted` blindly when multiple simulators are
+running.
+If the target is not already running:
 
 ```bash
 xcrun simctl boot SIMULATOR_UDID
 xcrun simctl bootstatus SIMULATOR_UDID -b
 ```
 
-本项目有自定义原生模块，使用自己的 OpenReader 应用，不使用 Expo Go。
-已安装且原生依赖匹配的 Debug 应用可以直接从 Metro 加载最新代码；原生模块、
-插件、依赖或原生配置发生变化时，需要重新构建并安装。Release 内含代码包，
-仅重启 Metro 不会更新它。
+This project has custom native modules, so use the OpenReader app rather than
+Expo Go. An installed Debug app whose native dependencies still match can load
+the latest JavaScript from Metro directly. Changes to native modules, plugins,
+dependencies, or native configuration require a new build and installation.
+A Release build contains its JavaScript bundle, so restarting Metro does not
+update it.
 
-## 日常更新：已有 Debug 应用，只有应用代码变化
+## Routine update: an existing Debug app with only app-code changes
 
-先确认 Metro 属于当前仓库。端口在监听只说明有服务，并不说明目录正确。
-用上一步得到的 PID 检查进程及工作目录：
+First confirm that Metro belongs to this repository. A listening port only shows
+that a service exists; it does not show that the service uses the right
+directory. Use the PID from the previous step to inspect the process and its
+working directory:
 
 ```bash
 ps -p METRO_PID -o command=
@@ -42,18 +51,20 @@ lsof -a -p METRO_PID -d cwd
 curl -s http://localhost:8081/status
 ```
 
-若确认该进程是本项目遗留的失效服务，停止这个确切的 PID，然后在当前仓库启动：
+If the process is a stale service from this project, stop that exact PID and
+start Metro from the current repository:
 
 ```bash
 kill METRO_PID
 npx expo start --port 8081
 ```
 
-若没有服务，只执行启动命令；若已有正确服务，保留它。若端口属于另一个仍在使用
-的项目，给本项目选择空闲端口，并让本项目的构建和运行配置使用同一端口。
-开发期间保持 Metro 所在终端运行。
+If no service is running, only run the start command. If the existing service is
+correct, keep it. If the port belongs to another project that is still in use,
+choose an available port for this project and use the same port in its build and
+run configuration. Keep the terminal running Metro open during development.
 
-在另一个终端重启应用，使它请求当前代码包：
+In another terminal, restart the app so that it requests the current bundle:
 
 ```bash
 xcrun simctl terminate SIMULATOR_UDID top.xujialiu.openreader
@@ -61,35 +72,45 @@ xcrun simctl launch SIMULATOR_UDID top.xujialiu.openreader
 curl -s http://localhost:8081/json/list
 ```
 
-应用原本未运行时，terminate 报未找到进程不妨碍后续 launch。
-检查 Metro 出现本次打包记录，并确认调试目标包含 `top.xujialiu.openreader`。
-还必须打开改动所在的界面，确认最终改动实际出现；连接成功本身不证明更新完成。
+If the app was not running, a “process not found” result from `terminate` does
+not prevent the later `launch` from working.
+Check Metro for a bundling record from this run and confirm that the debug target
+includes `top.xujialiu.openreader`.
+You must also open the screen affected by the change and confirm that the final
+change is actually visible; a successful connection alone does not prove that
+the update is complete.
 
-### 已遇到：Metro 指向搬家前的目录
+### Encountered: Metro pointed to the old directory
 
-2026-09-20，8081 上的进程仍从旧目录 `Works/react_native` 启动。
-应用重启显示 `ConfigError: The expected package.json path … does not exist`，
-`/json/list` 最初为空。停止这个失效进程，在 `Works/openreader` 启动 Metro
-后重新启动应用，日志显示重新打包，调试目标出现，阅读页显示了最新的同排目录
-和倍速按钮。此情况通过更正 Metro 解决，无需删除应用或清空书库。
+On 2026-09-20, the process on port 8081 was still running from the old
+`Works/react_native` directory. Restarting the app showed
+`ConfigError: The expected package.json path … does not exist`, and `/json/list`
+was initially empty. Stopping that stale process, starting Metro in
+`Works/openreader`, and restarting the app fixed the problem. The logs showed a
+new bundle, the debug target appeared, and the reading page displayed the latest
+same-row layout and speed buttons. No app deletion or library clearing was
+needed.
 
-## 首次安装或原生内容变化：构建 Debug 模拟器应用
+## First installation or native changes: build a Debug simulator app
 
-先阅读 [Expo SDK 57 文档](https://docs.expo.dev/versions/v57.0.0/)。
-安装仓库依赖；仅在原生目录不存在或相关配置需要重新生成时执行：
+Read the [Expo SDK 57 documentation](https://docs.expo.dev/versions/v57.0.0/)
+first.
+Install the repository dependencies. Run the following only when the native
+directory does not exist or the relevant configuration needs to be regenerated:
 
 ```bash
 npx expo prebuild --platform ios
 ```
 
-常规构建与启动入口：
+The usual build and launch entry point is:
 
 ```bash
 npx expo run:ios --device SIMULATOR_UDID --port 8081
 ```
 
-也可以分开构建、安装和启动，便于区分失败发生在哪一步。以下为 Debug
-模拟器命令形状；本次仅更新 JavaScript 的验证未重新执行这条构建命令：
+You can also build, install, and launch separately to identify which step fails.
+The following shows the Debug simulator command shape; during the recorded run,
+the JavaScript-only update was verified without rerunning this build command:
 
 ```bash
 xcodebuild \
@@ -103,7 +124,8 @@ xcodebuild \
   -quiet build > /tmp/openreader-simulator-build.log 2>&1
 ```
 
-等待命令退出且退出码为 0 后再安装；产物目录存在不代表本次构建成功。
+Wait for the command to exit with code 0 before installing. The existence of the
+product directory does not prove that this build succeeded.
 
 ```bash
 xcrun simctl install SIMULATOR_UDID \
@@ -111,70 +133,93 @@ xcrun simctl install SIMULATOR_UDID \
 xcrun simctl launch SIMULATOR_UDID top.xujialiu.openreader
 ```
 
-保留已有应用的数据，直接覆盖安装。不要用卸载应用或抹掉模拟器作为日常更新步骤。
-随后完成上面的 Metro 连接检查与下面的交互验证。
+Keep the existing app data by installing over the app. Do not uninstall the app
+or erase the simulator as part of a routine update.
+Then complete the Metro connection checks above and the interaction verification
+below.
 
-### 已遇到：Debug 链接使用了 Release 的 React framework
+### Encountered: Debug linked the Release React framework
 
-2026-09-20，Debug 链接缺少 `facebook::react::Sealable` 和
-`ShadowNode::getDebugName` 符号。`React-Core-prebuilt/.last_build_configuration`
-缺失时，React Native 的 `replace-rncore-version.js` 将未标记的 framework
-视为 Debug，跳过替换；实际安装的却是 Release 二进制。
+On 2026-09-20, the Debug link failed with missing symbols
+`facebook::react::Sealable` and `ShadowNode::getDebugName`. When
+`React-Core-prebuilt/.last_build_configuration` is missing,
+`replace-rncore-version.js` treats an unmarked framework as Debug and skips the
+replacement; the installed binary was actually the Release binary.
 
-当且仅当遇到相同符号错误，检查当前 framework 的符号、生成的配置标记和本地
-替换脚本。此前修复是将生成标记设为 Release，再用已安装的脚本切换到 Debug，
-从缓存提取 Debug archive。`nm` 随后找到 Sealable 构造函数，构建通过。
-这不是每次构建必做的操作；完整测量保留在当天工程日志中。
+Only when you encounter the same symbol errors, inspect the current framework's
+symbols, the generated configuration marker, and the local replacement script.
+The previous fix set the generated marker to Release, then used the installed
+script to switch to Debug and extract the Debug archive from the cache. `nm`
+then found the Sealable constructor and the build passed.
+This is not required for every build; the complete measurement is preserved in
+the engineering log for that day.
 
-## 最后的交付验证
+## Final delivery verification
 
-1. 打开受修改影响的页面，核对本次最终代码的可见变化。
-2. 操作变化的控件，检查其结果；需要时保存模拟器截图：
+1. Open the page affected by the change and verify the visible result of the final code.
+2. Operate the changed control and check its result. When needed, save a simulator screenshot:
 
    ```bash
    xcrun simctl io SIMULATOR_UDID screenshot /tmp/openreader-simulator-final.png
    ```
 
-3. 在报告中区分构建、安装、启动和交互验证；调用控件处理器不等同于物理触摸测试。
-4. 停止播放，保留最新应用打开在方便检查的页面。Debug 交付同时保留正确的 Metro。
+3. Report build, installation, launch, and interaction verification separately. Calling a control handler is not equivalent to testing a physical touch.
+4. Stop playback and leave the latest app open on a convenient page for inspection. For a Debug delivery, also leave the correct Metro process running.
 
-纯界面检查不需要播放。需要音频时，先将模拟器音量降为零，再按测试要建立的
-事实决定播放时长，并在事实建立后立即停止。凭据只按需从仓库 `.secrets/` 读取，
-不得出现在截图、日志或文档中。
+Purely visual checks do not require playback. When audio is needed, turn the
+simulator volume all the way down first, then derive the playback duration from
+the fact the test needs to establish and stop playback immediately after that
+fact is established. Read credentials from the repository's `.secrets/` only as
+needed; do not put them in screenshots, logs, or documentation.
 
-### 没有可操作的模拟器窗口
+### No usable simulator window
 
-先检查本机 Xcode 提供的模拟器入口。本机 Xcode 27 的入口为
-`Xcode-27.0.0.app/Contents/Applications/DeviceHub.app`，不应反复尝试不存在的
-`Developer/Applications/Simulator.app`。启动设备、安装应用和启动应用仍可通过
-`simctl` 完成；窗口不可用不等于这些步骤不可做。
+First check the simulator entry point provided by the local Xcode installation.
+On this machine, Xcode 27 provides
+`Xcode-27.0.0.app/Contents/Applications/DeviceHub.app`; do not repeatedly try
+the nonexistent `Developer/Applications/Simulator.app`.
+Starting the device, installing the app, and launching it can still be done with
+`simctl`; an unavailable window does not mean those steps are impossible.
 
-截图和实际运行状态可以帮助定位问题，但截图本身不证明交互成功。
-如果自动化窗口仍不可用，继续排查窗口、权限和会话状态；如用调试处理器完成
-交互验证，要明确其覆盖范围，移除临时调试代码，再确认最终工作区代码已加载。
-真正的外部阻塞必须明确报告，未完成的模拟器交付不能写成完成。
+Screenshots and the actual runtime state can help locate a problem, but a
+screenshot alone does not prove that an interaction succeeded.
+If the automation window is still unavailable, continue checking the window,
+permissions, and session state. If a debug handler is used to verify an
+interaction, state its coverage, remove temporary debug code, and confirm again
+that the final working-tree code is loaded.
+Any real external blocker must be reported explicitly; incomplete simulator
+delivery must not be reported as complete.
 
+### Encountered: DeviceHub launcher did not open a window
 
-### 已遇到：DeviceHub 启动器没有带出窗口
-
-2026-09-20，桌面未锁定，已有 DeviceHub 进程，但打开应用包后仍没有可发现的窗口。
-直接启动包内真正的可执行文件后，窗口和模拟器的辅助功能控件树出现：
+On 2026-09-20, the desktop was unlocked and a DeviceHub process already existed,
+but opening the app bundle still produced no discoverable window.
+Launching the actual executable inside the bundle directly made the window and
+the simulator's accessibility control tree appear:
 
 ```bash
 /Applications/Xcode-27.0.0.app/Contents/Applications/DeviceHub.app/Contents/MacOS/DeviceHub \
   > /tmp/openreader-devicehub.log 2>&1
 ```
 
-本次通过辅助功能操作并读回了启用开关、只读字段和声音来源；坐标输入仍报告
-窗口没有焦点。不要把辅助功能操作的成功写成坐标触摸测试通过。
+This run used accessibility controls to operate and read back the enabled switch,
+read-only fields, and audio source; coordinate input still reported that the
+window was not focused. Do not describe successful accessibility operations as a
+passed coordinate-touch test.
 
-### 锁屏按钮可点击，但图标不可见
+### Lock-screen button is clickable, but its icon is invisible
 
-本机 iOS 27.0 曾出现这种情况：系统辅助功能树有启用的 Play 按钮，实际点击也
-能播放／暂停，但截图里没有图标。先使用
-[`test/manual-test/README.md`](../test/manual-test/README.md) 中的锁屏截图、
-实际点击和系统资源检查脚本区分这些事实；“XCTest 通过”不等于图标可见。
-2026-09-20 的资源加载失败及 iOS 26.5 对照记录在当天工程日志。随后 owner
-报告真机锁屏显示正常；目前把该现象归为已测模拟器环境的显示问题，保留应用
-现有媒体控制实现。真机型号与系统版本未记录，不能据此声称所有设备均已验证。
-遇到同一现象时先做真机对照，不要仅为修复模拟器截图而替换应用的锁屏接口。
+On this machine, iOS 27.0 once showed an enabled Play button in the system
+accessibility tree. Clicking it actually played or paused, but the icon was not
+visible in the screenshot. First use the lock-screen screenshot, real-click, and
+system-resource inspection scripts in
+[`test/manual-test/README.md`](../test/manual-test/README.md) to distinguish these
+facts; “XCTest passed” does not mean that the icon is visible.
+The resource-loading failure recorded on 2026-09-20 and the iOS 26.5 comparison
+are in that day's engineering log. The owner later reported that the lock-screen
+displayed correctly on a physical device. For now, treat this as a display issue
+in the tested simulator environment and keep the app's existing media-control
+implementation. The physical device model and system version were not recorded,
+so this does not establish that all devices have been verified.
+When the same symptom occurs, compare with a physical device first; do not
+replace the app's lock-screen interface solely to fix a simulator screenshot.
