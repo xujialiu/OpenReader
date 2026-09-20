@@ -26,7 +26,7 @@
  */
 
 import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { LibraryEntry } from '../core/document';
 
@@ -38,6 +38,9 @@ import type { ScreenProps } from './routes';
 import { useShell } from './routes';
 import { PROVIDER_LABELS, readiness, readinessSentence } from './settings';
 import { useProviderKey } from './use-provider-secrets';
+import { ReaderActions } from './reader-actions';
+import { Icon } from './icon';
+import { formatBytes, occupied, removeDownloads } from '../offline/runtime';
 
 /** How much of the last Utterance a row shows. Two lines of it at this size; more would push the next Document off the screen. */
 const QUOTATION = 90;
@@ -52,6 +55,17 @@ function progressOf(entry: LibraryEntry, present: boolean): string {
 export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const { settings, library } = useShell();
   const [picking, setPicking] = useState(false);
+  const [actions, setActions] = useState<LibraryEntry | null>(null);
+  const menu = (entry: LibraryEntry) => Alert.alert(entry.title, undefined, [
+    { text: 'Download', onPress: () => setActions(entry) },
+    { text: 'Remove from Library', style: 'destructive', onPress: () => Alert.alert('Remove from Library?',
+      `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => {
+          try { removeDownloads(entry.id); library.remove(entry.id); } catch (error) { library.report(String(error)); }
+        } },
+      ]) },
+    { text: 'Cancel', style: 'cancel' },
+  ]);
   const key = useProviderKey(settings.provider);
 
   const add = useCallback(async () => {
@@ -133,11 +147,12 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
         data={library.entries}
         keyExtractor={(entry) => entry.id}
         renderItem={({ item }) => (
-          <LibraryDocument
+          <View><LibraryDocument
             entry={item}
             present={present.has(item.id)}
             onPress={() => navigation.navigate('Reader', { id: item.id })}
-          />
+          /><Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${item.title}`} onPress={() => menu(item)}
+            style={{ position: 'absolute', right: 12, top: 8, padding: 10 }}><Icon name="more" color={INK.quiet} size={22} /></Pressable></View>
         )}
         ListHeaderComponent={library.note ? <View style={styles.banner}><Note attention>{library.note}</Note></View> : null}
         ListEmptyComponent={
@@ -160,6 +175,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
           )
         }
       />
+      {actions ? <ReaderActions document={actions.id} initial="download" onClose={() => setActions(null)} /> : null}
     </View>
   );
 }

@@ -156,6 +156,15 @@ the engineering log for that day.
 
 ## Final delivery verification
 
+If a Debug build links after replacing React but crashes before JavaScript in `expo::ExpoViewProps` / `facebook::react::Props::Props`, check for precompiled Expo modules built against a different React configuration. On 2026-09-20, rebuilding those modules from source resolved this startup crash:
+
+```sh
+cd ios
+EXPO_USE_PRECOMPILED_MODULES=0 pod install
+```
+
+Then run the Debug build from the repository root as above. A simulator launch failure naming `/usr/lib/libSystem.B.dylib` and `no dyld cache` was separately resolved by shutting down and booting the same device; no app uninstall or device erase was needed. These are specific observed failures, not required steps for every build.
+
 1. Open the page affected by the change and verify the visible result of the final code.
 2. Operate the changed control and check its result. When needed, save a simulator screenshot:
 

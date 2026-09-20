@@ -51,6 +51,8 @@ import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
 import { useLibrary } from './use-library';
+import { configureDownloads, startDownloads } from '../offline/runtime';
+import { DownloadIndexer } from '../offline/indexer';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -72,6 +74,8 @@ export function OpenReader() {
     updateSettings(value);
   }, []);
   const library = useLibrary();
+  useEffect(() => { configureDownloads(settings); }, [settings]);
+  useEffect(() => startDownloads(), []);
   /**
    * How many credentials have been written this session. `routes.ts` says what
    * it is for; what it is *not* is a credential, or even whether there is one —
@@ -227,6 +231,7 @@ export function OpenReader() {
 
   return (
     <ShellContext.Provider value={shell}>
+      <DownloadIndexer />
       {/*
        * `ReaderProvider` is `@epubjs-react-native/core`'s own context and has to
        * sit above both `<Reader>` and `useReaderBridge`, which reads

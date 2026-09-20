@@ -54,6 +54,7 @@ import { useVoiceLists } from './use-voices';
 import { voiceInList } from './voices';
 import { knownVoice } from './voice-catalog';
 import { VoiceSheet } from './voice-sheet';
+import { hasSavedVoice, playbackActive, useDownloads } from '../offline/runtime';
 
 /**
  * How often a Reading Position is written to the Library while the reading is
@@ -212,7 +213,10 @@ export function ReadingView({
     () => (position ? readLocator(position.locator, document.identity.format) : null),
     [position, document.identity.format],
   );
-  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position);
+  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id);
+  useDownloads();
+  const savedVoice = hasSavedVoice(document.identity.id, settings.provider, settings.voice);
+  useEffect(() => { playbackActive(reading.status.playing); return () => playbackActive(false); }, [reading.status.playing]);
   const voices = useVoiceLists(settings);
   const [displayError, setDisplayError] = useState<string | null>(null);
   const [contentsOpen, setContentsOpen] = useState(false);
@@ -354,7 +358,7 @@ export function ReadingView({
 
   const ready = readiness(settings, keyPresence.state === 'held');
   // Nothing is claimed about a key while the Keychain is still being asked.
-  const sayWhatIsMissing = !ready.ready && keyPresence.state !== 'unknown';
+  const sayWhatIsMissing = !savedVoice && !ready.ready && keyPresence.state !== 'unknown';
 
   /** Only actionable problems occupy the player; routine status stays in diagnostics. */
   const notes = useMemo(() => {
@@ -367,7 +371,7 @@ export function ReadingView({
         attention: true,
       });
     }
-    if (keyPresence.state === 'refused') {
+    if (keyPresence.state === 'refused' && !savedVoice) {
       said.push({ said: `The Keychain would not say whether a key is saved: ${keyPresence.message}`, attention: true });
     }
     if (displayError) said.push({ said: `The document would not display: ${displayError}`, attention: true });
@@ -375,7 +379,7 @@ export function ReadingView({
     if (status.note) said.push({ said: status.note, attention: true });
     if (status.voiceError && !voicesOpen) said.push({ said: status.voiceError, attention: true });
     return said;
-  }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status, voicesOpen]);
+  }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status, voicesOpen, savedVoice]);
 
   /**
    * The Voice in use as its own Provider describes it — the name it publishes and
@@ -508,10 +512,10 @@ export function ReadingView({
         buffering={status.buffering}
         collapsed={collapsed}
         onCollapsed={setCollapsed}
-        enabled={ready.ready || status.playing || !settings.enabledProviders.includes(settings.provider) || !settings.voice.trim()}
+        enabled={savedVoice || ready.ready || status.playing || !settings.enabledProviders.includes(settings.provider) || !settings.voice.trim()}
         voiceInUse={voiceInUse}
         notes={notes}
-        onPlay={() => { if (!settings.enabledProviders.includes(settings.provider) || !settings.voice.trim()) setVoicesOpen(true); else reading.play(); }}
+        onPlay={() => { if ((!settings.enabledProviders.includes(settings.provider) && !savedVoice) || !settings.voice.trim()) setVoicesOpen(true); else reading.play(); }}
         onPause={pause}
         onSkip={reading.skip}
         onRate={onRate}

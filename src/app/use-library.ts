@@ -29,6 +29,7 @@ import { APP_NAME } from '../../app-name';
 import type { DocumentId, LibraryEntry, ReadingPosition, VoiceChoice } from '../core/document';
 
 import { addDocument } from './document';
+import { displayNames, saveDisplayName } from './display-names';
 import { migrateDocumentIds, readLibrary, thisDevice, writeLibrary, type LoadedLibrary } from './library';
 
 /** What the Library screen shows and what the Reader route resolves a Document Id against. */
@@ -52,6 +53,8 @@ export interface Library {
   opened(id: DocumentId): void;
   /** What the document turned out to call itself, once epub.js has read its metadata. Ignored when it is empty or unchanged. */
   retitled(id: DocumentId, title: string): void;
+  rename(id: DocumentId, title: string): void;
+  remove(id: DocumentId): void;
   /** Where speech stopped (ADR 0008). Written through to the file like every other change. */
   reached(id: DocumentId, position: ReadingPosition): void;
   /**
@@ -117,7 +120,8 @@ export function useLibrary(): Library {
        * which rule the files are named under, and a match returns at once.
        */
       const migration = migrateDocumentIds(loaded);
-      entriesRef.current = [...migration.entries].sort(byNewestFirst);
+      const names = displayNames();
+      entriesRef.current = migration.entries.map((entry) => names[entry.id] ? { ...entry, title: names[entry.id] } : entry).sort(byNewestFirst);
       setEntries(entriesRef.current);
       setNote(migration.note ?? loaded.note ?? problemSentence(loaded));
     } catch (problem) {
@@ -175,6 +179,7 @@ export function useLibrary(): Library {
     (id: DocumentId, title: string) => {
       const trimmed = title.trim();
       if (!trimmed) return;
+      if (displayNames()[id]) return;
       if (entriesRef.current.find((one) => one.id === id)?.title === trimmed) return;
       change(id, (entry) => ({ ...entry, title: trimmed, stamp: stamp() }));
     },
@@ -197,7 +202,14 @@ export function useLibrary(): Library {
 
   const report = useCallback((said: string) => setNote(said), []);
 
-  return { entries, loading, note, add, opened, retitled, reached, voiced, report };
+  const rename = useCallback((id: DocumentId, title: string) => {
+    if (title.trim()) {
+      saveDisplayName(id, title.trim());
+      change(id, (entry) => ({ ...entry, title: title.trim(), stamp: stamp() }));
+    }
+  }, [change, stamp]);
+  const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id)), [commit]);
+  return { entries, loading, note, add, opened, retitled, rename, remove, reached, voiced, report };
 }
 
 /**

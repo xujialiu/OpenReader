@@ -312,16 +312,16 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       while (!disposed && !pending?.armed && nextToEnqueue < utterances.length && nextToEnqueue <= enqueueCeiling(cursor)) {
         const clip = prepared.get(nextToEnqueue);
         if (!clip) {
-          // An Utterance whose synthesis failed is stepped over. Blocking the
-          // queue behind it would stop the reading dead with Clips already
-          // fetched and waiting, and the failure has already been reported. A
-          // retry is an explicit act — a seek back to it — for the reason the
-          // plugin's prefetch chain also ends on a failure: a background retry
-          // loop spends the owner's quota out of sight of anything that could
-          // show it (ADR 0002, philosophy rule 4).
+          // Never skip missing content. Let already-queued audio finish, then
+          // stop exactly at the missing utterance; Play explicitly retries it.
           if (failed.has(nextToEnqueue)) {
-            nextToEnqueue++;
-            continue;
+            if (timeline.pending() === 0 && playing) {
+              cursor = nextToEnqueue;
+              pauseNow();
+              deps.clock.onClip({ utterance: cursor, words: null, duration: 0, rate });
+              deps.onError(lastRefusal);
+            }
+            break;
           }
           break;
         }
@@ -330,11 +330,13 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
         try {
           await enqueue(clip, mine);
         } catch (error) {
-          // A Clip that cannot be decoded is stepped over for the same reason.
+          // A decode failure blocks here too; never claim unheard text was read.
           if (mine === generation && !disposed) {
             deps.onError(error);
             failed.add(nextToEnqueue);
             lastRefusal = error;
+            prepared.delete(index);
+            break;
           }
         }
         if (mine !== generation || pending?.armed) break;
@@ -603,6 +605,10 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
     play() {
       if (disposed) return;
+      if (failed.has(cursor)) {
+        failed.delete(cursor);
+        nextToEnqueue = cursor;
+      }
       playing = true;
       graph?.resume();
       const front = timeline.front();

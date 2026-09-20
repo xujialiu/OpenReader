@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Animated, Modal, PanResponder, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { INK } from './controls';
 
 /** Only the handle/title owns the drag; lists and steppers retain their gestures. */
@@ -24,6 +24,7 @@ export function Sheet({ visible, title, onClose, children, style }: {
   }), [y, onClose]);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={styles.behind} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable style={styles.behind} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Close ${title}`} />
       <Animated.View style={[styles.sheet, style, { transform: [{ translateY: y }] }]} onAccessibilityEscape={onClose}>
         <View {...gesture.panHandlers} style={styles.header} accessibilityLabel={`${title}, drag down to close`}>
@@ -32,6 +33,7 @@ export function Sheet({ visible, title, onClose, children, style }: {
         </View>
         {children}
       </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

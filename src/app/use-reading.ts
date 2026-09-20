@@ -38,10 +38,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { createLocator, readingPositionAt, type ReadingPosition } from '../core/document';
-import { createProvider } from '../core/providers/factory';
+import { hasSavedVoice, offlineProvider } from '../offline/runtime';
 import type { ProviderId } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
-import { readGatewayHeaders, readProviderKey } from '../keys/store';
 import { lockScreenPosition } from '../now-playing';
 import {
   createPlaybackEngine,
@@ -67,11 +66,6 @@ import {
 import { documentLanguage, firstUtteranceOfSection, outOfTextSentence, samePrefix, segmentDocument } from './segment';
 import {
   engineIdentity,
-  headersAreOffered,
-  keyIsOffered,
-  keyIsRequired,
-  providerDeps,
-  providerSettings,
   readiness,
   readinessSentence,
   resolveTheme,
@@ -262,7 +256,7 @@ export interface KnownCredentials {
  * every few sentences while the reading runs, so a value that kept arriving
  * would be the reading chasing its own tail.
  */
-export function useReading(settings: AppSettings, credentials: KnownCredentials, resume: ReadingPosition | null): Reading {
+export function useReading(settings: AppSettings, credentials: KnownCredentials, resume: ReadingPosition | null, document: string): Reading {
   const { hasKey, writtenAt } = credentials;
   /**
    * The theme the page is painted in (ADR 0022), resolved the same way the shell
@@ -796,54 +790,17 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const engineGeneration = useRef(0);
   const build = useCallback(async (): Promise<PlaybackEngine | null> => {
     const generation = engineGeneration.current;
+    // Register buildingRef before engine.load can publish its initial paused
+    // state. Offline construction no longer awaits a credential lookup.
+    await Promise.resolve();
     const ready = readiness(settings, hasKey);
-    if (!ready.ready) {
+    if (!ready.ready && !hasSavedVoice(document, settings.provider, settings.voice)) {
       setStatus((was) => ({ ...was, note: readinessSentence(settings.provider, ready.missing) }));
       return null;
     }
 
-    let key = '';
-    if (keyIsOffered(settings.provider)) {
-      const lookup = await readProviderKey(settings.provider);
-      if (lookup.outcome === 'refused') {
-        setStatus((was) => ({
-          ...was,
-          note: `The Keychain would not hand over the key: ${lookup.refusal.message}`,
-        }));
-        return null;
-      }
-      if (lookup.outcome === 'found') key = lookup.secret;
-      else if (keyIsRequired(settings.provider)) {
-        setStatus((was) => ({ ...was, note: readinessSentence(settings.provider, ['an API key']) }));
-        return null;
-      }
-    }
-
-    /**
-     * The gateway headers, read the same way and at the same moment as the key
-     * (ADR 0019). Absent is not a failure and never can be: a server that is
-     * behind nothing wants none, and one that is behind something answers for
-     * itself — a 403 from the gateway rather than a guess from here.
-     */
-    let gatewayHeaders = '';
-    if (headersAreOffered(settings.provider)) {
-      const lookup = await readGatewayHeaders(settings.provider);
-      if (lookup.outcome === 'refused') {
-        setStatus((was) => ({
-          ...was,
-          note: `The Keychain would not hand over the gateway headers: ${lookup.refusal.message}`,
-        }));
-        return null;
-      }
-      if (lookup.outcome === 'found') gatewayHeaders = lookup.secret;
-    }
-
     if (generation !== engineGeneration.current) return null;
-    const provider = createProvider(
-      settings.provider,
-      providerSettings(settings, { key, headers: gatewayHeaders }),
-      providerDeps,
-    );
+    const provider = offlineProvider(document, settings);
     const engine = createPlaybackEngine({
       provider,
       // Initial voice; successful live handovers retain this engine (ADR 0026).
@@ -870,10 +827,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     engine.load(loadedRef.current, atRef.current ?? 0);
     setStatus((was) => ({ ...was, reportsWordTimings: provider.capabilities.wordTimestamps, note: null }));
     return engine;
-  }, [settings, hasKey, clock, report, ranOutOfText]);
+  }, [settings, hasKey, clock, report, ranOutOfText, document]);
 
   const play = useCallback(() => {
-    if (!settings.enabledProviders.includes(settings.provider)) {
+    if (!settings.enabledProviders.includes(settings.provider) && !hasSavedVoice(document, settings.provider, settings.voice)) {
       playIntent.current = false;
       engineRef.current?.pause();
       setStatus((was) => ({ ...was, playing: false, note: readinessSentence(settings.provider, ['enabling']) }));
@@ -932,7 +889,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       setStatus((was) => ({ ...was, playing: false, buffering: false }));
       report(error);
     });
-  }, [settings, build, report, walkForward, abandonResume]);
+  }, [settings, build, report, walkForward, abandonResume, document]);
 
   /**
    * The section Play was looking for has arrived with text in it, so the reading
@@ -991,21 +948,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
         selected();
         return;
       }
-      let key = '';
-      let headers = '';
-      if (keyIsOffered(provider)) {
-        const lookup = await readProviderKey(provider);
-        if (lookup.outcome === 'refused') throw new Error(lookup.refusal.message);
-        if (lookup.outcome === 'found') key = lookup.secret;
-        else if (keyIsRequired(provider)) throw new Error(readinessSentence(provider, ['an API key']));
-      }
-      if (headersAreOffered(provider)) {
-        const lookup = await readGatewayHeaders(provider);
-        if (lookup.outcome === 'refused') throw new Error(lookup.refusal.message);
-        if (lookup.outcome === 'found') headers = lookup.secret;
-      }
       if (request !== switchRequest.current || engine !== engineRef.current) return;
-      const target = createProvider(provider, providerSettings(next, { key, headers }), providerDeps);
+      const target = offlineProvider(document, next);
       engine.switchVoice(target, voice, () => {
         if (request !== switchRequest.current || engine !== engineRef.current) return;
         pendingChoice.current = null;
@@ -1015,7 +959,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
         selected();
       }, failed);
     })().catch(failed);
-  }, [settings]);
+  }, [settings, document]);
 
   const opened = useCallback((declared: string | null | undefined) => {
     const language = documentLanguage(declared);

@@ -66,4 +66,4 @@ Removing a document from the library also removes its saved audio and stops its 
 
 ## Agreement and remaining validation
 
-The owner approved this interaction design on 2026-09-20. Background continuation still requires technical validation. This records agreed choices, not an implemented feature.
+The owner approved this interaction design on 2026-09-20. The system may stop preparation after allowing only a limited time in the background; completed work stays saved and preparation resumes when the app is opened again. A long document is not guaranteed to finish while the phone stays locked. The app must describe that interruption honestly.

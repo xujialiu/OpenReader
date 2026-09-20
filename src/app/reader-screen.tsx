@@ -29,6 +29,7 @@ import type { ProviderId } from '../core/providers/types';
 import { useHarnessCommands, type HarnessCommand } from './walkthrough-harness';
 
 import { AppearanceSheet } from './appearance-sheet';
+import { ReaderActions } from './reader-actions';
 import { HeaderButton, INK, Note } from './controls';
 import { openDocument, type OpenDocument } from './document';
 import { ReadingView } from './reading-view';
@@ -55,6 +56,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const [opened, setOpened] = useState<{ document: OpenDocument; position: ReadingPosition | null } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [appearance, setAppearance] = useState(false);
+  const [actions, setActions] = useState(false);
 
   /**
    * The title the header shows, held here rather than read from `entry`.
@@ -100,7 +102,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
     navigation.setOptions({
       title,
       headerBackButtonDisplayMode: 'minimal',
-      headerRight: () => <HeaderButton label="Appearance" title="Aa" onPress={() => setAppearance(true)} />,
+      headerRight: () => <HeaderButton label="More actions" icon="more" onPress={() => setActions(true)} />,
     });
   }, [navigation, title]);
 
@@ -235,7 +237,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
          */
         <ReadingView
           key={opened.document.identity.id}
-          document={opened.document}
+          document={{ ...opened.document, title: openedEntry?.title ?? opened.document.title }}
           settings={forDocument}
           voiceNote={unusableVoiceSentence(documentVoice)}
           keyPresence={key.presence}
@@ -272,6 +274,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
         appearance={settings.appearance}
         onChange={(next) => setSettings({ ...settings, appearance: next })}
       />
+      {actions ? <ReaderActions document={id} onClose={() => setActions(false)} /> : null}
     </View>
   );
 }

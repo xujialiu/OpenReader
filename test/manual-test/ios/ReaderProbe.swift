@@ -58,6 +58,7 @@ final class ReaderProbe: XCTestCase {
     dragClosed("Playback speed")
     app.buttons["Contents"].tap()
     dragClosed("Contents")
+    app.buttons["More actions"].tap()
     app.buttons["Appearance"].tap()
     dragClosed("Appearance")
     app.buttons["Choose a Voice"].tap()

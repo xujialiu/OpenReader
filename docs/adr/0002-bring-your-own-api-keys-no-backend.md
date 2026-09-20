@@ -18,6 +18,8 @@ person maintains rather than operates.
 
 ## Consequences
 
+Explicit offline preparation is now defined by [ADR 0027](0027-whole-document-offline-narration.md). The memory-only rule below continues to apply to ordinary playback; owner-selected downloads have their own durable storage and lifecycle.
+
 Synthesized audio is cached **in memory only**, and there is deliberately no
 disk cache. The obvious argument for one — that without it every re-listen
 re-spends the owner's own quota — does not apply, because the owner rarely

@@ -58,7 +58,7 @@ export interface ReaderFileSystem {
 /** Where the library's own three files go. A subdirectory, so that what it writes is recognisable as not ours. */
 const RENDERER_DIRECTORY = 'epubjs';
 
-export function useReaderFileSystem(): ReaderFileSystem {
+export function useReaderFileSystem(name = RENDERER_DIRECTORY): ReaderFileSystem {
   /**
    * The directory, made if it is not there, **without its trailing slash**.
    *
@@ -67,10 +67,10 @@ export function useReaderFileSystem(): ReaderFileSystem {
    * middle of the very path it then hands to WKWebView as read access.
    */
   const directory = useMemo(() => {
-    const made = new Directory(Paths.cache, RENDERER_DIRECTORY);
+    const made = new Directory(Paths.cache, name);
     made.create({ intermediates: true, idempotent: true });
     return made.uri.replace(/\/+$/, '');
-  }, []);
+  }, [name]);
 
   const readAsStringAsync = useCallback(async (uri: string, options?: { encoding?: 'utf8' | 'base64' }) => {
     const file = new File(uri);
