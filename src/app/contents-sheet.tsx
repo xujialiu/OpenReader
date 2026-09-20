@@ -29,11 +29,12 @@
  */
 
 import { useMemo } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text } from 'react-native';
 
 import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
 
 import { INK, Note } from './controls';
+import { Sheet } from './sheet';
 
 /** One line per row, and the same height for every one of them: what makes the list open where it should. */
 const ROW_HEIGHT = 46;
@@ -70,12 +71,7 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
   );
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      {/* The page stays visible behind the sheet and is what closes it, the same as the Appearance sheet. */}
-      <Pressable style={styles.behind} onPress={onClose} accessibilityLabel="Close the contents" />
-      <View style={styles.sheet}>
-        <View style={styles.grip} />
-        <Text style={styles.title}>Contents</Text>
+    <Sheet visible={visible} title="Contents" onClose={onClose}>
 
         {contents.rows.length === 0 ? (
           <Note>
@@ -117,8 +113,7 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
         />
 
         {here ? <Note>{precisionLine(here.precision)}</Note> : null}
-      </View>
-    </Modal>
+    </Sheet>
   );
 }
 

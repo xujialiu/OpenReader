@@ -30,11 +30,12 @@
  * route in a gentler form.
  */
 
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { READING_FONTS, READING_SCALES, type Appearance, type ReadingFont } from '../renderer/highlighter';
 
 import { Choice, INK, Note } from './controls';
+import { Sheet } from './sheet';
 
 /** What each row shows for "leave this book's own typography alone". A string, because `Choice` compares by value and null is not one. */
 const FOLLOW = 'The document’s own';
@@ -57,12 +58,7 @@ export function AppearanceSheet({
   const chosenScale = appearance.scale === null ? FOLLOW : `${appearance.scale}%`;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      {/* Tapping the page behind the sheet closes it. The page is visible, which is the point, so it is also tappable. */}
-      <Pressable style={styles.behind} onPress={onClose} accessibilityLabel="Close Appearance" />
-      <View style={styles.sheet}>
-        <View style={styles.grip} />
-        <Text style={styles.title}>Appearance</Text>
+    <Sheet visible={visible} title="Appearance" onClose={onClose} style={{ paddingHorizontal: 20 }}>
 
         <Text style={styles.label}>Font</Text>
         <Choice
@@ -91,8 +87,7 @@ export function AppearanceSheet({
         <Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.done, pressed && styles.pressed]}>
           <Text style={styles.doneLabel}>Done</Text>
         </Pressable>
-      </View>
-    </Modal>
+    </Sheet>
   );
 }
 

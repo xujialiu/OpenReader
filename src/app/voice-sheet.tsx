@@ -35,7 +35,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ProviderId } from '../core/providers/types';
 
@@ -44,12 +44,16 @@ import { Icon } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { VoiceLists } from './use-voices';
 import { levelOfVoice, voiceLevels } from './voices';
+import { Sheet } from './sheet';
+import { LoadingSpinner } from './loading-spinner';
 
 export interface VoiceSheetProps {
   visible: boolean;
   onClose(): void;
   settings: AppSettings;
   lists: VoiceLists;
+  pending?: { provider: ProviderId; voice: string } | null;
+  error?: string | null;
   /** Read with this Provider and this Voice. Both at once: a Voice belongs to exactly one Provider (CONTEXT.md). */
   onChoose(provider: ProviderId, voice: string): void;
 }
@@ -60,16 +64,15 @@ export interface VoiceSheetProps {
  * as the sheet appears. A picker that kept its state between opens would show
  * whatever was last looked at rather than what is reading.
  */
-export function VoiceSheet({ visible, onClose, settings, lists, onChoose }: VoiceSheetProps) {
+export function VoiceSheet({ visible, onClose, ...props }: VoiceSheetProps) {
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.behind} onPress={onClose} accessibilityLabel="Close the Voice list" />
-      {visible ? <VoicePicker onClose={onClose} settings={settings} lists={lists} onChoose={onChoose} /> : null}
-    </Modal>
+    <Sheet visible={visible} title="Voice" onClose={onClose}>
+      {visible ? <VoicePicker {...props} /> : null}
+    </Sheet>
   );
 }
 
-function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProps, 'visible'>) {
+function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSheetProps, 'visible' | 'onClose'>) {
   /** Which Provider's Voices are being looked at. The one in use, until another is tapped. */
   const [looking, setLooking] = useState<ProviderId>(lists.enabled?.includes(settings.provider) ? settings.provider : lists.enabled?.[0] ?? settings.provider);
   /** Which locale is open. Null means none has been chosen yet, and the Voice in use decides. */
@@ -118,9 +121,7 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
 
   return (
     <>
-      <View style={styles.sheet}>
-        <View style={styles.grip} />
-        <Text style={styles.title}>Voice</Text>
+      <View style={{ gap: 10 }}>
 
         {enabled.length === 0 ? (
           <Note attention>
@@ -186,21 +187,21 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
                 .flatMap((level) => level.voices)
                 .map((voice) => {
                   const chosen = looking === settings.provider && voice.id === settings.voice;
+                  const loading = looking === pending?.provider && voice.id === pending.voice;
                   return (
                     <Pressable
                       key={voice.id}
                       accessibilityRole="button"
-                      accessibilityState={{ selected: chosen }}
+                      accessibilityState={{ selected: chosen, busy: loading }}
                       onPress={() => {
                         onChoose(looking, voice.id);
-                        onClose();
                       }}
                       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
                     >
                       <Text style={[styles.rowLabel, chosen && styles.rowLabelChosen]} numberOfLines={1}>
                         {voice.label}
                       </Text>
-                      {chosen ? <Icon name="check" color={INK.text} size={20} /> : null}
+                      {loading ? <LoadingSpinner /> : chosen ? <Icon name="check" color={INK.text} size={20} /> : null}
                     </Pressable>
                   );
                 })}
@@ -209,9 +210,7 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
         )}
 
         {lists.note ? <Note attention>{lists.note}</Note> : null}
-        <Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.done, pressed && styles.pressed]}>
-          <Text style={styles.doneLabel}>Done</Text>
-        </Pressable>
+        {error ? <Note attention>{error}</Note> : null}
       </View>
     </>
   );

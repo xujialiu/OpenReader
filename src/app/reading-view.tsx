@@ -217,6 +217,8 @@ export function ReadingView({
   const [displayError, setDisplayError] = useState<string | null>(null);
   const [contentsOpen, setContentsOpen] = useState(false);
   const [voicesOpen, setVoicesOpen] = useState(false);
+  const closeContents = useCallback(() => setContentsOpen(false), []);
+  const closeVoices = useCallback(() => setVoicesOpen(false), []);
   /** Down to one button, or the whole strip. Here rather than in the player because pausing re-opens it, and the pause is this screen's. */
   const [collapsed, setCollapsed] = useState(false);
   /**
@@ -371,8 +373,9 @@ export function ReadingView({
     if (displayError) said.push({ said: `The document would not display: ${displayError}`, attention: true });
     if (status.resumeNeedsAttention && status.resume) said.push({ said: status.resume, attention: true });
     if (status.note) said.push({ said: status.note, attention: true });
+    if (status.voiceError && !voicesOpen) said.push({ said: status.voiceError, attention: true });
     return said;
-  }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status]);
+  }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status, voicesOpen]);
 
   /**
    * The Voice in use as its own Provider describes it — the name it publishes and
@@ -392,11 +395,12 @@ export function ReadingView({
    */
   const at = status.section ?? status.rendered?.index ?? null;
 
+  const selectReadingVoice = reading.chooseVoice;
   const chooseVoice = useCallback(
     (provider: ProviderId, voice: string) => {
-      onVoice(provider, voice);
+      selectReadingVoice(provider, voice, () => onVoice(provider, voice));
     },
-    [onVoice],
+    [onVoice, selectReadingVoice],
   );
 
   // WALKTHROUGH-HARNESS
@@ -501,6 +505,7 @@ export function ReadingView({
       <Player
         settings={settings}
         playing={status.playing}
+        buffering={status.buffering}
         collapsed={collapsed}
         onCollapsed={setCollapsed}
         enabled={ready.ready || status.playing || !settings.enabledProviders.includes(settings.provider) || !settings.voice.trim()}
@@ -517,7 +522,7 @@ export function ReadingView({
 
       <ContentsSheet
         visible={contentsOpen}
-        onClose={() => setContentsOpen(false)}
+        onClose={closeContents}
         contents={contents}
         spineKnown={status.spineHrefs.length > 0}
         section={at}
@@ -526,9 +531,11 @@ export function ReadingView({
 
       <VoiceSheet
         visible={voicesOpen}
-        onClose={() => setVoicesOpen(false)}
+        onClose={closeVoices}
         settings={settings}
         lists={voices}
+        pending={status.pendingVoice}
+        error={status.voiceError}
         onChoose={chooseVoice}
       />
     </View>

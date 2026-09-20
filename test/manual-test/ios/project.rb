@@ -1,10 +1,12 @@
 # Creates a disposable XCTest project; requires the xcodeproj gem used by CocoaPods.
 require 'xcodeproj'
-output, target_bundle, expect_player, mode = ARGV
+output, target_bundle, expect_player, mode, source = ARGV
 abort 'usage: project.rb OUTPUT TARGET_BUNDLE YES|NO' unless output && target_bundle && %w[YES NO].include?(expect_player)
 project = Xcodeproj::Project.new(File.join(output, 'ManualTests.xcodeproj'))
 target = project.new_target(:ui_test_bundle, 'LockScreenProbe', :ios, '16.4')
-target.add_file_references([project.main_group.new_file(File.expand_path('LockScreenProbe.swift', __dir__))])
+source ||= 'LockScreenProbe.swift'
+abort 'unknown probe source' unless %w[LockScreenProbe.swift ReaderProbe.swift].include?(source)
+target.add_file_references([project.main_group.new_file(File.expand_path(source, __dir__))])
 plist = File.join(output, 'Probe-Info.plist')
 Xcodeproj::Plist.write_to_path({
   'ManualTargetBundleIdentifier' => target_bundle,

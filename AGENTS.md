@@ -87,6 +87,10 @@ a later sweep.
 Before running or writing device/manual tests, read
 [`test/manual-test/README.md`](test/manual-test/README.md) and reuse its scripts.
 
+Prefer `xcrun` (especially `xcrun simctl`), `xcodebuild`, and the existing
+XCTest/manual-test scripts for device and simulator work. Use Computer Use only
+when a required action cannot be performed through those tools.
+
 ## Finish with the latest app running in the simulator
 
 After every app change, update and launch the app in the simulator from the

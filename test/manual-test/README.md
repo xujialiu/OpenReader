@@ -128,3 +128,52 @@ If either reports an unconfirmed pause, stop in the app and verify its state.
 The duration includes synthesis/buffering and does not guarantee that audio
 actually started. These handler calls are not touch tests; use the `tap` mode
 above for that. Run `state` afterwards to verify the final paused state.
+
+## Reader drawers and voice loading
+
+With the latest Debug app connected to Metro and the existing fixture Document
+`A Short Test of Reading Aloud` in the Library:
+
+```sh
+bash test/manual-test/reader.sh SIMULATOR_UDID /tmp/openreader-reader-01
+```
+
+This reuses the disposable XCTest project builder. It opens the Document if
+needed, drags all four handles/title regions, checks that Voice and Speed have
+no Done button, and checks a paused voice choice stays open when the fixture's
+Sarah/Adrian rows are present. It never presses Play. Inspect exported screenshots
+as well as assertions. It leaves the reader paused. The optional voice choice
+check restores Sarah; use this on the fixture document, not the owner's reading.
+
+For deterministic transport/handover checks, first mute machine and simulator,
+open the fixture Document, and open Voice once so its Fish list is loaded. Fish
+must already be enabled with its key in the app. No credential is read by or
+printed from the test script. The first eight list entries supply distinct
+choices; an English fixture supplies the test text.
+
+```sh
+node test/manual-test/voice-playback.cjs SIMULATOR_UDID /tmp/openreader-reader-01
+node test/manual-test/voice-playback.cjs SIMULATOR_UDID /tmp/openreader-touch-01 touch
+```
+
+The first command requires an existing screenshot directory. It replaces only
+Fish synthesis responses in the running process with delayed silent WAVs and
+word timestamps. The actual provider parser, native audio graph, reader clock,
+React handlers and persistence callbacks run. Assertions cover initial loading,
+pause before receipt without abort, same-Utterance word handover, latest choice
+wins, failure rollback, next-Utterance fallback without timings, and pausing a
+pending handover until the next Play. Each playback interval stops on its checked
+transition, with an eight-second watchdog. It reports durations in milliseconds.
+This is a handler probe, not a touch test or a test of live provider audio quality.
+
+The `touch` command uses a **new** artifact directory. It installs a five-second
+reply delay and calls `reader.sh` in loading mode to press Play, inspect the
+spinner, and physically tap it to pause before any reply arrives. It then checks
+that audio still arrives and the app remains paused. Do not run loading mode by
+itself: it depends on the fixture and watchdog installed by the outer script.
+
+Both modes restore fetch, the original voice and speed, close the sheet and
+pause in `finally`. They use Metro's existing CDP inspection approach; they add
+no test hooks to production app code. Do not edit app code while a probe runs:
+Fast Refresh can replace the state being inspected. Restart the app afterwards
+to remove all temporary debugger globals and verify final delivery separately.

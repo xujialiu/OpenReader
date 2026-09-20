@@ -231,7 +231,7 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
   const reading = code('use-reading.ts');
 
   it('leaves the cursor alone when the engine is thrown away', () => {
-    const cleanup = within(reading, 'const identity = `${engineIdentity(settings)}@${writtenAt}`;', '[identity],');
+    const cleanup = within(reading, 'const disposeEngine = useCallback(', '}, []);');
     expect(cleanup).toContain('void engine?.dispose();');
     expect(cleanup).not.toContain('atRef.current = null;');
     expect(cleanup).not.toContain('utterance: null,');
@@ -246,7 +246,7 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
     // highlight while the player still says where the reading is. `show` paints the
     // Utterance whole, which is also what replaces the words the previous Voice was
     // cued with.
-    const cleanup = within(reading, 'const identity = `${engineIdentity(settings)}@${writtenAt}`;', '[identity],');
+    const cleanup = within(reading, 'const disposeEngine = useCallback(', '}, []);');
     pin(cleanup, 'if (at === null) bridgeRef.current?.clear();', 'use-reading.ts, the identity cleanup');
     pin(cleanup, 'else bridgeRef.current?.show(at);', 'use-reading.ts, the identity cleanup');
   });

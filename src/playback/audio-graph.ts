@@ -25,6 +25,7 @@ import type { PreparedClip } from './clips';
 import { framesFor } from './gap';
 import { resampleLinear } from './pcm';
 import { POSITION_INTERVAL_MS } from './reader-clock';
+import { bufferParts } from './buffer-parts';
 
 /**
  * The offset that tells the native queue node to leave its read index where it
@@ -59,12 +60,22 @@ export interface EnqueuedBuffer {
   speech: number;
   /** Content seconds of silence after it. */
   gap: number;
+  offset: number;
+  duration: number;
+}
+
+export interface DecodedClip {
+  clip: PreparedClip;
+  samples: Float32Array<ArrayBuffer>;
+  duration: number;
 }
 
 export interface AudioGraph {
   /** The context's sample rate. Every buffer enqueued is at this rate; see `enqueue`. */
   readonly sampleRate: number;
-  enqueue(clip: PreparedClip, gapSeconds: number): Promise<EnqueuedBuffer>;
+  prepare(clip: PreparedClip): Promise<DecodedClip>;
+  enqueue(audio: DecodedClip, gapSeconds: number, from?: number, to?: number): EnqueuedBuffer[];
+  remove(bufferIds: readonly string[]): void;
   /** The pitch-preserving time-stretch, live. ADR 0009's 1.5–3× is this line and nothing else. */
   setRate(rate: number): void;
   /** Start, or resume after `pause()`. Safe to call when already playing. */
@@ -207,17 +218,25 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
   return {
     sampleRate: context.sampleRate,
 
-    async enqueue(clip, gapSeconds) {
+    async prepare(clip) {
+      const samples = await samplesOf(clip, context, context.sampleRate);
+      return { clip, samples, duration: samples.length / context.sampleRate };
+    },
+
+    enqueue(audio, gapSeconds, from = 0, to = audio.duration) {
       // Named `hz` rather than `rate`, which in this directory means the playback
       // rate and is a different number entirely.
       const hz = context.sampleRate;
-      const samples = await samplesOf(clip, context, hz);
-      const gapFrames = framesFor(gapSeconds, hz);
+      // Native queue boundaries make a prepared voice handover independent of
+      // JavaScript timer latency. Split only at reported word ends; never guess.
+      const result: EnqueuedBuffer[] = [];
+      for (const { start, end, final } of bufferParts(audio.samples.length, hz, audio.clip.words, from, to)) {
+      const samples = audio.samples.slice(start, end);
+      const gapFrames = final ? framesFor(gapSeconds, hz) : 0;
       const frames = Math.max(1, samples.length + gapFrames);
 
-      // One buffer per Utterance: the speech, then the gap as silence. The gap is
-      // part of the content, so the time-stretch shrinks it with the speech and
-      // the position keeps advancing across it instead of stalling (gap.ts).
+      // A Clip is split at reported word ends. Only its final piece has a gap;
+      // all pieces share the same continuous pitch-corrected source.
       // `createBuffer` zeroes, so the gap needs nothing written into it.
       const buffer = context.createBuffer(1, frames, hz);
       // `samples` must cover its whole `ArrayBuffer` exactly. The native
@@ -228,15 +247,21 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
       // `Float32Array<ArrayBuffer>` in their signatures is there to keep true.
       if (samples.length > 0) buffer.copyToChannel(samples, 0, 0);
 
-      return {
+      result.push({
         bufferId: node.enqueueBuffer(buffer),
         // Derived from the frames actually written, because that is what the
         // native side divides by the sample rate. A duration the timeline
         // believes and the node does not is drift by another name.
         speech: samples.length / hz,
         gap: gapFrames / hz,
-      };
+        offset: start / hz,
+        duration: audio.duration,
+      });
+      }
+      return result;
     },
+
+    remove(bufferIds) { for (const id of bufferIds) node.dequeueBuffer(id); },
 
     setRate(rate) {
       node.playbackRate.value = rate;

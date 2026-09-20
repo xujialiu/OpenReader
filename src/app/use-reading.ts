@@ -39,6 +39,7 @@ import { useColorScheme } from 'react-native';
 
 import { createLocator, readingPositionAt, type ReadingPosition } from '../core/document';
 import { createProvider } from '../core/providers/factory';
+import type { ProviderId } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
 import { readGatewayHeaders, readProviderKey } from '../keys/store';
 import { lockScreenPosition } from '../now-playing';
@@ -103,6 +104,9 @@ const SKIP_DEBOUNCE_MS = 600;
 /** Everything the player bar and the status line show. Nothing in here changes more than once per Utterance. */
 export interface ReadingStatus {
   playing: boolean;
+  buffering: boolean;
+  pendingVoice: { provider: ProviderId; voice: string } | null;
+  voiceError: string | null;
   /** The Utterance the Clip now playing speaks, or null before the first one. */
   utterance: number | null;
   /** How many Utterances the renderer has reported text for so far. It grows as epub.js renders further sections. */
@@ -164,6 +168,9 @@ export interface ReadingStatus {
 
 const NOTHING_YET: ReadingStatus = {
   playing: false,
+  buffering: false,
+  pendingVoice: null,
+  voiceError: null,
   utterance: null,
   known: 0,
   rendered: null,
@@ -186,6 +193,7 @@ export interface Reading {
   opened(language: string | null | undefined): void;
   play(): void;
   pause(): void;
+  chooseVoice(provider: ProviderId, voice: string, selected: () => void): void;
   /**
    * Read from this Utterance (ADR 0020).
    *
@@ -265,6 +273,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const [status, setStatus] = useState<ReadingStatus>(NOTHING_YET);
 
   const engineRef = useRef<PlaybackEngine | null>(null);
+  const playIntent = useRef(false);
+  const switchRequest = useRef(0);
+  const pendingChoice = useRef<{ provider: ProviderId; voice: string } | null>(null);
+  const retainedIdentity = useRef<string | null>(null);
   const bridgeRef = useRef<ReaderBridge | null>(null);
   /** Being built: a second press of play must not build a second engine and a second audio session. */
   const buildingRef = useRef<Promise<PlaybackEngine | null> | null>(null);
@@ -403,6 +415,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     () => ({
       onClip(cue) {
         bridgeRef.current?.clock.onClip(cue);
+        if (!playIntent.current) bridgeRef.current?.hold();
         atRef.current = cue.utterance;
         // Once per Clip. `cue.words === null` is the Provider reporting no Word
         // Timings, which is the whole of the Highlight Level (ADR 0005): the
@@ -417,7 +430,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
         }));
       },
       onPosition(correction) {
-        bridgeRef.current?.clock.onPosition(correction);
+        if (playIntent.current) bridgeRef.current?.clock.onPosition(correction);
         // The second reader of the one clock (ADR 0016). `contentPosition` is the
         // source node's own value, unchanged — the same number the highlight is
         // corrected against, so the lock screen's elapsed time and the highlight
@@ -494,8 +507,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       return;
     }
     seekingRef.current = false;
+    playIntent.current = false;
     setStatus((was) => ({
       ...was,
+      playing: false,
+      buffering: false,
       seeking: false,
       note:
         'Play reached the last section of this document without finding one with text in it. ' +
@@ -527,6 +543,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // Nothing loaded is not a position to clamp into: `navigation.ts` throws on it
     // rather than fabricate one, and there is nothing here to seek either.
     if (list.length === 0) return;
+    switchRequest.current++;
+    pendingChoice.current = null;
+    engineRef.current?.cancelVoiceSwitch();
+    setStatus((was) => ({ ...was, pendingVoice: null, voiceError: null }));
     // A word tapped, a skip, a contents row: the owner has pointed somewhere, so
     // the bookmark is done asking. The resume's own call clears the ref first, so
     // this is a no-op on that path.
@@ -753,10 +773,15 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       reason: report.refusal === null ? null : describe(report.refusal),
     });
     if (ended) {
+      playIntent.current = false;
+      switchRequest.current++;
+      pendingChoice.current = null;
+      engineRef.current?.cancelVoiceSwitch();
       engineRef.current?.pause();
       bridgeRef.current?.hold();
     }
-    setStatus((was) => ({ ...was, playing: ended ? false : was.playing, note: sentence }));
+    setStatus((was) => ({ ...was, playing: ended ? false : was.playing,
+      buffering: ended ? false : was.buffering, pendingVoice: ended ? null : was.pendingVoice, note: sentence }));
   }, []);
 
   /**
@@ -821,11 +846,16 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     );
     const engine = createPlaybackEngine({
       provider,
-      // Fixed for the engine's lifetime, because a Voice belongs to a document
-      // (ADR 0010) and a Clip's cache identity includes it.
+      // Initial voice; successful live handovers retain this engine (ADR 0026).
       voice: settings.voice,
       clock,
       onError: report,
+      onState: (state) => {
+        if (generation !== engineGeneration.current) return;
+        if (!buildingRef.current) playIntent.current = state.playing;
+        setStatus((was) => ({ ...was, ...(buildingRef.current && playIntent.current && !state.playing
+          ? { playing: true, buffering: true } : state) }));
+      },
       onOutOfText: ranOutOfText,
       rate: settings.rate,
     });
@@ -844,6 +874,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
 
   const play = useCallback(() => {
     if (!settings.enabledProviders.includes(settings.provider)) {
+      playIntent.current = false;
       engineRef.current?.pause();
       setStatus((was) => ({ ...was, playing: false, note: readinessSentence(settings.provider, ['enabling']) }));
       return;
@@ -851,6 +882,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // Play is the owner saying "read from here", and here is wherever the reading
     // is now. A bookmark that has not resolved by this point has lost its claim.
     abandonResume();
+    playIntent.current = true;
+    setStatus((was) => ({ ...was, playing: true, buffering: true, note: null }));
     /**
      * Play, pressed with nothing to read.
      *
@@ -874,17 +907,31 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
 
     if (engineRef.current) {
       engineRef.current.play();
-      setStatus((was) => ({ ...was, playing: true, note: null }));
+      setStatus((was) => ({ ...was, playing: true, buffering: engineRef.current!.snapshot().queued === 0, note: null }));
       return;
     }
-    buildingRef.current ??= build().finally(() => {
-      buildingRef.current = null;
-    });
+    if (!buildingRef.current) {
+      const job = build();
+      buildingRef.current = job;
+      const settled = () => { if (buildingRef.current === job) buildingRef.current = null; };
+      void job.then(settled, settled);
+    }
+    const generation = engineGeneration.current;
     void buildingRef.current.then((engine) => {
-      if (!engine || engine !== engineRef.current) return;
+      if (generation !== engineGeneration.current) return;
+      if (!engine) {
+        playIntent.current = false;
+        setStatus((was) => ({ ...was, playing: false, buffering: false }));
+        return;
+      }
+      if (engine !== engineRef.current || !playIntent.current) return;
       engine.play();
-      setStatus((was) => ({ ...was, playing: true }));
-    }, report);
+    }, (error: unknown) => {
+      if (generation !== engineGeneration.current) return;
+      playIntent.current = false;
+      setStatus((was) => ({ ...was, playing: false, buffering: false }));
+      report(error);
+    });
   }, [settings, build, report, walkForward, abandonResume]);
 
   /**
@@ -903,13 +950,72 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [status.known, play]);
 
   const pause = useCallback(() => {
+    playIntent.current = false;
+    seekingRef.current = false;
     engineRef.current?.pause();
     // Not a third clock message: a pause stops the position stream, and a WebView
     // still interpolating against `requestAnimationFrame` would run the highlight
     // ahead of silence (`reader-bridge.ts`).
     bridgeRef.current?.hold();
-    setStatus((was) => ({ ...was, playing: false }));
+    setStatus((was) => ({ ...was, playing: false, buffering: false, seeking: false }));
   }, []);
+
+  const chooseVoice = useCallback((provider: ProviderId, voice: string, selected: () => void) => {
+    if (playIntent.current && pendingChoice.current?.provider === provider && pendingChoice.current.voice === voice) return;
+    const request = ++switchRequest.current;
+    pendingChoice.current = null;
+    let engine = engineRef.current;
+    engine?.cancelVoiceSwitch();
+    setStatus((was) => ({ ...was, pendingVoice: null, voiceError: null }));
+    if (!settings.enabledProviders.includes(provider)) return;
+    if (provider === settings.provider && voice === settings.voice) return;
+    if (!playIntent.current) {
+      // A paused selection is a preference, not a request to start synthesizing.
+      selected();
+      return;
+    }
+    const next = { ...settings, provider, voice };
+    pendingChoice.current = { provider, voice };
+    setStatus((was) => ({ ...was, pendingVoice: { provider, voice } }));
+    const failed = (error: unknown) => {
+      if (request !== switchRequest.current) return;
+      pendingChoice.current = null;
+      setStatus((was) => ({ ...was, pendingVoice: null, voiceError: describe(error) }));
+    };
+    void (async () => {
+      engine ??= await buildingRef.current;
+      if (request !== switchRequest.current) return;
+      if (!engine) {
+        pendingChoice.current = null;
+        setStatus((was) => ({ ...was, pendingVoice: null }));
+        selected();
+        return;
+      }
+      let key = '';
+      let headers = '';
+      if (keyIsOffered(provider)) {
+        const lookup = await readProviderKey(provider);
+        if (lookup.outcome === 'refused') throw new Error(lookup.refusal.message);
+        if (lookup.outcome === 'found') key = lookup.secret;
+        else if (keyIsRequired(provider)) throw new Error(readinessSentence(provider, ['an API key']));
+      }
+      if (headersAreOffered(provider)) {
+        const lookup = await readGatewayHeaders(provider);
+        if (lookup.outcome === 'refused') throw new Error(lookup.refusal.message);
+        if (lookup.outcome === 'found') headers = lookup.secret;
+      }
+      if (request !== switchRequest.current || engine !== engineRef.current) return;
+      const target = createProvider(provider, providerSettings(next, { key, headers }), providerDeps);
+      engine.switchVoice(target, voice, () => {
+        if (request !== switchRequest.current || engine !== engineRef.current) return;
+        pendingChoice.current = null;
+        retainedIdentity.current = engineIdentity(next);
+        setStatus((was) => ({ ...was, pendingVoice: null, voiceError: null,
+          reportsWordTimings: target.capabilities.wordTimestamps }));
+        selected();
+      }, failed);
+    })().catch(failed);
+  }, [settings]);
 
   const opened = useCallback((declared: string | null | undefined) => {
     const language = documentLanguage(declared);
@@ -988,9 +1094,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * underneath.
    */
   const identity = `${engineIdentity(settings)}@${writtenAt}`;
-  useEffect(
-    () => () => {
+  const disposeEngine = useCallback(() => {
       engineGeneration.current += 1;
+      switchRequest.current += 1;
+      pendingChoice.current = null;
+      playIntent.current = false;
       const engine = engineRef.current;
       engineRef.current = null;
       buildingRef.current = null;
@@ -1016,6 +1124,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       setStatus((was) => ({
         ...was,
         playing: false,
+        buffering: false,
+        pendingVoice: null,
+        voiceError: null,
         // `utterance` and `section` stay, because the cursor stays. `level` and
         // `reportsWordTimings` go, because both are claims about a Provider that
         // is no longer the one that will speak (`reading-view.tsx`'s
@@ -1024,9 +1135,19 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
         reportsWordTimings: null,
         seeking: false,
       }));
-    },
-    [identity],
-  );
+    }, []);
+  const previousIdentity = useRef(identity);
+  useEffect(() => {
+    if (previousIdentity.current === identity) return;
+    previousIdentity.current = identity;
+    if (retainedIdentity.current === engineIdentity(settings)) {
+      retainedIdentity.current = null;
+      return;
+    }
+    retainedIdentity.current = null;
+    disposeEngine();
+  }, [identity, settings, disposeEngine]);
+  useEffect(() => disposeEngine, [disposeEngine]);
 
   /**
    * The Utterance being spoken, written down as a place in the document.
@@ -1057,5 +1178,5 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     return readingPositionAt(createLocator('epub', block.cfi), block.text, span.start, span.end);
   }, []);
 
-  return { bridge, status, opened, play, pause, seekTo, skip, goToSection, readingPosition };
+  return { bridge, status, opened, play, pause, chooseVoice, seekTo, skip, goToSection, readingPosition };
 }

@@ -33,7 +33,7 @@
 
 import type { Timestamp } from '../core/providers/types';
 
-/** One buffer on the queue, which is one Utterance's Clip followed by its gap. */
+/** One buffer on the queue: a portion of a Clip, with the gap on its final piece. */
 export interface QueuedClip {
   /** What `enqueueBuffer` returned. The queue is FIFO, so this is also the order. */
   bufferId: string;
@@ -45,6 +45,10 @@ export interface QueuedClip {
   gap: number;
   /** Word Timings as the Provider reported them: clip-relative, at 1.0×, or null where it reported none. Scaled on the way out (rate.ts), never here. */
   words: Timestamp[] | null;
+  /** A word-sized queue buffer still belongs to one full Clip. */
+  offset?: number;
+  duration?: number;
+  voiceGeneration?: number;
 }
 
 export interface TimelinePosition {
@@ -78,6 +82,8 @@ export interface Timeline {
   reset(): void;
   /** The content offset at which the front Clip's speech begins. Exposed because it is the whole of the arithmetic, and a number nothing can see is a number nothing can test. */
   anchor(): number;
+  clips(): readonly QueuedClip[];
+  truncateAfter(bufferId: string | null): QueuedClip[];
 }
 
 export function createTimeline(): Timeline {
@@ -158,7 +164,7 @@ export function createTimeline(): Timeline {
       }
 
       const inGap = offset > clip.speech;
-      return { clip, inClip: inGap ? clip.speech : offset, inGap, position };
+      return { clip, inClip: (clip.offset ?? 0) + (inGap ? clip.speech : offset), inGap, position };
     },
 
     ended(bufferId) {
@@ -183,6 +189,11 @@ export function createTimeline(): Timeline {
 
     anchor() {
       return base;
+    },
+    clips() { return queue; },
+    truncateAfter(bufferId) {
+      const index = bufferId === null ? -1 : queue.findIndex((clip) => clip.bufferId === bufferId);
+      return queue.splice(index + 1);
     },
   };
 }

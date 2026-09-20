@@ -72,8 +72,8 @@ Contents moves to the left end of the playback row and the current speed to its
 right end, removing the separate bottom row so the player covers less text.
 Adjustments apply immediately. Each tap changes speed by 0.05, between 0.50 and
 4.00 times natural pace; holding a button continues adjusting. Tapping outside
-the drawer or Done closes it without undoing the chosen speed. This follows the
-other drawers rather than introducing a separate confirmation step.
+the drawer closes it without undoing the chosen speed. The dismissal controls
+were subsequently revised below; closing never adds a confirmation step.
 
 The owner approved this arrangement and interaction after the interview.
 
@@ -164,3 +164,41 @@ and hidden again after another tap or leaving the page. Viewing remains availabl
 while enabled; requiring disabling just to check a saved credential would
 interrupt its availability unnecessarily. Editing still requires disabling.
 The owner confirmed this interaction.
+
+## Drawers dismiss by dragging their handles
+
+Voice, Speed, Contents and Appearance close when the owner drags down from the
+handle or the surrounding title area. A visible handle that does nothing was
+rejected because it promises an action the owner cannot perform. Tapping outside
+continues to close each drawer. Voice and Speed lose their Done buttons: these
+buttons took up space without confirming a separate change. This gives up a
+labelled close button in those two drawers in exchange for more room for their
+controls and choices. The owner confirmed this scope.
+
+## Voice selection stays open while the new voice prepares
+
+Choosing a voice leaves the drawer open. While reading, the current voice keeps
+speaking as the chosen voice prepares; when ready, the new voice takes over at
+the next word. The chosen row shows a loading spinner until the actual handover,
+then a check mark. Closing on selection was rejected because the owner wants to
+keep choosing and see when the change actually takes effect. If either voice
+cannot locate a safe shared word boundary, the handover waits for the next
+sentence. Guessing a position was rejected because it can omit or repeat words.
+The old voice keeps its check mark until handover. Only the most recent choice
+can take over; choosing the current voice cancels a pending change. Failure
+stops the spinner and shows an error while the old voice continues.
+
+Choosing while paused immediately selects the voice without starting playback;
+audio is prepared on the next Play. Pausing during a pending change never lets
+its eventual arrival resume playback by itself.
+
+When the owner opens a document and presses Play, the playback button shows a
+loading spinner while waiting for audio. The spinner has the same appearance as
+the one in the voice list. It also appears if playback later runs out of ready
+audio. While the old voice is still speaking, the player keeps its Pause button;
+only the chosen voice row spins. Tapping the player's spinner pauses playback
+and restores the Play button, while audio continues arriving in the background.
+The owner must press Play again to hear it. Aborting the request was rejected
+because the owner wants the waiting time to remain useful after pausing.
+
+The owner confirmed these behaviours and authorised implementation.

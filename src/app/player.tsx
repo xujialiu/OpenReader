@@ -23,7 +23,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { MAX_STEPPER_RATE, MIN_STEPPER_RATE, snapRate, stepRate } from '../playback';
 
@@ -31,6 +31,8 @@ import { INK } from './controls';
 import { Icon, type IconName } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { SkipTarget } from './use-reading';
+import { Sheet } from './sheet';
+import { LoadingSpinner } from './loading-spinner';
 
 /**
  * How a held stepper button repeats, and why it is not simply "fast".
@@ -55,6 +57,7 @@ const HOLD_COARSE_STEPS = 3;
 export interface PlayerProps {
   settings: AppSettings;
   playing: boolean;
+  buffering?: boolean;
   /**
    * Whether the player is down to its one button.
    *
@@ -120,6 +123,7 @@ function voiceLine(settings: AppSettings, inUse: { label: string; locale: string
 export function Player({
   settings,
   playing,
+  buffering = false,
   collapsed,
   onCollapsed,
   enabled,
@@ -165,7 +169,7 @@ export function Player({
       // beside it: with the controls hidden, tapping the page is the reading
       // position moving, and a band of dead page would be a puzzle.
       <View style={styles.collapsed} pointerEvents="box-none" onLayout={measure}>
-        <Transport icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
+        <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
       </View>
     );
   }
@@ -193,7 +197,7 @@ export function Player({
         </Pressable>
         <Transport icon="previousParagraph" label="Previous paragraph" onPress={() => onSkip('previous-paragraph')} disabled={!enabled} />
         <Transport icon="previous" label="Previous sentence" onPress={() => onSkip('previous-sentence')} disabled={!enabled} />
-        <Transport icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
+        <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
         <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
         <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
         <Pressable
@@ -206,19 +210,9 @@ export function Player({
         </Pressable>
       </View>
       {speedOpen && (
-        <Modal transparent animationType="slide" onRequestClose={closeSpeed}>
-          <Pressable style={styles.behind} onPress={closeSpeed}
-            accessibilityRole="button" accessibilityLabel="Close playback speed" />
-          <View style={styles.sheet}>
-            <View style={styles.grip} />
-            <Text style={styles.sheetTitle}>Playback speed</Text>
+        <Sheet visible title="Playback speed" onClose={closeSpeed}>
             <Speed rate={settings.rate} onRate={onRate} />
-            <Pressable accessibilityRole="button" onPress={closeSpeed}
-              style={({ pressed }) => [styles.done, pressed && styles.pressed]}>
-              <Text style={styles.doneLabel}>Done</Text>
-            </Pressable>
-          </View>
-        </Modal>
+        </Sheet>
       )}
     </View>
   );
@@ -231,17 +225,20 @@ function Transport({
   onPress,
   primary,
   disabled,
+  loading,
 }: {
   icon: IconName;
   label: string;
   onPress(): void;
   primary?: boolean;
   disabled?: boolean;
+  loading?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ busy: loading, disabled }}
       onPress={onPress}
       disabled={disabled}
       style={({ pressed }) => [
@@ -251,7 +248,7 @@ function Transport({
         disabled && styles.disabled,
       ]}
     >
-      <Icon name={icon} color={primary ? INK.page : INK.text} size={primary ? 26 : 24} />
+      {loading ? <LoadingSpinner color={primary ? INK.page : INK.text} /> : <Icon name={icon} color={primary ? INK.page : INK.text} size={primary ? 26 : 24} />}
     </Pressable>
   );
 }

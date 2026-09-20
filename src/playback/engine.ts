@@ -34,14 +34,16 @@
 
 import type { Utterance } from '../core/segmenter';
 import type { TTSProvider } from '../core/providers/types';
-import { createAudioGraph, type AudioGraph } from './audio-graph';
-import { createClipFetcher, type PreparedClip } from './clips';
-import type { ClipCache } from './clip-cache';
+import { createMemoryCache } from '../core/memory-cache';
+import { createAudioGraph, type AudioGraph, type DecodedClip } from './audio-graph';
+import { createClipFetcher, DEFAULT_CACHE_BYTES, type PreparedClip } from './clips';
+import type { ClipCache, StoredClip } from './clip-cache';
 import { DEFAULT_GAP, gapContentSeconds, startsNewBlock, type GapSettings } from './gap';
 import { atTheEar, clampRate, heardSeconds, NATURAL_PACE, scaleTimings } from './rate';
 import { enqueueCeiling, fetchWindow, hasRunOut, type UtteranceState } from './read-ahead';
 import type { ReaderClock } from './reader-clock';
 import { createTimeline, type QueuedClip, type TimelinePosition } from './timeline';
+import { wordHandoff } from './voice-boundary';
 
 /**
  * What the engine knows about its own exhaustion, which is more than "it
@@ -81,12 +83,13 @@ export interface OutOfTextReport {
 export interface PlaybackEngineDeps {
   /** The Provider, already holding its key — which arrives as a setting and never as a side effect (ADR 0002). */
   provider: TTSProvider;
-  /** The Voice. One per document (ADR 0010), which is why it is fixed for the engine's lifetime rather than passed per Utterance. */
+  /** Initial Voice. An explicit switch replaces it only at an audible boundary. */
   voice: string;
   /** Where the clock goes: the renderer's bridge (ADR 0005) and the lock screen (ADR 0016) are two readers of one clock. */
   clock: ReaderClock;
   /** Reported, never thrown. A synthesis that failed, a decode that failed, a session that would not activate. */
   onError(error: unknown): void;
+  onState?(state: { playing: boolean; buffering: boolean }): void;
   /**
    * Everything the engine was given has been spoken and the queue is empty.
    *
@@ -162,6 +165,8 @@ export interface PlaybackEngine {
   /** Jump to an Utterance: the queue is cleared, the clock re-anchored, and the reading resumes there if it was playing. */
   seek(utterance: number): void;
   setRate(rate: number): void;
+  switchVoice(provider: TTSProvider, voice: string, selected: () => void, failed: (error: unknown) => void): void;
+  cancelVoiceSwitch(): void;
   snapshot(): PlaybackSnapshot;
   /** Give back the audio session and close the context. After this the engine is done. */
   dispose(): Promise<void>;
@@ -170,10 +175,11 @@ export interface PlaybackEngine {
 export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   const gap = deps.gap ?? DEFAULT_GAP;
   const latency = Math.max(0, deps.outputLatencySeconds ?? 0);
-  const fetcher = createClipFetcher({
+  const cache = deps.cache ?? createMemoryCache<StoredClip>({ maxBytes: DEFAULT_CACHE_BYTES });
+  let fetcher = createClipFetcher({
     provider: deps.provider,
     voice: deps.voice,
-    cache: deps.cache,
+    cache,
     timeoutMs: deps.synthesisTimeoutMs,
   });
   const timeline = createTimeline();
@@ -212,6 +218,28 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   let last: TimelinePosition | null = null;
   /** Whether running out of text has already been said. Cleared by anything that gives the engine somewhere else to go. */
   let announced = false;
+  let voiceGeneration = 0;
+  let switchSerial = 0;
+  const audioByBuffer = new Map<string, DecodedClip>();
+  type PendingSwitch = {
+    id: number;
+    fetcher: ReturnType<typeof createClipFetcher>;
+    ready: Map<number, DecodedClip>;
+    fetching: Set<number>;
+    selected(): void;
+    failed(error: unknown): void;
+    armed: { cut: string | null; removed: { clip: QueuedClip; audio: DecodedClip }[] } | null;
+    deadline: ReturnType<typeof setTimeout> | null;
+  };
+  let pending: PendingSwitch | null = null;
+  let lastState = '';
+  function publish() {
+    const buffering = playing && timeline.pending() === 0;
+    const state = `${playing}:${buffering}`;
+    if (state === lastState || disposed) return;
+    lastState = state;
+    deps.onState?.({ playing, buffering });
+  }
 
   function stateOf(index: number): UtteranceState {
     if (prepared.has(index)) return 'ready';
@@ -222,10 +250,12 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
   function pump(): void {
     if (disposed) return;
-    for (const index of fetchWindow({ cursor, total: utterances.length, inFlight: inFlight.size, stateOf })) {
+    for (const index of pending?.armed ? [] : fetchWindow({ cursor, total: utterances.length, inFlight: inFlight.size, stateOf })) {
       startFetch(index);
     }
     void drain();
+    prepareSwitch();
+    publish();
     outOfText();
   }
 
@@ -261,10 +291,10 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
           failed.add(index);
           lastRefusal = error;
         }
-        deps.onError(error);
+        if (mine === generation && !disposed) deps.onError(error);
       },
     ).finally(() => {
-      inFlight.delete(index);
+      if (mine === generation) inFlight.delete(index);
       pump();
     });
   }
@@ -279,7 +309,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     if (draining || disposed) return;
     draining = true;
     try {
-      while (!disposed && nextToEnqueue < utterances.length && nextToEnqueue <= enqueueCeiling(cursor)) {
+      while (!disposed && !pending?.armed && nextToEnqueue < utterances.length && nextToEnqueue <= enqueueCeiling(cursor)) {
         const clip = prepared.get(nextToEnqueue);
         if (!clip) {
           // An Utterance whose synthesis failed is stepped over. Blocking the
@@ -295,39 +325,48 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
           }
           break;
         }
+        const index = nextToEnqueue;
+        const mine = generation;
         try {
-          await enqueue(clip);
+          await enqueue(clip, mine);
         } catch (error) {
           // A Clip that cannot be decoded is stepped over for the same reason.
-          deps.onError(error);
-          failed.add(nextToEnqueue);
-          lastRefusal = error;
+          if (mine === generation && !disposed) {
+            deps.onError(error);
+            failed.add(nextToEnqueue);
+            lastRefusal = error;
+          }
         }
-        prepared.delete(nextToEnqueue);
-        nextToEnqueue++;
+        if (mine !== generation || pending?.armed) break;
+        prepared.delete(index);
+        nextToEnqueue = index + 1;
       }
     } catch (error) {
       deps.onError(error);
     } finally {
       draining = false;
+      publish();
     }
   }
 
-  async function enqueue(clip: PreparedClip): Promise<void> {
+  function queueAudio(audio: DecodedClip, gapSeconds: number, from = 0, to = audio.duration, voice = voiceGeneration) {
+    if (!graph) return;
+    for (const enqueued of graph.enqueue(audio, gapSeconds, from, to)) {
+      timeline.enqueued({ ...enqueued, utterance: audio.clip.utterance, words: audio.clip.words, voiceGeneration: voice });
+      audioByBuffer.set(enqueued.bufferId, audio);
+    }
+  }
+
+  async function enqueue(clip: PreparedClip, mine: number): Promise<void> {
     const current = utterances[clip.utterance];
     if (!current) return;
     const paragraphAhead = startsNewBlock(current, utterances[clip.utterance + 1]);
     const built = await ensureGraph(clip);
     if (!built || disposed) return;
 
-    const enqueued = await built.enqueue(clip, gapContentSeconds(gap, paragraphAhead));
-    timeline.enqueued({
-      bufferId: enqueued.bufferId,
-      utterance: clip.utterance,
-      speech: enqueued.speech,
-      gap: enqueued.gap,
-      words: clip.words,
-    });
+    const audio = await built.prepare(clip);
+    if (disposed || mine !== generation || pending?.armed) return;
+    queueAudio(audio, gapContentSeconds(gap, paragraphAhead));
 
     // Starting the node is what activates the engine, so it happens after there
     // is something to play rather than at construction. Calling it again while
@@ -339,6 +378,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     // boundary itself.
     const front = timeline.front();
     if (cued === null && front) cue(front);
+    prepareSwitch();
+    publish();
   }
 
   async function ensureGraph(first: PreparedClip): Promise<AudioGraph | null> {
@@ -362,8 +403,9 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   function onPosition(position: number): void {
     const at = timeline.advanceTo(position);
     if (!at) return;
-    last = at;
     cursor = at.clip.utterance;
+    landed(at.clip);
+    last = at;
     // Belt and braces: if the boundary's own cue was missed, the correction
     // below would carry an Utterance the renderer is not showing. One comparison
     // closes that, and it costs nothing in the normal case.
@@ -378,10 +420,15 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
    * the position stream, whose cadence is one second (ADR 0005).
    */
   function onBufferEnded(bufferId: string): void {
+    audioByBuffer.delete(bufferId);
     timeline.ended(bufferId);
     const front = timeline.front();
     if (front) {
       cursor = front.utterance;
+      landed(front);
+      if (last?.clip.bufferId !== front.bufferId) {
+        last = { clip: front, inClip: front.offset ?? 0, inGap: false, position: timeline.anchor() };
+      }
       if (front.utterance !== cued) cue(front);
     }
     pump();
@@ -400,6 +447,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   function pauseNow(): void {
     playing = false;
     graph?.pause();
+    publish();
   }
 
   function cue(clip: QueuedClip): void {
@@ -409,7 +457,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       // Scaled here, once per Clip. ADR 0005 calls forgetting this the single
       // easiest way to reintroduce drift.
       words: scaleTimings(clip.words, rate),
-      duration: heardSeconds(clip.speech, rate),
+      duration: heardSeconds(clip.duration ?? clip.speech, rate),
       rate,
     });
   }
@@ -427,6 +475,9 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   }
 
   function restart(from: number): void {
+    cancelVoiceSwitch();
+    generation++;
+    inFlight.clear();
     cursor = Math.min(Math.max(0, from), Math.max(0, utterances.length - 1));
     nextToEnqueue = cursor;
     prepared.clear();
@@ -437,6 +488,97 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     announced = false;
     graph?.clear();
     timeline.reset();
+    audioByBuffer.clear();
+  }
+
+  function cancelVoiceSwitch() {
+    const previous = pending;
+    pending = null;
+    if (previous?.deadline) clearTimeout(previous.deadline);
+    if (!previous?.armed || !graph) return;
+    const { cut, removed } = previous.armed;
+    const discarded = timeline.truncateAfter(cut);
+    graph.remove(discarded.map((clip) => clip.bufferId));
+    for (const clip of discarded) audioByBuffer.delete(clip.bufferId);
+    for (const item of removed) queueAudio(item.audio, item.clip.gap, item.clip.offset ?? 0,
+      (item.clip.offset ?? 0) + item.clip.speech, item.clip.voiceGeneration);
+  }
+
+  function landed(front: QueuedClip) {
+    const target = pending;
+    if (!target?.armed || front.voiceGeneration !== target.id) return;
+    pending = null;
+    if (target.deadline) clearTimeout(target.deadline);
+    voiceGeneration = target.id;
+    generation++;
+    inFlight.clear();
+    prepared.clear();
+    failed.clear();
+    lastRefusal = null;
+    fetcher = target.fetcher;
+    nextToEnqueue = front.utterance + 1;
+    for (const [index, audio] of target.ready) if (index >= nextToEnqueue) prepared.set(index, audio.clip);
+    cued = null;
+    last = { clip: front, inClip: front.offset ?? 0, inGap: false, position: timeline.anchor() };
+    cue(front);
+    correct(last);
+    // The native queue has crossed the boundary. Receipt of a network response
+    // or merely queueing the replacement must never turn the spinner into a tick.
+    target.selected();
+  }
+
+  function arm(target: PendingSwitch, audio: DecodedClip, cut: string | null, offset: number) {
+    if (!graph || pending !== target || target.armed) return;
+    const removed = timeline.truncateAfter(cut).map((clip) => ({ clip, audio: audioByBuffer.get(clip.bufferId)! }));
+    graph.remove(removed.map(({ clip }) => clip.bufferId));
+    for (const { clip } of removed) audioByBuffer.delete(clip.bufferId);
+    target.armed = { cut, removed };
+    queueAudio(audio, gapContentSeconds(gap, startsNewBlock(utterances[audio.clip.utterance]!, utterances[audio.clip.utterance + 1])), offset, audio.duration, target.id);
+    // With an empty old queue, this is the first playable source. Wait for its
+    // native position event before publishing selection.
+    if (playing) graph.resume();
+    publish();
+  }
+
+  function prepareSwitch() {
+    const target = pending;
+    if (!target || target.armed || !graph || disposed) return;
+    const queue = timeline.clips();
+    const front = queue[0];
+    const index = front?.utterance ?? nextToEnqueue;
+    const replacement = target.ready.get(index);
+    if (replacement && !front) { arm(target, replacement, null, 0); return; }
+    if (replacement && front) {
+      // Preserve the currently playing native buffer. The cut is a subsequent
+      // reported word end, so splicing never edits a buffer the audio thread reads.
+      const boundary = wordHandoff(utterances[index]!.text, front.words, replacement.clip.words,
+        (front.offset ?? 0) + front.speech, front.duration ?? front.speech, replacement.duration);
+      const cut = boundary && queue.find((clip) => clip.utterance === index &&
+        Math.abs((clip.offset ?? 0) + clip.speech - boundary.end) <= 1 / graph!.sampleRate);
+      if (boundary && cut) { arm(target, replacement, cut.bufferId, boundary.offset); return; }
+    }
+    const following = target.ready.get(index + 1);
+    const lastOfCurrent = queue.filter((clip) => clip.utterance === index).at(-1);
+    if (following && lastOfCurrent) { arm(target, following, lastOfCurrent.bufferId, 0); return; }
+    for (const at of [index, index + 1]) {
+      const text = utterances[at];
+      if (!text || target.ready.has(at) || target.fetching.has(at) || target.fetching.size >= 2) continue;
+      target.fetching.add(at);
+      const built = graph;
+      void target.fetcher.fetch(at, text.text, text.speakable).then((clip) => {
+        if (pending !== target || disposed) return null;
+        return built.prepare(clip);
+      }).then((audio) => {
+        if (pending !== target || disposed || !audio) return;
+        target.ready.set(at, audio);
+        for (const key of target.ready.keys()) if (key < cursor) target.ready.delete(key);
+        prepareSwitch();
+      }).catch((error: unknown) => {
+        if (pending !== target || disposed) return;
+        cancelVoiceSwitch();
+        target.failed(error);
+      }).finally(() => target.fetching.delete(at));
+    }
   }
 
   return {
@@ -463,6 +605,12 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       if (disposed) return;
       playing = true;
       graph?.resume();
+      const front = timeline.front();
+      if (front) {
+        cue(front);
+        correct(last?.clip.bufferId === front.bufferId ? last :
+          { clip: front, inClip: front.offset ?? 0, inGap: false, position: timeline.anchor() });
+      }
       pump();
     },
 
@@ -496,6 +644,23 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       if (front) cue(front);
     },
 
+    switchVoice(provider, voice, selected, failed) {
+      cancelVoiceSwitch();
+      const target: PendingSwitch = { id: ++switchSerial, fetcher: createClipFetcher({ provider, voice, cache, timeoutMs: deps.synthesisTimeoutMs }),
+        ready: new Map(), fetching: new Set(), selected, failed, armed: null, deadline: null };
+      pending = target;
+      // A slow target must not chase a fast reading forever. Pausing still keeps
+      // downloads alive; this bounds preparation, not how long a pause may last.
+      target.deadline = setTimeout(() => {
+        if (pending !== target || target.armed) return;
+        cancelVoiceSwitch();
+        failed(new Error('The new voice could not catch up. The current voice is unchanged.'));
+      }, 120_000);
+      prepareSwitch();
+    },
+
+    cancelVoiceSwitch,
+
     snapshot() {
       return { playing, utterance: cursor, rate, queued: timeline.pending(), fetching: inFlight.size };
     },
@@ -503,6 +668,9 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     async dispose() {
       disposed = true;
       playing = false;
+      if (pending?.deadline) clearTimeout(pending.deadline);
+      pending = null;
+      audioByBuffer.clear();
       prepared.clear();
       const built = graph;
       graph = null;

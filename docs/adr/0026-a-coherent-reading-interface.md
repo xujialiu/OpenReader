@@ -156,3 +156,63 @@ labels. Visibility is local state, initially false and reset on navigation blur;
 it only changes secureTextEntry, never editability or credential persistence.
 All API-key providers share this behavior. Extra headers retain their existing
 masked field.
+
+## A shared draggable header replaces decorative grips
+
+`Sheet` owns the transparent Modal, backdrop, animated vertical offset and
+PanResponder for the handle/title region. The list and stepper do not claim that
+gesture, so scrolling and holding speed buttons retain their existing behaviour.
+Voice and Speed have no Done; Appearance retains its existing button. Voice
+selection no longer closes the sheet. `LoadingSpinner` supplies the same native
+ActivityIndicator to pending voice rows and the playback button.
+
+## Voice handover retains the source queue
+
+The previous identity cleanup disposed the engine on every Voice change. The
+new path defers document persistence until the native queue actually reaches
+the new voice. A pending selection lives separately from the active settings:
+the old row keeps its tick and the chosen row spins. Selecting the current voice
+cancels pending work; a generation guard discards superseded preparation and
+Keychain lookups. A failure restores any queued old tail and leaves the old
+voice selected. A paused selection still updates settings immediately without
+starting synthesis. Configuration changes and unmount still dispose the engine;
+an accepted live handover alone retains it. The cursor preservation of 0025 stays.
+
+The boundary matcher comes from the owner's Zotero-TTS code, including the
+captured Kokoro negative-onset fixture. It requires a shared, whole text-token
+boundary in both timing arrays and never equates playback seconds across voices.
+Missing timings, unsafe overlaps, partial tokens and absent remaining boundaries
+fall back to a prepared next Utterance. A switch prepares at most two Clips
+concurrently alongside the old read-ahead. Preparation has the existing 60-second
+synthesis timeout and a 120-second overall catch-up limit; an armed handover can
+remain paused indefinitely. All voice fetchers share the engine's bounded
+memory cache, whose key already contains Provider, Voice and text.
+
+Decoded audio is queued in frame-exact pieces at reported word ends. Native
+`dequeueBuffer` leaves the read index untouched when removing a non-front buffer;
+it resets the read index when removing the front. Consequently handover keeps
+the current piece plus a following safe boundary, removes only the later pieces,
+and appends the prepared new voice from its matching text offset. The native
+queue, rather than a JavaScript timer, executes that boundary. This trades more
+native buffer-end events for a handover that does not require stopping the
+current source or a second audio session. It does not add per-word WebView
+messages: a cue still travels only when the Utterance or voice changes, and
+position corrections remain once per second. Timeline entries retain the full
+Clip's timings, duration and piece offset; discarded audio does not advance the
+content anchor. A queued replacement can be disarmed by restoring its old tail.
+
+`onState` publishes only playing/buffering transitions. Buffering is requested
+playback with an empty native queue, including initial synthesis and later
+underruns. Pause changes playback intent and pauses the source; it does not
+abort requests, empty the queue, or discard arrived audio. The intent guard also
+covers asynchronous engine construction and walking past an empty cover.
+Arriving Clips while paused hold the renderer, and only another Play resumes it.
+The native source boundary, not a network response or decoded buffer, moves the
+voice spinner to a tick.
+
+The simulator evidence and fixture limitations are recorded in the engineering
+log at 2026-09-20 15:54. The deterministic provider supplies silent WAV data and
+real timing arrays through the normal provider path; the actual native graph,
+React state, persistence callback and renderer run. This proves transport and
+handover state, not the quality of a remote narrator's sound or a long-session
+drift bound.

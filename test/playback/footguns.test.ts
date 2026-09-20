@@ -253,7 +253,9 @@ describe('footgun 3 again: the engine says when the silence is permanent', () =>
     // `onBufferEnded` ends in `pump()`, and the last buffer ending is the moment
     // there is nothing left. Asking anywhere else would be asking before the queue
     // was empty or not at all.
-    expect(engine).toMatch(/function pump\(\): void \{[\s\S]*?void drain\(\);\s*outOfText\(\);\s*\}/);
+    const pump = engine.slice(engine.indexOf('function pump()'), engine.indexOf('function outOfText()'));
+    pin(pump, 'outOfText();', 'engine.ts, pump');
+    expect(pump.indexOf('void drain();')).toBeLessThan(pump.indexOf('outOfText();'));
     expect(engine).toMatch(/function onBufferEnded\([\s\S]*?pump\(\);\s*\}/);
   });
 
@@ -282,7 +284,7 @@ describe('footgun 3 again: the engine says when the silence is permanent', () =>
     pin(drain, 'lastRefusal = error;', 'engine.ts, drain');
     // Sliced to `restart` itself rather than through `member`, whose close marker is
     // an object member's and reaches to the end of the returned object.
-    const restart = engine.slice(engine.indexOf('function restart('), engine.indexOf('return {'));
+    const restart = engine.slice(engine.indexOf('function restart('), engine.indexOf('function cancelVoiceSwitch('));
     pin(restart, 'failed.clear();', 'engine.ts, restart');
     pin(restart, 'lastRefusal = null;', 'engine.ts, restart');
   });
