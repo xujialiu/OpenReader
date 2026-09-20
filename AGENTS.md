@@ -137,13 +137,17 @@ one day — each time because reality moved and the file that described it did
 not. Every one was fixed while the context was still in hand; none was left for
 a later sweep.
 
+# Waiting for delegated agents
+
+Until a delegated agent returns, the main agent must wait patiently for its completion notification or use a long blocking wait. Do not repeatedly check agent status, turn short wait timeouts into a polling loop, or send repeated waiting-only updates. An ordinary timeout is not a reason to inspect status or interrupt the agent; continue waiting for its result. Resume dependent work only after the result arrives or the owner changes the task.
+
 # Testing on the device
 
 ## Delegate final iOS verification
 
 After finishing app-code changes and local checks, the implementing agent must hand the final working tree to `ios-tester`. Its shared workflow is [.agents/ios-tester.md](.agents/ios-tester.md); `.codex/agents/ios-tester.toml` and `.claude/agents/ios-tester.md` reference that one source and define their respective model settings. Use the declared model and maximum effort; report an unavailable model rather than silently substituting another.
 
-Give the tester the issue/specification, changed interactions, verification already performed, simulator target and remaining risks. Keep app code stable during the run. The main agent must wait patiently for the tester's completion notification or use a blocking wait; do not repeatedly query its status or duplicate its simulator work. After a failure, fix the reported defect and hand the updated tree back for verification. Completion requires the tester's result and the latest-app delivery below; the tester itself does not recursively delegate this step.
+Give the tester the issue/specification, changed interactions, verification already performed, simulator target and remaining risks. Keep app code stable during the run and follow the delegated-agent waiting rule above; do not duplicate its simulator work. After a failure, fix the reported defect and hand the updated tree back for verification. Completion requires the tester's result and the latest-app delivery below; the tester itself does not recursively delegate this step.
 
 Before running or writing device/manual tests, read
 [`test/manual-test/README.md`](test/manual-test/README.md) and reuse its scripts.
