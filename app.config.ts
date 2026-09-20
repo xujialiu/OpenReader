@@ -99,6 +99,7 @@ const config: ExpoConfig = {
   },
 
   plugins: [
+    'expo-sqlite',
     /**
      * ADR 0018. Adopts the UIScene life cycle, without which iOS 27 kills the
      * app at launch before any JavaScript runs — every other entry in this list

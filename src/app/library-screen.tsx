@@ -40,7 +40,7 @@ import { PROVIDER_LABELS, readiness, readinessSentence } from './settings';
 import { useProviderKey } from './use-provider-secrets';
 import { ReaderActions } from './reader-actions';
 import { Icon } from './icon';
-import { formatBytes, occupied, removeDownloads } from '../offline/runtime';
+import { formatBytes, occupied, removeDownloads, requestInventory } from '../offline/runtime';
 
 /** How much of the last Utterance a row shows. Two lines of it at this size; more would push the next Document off the screen. */
 const QUOTATION = 90;
@@ -58,12 +58,12 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const [actions, setActions] = useState<LibraryEntry | null>(null);
   const menu = (entry: LibraryEntry) => Alert.alert(entry.title, undefined, [
     { text: 'Download', onPress: () => setActions(entry) },
-    { text: 'Remove from Library', style: 'destructive', onPress: () => Alert.alert('Remove from Library?',
+    { text: 'Remove from Library', style: 'destructive', onPress: () => { void requestInventory(entry.id).then(()=>Alert.alert('Remove from Library?',
       `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
         { text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => {
-          try { removeDownloads(entry.id); library.remove(entry.id); } catch (error) { library.report(String(error)); }
+          void removeDownloads(entry.id).then(()=>library.remove(entry.id),error=>library.report(String(error)));
         } },
-      ]) },
+      ]),error=>library.report(String(error))); } },
     { text: 'Cancel', style: 'cancel' },
   ]);
   const key = useProviderKey(settings.provider);

@@ -69,3 +69,9 @@ Removing a document from the library also removes its saved audio and stops its 
 ## Agreement and remaining validation
 
 The owner approved this interaction design on 2026-09-20. The system may stop preparation after allowing only a limited time in the background; completed work stays saved and preparation resumes when the app is opened again. A long document is not guaranteed to finish while the phone stays locked. The app must describe that interruption honestly.
+
+## Opening a document does not audit every possible download
+
+The owner approved maintaining saved-audio records as downloads finish and are removed. Opening a document and displaying download progress read those records, so a long document does not have to check every sentence before its reading page appears. Repeating a full check in the background was rejected because it would still do unnecessary work on every opening.
+
+For this unreleased development change, the owner explicitly chose to discard the existing offline downloads instead of carrying them forward. Documents, reading positions and credentials remain. Those old audio downloads must be prepared again. New downloads are retained across ordinary restarts and updates, and preparation alone does not count as downloaded audio. Completion is recorded only after the audio has been safely stored, and interrupted writes or deletions are reconciled without falsely showing a completed download.

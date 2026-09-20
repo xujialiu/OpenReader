@@ -7,11 +7,14 @@ import type { DocumentNavigation } from '../core/document/navigation';
 export interface Chapter {
   id: string; title: string; depth: number; parent: string | null; texts: string[];
   section?: number | null; fragment?: string;
-  /** Omitted in legacy fully prepared plans. False means text has not been read. */
+  /** False means text has not been read. */
   prepared?: boolean;
+  /** Metadata queries omit text. Only the scheduler loads a selected chapter. */
+  textCount?: number;
+  textsLoaded?: boolean;
 }
 export interface NarrationPlan {
-  version: 1 | 2; chapters: Chapter[];
+  version: 2; chapters: Chapter[];
   sections?: DocumentNavigation['sections']; preparedSections?: number[];
 }
 export interface OfflineVoice { provider: ProviderId; voice: string; label: string }
@@ -45,8 +48,9 @@ export function descendants(chapters: Chapter[], id: string): Chapter[] {
   const ids = new Set([id]);
   // The navigation is parent-before-child, including empty volume headings.
   for (const chapter of chapters) if (chapter.parent && ids.has(chapter.parent)) ids.add(chapter.id);
-  return chapters.filter((chapter) => ids.has(chapter.id) && (chapter.prepared === false || chapter.texts.length > 0));
+  return chapters.filter((chapter) => ids.has(chapter.id) && (chapter.prepared === false || chapterTextCount(chapter) > 0));
 }
+export const chapterTextCount=(chapter:Chapter)=>chapter.textCount??chapter.texts.length;
 
 export function navigationPlan(navigation: DocumentNavigation): NarrationPlan {
   const chapters: Chapter[] = navigation.chapters.map((chapter) => ({ ...chapter, texts: [], prepared: chapter.section === null }));
@@ -72,4 +76,4 @@ export function withPreparedSection(plan: NarrationPlan, section: number, prepar
   });
   return { ...plan, chapters, preparedSections: [...new Set([...(plan.preparedSections ?? []), section])].sort((a, b) => a - b) };
 }
-export const fullyPrepared = (plan: NarrationPlan) => plan.version === 1 || plan.preparedSections?.length === plan.sections?.length;
+export const fullyPrepared = (plan: NarrationPlan) => !!plan.sections && plan.preparedSections?.length === plan.sections.length;

@@ -38,7 +38,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { createLocator, readingPositionAt, type ReadingPosition } from '../core/document';
-import { hasSavedVoice, offlineProvider } from '../offline/runtime';
+import { hasSavedVoice, inventoryReady, offlineProvider } from '../offline/runtime';
 import type { ProviderId } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
 import { lockScreenPosition } from '../now-playing';
@@ -794,7 +794,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // state. Offline construction no longer awaits a credential lookup.
     await Promise.resolve();
     const ready = readiness(settings, hasKey);
-    if (!ready.ready && !hasSavedVoice(document, settings.provider, settings.voice)) {
+    if (!ready.ready && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
       setStatus((was) => ({ ...was, note: readinessSentence(settings.provider, ready.missing) }));
       return null;
     }
@@ -830,7 +830,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [settings, hasKey, clock, report, ranOutOfText, document]);
 
   const play = useCallback(() => {
-    if (!settings.enabledProviders.includes(settings.provider) && !hasSavedVoice(document, settings.provider, settings.voice)) {
+    if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
       playIntent.current = false;
       engineRef.current?.pause();
       setStatus((was) => ({ ...was, playing: false, note: readinessSentence(settings.provider, ['enabling']) }));

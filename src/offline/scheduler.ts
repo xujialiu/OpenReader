@@ -3,12 +3,13 @@ import type { Chapter, DownloadTask, NarrationPlan } from './model';
 
 export interface SchedulerDeps {
   tasks(): DownloadTask[];
-  plan(document: string): NarrationPlan | null;
-  changed(): void;
+  plan(document: string): NarrationPlan | null | Promise<NarrationPlan | null>;
+  changed(): void | Promise<void>;
   connected(): boolean;
   allowed(): boolean;
-  exists(task: DownloadTask, text: string): boolean;
-  fetch(task: DownloadTask, text: string): Promise<void>;
+  exists(task: DownloadTask, text: string): boolean | Promise<boolean>;
+  fetch(task: DownloadTask, text: string, chapter: string): Promise<void>;
+  load?(task: DownloadTask, chapter: Chapter): Promise<Chapter>;
   prepare?(task: DownloadTask, chapter: Chapter): Promise<Chapter>;
   wait(ms: number): Promise<void>;
 }
@@ -26,37 +27,43 @@ export function createScheduler(deps: SchedulerDeps) {
         if (!deps.allowed()) break;
         const task = deps.tasks().find((t) => t.state === 'queued');
         if (!task) break;
-        if (!deps.connected()) { task.state = 'waiting'; deps.changed(); continue; }
-        const plan = deps.plan(task.document);
-        if (!plan) { task.state = 'blocked'; task.error = 'Reopen Download to prepare the chapter list.'; deps.changed(); continue; }
-        task.state = 'downloading'; task.error = null; deps.changed();
+        if (!deps.connected()) { task.state = 'waiting'; await deps.changed(); continue; }
+        const plan = await deps.plan(task.document);
+        if (!deps.tasks().includes(task) || task.state !== 'queued') continue;
+        if (!deps.allowed()) break;
+        if (!plan) { task.state = 'blocked'; task.error = 'Reopen Download to prepare the chapter list.'; await deps.changed(); continue; }
+        task.state = 'downloading'; task.error = null; await deps.changed();
         for (const chapterId of [...task.chapters]) {
           if (!active(task)) break;
           if (!task.chapters.includes(chapterId)) continue;
-          let chapter = deps.plan(task.document)?.chapters.find((c) => c.id === chapterId);
+          let chapter = (await deps.plan(task.document))?.chapters.find((c) => c.id === chapterId);
+          if (!active(task)) break;
           if (!chapter) continue;
           try {
             if (chapter.prepared === false) {
               if (!deps.prepare) throw new Error('Chapter text is not prepared.');
-              task.state = 'preparing'; deps.changed();
+              task.state = 'preparing'; await deps.changed();
               chapter = await deps.prepare(task, chapter);
               if (!active(task)) break;
-              task.state = 'downloading'; deps.changed();
+              task.state = 'downloading'; await deps.changed();
               if (!task.chapters.includes(chapterId)) continue;
             }
+            if (deps.load) chapter = await deps.load(task, chapter);
+            if (!active(task) || !task.chapters.includes(chapterId)) break;
             for (const text of chapter.texts) {
               if (!active(task) || !task.chapters.includes(chapterId) || !deps.allowed()) break;
               if (!deps.connected()) { task.state = 'waiting'; task.error = 'No network connection, waiting to reconnect'; break; }
-              if (deps.exists(task, text)) continue;
+              if (await deps.exists(task, text)) continue;
+              if (!active(task) || !task.chapters.includes(chapterId) || !deps.allowed()) break;
               for (let attempt = 0; ; attempt++) {
-                try { await deps.fetch(task, text); break; }
+                try { await deps.fetch(task, text, chapterId); break; }
                 catch (error) {
                   if (!active(task) || !deps.connected() || !(error instanceof SynthesisError) || !error.retriable || attempt >= 2) throw error;
                   await deps.wait(1000 * (attempt + 1));
                   if (!active(task) || !task.chapters.includes(chapterId) || !deps.allowed()) break;
                 }
               }
-              deps.changed();
+              await deps.changed();
             }
           } catch (error) {
             if (!active(task)) break;
@@ -64,11 +71,11 @@ export function createScheduler(deps: SchedulerDeps) {
             if (!deps.connected()) { task.state = 'waiting'; task.error = 'No network connection, waiting to reconnect'; }
             else if (!(error instanceof SynthesisError) || ['auth', 'no-key', 'quota'].includes(error.kind)) task.state = 'blocked';
             else if (!task.failed.includes(chapterId)) task.failed.push(chapterId);
-            deps.changed();
+            await deps.changed();
           }
         }
         if (active(task)) task.state = deps.allowed() ? 'done' : 'interrupted';
-        deps.changed();
+        await deps.changed();
       }
     } finally { running = false; }
   }

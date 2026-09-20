@@ -131,7 +131,37 @@ above for that. Run `state` afterwards to verify the final paused state.
 
 ## Reader drawers and voice loading
 
+### Cold Library opening
+
+With the latest installed Debug app connected to Metro and the named Document
+already in Library:
+
+```sh
+bash test/manual-test/library-open.sh SIMULATOR_UDID /tmp/openreader-library-open-01 '仙逆'
+```
+
+This restarts the app to discard debugger overrides and in-memory caches,
+physically taps the named Library row, and requires the reading player within
+15 seconds. It captures the resulting UI and returns nonzero on failure. The
+threshold detects issue #7's blocked opening; passing does not prove that every
+chapter rendered. It never starts playback, modifies downloads, or supplies
+credentials. Normal opening may update the Library's last-opened timestamp.
+For comparison, run it with `A Short Test of Reading Aloud`. After a failed
+opening that leaves the app unresponsive, restart it with `xcrun simctl` to
+return to Library. Issue #7's original JSON plan was discarded with the owner's
+explicit approval. Verify this path with fresh SQLite data as well as a large
+prepared SQLite plan; a fresh empty store alone does not establish the absence
+of per-text work. The catalog tests also cover 131,686 prepared texts.
+
 ### Offline narration and reader actions
+
+Current offline data lives in `Documents/offline-narration-v2`, including
+`catalog.sqlite` and any SQLite WAL/SHM files. The unreleased JSON store was
+discarded with the owner's approval; do not restore pre-SQLite backups. Create
+fresh fixture downloads before testing persisted playback or management.
+Terminate the app before taking or restoring a complete offline-directory
+backup so an open database connection cannot keep writing to replaced files.
+After restoration, launch the app again before testing.
 
 With the current Debug app connected to Metro and the fixture Document `A Short Test of Reading Aloud` in the Library:
 
@@ -141,7 +171,7 @@ bash test/manual-test/offline.sh SIMULATOR_UDID /tmp/openreader-offline-inspect 
 
 This uses real XCTest touches to check the three-action drawer, font-size stepper, keyboard-visible rename/save and restoration of the fixture's original display name. It then checks persisted download completion, or selects chapters if the fixture has not yet been downloaded. It never presses Play. Review the exported screenshots as well as the assertions.
 
-To exercise management and deletion against an already completed fixture, use `management` instead of `inspect` after making a byte-for-byte backup of the simulator's `Documents/offline-narration` directory. The mode uses real XCTest touches to enter Manage downloads, select the first chapter, confirm Delete downloaded audio, and assert that only the second chapter remains with its measured saved size. Restore the backup before handing the simulator back; this mode does not prove deletion of a document from the library or playback of the remaining chapter.
+To exercise management and deletion against an already completed fixture, use `management` instead of `inspect` after making a complete backup of the stopped app's `Documents/offline-narration-v2` directory. The mode uses real XCTest touches to enter Manage downloads, select the first chapter, confirm Delete downloaded audio, and assert that only the second chapter remains with its measured saved size. Stop the app before restoring that same SQLite-format backup, then relaunch it before handing the simulator back; this mode does not prove deletion of a document from the library or playback of the remaining chapter.
 
 To verify display-name persistence across a cold app restart, use `alias` instead of `inspect`. The mode uses real Rename touches, terminates and relaunches OpenReader, checks the alias in Library and Reader, then restores the fixture's original name. It does not prove persistence across an OS reboot or a library file migration.
 

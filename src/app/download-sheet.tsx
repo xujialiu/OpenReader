@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { descendants, fullyPrepared, type OfflineVoice } from '../offline/model';
+import { chapterTextCount, descendants, fullyPrepared, type OfflineVoice } from '../offline/model';
 import * as downloads from '../offline/runtime';
 import { INK } from './controls';
 import { Icon } from './icon';
@@ -8,7 +8,7 @@ import { Icon } from './icon';
 export function DownloadContent({ document, title, voice, onVoice, onStart }: {
   document: string; title: string; voice: OfflineVoice; onVoice?(voice: OfflineVoice): void; onStart?(): void;
 }) {
-  const revision = downloads.useDownloads();
+  downloads.useDownloads();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [manage, setManage] = useState(false);
@@ -18,14 +18,15 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
   const plan = downloads.planOf(document);
   const task = downloads.downloadTasks(document).find((t) => downloads.sameVoice(t.voice, choice));
   const chapters = useMemo(() => plan?.chapters ?? [], [plan]);
-  const progress = useMemo(() => new Map(chapters.map((chapter) => {
-    const count = chapter.texts.filter((text) => downloads.savedSize(document, choice, text) !== null).length;
-    return [chapter.id, { count, complete: chapter.prepared !== false && chapter.texts.length > 0 && count === chapter.texts.length }];
-    // The revision includes stored clips; only the voice identity matters here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  })), [chapters, document, choice.provider, choice.voice, revision]);
+  useEffect(()=>{
+    const selectedVoice={provider:choice.provider,voice:choice.voice,label:choice.label};
+    if(plan)downloads.requestProgress(document,selectedVoice);
+    return ()=>downloads.releaseProgress(document,selectedVoice);
+  },[document,choice.provider,choice.voice,choice.label,plan]);
+  const progress=downloads.chapterProgress(document,choice);
+  const progressReady=!!plan && progress.size===chapters.length;
   const busy = (id: string) => !!task && ['preparing', 'downloading', 'queued', 'waiting'].includes(task.state) && task.chapters.includes(id) && !task.failed.includes(id);
-  const eligible = chapters.filter((c) => (c.prepared === false || c.texts.length > 0) && (manage ? (progress.get(c.id)?.count ?? 0) > 0 : !progress.get(c.id)?.complete && !busy(c.id)));
+  const eligible = chapters.filter((c) => (c.prepared === false || chapterTextCount(c) > 0) && (manage ? (progress.get(c.id)?.count ?? 0) > 0 : !progress.get(c.id)?.complete && !busy(c.id)));
   const eligibleIds = new Set(eligible.map((c) => c.id));
   const chosen = [...selected].filter((id) => eligibleIds.has(id));
   const toggle = (ids: string[]) => setSelected((was) => {
@@ -33,12 +34,12 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
     ids.forEach((id) => { if (remove) next.delete(id); else next.add(id); }); return next;
   });
   const visible = chapters.filter((chapter) => {
-    if (chapter.prepared !== false && !chapter.texts.length && !chapters.some((c) => c.parent === chapter.id)) return false;
+    if (chapter.prepared !== false && !chapterTextCount(chapter) && !chapters.some((c) => c.parent === chapter.id)) return false;
     let parent = chapter.parent;
     while (parent) { if (collapsed.has(parent)) return false; parent = chapters.find((c) => c.id === parent)?.parent ?? null; }
     return true;
   });
-  const full = chapters.filter((c) => c.prepared === false || c.texts.length > 0).length;
+  const full = chapters.filter((c) => c.prepared === false || chapterTextCount(c) > 0).length;
   const completed = [...progress.values()].filter((p) => p.complete).length;
   const whole = !!plan && fullyPrepared(plan) && full > 0 && completed === full;
   const state = downloads.indexingState(document);
@@ -47,8 +48,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
     try {
       if (manage) Alert.alert('Delete downloaded audio?', 'The document and reading position will be kept.', [
         { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => {
-          try { downloads.deleteDownloaded(document, choice, chosen); setSelected(new Set()); }
-          catch (e) { Alert.alert('Could not delete audio', String(e)); }
+          void downloads.deleteDownloaded(document, choice, chosen).then(()=>setSelected(new Set()),e=>Alert.alert('Could not delete audio',String(e)));
         } },
       ]);
       else { onStart?.(); downloads.enqueue(document, choice, chosen); setSelected(new Set()); }
@@ -65,6 +65,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
       {state?.state === 'failed' ? <Pressable onPress={() => downloads.requestPlan(document, title)}><Text style={styles.link}>Try again</Text></Pressable> : null}
     </View> : null}
     {downloads.downloadError() ? <Text style={styles.error}>{downloads.downloadError()}</Text> : null}
+    {plan && !progressReady ? <Text style={styles.secondary}>Checking saved downloads…</Text> : null}
     {plan ? <Text style={styles.secondary}>{manage ? `${downloads.formatBytes(downloads.occupied(document, choice))} saved` :
       whole ? 'Whole document downloaded' : `${completed} chapters downloaded`}</Text> : null}
     {task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length && whole) ? <View style={styles.top}>
@@ -93,7 +94,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
             accessibilityState={{ checked: picked, disabled: !ids.length }} disabled={!ids.length} onPress={() => toggle(ids)} style={styles.chapter}>
             <View style={{ flex: 1 }}><Text style={[styles.title, children && { fontWeight: '600' }]} numberOfLines={2}>{item.title || 'Untitled chapter'}</Text>
               {!done && (busy(item.id) || count || task?.failed.includes(item.id)) ? <Text style={styles.secondary}>
-                {task?.failed.includes(item.id) ? 'Failed · ' : ''}{item.prepared === false ? 'Waiting for preparation' : `${count} / ${item.texts.length}`}
+                {task?.failed.includes(item.id) ? 'Failed · ' : ''}{item.prepared === false ? 'Waiting for preparation' : `${count} / ${chapterTextCount(item)}`}
               </Text> : null}</View>
             {done && !manage ? <View style={styles.downloaded}><Icon name="check" color={INK.reading} size={19} /><Text style={styles.small}>Downloaded</Text></View> :
               <View style={[styles.circle, picked && styles.checked]}>{picked ? <Icon name="check" color={INK.page} size={17} /> : null}</View>}
@@ -106,7 +107,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
       <Pressable accessibilityRole="button" onPress={() => { setSelected(new Set()); setManage(!manage); setManagedVoice(null); }}><Text style={styles.link}>{manage ? 'Back to downloads' : 'Manage downloads'}</Text></Pressable>
       {!manage ? <Text style={styles.small}>Generating audio may incur speech service charges.</Text> : null}
       <Pressable accessibilityRole="button" accessibilityLabel={manage ? `Delete selected (${chosen.length})` : `Download selected (${chosen.length})`}
-        disabled={!chosen.length || !choice.voice || !!downloads.downloadError()} onPress={act}
+        disabled={!progressReady || !downloads.downloadsReady() || !chosen.length || !choice.voice || !!downloads.downloadError()} onPress={act}
         style={[styles.button, (!chosen.length || !choice.voice) && { opacity: 0.35 }]}>
         <Text style={styles.buttonText}>{manage ? 'Delete selected' : 'Download selected'} ({chosen.length})</Text>
       </Pressable>

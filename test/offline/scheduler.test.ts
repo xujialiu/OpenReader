@@ -4,7 +4,7 @@ import { navigationPlan, withPreparedSection, type DownloadTask, type NarrationP
 import { SynthesisError } from '../../src/core/providers/errors';
 
 function fixture() {
-  const plan: NarrationPlan = { version: 1, chapters: [
+  const plan: NarrationPlan = { version: 2, chapters: [
     { id: 'a', title: 'A', depth: 0, parent: null, texts: ['One.', 'Two.'] },
     { id: 'b', title: 'B', depth: 0, parent: null, texts: ['Three.'] },
   ] };
@@ -19,6 +19,18 @@ function fixture() {
   return { tasks, stored, fetch, env, scheduler };
 }
 describe('durable download scheduling', () => {
+  it('loads only selected chapter text and awaits durable state before requesting audio', async () => {
+    const task:DownloadTask={id:'t',document:'book',voice:{provider:'fish',voice:'A',label:'A'},chapters:['late'],state:'queued',error:null,failed:[]};
+    const events:string[]=[];
+    const scheduler=createScheduler({tasks:()=>[task],plan:async()=>({version:2,chapters:[
+      {id:'early',title:'Early',depth:0,parent:null,texts:[],textCount:500,textsLoaded:false},
+      {id:'late',title:'Late',depth:0,parent:null,texts:[],textCount:1,textsLoaded:false},
+    ]}),connected:()=>true,allowed:()=>true,changed:async()=>{events.push(`saved ${task.state}`);},
+    load:async(_,chapter)=>{events.push(`load ${chapter.id}`);return {...chapter,texts:['Late audio'],textsLoaded:true};},
+    exists:async()=>false,fetch:async(_,text)=>{events.push(text);},wait:async()=>{},});
+    await scheduler.run();
+    expect(events).toEqual(['saved downloading','load late','Late audio','saved downloading','saved done']);
+  });
   it('reuses completed audio, in order, without overlapping workers', async () => {
     const f = fixture(); f.stored.add('One.');
     await Promise.all([f.scheduler.run(), f.scheduler.run()]);
