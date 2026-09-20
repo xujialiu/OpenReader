@@ -117,26 +117,34 @@ export const DEFAULT_HIGHLIGHT: HighlightStyles = {
  * glyphs for it. `Georgia, serif` lays Latin out in Georgia and Chinese out in
  * the system's own serif CJK face, in the same paragraph.
  *
- * This list used to hold three categories — System, Serif, Sans-serif — and to
- * name no CJK face at all, on the reasoning that the fall-through already gave a
- * Chinese book the right *kind* of face. ADR 0029 keeps the fall-through and
- * drops the prohibition, because the two are not the same claim: the danger was
- * ever a stack with **no** generic behind it, and `Songti SC, serif` has one.
- * What the old list could not do was let an owner reading Chinese pick a
- * particular Chinese face, which on a Chinese novel is the whole of the setting.
+ * This list used to hold three categories — System, Serif, Sans-serif. ADR 0029
+ * names faces instead, so that an owner choosing one is told which face they
+ * got.
+ *
+ * **It names no CJK face, and that is a measurement rather than a rule.** The
+ * list briefly held 苹方, 宋体, 楷体 and 圆体, because naming a CJK face is safe
+ * as long as a generic is behind it — `"Songti SC", serif` wins where it has
+ * glyphs and falls through everywhere else. That reasoning still holds. What
+ * does not is the assumption that those faces exist: on the iOS 27.0 simulator
+ * runtime `UIFont.familyNames` contains **only PingFang** of the four, so three
+ * of the rows rendered identically to the system font and changed nothing.
+ * A row that does nothing is worse than no row, so they came out. See ADR 0029
+ * for what would have to be true to put them back.
+ *
+ * A Chinese book still gets both kinds through the generics: Georgia, Times and
+ * Palatino give it a serif CJK face, Avenir and Helvetica a modern one. That is
+ * what the three categories gave it, unchanged.
  *
  * `serif` and `sans` are gone as ids. `settings-storage.ts` migrates them to
  * `georgia` and `helvetica`, which are the faces those stacks already named
  * first, so an owner's existing choice keeps rendering exactly as it did.
  *
  * `preview` is the same face named for React Native rather than for CSS, so the
- * Appearance list can set each row in the font it offers. For the Latin faces it
- * is a **sample and not a promise** — what a document gets for any other script
- * is decided by the fall-through, so Georgia and Palatino preview differently
- * and still lay a Chinese book out identically. For the four CJK faces the
- * preview *is* the promise, which is why their labels are their own names in
- * their own script: 宋体 set in Songti is the demonstration. `null` is the
- * interface font, which is what `system` means on this platform.
+ * Appearance list can set each row in the font it offers. It is a **sample and
+ * not a promise**: what a document gets for any other script is decided by the
+ * fall-through, so Georgia and Palatino preview differently and still lay a
+ * Chinese book out identically. `null` is the interface font, which is what
+ * `system` means on this platform.
  */
 export const READING_FONTS = [
   { id: 'system', label: 'System', stack: '-apple-system, system-ui, sans-serif', preview: null },
@@ -145,10 +153,6 @@ export const READING_FONTS = [
   { id: 'palatino', label: 'Palatino', stack: 'Palatino, serif', preview: 'Palatino' },
   { id: 'avenir', label: 'Avenir Next', stack: '"Avenir Next", sans-serif', preview: 'Avenir Next' },
   { id: 'helvetica', label: 'Helvetica', stack: 'Helvetica, sans-serif', preview: 'Helvetica' },
-  { id: 'pingfang', label: '苹方', stack: '"PingFang SC", sans-serif', preview: 'PingFang SC' },
-  { id: 'songti', label: '宋体', stack: '"Songti SC", serif', preview: 'Songti SC' },
-  { id: 'kaiti', label: '楷体', stack: '"Kaiti SC", serif', preview: 'Kaiti SC' },
-  { id: 'yuanti', label: '圆体', stack: '"Yuanti SC", sans-serif', preview: 'Yuanti SC' },
 ] as const;
 
 /** One of `READING_FONTS`. Not a free string: see that list. */

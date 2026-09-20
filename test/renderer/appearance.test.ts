@@ -117,16 +117,20 @@ describe('Appearance as a stylesheet', () => {
     }
   });
 
-  it('offers a face for Chinese as well as for Latin, each with its generic behind it', () => {
-    const cjk = READING_FONTS.filter((font) => /PingFang|Songti|Kaiti|Yuanti/.test(font.stack));
-    expect(cjk.length).toBeGreaterThan(0);
-    for (const font of cjk) {
-      // Named first so it wins where it has glyphs, generic last so the book is
-      // never laid out in nothing.
-      expect(font.stack).toMatch(/^"[A-Za-z ]+ SC", (serif|sans-serif)$/);
-      // Its own name in its own script, because the row is set in the font it
-      // offers and that is what makes the list answer its own question.
-      expect(font.label).toMatch(/^[一-鿿]+$/);
+  it('offers both kinds of CJK face through the generics, without naming one', () => {
+    // The list named 苹方, 宋体, 楷体 and 圆体 for one commit. Three of the four
+    // are absent from `UIFont.familyNames` on the iOS 27.0 simulator runtime, so
+    // those rows rendered as the system font and changed nothing (ADR 0029).
+    //
+    // Nothing is lost by their absence, and this is what says so: a Chinese book
+    // still reaches a serif CJK face and a modern one, through the generic at
+    // the end of a Latin stack, which is exactly what the three categories that
+    // preceded this list gave it.
+    const ends = new Set(READING_FONTS.map((font) => font.stack.split(', ').at(-1)));
+    expect(ends).toContain('serif');
+    expect(ends).toContain('sans-serif');
+    for (const font of READING_FONTS) {
+      expect(font.label).not.toMatch(/[一-鿿]/);
     }
   });
 });

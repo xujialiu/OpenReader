@@ -7,9 +7,10 @@ status: proposed
 _The product argument — what the owner sees and what it costs — is
 `docs/design/0021-changing-how-the-page-looks.md`._
 
-**ADR 0029 revises the font list below.** It is ten faces now rather than three
-kinds, a stack may name a CJK face, and `serif` and `sans` are retired ids that
-`settings-storage.ts` migrates. Everything else here stands.
+**ADR 0029 revises the font list below.** It is six named faces now rather than
+three kinds, and `serif` and `sans` are retired ids that `settings-storage.ts`
+migrates. The prohibition on naming a CJK face is lifted, though no entry uses
+that yet. Everything else here stands.
 
 ADR 0019 decided that Appearance is a **sheet over the reader** and not a route,
 and left what it holds to this one. It holds two rows, a font and a size, and
