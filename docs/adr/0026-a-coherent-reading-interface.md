@@ -113,3 +113,35 @@ enablement. Credential revision counters are per provider. Editing a disabled
 provider therefore cannot dispose another provider's live engine. A generation
 guard also discards an engine build whose credentials finish loading after its
 provider was disabled.
+
+
+## Follow-up provider control review
+
+The owner revised the switch placement to detail-only. Provider rows show names
+and a read-only enabled check mark, with neither enable controls nor errors.
+Errors remain in the provider detail screen. Remove the detail-header and
+API-key help buttons and the separate Remove action. Fish source choices become
+native switches, and switch rows need verified vertical centring.
+
+An enabled provider locks every configuration field and source switch. Its
+enable control remains operable so it can be disabled. The locked-state hint is
+"Disable to edit." Credentials must be editable as actual masked field contents
+while disabled, so manual deletion clears the Keychain entry; the existing empty
+input plus bullet placeholder cannot support that interaction. Credentials stay
+out of ordinary settings, logs and commits. Autosave and test-before-enable
+semantics remain unchanged. The owner confirmed and authorised this revision.
+
+`ProvidersScreen` now reads enabled ids directly and renders a check mark; it
+neither mounts a connection controller nor displays its error state. The detail
+screen owns the sole Enable switch. `useSecretInput` reads only that screen's
+credential into its secure field, without triggering a write during hydration.
+Initial reads block editing until complete; failed reads cannot overwrite an
+unread credential. Clearing invokes the existing queued Keychain deletion.
+The editor is keyed by provider and credential kind; late reads after unmount
+are ignored. This revises the previous presence-only UI rule while retaining
+credential separation from ordinary settings and all persistence formats.
+
+The installed React Native iOS Switch composes `alignSelf: 'flex-start'` into its
+style. It overrides a parent's `alignItems: 'center'`, which caused the reported
+vertical offset. Both enablement and source switches explicitly set
+`alignSelf: 'center'`. No guessed translation or native-size override is needed.

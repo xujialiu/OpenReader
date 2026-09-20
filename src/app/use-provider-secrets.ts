@@ -13,9 +13,9 @@
  * with the screen locked, and both are removed only by asking. So there is one
  * hook body and two names for it, rather than two hooks that could drift.
  *
- * A secret's value never reaches React state. It is read at the moment a
- * Provider is built (`use-reading.ts`) and handed over as a setting; what the UI
- * holds is whether there is one.
+ * Readers hold only presence and read values when building a Provider.
+ * The provider detail screen also reads its own credential into a mounted,
+ * secure input so it can be edited or cleared (ADR 0026).
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -59,8 +59,8 @@ export interface ProviderSecret {
   /**
    * Do something that needs it, with it.
    *
-   * It is handed to a callback rather than returned so that a caller cannot keep
-   * it: the value belongs in `providerSettings` and nowhere else (ADR 0002).
+   * Readers hand the value straight to `providerSettings`. The sole UI holder
+   * is the mounted secure credential editor (ADR 0026).
    * A Provider with none is called with the empty string, which is what its own
    * `keyRequired` — or, for headers, the gateway's own answer — is there to
    * judge.

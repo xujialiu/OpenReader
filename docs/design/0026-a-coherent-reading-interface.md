@@ -81,11 +81,11 @@ The owner approved this arrangement and interaction after the interview.
 ## Provider settings separate availability from voice selection
 
 The owner finds provider settings too wordy and their organisation confusing.
-Keep a list of names with enable switches, with each provider's configuration on
-its own detail page. Putting every form on one page was rejected because the
+Keep a list of names with enabled-status marks, with each provider's configuration
+and enable switch on its own detail page. Putting every form on one page was rejected because the
 phone would make the owner scroll through unrelated settings. Detail pages keep
-fields, a connection test and actionable errors; optional explanations open from
-a help control instead of occupying the page throughout setup.
+fields, a connection test and actionable errors. The later review below removes
+help controls that supplied no useful information.
 
 Enabling first tests the connection and succeeds only when that test succeeds.
 Testing alone does not enable. Several providers can be enabled together, and
@@ -126,3 +126,28 @@ Fish Audio offers three independent voice sources: Official voices, Your voices
 and Manual voices. Only Official voices starts selected. Manual voices reveals
 a field for the voices the owner supplies. These follow the same editing lock as
 the rest of the provider configuration.
+
+
+## One enable switch per provider
+
+After inspecting the implemented screens, the owner rejected having the same
+enable switch in both the list and the detail page. Keep the switch in the
+detail page only. The list shows the provider's name and a check mark when it is
+enabled; it cannot change availability and shows no errors. This costs opening
+a provider to enable or disable it, in exchange for keeping the action beside
+the configuration it controls. Keeping the switch only in the list was considered
+and then rejected during the review.
+
+Remove the general help button in the detail header and the help button beside
+the credential field: the owner found neither useful. Remove the separate
+Remove action. Saved credentials behave like password fields: their contents
+are masked, and while disabled the owner can replace or manually clear them.
+Clearing removes the saved credential. Edits continue to save automatically.
+
+Voice sources use the same style of switches as provider enablement rather
+than checkboxes. Only Official voices is initially on. All configuration fields
+and source switches are read-only while enabled; the enable switch itself must
+remain usable to disable the provider. Show only the short instruction
+"Disable to edit." while locked. Centre switches vertically beside their labels.
+The owner confirmed this revised arrangement. It is implemented, with existing
+settings and credentials retained across ordinary app updates.
