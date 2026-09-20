@@ -237,9 +237,25 @@ Explicit single-language regional metadata retains precedence; a single
 non-English language is not regrouped from its title.
 
 The paused-seek regression added for #2 samples the actual WebView highlight
-across background receipt, current/next sentence taps and Play. The latest
-bundle's existing intent guard passes those cases; the original reported
-animation has not been reproduced, so no additional playback mechanism was
-introduced. Measurements and the diagnostic-receiver limitation are recorded
-in the engineering log at 2026-09-20 16:37. Text taps continue to select an
-Utterance start, not a word offset.
+across background receipt, current/next sentence taps and Play. The reported
+animation is the clock before commit 63c8591 (2026-09-20 16:16:40 +0800):
+`use-reading.ts` forwarded every cue and every position correction to the
+WebView unconditionally, and only `pause()` itself sent `hold`. The engine
+cues the first Clip after a `seek` from `enqueue` whether or not it is playing
+(`cued === null`), so a paused tap on the current or next sentence delivered a
+`speak` with Word Timings once the re-fetched Clip was enqueued, and
+`highlighter.ts` ran its `requestAnimationFrame` loop against a paused source
+to the end of the sentence. The next Play resumed the source at offset zero and
+the first once-a-second correction pulled the highlight back to the first word,
+which is the report verbatim; the same path fired without a tap when the first
+Clip arrived while paused. That commit's intent guard — `hold` after a cue
+while paused, corrections dropped while paused — closed the path eleven minutes
+before the issue was filed at 16:27:48 +0800, so the report describes the build
+before it and no further playback mechanism was introduced. The guarded bundle
+passes the regression mode (zero word ranges across 600 ms for both sentences,
+Play at each first word), and the negative control with `hold` disabled
+reproduced the motion (`The` to `speaks` in 600 ms), which is that clock's cue
+path. Measurements and the diagnostic-receiver limitation are recorded in the
+engineering log at 2026-09-20 16:37, 16:38 and 22:41. Text taps continue to
+select an Utterance start, not a word offset. A Release build installed on a
+physical iPhone before that commit keeps the animation until it is reinstalled.
