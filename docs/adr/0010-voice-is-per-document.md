@@ -4,6 +4,10 @@ status: accepted
 
 # A voice belongs to a document, with a global default
 
+The provider configuration UI, player eligibility and new-document voice default
+are revised by [ADR 0026](0026-a-coherent-reading-interface.md). Historical
+measurements below are retained unchanged.
+
 Each document remembers the voice it is read in. A document opened for the first
 time inherits whatever the global default is at that moment, and from then on it
 keeps its own — changing the global default does not change a document already

@@ -17,7 +17,7 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { DynamicColorIOS, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, DynamicColorIOS, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { Icon, type IconName } from './icon';
 
@@ -168,6 +168,8 @@ export function Field({
   onChangeText,
   placeholder,
   hint,
+  help,
+  editable = true,
   secure,
   keyboard,
   lines,
@@ -177,6 +179,8 @@ export function Field({
   onChangeText(next: string): void;
   placeholder?: string;
   hint?: ReactNode;
+  help?: string;
+  editable?: boolean;
   secure?: boolean;
   keyboard?: 'url';
   /**
@@ -194,9 +198,14 @@ export function Field({
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.fieldHead}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        {help ? <HeaderButton title="?" label={`${label} help`} onPress={() => Alert.alert(label, help)} /> : null}
+      </View>
       <TextInput
         style={[styles.input, lines ? { height: 22 * lines + 20, textAlignVertical: 'top' } : null]}
+        accessibilityLabel={label}
+        editable={editable}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -313,6 +322,7 @@ const styles = StyleSheet.create({
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   disabled: { opacity: 0.4 },
   field: { gap: 6 },
+  fieldHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   fieldLabel: { color: INK.text, fontSize: 14, fontWeight: '600' },
   hint: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
   input: {

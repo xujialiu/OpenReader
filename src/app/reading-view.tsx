@@ -503,10 +503,10 @@ export function ReadingView({
         playing={status.playing}
         collapsed={collapsed}
         onCollapsed={setCollapsed}
-        enabled={ready.ready || status.playing}
+        enabled={ready.ready || status.playing || !settings.enabledProviders.includes(settings.provider) || !settings.voice.trim()}
         voiceInUse={voiceInUse}
         notes={notes}
-        onPlay={reading.play}
+        onPlay={() => { if (!settings.enabledProviders.includes(settings.provider) || !settings.voice.trim()) setVoicesOpen(true); else reading.play(); }}
         onPause={pause}
         onSkip={reading.skip}
         onRate={onRate}

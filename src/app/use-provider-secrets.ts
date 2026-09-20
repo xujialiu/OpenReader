@@ -144,7 +144,7 @@ function useProviderSecret(provider: ProviderId, store: SecretStore): ProviderSe
     async (secret: string) => {
       const change = await store.save(provider, secret.trim());
       setAnswered({ provider, presence: await look() });
-      noteSecretWritten();
+      noteSecretWritten(provider);
       return change.outcome === 'done' ? null : change.refusal.message;
     },
     [provider, look, store, noteSecretWritten],
@@ -153,7 +153,7 @@ function useProviderSecret(provider: ProviderId, store: SecretStore): ProviderSe
   const forget = useCallback(async () => {
     const change = await store.forget(provider);
     setAnswered({ provider, presence: await look() });
-    noteSecretWritten();
+    noteSecretWritten(provider);
     return change.outcome === 'done' ? null : change.refusal.message;
   }, [provider, look, store, noteSecretWritten]);
 

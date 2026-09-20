@@ -153,3 +153,17 @@ xcrun simctl launch SIMULATOR_UDID top.xujialiu.openreader
 如果自动化窗口仍不可用，继续排查窗口、权限和会话状态；如用调试处理器完成
 交互验证，要明确其覆盖范围，移除临时调试代码，再确认最终工作区代码已加载。
 真正的外部阻塞必须明确报告，未完成的模拟器交付不能写成完成。
+
+
+### 已遇到：DeviceHub 启动器没有带出窗口
+
+2026-09-20，桌面未锁定，已有 DeviceHub 进程，但打开应用包后仍没有可发现的窗口。
+直接启动包内真正的可执行文件后，窗口和模拟器的辅助功能控件树出现：
+
+```bash
+/Applications/Xcode-27.0.0.app/Contents/Applications/DeviceHub.app/Contents/MacOS/DeviceHub \
+  > /tmp/openreader-devicehub.log 2>&1
+```
+
+本次通过辅助功能操作并读回了启用开关、只读字段和声音来源；坐标输入仍报告
+窗口没有焦点。不要把辅助功能操作的成功写成坐标触摸测试通过。

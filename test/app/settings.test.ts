@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   andList,
-  configuredProviders,
+  enabledProviders,
+  recentEnabledVoice,
+  selectVoice,
   DEFAULT_SETTINGS,
   headersAreOffered,
   isProviderId,
@@ -13,7 +15,6 @@ import {
   engineIdentity,
   keyIsOffered,
   keyIsRequired,
-  missingBeforeVoice,
   PROVIDER_ORDER,
   resolveTheme,
   settingsForDocument,
@@ -35,11 +36,11 @@ import { createProvider } from '../../src/core/providers/factory';
  * ADR 0002's "a key arrives as a setting" is a claim about this one function.
  */
 
-const settingsWith = (change: Partial<AppSettings>): AppSettings => ({ ...DEFAULT_SETTINGS, ...change });
+const settingsWith = (change: Partial<AppSettings>): AppSettings => ({ ...DEFAULT_SETTINGS, enabledProviders: [...PROVIDER_ORDER], ...change });
 
 describe('readiness', () => {
   it('refuses to claim OpenAI can speak with no key, no model and no Voice', () => {
-    const found = readiness(DEFAULT_SETTINGS, false);
+    const found = readiness(settingsWith({}), false);
     expect(found).toEqual({ ready: false, missing: ['an API key', 'a model', 'a Voice'] });
   });
 
@@ -166,74 +167,39 @@ describe('what the owner is offered', () => {
 
 });
 
-/**
- * The Voice list of ADR 0020 shows **only the Providers the owner has set up**, and
- * it is the list a Voice is chosen from — so the Voice cannot be one of the things
- * it asks for, and everything else has to be.
- *
- * The greyed-out alternative was turned down by the owner and the cost is in
- * `docs/design/0020`; what is checked here is the rule that replaced it, which is
- * that a Provider appears exactly when it could be read with once a Voice is
- * picked. A Provider that could list its voices but not speak with them would be a
- * trap: the picker offers it, the owner picks, and Play stops on a missing model.
- */
-describe('which Providers a Voice can be chosen from', () => {
-  /**
-   * Nothing typed anywhere, including the address the app ships with — see the last
-   * assertion, which is what that default costs.
-   */
-  const nothingSet: AppSettings = {
-    ...DEFAULT_SETTINGS,
-    voice: '',
-    openai: { model: '' },
-    compatible: { baseURL: '', model: '' },
-    local: { ...DEFAULT_SETTINGS.local, baseURL: '' },
-  };
-  const none = () => false;
-  const all = () => true;
-
-  it('leaves the Voice out of what a Provider is asked for, and nothing else', () => {
-    const withModel: AppSettings = { ...nothingSet, openai: { model: 'gpt-4o-mini-tts' } };
-    expect(missingBeforeVoice(withModel, 'openai-official', true)).toEqual([]);
-    expect(readiness({ ...withModel, provider: 'openai-official' }, true)).toEqual({ ready: false, missing: ['a Voice'] });
-    expect(missingBeforeVoice(withModel, 'openai-official', false)).toEqual(['an API key']);
+describe('explicit provider enablement', () => {
+  it('offers nothing on first run, even with the prefilled local address', () => {
+    expect(enabledProviders(DEFAULT_SETTINGS)).toEqual([]);
+    expect(readiness(DEFAULT_SETTINGS, true)).toEqual({ ready: false, missing: ['enabling'] });
   });
-
-  it('lists nothing at all when no key is saved and no address is typed', () => {
-    expect(configuredProviders(nothingSet, none)).toEqual([]);
+  it('offers only enabled providers, in display order', () => {
+    expect(enabledProviders({ ...DEFAULT_SETTINGS, enabledProviders: ['local', 'fish'] })).toEqual(['fish', 'local']);
   });
-
-  it('lists a hosted service as soon as its key is there, and a server of your own only once it has an address', () => {
-    expect(configuredProviders(nothingSet, all)).toEqual(['speechify', 'fish']);
-    const local: AppSettings = { ...nothingSet, local: { ...nothingSet.local, baseURL: 'http://127.0.0.1:8880' } };
-    expect(configuredProviders(local, none)).toEqual(['local']);
+  it('invalidates the active engine on disable, without losing the document voice', () => {
+    const settings = settingsWith({ provider: 'fish', voice: 'voice' });
+    const disabled = { ...settings, enabledProviders: [] };
+    expect(engineIdentity(disabled)).not.toBe(engineIdentity(settings));
+    expect(settingsForDocument(disabled, { provider: 'fish', voice: 'voice' }).voice).toBe('voice');
+    expect(readiness(disabled, true).ready).toBe(false);
   });
-
-  it('keeps a key-holding Provider out of the list while the thing it also needs is missing', () => {
-    // OpenAI can list its voices with nothing but a key (ADR 0020 measured the 401),
-    // and is still not offered: choosing one of those voices would leave the reading
-    // stopped on "OpenAI needs a model".
-    expect(configuredProviders(nothingSet, (provider) => provider === 'openai-official')).toEqual([]);
-    const model: AppSettings = { ...nothingSet, openai: { model: 'gpt-4o-mini-tts' } };
-    expect(configuredProviders(model, (provider) => provider === 'openai-official')).toEqual(['openai-official']);
+  it('does not interrupt the active engine when another provider is disabled', () => {
+    const settings = settingsWith({ provider: 'fish', voice: 'voice' });
+    expect(engineIdentity({ ...settings, enabledProviders: ['fish'] })).toBe(engineIdentity(settings));
+    expect(engineIdentity({ ...settings, local: { ...settings.local, baseURL: 'https://changed.example' } })).toBe(engineIdentity(settings));
   });
-
-  it('offers a server of your own out of the box, because the app ships with its address', () => {
-    // Not an accident to be tidied: `DEFAULT_SETTINGS.local.baseURL` is the local
-    // engine's own default, so the one Provider needing no credential is the one
-    // offered on a first run — and tapping it says what the server said, which is
-    // the honest outcome when there is no server there.
-    expect(configuredProviders({ ...DEFAULT_SETTINGS, voice: '' }, none)).toEqual(['local']);
+  it('finds the latest still-enabled voice for new documents and rejects disabled selections', () => {
+    const first = selectVoice(settingsWith({}), 'fish', 'one');
+    const second = selectVoice(first, 'local', 'two');
+    const disabled = { ...second, enabledProviders: ['fish'] as const };
+    expect(recentEnabledVoice(disabled)).toEqual({ provider: 'fish', voice: 'one' });
+    expect(settingsForDocument(disabled, null)).toMatchObject({ provider: 'fish', voice: 'one' });
+    expect(selectVoice(disabled, 'local', 'three')).toBe(disabled);
+    expect(recentEnabledVoice({ ...disabled, enabledProviders: [] })).toBeNull();
   });
-
-  it('keeps the list in the order the Providers are offered in', () => {
-    const everything: AppSettings = {
-      ...nothingSet,
-      openai: { model: 'a' },
-      compatible: { baseURL: 'https://example.invalid', model: 'a' },
-      local: { ...nothingSet.local, baseURL: 'http://127.0.0.1:8880' },
-    };
-    expect(configuredProviders(everything, all)).toEqual([...PROVIDER_ORDER]);
+  it('only includes official Fish voices by default and forwards changes', () => {
+    expect(providerSettings(DEFAULT_SETTINGS, { key: '', headers: '' }).fish).toMatchObject({ includeOfficial: true, includeOwn: false, includeManual: false });
+    const settings = { ...DEFAULT_SETTINGS, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'abc' } };
+    expect(providerSettings(settings, { key: '', headers: '' }).fish).toMatchObject(settings.fish);
   });
 });
 
@@ -415,7 +381,7 @@ describe('the theme (ADR 0022)', () => {
  * read with, and what is said about one this build cannot honour.
  */
 describe('settingsForDocument', () => {
-  const chosen = settingsWith({ provider: 'openai-official', voice: 'alloy', openai: { model: 'tts-1' } });
+  const chosen = selectVoice(settingsWith({ openai: { model: 'tts-1' } }), 'openai-official', 'alloy');
 
   it('reads a Document in the Voice it remembers, not the global default', () => {
     const forDocument = settingsForDocument(chosen, { provider: 'fish', voice: 'zh/74c6aba5' });
@@ -434,7 +400,7 @@ describe('settingsForDocument', () => {
   it('is the global default for a Document that remembers nothing', () => {
     // Which is what "opening one for the first time gives it whatever the default is
     // at that moment" needs: until it is written down, the default *is* the answer.
-    expect(settingsForDocument(chosen, null)).toBe(chosen);
+    expect(settingsForDocument(chosen, null)).toEqual(chosen);
   });
 
   it('is a different engine, which is what makes the two books not disturb each other', () => {
@@ -451,8 +417,8 @@ describe('settingsForDocument', () => {
     // wrote it; `core/document/library.ts` carries the pair as written for exactly
     // this reason. Losing a place because a Voice named something unfamiliar would be
     // the worst possible trade.
-    expect(settingsForDocument(chosen, { provider: 'elevenlabs', voice: 'rachel' })).toBe(chosen);
-    expect(settingsForDocument(chosen, { provider: 'fish', voice: '   ' })).toBe(chosen);
+    expect(settingsForDocument(chosen, { provider: 'elevenlabs', voice: 'rachel' })).toEqual(chosen);
+    expect(settingsForDocument(chosen, { provider: 'fish', voice: '   ' })).toEqual(chosen);
   });
 
   it('says so, in a sentence, rather than reading the book in a stranger in silence', () => {

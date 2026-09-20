@@ -76,3 +76,53 @@ the drawer or Done closes it without undoing the chosen speed. This follows the
 other drawers rather than introducing a separate confirmation step.
 
 The owner approved this arrangement and interaction after the interview.
+
+
+## Provider settings separate availability from voice selection
+
+The owner finds provider settings too wordy and their organisation confusing.
+Keep a list of names with enable switches, with each provider's configuration on
+its own detail page. Putting every form on one page was rejected because the
+phone would make the owner scroll through unrelated settings. Detail pages keep
+fields, a connection test and actionable errors; optional explanations open from
+a help control instead of occupying the page throughout setup.
+
+Enabling first tests the connection and succeeds only when that test succeeds.
+Testing alone does not enable. Several providers can be enabled together, and
+only enabled providers appear among the player's choices. Configuration alone
+must not make a provider available there. This costs a successful connection at
+enablement in exchange for a list the owner has deliberately made available.
+Enabling does not change who reads the current document.
+
+Use each provider's recognisable name rather than a generic description of
+server ownership. Configuration pages no longer choose voices: the player is
+where the owner chooses a document's voice.
+
+An enabled provider's configuration is locked. Disable it before editing;
+there is no Save button. Editing an enabled connection and testing a replacement
+before applying it was rejected in favour of this explicit boundary. Disabling
+retains configuration. If the provider is reading a document, disabling stops
+playback immediately and preserves that document's remembered voice. The next
+attempt to play asks the owner to choose an enabled provider rather than silently
+substituting a narrator.
+
+There is no separate default-voice setting. A new document takes the most recently
+selected voice whose provider is still enabled, or asks for a choice when none
+is available. Existing documents keep their own voices. This revises the explicit
+default for new documents in decision 0010; its per-document memory remains.
+
+Existing installations retain their configuration, but start with every provider
+disabled when this change arrives. The owner enables each with a successful test.
+This costs a one-time setup action in exchange for never guessing availability
+from a saved credential or prefilled address.
+
+Edits are retained automatically even while the provider is disabled, including
+credentials, so leaving the page does not discard setup work. Enable tests and
+enables; it is not a save action. A failed test preserves the owner's input.
+
+The owner confirmed the complete proposal and authorised implementation.
+
+Fish Audio offers three independent voice sources: Official voices, Your voices
+and Manual voices. Only Official voices starts selected. Manual voices reveals
+a field for the voices the owner supplies. These follow the same editing lock as
+the rest of the provider configuration.

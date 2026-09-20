@@ -12,6 +12,7 @@ const file = () => new File(Paths.document, 'voice-names.json');
 
 // A self-hosted server's ids are only meaningful at that server.
 function scope(settings: AppSettings, provider: ProviderId): string {
+  if (provider === 'fish') return JSON.stringify([provider, settings.fish]);
   return JSON.stringify([provider, provider === 'compatible' ? settings.compatible.baseURL.trim() :
     provider === 'local' ? `${settings.local.engine}:${settings.local.baseURL.trim()}` : '']);
 }
@@ -46,8 +47,9 @@ export function catalogVoices(snapshot: Snapshot, settings: AppSettings, provide
 export function knownVoice(settings: AppSettings): VoiceInfo | null {
   loadNames();
   const key = scope(settings, settings.provider);
+  const nameKey = settings.provider === 'fish' ? JSON.stringify(['fish', null]) : key;
   return lists[key]?.find((voice) => voice.id === settings.voice) ??
-    names[key]?.find((voice) => voice.id === settings.voice) ?? null;
+    names[nameKey]?.find((voice) => voice.id === settings.voice) ?? null;
 }
 export function rememberVoices(settings: AppSettings, provider: ProviderId, voices: readonly VoiceInfo[]): void {
   loadNames();
@@ -55,9 +57,11 @@ export function rememberVoices(settings: AppSettings, provider: ProviderId, voic
   const clean = voices.map(({ id, label, locale }) => ({ id, label, locale }));
   lists = { ...lists, [key]: clean };
   // Keep names of previously selected voices even if a later list omits them.
-  const merged = new Map((names[key] ?? []).map((voice) => [voice.id, voice]));
+  // Source filters change selectable voices, not the identity of a remembered speaker.
+  const nameKey = provider === 'fish' ? JSON.stringify(['fish', null]) : key;
+  const merged = new Map((names[nameKey] ?? []).map((voice) => [voice.id, voice]));
   for (const voice of clean) merged.set(voice.id, voice);
-  names = { ...names, [key]: [...merged.values()] };
+  names = { ...names, [nameKey]: [...merged.values()] };
   try { file().write(JSON.stringify(names)); } catch { /* The session still knows the name. */ }
   for (const listener of listeners) listener();
 }

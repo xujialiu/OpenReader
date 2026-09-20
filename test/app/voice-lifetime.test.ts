@@ -25,7 +25,7 @@ vi.mock('../../src/core/providers/factory', () => ({ createProvider: () => ({ li
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 it('keeps a known voice name when the reader closes and opens again, without another request', async () => {
-  const settings = { ...DEFAULT_SETTINGS, provider: 'fish' as const, voice: 'zh/example' };
+  const settings = { ...DEFAULT_SETTINGS, provider: 'fish' as const, enabledProviders: ['fish'] as const, voice: 'zh/example' };
   let lists: VoiceLists;
   function Probe() { lists = useVoiceLists(settings); return null; }
   let tree: ReactTestRenderer;
@@ -43,7 +43,7 @@ it('keeps a known voice name when the reader closes and opens again, without ano
 it('restores caption names after a process restart without treating old names as a current voice list', async () => {
   vi.resetModules();
   const catalog = await import('../../src/app/voice-catalog');
-  const settings = { ...DEFAULT_SETTINGS, provider: 'fish' as const, voice: 'zh/example' };
+  const settings = { ...DEFAULT_SETTINGS, provider: 'fish' as const, enabledProviders: ['fish'] as const, voice: 'zh/example' };
   expect(catalog.knownVoice(settings)?.label).toBe('Bingbing — Female professional (ZH)');
   expect(catalog.catalogVoices(catalog.voiceCatalogSnapshot(), settings, 'fish')).toBeNull();
 });
@@ -55,4 +55,14 @@ it('keeps self-hosted voice names scoped to the server that supplied them', asyn
   catalog.rememberVoices(settings, 'compatible', [{ id: 'same-id', label: 'First server', locale: 'en' }]);
   expect(catalog.knownVoice(settings)?.label).toBe('First server');
   expect(catalog.knownVoice({ ...settings, compatible: { ...settings.compatible, baseURL: 'https://two.example' } })).toBeNull();
+});
+
+
+it('changes Fish selectable sources without losing a remembered voice caption', async () => {
+  const catalog = await import('../../src/app/voice-catalog');
+  const settings = { ...DEFAULT_SETTINGS, provider: 'fish' as const, voice: 'en/own-voice' };
+  catalog.rememberVoices(settings, 'fish', [{ id: settings.voice, label: 'My voice', locale: 'en' }]);
+  const changed = { ...settings, fish: { ...settings.fish, includeOwn: true } };
+  expect(catalog.catalogVoices(catalog.voiceCatalogSnapshot(), changed, 'fish')).toBeNull();
+  expect(catalog.knownVoice(changed)?.label).toBe('My voice');
 });

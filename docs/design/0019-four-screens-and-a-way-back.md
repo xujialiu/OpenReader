@@ -1,5 +1,9 @@
 # Four screens, and a way back from every one of them
 
+Provider configuration, availability and the initial voice for new documents are
+revised in [decision 0026](0026-a-coherent-reading-interface.md). The earlier
+choices below retain their original context.
+
 _The engineering half of this decision is
 [ADR 0019](../adr/0019-a-native-stack-and-a-persisted-library.md)._
 

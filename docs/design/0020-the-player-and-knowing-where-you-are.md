@@ -1,5 +1,9 @@
 # The player, and knowing where you are without a progress bar
 
+Provider configuration, availability and the initial voice for new documents are
+revised in [decision 0026](0026-a-coherent-reading-interface.md). The earlier
+choices below retain their original context.
+
 _The engineering half of this decision is
 [ADR 0020](../adr/0020-the-player-rides-the-existing-seek.md)._
 

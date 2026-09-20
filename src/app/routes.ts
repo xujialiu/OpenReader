@@ -67,7 +67,7 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
  */
 export interface Shell {
   settings: AppSettings;
-  setSettings(next: AppSettings): void;
+  setSettings(next: AppSettings | ((previous: AppSettings) => AppSettings)): void;
   library: Library;
   /**
    * How many times a credential has been written to the Keychain this session.
@@ -86,8 +86,9 @@ export interface Shell {
    * getting a 403 is exactly the invisible failure this project's rules forbid.
    */
   secretsWritten: number;
+  secretRevisions: Partial<Record<import('../core/providers/types').ProviderId, number>>;
   /** Called by `use-provider-secrets.ts` after a save or a forget, and by nothing else. */
-  noteSecretWritten(): void;
+  noteSecretWritten(provider?: import('../core/providers/types').ProviderId): void;
 }
 
 export const ShellContext = createContext<Shell | null>(null);

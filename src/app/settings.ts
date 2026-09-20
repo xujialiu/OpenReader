@@ -51,7 +51,7 @@ export const PROVIDER_LABELS: Readonly<Record<ProviderId, string>> = {
   compatible: COMPATIBLE_LABEL,
   speechify: 'Speechify',
   fish: 'Fish Audio',
-  local: 'A server of your own',
+  local: 'Kokoro FastAPI',
 };
 
 /** The order the sections are offered in: the one that needs no credentials last, because it is the one with an address to type. */
@@ -99,26 +99,12 @@ export function headersAreOffered(provider: ProviderId): boolean {
   return provider === 'local' || provider === 'compatible';
 }
 
-/**
- * Everything the owner has set. One object, held for the session.
- *
- * It is **not** stored anywhere. Shared Settings live in the Sync Folder
- * (ADR 0003) and `src/core/sync/` is not written yet, so the honest thing is to
- * keep them in memory and have the screen say so — rather than inventing a
- * private store now that the folder will have to argue with later.
- *
- * **The credentials are the exception, and that is why they are not in here.**
- * The API key and the gateway headers are in the Keychain, because ADR 0002 says
- * where a credential lives and nothing about that waits on sync — and because
- * this object's eventual home is a file on a server the owner syncs through,
- * which philosophy rule 3 says is not where a Provider's credential goes. So
- * there is no `headers` field below, and the absence is the decision.
- *
- * The two sections that speak OpenAI's API keep their own model and address, as
- * `ProviderSettings` does: nothing typed for one is ever sent to the other.
- */
+/** Device-local preferences. Credentials live separately in the Keychain. */
 export interface AppSettings {
   provider: ProviderId;
+  enabledProviders: readonly ProviderId[];
+  recentVoices: readonly DocumentVoice[];
+  fish: { includeOfficial: boolean; includeOwn: boolean; includeManual: boolean; voices: string };
   openai: {
     /** A speech model id. Empty by default: OpenAI publishes the list and `listModels()` asks for it, so the app does not guess one. */
     model: string;
@@ -132,19 +118,7 @@ export interface AppSettings {
     engine: string;
     baseURL: string;
   };
-  /**
-   * The Voice, as the **global default** — what a Document that has never been
-   * opened will be read in. One Voice belongs to exactly one Provider
-   * (CONTEXT.md), which is why choosing one from another Provider's list chooses
-   * that Provider too.
-   *
-   * ADR 0010 binds a Voice to a Document with this as the default, and that half is
-   * built now: a `LibraryEntry` keeps its own `voice`, `settingsForDocument` below
-   * is how it reaches the reading, and `use-library.ts`'s `voiced` is what writes
-   * it. So this is read at the moment a Document is opened for the first time and
-   * not afterwards — changing it steers the next new Document and leaves a book
-   * already underway exactly as it was, which is the whole of design 0010.
-   */
+  /** Most recently selected voice; recentVoices retains earlier enabled alternatives. */
   voice: string;
   /** The reading speed. Applied at playback and nowhere else; a Provider is never asked for it (ADR 0009). */
   rate: number;
@@ -222,11 +196,11 @@ export function resolveTheme(
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  // The first section, not the easiest one: a first run that says "OpenAI has no
-  // API key" states ADR 0014's rule where the owner can act on it, and the sheet
-  // names the server-of-your-own path underneath. Defaulting to an address that
-  // happens to be free would hide the rule instead.
+  // A placeholder until a voice is selected. All providers start disabled.
   provider: 'openai-official',
+  enabledProviders: [],
+  recentVoices: [],
+  fish: { includeOfficial: true, includeOwn: false, includeManual: false, voices: '' },
   openai: { model: '' },
   compatible: { baseURL: '', model: '' },
   local: { engine: LOCAL_ENGINES[0].id, baseURL: LOCAL_ENGINES[0].defaultBaseURL },
@@ -257,6 +231,7 @@ export type Readiness = { readonly ready: true } | { readonly ready: false; read
  * moment it is needed and handed straight to `providerSettings`.
  */
 export function readiness(settings: AppSettings, hasKey: boolean): Readiness {
+  if (!settings.enabledProviders.includes(settings.provider)) return { ready: false, missing: ['enabling'] };
   const missing = [...missingBeforeVoice(settings, settings.provider, hasKey)];
   // Last, because it is the one thing every section needs and reads oddly first.
   if (!settings.voice.trim()) missing.push('a Voice');
@@ -313,23 +288,21 @@ export function missingBeforeVoice(settings: AppSettings, provider: ProviderId, 
   return missing;
 }
 
-/**
- * The Providers the owner has actually set up, in `PROVIDER_ORDER`.
- *
- * This is the voice list of ADR 0020 and docs/design/0020: **only configured
- * Providers appear at all**, and when none is the list is empty apart from a line
- * pointing at Settings. That was chosen over listing everything greyed out — this
- * app is for one owner, who knows what they have signed up for, and a list mostly
- * full of things that cannot be picked is a worse list than a short one that
- * works. The cost, stated in the design file, is that nothing in the reading
- * screen advertises a service that has not been configured.
- *
- * `hasKey` is asked per Provider rather than passed as one boolean, because the
- * Keychain holds one entry per Provider and the answer differs between them. The
- * key itself never comes near this function.
- */
-export function configuredProviders(settings: AppSettings, hasKey: (provider: ProviderId) => boolean): readonly ProviderId[] {
-  return PROVIDER_ORDER.filter((provider) => missingBeforeVoice(settings, provider, hasKey(provider)).length === 0);
+/** Only explicit enablement makes a provider selectable. Configuration is checked at enablement. */
+export function enabledProviders(settings: AppSettings): readonly ProviderId[] {
+  return PROVIDER_ORDER.filter((provider) => settings.enabledProviders.includes(provider));
+}
+
+/** The last selection for each provider is enough to find the latest enabled narrator. */
+export function selectVoice(settings: AppSettings, provider: ProviderId, voice: string): AppSettings {
+  if (!settings.enabledProviders.includes(provider)) return settings;
+  return { ...settings, provider, voice,
+    recentVoices: [{ provider, voice }, ...settings.recentVoices.filter((entry) => entry.provider !== provider)] };
+}
+
+export function recentEnabledVoice(settings: AppSettings): DocumentVoice | null {
+  return settings.recentVoices.find((entry) => isProviderId(entry.provider) &&
+    settings.enabledProviders.includes(entry.provider) && entry.voice.trim()) ?? null;
 }
 
 /**
@@ -373,7 +346,12 @@ export function isProviderId(id: string): id is ProviderId {
  * silently substituted.
  */
 export function settingsForDocument(settings: AppSettings, choice: DocumentVoice | null): AppSettings {
-  if (!choice || !isProviderId(choice.provider) || !choice.voice.trim()) return settings;
+  if (!choice || !isProviderId(choice.provider) || !choice.voice.trim()) {
+    const recent = recentEnabledVoice(settings);
+    return recent && isProviderId(recent.provider)
+      ? { ...settings, provider: recent.provider, voice: recent.voice }
+      : { ...settings, voice: '' };
+  }
   return { ...settings, provider: choice.provider, voice: choice.voice };
 }
 
@@ -404,6 +382,7 @@ export function andList(items: readonly string[]): string {
 /** "OpenAI needs an API key, a model and a Voice." */
 export function readinessSentence(provider: ProviderId, missing: readonly string[]): string {
   const label = PROVIDER_LABELS[provider];
+  if (missing.includes('enabling')) return `${label} is disabled. Choose an enabled provider.`;
   if (missing.length === 0) return `${label} is ready.`;
   return `${label} needs ${andList(missing)}.`;
 }
@@ -478,11 +457,9 @@ export function providerSettings(settings: AppSettings, secrets: ProviderSecrets
     speechify: { apiKey: keyFor('speechify') },
     // `freeOnly` is on and is not yet a setting: a missing or unknown `model`
     // header makes Fish fall back to the **paid** model, so the value that
-    // spends nothing is the one to state until the sheet offers the switch
-    // (philosophy rule 4, no silent spending). `voices` — the pasted model ids
-    // of ADR 0010's per-document Voice — has no field yet either, and an empty
-    // field is a field with no ids rather than a special case.
-    fish: { apiKey: keyFor('fish'), freeOnly: true, voices: '' },
+    // spends nothing remains fixed (philosophy rule 4). Source choices and
+    // manual ids now come from the provider's configuration screen.
+    fish: { apiKey: keyFor('fish'), freeOnly: true, ...settings.fish },
     // No key — a server of the owner's own is reached by address (ADR 0014) —
     // but headers, because that address can be behind a gateway that wants a
     // service token of its own, and `factory.ts` has passed
@@ -507,13 +484,7 @@ export function providerSettings(settings: AppSettings, secrets: ProviderSecrets
  * rebuilt for it would re-spend the quota to change a font.
  */
 export function engineIdentity(settings: AppSettings): string {
-  return JSON.stringify([
-    settings.provider,
-    settings.voice,
-    settings.openai.model,
-    settings.compatible.baseURL,
-    settings.compatible.model,
-    settings.local.engine,
-    settings.local.baseURL,
-  ]);
+  const config = settings.provider === 'local' ? settings.local : settings.provider === 'compatible' ? settings.compatible :
+    settings.provider === 'openai-official' ? settings.openai : settings.provider === 'fish' ? settings.fish : null;
+  return JSON.stringify([settings.provider, settings.enabledProviders.includes(settings.provider), settings.voice, config]);
 }

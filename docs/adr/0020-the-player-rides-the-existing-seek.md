@@ -4,6 +4,10 @@ status: accepted
 
 # The player rides the seek that already exists
 
+The provider configuration UI, player eligibility and new-document voice default
+are revised by [ADR 0026](0026-a-coherent-reading-interface.md). Historical
+measurements below are retained unchanged.
+
 _The product argument is
 `docs/design/0020-the-player-and-knowing-where-you-are.md`._
 

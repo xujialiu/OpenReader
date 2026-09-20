@@ -768,7 +768,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * as a refusal rather than flattened into "no key" (`src/keys/refusal.ts`
    * exists for exactly that distinction).
    */
+  const engineGeneration = useRef(0);
   const build = useCallback(async (): Promise<PlaybackEngine | null> => {
+    const generation = engineGeneration.current;
     const ready = readiness(settings, hasKey);
     if (!ready.ready) {
       setStatus((was) => ({ ...was, note: readinessSentence(settings.provider, ready.missing) }));
@@ -811,6 +813,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       if (lookup.outcome === 'found') gatewayHeaders = lookup.secret;
     }
 
+    if (generation !== engineGeneration.current) return null;
     const provider = createProvider(
       settings.provider,
       providerSettings(settings, { key, headers: gatewayHeaders }),
@@ -840,6 +843,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [settings, hasKey, clock, report, ranOutOfText]);
 
   const play = useCallback(() => {
+    if (!settings.enabledProviders.includes(settings.provider)) {
+      engineRef.current?.pause();
+      setStatus((was) => ({ ...was, playing: false, note: readinessSentence(settings.provider, ['enabling']) }));
+      return;
+    }
     // Play is the owner saying "read from here", and here is wherever the reading
     // is now. A bookmark that has not resolved by this point has lost its claim.
     abandonResume();
@@ -873,11 +881,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       buildingRef.current = null;
     });
     void buildingRef.current.then((engine) => {
-      if (!engine) return;
+      if (!engine || engine !== engineRef.current) return;
       engine.play();
       setStatus((was) => ({ ...was, playing: true }));
     }, report);
-  }, [build, report, walkForward, abandonResume]);
+  }, [settings, build, report, walkForward, abandonResume]);
 
   /**
    * The section Play was looking for has arrived with text in it, so the reading
@@ -982,6 +990,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const identity = `${engineIdentity(settings)}@${writtenAt}`;
   useEffect(
     () => () => {
+      engineGeneration.current += 1;
       const engine = engineRef.current;
       engineRef.current = null;
       buildingRef.current = null;

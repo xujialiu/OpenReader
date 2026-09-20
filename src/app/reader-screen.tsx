@@ -33,12 +33,12 @@ import { HeaderButton, INK, Note } from './controls';
 import { openDocument, type OpenDocument } from './document';
 import { ReadingView } from './reading-view';
 import { useShell, type ScreenProps } from './routes';
-import { settingsForDocument, unusableVoiceSentence } from './settings';
+import { settingsForDocument, unusableVoiceSentence, recentEnabledVoice, selectVoice } from './settings';
 import { useProviderKey } from './use-provider-secrets';
 
 export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const { id } = route.params;
-  const { settings, setSettings, library, secretsWritten } = useShell();
+  const { settings, setSettings, library, secretRevisions } = useShell();
   const entry = useMemo(() => library.entries.find((one) => one.id === id) ?? null, [library.entries, id]);
 
   /**
@@ -175,8 +175,8 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
    */
   useEffect(() => {
     if (!openedId || voiceId) return;
-    if (!settings.voice.trim()) return;
-    library.voiced(openedId, { provider: settings.provider, voice: settings.voice });
+    const recent = recentEnabledVoice(settings);
+    if (recent) library.voiced(openedId, recent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openedId, voiceId]);
 
@@ -195,8 +195,9 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
    */
   const setVoice = useCallback(
     (provider: ProviderId, voice: string) => {
+      if (!settings.enabledProviders.includes(provider)) return;
       if (openedId) library.voiced(openedId, { provider, voice });
-      setSettings({ ...settings, provider, voice });
+      setSettings((previous) => selectVoice(previous, provider, voice));
     },
     [openedId, library, settings, setSettings],
   );
@@ -238,7 +239,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
           settings={forDocument}
           voiceNote={unusableVoiceSentence(documentVoice)}
           keyPresence={key.presence}
-          credentialsWrittenAt={secretsWritten}
+          credentialsWrittenAt={secretRevisions[forDocument.provider] ?? 0}
           position={opened.position}
           onRate={setRate}
           onVoice={setVoice}

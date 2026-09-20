@@ -159,7 +159,7 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     // three paragraphs away", arriving late instead of wrong.
     const reading = code('use-reading.ts');
     expect(within(reading, 'const seekTo = useCallback(', '}, [sectionOf')).toContain('abandonResume();');
-    expect(within(reading, 'const play = useCallback(', '}, [build, report, walkForward')).toContain('abandonResume();');
+    expect(within(reading, 'const play = useCallback(', '}, [settings, build, report, walkForward')).toContain('abandonResume();');
     expect(within(reading, 'const abandonResume = useCallback(', '}, []);')).toContain('resumeRef.current = null;');
   });
 });
@@ -327,7 +327,7 @@ describe('each Document is read in the Voice it remembers (ADR 0010)', () => {
     // inheritance design 0010 promises — "and from then on the document keeps it",
     // which is only true if it is written.
     pin(screen, 'if (openedId) library.voiced(openedId, { provider, voice });', 'reader-screen.tsx, setVoice');
-    pin(screen, 'library.voiced(openedId, { provider: settings.provider, voice: settings.voice });', 'reader-screen.tsx');
+    pin(screen, 'if (recent) library.voiced(openedId, recent);', 'reader-screen.tsx');
     pin(screen, 'if (!openedId || voiceId) return;', 'reader-screen.tsx, the inheritance');
   });
 });

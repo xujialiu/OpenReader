@@ -71,11 +71,11 @@ export function VoiceSheet({ visible, onClose, settings, lists, onChoose }: Voic
 
 function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProps, 'visible'>) {
   /** Which Provider's Voices are being looked at. The one in use, until another is tapped. */
-  const [looking, setLooking] = useState<ProviderId>(settings.provider);
+  const [looking, setLooking] = useState<ProviderId>(lists.enabled?.includes(settings.provider) ? settings.provider : lists.enabled?.[0] ?? settings.provider);
   /** Which locale is open. Null means none has been chosen yet, and the Voice in use decides. */
   const [locale, setLocale] = useState<string | null>(null);
 
-  const voices = lists.voicesOf(looking);
+  const voices = lists.enabled?.includes(looking) ? lists.voicesOf(looking) : null;
   const levels = useMemo(() => voiceLevels(voices ?? []), [voices]);
   const inUse = looking === settings.provider ? levelOfVoice(levels, settings.voice) : null;
   const open = locale ?? inUse ?? levels[0]?.locale ?? null;
@@ -93,10 +93,10 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
     askRef.current = lists;
   }, [lists]);
   useEffect(() => {
-    if (!askRef.current.voicesOf(settings.provider)) askRef.current.ask(settings.provider);
+    if (askRef.current.enabled?.includes(looking) && !askRef.current.voicesOf(looking)) askRef.current.ask(looking);
     // On mount, which is on opening. Through a ref because `lists` is a fresh object
     // every render and depending on it would ask again on every one of them.
-  }, [settings.provider]);
+  }, [looking]);
 
   /**
    * The locale row, scrolled to the level in use as it lays out.
@@ -114,7 +114,7 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
     [locale],
   );
 
-  const configured = lists.configured;
+  const enabled = lists.enabled;
 
   return (
     <>
@@ -122,12 +122,9 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
         <View style={styles.grip} />
         <Text style={styles.title}>Voice</Text>
 
-        {configured === null ? (
-          <Note>Looking in the Keychain for what has been set up…</Note>
-        ) : configured.length === 0 ? (
+        {enabled.length === 0 ? (
           <Note attention>
-            No service has been set up yet, so there is no Voice to choose. Settings → Providers is where a key or the
-            address of a server goes; until one is there, nothing can be spoken.
+            Enable a provider in Settings to choose a voice.
           </Note>
         ) : (
           <>
@@ -139,7 +136,7 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
              * which is what the next book they open for the first time inherits.
              */}
             <View style={styles.providers}>
-              {configured.map((provider) => (
+              {enabled.map((provider) => (
                 <Chip
                   key={provider}
                   label={PROVIDER_LABELS[provider]}
@@ -212,12 +209,6 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
         )}
 
         {lists.note ? <Note attention>{lists.note}</Note> : null}
-        {lists.refusals.map((refusal) => (
-          <Note key={refusal} attention>
-            {refusal}
-          </Note>
-        ))}
-
         <Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.done, pressed && styles.pressed]}>
           <Text style={styles.doneLabel}>Done</Text>
         </Pressable>

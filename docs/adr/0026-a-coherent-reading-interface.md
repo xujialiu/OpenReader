@@ -61,3 +61,55 @@ timers when the drawer closes. Changes still call `onRate` immediately, with the
 range, integer-grid stepping and measured repeat cadence from ADR 0020 unchanged.
 Transport hit slop is removed now that these targets sit directly beside one
 another; their actual targets remain at least 44 points wide.
+
+
+## Provider enablement is explicit
+
+The owner agreed that player eligibility requires explicit per-provider
+enablement, after a successful connection test. A standalone test does not
+enable, and enabling does not select the document's Provider or Voice.
+This revises ADR 0020's configured-provider eligibility and its deliberate
+first-run offering of `local` solely because its default address exists.
+The old measurements in 0020 remain historical evidence, not the new rule.
+`PROVIDER_LABELS.local` will read `Kokoro FastAPI` instead of
+`A server of your own`. Settings retain a list/detail structure, remove voice
+selection from provider configuration, and move optional explanations behind
+help controls.
+
+Enabled configurations are read-only; disabling unlocks editing and retains
+configuration. There is no Save action. Disabling the document's Provider stops
+playback immediately, preserves its Voice assignment, and requires choosing an
+enabled Provider on the next play attempt rather than silently falling back.
+
+A new Document inherits the most recently selected Voice whose Provider remains
+enabled, or requires selection if none qualifies. There is no separately edited
+default Voice. This supersedes the explicit new-document default in ADR 0010,
+while retaining per-document Voice assignments. Existing settings migrate with
+configuration retained and all Providers disabled; each must pass the explicit
+enablement test. Configuration edits, including credentials, persist automatically
+while disabled and survive leaving the detail screen. Enable is a test and state
+transition, not a save action; a failed test retains inputs. Credentials continue
+to belong in the Keychain, separately from ordinary settings. The owner confirmed the complete proposal and authorised implementation.
+
+The previous `AppSettings` was session-only. Local `settings.json` now persists
+ordinary configuration and enabled ids; credentials remain in the Keychain.
+This is a local preferences file, not the unimplemented shared sync format.
+The parser projects known non-secret fields and migrates unversioned settings
+with all providers disabled. New documents use `recentVoices`, ordered by the
+owner's selections, skipping disabled providers.
+
+Fish configuration explicitly passes `includeOfficial: true`, `includeOwn: false`
+and `includeManual: false` by default. The provider layer's own omitted flags
+mean enabled, so leaving them out would fetch all three sources. Manual ids are
+passed as `voices`. Fish voice-list cache scope includes these source settings.
+Connection checks use `checkConnection` where supplied before listing voices:
+OpenAI's static voice list is not evidence that a key works. Tests make no audio
+playback or synthesis requests. Enable and standalone Test share that check;
+only Enable changes eligibility. List and detail share an in-flight check.
+
+
+The reader's engine identity includes only its own provider configuration and
+enablement. Credential revision counters are per provider. Editing a disabled
+provider therefore cannot dispose another provider's live engine. A generation
+guard also discards an engine build whose credentials finish loading after its
+provider was disabled.

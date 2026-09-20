@@ -22,8 +22,7 @@
  * is not optional (ADR 0001).
  *
  * The **settings** and the **Library** are held here because both outlive any
- * one screen. They are still not stored anywhere (`settings.ts` says why for the
- * settings; the Library is a file, `library.ts`).
+ * one screen. Both are persisted locally; credentials have their own Keychain store.
  */
 
 // WALKTHROUGH-HARNESS
@@ -36,8 +35,8 @@ import { ReaderProvider } from '@epubjs-react-native/core';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Appearance, useColorScheme } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Appearance, useColorScheme } from 'react-native';
 
 
 import { PALETTE } from './controls';
@@ -49,13 +48,29 @@ import { ProvidersScreen } from './providers-screen';
 import { ReaderScreen } from './reader-screen';
 import { navigationRef, ShellContext, type RootStackParamList, type Shell } from './routes';
 import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
+import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
 import { useLibrary } from './use-library';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function OpenReader() {
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [settings, updateSettings] = useState<AppSettings>(() => {
+    try { return readSettings(); } catch {
+      Alert.alert('Settings could not be loaded', 'Your saved file has been kept. Check device storage before editing settings.');
+      return DEFAULT_SETTINGS;
+    }
+  });
+  const settingsRef = useRef(settings);
+  const setSettings = useCallback<Shell['setSettings']>((next) => {
+    const value = typeof next === 'function' ? next(settingsRef.current) : next;
+    try { writeSettings(value); } catch {
+      Alert.alert('Settings could not be saved', 'Check device storage and try again.');
+      return;
+    }
+    settingsRef.current = value;
+    updateSettings(value);
+  }, []);
   const library = useLibrary();
   /**
    * How many credentials have been written this session. `routes.ts` says what
@@ -64,10 +79,14 @@ export function OpenReader() {
    * and the screens that have to notice are never the same screen.
    */
   const [secretsWritten, setSecretsWritten] = useState(0);
-  const noteSecretWritten = useCallback(() => setSecretsWritten((was) => was + 1), []);
+  const [secretRevisions, setSecretRevisions] = useState<Shell['secretRevisions']>({});
+  const noteSecretWritten = useCallback<Shell['noteSecretWritten']>((provider) => {
+    setSecretsWritten((was) => was + 1);
+    if (provider) setSecretRevisions((was) => ({ ...was, [provider]: (was[provider] ?? 0) + 1 }));
+  }, []);
   const shell = useMemo<Shell>(
-    () => ({ settings, setSettings, library, secretsWritten, noteSecretWritten }),
-    [settings, library, secretsWritten, noteSecretWritten],
+    () => ({ settings, setSettings, library, secretsWritten, secretRevisions, noteSecretWritten }),
+    [settings, setSettings, library, secretsWritten, secretRevisions, noteSecretWritten],
   );
 
   // WALKTHROUGH-HARNESS
@@ -141,7 +160,7 @@ export function OpenReader() {
       void readProviderKey(String(command.provider)).then((found) => {
         if (found.outcome !== 'found') return hlog(`resave: no key held (${found.outcome})`);
         void saveProviderKey(String(command.provider), found.secret).then((change) => {
-          noteSecretWritten();
+          noteSecretWritten(String(command.provider) as AppSettings['provider']);
           hlog(`resave ${String(command.provider)} ${change.outcome}`);
         });
       });

@@ -1,5 +1,9 @@
 # Each document keeps the voice it was started in
 
+Provider configuration, availability and the initial voice for new documents are
+revised in [decision 0026](0026-a-coherent-reading-interface.md). The earlier
+choices below retain their original context.
+
 A document remembers its own voice. Opening one for the first time gives it
 whatever the overall default is at that moment, and from then on the document keeps
 it. Changing the default later steers the next new document and leaves everything

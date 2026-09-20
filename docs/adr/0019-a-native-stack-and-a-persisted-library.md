@@ -4,6 +4,10 @@ status: proposed
 
 # A native stack, and a Library that is a file
 
+The provider configuration UI, player eligibility and new-document voice default
+are revised by [ADR 0026](0026-a-coherent-reading-interface.md). Historical
+measurements below are retained unchanged.
+
 _The product argument — what the owner sees and what it costs — is
 `docs/design/0019-four-screens-and-a-way-back.md`._
 

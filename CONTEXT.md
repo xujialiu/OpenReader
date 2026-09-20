@@ -50,6 +50,10 @@ A source of synthesized speech, reached over the network: a hosted service, a
 server on the owner's own machine, or the operating system's own voices.
 _Avoid_: engine, backend, service, vendor, TTS
 
+**Enabled Provider**:
+A provider the owner has made available for selection in the player.
+_Avoid_: configured provider, in-use provider, default provider
+
 **Voice**:
 One named speaker a provider offers. A voice belongs to exactly one provider.
 _Avoid_: model, speaker, persona

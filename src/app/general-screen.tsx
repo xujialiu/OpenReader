@@ -20,7 +20,7 @@
 import { ScrollView, StyleSheet } from 'react-native';
 
 
-import { Choice, INK, Note, Section } from './controls';
+import { Choice, INK, Section } from './controls';
 import { useShell } from './routes';
 import { THEME_LABELS, THEME_SETTINGS } from './settings';
 
@@ -36,7 +36,6 @@ export function GeneralScreen() {
           onChange={(theme) => setSettings({ ...settings, theme })}
           labelOf={(theme) => THEME_LABELS[theme]}
         />
-        <Note>Resets when the app closes.</Note>
       </Section>
     </ScrollView>
   );
