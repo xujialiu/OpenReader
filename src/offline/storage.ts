@@ -4,7 +4,7 @@ import { offlineNative } from '../../modules/open-reader-offline';
 import { sha256Hex } from '../core/document/sha256';
 import type { SynthesisResult } from '../core/providers/types';
 import { clipCacheKey } from '../playback/clip-cache';
-import type { NarrationPlan, OfflineVoice } from './model';
+import { withPreparedSection, type Chapter, type NarrationPlan, type OfflineVoice } from './model';
 
 let directory: Directory | null = null;
 const root = () => {
@@ -36,13 +36,27 @@ export function writeState(name: string, value: unknown): void { writeJson(new F
 export function readPlan(id: string): NarrationPlan | null {
   const file = new File(docDir(id), 'plan.json');
   if (!file.exists) return null;
-  const plan = JSON.parse(file.textSync()) as NarrationPlan;
-  if (plan.version !== 1 || !Array.isArray(plan.chapters)) throw new Error('Update the app to read these downloads.');
+  let plan = JSON.parse(file.textSync()) as NarrationPlan;
+  if (![1, 2].includes(plan.version) || !Array.isArray(plan.chapters)) throw new Error('Update the app to read these downloads.');
+  if (plan.version === 2) {
+    for (const section of plan.preparedSections ?? []) {
+      const content = new File(docDir(id), `section-${section}.json`);
+      if (!content.exists) throw new Error('Prepared chapter text is missing. Reopen the document to repair its downloads.');
+      plan = withPreparedSection(plan, section, JSON.parse(content.textSync()) as Chapter[]);
+    }
+  }
   return plan;
 }
 export function savePlan(id: string, plan: NarrationPlan): void {
   docDir(id).create({ intermediates: true, idempotent: true });
-  writeJson(new File(docDir(id), 'plan.json'), plan);
+  writeJson(new File(docDir(id), 'plan.json'), plan.version === 1 ? plan : {
+    ...plan, chapters: plan.chapters.map((chapter) => ({ ...chapter, texts: [] })),
+  });
+}
+export function saveSection(id: string, section: number, chapters: Chapter[], plan: NarrationPlan): void {
+  // Payload first; the small manifest never repeatedly serializes the book's text.
+  writeJson(new File(docDir(id), `section-${section}.json`), chapters);
+  savePlan(id, plan);
 }
 interface ClipMeta {
   format: 'alac' | 'gzip-pcm' | 'encoded'; size: number; sampleRate?: number;

@@ -17,7 +17,7 @@ function xml(bytes: Uint8Array): XmlDocument {
 }
 
 /** EPUB paths are URI references relative to the package, not filesystem paths. */
-function resolve(base: string, href: string): string {
+export function resolveArchivePath(base: string, href: string): string {
   if (/^[a-z][a-z\d+.-]*:|^\/\//i.test(href)) throw new Error('A cover must be inside its document.');
   const path = decodeURIComponent(href.split(/[?#]/, 1)[0]);
   const parts: string[] = path.startsWith('/') ? [] : base.split('/').slice(0, -1);
@@ -29,7 +29,7 @@ function resolve(base: string, href: string): string {
   return parts.join('/');
 }
 
-function memberBytes(archive: ArchiveBytes, member: LocatedZipMember, limit: number): Uint8Array {
+export function readArchiveMember(archive: ArchiveBytes, member: LocatedZipMember, limit: number): Uint8Array {
   const { offset, compressedSize, uncompressedSize, method, flags } = member;
   if (flags & 1 || ![0, 8].includes(method) || compressedSize > limit || uncompressedSize > limit)
     throw new Error('Cover member is encrypted, unsupported or too large.');
@@ -54,13 +54,13 @@ export function readDocumentCover(archive: ArchiveBytes): DocumentCover | null {
   const read = (name: string, limit: number) => {
     const member = members.get(name);
     if (!member) throw new Error('Cover member is missing.');
-    return memberBytes(archive, member, limit);
+    return readArchiveMember(archive, member, limit);
   };
   const container = xml(read('META-INF/container.xml', XML_LIMIT));
   const roots = elements(container, 'rootfile');
   const root = roots.find((item) => item.getAttribute('media-type') === 'application/oebps-package+xml') ?? roots[0];
   if (!root) return null;
-  const packagePath = resolve('', root.getAttribute('full-path') ?? '');
+  const packagePath = resolveArchivePath('', root.getAttribute('full-path') ?? '');
   const pack = xml(read(packagePath, XML_LIMIT));
   const items = elements(pack, 'item');
   const coverId = elements(pack, 'meta').find((meta) => meta.getAttribute('name') === 'cover')?.getAttribute('content');
@@ -73,5 +73,5 @@ export function readDocumentCover(archive: ArchiveBytes): DocumentCover | null {
   const extension = extensions[item.getAttribute('media-type') ?? ''];
   const href = item.getAttribute('href');
   if (!extension || !href) return null;
-  return { bytes: read(resolve(packagePath, href), IMAGE_LIMIT), extension };
+  return { bytes: read(resolveArchivePath(packagePath, href), IMAGE_LIMIT), extension };
 }

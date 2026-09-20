@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { SynthesisResult } from '../../src/core/providers/types';
-import { clipSize, deleteClips, readClip, saveClip, savePlan, readPlan } from '../../src/offline/storage';
+import { clipSize, deleteClips, readClip, saveClip, savePlan, readPlan, saveSection } from '../../src/offline/storage';
+import { navigationPlan, withPreparedSection } from '../../src/offline/model';
 
 const fake = vi.hoisted(() => ({ files: new Map<string, Uint8Array>(), compress: vi.fn(), excluded: vi.fn() }));
 vi.mock('expo-file-system', () => {
@@ -64,4 +65,18 @@ it('does not report a truncated payload as downloaded and deletes only the selec
 it('round-trips a durable plan independently of audio and playback', () => {
   const plan = { version: 1 as const, chapters: [{ id: 'c', title: 'Chapter', parent: null, depth: 0, texts: ['Hi'] }] };
   savePlan('book', plan); expect(readPlan('book')).toEqual(plan);
+});
+
+it('persists selected section text independently and restores partial preparation without declaring the rest ready', () => {
+  const plan = navigationPlan({ sections: [{ href: 'one.xhtml', path: 'one.xhtml' }, { href: 'two.xhtml', path: 'two.xhtml' }], chapters: [] });
+  savePlan('book', plan);
+  const content = [{ id: 'section-1', title: 'Two', parent: null, depth: 0, texts: ['Second chapter text.'] }];
+  const next = withPreparedSection(plan, 1, content);
+  saveSection('book', 1, content, next);
+  const manifest = [...fake.files].find(([path]) => path.endsWith('/plan.json'))![1];
+  expect(new TextDecoder().decode(manifest)).not.toContain('Second chapter text.');
+  const restored = readPlan('book')!;
+  expect(restored.preparedSections).toEqual([1]);
+  expect(restored.chapters[0]).toMatchObject({ prepared: false, texts: [] });
+  expect(restored.chapters[1]).toMatchObject({ prepared: true, texts: ['Second chapter text.'] });
 });

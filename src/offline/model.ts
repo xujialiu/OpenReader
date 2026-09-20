@@ -2,11 +2,20 @@ import type { ProviderId } from '../core/providers/types';
 import type { Block } from '../core/segmenter';
 import { segmentBlocks } from '../core/segmenter';
 import { splitWithSentencex } from '../core/segmenter/sentencex';
+import type { DocumentNavigation } from '../core/document/navigation';
 
-export interface Chapter { id: string; title: string; depth: number; parent: string | null; texts: string[] }
-export interface NarrationPlan { version: 1; chapters: Chapter[] }
+export interface Chapter {
+  id: string; title: string; depth: number; parent: string | null; texts: string[];
+  section?: number | null; fragment?: string;
+  /** Omitted in legacy fully prepared plans. False means text has not been read. */
+  prepared?: boolean;
+}
+export interface NarrationPlan {
+  version: 1 | 2; chapters: Chapter[];
+  sections?: DocumentNavigation['sections']; preparedSections?: number[];
+}
 export interface OfflineVoice { provider: ProviderId; voice: string; label: string }
-export type TaskState = 'queued' | 'downloading' | 'paused' | 'waiting' | 'blocked' | 'interrupted' | 'done';
+export type TaskState = 'queued' | 'preparing' | 'downloading' | 'paused' | 'waiting' | 'blocked' | 'interrupted' | 'done';
 export interface DownloadTask {
   id: string; document: string; voice: OfflineVoice; chapters: string[];
   state: TaskState; error: string | null; failed: string[];
@@ -36,5 +45,31 @@ export function descendants(chapters: Chapter[], id: string): Chapter[] {
   const ids = new Set([id]);
   // The navigation is parent-before-child, including empty volume headings.
   for (const chapter of chapters) if (chapter.parent && ids.has(chapter.parent)) ids.add(chapter.id);
-  return chapters.filter((chapter) => ids.has(chapter.id) && chapter.texts.length > 0);
+  return chapters.filter((chapter) => ids.has(chapter.id) && (chapter.prepared === false || chapter.texts.length > 0));
 }
+
+export function navigationPlan(navigation: DocumentNavigation): NarrationPlan {
+  const chapters: Chapter[] = navigation.chapters.map((chapter) => ({ ...chapter, texts: [], prepared: chapter.section === null }));
+  // Every unlisted file is selectable. A leading fragment may leave a preface
+  // before its first chapter, so retain that possible coverage until rendered.
+  navigation.sections.forEach((_, section) => {
+    const entries = chapters.filter((chapter) => chapter.section === section);
+    if (entries.some((chapter) => !chapter.fragment)) return;
+    const extra: Chapter = { id: `section-${section}`, title: `Part ${section + 1}`, parent: null, depth: 0, section, texts: [], prepared: false, fragment: '' };
+    const at = chapters.findIndex((chapter) => chapter.section !== null && chapter.section !== undefined && chapter.section >= section);
+    chapters.splice(at < 0 ? chapters.length : at, 0, extra);
+  });
+  return { version: 2, chapters, sections: navigation.sections, preparedSections: [] };
+}
+
+export function withPreparedSection(plan: NarrationPlan, section: number, prepared: Chapter[]): NarrationPlan {
+  const found = new Map(prepared.map((chapter) => [chapter.id, chapter]));
+  const chapters = plan.chapters.map((chapter) => {
+    if (chapter.section !== section) return chapter;
+    const content = found.get(chapter.id);
+    return { ...chapter, texts: content?.texts ?? [], prepared: true,
+      title: chapter.id.startsWith('section-') && content ? content.title : chapter.title };
+  });
+  return { ...plan, chapters, preparedSections: [...new Set([...(plan.preparedSections ?? []), section])].sort((a, b) => a - b) };
+}
+export const fullyPrepared = (plan: NarrationPlan) => plan.version === 1 || plan.preparedSections?.length === plan.sections?.length;

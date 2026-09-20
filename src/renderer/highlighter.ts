@@ -485,7 +485,7 @@ ${constants}
 
   /* The download indexer runs in its own rendition. It uses this exact walk,
      including the publication's computed CSS, rather than a second text parser. */
-  window.openreaderOfflineSection = async function(index) {
+  window.openreaderOfflineSection = async function(index, navigationPoints, token) {
     try {
       var section = book.spine.get(index);
       await rendition.display(index);
@@ -497,28 +497,10 @@ ${constants}
       if (!contents) throw new Error('Chapter ' + (index + 1) + ' did not render.');
       var found = walk(contents);
       var points = [];
-      function targetOf(entry) {
-        var target = entry.href ? book.spine.get(entry.href) : null;
-        if (!target && entry.href) {
-          var bare = decodeURI(entry.href.split('#')[0]).replace(/^\\/+/, '');
-          for (var at = 0; at < book.spine.length; at++) {
-            var candidate = book.spine.get(at);
-            if (decodeURI(candidate.href).replace(/^\\/+/, '') === bare) { target = candidate; break; }
-          }
-        }
-        if (target) return target;
-        var children = entry.subitems || [];
-        for (var i = 0; i < children.length; i++) { target = targetOf(children[i]); if (target) return target; }
-        return null;
-      }
-      function navigation(entries, depth, parent, prefix) {
-        entries.forEach(function(entry, ordinal) {
-          var id = prefix + '.' + ordinal;
-          var target = targetOf(entry);
-          if (target && target.index === index) {
-            var fragment = ((entry.href || '').split('#')[1] || '');
-            var anchor = fragment ? contents.document.getElementById(decodeURIComponent(fragment)) : null;
-            if (fragment && !anchor) throw new Error('A chapter anchor could not be found: ' + entry.label);
+      (navigationPoints || []).forEach(function(entry) {
+            var fragment = entry.fragment || '';
+            var anchor = fragment ? contents.document.getElementById(fragment) : null;
+            if (fragment && !anchor) throw new Error('A chapter anchor could not be found: ' + entry.title);
             var at = 0;
             if (anchor) {
               at = found.findIndex(function(b) {
@@ -526,16 +508,12 @@ ${constants}
               });
               if (at < 0) at = found.length;
             }
-            points.push({id:id, title:String(entry.label || '').trim(), depth:depth, parent:parent, block:at});
-          }
-          navigation(entry.subitems || [], depth + 1, id, id);
-        });
-      }
-      navigation(book.navigation.toc || [], 0, null, 'nav');
-      post({type:'openreader:offline-section', index:index, total:book.spine.length,
-        language:book.package.metadata.language || 'en', points:points,
+            points.push({id:entry.id, title:entry.title, depth:entry.depth, parent:entry.parent, block:at});
+      });
+      post({type:'openreader:offline-section', token:token, index:index, total:book.spine.length,
+        language:String(book.package.metadata.language || '').trim() || 'en', points:points,
         blocks:found.map(function(b) { return {text:b.text, role:roleOf(b.element), section:section.href}; })});
-    } catch (error) { post({type:'openreader:offline-error', detail:String(error)}); }
+    } catch (error) { post({type:'openreader:offline-error', token:token, detail:String(error)}); }
   };
 
   function ensureStyle(doc) {

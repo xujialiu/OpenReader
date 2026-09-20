@@ -1,5 +1,9 @@
 import { AppState, Platform } from 'react-native';
 import { useSyncExternalStore } from 'react';
+import { FileMode } from 'expo-file-system';
+import { asDocumentId } from '../core/document';
+import { readDocumentNavigation, type ChapterMetadata } from '../core/document/navigation';
+import { documentFile } from '../app/library';
 import { offlineNative } from '../../modules/open-reader-offline';
 import { createMemoryCache } from '../core/memory-cache';
 import { createProvider } from '../core/providers/factory';
@@ -9,7 +13,7 @@ import { withTimeout } from '../core/timeout';
 import { readGatewayHeaders, readProviderKey } from '../keys/store';
 import { clipCacheKey, toStored, type StoredClip } from '../playback/clip-cache';
 import { headersAreOffered, keyIsOffered, providerDeps, providerSettings, readiness, readinessSentence, type AppSettings } from '../app/settings';
-import type { DownloadTask, NarrationPlan, OfflineVoice } from './model';
+import { navigationPlan, withPreparedSection, type Chapter, type DownloadTask, type NarrationPlan, type OfflineVoice } from './model';
 import { createScheduler } from './scheduler';
 import * as disk from './storage';
 
@@ -28,11 +32,29 @@ const sizes = new Map<string, number | null>();
 const flights = new Map<string, Promise<SynthesisResult>>();
 const memory = createMemoryCache<StoredClip>({ maxBytes: 96 * 1024 * 1024 });
 const indexing = new Map<string, { title: string; state: 'queued' | 'preparing' | 'failed'; error?: string; count: number }>();
+export interface PreparationRequest { token: number; document: string; section: number; points: ChapterMetadata[] }
+let preparation: (PreparationRequest & { task: DownloadTask; resolve(): void; reject(error: Error): void }) | null = null;
+let rendererDocument: string | null = null;
+let preparationSerial = 0;
+export const preparationRequest = (): PreparationRequest | null => preparation;
+export const indexDocument = () => preparation?.document ?? (tasks.some((task) => task.document === rendererDocument &&
+  ['preparing', 'downloading'].includes(task.state)) ? rendererDocument : null);
+function cancelInactivePreparation() {
+  if (preparation && (!tasks.includes(preparation.task) || !['preparing', 'downloading'].includes(preparation.task.state))) {
+    const stopped = preparation; preparation = null;
+    stopped.reject(new Error('Chapter preparation was stopped.'));
+  }
+}
 const keyOf = (document: string, voice: OfflineVoice, text: string) => JSON.stringify([document, clipCacheKey(voice.provider, voice.voice, text)]);
 const emit = () => { revision++; listeners.forEach((listener) => listener()); };
 function persist() {
+  cancelInactivePreparation();
   try { disk.writeState('tasks.json', { version: 1, tasks }); storeError = null; }
-  catch (error) { storeError = `Downloads could not be saved: ${String(error)}`; tasks.forEach((t) => { if (t.state === 'downloading') t.state = 'blocked'; }); }
+  catch (error) {
+    storeError = `Downloads could not be saved: ${String(error)}`;
+    tasks.forEach((t) => { if (['preparing', 'downloading'].includes(t.state)) t.state = 'blocked'; });
+    cancelInactivePreparation();
+  }
   emit();
 }
 export function useDownloads(): number { return useSyncExternalStore((fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; }, () => revision); }
@@ -109,6 +131,21 @@ const scheduler = createScheduler({
   allowed: () => loaded && !storeError && !playing && (foreground || !expired),
   changed: persist,
   exists: (task, text) => savedSize(task.document, task.voice, text) !== null,
+  prepare: async (task, chapter) => {
+    const section = chapter.section;
+    if (section === null || section === undefined) throw new Error('This chapter does not identify a document section.');
+    const plan = planOf(task.document)!;
+    const held = plan.chapters.find((c) => c.id === chapter.id)!;
+    if (held.prepared !== false) return held;
+    await new Promise<void>((resolve, reject) => {
+      rendererDocument = task.document;
+      preparation = { token: ++preparationSerial, document: task.document, section, task, resolve, reject,
+        points: plan.chapters.filter((c) => c.section === section && !c.id.startsWith('section-'))
+          .map((c) => ({ id: c.id, title: c.title, parent: c.parent, depth: c.depth, section, fragment: c.fragment ?? '' })) };
+      emit();
+    });
+    return planOf(task.document)!.chapters.find((c) => c.id === chapter.id)!;
+  },
   fetch: async (task, text) => {
     const clip = await synthesize(task.document, task.voice, text, settings);
     // A paused task can keep its paid in-flight result; a removed chapter cannot.
@@ -120,7 +157,7 @@ const scheduler = createScheduler({
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
 const kick = () => { void scheduler.run().catch((error) => { storeError = String(error); emit(); }).finally(() => {
-  if (!tasks.some((task) => ['queued', 'downloading'].includes(task.state))) void offlineNative?.endBackground();
+  if (!tasks.some((task) => ['queued', 'preparing', 'downloading'].includes(task.state))) void offlineNative?.endBackground();
 }); };
 export function configureDownloads(next: AppSettings): void { settings = next; }
 export function startDownloads(): () => void {
@@ -129,7 +166,7 @@ export function startDownloads(): () => void {
       const file = disk.readState<{ version: number; tasks: DownloadTask[] }>('tasks.json', { version: 1, tasks: [] });
       if (file.version !== 1 || !Array.isArray(file.tasks)) throw new Error('Unsupported download manifest. Update the app.');
       tasks = file.tasks;
-      for (const task of tasks) if (['downloading', 'interrupted', 'waiting'].includes(task.state)) task.state = 'queued';
+      for (const task of tasks) if (['preparing', 'downloading', 'interrupted', 'waiting'].includes(task.state)) task.state = 'queued';
       loaded = true; persist();
     } catch (error) { storeError = String(error); emit(); }
   }
@@ -140,7 +177,7 @@ export function startDownloads(): () => void {
   });
   const expiration = offlineNative?.addListener('expired', () => {
     expired = true;
-    for (const task of tasks) if (task.state === 'downloading') task.state = 'interrupted';
+    for (const task of tasks) if (['preparing', 'downloading'].includes(task.state)) task.state = 'interrupted';
     persist();
   });
   const state = AppState.addEventListener('change', (value) => {
@@ -149,7 +186,7 @@ export function startDownloads(): () => void {
       expired = false; void offlineNative?.endBackground();
       for (const task of tasks) if (task.state === 'interrupted') task.state = 'queued';
       persist(); kick();
-    } else if (tasks.some((task) => ['downloading', 'queued'].includes(task.state))) {
+    } else if (tasks.some((task) => ['preparing', 'downloading', 'queued'].includes(task.state))) {
       if (offlineNative) void offlineNative.beginBackground().then((allowed) => { expired = !allowed; emit(); });
       else { expired = true; emit(); }
     }
@@ -171,7 +208,7 @@ export function enqueue(document: string, voice: OfflineVoice, chapters: string[
   persist(); kick();
 }
 export function toggleTask(task: DownloadTask): void {
-  if (['queued', 'downloading', 'waiting'].includes(task.state)) task.state = 'paused';
+  if (['queued', 'preparing', 'downloading', 'waiting'].includes(task.state)) task.state = 'paused';
   else { task.state = 'queued'; task.failed = []; task.error = null; }
   persist(); kick();
 }
@@ -199,10 +236,37 @@ export function removeDownloads(document: string): void {
 }
 export function requestPlan(document: string, title: string): void {
   try { if (planOf(document)) return; } catch (error) { storeError = String(error); emit(); return; }
-  if (!indexing.has(document) || indexing.get(document)?.state === 'failed') { indexing.set(document, { title, state: 'queued', count: 0 }); emit(); }
+  if (indexing.has(document) && indexing.get(document)?.state !== 'failed') return;
+  const request = { title, state: 'preparing' as const, count: 0 };
+  indexing.set(document, request); emit();
+  setTimeout(() => {
+    if (indexing.get(document) !== request) return;
+    try {
+      const id = asDocumentId(document);
+      if (!id) throw new Error('Invalid document identity.');
+      const file = documentFile(id, 'epub');
+      const handle = file.open(FileMode.ReadOnly);
+      let plan: NarrationPlan;
+      try {
+        plan = navigationPlan(readDocumentNavigation({ size: file.size, read: (offset, length) => {
+          handle.offset = offset; return handle.readBytes(length);
+        } }));
+      } finally { handle.close(); }
+      disk.savePlan(document, plan); plans.set(document, plan); indexing.delete(document); emit(); kick();
+    } catch (error) { indexing.set(document, { title, state: 'failed', count: 0, error: String(error) }); emit(); }
+  }, 0);
 }
 export const indexingState = (document: string) => indexing.get(document);
-export const nextIndex = () => [...indexing].find(([, value]) => value.state !== 'failed');
-export function indexProgress(document: string, count: number): void { const entry = indexing.get(document); if (entry) { entry.state = 'preparing'; entry.count = count; emit(); } }
-export function finishIndex(document: string, plan: NarrationPlan): void { disk.savePlan(document, plan); plans.set(document, plan); indexing.delete(document); emit(); kick(); }
-export function failIndex(document: string, error: string): void { const entry = indexing.get(document); if (entry) { entry.state = 'failed'; entry.error = error; emit(); } }
+export function finishPreparation(token: number, chapters: Chapter[]): void {
+  const request = preparation;
+  if (!request || request.token !== token) return;
+  try {
+    const plan = withPreparedSection(planOf(request.document)!, request.section, chapters);
+    disk.saveSection(request.document, request.section, chapters, plan);
+    plans.set(request.document, plan); preparation = null; emit(); request.resolve();
+  } catch (error) { failPreparation(token, String(error)); }
+}
+export function failPreparation(token: number, error: string): void {
+  if (!preparation || preparation.token !== token) return;
+  const request = preparation; preparation = null; emit(); request.reject(new Error(error));
+}

@@ -1,5 +1,5 @@
 import { SynthesisError } from '../core/providers/errors';
-import type { DownloadTask, NarrationPlan } from './model';
+import type { Chapter, DownloadTask, NarrationPlan } from './model';
 
 export interface SchedulerDeps {
   tasks(): DownloadTask[];
@@ -9,6 +9,7 @@ export interface SchedulerDeps {
   allowed(): boolean;
   exists(task: DownloadTask, text: string): boolean;
   fetch(task: DownloadTask, text: string): Promise<void>;
+  prepare?(task: DownloadTask, chapter: Chapter): Promise<Chapter>;
   wait(ms: number): Promise<void>;
 }
 
@@ -16,7 +17,7 @@ export interface SchedulerDeps {
  * cancellation boundary; removing a task never resurrects it on completion. */
 export function createScheduler(deps: SchedulerDeps) {
   let running = false;
-  const active = (task: DownloadTask) => deps.tasks().includes(task) && task.state === 'downloading';
+  const active = (task: DownloadTask) => deps.tasks().includes(task) && ['downloading', 'preparing'].includes(task.state);
   async function run() {
     if (running || !deps.allowed()) return;
     running = true;
@@ -31,11 +32,20 @@ export function createScheduler(deps: SchedulerDeps) {
         task.state = 'downloading'; task.error = null; deps.changed();
         for (const chapterId of [...task.chapters]) {
           if (!active(task)) break;
-          const chapter = plan.chapters.find((c) => c.id === chapterId);
+          if (!task.chapters.includes(chapterId)) continue;
+          let chapter = deps.plan(task.document)?.chapters.find((c) => c.id === chapterId);
           if (!chapter) continue;
           try {
+            if (chapter.prepared === false) {
+              if (!deps.prepare) throw new Error('Chapter text is not prepared.');
+              task.state = 'preparing'; deps.changed();
+              chapter = await deps.prepare(task, chapter);
+              if (!active(task)) break;
+              task.state = 'downloading'; deps.changed();
+              if (!task.chapters.includes(chapterId)) continue;
+            }
             for (const text of chapter.texts) {
-              if (!active(task) || !deps.allowed()) break;
+              if (!active(task) || !task.chapters.includes(chapterId) || !deps.allowed()) break;
               if (!deps.connected()) { task.state = 'waiting'; task.error = 'No network connection, waiting to reconnect'; break; }
               if (deps.exists(task, text)) continue;
               for (let attempt = 0; ; attempt++) {
@@ -43,7 +53,7 @@ export function createScheduler(deps: SchedulerDeps) {
                 catch (error) {
                   if (!active(task) || !deps.connected() || !(error instanceof SynthesisError) || !error.retriable || attempt >= 2) throw error;
                   await deps.wait(1000 * (attempt + 1));
-                  if (!active(task) || !deps.allowed()) break;
+                  if (!active(task) || !task.chapters.includes(chapterId) || !deps.allowed()) break;
                 }
               }
               deps.changed();

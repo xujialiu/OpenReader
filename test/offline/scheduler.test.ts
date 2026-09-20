@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createScheduler } from '../../src/offline/scheduler';
-import type { DownloadTask, NarrationPlan } from '../../src/offline/model';
+import { navigationPlan, withPreparedSection, type DownloadTask, type NarrationPlan } from '../../src/offline/model';
 import { SynthesisError } from '../../src/core/providers/errors';
 
 function fixture() {
@@ -69,4 +69,39 @@ describe('durable download scheduling', () => {
     await f.scheduler.run(); expect(first.state).toBe('paused');
     expect(f.fetch.mock.calls.every(([task]) => task.voice.voice === 'B')).toBe(true);
   });
+});
+
+it('prepares only selected late chapters and synthesizes each before preparing the next', async () => {
+  let plan = navigationPlan({ sections: Array.from({ length: 2200 }, (_, i) => ({ href: `${i}.xhtml`, path: `${i}.xhtml` })),
+    chapters: Array.from({ length: 2200 }, (_, i) => ({ id: `c${i}`, title: `Chapter ${i}`, parent: null, depth: 0, section: i, fragment: '' })) });
+  const task: DownloadTask = { id: 'one', document: 'book', voice: { provider: 'fish', voice: 'A', label: 'A' },
+    chapters: ['c2099', 'c2100'], state: 'queued', error: null, failed: [] };
+  const events: string[] = [];
+  const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+    exists: () => false, wait: async () => {},
+    prepare: async (_, chapter) => {
+      expect(task.state).toBe('preparing'); events.push(`prepare ${chapter.id}`);
+      const ready = { ...chapter, prepared: true, texts: [`Audio ${chapter.id}`] };
+      plan = withPreparedSection(plan, chapter.section!, [ready]); return ready;
+    },
+    fetch: async (_, text) => { events.push(text); },
+  });
+  expect(events).toEqual([]);
+  await scheduler.run();
+  expect(events).toEqual(['prepare c2099', 'Audio c2099', 'prepare c2100', 'Audio c2100']);
+  expect(plan.preparedSections).toEqual([2099, 2100]); expect(task.state).toBe('done');
+});
+
+it.each(['paused', 'deleted'] as const)('does not synthesize a chapter %s during preparation', async (action) => {
+  const f = fixture();
+  const plan: NarrationPlan = { version: 2, chapters: [{ id: 'a', title: 'A', parent: null, depth: 0, section: 0, prepared: false, texts: [] }] };
+  const task = f.tasks[0]; task.chapters = ['a'];
+  const scheduler = createScheduler({ tasks: () => f.tasks, plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+    exists: () => false, wait: async () => {}, fetch: f.fetch,
+    prepare: async (_, chapter) => {
+      if (action === 'paused') task.state = 'paused'; else task.chapters = [];
+      return { ...chapter, prepared: true, texts: ['Never send this.'] };
+    },
+  });
+  await scheduler.run(); expect(f.fetch).not.toHaveBeenCalled();
 });

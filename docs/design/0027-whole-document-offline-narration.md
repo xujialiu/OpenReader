@@ -10,6 +10,8 @@ The action is described as downloading the whole document's audio. Preparing tha
 
 Download opens a drawer listing chapter names with selection controls on the right. Select all sits at the upper right; Download selected stays at the bottom. Downloaded chapters carry a completion check. Selecting all offers the original whole-document preparation, while selecting individual chapters lets the owner prepare only what they need.
 
+The chapter list appears from the document's existing contents before its body is prepared for speech. Opening this drawer does not start reading through the entire document. Only Download selected starts that work: prepare a selected chapter, download its audio, then move to the next. Someone choosing chapter 103 must not wait for chapters 1 through 102 to be prepared first. Preparation status stays in this view alongside the selectable list. Waiting for the whole document before showing any choices was rejected because it makes a small selection in a long book unnecessarily slow.
+
 The drawer names the current voice, and every chapter status refers to that voice. Initially nothing is selected. Select all includes only incomplete chapters that are not already downloading, and becomes an action to clear the selection. The bottom button includes the selected chapter count and is disabled when nothing is selected.
 
 An empty selection circle marks an available chapter; a coloured selected circle marks a chapter chosen for preparation. Downloading chapters show progress, and completed chapters show a check with Downloaded. Neither is added again. Failed or incomplete chapters remain selectable, and another attempt fills in missing audio rather than repeating completed work.
