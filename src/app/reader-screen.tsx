@@ -112,9 +112,38 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
     (provider: ProviderId, voice: string) => setSettings({ ...settings, provider, voice }),
     [settings, setSettings],
   );
-  const reached = useCallback((position: ReadingPosition) => library.reached(id, position), [library, id]);
+  /**
+   * The Document these two write about is **the one that is open**, not the one
+   * the route now names. They are never the same during a hand-over.
+   *
+   * `navigate('Reader', { id })` with a different id re-renders this screen with
+   * the new route param while `opened` still holds the previous Document — the
+   * bytes of the next one are still being read, which for the 34 MB novel is not
+   * a short window. The `<ReadingView>` for the previous Document re-renders in
+   * that window and takes these callbacks with it; when `setOpened` finally lands
+   * and its key changes, its unmount cleanup writes the Reading Position it has
+   * been holding. Bound to `id`, that write lands on the **new** Document.
+   *
+   * Seen on the device: adding a second book while the first was being read gave
+   * the new book the first one's Reading Position, quoted on its Library row, for
+   * a sentence that is not in it. Losing a place is the failure this app exists to
+   * prevent; inventing one is the same failure wearing a different coat, and ADR
+   * 0008's rule is that a place which might be wrong is worse than no place.
+   */
+  const openedId = opened?.document.identity.id ?? null;
+  const reached = useCallback(
+    (position: ReadingPosition) => {
+      if (openedId) library.reached(openedId, position);
+    },
+    [library, openedId],
+  );
   /** What the EPUB calls itself, once epub.js has read its metadata. A file name is not a title. */
-  const titled = useCallback((said: string) => library.retitled(id, said), [library, id]);
+  const titled = useCallback(
+    (said: string) => {
+      if (openedId) library.retitled(openedId, said);
+    },
+    [library, openedId],
+  );
 
   return (
     <View style={styles.screen}>
