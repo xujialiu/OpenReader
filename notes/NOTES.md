@@ -190,6 +190,19 @@ or striking it here with the day's log named.
   device session.
 - **Glyph coverage in the system font** (00:59) is device-only and is not a property
   of the code. Recorded so it is not looked for in the suite.
+- **A remembered Voice naming a Provider this build does not have has never been on
+  a screen** (added 08:45). `settingsForDocument` ignores it and
+  `unusableVoiceSentence` says so, both asserted in `test/app/settings.test.ts`;
+  what is unseen is the sentence rendered under the player. The same family as the
+  three resume refusals above, and the same trick settles it: one Library file
+  written by hand with a Voice from a Provider that does not exist here, one open.
+  *Cost:* minutes, inside any device session.
+- **The failure sentence has only been seen at the end of a document** (08:40). Its
+  other branch — Utterances refused while sections are still to render, where the
+  reading is left running and waiting — is asserted in `test/app/segment.test.ts`
+  and has never been drawn. *Would establish it:* the same broken `fetch`, a seek
+  into the middle of the owner's novel rather than the end of the fixture. *Cost:*
+  one device session, and the harness for it is the one 08:45 describes.
 - **Whether *Piper – Neural TTS*'s system-wide voices emit word markers** — item 6
   above. *Would establish it:* install it on a real device and ask
   `AVSpeechSynthesizer` for its voices and their markers. *Cost:* an hour, and if
@@ -234,6 +247,18 @@ or striking it here with the day's log named.
   restate the stylesheet.
 - **The stepper's hold cadence** is three constants (01:15); an assertion on them
   restates them.
+- **The identity cleanup now paints the highlight rather than clearing it**
+  (ADR 0025), and on the **unmount** path that message goes into a WebView that is
+  being torn down. Four Reader unmounts in the 08:23–08:45 session produced no
+  warning, no error and no log line of any kind — but `clear()` was the same kind of
+  call in the same place and had never been observed either, so what this rests on
+  is that the two are the same `injectJavascript` and one of them has now been
+  watched. An assertion on it would restate the bridge.
+- **The lock screen is published while the cursor exists, which now survives an
+  engine rebuild** (ADR 0025). Nothing appears until the audio session is active,
+  measured at 04:05, and a press arrives at `reading.play()`, which builds the
+  engine — so the window publishes an item iOS does not show. Argued from that
+  measurement rather than re-observed across a rebuild.
 - **`goToSection`'s already-rendered branch** was listed at 01:45 as neither proved
   nor asserted. It ran at 05:54, after eighteen minutes of reading made the state
   reachable.

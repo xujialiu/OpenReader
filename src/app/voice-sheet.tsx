@@ -23,8 +23,15 @@
  * (`voices.ts` is the grouping, and the argument).
  *
  * Nothing is fetched until a Provider is tapped. A Voice list is a request against
- * the owner's own account (philosophy rule 4), and it is cached for the session
- * afterwards because Speechify paginates and Fish merges up to three sources.
+ * the owner's own account (philosophy rule 4), and it is cached for as long as the
+ * reader is open because Speechify paginates and Fish merges up to three sources.
+ *
+ * **What is chosen here is this book's Voice** (ADR 0010). It is written into the
+ * Library entry of the Document that is open, and it becomes the global default as
+ * well — so the next Document opened for the first time inherits it and a book
+ * already under way keeps what it was started with. The sheet says so in as many
+ * words, because a picker that quietly did two things is one the owner cannot
+ * predict.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -123,6 +130,17 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
           </Note>
         ) : (
           <>
+            {/*
+             * **Whose Voice this is**, which design 0010 names as the price of a Voice
+             * per Document: a picker that did not say would leave the owner unable to
+             * tell which of the two things they had just done. Choosing here is a
+             * choice for the book in front of them; it becomes the default as well,
+             * which is what the next book they open for the first time inherits.
+             */}
+            <Note>
+              The Voice this book is read in. Choosing one here changes this book and nothing already on the shelf, and
+              it becomes the Voice a new book starts in.
+            </Note>
             <View style={styles.providers}>
               {configured.map((provider) => (
                 <Chip

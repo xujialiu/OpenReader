@@ -263,8 +263,9 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
                 <Action label={`Read with ${PROVIDER_LABELS[id]}`} primary onPress={use} />
               </View>
               <Note>
-                Everything below can be filled in without choosing this Provider; it is kept for when you do. The Voice
-                cannot, because there is one Voice and it belongs to the Provider that is reading.
+                Everything below can be filled in without choosing this Provider; it is kept for when you do. The
+                default Voice cannot, because a Voice belongs to exactly one Provider and the default belongs to the
+                one that is reading.
               </Note>
             </>
           )}
@@ -393,14 +394,14 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
         ) : null}
 
         {inUse ? (
-          <Section title="Voice">
+          <Section title="Default Voice">
             <View style={styles.row}>
               <Action label={asking ? 'Asking…' : 'Ask the server'} onPress={() => void ask()} disabled={asking} />
             </View>
             {voices === null ? (
               <Note>
                 {draft.voice
-                  ? `Reading in ${draft.voice}. Ask the server for the list to change it.`
+                  ? `New books will be read in ${draft.voice}. Ask the server for the list to change it.`
                   : 'Nothing can be spoken without a Voice. Ask the server for the ones it offers.'}
               </Note>
             ) : (
@@ -412,9 +413,9 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
               />
             )}
             <Note>
-              One Voice, and the document being read uses it. ADR 0010 gives each document a Voice of its own with this
-              as the default, and that half waits on there being somewhere to remember a document — so this is the
-              Voice, and changing it changes what is being read now.
+              This is the Voice a book you have not opened yet will be read in. A book already on the shelf keeps the
+              Voice it was started with (ADR 0010), so changing this does not change one that is already under way —
+              the Voice list inside the reader is where that book&apos;s own Voice is changed.
             </Note>
           </Section>
         ) : null}

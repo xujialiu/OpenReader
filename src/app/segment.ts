@@ -84,8 +84,26 @@ export interface OutOfText {
 }
 
 /**
- * The engine has spoken every Utterance it was given: which of the two things
- * that is, and how to say it.
+ * The Utterances the engine was given and never spoke, which is the difference
+ * between a book that finished and a Provider that stopped answering.
+ *
+ * Both fields come from the engine's own bookkeeping (`OutOfTextReport`): it is
+ * the only thing that knows a Clip was refused, and the app is the only thing
+ * that can say so.
+ */
+export interface Unspoken {
+  /** How many Utterances were never spoken since the reading was last pointed somewhere. */
+  count: number;
+  /** What the last refusal said, in its own words, or null when nothing kept it. */
+  reason: string | null;
+}
+
+/** Nothing was lost: the ordinary exhaustion, and the default so that a caller with nothing to report says nothing. */
+const NOTHING_UNSPOKEN: Unspoken = { count: 0, reason: null };
+
+/**
+ * The engine has spoken every Utterance it was given: which of the **three**
+ * things that is, and how to say it.
  *
  * They are not the same event and must not share a sentence. Reaching the last
  * spine item is a **book that has finished**, and the reading stops there because
@@ -95,13 +113,43 @@ export interface OutOfText {
  * moment another section reports (notes/NOTES.md footgun 3, and the engine's
  * `extend`).
  *
+ * **And running out with Utterances that were never spoken is neither of those.**
+ * A Clip the Provider refused leaves no trace in any of `hasRunOut`'s four
+ * conditions — it is not in flight, it is stepped over, and the queue empties
+ * behind it — so a run of failures at the end of a document reached this function
+ * as a finished book and was announced as one: "That was the last of this
+ * document", said to an owner whose Fish Audio had lost the network for the last
+ * clips (notes/NOTES_2026-09-20.md, 07:48). Design 0023 names that exact lie as
+ * worse than the silence it replaced, so it gets the third sentence rather than a
+ * fifth condition: the sentence says the reading stopped because something failed,
+ * and what failed.
+ *
+ * `ended` is unchanged by a failure, and deliberately: it decides whether the
+ * engine is paused, and at the last spine item there is nothing left to resume for
+ * whatever the reason. Before it, more text is still coming and the reading is
+ * still waiting for it — the failures are behind the cursor either way.
+ *
  * `furthest` is the **furthest** section that has reported, not the last one to
  * report: sections render out of order, so the last to report is routinely behind.
  * A spine of zero is a document that has not said how long it is yet, and that is
  * never the end of a book.
  */
-export function outOfTextSentence(furthest: number, spine: number): OutOfText {
+export function outOfTextSentence(furthest: number, spine: number, unspoken: Unspoken = NOTHING_UNSPOKEN): OutOfText {
   const ended = spine > 0 && furthest >= spine - 1;
+  if (unspoken.count > 0) {
+    const many = unspoken.count === 1;
+    return {
+      ended,
+      sentence:
+        `${many ? 'One Utterance was' : `${unspoken.count} Utterances were`} never spoken, because synthesis failed` +
+        `${unspoken.reason ? `: ${fullStop(unspoken.reason)}` : '.'} ` +
+        (ended
+          ? 'The reading has stopped here for that reason and not at the end of the book. '
+          : 'The reading has run out of the text this document has reported and is waiting for more of it. ') +
+        `Going back to ${many ? 'it' : 'them'} is how ${many ? 'it is' : 'they are'} asked for again; ` +
+        'nothing is retried out of sight.',
+    };
+  }
   return {
     ended,
     sentence: ended
@@ -109,6 +157,18 @@ export function outOfTextSentence(furthest: number, spine: number): OutOfText {
       : 'The reading has reached the end of the text this document has reported and is waiting for more of it. ' +
         'It carries on by itself the moment another section arrives.',
   };
+}
+
+/**
+ * A refusal's own words, ending in something a sentence can follow.
+ *
+ * Providers are inconsistent about the full stop — `SynthesisError`'s messages end
+ * in a question mark, a period or neither — and the sentence above continues after
+ * this one, so without it two sentences run together.
+ */
+function fullStop(said: string): string {
+  const trimmed = said.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
 /**

@@ -334,8 +334,9 @@ Three decisions inside that, each of which could have gone the other way:
   visible at the moment of choosing. A list that selected on tap would make
   "look at what Fish Audio wants" and "stop reading with Kokoro" the same
   gesture, and the second is the one the owner would not notice having made.
-- **The Voice section appears only on the Provider in use.** There is one Voice
-  and it belongs to the Provider that is reading (ADR 0010, CONTEXT.md), and
+- **The Voice section appears only on the Provider in use.** What that screen
+  holds is the **default** Voice — a Document keeps its own (ADR 0010), and the
+  default belongs to the Provider that is reading (CONTEXT.md) — and
   `providerSettings` puts a credential in the section of the Provider the
   settings name and in no other (philosophy rule 3) — so asking a Provider that
   is not in use for its Voices would be asking with an empty key. The address,

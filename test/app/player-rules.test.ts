@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
+import { pin } from '../structural';
+
 /**
  * Three properties of the player that were proved on the device and cannot be
  * proved here, kept as tripwires over the source text.
@@ -194,10 +196,59 @@ describe('a section that arrives mid-reading reaches the engine at once (notes/N
     // spine item would stop a reading that is about to be fed.
     expect(reading).toContain('onOutOfText: ranOutOfText,');
     const ranOut = within(reading, 'const ranOutOfText = useCallback(', '}, []);');
-    expect(ranOut).toContain('outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0)');
+    expect(ranOut).toContain('outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0, {');
     expect(ranOut).toContain('if (ended) {');
     expect(ranOut).toContain('engineRef.current?.pause();');
     expect(ranOut).toContain('playing: ended ? false : was.playing');
+  });
+
+  /**
+   * And the third sentence reaches it (ADR 0023, and 07:48). The engine counts the
+   * Utterances that were never spoken; if this hand-over goes, `outOfTextSentence`
+   * falls back to its own default of "nothing was lost" and a Provider that dropped
+   * the last clips of a document is announced as the end of the book again — which is
+   * the sentence design 0023 calls a worse lie than the silence it replaced.
+   */
+  it('passes what was never spoken, and the refusal, into the sentence', () => {
+    const ranOut = within(reading, 'const ranOutOfText = useCallback(', '}, []);');
+    pin(ranOut, 'count: report.unspoken,', 'use-reading.ts, ranOutOfText');
+    pin(ranOut, 'reason: report.refusal === null ? null : describe(report.refusal),', 'use-reading.ts, ranOutOfText');
+  });
+});
+
+describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.md, 07:45)', () => {
+  /**
+   * The cleanup on `engineIdentity(settings)@writtenAt` is where the audio session
+   * is given back, and it used to clear `atRef` with it. `play()` then found a loaded
+   * list with no cursor and read from the top: changing the Voice at chapter 100 of a
+   * 2,000-chapter novel started it again at chapter one, and so did pasting a key
+   * while reading, because a credential write runs the same cleanup. It fails
+   * silently — the reading works perfectly, somewhere else.
+   *
+   * Measured on the device at 07:45 before the fix and after it; the mutation that
+   * proves this rule is the line going back in.
+   */
+  const reading = code('use-reading.ts');
+
+  it('leaves the cursor alone when the engine is thrown away', () => {
+    const cleanup = within(reading, 'const identity = `${engineIdentity(settings)}@${writtenAt}`;', '[identity],');
+    expect(cleanup).toContain('void engine?.dispose();');
+    expect(cleanup).not.toContain('atRef.current = null;');
+    expect(cleanup).not.toContain('utterance: null,');
+    // The one place the cursor is cleared is the renumbering branch, where every
+    // index means a different sentence and clearing is the whole point (`samePrefix`).
+    expect(reading.match(/atRef\.current = null;/g)).toHaveLength(1);
+    pin(within(reading, 'const adopt = useCallback(', '}, []);'), 'atRef.current = null;', 'use-reading.ts, adopt');
+  });
+
+  it('leaves the highlight on the sentence the cursor names, rather than clearing it', () => {
+    // `clear()` here is the visible half of the same defect: the page loses the
+    // highlight while the player still says where the reading is. `show` paints the
+    // Utterance whole, which is also what replaces the words the previous Voice was
+    // cued with.
+    const cleanup = within(reading, 'const identity = `${engineIdentity(settings)}@${writtenAt}`;', '[identity],');
+    pin(cleanup, 'if (at === null) bridgeRef.current?.clear();', 'use-reading.ts, the identity cleanup');
+    pin(cleanup, 'else bridgeRef.current?.show(at);', 'use-reading.ts, the identity cleanup');
   });
 
   it('marks the furthest section reported, not the last one to report', () => {
@@ -206,5 +257,78 @@ describe('a section that arrives mid-reading reaches the engine at once (notes/N
     // render with no text in them live.
     const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, seekTo],');
     expect(blocks).toContain('furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);');
+  });
+});
+
+describe('the player names the Voice, and a resume is not an error (design 0020)', () => {
+  /**
+   * Two things the device found in the same minute, both of them in the view rather
+   * than in what the view was given.
+   *
+   * The line above the play button rendered `settings.voice`:
+   * `Fish Audio · zh/74c6aba5cbf94a15bbdc547ffce5cb38`, while the sheet three taps
+   * away knew the Voice as 「语彤 Yutong - Female Mandarin (Mainland)」 (07:14). And a
+   * resume that worked was painted in the attention colour, because `ReadingStatus`
+   * keeps `resume` out of `note` on purpose and this screen merged both into one array
+   * that the player drew in one style (07:27) — the distinction was made in the model
+   * and thrown away in the view.
+   *
+   * Both are one line each and both fail silently: the caption is wrong rather than
+   * missing, and the colour is wrong rather than absent.
+   */
+  const view = code('reading-view.tsx');
+  const player = code('player.tsx');
+
+  it('looks the Voice up in the list the Provider published', () => {
+    pin(view, 'voiceInList(voices.voicesOf(settings.provider), settings.voice)', 'reading-view.tsx');
+    pin(view, 'voiceInUse={voiceInUse}', 'reading-view.tsx');
+    pin(player, '{voiceLine(settings, voiceInUse)}', 'player.tsx');
+    // The id is still what is shown when no list holds it, because that is the only
+    // true thing there is to show — and nothing fetches a list to make a caption.
+    pin(player, 'if (!inUse) return `${provider} · ${settings.voice}`;', 'player.tsx, voiceLine');
+  });
+
+  it('carries the tone of each line from the model to the style that paints it', () => {
+    pin(view, "if (status.resume) said.push({ said: status.resume, attention: false });", 'reading-view.tsx');
+    pin(view, "if (status.note) said.push({ said: status.note, attention: true });", 'reading-view.tsx');
+    pin(player, 'style={[styles.note, note.attention && styles.noteAttention]}', 'player.tsx');
+    pin(player, 'noteAttention: { color: INK.attention },', 'player.tsx');
+  });
+
+  it('claims no Highlight Level until a Clip has answered with one', () => {
+    // `utterance` is set the moment Play is pressed and `level` only when a Clip
+    // arrives, so the line claimed "highlighting the whole Utterance" — the Level that
+    // means the Provider reported no Word Timings — for the second before it knew.
+    pin(view, 'if (status.level === null) return `Reading ${where}.`;', 'reading-view.tsx, readingLine');
+  });
+});
+
+describe('each Document is read in the Voice it remembers (ADR 0010)', () => {
+  /**
+   * `LibraryEntry.voice` was in the file format, parsed and written, and **nothing
+   * ever set it** — so design 0010 described an app that did not exist, and the
+   * owner's shelf read an English document in a Mandarin Voice (07:38).
+   *
+   * What `settingsForDocument` decides is tested in `settings.test.ts`. What cannot
+   * be tested there is the wiring: that the screen hands the reading the Document's
+   * settings rather than the app's, asks the Keychain about *that* Provider, and
+   * writes the choice down. Each is one line, and each fails by reading the book
+   * perfectly in the wrong Voice.
+   */
+  const screen = code('reader-screen.tsx');
+
+  it('hands the reading this Document settings, and asks the Keychain about its Provider', () => {
+    pin(screen, 'settings={forDocument}', 'reader-screen.tsx');
+    pin(screen, 'const key = useProviderKey(forDocument.provider);', 'reader-screen.tsx');
+    expect(screen).not.toContain('settings={settings}');
+  });
+
+  it('writes the Voice down when it is chosen, and inherits the default only at the first open', () => {
+    // The two writes are different: one is the owner choosing, the other is the
+    // inheritance design 0010 promises — "and from then on the document keeps it",
+    // which is only true if it is written.
+    pin(screen, 'if (openedId) library.voiced(openedId, { provider, voice });', 'reader-screen.tsx, setVoice');
+    pin(screen, 'library.voiced(openedId, { provider: settings.provider, voice: settings.voice });', 'reader-screen.tsx');
+    pin(screen, 'if (!openedId || voiceId) return;', 'reader-screen.tsx, the inheritance');
   });
 });

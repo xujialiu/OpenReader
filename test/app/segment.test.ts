@@ -184,3 +184,70 @@ describe('outOfTextSentence', () => {
     expect(outOfTextSentence(2075, 2077).ended).toBe(false);
   });
 });
+
+/**
+ * And the third sentence, which is the one a Provider failure needs.
+ *
+ * On 2026-09-20 at 07:48 Fish Audio lost the network for the last clips of a
+ * document. The reading stopped at Utterance 17 of 18 and the player said "That was
+ * the last of this document. The reading has stopped at the end of the book." Every
+ * one of `hasRunOut`'s four conditions held, because a Clip that was refused leaves
+ * `inFlight` and the queue drains past it — so the answer is a sentence and not a
+ * fifth condition, which would have restored the silence of 04:43 instead.
+ */
+describe('outOfTextSentence, with Utterances that were never spoken', () => {
+  const lost = 'Fish Audio could not reach api.fish.audio: The network connection was lost.';
+
+  it('says the reading stopped because synthesis failed, and names the refusal', () => {
+    const answer = outOfTextSentence(1, 2, { count: 1, reason: lost });
+    expect(answer.sentence).toContain('One Utterance was never spoken, because synthesis failed');
+    expect(answer.sentence).toContain(lost);
+  });
+
+  it('does not say the book ended, at the very place where it would have', () => {
+    // The 07:48 state: the last spine item, so `ended` is true and the reading does
+    // stop — but it stopped because a Clip never arrived, and that is what is said.
+    const answer = outOfTextSentence(1, 2, { count: 1, reason: lost });
+    expect(answer.sentence).toContain('not at the end of the book');
+    expect(answer.sentence).not.toContain('That was the last of this document');
+  });
+
+  it('still stops the reading at the last spine item, because nothing is coming either way', () => {
+    // `ended` decides whether the engine is paused, and a failure does not change
+    // what is left to play. Keeping it false here would leave a reading `playing`
+    // with nothing to play — the six-minute silence, wearing a better sentence.
+    expect(outOfTextSentence(1, 2, { count: 3, reason: null }).ended).toBe(true);
+    expect(outOfTextSentence(4, 2077, { count: 3, reason: null }).ended).toBe(false);
+  });
+
+  it('says it is waiting for more when there are sections still to render', () => {
+    const answer = outOfTextSentence(4, 2077, { count: 2, reason: lost });
+    expect(answer.sentence).toContain('2 Utterances were never spoken');
+    expect(answer.sentence).toContain('waiting for more of it');
+    expect(answer.sentence).not.toContain('the end of the book');
+  });
+
+  it('counts, and asks for them back in the plural it counted', () => {
+    expect(outOfTextSentence(1, 2, { count: 1, reason: null }).sentence).toContain('Going back to it is how it is asked for again');
+    expect(outOfTextSentence(1, 2, { count: 4, reason: null }).sentence).toContain(
+      'Going back to them is how they are asked for again',
+    );
+  });
+
+  it('ends the refusal in a full stop, because a sentence follows it', () => {
+    // `SynthesisError`'s messages end in a question mark, a period or nothing at all,
+    // and without this the refusal runs into the sentence after it.
+    expect(outOfTextSentence(1, 2, { count: 1, reason: 'the server answered 500' }).sentence).toContain(
+      'the server answered 500. The reading',
+    );
+    expect(outOfTextSentence(1, 2, { count: 1, reason: 'is the address right?' }).sentence).toContain(
+      'is the address right? The reading',
+    );
+  });
+
+  it('is the ordinary pair of sentences when nothing was lost', () => {
+    // The default, so that a caller with nothing to report says what it always said.
+    expect(outOfTextSentence(1, 2, { count: 0, reason: null }).sentence).toBe(outOfTextSentence(1, 2).sentence);
+    expect(outOfTextSentence(4, 2077, { count: 0, reason: lost }).sentence).toBe(outOfTextSentence(4, 2077).sentence);
+  });
+});

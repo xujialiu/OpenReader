@@ -77,7 +77,9 @@ From notes/NOTES.md. Each fails in a way that looks like something else.
    waiting for a Provider look identical from in here, one of them ends by itself
    and the other never does, and the second was six minutes of silence with the
    app still reporting `playing` (ADR 0023). `onOutOfText` says which it is, on
-   `read-ahead.ts`'s four conditions.
+   `read-ahead.ts`'s four conditions — and carries the count of Utterances that
+   were **never spoken**, because a Clip the Provider refused is invisible to all
+   four and was announced as the end of the book.
 4. **Never call the library's `PlaybackNotificationManager` on iOS** — see
    [`../now-playing/`](../now-playing/) and ADR 0016. If `show()` is never
    called, the library never claims the command centre, and there is no contest

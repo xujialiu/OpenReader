@@ -43,6 +43,41 @@ import { enqueueCeiling, fetchWindow, hasRunOut, type UtteranceState } from './r
 import type { ReaderClock } from './reader-clock';
 import { createTimeline, type QueuedClip, type TimelinePosition } from './timeline';
 
+/**
+ * What the engine knows about its own exhaustion, which is more than "it
+ * happened".
+ *
+ * **Why the failures are in here rather than in a condition.** A Clip that was
+ * refused leaves `inFlight`, `drain` steps over it and `nextToEnqueue` passes it,
+ * so every one of `hasRunOut`'s four conditions holds exactly as it does for a
+ * book that finished — and the app said "the reading has stopped at the end of
+ * the book" to an owner whose Provider had dropped the last clips of a document
+ * (notes/NOTES_2026-09-20.md, 07:48). Suppressing the announcement instead would
+ * restore the silence the announcement exists to end, so the engine reports what
+ * it already tracks and the app has a third sentence to say (ADR 0023).
+ */
+export interface OutOfTextReport {
+  /** How many Utterances the engine had when it ran out. */
+  known: number;
+  /**
+   * How many of them were **never spoken** — a synthesis that was refused, or a
+   * Clip that would not decode — since the last `load` or `seek`.
+   *
+   * Since then and not ever, because that is what the owner just listened to: a
+   * seek back to a failed Utterance is how a retry is asked for (`read-ahead.ts`),
+   * and it clears this with the rest of the restart.
+   */
+  unspoken: number;
+  /**
+   * The last of those refusals, exactly as it arrived, or null when none did.
+   *
+   * Unconverted: `SynthesisError`'s message already names the address it tried and
+   * asks the one question there is, and the app has one place that turns a problem
+   * into a sentence (`describe` in `use-reading.ts`).
+   */
+  refusal: unknown;
+}
+
 export interface PlaybackEngineDeps {
   /** The Provider, already holding its key — which arrives as a setting and never as a side effect (ADR 0002). */
   provider: TTSProvider;
@@ -66,10 +101,8 @@ export interface PlaybackEngineDeps {
    * This is the engine saying it. Once per exhaustion: a longer list, a seek or a
    * load arms it again, so a reading that is fed more text and runs out again
    * says so again.
-   *
-   * @param known how many Utterances it had when it ran out.
    */
-  onOutOfText?(known: number): void;
+  onOutOfText?(report: OutOfTextReport): void;
   /** Memory only (ADR 0002). Left out, the engine makes its own. */
   cache?: ClipCache;
   /** The owner's reading speed. Applied here and nowhere else (ADR 0009); a Provider is never asked for it. */
@@ -160,6 +193,15 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   const prepared = new Map<number, PreparedClip>();
   const inFlight = new Set<number>();
   const failed = new Set<number>();
+  /**
+   * The last problem that left an Utterance unspoken, for `OutOfTextReport`.
+   *
+   * Not every problem: a session that would not activate is reported through
+   * `onError` and is not a sentence that was skipped. This is set beside
+   * `failed.add` and cleared beside `failed.clear`, so the two cannot disagree
+   * about whether anything was lost.
+   */
+  let lastRefusal: unknown = null;
 
   let graph: AudioGraph | null = null;
   /** `drain` is the only thing that enqueues, and it must do so in order, so only one run of it exists at a time. */
@@ -199,7 +241,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     };
     if (!hasRunOut(state)) return;
     announced = true;
-    deps.onOutOfText?.(utterances.length);
+    deps.onOutOfText?.({ known: utterances.length, unspoken: failed.size, refusal: lastRefusal });
   }
 
   function startFetch(index: number): void {
@@ -215,7 +257,10 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
         if (mine === generation && index >= cursor && index <= enqueueCeiling(cursor)) prepared.set(index, clip);
       },
       (error) => {
-        if (mine === generation) failed.add(index);
+        if (mine === generation) {
+          failed.add(index);
+          lastRefusal = error;
+        }
         deps.onError(error);
       },
     ).finally(() => {
@@ -256,6 +301,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
           // A Clip that cannot be decoded is stepped over for the same reason.
           deps.onError(error);
           failed.add(nextToEnqueue);
+          lastRefusal = error;
         }
         prepared.delete(nextToEnqueue);
         nextToEnqueue++;
@@ -385,6 +431,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     nextToEnqueue = cursor;
     prepared.clear();
     failed.clear();
+    lastRefusal = null;
     cued = null;
     last = null;
     announced = false;

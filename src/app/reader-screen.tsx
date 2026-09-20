@@ -30,6 +30,7 @@ import { HeaderButton, INK, Note } from './controls';
 import { openDocument, type OpenDocument } from './document';
 import { ReadingView } from './reading-view';
 import { useShell, type ScreenProps } from './routes';
+import { settingsForDocument, unusableVoiceSentence } from './settings';
 import { useProviderKey } from './use-provider-secrets';
 
 export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
@@ -51,7 +52,6 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const [opened, setOpened] = useState<{ document: OpenDocument; position: ReadingPosition | null } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [appearance, setAppearance] = useState(false);
-  const key = useProviderKey(settings.provider);
 
   /**
    * The title the header shows, held here rather than read from `entry`.
@@ -103,18 +103,8 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
 
   const setRate = useCallback((rate: number) => setSettings({ ...settings, rate }), [settings, setSettings]);
   /**
-   * A Provider and a Voice at once, because a Voice belongs to exactly one Provider
-   * (CONTEXT.md, ADR 0010) — so choosing one from another Provider's list is
-   * choosing that Provider too. `use-reading.ts` throws the engine away and builds
-   * another, which is what `engineIdentity` is for.
-   */
-  const setVoice = useCallback(
-    (provider: ProviderId, voice: string) => setSettings({ ...settings, provider, voice }),
-    [settings, setSettings],
-  );
-  /**
-   * The Document these two write about is **the one that is open**, not the one
-   * the route now names. They are never the same during a hand-over.
+   * The Document everything below writes about is **the one that is open**, not the
+   * one the route now names. They are never the same during a hand-over.
    *
    * `navigate('Reader', { id })` with a different id re-renders this screen with
    * the new route param while `opened` still holds the previous Document — the
@@ -131,6 +121,83 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
    * 0008's rule is that a place which might be wrong is worse than no place.
    */
   const openedId = opened?.document.identity.id ?? null;
+
+  /**
+   * **This Document's own Voice** (ADR 0010), from the entry of the Document that
+   * is *open* — never the one the route now names, for the reason the block above
+   * gives about a hand-over.
+   *
+   * Read live rather than captured at the open, and that is what makes choosing a
+   * Voice work: the choice is written to the Library, the entry changes, these two
+   * strings change, `settingsForDocument` hands `<ReadingView>` a different Provider
+   * and Voice, and `engineIdentity` rebuilds the engine around them. One path, and
+   * the Library is the thing that remembers.
+   *
+   * Two strings and not the object, because the object is rebuilt every time a
+   * Reading Position is written — every ten seconds while the reading runs — and a
+   * memo keyed on it would hand down a new settings object that often.
+   */
+  const openedEntry = useMemo(
+    () => (openedId ? library.entries.find((one) => one.id === openedId) ?? null : null),
+    [library.entries, openedId],
+  );
+  const voiceProvider = openedEntry?.voice?.provider ?? '';
+  const voiceId = openedEntry?.voice?.voice ?? '';
+  const documentVoice = useMemo(
+    () => (voiceId ? { provider: voiceProvider, voice: voiceId } : null),
+    [voiceProvider, voiceId],
+  );
+  /**
+   * The settings this Document is read with: the owner's, with its own Voice in
+   * place of the global default. Everything below takes this one and nothing takes
+   * `settings` — including the Keychain lookup, because the key that matters is the
+   * one belonging to the Provider **this book** is read by.
+   */
+  const forDocument = useMemo(() => settingsForDocument(settings, documentVoice), [settings, documentVoice]);
+  const key = useProviderKey(forDocument.provider);
+
+  /**
+   * A Document opened for the first time inherits whatever the default is **at that
+   * moment**, and from then on it keeps it (ADR 0010, design 0010).
+   *
+   * Written down rather than left implied, which is the whole difference between
+   * this and one global Voice: the default can change ten times afterwards and this
+   * book is still read by the narrator it was started with. A Document opened before
+   * any Voice has been chosen inherits nothing and waits — the first choice made
+   * while it is open is written straight to it by `chooseVoice`.
+   *
+   * On `openedId` and the Document's own Voice only. The default is read at the
+   * moment this runs and is deliberately not a dependency: this is the inheritance,
+   * and a later change to the default is exactly what it must not follow.
+   */
+  useEffect(() => {
+    if (!openedId || voiceId) return;
+    if (!settings.voice.trim()) return;
+    library.voiced(openedId, { provider: settings.provider, voice: settings.voice });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedId, voiceId]);
+
+  /**
+   * A Provider and a Voice at once, because a Voice belongs to exactly one Provider
+   * (CONTEXT.md, ADR 0010) — so choosing one from another Provider's list is
+   * choosing that Provider too.
+   *
+   * **Both halves are written, and they are two different things.** The Library
+   * remembers it for *this* Document, which is what the reading then follows; the
+   * global default becomes it as well, which is what the next Document opened for
+   * the first time will inherit. That is design 0010's pair — "changing the default
+   * steers the next new document and leaves everything already underway exactly as
+   * it was" — and a book already underway is untouched because its own entry holds
+   * its own Voice.
+   */
+  const setVoice = useCallback(
+    (provider: ProviderId, voice: string) => {
+      if (openedId) library.voiced(openedId, { provider, voice });
+      setSettings({ ...settings, provider, voice });
+    },
+    [openedId, library, settings, setSettings],
+  );
+
   const reached = useCallback(
     (position: ReadingPosition) => {
       if (openedId) library.reached(openedId, position);
@@ -160,7 +227,8 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
         <ReadingView
           key={opened.document.identity.id}
           document={opened.document}
-          settings={settings}
+          settings={forDocument}
+          voiceNote={unusableVoiceSentence(documentVoice)}
           keyPresence={key.presence}
           credentialsWrittenAt={secretsWritten}
           position={opened.position}

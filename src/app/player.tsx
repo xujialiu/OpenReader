@@ -77,12 +77,25 @@ export interface PlayerProps {
    * instead.
    */
   enabled: boolean;
-  /** The Voice's locale, once the Provider's list has been asked for. Null before that; see `voiceLine`. */
-  voiceLocale: string | null;
+  /**
+   * The Voice in use as the Provider describes it — its own name and its locale —
+   * or null until a list holding it has been asked for. See `voiceLine`.
+   */
+  voiceInUse: { label: string; locale: string } | null;
   /** What the reading is doing, in one line. Kept in the player so that collapsing hides it with everything else. */
   reading: string;
-  /** Things the owner has to act on, in the words of whatever said them. Never swallowed (philosophy rule 1). */
-  notes: readonly string[];
+  /**
+   * What the player says under the reading line, in the words of whatever said it.
+   * Never swallowed (philosophy rule 1).
+   *
+   * `attention` and not one style for all of them: the screen that builds this list
+   * already knows which of them is a failure and which is a statement of fact —
+   * `ReadingStatus` keeps a resume that worked out of `note` precisely so — and
+   * painting both in the attention colour threw that away, so a book that came back
+   * to the right sentence said so in the colour of an error
+   * (notes/NOTES_2026-09-20.md, 07:27).
+   */
+  notes: readonly { said: string; attention: boolean }[];
   onPlay(): void;
   onPause(): void;
   onSkip(target: SkipTarget): void;
@@ -105,17 +118,26 @@ export interface PlayerProps {
 /**
  * The Voice in use, above the play button.
  *
- * The locale is shown **once the Provider's Voice list has been asked for**, and
- * not before. It is not a property of the id: two of the five Providers report a
- * real locale per Voice and three report none at all (ADR 0020), and the only way
- * to know which is to have the list — which is a request against the owner's
- * account. Fetching one so that a label could be complete would be spending the
- * owner's quota on a caption (philosophy rule 4).
+ * Design 0020 promises "the service that is reading and the voice it is reading
+ * with", and for a while this line kept the first half and spelled the second as
+ * `zh/74c6aba5cbf94a15bbdc547ffce5cb38` — a Provider's internal id, which is not
+ * the name of anything (notes/NOTES_2026-09-20.md, 07:14). The Voice's own name is
+ * in the list the sheet fetched, so it is threaded through to here.
+ *
+ * The name and the locale are both shown **once the Provider's Voice list has been
+ * asked for**, and not before. Neither is a property of the id: a Voice's name is
+ * whatever the service calls it, two of the five Providers report a real locale per
+ * Voice and three report none at all (ADR 0020), and the only way to know either is
+ * to have the list — which is a request against the owner's account. Fetching one
+ * so that a caption could be complete would be spending the owner's quota on a
+ * caption (philosophy rule 4), so until then the id is shown, because it is the
+ * only true thing there is to show.
  */
-function voiceLine(settings: AppSettings, locale: string | null): string {
+function voiceLine(settings: AppSettings, inUse: { label: string; locale: string } | null): string {
   const provider = PROVIDER_LABELS[settings.provider];
   if (!settings.voice) return `${provider} · choose a Voice`;
-  return locale ? `${provider} · ${settings.voice} · ${locale}` : `${provider} · ${settings.voice}`;
+  if (!inUse) return `${provider} · ${settings.voice}`;
+  return inUse.locale ? `${provider} · ${inUse.label} · ${inUse.locale}` : `${provider} · ${inUse.label}`;
 }
 
 export function Player({
@@ -124,7 +146,7 @@ export function Player({
   collapsed,
   onCollapsed,
   enabled,
-  voiceLocale,
+  voiceInUse,
   reading,
   notes,
   onPlay,
@@ -188,8 +210,8 @@ export function Player({
       </View>
 
       {notes.map((note) => (
-        <Text key={note} style={styles.note}>
-          {note}
+        <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>
+          {note.said}
         </Text>
       ))}
 
@@ -200,7 +222,7 @@ export function Player({
         style={({ pressed }) => [styles.voice, pressed && styles.pressed]}
       >
         <Text style={styles.voiceLabel} numberOfLines={1}>
-          {voiceLine(settings, voiceLocale)}
+          {voiceLine(settings, voiceInUse)}
         </Text>
       </Pressable>
 
@@ -373,7 +395,8 @@ const styles = StyleSheet.create({
   glyph: { color: INK.text, fontSize: 18, fontWeight: '600' },
   glyphPrimary: { color: INK.page },
   head: { alignItems: 'flex-start', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
-  note: { color: INK.attention, fontSize: 12, lineHeight: 17 },
+  note: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
+  noteAttention: { color: INK.attention },
   player: {
     backgroundColor: INK.panel,
     borderColor: INK.line,

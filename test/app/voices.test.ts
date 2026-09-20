@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { levelOfVoice, MULTILINGUAL_LABEL, voiceLevels } from '../../src/app/voices';
+import { levelOfVoice, MULTILINGUAL_LABEL, voiceInList, voiceLevels } from '../../src/app/voices';
 import { MULTILINGUAL, type VoiceInfo } from '../../src/core/providers/types';
 
 /**
@@ -75,5 +75,35 @@ describe('levelOfVoice', () => {
   it('says nothing for a Voice this Provider does not publish, which is the ordinary case for another Provider’s', () => {
     expect(levelOfVoice(levels, 'c')).toBeNull();
     expect(levelOfVoice(levels, '')).toBeNull();
+  });
+});
+
+/**
+ * And the Voice a line above the play button can name (design 0020).
+ *
+ * That line rendered `settings.voice` — `Fish Audio · zh/74c6aba5cbf94a15bbdc547ffce5cb38`,
+ * a provider's internal id, while the sheet three taps away knew the Voice as
+ * 「语彤 Yutong - Female Mandarin (Mainland)」 (notes/NOTES_2026-09-20.md, 07:14).
+ * Design 0020 promises "the service that is reading and the voice it is reading
+ * with", and a 32-character hex string is not the name of anything.
+ */
+describe('voiceInList', () => {
+  const listed = [voice('zh/74c6', 'zh', '语彤 Yutong - Female Mandarin (Mainland)'), voice('en/9a1b', 'en', 'Aiden')];
+
+  it('finds the Voice a Provider published under this id, with its own name and locale', () => {
+    expect(voiceInList(listed, 'zh/74c6')).toEqual({ id: 'zh/74c6', label: '语彤 Yutong - Female Mandarin (Mainland)', locale: 'zh' });
+  });
+
+  it('answers null before a list has been asked for, which is not the same as a Voice that is gone', () => {
+    // A Voice list is a request against the owner's account, so nothing fetches one
+    // to complete a caption (philosophy rule 4) — the screen shows the id until the
+    // owner opens the sheet, and both cases arrive here as null.
+    expect(voiceInList(null, 'zh/74c6')).toBeNull();
+    expect(voiceInList(undefined, 'zh/74c6')).toBeNull();
+    expect(voiceInList(listed, 'zh/nothing-like-it')).toBeNull();
+  });
+
+  it('answers null for no Voice chosen, rather than the first one in the list', () => {
+    expect(voiceInList(listed, '')).toBeNull();
   });
 });

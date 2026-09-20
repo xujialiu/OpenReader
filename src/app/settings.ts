@@ -133,14 +133,17 @@ export interface AppSettings {
     baseURL: string;
   };
   /**
-   * The Voice. One Voice belongs to exactly one Provider (CONTEXT.md), so
-   * choosing another Provider clears it.
+   * The Voice, as the **global default** — what a Document that has never been
+   * opened will be read in. One Voice belongs to exactly one Provider
+   * (CONTEXT.md), which is why choosing one from another Provider's list chooses
+   * that Provider too.
    *
-   * ADR 0010 binds a Voice to a document with this as the global default, and
-   * that half is not built: there is nowhere to remember a document's own Voice
-   * until `core/document/` exists. So there is one Voice, it is the one the open
-   * document is read in, and the sheet says that rather than implying a
-   * per-document memory that would be lost at the next launch.
+   * ADR 0010 binds a Voice to a Document with this as the default, and that half is
+   * built now: a `LibraryEntry` keeps its own `voice`, `settingsForDocument` below
+   * is how it reaches the reading, and `use-library.ts`'s `voiced` is what writes
+   * it. So this is read at the moment a Document is opened for the first time and
+   * not afterwards — changing it steers the next new Document and leaves a book
+   * already underway exactly as it was, which is the whole of design 0010.
    */
   voice: string;
   /** The reading speed. Applied at playback and nowhere else; a Provider is never asked for it (ADR 0009). */
@@ -329,6 +332,68 @@ export function configuredProviders(settings: AppSettings, hasKey: (provider: Pr
   return PROVIDER_ORDER.filter((provider) => missingBeforeVoice(settings, provider, hasKey(provider)).length === 0);
 }
 
+/**
+ * A Document's own Voice (ADR 0010): the pair a `LibraryEntry` remembers, as this
+ * app would have to read it.
+ *
+ * Structural and `provider: string`, because that is how the Library carries it and
+ * why: "an entry written by a build with one more provider than this one must still
+ * be readable — losing a Reading Position because the Voice names something
+ * unfamiliar would be the worst possible trade" (`core/document/library.ts`). So
+ * the validation is here, which is the layer that knows which Providers exist.
+ */
+export interface DocumentVoice {
+  provider: string;
+  voice: string;
+}
+
+/** Whether a string names a Provider this build has. The one place `PROVIDER_ORDER` is used as the closed set it is. */
+export function isProviderId(id: string): id is ProviderId {
+  return (PROVIDER_ORDER as readonly string[]).includes(id);
+}
+
+/**
+ * The settings a **Document** is read with: the owner's, with its own Voice in
+ * place of the default (ADR 0010).
+ *
+ * The one place the per-Document Voice is applied, and everything downstream
+ * follows from it without knowing: `engineIdentity` sees this Provider and this
+ * Voice, so the engine is built around them; `readiness` asks for this Provider's
+ * key; the player's line and the Voice sheet show this Voice as the one in use. A
+ * screen that reached past this to `settings.provider` would be the one place two
+ * books could disagree about who is reading them.
+ *
+ * Only the pair moves. A model, an address and the Appearance are the owner's and
+ * are the same in every book — `settings.ts`'s own comment on the Appearance is the
+ * argument, and it is why this is not "the Document's settings".
+ *
+ * A choice this build cannot use — a Provider from a later version, an empty
+ * Voice — leaves the settings alone, which reads the Document in the default Voice.
+ * `unusableVoiceSentence` is what says so out loud; between them nothing is
+ * silently substituted.
+ */
+export function settingsForDocument(settings: AppSettings, choice: DocumentVoice | null): AppSettings {
+  if (!choice || !isProviderId(choice.provider) || !choice.voice.trim()) return settings;
+  return { ...settings, provider: choice.provider, voice: choice.voice };
+}
+
+/**
+ * What to say about a Document whose remembered Voice this build cannot use, or
+ * null when there is nothing to say.
+ *
+ * It can only come from a Library file written by a build with a Provider this one
+ * does not have (ADR 0003 keeps the file readable across versions on purpose), and
+ * the reading still works — in the default Voice. Saying so is philosophy rule 1:
+ * the alternative is a book that is quietly read by someone else.
+ */
+export function unusableVoiceSentence(choice: DocumentVoice | null): string | null {
+  if (!choice || isProviderId(choice.provider)) return null;
+  return (
+    `This book remembers being read by "${choice.provider}", which this version of the app does not have. ` +
+    'It is being read in the Voice the rest of the app is set to; choosing a Voice here replaces what it remembers.'
+  );
+}
+
 /** "an API key, a model and a Voice" — the one place the commas and the final "and" are decided. */
 export function andList(items: readonly string[]): string {
   if (items.length === 0) return '';
@@ -353,9 +418,10 @@ export function readinessSentence(provider: ProviderId, missing: readonly string
  * true whether or not the Provider has ever been used, and is what a list of six
  * rows can honestly show without six Keychain lookups.
  *
- * The Voice is deliberately absent. There is one Voice and it belongs to the
- * Provider in use (ADR 0010, CONTEXT.md), so it is not something a Provider that
- * is not in use holds.
+ * The Voice is deliberately absent. A Document keeps its own (ADR 0010) and the
+ * one thing a Provider screen holds is the **default** for Documents not yet
+ * opened, which belongs to the Provider in use (CONTEXT.md) — so it is not
+ * something a Provider that is not in use holds either.
  *
  * The last two lines are derived from the predicates above rather than written
  * out, so a Provider that gains a key field or a headers field cannot end up

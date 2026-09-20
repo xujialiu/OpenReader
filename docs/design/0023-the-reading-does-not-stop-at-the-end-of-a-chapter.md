@@ -45,6 +45,28 @@ Those two sentences are deliberately different. Telling someone they have reache
 the end of the book when two thousand chapters are still ahead of them would be a
 worse lie than the silence it replaces.
 
+**And there is a third sentence, for the reading that stopped because something
+failed.** A service can go quiet in the middle of a document — the connection
+drops, the account runs out — and the sentences it never managed to read are
+stepped over rather than blocking everything behind them, so the reading arrives at
+the end of what it was given having skipped some of it. From the inside that is
+indistinguishable from a book that finished, and for a while the owner was told the
+book had finished: it happened on the very last sentences of a document, and the
+reading stopped one sentence from the end with "that was the last of this
+document".
+
+So when anything was skipped, the app says that instead — how many sentences were
+never read, and what the service said when it refused, in the service's own words.
+Nothing is tried again behind the owner's back, because every attempt is theirs to
+pay for; going back to one of those sentences is how it is asked for a second time,
+and the app says so in the same breath.
+
+**Saying nothing in that case was the obvious alternative and it was refused.** It
+would have put the reading straight back into the silence this whole decision
+exists to end — stopped, still claiming to be reading, with nothing on the screen.
+The problem was never that a sentence appeared; it was that the sentence was
+untrue.
+
 ## What was turned down
 
 **Laying out the whole book in advance.** It would remove the problem completely

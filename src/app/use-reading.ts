@@ -48,6 +48,7 @@ import {
   nextSentence,
   previousParagraph,
   previousSentence,
+  type OutOfTextReport,
   type PlaybackEngine,
   type ReaderClock,
 } from '../playback';
@@ -728,17 +729,25 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * all for as long as it lasted — six minutes, on the reading that found it
    * (notes/NOTES_2026-09-20.md, 04:43).
    *
-   * **Two states, and they are not the same thing to say.** At the last spine
+   * **Three states, and they are not the same thing to say.** At the last spine
    * item the book is simply finished, and the reading stops: nothing more is
    * coming, and a Play that sat silent would be the same defect wearing the
    * honest sentence. Anywhere else the document has more in it than the reading
    * was given, which after `renderAhead` should not happen — so this is the guard
    * rather than the mechanism, and it says so without stopping, because the
    * engine resumes by itself the moment a section reports (footgun 3, and
-   * `extend`).
+   * `extend`). And an exhaustion with Utterances the Provider refused is neither:
+   * `outOfTextSentence` says the reading stopped because synthesis failed, and
+   * names the refusal, because none of the four conditions can see a Clip that was
+   * skipped (ADR 0023, and notes/NOTES_2026-09-20.md, 07:48).
    */
-  const ranOutOfText = useCallback(() => {
-    const { ended, sentence } = outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0);
+  const ranOutOfText = useCallback((report: OutOfTextReport) => {
+    const { ended, sentence } = outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0, {
+      count: report.unspoken,
+      // The engine hands the problem over unconverted, so that the one place a
+      // problem becomes a sentence is the one place it is done anywhere here.
+      reason: report.refusal === null ? null : describe(report.refusal),
+    });
     if (ended) {
       engineRef.current?.pause();
       bridgeRef.current?.hold();
@@ -817,6 +826,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // Where the reading has been pointed, not the top of the document: a word tapped
     // or a chapter chosen before Play was ever pressed has already moved `atRef`, and
     // loading at 0 would silently read the book from its beginning instead (ADR 0020).
+    // `?? 0` is reachable only for a cursor that has never existed — a document opened
+    // with no stored place and not yet pointed anywhere, where the top *is* where the
+    // reading starts. It survives an engine rebuild (ADR 0025), so it is no longer the
+    // fallback a Voice change fell through.
     engine.load(loadedRef.current, atRef.current ?? 0);
     setStatus((was) => ({ ...was, reportsWordTimings: provider.capabilities.wordTimestamps, note: null }));
     return engine;
@@ -949,6 +962,18 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * The work is all in the cleanup, which is the point: it runs when the identity
    * changes and when the screen goes away, and it is the only place the audio
    * session is given back.
+   *
+   * **`atRef` is not the engine's, so it is not cleared here** (ADR 0025). The
+   * cursor is where the *reading* is pointed, and an engine rebuild changes who
+   * is speaking rather than where. Clearing it left `play()` looking at a loaded
+   * list with no cursor, which means "this document has never been pointed
+   * anywhere" and reads from the top — so changing the Voice at chapter 100 of a
+   * 2,000-chapter novel started it again at chapter one and dragged the page back
+   * with it (notes/NOTES_2026-09-20.md, 07:45). The same cleanup runs for a
+   * Provider change and for saving a credential, so it did that to an owner who
+   * pasted a key while reading. docs/design/0020 keeps "anything that rewrites
+   * your place without you asking" out of the player; this was it, arriving from
+   * underneath.
    */
   const identity = `${engineIdentity(settings)}@${writtenAt}`;
   useEffect(
@@ -956,7 +981,6 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       const engine = engineRef.current;
       engineRef.current = null;
       buildingRef.current = null;
-      atRef.current = null;
       seekingRef.current = false;
       // A skip's 600 ms could otherwise fire into an engine that has been disposed,
       // or into the next one built around a different Provider.
@@ -965,11 +989,24 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       pendingSeekRef.current = null;
       pendingSectionRef.current = null;
       void engine?.dispose();
-      bridgeRef.current?.clear();
+      /**
+       * The highlight follows the cursor rather than the engine, for the same
+       * reason. `show` paints the Utterance whole, which is the Highlight Level of
+       * a Clip nobody has fetched yet (ADR 0005) — and it replaces the words the
+       * *previous* Voice was cued with, which is the one thing here that would have
+       * been a lie left on the page. `clear` is right only where there is no
+       * cursor: a document nothing has pointed at has no sentence to leave lit.
+       */
+      const at = atRef.current;
+      if (at === null) bridgeRef.current?.clear();
+      else bridgeRef.current?.show(at);
       setStatus((was) => ({
         ...was,
         playing: false,
-        utterance: null,
+        // `utterance` and `section` stay, because the cursor stays. `level` and
+        // `reportsWordTimings` go, because both are claims about a Provider that
+        // is no longer the one that will speak (`reading-view.tsx`'s
+        // `highlightLine` is the sentence they produce).
         level: null,
         reportsWordTimings: null,
         seeking: false,

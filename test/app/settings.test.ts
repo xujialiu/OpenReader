@@ -5,6 +5,7 @@ import {
   configuredProviders,
   DEFAULT_SETTINGS,
   headersAreOffered,
+  isProviderId,
   providerFields,
   providerSettings,
   readiness,
@@ -15,8 +16,10 @@ import {
   missingBeforeVoice,
   PROVIDER_ORDER,
   resolveTheme,
+  settingsForDocument,
   THEME_LABELS,
   THEME_SETTINGS,
+  unusableVoiceSentence,
   type AppSettings,
 } from '../../src/app/settings';
 import { createProvider } from '../../src/core/providers/factory';
@@ -397,5 +400,77 @@ describe('the theme (ADR 0022)', () => {
   it('offers the two answers before the one that defers, and names each of them', () => {
     expect(THEME_SETTINGS).toEqual(['light', 'dark', 'system']);
     for (const setting of THEME_SETTINGS) expect(THEME_LABELS[setting].length, setting).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * A Voice belongs to a **Document** (ADR 0010, design 0010), and this is where the
+ * one it remembers becomes the one it is read with.
+ *
+ * The file format has carried `LibraryEntry.voice` since it was written and nothing
+ * ever set it, so design 0010 described an app that did not exist — one global Voice,
+ * which on a shelf holding a Chinese novel and an English document is wrong for one
+ * of them whichever way it is set (notes/NOTES_2026-09-20.md, 07:38). These are the
+ * two halves that could not be tested through a screen: which settings a Document is
+ * read with, and what is said about one this build cannot honour.
+ */
+describe('settingsForDocument', () => {
+  const chosen = settingsWith({ provider: 'openai-official', voice: 'alloy', openai: { model: 'tts-1' } });
+
+  it('reads a Document in the Voice it remembers, not the global default', () => {
+    const forDocument = settingsForDocument(chosen, { provider: 'fish', voice: 'zh/74c6aba5' });
+    expect(forDocument.provider).toBe('fish');
+    expect(forDocument.voice).toBe('zh/74c6aba5');
+  });
+
+  it('moves the pair and nothing else: a model, an address and the Appearance are the app’s', () => {
+    const forDocument = settingsForDocument(chosen, { provider: 'fish', voice: 'zh/74c6aba5' });
+    expect(forDocument.openai.model).toBe('tts-1');
+    expect(forDocument.rate).toBe(chosen.rate);
+    expect(forDocument.appearance).toBe(chosen.appearance);
+    expect(forDocument.theme).toBe(chosen.theme);
+  });
+
+  it('is the global default for a Document that remembers nothing', () => {
+    // Which is what "opening one for the first time gives it whatever the default is
+    // at that moment" needs: until it is written down, the default *is* the answer.
+    expect(settingsForDocument(chosen, null)).toBe(chosen);
+  });
+
+  it('is a different engine, which is what makes the two books not disturb each other', () => {
+    // `engineIdentity` is what `use-reading.ts` rebuilds on, so this is the property
+    // that stops one book's Voice being spoken in another's.
+    const one = settingsForDocument(chosen, { provider: 'fish', voice: 'zh/74c6aba5' });
+    const other = settingsForDocument(chosen, { provider: 'speechify', voice: 'george' });
+    expect(engineIdentity(one)).not.toBe(engineIdentity(other));
+    expect(engineIdentity(settingsForDocument(chosen, null))).toBe(engineIdentity(chosen));
+  });
+
+  it('ignores a Voice from a Provider this build does not have, rather than throwing one', () => {
+    // ADR 0003 keeps the Library file readable by a build with fewer Providers than
+    // wrote it; `core/document/library.ts` carries the pair as written for exactly
+    // this reason. Losing a place because a Voice named something unfamiliar would be
+    // the worst possible trade.
+    expect(settingsForDocument(chosen, { provider: 'elevenlabs', voice: 'rachel' })).toBe(chosen);
+    expect(settingsForDocument(chosen, { provider: 'fish', voice: '   ' })).toBe(chosen);
+  });
+
+  it('says so, in a sentence, rather than reading the book in a stranger in silence', () => {
+    const said = unusableVoiceSentence({ provider: 'elevenlabs', voice: 'rachel' });
+    expect(said).toContain('elevenlabs');
+    expect(said).toContain('this version of the app does not have');
+    expect(unusableVoiceSentence({ provider: 'fish', voice: 'zh/74c6aba5' })).toBeNull();
+    expect(unusableVoiceSentence(null)).toBeNull();
+  });
+});
+
+describe('isProviderId', () => {
+  it('answers for every Provider this build has, and for nothing else', () => {
+    for (const provider of PROVIDER_ORDER) expect(isProviderId(provider)).toBe(true);
+    expect(isProviderId('elevenlabs')).toBe(false);
+    expect(isProviderId('')).toBe(false);
+    // Not a property of the object it might be read off: a key that exists on every
+    // object must not answer true.
+    expect(isProviderId('toString')).toBe(false);
   });
 });

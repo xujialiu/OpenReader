@@ -26,7 +26,7 @@ import type { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { APP_NAME } from '../../app-name';
-import type { DocumentId, LibraryEntry, ReadingPosition } from '../core/document';
+import type { DocumentId, LibraryEntry, ReadingPosition, VoiceChoice } from '../core/document';
 
 import { addDocument } from './document';
 import { migrateDocumentIds, readLibrary, thisDevice, writeLibrary, type LoadedLibrary } from './library';
@@ -54,6 +54,21 @@ export interface Library {
   retitled(id: DocumentId, title: string): void;
   /** Where speech stopped (ADR 0008). Written through to the file like every other change. */
   reached(id: DocumentId, position: ReadingPosition): void;
+  /**
+   * The Voice this Document is read in (ADR 0010).
+   *
+   * Written when the owner chooses one while the book is open, and once more when a
+   * Document that remembers none inherits the global default — which is the whole of
+   * "opening one for the first time gives it whatever the default is at that moment,
+   * and from then on the document keeps it". Unchanged when the entry already holds
+   * this pair, so an open costs no write of its own.
+   *
+   * It does **not** move the Stamp. A Stamp is when this Document was last touched
+   * by the owner, which is what orders the shelf, and `opened` has already moved it
+   * a moment earlier; moving it again for a value the owner inherited rather than
+   * chose would reorder the shelf for an open that already did.
+   */
+  voiced(id: DocumentId, voice: VoiceChoice): void;
   /**
    * Something went wrong out here rather than in the file — a book handed over
    * by another app that would not open, say.
@@ -171,9 +186,18 @@ export function useLibrary(): Library {
     [change, stamp],
   );
 
+  const voiced = useCallback(
+    (id: DocumentId, voice: VoiceChoice) => {
+      const held = entriesRef.current.find((one) => one.id === id)?.voice;
+      if (held && held.provider === voice.provider && held.voice === voice.voice) return;
+      change(id, (entry) => ({ ...entry, voice }));
+    },
+    [change],
+  );
+
   const report = useCallback((said: string) => setNote(said), []);
 
-  return { entries, loading, note, add, opened, retitled, reached, report };
+  return { entries, loading, note, add, opened, retitled, reached, voiced, report };
 }
 
 /**

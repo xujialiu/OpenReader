@@ -112,6 +112,17 @@ export interface RunOutInput {
  * - **The queue consumed.** A buffer still on it is a sentence still to be heard.
  * - **Nothing in flight.** A fetch outstanding is a Provider being slow, which is
  *   a stall the reader hears and which ends by itself.
+ *
+ * **There is deliberately no fifth condition about the failed set** (ADR 0023). A
+ * Clip that was refused leaves `inFlight`, `nextToEnqueue` steps over it, and all
+ * four of the above hold — so a Provider that dropped the last clips of a document
+ * ran out of text exactly the way a finished book does, and the owner was told
+ * "the reading has stopped at the end of the book" with two thousand chapters
+ * still ahead (notes/NOTES_2026-09-20.md, 07:48). Making the failures a fifth
+ * condition would say nothing at all instead, which is the six minutes of silence
+ * this function was written to end. So the reading **has** run out, and what it is
+ * told to say gains a third sentence: `outOfTextSentence` in `src/app/segment.ts`
+ * takes the count of Utterances that were never spoken and names the refusal.
  */
 export function hasRunOut(input: RunOutInput): boolean {
   if (!input.playing) return false;

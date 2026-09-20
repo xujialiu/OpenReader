@@ -102,11 +102,45 @@ the queue consumed, nothing in flight — because anything less is a Provider be
 slow, which is a stall the reader hears and which ends by itself. Said once;
 armed again by a longer list, a seek or a load.
 
-The app turns it into one of two sentences (`outOfTextSentence` in
+The app turns it into one of **three** sentences (`outOfTextSentence` in
 `src/app/segment.ts`), and they are not the same event. At the last spine item the
 book has finished and the reading **stops**. Anywhere else the reading has
 outpaced what the document rendered, and it is left running, because the engine
 picks up by itself the moment another section reports.
+
+## The third sentence: a Provider failure is not the end of a book
+
+Added 2026-09-20 after the first end-to-end walkthrough
+(`notes/NOTES_2026-09-20.md`, 07:48). Fish Audio answered "cannot reach
+api.fish.audio … The network connection was lost" for the last clips of a
+document. The reading stopped at Utterance 17 of 18 and the player said **"That
+was the last of this document. The reading has stopped at the end of the book."**
+
+**None of the four conditions can see a Clip that was refused.** A rejected fetch
+leaves `inFlight` in its `finally`, `drain` steps over the Utterance rather than
+blocking the queue behind it, and `nextToEnqueue` passes it — so `playing`,
+everything enqueued, the queue consumed and nothing in flight all hold exactly as
+they do for a book that finished. The state is indistinguishable from the inside,
+which is the same shape as the defect this ADR is about.
+
+**A fifth condition was refused.** Suppressing the announcement when something has
+failed would put the reading back in the state of 04:43: silent, `playing`, and
+saying nothing — and `docs/design/0023` names the lie the announcement replaced as
+worse than the silence *because it is a lie*, not because it is a sentence. The
+reading genuinely has run out; what was wrong was the reason given for it.
+
+So the engine reports what it already tracks. `onOutOfText` now carries an
+`OutOfTextReport` — how many Utterances it holds, how many were **never spoken**
+since the last `load` or `seek` (`failed.size`), and the last refusal that left one
+unspoken, unconverted. `outOfTextSentence` takes the count and the reason and says
+that the reading stopped because synthesis failed, names the refusal in the words
+it arrived in, and says that going back to those sentences is how they are asked
+for again — because nothing is retried out of sight (ADR 0002, philosophy rule 4).
+
+`ended` is deliberately untouched by a failure: it decides whether the engine is
+**paused**, and at the last spine item there is nothing left to play whatever the
+reason. Before it, more text is still coming and the reading is still waiting for
+it. The failures are behind the cursor either way.
 
 ## The one thing that must not change
 

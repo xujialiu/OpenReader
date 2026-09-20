@@ -37,7 +37,7 @@ import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { readLocator, type ReadingPosition } from '../core/document';
 import { contentsOf, type NavigationEntry } from '../core/document/contents';
 import { chapterOf, useNowPlaying } from '../now-playing';
-import type { ProviderId } from '../core/providers/types';
+import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
 
 import { ContentsSheet } from './contents-sheet';
 import { INK } from './controls';
@@ -48,6 +48,7 @@ import { PROVIDER_LABELS, readiness, readinessSentence, type AppSettings } from 
 import type { SecretPresence } from './use-provider-secrets';
 import { useReading, type ReadingStatus } from './use-reading';
 import { useVoiceLists } from './use-voices';
+import { voiceInList } from './voices';
 import { VoiceSheet } from './voice-sheet';
 
 /**
@@ -76,6 +77,17 @@ export interface ReadingViewProps {
    * worth showing rather than reading as "no key" (`src/keys/refusal.ts`).
    */
   keyPresence: SecretPresence;
+  /**
+   * Something about this Document's own Voice that the owner has to be told, or
+   * null — which is every ordinary case.
+   *
+   * Today it is one sentence: a remembered Voice naming a Provider this build does
+   * not have, which `unusableVoiceSentence` composes and which means the book is
+   * being read in the default Voice instead (ADR 0010). It arrives as a prop rather
+   * than being worked out here because the entry it is about belongs to
+   * `reader-screen.tsx`, which is the one place that knows which Document is open.
+   */
+  voiceNote: string | null;
   /**
    * The shell's count of credential writes, passed straight to `useReading`.
    *
@@ -123,9 +135,20 @@ export interface ReadingViewProps {
  */
 function readingLine(status: ReadingStatus, settings: AppSettings): string {
   if (status.utterance !== null) {
-    const level = status.level === 'word' ? 'the word' : 'the whole Utterance';
     const where = `Utterance ${status.utterance + 1} of ${status.known}`;
-    return status.playing ? `Reading ${where}, highlighting ${level}.` : `Paused at ${where}.`;
+    if (!status.playing) return `Paused at ${where}.`;
+    /**
+     * **No Highlight Level until a Clip has answered.** `utterance` is set the
+     * moment Play is pressed and `level` only when a Clip arrives with or without
+     * Word Timings, so for the second or two between them this line used to claim
+     * "highlighting the whole Utterance" — the Level that means the Provider
+     * reported no timings. Sub-second on a warm cache and a second or two on a cold
+     * one, and it is a claim about the one thing this app exists to do
+     * (notes/NOTES_2026-09-20.md, 07:02). Null is not a third Level to name: the
+     * sentence simply does not make the claim yet.
+     */
+    if (status.level === null) return `Reading ${where}.`;
+    return `Reading ${where}, highlighting ${status.level === 'word' ? 'the word' : 'the whole Utterance'}.`;
   }
   if (status.playing) return `Waiting for the first Clip from ${PROVIDER_LABELS[settings.provider]}.`;
   if (status.known > 0) return `${status.known} Utterances ready. Tap a word to read from there.`;
@@ -158,6 +181,7 @@ function highlightLine(status: ReadingStatus): string | null {
 export function ReadingView({
   document,
   settings,
+  voiceNote,
   keyPresence,
   credentialsWrittenAt,
   position,
@@ -326,37 +350,51 @@ export function ReadingView({
   const sayWhatIsMissing = !ready.ready && keyPresence.state !== 'unknown';
 
   /**
-   * Everything the owner has to act on, in one list, so the player draws it without
-   * deciding anything. Order is worst first: what is missing before the app can
-   * speak at all, then what refused, then what it is doing to the highlight.
+   * Everything the player says under the reading line, in one list, so that it
+   * draws them without deciding anything. Order is worst first: what is missing
+   * before the app can speak at all, then what refused, then what became of the
+   * stored place, then what is being done to the highlight.
+   *
+   * **Each one carries whether it wants attention**, and that is not decoration.
+   * `ReadingStatus` keeps `resume` out of `note` on purpose — "`note` means
+   * something went wrong and a resume that worked is the ordinary case" — and this
+   * list used to flatten both into one array that the player painted in one style,
+   * so a resume that worked arrived in the colour of a failure (07:27). The
+   * distinction was made in the model and thrown away here. `attention` is for what
+   * the owner has to act on; a resume and the Highlight Level are statements of
+   * fact, and the colour now means one thing.
    */
   const notes = useMemo(() => {
-    const said: string[] = [];
+    const said: { said: string; attention: boolean }[] = [];
+    // First, because it says which Provider the sentence below is even about.
+    if (voiceNote) said.push({ said: voiceNote, attention: true });
     if (sayWhatIsMissing && !ready.ready) {
-      said.push(
-        `${readinessSentence(settings.provider, ready.missing)} There is no zero-key path: nothing can be spoken until Settings has what it asks for.`,
-      );
+      said.push({
+        said: `${readinessSentence(settings.provider, ready.missing)} There is no zero-key path: nothing can be spoken until Settings has what it asks for.`,
+        attention: true,
+      });
     }
     if (keyPresence.state === 'refused') {
-      said.push(`The Keychain would not say whether a key is saved: ${keyPresence.message}`);
+      said.push({ said: `The Keychain would not say whether a key is saved: ${keyPresence.message}`, attention: true });
     }
-    if (displayError) said.push(`The document would not display: ${displayError}`);
-    if (status.note) said.push(status.note);
+    if (displayError) said.push({ said: `The document would not display: ${displayError}`, attention: true });
+    if (status.note) said.push({ said: status.note, attention: true });
     // After what refused and before what is being done to the highlight: where the
     // reading came back to is neither an error nor a property of the Provider.
-    if (status.resume) said.push(status.resume);
+    if (status.resume) said.push({ said: status.resume, attention: false });
     const highlight = highlightLine(status);
-    if (highlight) said.push(highlight);
+    if (highlight) said.push({ said: highlight, attention: false });
     return said;
-  }, [sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status]);
+  }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status]);
 
   /**
-   * The Voice's locale, when it is known — which is only once the Provider's list
-   * has been asked for. See `player.tsx`'s `voiceLine`.
+   * The Voice in use as its own Provider describes it — the name it publishes and
+   * the locale, when there is one — or null until a list holding it has been asked
+   * for. See `player.tsx`'s `voiceLine` for why nothing is fetched to fill it.
    */
-  const voiceLocale = useMemo(() => {
-    const listed = voices.voicesOf(settings.provider);
-    return listed?.find((voice) => voice.id === settings.voice)?.locale ?? null;
+  const voiceInUse = useMemo(() => {
+    const found = voiceInList(voices.voicesOf(settings.provider), settings.voice);
+    return found ? { label: found.label, locale: found.locale === MULTILINGUAL ? '' : found.locale } : null;
   }, [voices, settings.provider, settings.voice]);
 
   /**
@@ -408,7 +446,7 @@ export function ReadingView({
         collapsed={collapsed}
         onCollapsed={setCollapsed}
         enabled={ready.ready || status.playing}
-        voiceLocale={voiceLocale}
+        voiceInUse={voiceInUse}
         reading={readingLine(status, settings)}
         notes={notes}
         onPlay={reading.play}

@@ -258,8 +258,33 @@ describe('footgun 3 again: the engine says when the silence is permanent', () =>
   });
 
   it('decides with read-ahead.ts’s four conditions rather than its own', () => {
-    expect(engine).toContain('if (!hasRunOut(state)) return;');
-    expect(engine).toContain('deps.onOutOfText?.(utterances.length);');
+    pin(engine, 'if (!hasRunOut(state)) return;', 'engine.ts');
+    pin(engine, 'deps.onOutOfText?.({ known: utterances.length, unspoken: failed.size, refusal: lastRefusal });', 'engine.ts');
+  });
+
+  /**
+   * The failures go in the **report**, not in a fifth condition (ADR 0023). A Clip
+   * that was refused leaves `inFlight`, `drain` steps over it and `nextToEnqueue`
+   * passes it, so all four conditions hold exactly as they do for a finished book —
+   * which is how "That was the last of this document" was said to an owner whose
+   * Provider had dropped the last clips (notes/NOTES_2026-09-20.md, 07:48). Without
+   * `unspoken` reaching the app there is nothing to say the third sentence from, and
+   * the lie comes back silently.
+   */
+  it('counts what was never spoken beside the exhaustion, from the set it already keeps', () => {
+    // Set where an Utterance is marked failed, both times, and cleared where the set
+    // is: a refusal that outlived its own failure would name the wrong thing.
+    const startFetch = engine.slice(engine.indexOf('function startFetch('), engine.indexOf('async function drain('));
+    pin(startFetch, 'failed.add(index);', 'engine.ts, startFetch');
+    pin(startFetch, 'lastRefusal = error;', 'engine.ts, startFetch');
+    const drain = engine.slice(engine.indexOf('async function drain('), engine.indexOf('async function enqueue('));
+    pin(drain, 'failed.add(nextToEnqueue);', 'engine.ts, drain');
+    pin(drain, 'lastRefusal = error;', 'engine.ts, drain');
+    // Sliced to `restart` itself rather than through `member`, whose close marker is
+    // an object member's and reaches to the end of the returned object.
+    const restart = engine.slice(engine.indexOf('function restart('), engine.indexOf('return {'));
+    pin(restart, 'failed.clear();', 'engine.ts, restart');
+    pin(restart, 'lastRefusal = null;', 'engine.ts, restart');
   });
 
   it('says it once, and is armed again by anything that gives the engine somewhere to go', () => {

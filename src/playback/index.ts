@@ -13,7 +13,13 @@
  * permission.
  */
 
-export { createPlaybackEngine, type PlaybackEngine, type PlaybackEngineDeps, type PlaybackSnapshot } from './engine';
+export {
+  createPlaybackEngine,
+  type OutOfTextReport,
+  type PlaybackEngine,
+  type PlaybackEngineDeps,
+  type PlaybackSnapshot,
+} from './engine';
 
 export {
   POSITION_INTERVAL_MS,

@@ -27,13 +27,10 @@ time, so that the key, the model and the voice for a provider are on a screen of
 their own with that provider's name at the top — rather than every provider's
 fields stacked on one long panel where five sixths of them do not apply.
 
-_General_ is, for now, empty, and it says so: the one thing it will hold is
-whether the app is light or dark, and that has not been built. An entry that
-admits it is empty is better than a switch that does nothing, and better than no
-entry at all — the second would leave the owner wondering where such a thing
-would ever go. The reading speed is deliberately not in it, even though it is
-true of the whole app, because it is judged by listening to the change and so
-belongs beside the book.
+_General_ holds whether the app is light or dark, or follows the phone — the one
+thing it was opened empty for, and the thing it now holds. The reading speed is
+deliberately not in it, even though it is true of the whole app, because it is
+judged by listening to the change and so belongs beside the book.
 
 Each row in _Providers_ says what is behind it before it is tapped — "holds an
 API key and a model", "holds an engine, the address of the server and the
@@ -48,7 +45,7 @@ other.
 
 **Appearance opens upward from the reader.** It is a short list that rises from
 the bottom of the screen over the page, so the text stays visible behind it and
-the effect of a change is seen as it is made. It holds one item for now.
+the effect of a change is seen as it is made. It holds the typeface and the size.
 
 ## What this gives up
 
@@ -103,13 +100,14 @@ one entry, because a document is recognised by what is in it rather than by
 where it came from. The second add changes nothing except which end of the shelf
 it sits at.
 
-**Adding a very large book used to take about fifteen seconds, and no longer
-does.** Recognising a document meant reading all of it, and for the owner's
+**Adding a very large book took fourteen seconds, and now takes a tenth of a
+second.** Recognising a document meant reading all of it, and for the owner's
 34-megabyte novel that was fourteen seconds during which the app could not draw,
 could not animate and could not say what it was doing — it looked stopped. That
 was recorded here rather than hidden, and it has since been fixed by changing
 what a book is recognised *by*: a book now carries a short list of everything
-inside it, and reading that list is enough. The full measurement is in the
+inside it, and reading that list is enough. The same novel, added three times over:
+a tenth of a second, and twice a little under. The full measurement is in the
 decision that owns it.
 
 One thing the owner gains and one thing they lose. They gain that the same book
@@ -171,8 +169,8 @@ Done button; a screen has a back arrow and a swipe, and either of those throwing
 away a freshly pasted key would be a new way to lose one. So leaving the screen,
 however it is left, is what saves.
 
-**Appearance opens and holds nothing yet.** It rises from the bottom over the
-page, the page stays visible behind it, and it says in as many words that the one
-thing it will hold has not been built. That is on purpose: the sheet is the part
-of this decision that could be got wrong, and it is easier to see that the page
-is still readable behind it now than after something is in it.
+**Appearance holds how the text is set.** It rises from the bottom over the page,
+the page stays visible behind it — which is the part of this decision that could
+have been got wrong, and is why the sheet was built empty first and filled
+afterwards — and it now offers the typeface and the size, each with "follow the
+document" as its own answer rather than as a number.

@@ -77,11 +77,11 @@ sentence being read sits in the middle of the screen to within the width of a ha
 and both of the two reasons the highlight had once painted nothing were reproduced
 deliberately and confirmed still to be the reasons.
 
-**Opening that very large book sometimes shows an empty page.** Two opens out of
-three; the third was fine. Nothing is lost — pressing play, or moving to anywhere in
-the book, brings it back and reading works normally from then on — but the first
-thing the owner sees can be nothing at all, and why is not yet understood. It is
-recorded as unexplained rather than guessed at.
+**Opening that very large book used to show an empty page, and the reason was
+found.** It happened two opens out of three. Nothing was lost — pressing play, or
+moving anywhere in the book, brought it back — but the first thing the owner saw
+could be nothing at all. It was recorded here as unexplained rather than guessed
+at, and it is explained and fixed in the section below.
 
 *The engineering half of this decision is [ADR 0011](../adr/0011-epub-renders-in-a-webview-via-epubjs.md).*
 

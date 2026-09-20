@@ -72,8 +72,9 @@ the rule the whole project is held to — the app never invents a fact it does n
 have.
 
 There is one more, and it is a race rather than a refusal. A very long book takes
-time to lay out the part the place is in — twenty seconds or so for the owner's
-own novel — and until it has, there is nothing to match the saved words against.
+time to lay out the part the place is in — six seconds, measured on the owner's own
+novel opened at a place a hundred chapters in, where this was once guessed at
+twenty — and until it has, there is nothing to match the saved words against.
 If the owner presses play, taps a word or picks a chapter before that, the app
 reads from there and says that the saved place had not arrived yet. It does not
 wait, and it does not quietly move the reading once the place turns up: being

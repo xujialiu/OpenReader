@@ -57,8 +57,16 @@ filed later as a gap.
 
 ## What this costs
 
-One more thing remembered per document, and a settings screen that has to be honest
-about the fact that the default applies to documents not yet opened. That is a small
+One more thing remembered per document, and two places that have to be honest about
+which of the two things a choice is. The voice list inside a book says that it is
+choosing for the book in front of you, and that the same choice is where a new book
+will start. The settings screen calls its own voice the default one and says that a
+book already on the shelf keeps the voice it was started with. That is a small
 price; the alternative was the owner's own money.
+
+There is one seam, and it is stated rather than smoothed over: a book opened before
+any voice has been chosen at all has nothing to inherit, so it reads in whatever the
+default becomes until either a voice is chosen while it is open or it is opened
+again. Every book opened after there is a voice to inherit takes it there and then.
 
 *The engineering half of this decision is [ADR 0010](../adr/0010-voice-is-per-document.md).*

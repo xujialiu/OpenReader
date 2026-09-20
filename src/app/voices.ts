@@ -81,6 +81,23 @@ export function voiceLevels(voices: readonly VoiceInfo[]): readonly VoiceLevel[]
 }
 
 /**
+ * The Voice a list calls by this id, or null.
+ *
+ * The one lookup between an id and the two things a reader can read — the Voice's
+ * own name and its locale — and it is here rather than written out at the screen
+ * because the player's line and the sheet's rows must not disagree about which
+ * Voice `settings.voice` names. Null is ordinary and means only that no list
+ * holding it has been asked for: a Voice list is a request against the owner's
+ * account (philosophy rule 4), so nothing fetches one to complete a caption, and
+ * the screen shows the id until the owner opens the sheet (design 0020 makes the
+ * same argument for the locale).
+ */
+export function voiceInList(voices: readonly VoiceInfo[] | null | undefined, id: string): VoiceInfo | null {
+  if (!voices || !id) return null;
+  return voices.find((one) => one.id === id) ?? null;
+}
+
+/**
  * The level a Voice id is in, or null.
  *
  * So that the picker opens showing the Voice in use rather than at the top of a
