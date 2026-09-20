@@ -30,6 +30,9 @@
  * way to clear it.
  */
 
+// WALKTHROUGH-HARNESS
+import { hlog, useHarnessCommands, type HarnessCommand } from './walkthrough-harness';
+
 import { Reader, useReader } from '@epubjs-react-native/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
@@ -197,7 +200,8 @@ export function ReadingView({
    * is the other half of the contents list, the first half being the spine's hrefs
    * from the document message.
    */
-  const { getMeta, toc } = useReader();
+  // WALKTHROUGH-HARNESS: `injectJavascript` is the harness's only probe into the WebView.
+  const { getMeta, toc, injectJavascript } = useReader();
   /**
    * `readLocator` rather than reaching into the position: a `Locator` is opaque
    * by construction (ADR 0007) and this is its one door — it hands back the CFI
@@ -411,6 +415,77 @@ export function ReadingView({
     },
     [onVoice],
   );
+
+  // WALKTHROUGH-HARNESS
+  useHarnessCommands((command: HarnessCommand) => {
+    const what = String(command.do);
+    if (what === 'play') return reading.play();
+    if (what === 'pause') return pause();
+    if (what === 'seek') {
+      hlog(`seek -> ${Number(command.utterance)} (status.known=${status.known})`);
+      reading.seekTo(Number(command.utterance));
+      hlog(`seek done, status.utterance=${status.utterance}`);
+      return;
+    }
+    if (what === 'skip') return reading.skip(command.target as never);
+    if (what === 'section') return reading.goToSection(Number(command.section));
+    if (what === 'rate') return onRate(Number(command.rate));
+    if (what === 'collapse') return setCollapsed(Boolean(command.on));
+    if (what === 'contents') return setContentsOpen(Boolean(command.on));
+    if (what === 'voicesheet') {
+      setVoicesOpen(Boolean(command.on));
+      if (command.on) voices.ask((command.provider ?? settings.provider) as ProviderId);
+      return;
+    }
+    if (what === 'voice') return chooseVoice(command.provider as ProviderId, String(command.voice));
+    if (what === 'ask') {
+      voices.ask(command.provider as ProviderId);
+      return;
+    }
+    if (what === 'voicelist') {
+      const list = voices.voicesOf(command.provider as ProviderId);
+      hlog(`voicelist ${String(command.provider)} n=${list === null ? 'null' : list.length} asking=${voices.asking} note=${JSON.stringify(voices.note)}`);
+      const want = String(command.locale ?? '');
+      for (const one of (list ?? []).filter((v) => !want || v.id.startsWith(want)).slice(0, Number(command.n ?? 8)))
+        hlog(`  voice ${one.id} | ${one.label} | ${one.locale}`);
+      return;
+    }
+    if (what === 'say') {
+      hlog(
+        `status playing=${status.playing} utterance=${status.utterance} known=${status.known} section=${status.section} ` +
+          `rendered=${status.rendered?.index ?? null}/${status.rendered?.spine ?? null} level=${status.level} ` +
+          `reportsWordTimings=${status.reportsWordTimings} seeking=${status.seeking} spine=${status.spineHrefs.length} ` +
+          `lang=${JSON.stringify(status.language)} collapsed=${collapsed} at=${at} contents=${contents.rows.length}`,
+      );
+      hlog(`line=${JSON.stringify(readingLine(status, settings))}`);
+      hlog(`voiceInUse=${JSON.stringify(voiceInUse)} provider=${settings.provider} voice=${settings.voice} rate=${settings.rate}`);
+      hlog(`appearance=${JSON.stringify(settings.appearance)} theme=${settings.theme} ready=${ready.ready}`);
+      for (const one of notes) hlog(`note attention=${one.attention} ${JSON.stringify(one.said)}`);
+      return;
+    }
+    if (what === 'js') {
+      injectJavascript(`(function(){try{var answer=(function(){${String(command.code)}})();
+        window.ReactNativeWebView.postMessage(JSON.stringify({type:'openreader:problem',utterance:-1,detail:'PROBE '+answer}));
+        }catch(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'openreader:problem',utterance:-1,detail:'PROBE threw '+e}));}})();true;`);
+      return;
+    }
+  });
+  const watched = useRef({ line: '', ticks: 0 });
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const line =
+        `playing=${status.playing} utterance=${status.utterance} known=${status.known} ` +
+        `section=${status.section} rendered=${status.rendered?.index ?? null}/${status.rendered?.spine ?? null} ` +
+        `level=${status.level} seeking=${status.seeking} resume=${status.resume ? JSON.stringify(status.resume.slice(0, 60)) : null} ` +
+        `note=${status.note ? JSON.stringify(status.note.slice(0, 500)) : null}`;
+      watched.current.ticks += 1;
+      if (line === watched.current.line && watched.current.ticks % 10 !== 0) return;
+      watched.current.line = line;
+      hlog(line);
+    }, 500);
+    return () => clearInterval(timer);
+  }, [status]);
+
 
   return (
     <View style={styles.screen}>

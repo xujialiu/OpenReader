@@ -26,6 +26,12 @@
  * settings; the Library is a file, `library.ts`).
  */
 
+// WALKTHROUGH-HARNESS
+import { File as HxFile, Paths as HxPaths } from 'expo-file-system';
+import { hlog, useHarnessCommands, breakFetch, unbreakFetch, type HarnessCommand } from './walkthrough-harness';
+import { asDocumentId } from '../core/document';
+import { readProviderKey, saveProviderKey } from '../keys/store';
+
 import { ReaderProvider } from '@epubjs-react-native/core';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -64,6 +70,87 @@ export function OpenReader() {
     () => ({ settings, setSettings, library, secretsWritten, noteSecretWritten }),
     [settings, library, secretsWritten, noteSecretWritten],
   );
+
+  // WALKTHROUGH-HARNESS
+  useHarnessCommands((command: HarnessCommand) => {
+    const what = String(command.do);
+    if (what === 'add') {
+      void library.add(new HxFile(HxPaths.document, 'Inbox', String(command.file)), { move: false }).then(
+        (entry) => hlog(`added ${entry.id} "${entry.title}"`),
+        (problem: unknown) => hlog(`add refused: ${String(problem)}`),
+      );
+      return;
+    }
+    if (what === 'shelf') {
+      hlog(`shelf loading=${library.loading} note=${JSON.stringify(library.note)}`);
+      for (const entry of library.entries) {
+        hlog(
+          `shelf ${entry.id.slice(7, 15)} "${entry.title}" voice=${entry.voice ? `${entry.voice.provider}/${entry.voice.voice}` : 'null'} ` +
+            `place=${entry.position ? JSON.stringify(entry.position.anchor.exact.slice(0, 40)) : 'null'} stamp=${entry.stamp.at}`,
+        );
+      }
+      return;
+    }
+    if (what === 'file') {
+      try {
+        hlog(`file ${String(command.name)} = ${new HxFile(HxPaths.document, String(command.name)).textSync()}`);
+      } catch (problem) {
+        hlog(`file ${String(command.name)} threw ${String(problem)}`);
+      }
+      return;
+    }
+    if (what === 'settings') {
+      setSettings((was) => ({ ...was, ...(command.patch as Partial<AppSettings>) }));
+      hlog(`settings patched ${JSON.stringify(command.patch)}`);
+      return;
+    }
+    if (what === 'saysettings') {
+      hlog(`settings ${JSON.stringify(settings)} secretsWritten=${secretsWritten}`);
+      return;
+    }
+    if (what === 'open') {
+      const id = asDocumentId(String(command.id));
+      if (!id) return hlog(`open: ${String(command.id)} is not a Document Id`);
+      if (navigationRef.isReady()) navigationRef.navigate('Reader', { id });
+      return;
+    }
+    if (what === 'navstate') {
+      hlog(`navstate ${JSON.stringify(navigationRef.isReady() ? navigationRef.getRootState() : null)}`);
+      return;
+    }
+    if (what === 'shut') {
+      // The back arrow, which is `goBack` — React Navigation 7's `navigate`
+      // pushes rather than popping, and using it here stacked four screens.
+      if (navigationRef.isReady() && navigationRef.canGoBack()) navigationRef.goBack();
+      return;
+    }
+    if (what === 'go') {
+      if (navigationRef.isReady()) {
+        const route = String(command.route) as 'Settings';
+        if (command.params) navigationRef.navigate(route, command.params as never);
+        else navigationRef.navigate(route);
+      }
+      return;
+    }
+    if (what === 'back') {
+      if (navigationRef.isReady()) navigationRef.goBack();
+      return;
+    }
+    if (what === 'resave') {
+      // The same two calls, in the same order, that `use-provider-secrets.ts`
+      // makes when Save is pressed: write the Keychain, then tell the shell.
+      void readProviderKey(String(command.provider)).then((found) => {
+        if (found.outcome !== 'found') return hlog(`resave: no key held (${found.outcome})`);
+        void saveProviderKey(String(command.provider), found.secret).then((change) => {
+          noteSecretWritten();
+          hlog(`resave ${String(command.provider)} ${change.outcome}`);
+        });
+      });
+      return;
+    }
+    if (what === 'breakfetch') return breakFetch(String(command.host), Number(command.from));
+    if (what === 'unbreakfetch') return unbreakFetch();
+  });
 
   /**
    * A book arriving from Files, Mail or a messaging app: into the Library, and

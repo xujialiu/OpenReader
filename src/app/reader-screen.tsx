@@ -25,6 +25,9 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { ReadingPosition } from '../core/document';
 import type { ProviderId } from '../core/providers/types';
 
+// WALKTHROUGH-HARNESS
+import { useHarnessCommands, type HarnessCommand } from './walkthrough-harness';
+
 import { AppearanceSheet } from './appearance-sheet';
 import { HeaderButton, INK, Note } from './controls';
 import { openDocument, type OpenDocument } from './document';
@@ -197,6 +200,11 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
     },
     [openedId, library, settings, setSettings],
   );
+
+  // WALKTHROUGH-HARNESS
+  useHarnessCommands((command: HarnessCommand) => {
+    if (String(command.do) === 'appearsheet') setAppearance(Boolean(command.on));
+  });
 
   const reached = useCallback(
     (position: ReadingPosition) => {
