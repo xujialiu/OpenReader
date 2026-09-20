@@ -139,6 +139,12 @@ a later sweep.
 
 # Testing on the device
 
+## Delegate final iOS verification
+
+After finishing app-code changes and local checks, the implementing agent must hand the final working tree to `ios-tester`. Its shared workflow is [.agents/ios-tester.md](.agents/ios-tester.md); `.codex/agents/ios-tester.toml` and `.claude/agents/ios-tester.md` reference that one source and define their respective model settings. Use the declared model and maximum effort; report an unavailable model rather than silently substituting another.
+
+Give the tester the issue/specification, changed interactions, verification already performed, simulator target and remaining risks. Keep app code stable during the run. The main agent must wait patiently for the tester's completion notification or use a blocking wait; do not repeatedly query its status or duplicate its simulator work. After a failure, fix the reported defect and hand the updated tree back for verification. Completion requires the tester's result and the latest-app delivery below; the tester itself does not recursively delegate this step.
+
 Before running or writing device/manual tests, read
 [`test/manual-test/README.md`](test/manual-test/README.md) and reuse its scripts.
 
