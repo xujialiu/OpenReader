@@ -9,6 +9,7 @@
  */
 
 import { createMemoryCache } from '../core/memory-cache';
+import { prepareSpeechText, restoreSpeechOffsets } from '../core/speech-text';
 import { SynthesisError } from '../core/providers/errors';
 import type { SynthesisResult, Timestamp, TTSProvider } from '../core/providers/types';
 import { withTimeout } from '../core/timeout';
@@ -58,6 +59,18 @@ export function prepareClip(utterance: number, result: SynthesisResult): Prepare
   return { utterance, audio: 'encoded', bytes: result.bytes, mediaType: result.mediaType, words };
 }
 
+/**
+ * A reply whose word timings have been moved back into the document's
+ * coordinates, or the same reply untouched when nothing was dropped.
+ *
+ * Untouched is the common case and is returned by identity rather than rebuilt,
+ * so an Utterance with no brackets in it is not copied on the way past.
+ */
+function restore(result: SynthesisResult, removed: readonly number[]): SynthesisResult {
+  if (!removed.length || !result.timestamps?.length) return result;
+  return { ...result, timestamps: restoreSpeechOffsets(result.timestamps, removed) };
+}
+
 /** A beat in place of speech, for text no Provider was asked to speak. */
 export function silence(utterance: number, ms: number = UNSPEAKABLE_MS): PreparedClip {
   return { utterance, audio: 'silence', seconds: Math.max(0, ms) / 1000, words: null };
@@ -74,6 +87,14 @@ export interface ClipFetcherDeps {
   timeoutMs?: number;
   /** Injected so a test can watch the abort; `AbortController` is a global on Hermes. */
   newAbortController?(): AbortController;
+  /**
+   * Whether an Utterance wrapped entirely in brackets is spoken with them, and
+   * which pairs count: the **Speech Text** (CONTEXT.md, ADR 0028).
+   *
+   * Optional, and absent means off, because every caller that does not care
+   * about brackets — and most tests — should not have to say so.
+   */
+  brackets?: { strip: boolean; pairs: string };
 }
 
 export interface ClipFetcher {
@@ -128,12 +149,36 @@ export function createClipFetcher(deps: ClipFetcherDeps): ClipFetcher {
       // reply to remember (CONTEXT.md, **Speakable**).
       if (!speakable) return Promise.resolve(silence(utterance));
 
-      const key = clipCacheKey(deps.provider.id, deps.voice, text);
+      /**
+       * The two forms of one Utterance (CONTEXT.md, **Speech Text**). `removed`
+       * is the document-text positions this dropped, and it is what turns the
+       * Provider's offsets back into the document's below.
+       *
+       * When nothing was dropped these are the same string and `removed` is
+       * empty, so the whole feature costs one pass over the text and nothing
+       * else.
+       */
+      const { text: speech, removed } = deps.brackets?.strip
+        ? prepareSpeechText(text, true, deps.brackets.pairs)
+        : { text, removed: [] as number[] };
+
+      /**
+       * **Keyed on the Speech Text, not the document's** (ADR 0028).
+       *
+       * A Clip is the audio of what was actually spoken, so what was actually
+       * spoken is its name. Change either bracket setting and the key changes
+       * with it, which means a Clip synthesized under one setting can never be
+       * paired with offsets computed under another — the drift ADR 0012 exists
+       * to prevent is impossible here rather than guarded against. It also
+       * means two Utterances differing only in their brackets are paid for
+       * once.
+       */
+      const key = clipCacheKey(deps.provider.id, deps.voice, speech);
       let job = inFlight.get(key);
       if (!job) {
         job = (async () => {
           const hit = await cache.match(key);
-          return hit ? hit.clip : synthesize(key, text);
+          return hit ? hit.clip : synthesize(key, speech);
         })();
         inFlight.set(key, job);
         // Cleared on settle, so a failure is asked again rather than remembered
@@ -141,8 +186,15 @@ export function createClipFetcher(deps: ClipFetcherDeps): ClipFetcher {
         // sees the rejection.
         void job.catch(() => {}).finally(() => inFlight.delete(key));
       }
-      // Each caller prepares its own Clip: one synthesis, two Utterances.
-      return job.then((result) => prepareClip(utterance, result));
+      /**
+       * Each caller prepares its own Clip: one synthesis, two Utterances — and
+       * it is also why the offsets are restored *here* rather than inside
+       * `synthesize`. What comes back from the cache is in Speech Text
+       * coordinates, shared by everyone who asked for that string; `removed`
+       * belongs to this Utterance's own text. Restoring per caller is what
+       * keeps those two facts from being confused.
+       */
+      return job.then((result) => prepareClip(utterance, restore(result, removed)));
     },
   };
 }

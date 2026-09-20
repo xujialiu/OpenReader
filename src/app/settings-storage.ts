@@ -31,6 +31,13 @@ export function parseSettings(value: unknown): AppSettings {
       includeOwn: fish.includeOwn === true, includeManual: fish.includeManual === true, voices: string(fish.voices, '') },
     rate: typeof data.rate === 'number' && Number.isFinite(data.rate) && data.rate >= 0.5 && data.rate <= 4 ? data.rate : DEFAULT_SETTINGS.rate,
     theme: data.theme === 'dark' || data.theme === 'light' ? data.theme : 'system',
+    stripBrackets: data.stripBrackets !== false,
+    // Kept exactly as it was typed, including a list that does not validate: the
+    // owner edits this with the setting off, and a half-finished edit that the
+    // app silently replaced on the way to disk would be an edit they never made.
+    // Nothing guesses from it either — `prepareSpeechText` strips nothing at all
+    // when the list is invalid.
+    bracketPairs: string(data.bracketPairs, DEFAULT_SETTINGS.bracketPairs),
     appearance: {
       font: typeof appearance.font === 'string' && ['system', 'serif', 'sans'].includes(appearance.font)
         ? appearance.font as AppSettings['appearance']['font'] : DEFAULT_SETTINGS.appearance.font,

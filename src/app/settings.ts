@@ -19,6 +19,7 @@
  */
 
 import { COMPATIBLE_LABEL } from '../core/providers/compatible';
+import { DEFAULT_BRACKET_PAIRS } from '../core/speech-text';
 // The renderer's, because it is the renderer that paints it — and imported from
 // the file rather than from the directory's index, which would drag the bridge
 // and React Native into a module whose whole point is that neither is here.
@@ -143,6 +144,27 @@ export interface AppSettings {
    * well as the page.
    */
   theme: ThemeSetting;
+  /**
+   * Whether a group of text wrapped entirely in brackets is spoken with its
+   * brackets: the **Speech Text** (CONTEXT.md), and ADR 0028.
+   *
+   * On by default, which is the one default here that is not a guess: a voice
+   * reading `<Log in>` as its punctuation is unlistenable, and an owner who
+   * wanted the brackets read would be the surprising one. It is also what the
+   * desktop plugin does, and the same book read on both should be read the
+   * same way.
+   */
+  stripBrackets: boolean;
+  /**
+   * Which pairs count as brackets, as the owner typed them — `validateBracketPairs`
+   * in `core/speech-text.ts` is what says whether that is a list at all.
+   *
+   * Editable rather than fixed because the default `<> []` is a Western list and
+   * this app is read in Chinese, where what wraps a heading is `【】` and what
+   * wraps a title is `《》`. A fixed list would mean the setting does nothing on
+   * the books it was asked for.
+   */
+  bracketPairs: string;
 }
 
 /**
@@ -212,6 +234,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Follow the system, which is the only default that is not a guess about the
   // room the owner is in.
   theme: 'system',
+  // On, and the same list the desktop plugin starts from (ADR 0028).
+  stripBrackets: true,
+  bracketPairs: DEFAULT_BRACKET_PAIRS,
 };
 
 /**

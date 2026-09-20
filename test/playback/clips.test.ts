@@ -201,4 +201,49 @@ describe('createClipFetcher', () => {
     await createClipFetcher({ provider: wrapped, voice: 'ava', cache: cache() }).fetch(0, 'Hello.', true);
     expect(Object.keys(options ?? {}).sort()).toEqual(['signal', 'voice']);
   });
+
+  /**
+   * The **Speech Text** seam (CONTEXT.md, ADR 0028). `core/speech-text.ts` has
+   * its own tests for the stripping and the offset arithmetic; what is tested
+   * here is that `clips.ts` applies them in the right order and on the right
+   * side of the cache — which is the part that can be wrong while both halves
+   * are right.
+   */
+  it('asks the Provider for the Speech Text and hands back timings in the document\'s coordinates', async () => {
+    const { provider, asked } = fakeProvider(async () =>
+      // `<Log in>` spoken is `Log in`: the Provider's own offsets cover 0..6 of
+      // the six characters it was given.
+      pcm(24, { timestamps: [{ start: 0, end: 0.4, charStart: 0, charEnd: 3 }, { start: 0.4, end: 0.8, charStart: 4, charEnd: 6 }] }));
+    const fetcher = createClipFetcher({ provider, voice: 'ava', cache: cache(), brackets: { strip: true, pairs: '<> []' } });
+    const clip = await fetcher.fetch(0, '<Log in>', true);
+
+    expect(asked).toEqual(['Log in']);
+    // Shifted by the one character the opening bracket occupies, so the
+    // highlight lands on `Log` and `in` inside the original text rather than
+    // one character to the left of each.
+    expect(clip.words).toEqual([
+      { start: 0, end: 0.4, charStart: 1, charEnd: 4 },
+      { start: 0.4, end: 0.8, charStart: 5, charEnd: 7 },
+    ]);
+  });
+
+  it('keys the cache on the Speech Text, so changing the setting cannot pair a Clip with the wrong offsets', async () => {
+    const { provider, asked } = fakeProvider(async () => pcm(24));
+    const shared = cache();
+    await createClipFetcher({ provider, voice: 'ava', cache: shared, brackets: { strip: true, pairs: '<> []' } }).fetch(0, '<Log in>', true);
+    // The same document text with stripping off is a different string spoken,
+    // so it is a different Clip and is fetched rather than mistaken for the one
+    // above.
+    await createClipFetcher({ provider, voice: 'ava', cache: shared, brackets: { strip: false, pairs: '<> []' } }).fetch(0, '<Log in>', true);
+    expect(asked).toEqual(['Log in', '<Log in>']);
+    expect(await shared.match(clipCacheKey('speechify', 'ava', 'Log in'))).toBeTruthy();
+  });
+
+  it('leaves text alone when the owner has not asked, and when the list does not validate', async () => {
+    for (const brackets of [undefined, { strip: false, pairs: '<> []' }, { strip: true, pairs: 'not a list' }]) {
+      const { provider, asked } = fakeProvider(async () => pcm(24));
+      await createClipFetcher({ provider, voice: 'ava', cache: cache(), brackets }).fetch(0, '<Log in>', true);
+      expect(asked).toEqual(['<Log in>']);
+    }
+  });
 });

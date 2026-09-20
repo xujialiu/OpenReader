@@ -34,8 +34,8 @@ heading, a list item.
 _Avoid_: segment, paragraph (as a type name), node
 
 **Utterance**:
-The unit of text sent to a provider as one synthesis request, in practice one
-sentence. The unit of caching, of prefetching and of resuming.
+The unit of the document's text that becomes one synthesis request, in practice
+one sentence. The unit of caching, of prefetching and of resuming.
 _Avoid_: segment, sentence (as a type name), chunk, phrase
 
 **Speakable**:
@@ -63,6 +63,14 @@ The credential a provider reached at an address of the owner's own needs in
 order to get past whatever guards that address. It belongs to one provider, as
 a key does, and is never sent to another.
 _Avoid_: auth headers, token, proxy headers, custom headers, access token
+
+**Speech Text**:
+The form of an utterance's text that is actually sent to a provider. It differs
+from the utterance's own text only where the owner has asked for enclosing
+brackets to be removed. A provider's word timings are reported in its
+coordinates and are turned back into the utterance's before anything is
+highlighted.
+_Avoid_: stripped text, cleaned text, normalized text, TTS text
 
 **Clip**:
 The audio a provider returns for one utterance.
