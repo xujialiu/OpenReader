@@ -177,6 +177,14 @@ To verify display-name persistence across a cold app restart, use `alias` instea
 
 To exercise real synthesis and persistence, configure a provider in the app and use `download` instead of `inspect`. This selects and downloads the entire short fixture and may spend provider quota; it never downloads the owner's other documents. The fixture has 17 speakable utterances in two chapters. Already completed audio is reused; start this mode with an incomplete fixture if testing the actual Download selected button.
 
+To verify indexed progress for a second voice without provider quota, stop the app's current work first and run the disposable synthetic-fixture mode:
+
+```sh
+bash test/manual-test/second-voice-progress.sh SIMULATOR_UDID /tmp/openreader-second-voice-progress-01
+```
+
+The wrapper backs up and restores the complete v2 offline directory, Library and settings, then adds one known shared clip for a synthetic second voice to the short fixture. The XCTest uses real touches to open Download, choose that saved voice and require `0 chapters downloaded` plus `1 / 7` for the second chapter. The synthetic row and copied audio are removed by restoring the backup even when the test fails. This checks indexed SQLite progress and the omitted-text `textCount` display; it does not test provider synthesis or playback.
+
 After the fixture is downloaded, terminate and relaunch the app with `xcrun simctl` to empty the memory cache, mute host output, then run:
 
 ```sh
