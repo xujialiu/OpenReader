@@ -45,8 +45,8 @@ describe('Appearance as a stylesheet', () => {
     // `font-family` inherits, so a rule on the two roots alone is beaten by the
     // owner's own novel, whose stylesheet says `div { font-family: "zw" }` — which
     // is where every line of its text is.
-    const css = appearanceCss({ font: 'serif', scale: null });
-    expect(css).toContain('html, body, body * { font-family: Georgia, "Times New Roman", serif !important; }');
+    const css = appearanceCss({ font: 'georgia', scale: null });
+    expect(css).toContain('html, body, body * { font-family: Georgia, serif !important; }');
     expect(css).not.toContain('font-size');
   });
 
@@ -102,12 +102,31 @@ describe('Appearance as a stylesheet', () => {
   });
 
   it('ends every font stack in a generic family, so something is always found', () => {
-    // And names no CJK face: WebKit falls through a stack per script, so a Chinese
-    // book under “Serif” gets the system's own serif CJK face rather than a font
-    // with no glyphs for it.
+    // The rule that survived ADR 0029, and the one that was load bearing all
+    // along: WebKit falls through a stack per script, so the generic at the end
+    // is what a Chinese book gets where the named face has no glyphs for it.
+    // `Georgia, serif` lays Latin out in Georgia and Chinese out in the system's
+    // own serif CJK face, in the same paragraph.
+    //
+    // The prohibition on naming a CJK face is gone. It was never the same claim:
+    // the danger was a stack with no generic behind it, and `Songti SC, serif`
+    // has one. What it cost was an owner reading Chinese being unable to pick a
+    // Chinese face at all.
     for (const font of READING_FONTS) {
       expect(font.stack).toMatch(/(serif|sans-serif)$/);
-      expect(font.stack).not.toMatch(/[一-鿿]|PingFang|Songti|Heiti/);
+    }
+  });
+
+  it('offers a face for Chinese as well as for Latin, each with its generic behind it', () => {
+    const cjk = READING_FONTS.filter((font) => /PingFang|Songti|Kaiti|Yuanti/.test(font.stack));
+    expect(cjk.length).toBeGreaterThan(0);
+    for (const font of cjk) {
+      // Named first so it wins where it has glyphs, generic last so the book is
+      // never laid out in nothing.
+      expect(font.stack).toMatch(/^"[A-Za-z ]+ SC", (serif|sans-serif)$/);
+      // Its own name in its own script, because the row is set in the font it
+      // offers and that is what makes the list answer its own question.
+      expect(font.label).toMatch(/^[一-鿿]+$/);
     }
   });
 });

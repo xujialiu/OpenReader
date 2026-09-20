@@ -111,23 +111,44 @@ export const DEFAULT_HIGHLIGHT: HighlightStyles = {
  * file, and an id that is not in this list produces no rule at all rather than a
  * rule built out of whatever the id said.
  *
- * Each stack ends in a generic family so that something is always found, and
- * none of them names a CJK face. That is deliberate: WebKit falls through a stack
- * per script, so a Chinese book under "Serif" is laid out in the system's own
- * serif CJK face rather than in a font that has no glyphs for it — which is the
- * behaviour a list of four Latin faces could not have given it.
+ * **Every stack ends in a generic family.** That is the rule, and it is load
+ * bearing rather than tidy: WebKit falls through a stack *per script*, so the
+ * generic at the end is what a Chinese book gets when the named face has no
+ * glyphs for it. `Georgia, serif` lays Latin out in Georgia and Chinese out in
+ * the system's own serif CJK face, in the same paragraph.
+ *
+ * This list used to hold three categories — System, Serif, Sans-serif — and to
+ * name no CJK face at all, on the reasoning that the fall-through already gave a
+ * Chinese book the right *kind* of face. ADR 0029 keeps the fall-through and
+ * drops the prohibition, because the two are not the same claim: the danger was
+ * ever a stack with **no** generic behind it, and `Songti SC, serif` has one.
+ * What the old list could not do was let an owner reading Chinese pick a
+ * particular Chinese face, which on a Chinese novel is the whole of the setting.
+ *
+ * `serif` and `sans` are gone as ids. `settings-storage.ts` migrates them to
+ * `georgia` and `helvetica`, which are the faces those stacks already named
+ * first, so an owner's existing choice keeps rendering exactly as it did.
  *
  * `preview` is the same face named for React Native rather than for CSS, so the
- * Appearance list can set each row in the font it offers. It is a **Latin
- * sample and not a promise**: what a document actually gets for any other script
- * is decided by the fall-through above, so two rows previewing differently can
- * still lay a Chinese book out identically. `null` is the interface font, which
- * is what `system` means on this platform.
+ * Appearance list can set each row in the font it offers. For the Latin faces it
+ * is a **sample and not a promise** — what a document gets for any other script
+ * is decided by the fall-through, so Georgia and Palatino preview differently
+ * and still lay a Chinese book out identically. For the four CJK faces the
+ * preview *is* the promise, which is why their labels are their own names in
+ * their own script: 宋体 set in Songti is the demonstration. `null` is the
+ * interface font, which is what `system` means on this platform.
  */
 export const READING_FONTS = [
   { id: 'system', label: 'System', stack: '-apple-system, system-ui, sans-serif', preview: null },
-  { id: 'serif', label: 'Serif', stack: 'Georgia, "Times New Roman", serif', preview: 'Georgia' },
-  { id: 'sans', label: 'Sans-serif', stack: 'Helvetica, Arial, sans-serif', preview: 'Helvetica' },
+  { id: 'georgia', label: 'Georgia', stack: 'Georgia, serif', preview: 'Georgia' },
+  { id: 'times', label: 'Times New Roman', stack: '"Times New Roman", serif', preview: 'Times New Roman' },
+  { id: 'palatino', label: 'Palatino', stack: 'Palatino, serif', preview: 'Palatino' },
+  { id: 'avenir', label: 'Avenir Next', stack: '"Avenir Next", sans-serif', preview: 'Avenir Next' },
+  { id: 'helvetica', label: 'Helvetica', stack: 'Helvetica, sans-serif', preview: 'Helvetica' },
+  { id: 'pingfang', label: '苹方', stack: '"PingFang SC", sans-serif', preview: 'PingFang SC' },
+  { id: 'songti', label: '宋体', stack: '"Songti SC", serif', preview: 'Songti SC' },
+  { id: 'kaiti', label: '楷体', stack: '"Kaiti SC", serif', preview: 'Kaiti SC' },
+  { id: 'yuanti', label: '圆体', stack: '"Yuanti SC", sans-serif', preview: 'Yuanti SC' },
 ] as const;
 
 /** One of `READING_FONTS`. Not a free string: see that list. */

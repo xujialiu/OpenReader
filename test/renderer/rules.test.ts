@@ -535,8 +535,8 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
   });
 
   it('bakes the owner’s choice into the program as well, so a book opens laid out in it', () => {
-    const chosen = highlighterSource(undefined, { font: 'serif', scale: 150 });
-    expect(chosen).toContain('var APPEARANCE = ' + JSON.stringify(appearanceCss({ font: 'serif', scale: 150 })));
+    const chosen = highlighterSource(undefined, { font: 'georgia', scale: 150 });
+    expect(chosen).toContain('var APPEARANCE = ' + JSON.stringify(appearanceCss({ font: 'georgia', scale: 150 })));
     expect(highlighterSource()).toContain('var APPEARANCE = "";');
   });
 

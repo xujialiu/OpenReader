@@ -18,7 +18,7 @@ describe('local settings persistence', () => {
   });
   it('roundtrips enablement, voice history, sources and appearance across reloads', () => {
     const settings = selectVoice({ ...DEFAULT_SETTINGS, enabledProviders: ['fish'],
-      appearance: { font: 'sans', scale: 125 }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
+      appearance: { font: 'helvetica', scale: 125 }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
     writeSettings(settings);
     expect(readSettings()).toEqual(settings);
   });

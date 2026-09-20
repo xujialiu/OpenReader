@@ -1,10 +1,26 @@
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
+import { READING_FONTS, type ReadingFont } from '../renderer/highlighter';
 import { DEFAULT_SETTINGS, isProviderId, type AppSettings, type DocumentVoice } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const string = (value: unknown, fallback: string) => typeof value === 'string' ? value : fallback;
+
+/**
+ * The two ids ADR 0029 retired, and what they become.
+ *
+ * `Serif` was `Georgia, "Times New Roman", serif` and `Sans-serif` was
+ * `Helvetica, Arial, sans-serif`, so each migrates to the face its own stack
+ * already named first and an owner's book keeps rendering exactly as it did.
+ */
+const RETIRED_FONTS: Readonly<Record<string, ReadingFont>> = { serif: 'georgia', sans: 'helvetica' };
+
+function readFont(value: unknown): AppSettings['appearance']['font'] {
+  if (typeof value !== 'string') return DEFAULT_SETTINGS.appearance.font;
+  if (READING_FONTS.some((font) => font.id === value)) return value as ReadingFont;
+  return RETIRED_FONTS[value] ?? DEFAULT_SETTINGS.appearance.font;
+}
 
 /** Explicit projection also prevents legacy credential fields from being persisted. */
 export function parseSettings(value: unknown): AppSettings {
@@ -39,8 +55,7 @@ export function parseSettings(value: unknown): AppSettings {
     // when the list is invalid.
     bracketPairs: string(data.bracketPairs, DEFAULT_SETTINGS.bracketPairs),
     appearance: {
-      font: typeof appearance.font === 'string' && ['system', 'serif', 'sans'].includes(appearance.font)
-        ? appearance.font as AppSettings['appearance']['font'] : DEFAULT_SETTINGS.appearance.font,
+      font: readFont(appearance.font),
       scale: typeof appearance.scale === 'number' && Number.isFinite(appearance.scale) && appearance.scale > 0 ? appearance.scale : DEFAULT_SETTINGS.appearance.scale,
     },
   };
