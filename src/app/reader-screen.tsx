@@ -99,8 +99,8 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   useLayoutEffect(() => {
     navigation.setOptions({
       title,
-      headerBackTitle: 'Library',
-      headerRight: () => <HeaderButton label="Appearance" onPress={() => setAppearance(true)} />,
+      headerBackButtonDisplayMode: 'minimal',
+      headerRight: () => <HeaderButton label="Appearance" title="Aa" onPress={() => setAppearance(true)} />,
     });
   }, [navigation, title]);
 

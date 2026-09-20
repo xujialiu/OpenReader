@@ -16,9 +16,10 @@
  * checked, because it is no longer something an eye can check.
  */
 
-import type { ReactNode } from 'react';
-import { DynamicColorIOS, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { DynamicColorIOS, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
+import { Icon, type IconName } from './icon';
 
 /**
  * One colour that is two, resolved by iOS rather than by React (ADR 0022).
@@ -227,37 +228,34 @@ export function Note({ children, attention }: { children: ReactNode; attention?:
   return <Text style={[styles.note, attention && styles.noteAttention]}>{children}</Text>;
 }
 
-/**
- * A word in a navigation bar.
- *
- * Text and not an icon, because there is no icon set in this binary and adding
- * one to say "add" and "settings" would be a font shipped for two glyphs. The
- * native header draws everything around it; this is only the label and the tap.
- */
-export function HeaderButton({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) {
+/** A labelled 44-point target, drawn as an icon or a short typographic mark. */
+export function HeaderButton({ label, icon, title, onPress, disabled }: {
+  label: string; icon?: IconName; title?: string; onPress(): void; disabled?: boolean;
+}) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      disabled={disabled}
-      hitSlop={8}
-      style={({ pressed }) => [pressed && styles.pressed, disabled && styles.disabled]}
-    >
-      <Text style={styles.headerButton}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} disabled={disabled}
+      style={({ pressed }) => [styles.headerTap, pressed && styles.pressed, disabled && styles.disabled]}>
+      {icon ? <Icon name={icon} color={INK.text} /> : <Text style={styles.headerButton}>{title ?? label}</Text>}
     </Pressable>
   );
 }
 
 /** One Document in the Library: what it is called, and how far the reading got. */
-export function DocumentRow({ title, progress, onPress }: { title: string; progress: string; onPress(): void }) {
+export function DocumentRow({ title, progress, cover, onPress }: {
+  title: string; progress: string; cover?: string | null; onPress(): void;
+}) {
+  const [failed, setFailed] = useState<string | null>(null);
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <Text style={styles.rowTitle} numberOfLines={2}>
-        {title}
-      </Text>
-      <Text style={styles.rowProgress} numberOfLines={2}>
-        {progress}
-      </Text>
+    <Pressable accessibilityRole="button" onPress={onPress}
+      style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}>
+      <View style={styles.cover} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        {cover && failed !== cover ? <Image source={{ uri: cover }} style={styles.coverImage}
+          resizeMode="contain" onError={() => setFailed(cover)} /> : <Icon name="book" color={INK.quiet} size={28} />}
+      </View>
+      <View style={styles.documentWords}>
+        <Text style={styles.documentTitle} numberOfLines={2}>{title}</Text>
+        <Text style={styles.rowProgress} numberOfLines={1}>{progress}</Text>
+      </View>
     </Pressable>
   );
 }
@@ -279,7 +277,7 @@ export function SettingRow({ title, detail, onPress }: { title: string; detail: 
         <Text style={styles.rowTitle} numberOfLines={1}>
           {title}
         </Text>
-        <Text style={styles.chevron}>›</Text>
+        <Icon name="next" color={INK.quiet} size={18} />
       </View>
       <Text style={styles.rowProgress}>{detail}</Text>
     </Pressable>
@@ -332,6 +330,12 @@ const styles = StyleSheet.create({
   section: { gap: 12 },
   sectionTitle: { color: INK.text, fontSize: 17, fontWeight: '700' },
   pressed: { opacity: 0.65 },
+  headerTap: { alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44 },
+  documentRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: 22, paddingVertical: 14 },
+  cover: { width: 56, height: 80, borderRadius: 5, backgroundColor: INK.panel, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  coverImage: { width: '100%', height: '100%' },
+  documentWords: { flex: 1, gap: 7 },
+  documentTitle: { color: INK.text, fontSize: 17, fontWeight: '500', lineHeight: 23 },
   headerButton: { color: INK.text, fontSize: 16, fontWeight: '600' },
   row: {
     borderBottomColor: INK.line,

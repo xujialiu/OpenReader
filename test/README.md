@@ -31,8 +31,10 @@ all 381 tests in 20 files passed, with and without that repo's own
 
 ## What is not tested here
 
-**React Native code.** Nothing in `test/` renders a component or touches a native
-module. That is not an omission to be filled in later with a different runner: the
+**React Native views.** Nothing in `test/` renders a native view or touches a native
+module. `app/voice-lifetime.test.ts` mounts the real voice-list hook with a null
+React component to reproduce loss across unmount/remount; native storage and the
+Provider response are test doubles. This is a hook-lifetime check, not visual QA. That is not an omission to be filled in later with a different runner: the
 platform-free half of OpenReader lives in `src/core/` precisely so that the tests
 that matter need no simulator, and the half that is not platform-free is the half
 whose failures are invisible on a desk anyway — notes/NOTES.md item 4 wants a

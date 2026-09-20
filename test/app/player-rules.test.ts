@@ -283,13 +283,12 @@ describe('the player names the Voice, and a resume is not an error (design 0020)
     pin(view, 'voiceInList(voices.voicesOf(settings.provider), settings.voice)', 'reading-view.tsx');
     pin(view, 'voiceInUse={voiceInUse}', 'reading-view.tsx');
     pin(player, '{voiceLine(settings, voiceInUse)}', 'player.tsx');
-    // The id is still what is shown when no list holds it, because that is the only
-    // true thing there is to show — and nothing fetches a list to make a caption.
-    pin(player, 'if (!inUse) return `${provider} · ${settings.voice}`;', 'player.tsx, voiceLine');
+    // Internal ids are not user-facing captions (design 0026).
+    expect(player).not.toContain('return `${provider} · ${settings.voice}`');
   });
 
   it('carries the tone of each line from the model to the style that paints it', () => {
-    pin(view, "if (status.resume) said.push({ said: status.resume, attention: false });", 'reading-view.tsx');
+    pin(view, 'if (status.resumeNeedsAttention && status.resume) said.push({ said: status.resume, attention: true });', 'reading-view.tsx');
     pin(view, "if (status.note) said.push({ said: status.note, attention: true });", 'reading-view.tsx');
     pin(player, 'style={[styles.note, note.attention && styles.noteAttention]}', 'player.tsx');
     pin(player, 'noteAttention: { color: INK.attention },', 'player.tsx');
@@ -330,5 +329,16 @@ describe('each Document is read in the Voice it remembers (ADR 0010)', () => {
     pin(screen, 'if (openedId) library.voiced(openedId, { provider, voice });', 'reader-screen.tsx, setVoice');
     pin(screen, 'library.voiced(openedId, { provider: settings.provider, voice: settings.voice });', 'reader-screen.tsx');
     pin(screen, 'if (!openedId || voiceId) return;', 'reader-screen.tsx, the inheritance');
+  });
+});
+
+
+describe('routine status is quiet, but lost positions still need attention (design 0026)', () => {
+  it('marks an abandoned resume as needing attention', () => {
+    const abandon = within(code('use-reading.ts'), 'const abandonResume = useCallback(', '}, []);');
+    pin(abandon, 'resumeNeedsAttention: true,', 'use-reading.ts, abandonResume');
+  });
+  it('shows problems even when the player was collapsed', () => {
+    pin(code('player.tsx'), 'if (collapsed && notes.length === 0)', 'player.tsx');
   });
 });

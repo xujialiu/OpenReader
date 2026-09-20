@@ -84,6 +84,13 @@ a later sweep.
 
 # Testing on the device
 
+## Local credentials
+
+For provider configuration or live-provider tests, first check `.secrets/` in
+this repository (`/Users/xujialiu/Works/openreader/.secrets`). It contains the
+owner's local credentials. Load only the credentials needed for the test; keep
+their values out of logs, screenshots, documentation and commits.
+
 ## Silence the simulator before playing anything
 
 Turn the simulator's volume all the way down **before** the first `play`, not

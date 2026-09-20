@@ -89,8 +89,8 @@ export function voiceLevels(voices: readonly VoiceInfo[]): readonly VoiceLevel[]
  * Voice `settings.voice` names. Null is ordinary and means only that no list
  * holding it has been asked for: a Voice list is a request against the owner's
  * account (philosophy rule 4), so nothing fetches one to complete a caption, and
- * the screen shows the id until the owner opens the sheet (design 0020 makes the
- * same argument for the locale).
+ * a caption can use a previously remembered name without another request
+ * (ADR 0026). Internal ids are no longer shown as captions.
  */
 export function voiceInList(voices: readonly VoiceInfo[] | null | undefined, id: string): VoiceInfo | null {
   if (!voices || !id) return null;

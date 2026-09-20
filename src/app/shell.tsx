@@ -33,13 +33,12 @@ import { asDocumentId } from '../core/document';
 import { readProviderKey, saveProviderKey } from '../keys/store';
 
 import { ReaderProvider } from '@epubjs-react-native/core';
-import { NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Appearance, useColorScheme } from 'react-native';
 
-import { APP_NAME } from '../../app-name';
 
 import { PALETTE } from './controls';
 import { GeneralScreen } from './general-screen';
@@ -182,6 +181,11 @@ export function OpenReader() {
    * so an owner who chose Light keeps it whatever the phone does at sunset.
    */
   const scheme = resolveTheme(settings.theme, useColorScheme());
+  const navigationTheme = useMemo(() => {
+    const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+    return { ...base, colors: { ...base.colors, background: PALETTE[scheme].page,
+      card: PALETTE[scheme].page, text: PALETTE[scheme].text, border: PALETTE[scheme].line } };
+  }, [scheme]);
 
   /**
    * Tell UIKit, which is what actually repaints.
@@ -218,20 +222,21 @@ export function OpenReader() {
             than left to `auto`, which reads the system's scheme and would be the
             one thing still light when the owner has chosen Dark on a light phone. */}
         <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer ref={navigationRef} theme={navigationTheme}>
           <Stack.Navigator
             initialRouteName="Library"
             screenOptions={{
               // Plain strings and not `INK`: the navigation library types these as
               // `string` and will not take a dynamic colour, so this is the one
               // place the theme is resolved in JavaScript rather than by UIKit.
-              headerStyle: { backgroundColor: PALETTE[scheme].panel },
+              headerStyle: { backgroundColor: PALETTE[scheme].page },
+              headerShadowVisible: false,
               headerTintColor: PALETTE[scheme].text,
               headerTitleStyle: { color: PALETTE[scheme].text },
               contentStyle: { backgroundColor: PALETTE[scheme].page },
             }}
           >
-            <Stack.Screen name="Library" component={LibraryScreen} options={{ title: APP_NAME }} />
+            <Stack.Screen name="Library" component={LibraryScreen} options={{ title: 'Library' }} />
             <Stack.Screen name="Reader" component={ReaderScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
             <Stack.Screen name="General" component={GeneralScreen} options={{ title: 'General', headerBackTitle: 'Settings' }} />

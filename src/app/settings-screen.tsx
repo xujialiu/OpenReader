@@ -46,25 +46,21 @@ export function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
     key.presence.state === 'unknown'
       ? `${PROVIDER_LABELS[settings.provider]} is the one in use.`
       : ready.ready
-        ? `${PROVIDER_LABELS[settings.provider]} is ready, reading in ${settings.voice}.`
+        ? `${PROVIDER_LABELS[settings.provider]} is ready to read aloud.`
         : readinessSentence(settings.provider, ready.missing);
 
   return (
     <View style={styles.screen}>
       <SettingRow
         title="General"
-        detail="What is true of the whole app. Almost nothing, yet."
+        detail="Light, dark, or follow your device."
         onPress={() => navigation.navigate('General')}
       />
       <SettingRow title="Providers" detail={providers} onPress={() => navigation.navigate('Providers')} />
 
       <View style={styles.foot}>
         <Note>
-          Everything here but a credential is kept for as long as the app is running and no longer. Settings are shared
-          between the owner&apos;s devices through their own Sync Folder, and that is not built yet; inventing a private
-          store now would only be something for it to argue with later. An API key and a gateway token are the
-          exception: they are in this device&apos;s Keychain, which is why they survive a relaunch when nothing else
-          here does.
+          App preferences reset when you close the app. Saved credentials stay on this device.
         </Note>
       </View>
     </View>

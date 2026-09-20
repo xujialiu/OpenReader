@@ -19,12 +19,7 @@
  *   has a button to press: with the controls hidden and no button, they would tap
  *   the page, and tapping the page moves the reading position.
  *
- * ## Why the buttons are characters
- *
- * There is no icon set in this binary and `controls.tsx` says why: a font shipped
- * for six glyphs. So the five transport controls are characters in the system font
- * with `accessibilityLabel`s saying what they are, and the two paragraph buttons
- * carry a pilcrow — the one glyph that means "paragraph" without a legend.
+ * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
 
 import { useCallback, useEffect, useRef } from 'react';
@@ -33,6 +28,7 @@ import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react
 import { MAX_STEPPER_RATE, MIN_STEPPER_RATE, snapRate, stepRate } from '../playback';
 
 import { INK } from './controls';
+import { Icon, type IconName } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { SkipTarget } from './use-reading';
 
@@ -82,10 +78,8 @@ export interface PlayerProps {
    * or null until a list holding it has been asked for. See `voiceLine`.
    */
   voiceInUse: { label: string; locale: string } | null;
-  /** What the reading is doing, in one line. Kept in the player so that collapsing hides it with everything else. */
-  reading: string;
   /**
-   * What the player says under the reading line, in the words of whatever said it.
+   * What the player says when attention is needed, in the words of whatever said it.
    * Never swallowed (philosophy rule 1).
    *
    * `attention` and not one style for all of them: the screen that builds this list
@@ -115,29 +109,12 @@ export interface PlayerProps {
   onHeight(height: number): void;
 }
 
-/**
- * The Voice in use, above the play button.
- *
- * Design 0020 promises "the service that is reading and the voice it is reading
- * with", and for a while this line kept the first half and spelled the second as
- * `zh/74c6aba5cbf94a15bbdc547ffce5cb38` — a Provider's internal id, which is not
- * the name of anything (notes/NOTES_2026-09-20.md, 07:14). The Voice's own name is
- * in the list the sheet fetched, so it is threaded through to here.
- *
- * The name and the locale are both shown **once the Provider's Voice list has been
- * asked for**, and not before. Neither is a property of the id: a Voice's name is
- * whatever the service calls it, two of the five Providers report a real locale per
- * Voice and three report none at all (ADR 0020), and the only way to know either is
- * to have the list — which is a request against the owner's account. Fetching one
- * so that a caption could be complete would be spending the owner's quota on a
- * caption (philosophy rule 4), so until then the id is shown, because it is the
- * only true thing there is to show.
- */
+/** A known name survives leaving the reader; internal ids are never a caption. */
 function voiceLine(settings: AppSettings, inUse: { label: string; locale: string } | null): string {
   const provider = PROVIDER_LABELS[settings.provider];
   if (!settings.voice) return `${provider} · choose a Voice`;
-  if (!inUse) return `${provider} · ${settings.voice}`;
-  return inUse.locale ? `${provider} · ${inUse.label} · ${inUse.locale}` : `${provider} · ${inUse.label}`;
+  if (!inUse) return `${provider} · Voice`;
+  return inUse.label;
 }
 
 export function Player({
@@ -147,7 +124,6 @@ export function Player({
   onCollapsed,
   enabled,
   voiceInUse,
-  reading,
   notes,
   onPlay,
   onPause,
@@ -181,66 +157,49 @@ export function Player({
     [onHeight],
   );
 
-  if (collapsed) {
+  if (collapsed && notes.length === 0) {
     return (
       // `box-none` so the strip the button sits in does not eat taps on the text
       // beside it: with the controls hidden, tapping the page is the reading
       // position moving, and a band of dead page would be a puzzle.
       <View style={styles.collapsed} pointerEvents="box-none" onLayout={measure}>
-        <Transport glyph={playing ? '‖' : '▸'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
+        <Transport icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
       </View>
     );
   }
 
   return (
     <View style={styles.player} onLayout={measure}>
+      {notes.map((note) => (
+        <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>{note.said}</Text>
+      ))}
       <View style={styles.head}>
-        <Text style={styles.reading} numberOfLines={2}>
-          {reading}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Collapse the player"
-          hitSlop={10}
-          onPress={() => onCollapsed(true)}
-          style={({ pressed }) => [styles.chevronTap, pressed && styles.pressed]}
-        >
-          <Text style={styles.chevron}>⌄</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
+          style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
+          <Text style={styles.voiceLabel} numberOfLines={1}>{voiceLine(settings, voiceInUse)}</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Collapse the player"
+          onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, pressed && styles.pressed]}>
+          <Icon name="down" color={INK.quiet} size={20} />
         </Pressable>
       </View>
 
-      {notes.map((note) => (
-        <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>
-          {note.said}
-        </Text>
-      ))}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Choose a Voice"
-        onPress={onVoices}
-        style={({ pressed }) => [styles.voice, pressed && styles.pressed]}
-      >
-        <Text style={styles.voiceLabel} numberOfLines={1}>
-          {voiceLine(settings, voiceInUse)}
-        </Text>
-      </Pressable>
-
       <View style={styles.transport}>
-        <Transport glyph="«¶" label="Previous paragraph" onPress={() => onSkip('previous-paragraph')} disabled={!enabled} />
-        <Transport glyph="‹" label="Previous sentence" onPress={() => onSkip('previous-sentence')} disabled={!enabled} />
-        <Transport glyph={playing ? '‖' : '▸'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
-        <Transport glyph="›" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
-        <Transport glyph="¶»" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
+        <Transport icon="previousParagraph" label="Previous paragraph" onPress={() => onSkip('previous-paragraph')} disabled={!enabled} />
+        <Transport icon="previous" label="Previous sentence" onPress={() => onSkip('previous-sentence')} disabled={!enabled} />
+        <Transport icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
+        <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
+        <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
       </View>
 
       <View style={styles.foot}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Contents"
           onPress={onContents}
           style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}
         >
-          <Text style={styles.footLabel}>Contents</Text>
+          <Icon name="contents" color={INK.text} />
         </Pressable>
         <Speed rate={settings.rate} onRate={onRate} />
       </View>
@@ -248,15 +207,15 @@ export function Player({
   );
 }
 
-/** One transport button: a character, a label for anyone who cannot see it, and a tap. */
+/** One transport button: an icon, a label for anyone who cannot see it, and a tap. */
 function Transport({
-  glyph,
+  icon,
   label,
   onPress,
   primary,
   disabled,
 }: {
-  glyph: string;
+  icon: IconName;
   label: string;
   onPress(): void;
   primary?: boolean;
@@ -276,7 +235,7 @@ function Transport({
         disabled && styles.disabled,
       ]}
     >
-      <Text style={[styles.glyph, primary && styles.glyphPrimary]}>{glyph}</Text>
+      <Icon name={icon} color={primary ? INK.page : INK.text} size={primary ? 26 : 24} />
     </Pressable>
   );
 }
@@ -347,7 +306,7 @@ function Speed({ rate, onRate }: { rate: number; onRate(next: number): void }) {
         hitSlop={6}
         style={({ pressed }) => [styles.step, pressed && styles.pressed, shown <= MIN_STEPPER_RATE && styles.disabled]}
       >
-        <Text style={styles.stepLabel}>−</Text>
+        <Icon name="minus" color={INK.text} size={18} />
       </Pressable>
       {/* Two decimals always, so the number does not change width as it is held and
           the two arrows do not move under the finger. */}
@@ -361,7 +320,7 @@ function Speed({ rate, onRate }: { rate: number; onRate(next: number): void }) {
         hitSlop={6}
         style={({ pressed }) => [styles.step, pressed && styles.pressed, shown >= MAX_STEPPER_RATE && styles.disabled]}
       >
-        <Text style={styles.stepLabel}>+</Text>
+        <Icon name="plus" color={INK.text} size={18} />
       </Pressable>
     </View>
   );
@@ -378,23 +337,18 @@ const styles = StyleSheet.create({
     backgroundColor: INK.panel,
     borderColor: INK.line,
     borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 44,
+    height: 48,
     justifyContent: 'center',
-    minWidth: 52,
+    minWidth: 44,
     paddingHorizontal: 10,
   },
-  buttonPrimary: { backgroundColor: INK.text, borderColor: INK.text, minWidth: 64 },
-  chevron: { color: INK.quiet, fontSize: 20, lineHeight: 22 },
-  chevronTap: { paddingHorizontal: 6 },
+  buttonPrimary: { backgroundColor: INK.text, borderColor: INK.text, minWidth: 64, height: 52, borderRadius: 26 },
+  chevronTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   collapsed: { alignItems: 'flex-end', bottom: 28, position: 'absolute', right: 16 },
   disabled: { opacity: 0.35 },
   foot: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  footLabel: { color: INK.text, fontSize: 15, fontWeight: '600' },
-  footTap: { paddingVertical: 6 },
-  glyph: { color: INK.text, fontSize: 18, fontWeight: '600' },
-  glyphPrimary: { color: INK.page },
-  head: { alignItems: 'flex-start', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
+  footTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   note: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
   noteAttention: { color: INK.attention },
   player: {
@@ -404,17 +358,16 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     bottom: 0,
-    gap: 10,
+    gap: 6,
     left: 0,
     paddingBottom: 28,
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 4,
     position: 'absolute',
     right: 0,
   },
   pressed: { opacity: 0.65 },
   rate: { color: INK.text, fontSize: 15, fontVariant: ['tabular-nums'], fontWeight: '600', minWidth: 62, textAlign: 'center' },
-  reading: { color: INK.reading, flex: 1, fontSize: 13, fontWeight: '600', lineHeight: 18 },
   speed: { alignItems: 'center', flexDirection: 'row', gap: 4 },
   step: {
     alignItems: 'center',
@@ -422,12 +375,11 @@ const styles = StyleSheet.create({
     borderColor: INK.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    height: 34,
+    height: 44,
     justifyContent: 'center',
-    width: 34,
+    width: 44,
   },
-  stepLabel: { color: INK.text, fontSize: 18, fontWeight: '600' },
   transport: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center' },
-  voice: { alignSelf: 'center', paddingVertical: 2 },
-  voiceLabel: { color: INK.text, fontSize: 14, fontWeight: '600' },
+  voice: { flex: 1, minHeight: 44, justifyContent: 'center', paddingLeft: 8 },
+  voiceLabel: { color: INK.text, fontSize: 14, fontWeight: '500' },
 });

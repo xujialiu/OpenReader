@@ -74,6 +74,14 @@ export interface ZipMember {
   readonly uncompressedSize: number;
 }
 
+/** Location information for reading an individual member, separate from identity. */
+export interface LocatedZipMember extends ZipMember {
+  readonly compressedSize: number;
+  readonly method: number;
+  readonly flags: number;
+  readonly offset: number;
+}
+
 const END_OF_CENTRAL_DIRECTORY = 0x06054b50;
 const CENTRAL_DIRECTORY_HEADER = 0x02014b50;
 
@@ -106,6 +114,10 @@ const ZIP64_32 = 0xffffffff;
  * rule applied to what the format allows.
  */
 export function readCentralDirectory(archive: ArchiveBytes): ZipMember[] {
+  return readZipDirectory(archive).map(({ name, crc32, uncompressedSize }) => ({ name, crc32, uncompressedSize }));
+}
+
+export function readZipDirectory(archive: ArchiveBytes): LocatedZipMember[] {
   const { size } = archive;
   if (!Number.isInteger(size) || size < 0) throw new Error(`An archive cannot be ${size} bytes long.`);
   if (size < END_RECORD) {
@@ -148,7 +160,7 @@ export function readCentralDirectory(archive: ArchiveBytes): ZipMember[] {
   }
 
   const directory = range(archive, directoryAt, directorySize);
-  const members: ZipMember[] = [];
+  const members: LocatedZipMember[] = [];
   let at = 0;
   for (let seen = 0; seen < entries; seen++) {
     if (at + 46 > directorySize) {
@@ -174,7 +186,9 @@ export function readCentralDirectory(archive: ArchiveBytes): ZipMember[] {
     // separates a name from its numbers with one — so two different archives
     // could produce the same line. Nothing legitimate puts one in a file name.
     if (name.indexOf(0) >= 0) throw new Error(`Member ${seen + 1} of this archive has a NUL in its name.`);
-    members.push({ name, crc32: u32(directory, at + 16), uncompressedSize });
+    members.push({ name, crc32: u32(directory, at + 16), uncompressedSize,
+      compressedSize: u32(directory, at + 20), method: u16(directory, at + 10),
+      flags: u16(directory, at + 8), offset: u32(directory, at + 42) });
     at += record;
   }
   // Slack after the last record means the directory is not what the end record

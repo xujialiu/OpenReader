@@ -28,11 +28,11 @@
 import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 
-import { APP_NAME } from '../../app-name';
 import type { LibraryEntry } from '../core/document';
 
 import { DocumentRow, HeaderButton, INK, Note } from './controls';
 import { pickDocument } from './document';
+import { useDocumentCover } from './document-cover';
 import { documentFile } from './library';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
@@ -98,8 +98,8 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
    */
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerLeft: () => <HeaderButton label="Settings" onPress={() => navigation.navigate('Settings')} />,
-      headerRight: () => <HeaderButton label={picking ? 'Adding…' : 'Add book'} onPress={() => void add()} disabled={picking} />,
+      headerLeft: () => <HeaderButton icon="settings" label="Settings" onPress={() => navigation.navigate('Settings')} />,
+      headerRight: () => <HeaderButton icon="plus" label={picking ? 'Adding…' : 'Add book'} onPress={() => void add()} disabled={picking} />,
     });
   }, [navigation, add, picking]);
 
@@ -129,12 +129,13 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   return (
     <View style={styles.screen}>
       <FlatList
+        contentContainerStyle={{ paddingVertical: 12 }}
         data={library.entries}
         keyExtractor={(entry) => entry.id}
         renderItem={({ item }) => (
-          <DocumentRow
-            title={item.title}
-            progress={progressOf(item, present.has(item.id))}
+          <LibraryDocument
+            entry={item}
+            present={present.has(item.id)}
             onPress={() => navigation.navigate('Reader', { id: item.id })}
           />
         )}
@@ -144,18 +145,15 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>No books yet</Text>
               <Text style={styles.emptyWords}>
-                {APP_NAME} reads an EPUB aloud through a text-to-speech Provider you choose and pay for directly, and
-                highlights the word being spoken. Add a book from this device, or open one from another app, and it
-                stays in this Library.
+                Add an EPUB to start reading and listening.
               </Text>
               {ready.ready ? (
                 <Note>
-                  {PROVIDER_LABELS[settings.provider]} is ready, reading in {settings.voice} at {settings.rate}×.
+                  {PROVIDER_LABELS[settings.provider]} is ready to read aloud.
                 </Note>
               ) : (
                 <Note attention>
-                  {readinessSentence(settings.provider, ready.missing)} There is no zero-key path: until Settings has
-                  what it asks for, a document can be read on screen and not aloud.
+                  {readinessSentence(settings.provider, ready.missing)} Set up a voice in Settings to listen.
                 </Note>
               )}
             </View>
@@ -164,6 +162,11 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
       />
     </View>
   );
+}
+
+function LibraryDocument({ entry, present, onPress }: { entry: LibraryEntry; present: boolean; onPress(): void }) {
+  const cover = useDocumentCover(entry);
+  return <DocumentRow title={entry.title} progress={progressOf(entry, present)} cover={cover} onPress={onPress} />;
 }
 
 const styles = StyleSheet.create({

@@ -42,7 +42,6 @@ const FOLLOW = 'The document’s own';
 export function AppearanceSheet({
   visible,
   onClose,
-  document,
   appearance,
   onChange,
 }: {
@@ -86,9 +85,7 @@ export function AppearanceSheet({
         />
 
         <Note>
-          A size is a percentage of what {document} asked for, not a number of points, because what is being chosen is
-          “bigger than this book set it”. Both rows apply to every book rather than to this one, and neither is kept
-          when the app is closed — nothing the app knows about you is stored anywhere yet.
+          Applies to all documents. Resets when the app closes.
         </Note>
 
         <Pressable accessibilityRole="button" onPress={onClose} style={({ pressed }) => [styles.done, pressed && styles.pressed]}>

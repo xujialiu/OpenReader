@@ -173,6 +173,12 @@ worse than reading nothing.
 
 ## The player says what it is doing, and hiding it hides that too
 
+The running status line below is superseded by
+[the interface redesign](0026-a-coherent-reading-interface.md): the owner chose
+to remove routine playback status and successful-resume messages. Failures and
+missing setup appear when they need attention, without occupying space during
+normal reading.
+
 The strip carries one line saying which sentence is being read, of how many, and
 whether the highlight is following the word or lighting the whole sentence —
 because on some voices only the whole sentence can be lit, and a reader watching
@@ -186,6 +192,11 @@ that remains says nothing, because the moment there is something to say the read
 can press it and get everything back.
 
 ## What the voice line can say, and what it costs to say more
+
+The presentation below is revised by [the interface redesign](0026-a-coherent-reading-interface.md):
+the player now shows the voice name, remembers names already obtained, and does
+not show internal identifiers. A list is still not requested merely to complete
+a caption.
 
 Above the play button is the service that is reading and the voice it is reading
 with. What it cannot always add is the language that voice speaks — because half

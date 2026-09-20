@@ -19,7 +19,6 @@
 
 import { ScrollView, StyleSheet } from 'react-native';
 
-import { APP_NAME } from '../../app-name';
 
 import { Choice, INK, Note, Section } from './controls';
 import { useShell } from './routes';
@@ -37,29 +36,7 @@ export function GeneralScreen() {
           onChange={(theme) => setSettings({ ...settings, theme })}
           labelOf={(theme) => THEME_LABELS[theme]}
         />
-        <Note>
-          Dark reaches the book as well as {APP_NAME} around it. A book that ships its own colours is repainted for it —
-          reading in the dark is something the room asks for, not an opinion about how the book was designed.
-        </Note>
-        <Note>
-          Light does the opposite and leaves the book exactly as its publisher set it, including a cream page or a
-          design that was already dark. Two things dark cannot reach: a picture keeps its own colours, so an
-          illustration on a white background still glares; and a book that uses colour to mean something loses that
-          meaning, because every colour it chose becomes one.
-        </Note>
-      </Section>
-
-      <Section title="What is not here yet">
-        <Note>
-          How big the text is has a control of its own, over the book, under Appearance — it is judged by watching the
-          book change size rather than by reading about it. The reading speed is in the player for the same reason: it
-          is judged by listening.
-        </Note>
-        <Note>
-          None of this is remembered when the app stops. Settings are shared between the owner&apos;s devices through
-          their own Sync Folder, and that is not built yet; inventing a private store now would only be something for it
-          to argue with later.
-        </Note>
+        <Note>Resets when the app closes.</Note>
       </Section>
     </ScrollView>
   );

@@ -52,6 +52,7 @@ import type { SecretPresence } from './use-provider-secrets';
 import { useReading, type ReadingStatus } from './use-reading';
 import { useVoiceLists } from './use-voices';
 import { voiceInList } from './voices';
+import { knownVoice } from './voice-catalog';
 import { VoiceSheet } from './voice-sheet';
 
 /**
@@ -353,28 +354,14 @@ export function ReadingView({
   // Nothing is claimed about a key while the Keychain is still being asked.
   const sayWhatIsMissing = !ready.ready && keyPresence.state !== 'unknown';
 
-  /**
-   * Everything the player says under the reading line, in one list, so that it
-   * draws them without deciding anything. Order is worst first: what is missing
-   * before the app can speak at all, then what refused, then what became of the
-   * stored place, then what is being done to the highlight.
-   *
-   * **Each one carries whether it wants attention**, and that is not decoration.
-   * `ReadingStatus` keeps `resume` out of `note` on purpose — "`note` means
-   * something went wrong and a resume that worked is the ordinary case" — and this
-   * list used to flatten both into one array that the player painted in one style,
-   * so a resume that worked arrived in the colour of a failure (07:27). The
-   * distinction was made in the model and thrown away here. `attention` is for what
-   * the owner has to act on; a resume and the Highlight Level are statements of
-   * fact, and the colour now means one thing.
-   */
+  /** Only actionable problems occupy the player; routine status stays in diagnostics. */
   const notes = useMemo(() => {
     const said: { said: string; attention: boolean }[] = [];
     // First, because it says which Provider the sentence below is even about.
     if (voiceNote) said.push({ said: voiceNote, attention: true });
     if (sayWhatIsMissing && !ready.ready) {
       said.push({
-        said: `${readinessSentence(settings.provider, ready.missing)} There is no zero-key path: nothing can be spoken until Settings has what it asks for.`,
+        said: readinessSentence(settings.provider, ready.missing),
         attention: true,
       });
     }
@@ -382,12 +369,8 @@ export function ReadingView({
       said.push({ said: `The Keychain would not say whether a key is saved: ${keyPresence.message}`, attention: true });
     }
     if (displayError) said.push({ said: `The document would not display: ${displayError}`, attention: true });
+    if (status.resumeNeedsAttention && status.resume) said.push({ said: status.resume, attention: true });
     if (status.note) said.push({ said: status.note, attention: true });
-    // After what refused and before what is being done to the highlight: where the
-    // reading came back to is neither an error nor a property of the Provider.
-    if (status.resume) said.push({ said: status.resume, attention: false });
-    const highlight = highlightLine(status);
-    if (highlight) said.push({ said: highlight, attention: false });
     return said;
   }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status]);
 
@@ -397,9 +380,9 @@ export function ReadingView({
    * for. See `player.tsx`'s `voiceLine` for why nothing is fetched to fill it.
    */
   const voiceInUse = useMemo(() => {
-    const found = voiceInList(voices.voicesOf(settings.provider), settings.voice);
+    const found = voiceInList(voices.voicesOf(settings.provider), settings.voice) ?? knownVoice(settings);
     return found ? { label: found.label, locale: found.locale === MULTILINGUAL ? '' : found.locale } : null;
-  }, [voices, settings.provider, settings.voice]);
+  }, [voices, settings]);
 
   /**
    * Where the contents list marks: the section the **reading** is in, or the last
@@ -457,7 +440,7 @@ export function ReadingView({
           `reportsWordTimings=${status.reportsWordTimings} seeking=${status.seeking} spine=${status.spineHrefs.length} ` +
           `lang=${JSON.stringify(status.language)} collapsed=${collapsed} at=${at} contents=${contents.rows.length}`,
       );
-      hlog(`line=${JSON.stringify(readingLine(status, settings))}`);
+      hlog(`line=${JSON.stringify(readingLine(status, settings))} highlight=${JSON.stringify(highlightLine(status))}`);
       hlog(`voiceInUse=${JSON.stringify(voiceInUse)} provider=${settings.provider} voice=${settings.voice} rate=${settings.rate}`);
       hlog(`appearance=${JSON.stringify(settings.appearance)} theme=${settings.theme} ready=${ready.ready}`);
       for (const one of notes) hlog(`note attention=${one.attention} ${JSON.stringify(one.said)}`);
@@ -522,7 +505,6 @@ export function ReadingView({
         onCollapsed={setCollapsed}
         enabled={ready.ready || status.playing}
         voiceInUse={voiceInUse}
-        reading={readingLine(status, settings)}
         notes={notes}
         onPlay={reading.play}
         onPause={pause}

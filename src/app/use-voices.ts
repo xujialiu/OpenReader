@@ -11,7 +11,7 @@
  *
  * **What Voices each one has**, which is a question for the server and costs a
  * request against the owner's own account. So it is asked when the owner opens the
- * list for a Provider and **cached for the session** — never re-fetched per open,
+ * list for a Provider and **cached across reader screens for the session** — never re-fetched per open,
  * because Speechify paginates its list and Fish merges up to three sources
  * (ADR 0020). It is never asked on the reader's behalf in the background:
  * philosophy rule 4 is no silent spending, and a list fetched because a screen
@@ -22,7 +22,7 @@
  * there is one.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 
 import { createProvider } from '../core/providers/factory';
 import type { ProviderId, VoiceInfo } from '../core/providers/types';
@@ -30,6 +30,7 @@ import { withTimeout } from '../core/timeout';
 import { readGatewayHeaders, readProviderKey } from '../keys/store';
 
 import { useShell } from './routes';
+import { catalogVoices, rememberVoices, subscribeVoiceCatalog, voiceCatalogSnapshot } from './voice-catalog';
 import {
   configuredProviders,
   headersAreOffered,
@@ -74,7 +75,7 @@ export function useVoiceLists(settings: AppSettings): VoiceLists {
   const { secretsWritten } = useShell();
   /** Which Providers the Keychain holds a key for, and what it refused to say. Null until it has answered. */
   const [keys, setKeys] = useState<{ held: ReadonlySet<ProviderId>; refusals: readonly string[] } | null>(null);
-  const [lists, setLists] = useState<Readonly<Partial<Record<ProviderId, readonly VoiceInfo[]>>>>({});
+  const lists = useSyncExternalStore(subscribeVoiceCatalog, voiceCatalogSnapshot);
   const [asking, setAsking] = useState<ProviderId | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -124,7 +125,7 @@ export function useVoiceLists(settings: AppSettings): VoiceLists {
     [keys, settings],
   );
 
-  const voicesOf = useCallback((provider: ProviderId) => lists[provider] ?? null, [lists]);
+  const voicesOf = useCallback((provider: ProviderId) => catalogVoices(lists, settings, provider), [lists, settings]);
 
   const ask = useCallback(
     (provider: ProviderId) => {
@@ -169,7 +170,7 @@ export function useVoiceLists(settings: AppSettings): VoiceLists {
             () => new Error(`${label} did not answer within ${ASK_TIMEOUT_MS / 1000} seconds.`),
             () => abort.abort(),
           );
-          setLists((was) => ({ ...was, [provider]: listed }));
+          rememberVoices(settingsNow, provider, listed);
           if (listed.length === 0) setNote(`${label} answered, and published no Voices.`);
         } catch (problem) {
           setNote(describe(problem));

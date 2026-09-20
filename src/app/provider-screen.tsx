@@ -56,6 +56,7 @@
  * address, a key and a gateway token work together at all.
  */
 
+import { rememberVoices } from './voice-catalog';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
@@ -221,6 +222,7 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
             () => abort.abort(),
           );
           setVoices(listed);
+          rememberVoices(draft, draft.provider, listed);
           if (listed.length === 0) setNote(`${label} answered, and published no Voices.`);
 
           // Not every OpenAI-compatible server has a model list, and one that has

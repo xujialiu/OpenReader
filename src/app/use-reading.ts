@@ -158,6 +158,8 @@ export interface ReadingStatus {
    * Position itself is kept out of state to avoid (ADR 0005).
    */
   resume: string | null;
+  /** A lost or changed resume needs attention even when routine status is hidden. */
+  resumeNeedsAttention: boolean;
 }
 
 const NOTHING_YET: ReadingStatus = {
@@ -173,6 +175,7 @@ const NOTHING_YET: ReadingStatus = {
   spineHrefs: [],
   note: null,
   resume: null,
+  resumeNeedsAttention: false,
 };
 
 export interface Reading {
@@ -363,6 +366,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     const lost = resumeLostRef.current;
     setStatus((was) => ({
       ...was,
+      resumeNeedsAttention: true,
       resume:
         lost ??
         'The place this book was left at had not rendered yet when the reading was asked to start, so it starts here instead.',
@@ -660,7 +664,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
           atRef.current = found.utterance;
           adopt(next);
           seekTo(found.utterance);
-          setStatus((was) => ({ ...was, resume: sentence }));
+          setStatus((was) => ({ ...was, resume: sentence, resumeNeedsAttention: found.moved !== null || found.agreement === 'aligned' }));
           return;
         }
         resumeLostRef.current = resumeSentence(found);

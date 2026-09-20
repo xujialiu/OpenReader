@@ -24,7 +24,7 @@
  *
  * Nothing is fetched until a Provider is tapped. A Voice list is a request against
  * the owner's own account (philosophy rule 4), and it is cached for as long as the
- * reader is open because Speechify paginates and Fish merges up to three sources.
+ * app is open because Speechify paginates and Fish merges up to three sources.
  *
  * **What is chosen here is this book's Voice** (ADR 0010). It is written into the
  * Library entry of the Document that is open, and it becomes the global default as
@@ -40,6 +40,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import type { ProviderId } from '../core/providers/types';
 
 import { INK, Note } from './controls';
+import { Icon } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { VoiceLists } from './use-voices';
 import { levelOfVoice, voiceLevels } from './voices';
@@ -137,10 +138,6 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
              * choice for the book in front of them; it becomes the default as well,
              * which is what the next book they open for the first time inherits.
              */}
-            <Note>
-              The Voice this book is read in. Choosing one here changes this book and nothing already on the shelf, and
-              it becomes the Voice a new book starts in.
-            </Note>
             <View style={styles.providers}>
               {configured.map((provider) => (
                 <Chip
@@ -206,9 +203,7 @@ function VoicePicker({ onClose, settings, lists, onChoose }: Omit<VoiceSheetProp
                       <Text style={[styles.rowLabel, chosen && styles.rowLabelChosen]} numberOfLines={1}>
                         {voice.label}
                       </Text>
-                      <Text style={styles.rowId} numberOfLines={1}>
-                        {voice.id}
-                      </Text>
+                      {chosen ? <Icon name="check" color={INK.text} size={20} /> : null}
                     </Pressable>
                   );
                 })}
@@ -276,9 +271,8 @@ const styles = StyleSheet.create({
   localesBody: { gap: 8, paddingHorizontal: 16 },
   pressed: { opacity: 0.65 },
   providers: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
-  row: { borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth, gap: 2, paddingHorizontal: 16, paddingVertical: 12 },
-  rowId: { color: INK.quiet, fontSize: 12 },
-  rowLabel: { color: INK.text, fontSize: 15, fontWeight: '600' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingVertical: 12 },
+  rowLabel: { flex: 1, color: INK.text, fontSize: 15, fontWeight: '600' },
   rowLabelChosen: { color: INK.reading },
   sheet: {
     backgroundColor: INK.panel,
