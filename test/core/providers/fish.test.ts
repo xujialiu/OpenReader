@@ -193,13 +193,27 @@ describe('fishVoice', () => {
     expect(fishVoice({ ...model(ID_A, 'Canadian voice'), tags: ['en-ca', 'en-us'] })?.locale).toBe('en');
   });
 
-  it('does not infer an accent from an unmarked name, and multilingual models stay multilingual', () => {
+  it('uses an explicit English region for multilingual models without guessing from a name', () => {
     expect(fishVoice(model(ID_A, 'Aarav'))).toEqual({ id: `en/${ID_A}`, label: 'Aarav', locale: 'en' });
     expect(fishVoice({ ...model(ID_B, 'Aarav — Male Indian multilingual (EN)', ['ru', 'ar', 'en', 'es', 'fr']), tags: ['indian'] })).toEqual({
       id: `mul/${ID_B}`,
       label: 'Aarav — Male Indian multilingual (EN)',
-      locale: 'mul',
+      locale: 'en-IN',
     });
+  });
+
+  it.each([
+    ['Indian multilingual narrator', ['indian'], 'mul'],
+    ['Indian multilingual narrator (EN)', [], 'en-IN'],
+    ['Australian English narrator', [], 'en-AU'],
+    ['Regional narrator', ['en-ca'], 'en-CA'],
+    ['Indian narrator (EN)', ['en-us'], 'mul'],
+  ])('groups multilingual %s only with explicit English and an unambiguous region', (title, tags, locale) => {
+    expect(fishVoice({ ...model(ID_A, title, ['hi', 'en']), tags })).toEqual({ id: `mul/${ID_A}`, label: title, locale });
+  });
+
+  it('does not move a non-English voice just because its title mentions English', () => {
+    expect(fishVoice(model(ID_A, 'Indian English narrator', ['hi']))?.locale).toBe('hi');
   });
 });
 
@@ -454,7 +468,7 @@ describe('listVoices', () => {
       ...(includeOfficial ? [{ id: `en/${ID_A}`, label: 'Official', locale: 'en' }] : []),
       ...(includeOwn ? [{ id: `en/${ID_B}`, label: 'Own', locale: 'en' }] : []),
       ...(includeManual ? [{ id: `en/${ID_C}`, label: 'Manual', locale: 'en' }] : []),
-      DEFAULT_ENTRY,
+      ...(includeOwn ? [DEFAULT_ENTRY] : []),
     ]);
     expect(fetchImpl).toHaveBeenCalledTimes(Number(includeOfficial) + Number(includeOwn) + Number(includeManual));
   });
@@ -472,7 +486,9 @@ describe('listVoices', () => {
     config.includeOfficial = false;
     config.includeOwn = false;
     config.includeManual = false;
-    expect(await p.listVoices()).toEqual([DEFAULT_ENTRY]);
+    expect(await p.listVoices()).toEqual([]);
+    config.includeOwn = true;
+    expect(await p.listVoices()).toEqual([{ id: `en/${ID_B}`, label: 'Own', locale: 'en' }, DEFAULT_ENTRY]);
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
@@ -653,7 +669,7 @@ describe('listVoices', () => {
     });
     await provider(fetchImpl, { includeOfficial: false, includeOwn: false, voices: ID_C }, { cache, timeoutMs: 20 }).listVoices();
     const later = provider(fetchImpl, { includeOwn: false, voices: `${ID_C} ${ID_B}` }, { cache, timeoutMs: 20 });
-    expect(await later.listVoices()).toEqual([{ id: `en/${ID_C}`, label: 'Saved manual', locale: 'en' }, DEFAULT_ENTRY]);
+    expect(await later.listVoices()).toEqual([{ id: `en/${ID_C}`, label: 'Saved manual', locale: 'en' }]);
     expect(fetchImpl.mock.calls.filter(([url]) => url.endsWith(`/model/${ID_C}`))).toHaveLength(1);
     expect(fetchImpl.mock.calls.some(([url]) => url.endsWith(`/model/${ID_B}`))).toBe(false);
   });

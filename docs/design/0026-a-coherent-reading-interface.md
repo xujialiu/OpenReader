@@ -127,6 +127,19 @@ and Manual voices. Only Official voices starts selected. Manual voices reveals
 a field for the voices the owner supplies. These follow the same editing lock as
 the rest of the provider configuration.
 
+Default belongs to Your voices and disappears from the picker when that source
+is off. Keeping it visible regardless of the choice was rejected because the
+source controls should describe what the owner will find in the picker. Hiding
+it does not replace a voice already selected for a document.
+
+A voice explicitly described as English with one regional accent appears under
+that region even if it can also speak other languages. This makes an Indian
+English narrator findable beside other Indian English voices. Keeping every
+such narrator under multilingual was rejected because it hides the distinction
+its published name makes. A regional label alone, or conflicting regional
+labels, is insufficient to choose an English accent.
+
+
 
 ## One enable switch per provider
 

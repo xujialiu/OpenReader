@@ -16,6 +16,16 @@ final class ReaderProbe: XCTestCase {
     if book.waitForExistence(timeout: 2) { book.tap() }
     XCTAssertTrue(app.buttons["Choose a Voice"].waitForExistence(timeout: 10))
     if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
+    if Bundle(for: Self.self).object(forInfoDictionaryKey: "ManualMode") as? String == "fish" {
+      app.buttons["Choose a Voice"].tap()
+      let region = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'en-IN'")).firstMatch
+      XCTAssertTrue(region.waitForExistence(timeout: 15))
+      region.tap()
+      let aarav = app.buttons["Aarav — Male Indian multilingual (EN)"]
+      XCTAssertTrue(aarav.waitForExistence(timeout: 3), "Aarav is missing from en-IN")
+      capture("fish-en-IN", app)
+      return
+    }
     if Bundle(for: Self.self).object(forInfoDictionaryKey: "ManualMode") as? String == "loading" {
       // voice-playback.cjs installs a delayed, silent response and a watchdog.
       app.buttons["Play"].tap()

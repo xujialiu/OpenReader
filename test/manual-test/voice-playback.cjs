@@ -7,7 +7,7 @@ const [device, output, mode] = process.argv.slice(2);
 if (!device || !output) throw new Error('Usage: voice-playback.cjs SIMULATOR_UDID EXISTING_ARTIFACT_DIR');
 if (execFileSync('osascript', ['-e', 'output volume of (get volume settings)'], { encoding: 'utf8' }).trim() !== '0') throw new Error('Mute machine and simulator before testing');
 
-const fixture = () => {
+const fixture = probeMode => {
   function props(name) {
     let found;
     function walk(f) { if (!f) return; if (f.type?.name === name) found = f; walk(f.child); walk(f.sibling); }
@@ -60,6 +60,48 @@ const fixture = () => {
         alignment: state.noTimings === request.reference_id ? null : { segments } }) + '\n\n', { status: 200 }));
     }, state.delay));
   };
+  if (probeMode === 'paused-seek') {
+    // Read the actual WebView highlight through the existing diagnostic channel.
+    // The temporary receiver survives React updates, consumes only our response,
+    // and is restored during cleanup.
+    const bridge = () => refs().find(v => v?.current?.readerProps && v.current.show)?.current;
+    const inject = script => {
+      for (let hook = props('ReaderProvider').memoizedState; hook; hook = hook.next) {
+        if (hook.memoizedState?.current?.injectJavaScript) return hook.memoizedState.current.injectJavaScript(script);
+      }
+      throw new Error('No reader WebView');
+    };
+    const options = refs().find(v => v?.current?.onBlocks && v.current.onTap);
+    let rawOptions = options.current;
+    const receive = message => {
+      if (!message.detail.startsWith('paused-seek-probe:')) return rawOptions.onProblem?.(message);
+      state.highlight = JSON.parse(message.detail.slice('paused-seek-probe:'.length));
+    };
+    let observedOptions = { ...rawOptions, onProblem: receive };
+    Object.defineProperty(options, 'current', { configurable: true,
+      get: () => observedOptions,
+      set: value => { rawOptions = value; observedOptions = { ...value, onProblem: receive }; },
+    });
+    state.restoreReceiver = () => Object.defineProperty(options, 'current', { configurable: true, writable: true, value: rawOptions });
+    state.sample = () => {
+      state.highlight = null;
+      inject(`(() => {
+        const texts = name => rendition.getContents().flatMap(c => Array.from(c.window.CSS.highlights.get(name) ?? []).map(r => r.toString()));
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'openreader:problem', utterance: -1,
+          detail: 'paused-seek-probe:' + JSON.stringify({ words: texts('openreader-word'), sentences: texts('openreader-utterance') }) }));
+      })(); true;`);
+    };
+    state.tapSentence = index => {
+      const list = refs().find(v => Array.isArray(v?.current) && v.current[0]?.spans)?.current;
+      const blocks = refs().find(v => Array.isArray(v?.current) && v.current[0]?.id && v.current[0]?.text)?.current;
+      const span = list?.[index]?.spans[0];
+      if (!span || !blocks?.[span.block]) throw new Error('Missing tap target');
+      // Same message the WebView posts for a text tap, in the middle of the sentence.
+      bridge().readerProps.onWebViewMessage({ type: 'openreader:tap', block: blocks[span.block].id,
+        offset: Math.min(span.end - 1, span.start + 8) });
+      return list[index].text;
+    };
+  }
   state.longSentence = () => {
     const list = refs().find(v => Array.isArray(v?.current) && v.current[0]?.spans)?.current;
     if (!list) throw new Error('No rendered utterances');
@@ -79,7 +121,7 @@ const fixture = () => {
   };
   state.pause = () => { player().onPause(); clearTimeout(state.watchdog); return Date.now() - state.playStarted; };
   state.cleanup = () => { player().onPause(); clearTimeout(state.watchdog); clearInterval(state.touchWatchdog); globalThis.fetch = realFetch;
-    sheet().onChoose(original.provider, original.voice); player().onRate(original.rate); sheet().onClose(); };
+    state.restoreReceiver?.(); sheet().onChoose(original.provider, original.voice); player().onRate(original.rate); sheet().onClose(); };
   globalThis.__voiceProbe = state;
   player().onRate(1);
   return { voices };
@@ -113,7 +155,7 @@ const fixture = () => {
   const assert = async (expression, label) => { if (!await evaluate(expression)) throw new Error(label + ': ' + JSON.stringify(await evaluate('__voiceProbe.inspect()'))); };
   let installed = false;
   try {
-    await evaluate(`(${fixture})()`); installed = true;
+    await evaluate(`(${fixture})(${JSON.stringify(mode ?? "handover")})`); installed = true;
     await evaluate('__voiceProbe.player().onVoices(); __voiceProbe.choose(1); true');
     await wait('__voiceProbe.player().settings.voice === __voiceProbe.voices[1]', 'paused choice');
     if (mode === 'touch') {
@@ -135,7 +177,12 @@ const fixture = () => {
       console.log('PASS: physical spinner tap, paused receipt; intent interval ms=' + await evaluate('__voiceProbe.touchEnded - __voiceProbe.touchStarted'));
       return;
     }
-    await evaluate('__voiceProbe.sheet().onClose(); __voiceProbe.play(); true');
+    await evaluate('__voiceProbe.sheet().onClose(); true');
+    if (mode === 'paused-seek') {
+      await evaluate('__voiceProbe.tapSentence(1); true');
+      await new Promise(resolve => setTimeout(resolve, 650));
+    }
+    await evaluate('__voiceProbe.play(); true');
     await wait('__voiceProbe.player().playing && __voiceProbe.player().buffering', 'initial spinner');
     shot('player-loading');
     await assert('__voiceProbe.player().buffering && __voiceProbe.completed === 0', 'Pause must precede receipt of the first audio');
@@ -143,6 +190,38 @@ const fixture = () => {
     await wait('__voiceProbe.engine()?.snapshot().queued > 0', 'download continues while paused');
     await assert('!__voiceProbe.player().playing && !__voiceProbe.player().buffering && __voiceProbe.aborted === 0', 'late audio resumed or aborted');
     console.log('paused receipt ' + JSON.stringify(await evaluate('__voiceProbe.inspect()')));
+    if (mode === 'paused-seek') {
+      const sample = async () => {
+        await evaluate('__voiceProbe.sample(); true');
+        await wait('__voiceProbe.highlight !== null', 'WebView highlight sample');
+        return evaluate('__voiceProbe.highlight');
+      };
+      const at = await evaluate('__voiceProbe.engine().snapshot().utterance');
+      for (const target of [at, at + 1]) {
+        const sentence = await evaluate(`__voiceProbe.tapSentence(${target})`);
+        await wait(`__voiceProbe.engine().snapshot().utterance === ${target} && __voiceProbe.engine().snapshot().queued > 0`, 'paused seek prepared');
+        // Debounce is 600 ms. Wait through it even when tapping the current sentence.
+        await new Promise(resolve => setTimeout(resolve, 700));
+        const before = await sample();
+        // Fixture words are 300 ms apart: two intervals expose unwanted motion.
+        await new Promise(resolve => setTimeout(resolve, 600));
+        const after = await sample();
+        await assert('!__voiceProbe.player().playing', 'paused tap resumed playback');
+        console.log('paused seek ' + JSON.stringify({ target, sentence, before, after }));
+        if (before.words.length || after.words.length || !after.sentences.length ||
+          JSON.stringify(before.sentences) !== JSON.stringify(after.sentences)) throw new Error('Paused selection must show a static whole sentence');
+        shot('paused-seek-' + target);
+        await evaluate('__voiceProbe.play(); true');
+        try {
+          const started = Date.now();
+          let playing;
+          do { playing = await sample(); } while (!playing.words.length && Date.now() - started < 1000);
+          if (!playing.words.length || !sentence.startsWith(playing.words[0])) throw new Error('Play did not start at the selected sentence first word: ' + JSON.stringify(playing));
+        } finally { console.log('selected sentence playback ms=' + await evaluate('__voiceProbe.pause()')); }
+      }
+      console.log('PASS: paused current/next sentence remains static; Play starts at each sentence first word');
+      return;
+    }
     await evaluate('__voiceProbe.delay = 100; __voiceProbe.longSentence(); true');
     await wait('__voiceProbe.engine().snapshot().queued > 0', 'long sentence prepared');
     await evaluate('__voiceProbe.player().onVoices(); __voiceProbe.play(); __voiceProbe.choose(2); true');

@@ -216,3 +216,30 @@ real timing arrays through the normal provider path; the actual native graph,
 React state, persistence callback and renderer run. This proves transport and
 handover state, not the quality of a remote narrator's sound or a long-session
 drift bound.
+
+
+## Fish source membership and regional display grouping (#3)
+
+`Default` remains `mul/default`, but `listVoices` appends it only when
+`includeOwn` is enabled. The source controls affect the selectable catalogue,
+not saved document voice IDs. A failed enabled-source request still reports its
+failure when no remote voices were obtained; Default must not hide that error.
+
+`fishVoice` retains the existing language-derived ID prefix. Display grouping
+can use a title or tag explicitly marking English (`EN`, `English`, or a regional
+English code) and exactly one recognized region even when `languages` lists
+several languages. The existing Aarav fixture contains
+`['ru', 'ar', 'en', 'es', 'fr']`, the title
+`Aarav — Male Indian multilingual (EN)` and the tag `indian`: it now displays as
+`en-IN` while its ID still begins with `mul/`. A name alone, region alone,
+description text, or conflicting regions do not establish that classification.
+Explicit single-language regional metadata retains precedence; a single
+non-English language is not regrouped from its title.
+
+The paused-seek regression added for #2 samples the actual WebView highlight
+across background receipt, current/next sentence taps and Play. The latest
+bundle's existing intent guard passes those cases; the original reported
+animation has not been reproduced, so no additional playback mechanism was
+introduced. Measurements and the diagnostic-receiver limitation are recorded
+in the engineering log at 2026-09-20 16:37. Text taps continue to select an
+Utterance start, not a word offset.

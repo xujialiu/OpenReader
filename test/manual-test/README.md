@@ -177,3 +177,41 @@ pause in `finally`. They use Metro's existing CDP inspection approach; they add
 no test hooks to production app code. Do not edit app code while a probe runs:
 Fast Refresh can replace the state being inspected. Restart the app afterwards
 to remove all temporary debugger globals and verify final delivery separately.
+
+
+### Paused sentence seeking after background receipt
+
+With the same muted simulator, fixture Document and loaded Fish list as above:
+
+```sh
+mkdir -p /tmp/openreader-paused-seek-01
+node test/manual-test/voice-playback.cjs SIMULATOR_UDID /tmp/openreader-paused-seek-01 paused-seek
+```
+
+This mode pauses before the delayed silent audio arrives, waits for the native
+queue, then sends text-tap messages for the current and next sentences through
+the real reader bridge. It samples the actual WebView CSS highlights across two
+300 ms fixture-word intervals: the sentence must remain highlighted with no word
+range. Each Play must then highlight the selected sentence's first word, and
+playback stops immediately after that observation, with the existing watchdog
+and cleanup paths as backup. Screenshots are saved for both paused selections.
+
+The temporary diagnostic receiver survives React updates and consumes only the
+probe's responses; other renderer errors keep their normal reporting path.
+Restart the app afterwards to discard all debugger state. This is a bridge-message
+probe, not a physical touch test, live-provider audio test or long-term drift test.
+
+
+### Fish regional picker, actual simulator touch
+
+With Fish enabled and the fixture Document open, this opens Voice, physically
+taps `en-IN` and asserts that `Aarav — Male Indian multilingual (EN)` appears:
+
+```sh
+bash test/manual-test/reader.sh SIMULATOR_UDID /tmp/openreader-fish-picker-01 fish
+```
+
+It uses the live voice list, so it needs the configured app key and network.
+It does not select a voice or start playback. It leaves the picker open and
+captures the list for visual review. The source-toggle combinations are covered
+by the provider tests; this mode verifies regional navigation and visibility.

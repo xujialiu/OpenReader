@@ -11,7 +11,7 @@ import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type Synth
  * `notes/NOTES_2026-09-10.md`):
  * - a voice is a model of the official library, an account's own model, or a
  *   model id the owner supplied; the three sources are independently optional,
- *   while the model's default voice is always available;
+ *   with the model's default voice included in the own-voices source;
  * - `POST /v1/tts/stream/with-timestamp` answers an event stream: one JSON
  *   per `data:` line with a base64 chunk of the audio and the latest
  *   alignment snapshot of a text chunk — words and digits in the text's own
@@ -297,7 +297,13 @@ export function fishVoice(model: FishModel): VoiceInfo | null {
   const explicitEnglish =
     languages.length === 1 && typeof languages[0] === 'string' && /^en[-_]/i.test(languages[0].trim()) ? englishRegionCode(languages[0]) : undefined;
   const tags = Array.isArray(model.tags) ? model.tags.filter((tag): tag is string => typeof tag === 'string') : [];
-  const locale = explicitEnglish ?? (languageLocale === 'en' ? englishRegionFromText([str(model.title), ...tags]) : undefined) ?? languageLocale;
+  const labels = [str(model.title), ...tags];
+  // Multiple supported languages do not erase an explicitly labelled English
+  // voice. A region alone is insufficient: an Indian multilingual voice need
+  // not be an English voice. Never use the description's audience as evidence.
+  const labelledEnglish = labels.some((label) => /\benglish\b|\ben(?:[-_][a-z]{2,3})?\b/i.test(label));
+  const english = languageLocale === 'en' || (languageLocale === MULTILINGUAL && labelledEnglish);
+  const locale = explicitEnglish ?? (english ? englishRegionFromText(labels) : undefined) ?? languageLocale;
   return { id: `${languageLocale}/${id}`, label: str(model.title) || id, locale };
 }
 
@@ -743,8 +749,8 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
     capabilities: { wordTimestamps: true },
 
     /**
-     * The enabled official, own and manual voices, plus the model's default
-     * voice.
+     * The enabled official, own and manual voices. The model's default voice
+     * belongs to the own-voices source.
      *
      * The three sources are independent and are started together, so one slow
      * list does not serialize behind another. A source that fails is left out
@@ -804,9 +810,10 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
         const first = failures[0];
         throw first instanceof Error ? first : new SynthesisError('unknown', `${OWN_WHAT}: ${String(first)}`);
       }
-      // Default is a local entry, not a listed model: it is what a fresh
-      // account with no models of its own is read in.
-      return mergeVoices(officialList, ownList, pastedList, [{ id: `${MULTILINGUAL}/${DEFAULT_VOICE}`, label: DEFAULT_VOICE_LABEL, locale: MULTILINGUAL }]);
+      // Default is a local entry in Your voices, including an account with no
+      // models of its own. Disabling that source hides it without changing its id.
+      const defaults: VoiceInfo[] = includeOwn ? [{ id: `${MULTILINGUAL}/${DEFAULT_VOICE}`, label: DEFAULT_VOICE_LABEL, locale: MULTILINGUAL }] : [];
+      return mergeVoices(officialList, ownList, pastedList, defaults);
     },
 
     /** The cheapest authenticated request there is: one entry of the own-voices list. */

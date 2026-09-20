@@ -148,7 +148,7 @@ describe('the Fish Audio section', () => {
     const s = settings({ fish: { apiKey: 'sk-fish', freeOnly: true, voices: `https://fish.audio/m/${id}/`, includeOfficial: false, includeOwn: false } });
     const voices = await createProvider('fish', s, { fetch: fetchImpl as unknown as typeof fetch }).listVoices();
     expect((fetchImpl as any).mock.calls[0][0]).toBe(`https://api.fish.audio/model/${id}`);
-    expect(voices.map((v) => v.label)).toEqual(['Pasted', 'Default']);
+    expect(voices.map((v) => v.label)).toEqual(['Pasted']);
   });
 });
 
