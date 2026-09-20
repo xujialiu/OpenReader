@@ -59,3 +59,20 @@ quotation remains the secondary line; copying the reference does not introduce
 a percentage, folders, recommendations or new navigation destinations.
 
 The owner approved implementation after the interview.
+
+## Speed adjustment opens when needed
+
+The player keeps the current speed visible as a tappable number. Tapping it
+opens a bottom drawer with minus and plus controls for adjusting the speed.
+The minus and plus controls leave the main player: keeping them always visible
+would preserve one-tap adjustment but continue to crowd the reading page.
+This choice costs an extra tap when the owner wants to change speed.
+
+Contents moves to the left end of the playback row and the current speed to its
+right end, removing the separate bottom row so the player covers less text.
+Adjustments apply immediately. Each tap changes speed by 0.05, between 0.50 and
+4.00 times natural pace; holding a button continues adjusting. Tapping outside
+the drawer or Done closes it without undoing the chosen speed. This follows the
+other drawers rather than introducing a separate confirmation step.
+
+The owner approved this arrangement and interaction after the interview.

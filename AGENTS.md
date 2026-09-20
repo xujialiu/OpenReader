@@ -84,6 +84,22 @@ a later sweep.
 
 # Testing on the device
 
+## Finish with the latest app running in the simulator
+
+After every app change, update and launch the app in the simulator from the
+latest working-tree code, including uncommitted changes. Reload the current
+bundle or rebuild and reinstall as needed; verify that the running app contains
+the final change, then exercise the changed interaction. Leave that latest app
+open for the owner to inspect, with playback stopped.
+
+This is a completion requirement regardless of which agent made the change,
+whether it runs tests, or whether it considers simulator testing necessary.
+Type checks, lint and passing tests do not replace it. A stale installed build,
+an unconnected Metro server, or an unavailable automation window is a problem
+to resolve, not a reason to skip updating the simulator. If an external blocker
+truly prevents completion, report the specific blocker and mark simulator
+delivery incomplete; do not claim the work is finished.
+
 ## Local credentials
 
 For provider configuration or live-provider tests, first check `.secrets/` in
@@ -124,4 +140,13 @@ guessed.
 
 # Installing on a physical iPhone
 
-For device installation, signing or provisioning failures, or a Release build that runs without Metro, read [docs/install-on-iphone.md](docs/install-on-iphone.md) before running build commands.
+For installation on the owner's physical iPhone, device signing or provisioning
+failures, or a standalone Release build for that iPhone, read
+[docs/install-on-iphone.md](docs/install-on-iphone.md) before running build commands.
+
+# Installing in the iOS simulator
+
+For simulator installation, updating the running app to the latest working-tree
+code, Metro connection problems, or simulator build failures, read
+[docs/install-on-simulator.md](docs/install-on-simulator.md) before updating or
+building the simulator app.

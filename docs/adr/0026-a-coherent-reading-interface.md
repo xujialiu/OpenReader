@@ -50,3 +50,14 @@ with light traits, even while the page and text were dark. The explicit navigati
 theme corrects the icons and glass together. Lost or changed resume positions
 carry `resumeNeedsAttention`; hiding successful-resume text must not hide those
 warnings. Problems render even when the player was previously collapsed.
+
+## Speed adjustment leaves the transport row
+
+Contents and a pressable rate caption flank the five transport buttons in
+`player.tsx`; the separate footer row is removed. The caption opens a transparent
+sliding `Modal`, following Appearance's backdrop and Done dismissal. `Speed`
+mounts only while that drawer is open, so its existing cleanup cancels held-button
+timers when the drawer closes. Changes still call `onRate` immediately, with the
+range, integer-grid stepping and measured repeat cadence from ADR 0020 unchanged.
+Transport hit slop is removed now that these targets sit directly beside one
+another; their actual targets remain at least 44 points wide.

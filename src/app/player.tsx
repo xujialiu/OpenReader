@@ -22,8 +22,8 @@
  * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
 
-import { useCallback, useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { MAX_STEPPER_RATE, MIN_STEPPER_RATE, snapRate, stepRate } from '../playback';
 
@@ -133,6 +133,8 @@ export function Player({
   onVoices,
   onHeight,
 }: PlayerProps) {
+  const [speedOpen, setSpeedOpen] = useState(false);
+  const closeSpeed = useCallback(() => setSpeedOpen(false), []);
   /**
    * Play or pause, and nothing else.
    *
@@ -185,24 +187,39 @@ export function Player({
       </View>
 
       <View style={styles.transport}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
+          style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}>
+          <Icon name="contents" color={INK.text} />
+        </Pressable>
         <Transport icon="previousParagraph" label="Previous paragraph" onPress={() => onSkip('previous-paragraph')} disabled={!enabled} />
         <Transport icon="previous" label="Previous sentence" onPress={() => onSkip('previous-sentence')} disabled={!enabled} />
         <Transport icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
         <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
         <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
-      </View>
-
-      <View style={styles.foot}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Contents"
-          onPress={onContents}
-          style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}
+          accessibilityLabel={`Playback speed, ${snapRate(settings.rate).toFixed(2)} times`}
+          onPress={() => setSpeedOpen(true)}
+          style={({ pressed }) => [styles.rateTap, pressed && styles.pressed]}
         >
-          <Icon name="contents" color={INK.text} />
+          <Text style={styles.rateLabel}>{snapRate(settings.rate).toFixed(2)}×</Text>
         </Pressable>
-        <Speed rate={settings.rate} onRate={onRate} />
       </View>
+      {speedOpen && (
+        <Modal transparent animationType="slide" onRequestClose={closeSpeed}>
+          <Pressable style={styles.behind} onPress={closeSpeed}
+            accessibilityRole="button" accessibilityLabel="Close playback speed" />
+          <View style={styles.sheet}>
+            <View style={styles.grip} />
+            <Text style={styles.sheetTitle}>Playback speed</Text>
+            <Speed rate={settings.rate} onRate={onRate} />
+            <Pressable accessibilityRole="button" onPress={closeSpeed}
+              style={({ pressed }) => [styles.done, pressed && styles.pressed]}>
+              <Text style={styles.doneLabel}>Done</Text>
+            </Pressable>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -227,7 +244,6 @@ function Transport({
       accessibilityLabel={label}
       onPress={onPress}
       disabled={disabled}
-      hitSlop={6}
       style={({ pressed }) => [
         styles.button,
         primary && styles.buttonPrimary,
@@ -340,13 +356,12 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
     minWidth: 44,
-    paddingHorizontal: 10,
+    paddingHorizontal: 0,
   },
-  buttonPrimary: { backgroundColor: INK.text, borderColor: INK.text, minWidth: 64, height: 52, borderRadius: 26 },
+  buttonPrimary: { backgroundColor: INK.text, borderColor: INK.text, minWidth: 56, height: 52, borderRadius: 26 },
   chevronTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   collapsed: { alignItems: 'flex-end', bottom: 28, position: 'absolute', right: 16 },
   disabled: { opacity: 0.35 },
-  foot: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   footTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   note: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
@@ -361,14 +376,32 @@ const styles = StyleSheet.create({
     gap: 6,
     left: 0,
     paddingBottom: 28,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 4,
     position: 'absolute',
     right: 0,
   },
   pressed: { opacity: 0.65 },
+  behind: { flex: 1 },
+  done: { alignItems: 'center', backgroundColor: INK.text, borderRadius: 10, paddingVertical: 12 },
+  doneLabel: { color: INK.page, fontSize: 15, fontWeight: '600' },
+  grip: { alignSelf: 'center', backgroundColor: INK.line, borderRadius: 3, height: 5, width: 40 },
+  sheet: {
+    backgroundColor: INK.panel,
+    borderTopColor: INK.line,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 20,
+    paddingBottom: 36,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  sheetTitle: { color: INK.text, fontSize: 18, fontWeight: '700' },
+  rateTap: { minWidth: 58, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  rateLabel: { color: INK.text, fontSize: 13, fontVariant: ['tabular-nums'], fontWeight: '600' },
   rate: { color: INK.text, fontSize: 15, fontVariant: ['tabular-nums'], fontWeight: '600', minWidth: 62, textAlign: 'center' },
-  speed: { alignItems: 'center', flexDirection: 'row', gap: 4 },
+  speed: { alignItems: 'center', alignSelf: 'center', flexDirection: 'row', gap: 20 },
   step: {
     alignItems: 'center',
     backgroundColor: INK.page,
@@ -379,7 +412,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 44,
   },
-  transport: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center' },
+  transport: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   voice: { flex: 1, minHeight: 44, justifyContent: 'center', paddingLeft: 8 },
   voiceLabel: { color: INK.text, fontSize: 14, fontWeight: '500' },
 });
