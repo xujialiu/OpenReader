@@ -68,6 +68,11 @@ _Avoid_: auth headers, token, proxy headers, custom headers, access token
 The audio a provider returns for one utterance.
 _Avoid_: segment audio, blob, buffer, track
 
+**Offline Narration**:
+A document's spoken audio saved on the device for listening inside OpenReader
+without a network connection.
+_Avoid_: downloaded book, audiobook export, document download
+
 **Word Timing**:
 Where one spoken word falls inside a clip, and which characters of the
 utterance it corresponds to. A provider either reports these or does not;
