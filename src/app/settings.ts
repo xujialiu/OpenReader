@@ -180,11 +180,14 @@ export type ThemeSetting = 'light' | 'dark' | 'system';
 /** The three, in the order General offers them: the two answers first, then the one that defers. */
 export const THEME_SETTINGS: readonly ThemeSetting[] = ['light', 'dark', 'system'];
 
-/** What each is called on the screen. `System` names what it follows rather than what it shows, because what it shows changes. */
+/** What each is called on the screen. The third names what it follows rather than what it shows, because what it shows changes. */
 export const THEME_LABELS: Readonly<Record<ThemeSetting, string>> = {
   light: 'Light',
   dark: 'Dark',
-  system: 'Follow the system',
+  // Two words rather than `Follow the system`'s four. This sits on the right of
+  // a row next to its label, where a sentence fragment reads as a sentence that
+  // was cut off.
+  system: 'Match Device',
 };
 
 /**

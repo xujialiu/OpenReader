@@ -3,7 +3,7 @@ import { useCallback, useLayoutEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import type { ProviderId } from '../core/providers/types';
-import { Action, Field, HeaderButton, INK, Note } from './controls';
+import { Action, Field, HeaderButton, INK, Note, SwitchRow } from './controls';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
 import { headersAreOffered, keyIsOffered, PROVIDER_LABELS } from './settings';
@@ -23,15 +23,6 @@ function SecretField({ id, label, secret, locked, help }: {
         icon={revealed ? 'eyeOff' : 'eye'} onPress={() => setRevealed((previous) => !previous)} /> : undefined}
       placeholder="Not set" help={help} />
     {input.error ? <Note attention>{input.error}</Note> : null}
-  </View>;
-}
-function Source({ label, checked, disabled, onChange }: {
-  label: string; checked: boolean; disabled: boolean; onChange(): void;
-}) {
-  return <View style={styles.source}>
-    <Text style={[styles.sourceLabel, disabled && styles.locked]}>{label}</Text>
-    <Switch accessibilityLabel={label} value={checked} disabled={disabled}
-      style={styles.switch} onValueChange={onChange} />
   </View>;
 }
 export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
@@ -66,7 +57,7 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
     {id === 'fish' ? <View style={styles.sources}>
       <Text style={styles.sourceHeading}>Voice sources</Text>
       {([['includeOfficial', 'Official voices'], ['includeOwn', 'Your voices'], ['includeManual', 'Manual voices']] as const).map(([source, label]) =>
-        <Source key={source} label={label} checked={settings.fish[source]} disabled={locked}
+        <SwitchRow key={source} label={label} value={settings.fish[source]} disabled={locked}
           onChange={() => setSettings((previous) => ({ ...previous, fish: { ...previous.fish, [source]: !previous.fish[source] } }))} />)}
       {settings.fish.includeManual ? <Field label="Voices" value={settings.fish.voices} editable={!locked}
         placeholder="Model IDs or links" help="Paste voice model IDs or links, separated by spaces or commas."
@@ -87,8 +78,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row' },
   sources: { gap: 4 },
   sourceHeading: { color: INK.text, fontSize: 14, fontWeight: '600', marginBottom: 6 },
-  source: { flexDirection: 'row', gap: 12, alignItems: 'center', minHeight: 44 },
-  sourceLabel: { color: INK.text, fontSize: 16, flex: 1 },
   switch: { alignSelf: 'center' },
   locked: { opacity: 0.5 },
 });

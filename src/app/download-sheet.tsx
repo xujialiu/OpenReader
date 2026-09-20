@@ -54,6 +54,30 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
       else { onStart?.(); downloads.enqueue(document, choice, chosen); setSelected(new Set()); }
     } catch (e) { Alert.alert('Download could not start', String(e)); }
   };
+  /**
+   * Everything saved for this Document, whatever voice or bracket setting it
+   * was saved under (ADR 0028).
+   *
+   * The per-chapter delete above can only reach audio the current settings can
+   * name. Change a bracket setting and the saved audio re-keys with it, so it
+   * stops appearing in this list while `occupied()` — which sums the inventory
+   * by voice and never looks at the text — keeps counting it. That leaves
+   * megabytes saved against no chapters downloaded and no way to act on it,
+   * which is what this is for.
+   *
+   * The plan is asked for again afterwards because `removeDownloads` drops it
+   * along with the audio, and the effect that first requested it is keyed on the
+   * document rather than on this.
+   */
+  const deleteEverything = () => Alert.alert('Delete all saved audio?',
+    `Everything saved for this document will be deleted, freeing ${downloads.formatBytes(downloads.occupied(document))}. The document and reading position will be kept.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => {
+        void downloads.removeDownloads(document).then(() => {
+          setSelected(new Set()); setManage(false); setManagedVoice(null); downloads.requestPlan(document, title);
+        }, (e) => Alert.alert('Could not delete audio', String(e)));
+      } },
+    ]);
   return <View style={styles.content}>
     <View style={styles.top}><Text style={styles.voice} numberOfLines={2}>Voice · {choice.label || 'Choose a voice in the player'}</Text>
       <Pressable accessibilityRole="button" onPress={() => toggle(eligible.map((c) => c.id))} disabled={!eligible.length}>
@@ -104,7 +128,12 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
     {otherVoices.length ? <View style={styles.other}>{otherVoices.map((v) => <Pressable key={`${v.provider}/${v.voice}`} accessibilityRole="button"
       onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.(v); }}><Text style={styles.link}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</Text></Pressable>)}</View> : null}
     <View style={styles.footer}>
-      <Pressable accessibilityRole="button" onPress={() => { setSelected(new Set()); setManage(!manage); setManagedVoice(null); }}><Text style={styles.link}>{manage ? 'Back to downloads' : 'Manage downloads'}</Text></Pressable>
+      <View style={styles.top}>
+        <Pressable accessibilityRole="button" onPress={() => { setSelected(new Set()); setManage(!manage); setManagedVoice(null); }}><Text style={styles.link}>{manage ? 'Back to downloads' : 'Manage downloads'}</Text></Pressable>
+        {manage && downloads.occupied(document) > 0 ? <Pressable accessibilityRole="button" onPress={deleteEverything}>
+          <Text style={[styles.link, { color: INK.attention }]}>Delete all saved audio</Text>
+        </Pressable> : null}
+      </View>
       <Pressable accessibilityRole="button" accessibilityLabel={manage ? `Delete selected (${chosen.length})` : `Download selected (${chosen.length})`}
         disabled={!progressReady || !downloads.downloadsReady() || !chosen.length || !choice.voice || !!downloads.downloadError()} onPress={act}
         style={[styles.button, (!chosen.length || !choice.voice) && { opacity: 0.35 }]}>

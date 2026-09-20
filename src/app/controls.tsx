@@ -16,8 +16,8 @@
  * checked, because it is no longer something an eye can check.
  */
 
-import { useState, type ReactNode } from 'react';
-import { Alert, DynamicColorIOS, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Children, useState, type ReactNode } from 'react';
+import { Alert, DynamicColorIOS, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { Icon, type IconName } from './icon';
 
@@ -127,40 +127,6 @@ export function Action({
   );
 }
 
-/** One choice out of a few, all of them visible. A picker would hide the list, and every list here is short and worth reading. */
-export function Choice<T extends string | number>({
-  options,
-  value,
-  onChange,
-  labelOf,
-}: {
-  options: readonly T[];
-  value: T;
-  onChange(option: T): void;
-  labelOf?(option: T): string;
-}) {
-  return (
-    <View style={styles.choices}>
-      {options.map((option) => {
-        const chosen = option === value;
-        return (
-          <Pressable
-            key={String(option)}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: chosen }}
-            onPress={() => onChange(option)}
-            style={({ pressed }) => [styles.chip, chosen && styles.chipChosen, pressed && styles.pressed]}
-          >
-            <Text style={[styles.chipLabel, chosen && styles.chipLabelChosen]}>
-              {labelOf ? labelOf(option) : String(option)}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 /** A labelled line of text the owner types, with room underneath for the sentence that says what it is for. */
 export function Field({
   label,
@@ -228,12 +194,85 @@ export function Field({
   );
 }
 
-export function Section({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * A group of settings, drawn the way iOS draws one: a small grey header, an
+ * inset card of rows separated by hairlines, and a sentence underneath.
+ *
+ * The **footer** is the part worth having. It is where the explanation of a
+ * setting belongs, which is what stops each setting carrying its own paragraph
+ * inside the row — and a screen of rows with paragraphs between them is what
+ * General used to be one setting away from becoming.
+ *
+ * The separator is drawn by the rows rather than between them, and the last one
+ * turns its own off (`groupRowLast`), because a card whose final row still has a
+ * hairline reads as a list that was cut off.
+ */
+export function SettingsGroup({ title, footer, children }: {
+  title: string; footer?: string; children: ReactNode;
+}) {
+  const rows = Children.toArray(children).filter(Boolean);
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
+    <View style={styles.group}>
+      <Text style={styles.groupTitle}>{title.toUpperCase()}</Text>
+      <View style={styles.groupCard}>
+        {rows.map((row, at) => (
+          <View key={at} style={[styles.groupRow, at === rows.length - 1 && styles.groupRowLast]}>{row}</View>
+        ))}
+      </View>
+      {footer ? <Text style={styles.groupFooter}>{footer}</Text> : null}
     </View>
+  );
+}
+
+/**
+ * A row inside a `SettingsGroup` whose value is chosen from a short list: the
+ * label, what it says now, and the two chevrons iOS puts on a row that opens a
+ * menu rather than pushing a screen.
+ */
+export function ValueRow({ label, value, onPress }: { label: string; value: string; onPress(): void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${label}, ${value}`}
+      onPress={onPress} style={({ pressed }) => [styles.settingRow, pressed && styles.pressed]}>
+      <Text style={styles.settingLabel}>{label}</Text>
+      <View style={styles.settingValue}>
+        <Text style={styles.settingDetail} numberOfLines={1}>{value}</Text>
+        <Icon name="menu" color={INK.quiet} size={18} />
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * A row inside a `SettingsGroup` that is on or off.
+ *
+ * Lifted out of `provider-screen.tsx`, which had exactly this and called it
+ * `Source`. Two copies of a switch row is how the two end up different heights
+ * in two places a tap apart, and `disabled` is here for the same reason it was
+ * there: a setting that guards something is frozen while it is on, and the way
+ * to edit it is to turn it off.
+ */
+export function SwitchRow({ label, value, onChange, disabled }: {
+  label: string; value: boolean; onChange(next: boolean): void; disabled?: boolean;
+}) {
+  return (
+    <View style={styles.settingRow}>
+      <Text style={[styles.settingLabel, disabled && styles.locked]}>{label}</Text>
+      <Switch accessibilityLabel={label} value={value} disabled={disabled} onValueChange={onChange} />
+    </View>
+  );
+}
+
+/** One of a few, with the one in force checked: what a `ValueRow` opens. */
+export function ChoiceRow({ label, icon, chosen, onPress }: {
+  label: string; icon?: IconName; chosen: boolean; onPress(): void;
+}) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: chosen }} accessibilityLabel={label}
+      onPress={onPress} style={({ pressed }) => [styles.choiceRow, pressed && styles.pressed]}>
+      {icon ? <Icon name={icon} color={INK.text} size={22} /> : null}
+      <Text style={[styles.settingLabel, { flex: 1 }]}>{label}</Text>
+      {chosen ? <Icon name="check" color={INK.reading} size={20} /> : null}
+    </Pressable>
   );
 }
 
@@ -313,18 +352,6 @@ const styles = StyleSheet.create({
   actionLabel: { color: INK.text, fontSize: 15, fontWeight: '600' },
   actionLabelPrimary: { color: INK.page },
   actionPrimary: { backgroundColor: INK.text, borderColor: INK.text },
-  chip: {
-    backgroundColor: INK.panel,
-    borderColor: INK.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  chipChosen: { backgroundColor: INK.text, borderColor: INK.text },
-  chipLabel: { color: INK.text, fontSize: 14 },
-  chipLabelChosen: { color: INK.page, fontWeight: '600' },
-  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   disabled: { opacity: 0.4 },
   field: { gap: 6 },
   fieldHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -345,8 +372,6 @@ const styles = StyleSheet.create({
   },
   note: { color: INK.quiet, fontSize: 13, lineHeight: 19 },
   noteAttention: { color: INK.attention },
-  section: { gap: 12 },
-  sectionTitle: { color: INK.text, fontSize: 17, fontWeight: '700' },
   pressed: { opacity: 0.65 },
   headerTap: { alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44 },
   documentRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: 22, paddingVertical: 14 },
@@ -366,4 +391,18 @@ const styles = StyleSheet.create({
   rowTitle: { color: INK.text, fontSize: 16, fontWeight: '600' },
   rowHead: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   chevron: { color: INK.quiet, fontSize: 20, lineHeight: 22 },
+  group: { gap: 7 },
+  groupTitle: { color: INK.quiet, fontSize: 13, fontWeight: '600', letterSpacing: 0.6, paddingHorizontal: 16 },
+  groupCard: { backgroundColor: INK.panel, borderRadius: 10, overflow: 'hidden' },
+  groupRow: { borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth, marginLeft: 16 },
+  groupRowLast: { borderBottomWidth: 0 },
+  groupFooter: { color: INK.quiet, fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
+  // One type scale with Settings: a row's label is 16 and what it says is 16 in
+  // the quiet ink, never larger than the label naming it.
+  settingRow: { alignItems: 'center', flexDirection: 'row', gap: 12, justifyContent: 'space-between', minHeight: 48, paddingRight: 16, paddingVertical: 10 },
+  settingLabel: { color: INK.text, fontSize: 16, flexShrink: 1 },
+  settingDetail: { color: INK.quiet, fontSize: 16, flexShrink: 1 },
+  settingValue: { alignItems: 'center', flexDirection: 'row', gap: 6, flexShrink: 1 },
+  choiceRow: { alignItems: 'center', flexDirection: 'row', gap: 14, minHeight: 52, paddingHorizontal: 20 },
+  locked: { opacity: 0.5 },
 });
