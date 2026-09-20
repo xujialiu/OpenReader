@@ -9,8 +9,15 @@ if (!['--eval', '--warnings'].includes(mode) || (mode === '--eval' && !input)) {
 }
 (async () => {
   const pages = await fetch(new URL('/json/list', metro)).then(response => response.json());
-  const targets = pages.filter(page => page.appId === 'top.xujialiu.openreader');
-  if (targets.length !== 1) throw new Error(`Expected one OpenReader debug target; found ${targets.length}`);
+  // OPENREADER_DEVICE narrows to one simulator's connection (e.g. "iPhone 16")
+  // when more than one is attached to the same Metro, which happens whenever
+  // two worktree sessions share a dev server. Unset, behaviour is unchanged.
+  const device = process.env.OPENREADER_DEVICE;
+  const targets = pages.filter(page => page.appId === 'top.xujialiu.openreader' && (!device || page.deviceName === device));
+  if (targets.length !== 1) {
+    const found = pages.filter(page => page.appId === 'top.xujialiu.openreader').map(page => page.deviceName);
+    throw new Error(`Expected one OpenReader debug target${device ? ` for ${device}` : ''}; found ${targets.length} (connected: ${found.join(', ') || 'none'})`);
+  }
   const endpoint = new URL(targets[0].webSocketDebuggerUrl);
   // Match the debugger endpoint's host. Mixing localhost and 127.0.0.1 caused
   // immediate 1006 closes with this Expo/Metro version.

@@ -8,6 +8,10 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 if (execFileSync('osascript', ['-e', 'output volume of (get volume settings)'], { encoding: 'utf8' }).trim() !== '0') throw Error('Mute host output first');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+// Overridable so a worktree whose Library was seeded with a differently-built
+// copy of the fixture (a different manifest digest, same title/chapters) can
+// still run this probe. Defaults to the id this file has always used.
+const documentId = process.env.OPENREADER_DOCUMENT_ID || 'sha256:11a1ed5406589e23630c8ebba777e46e207342bfcdeb206c28aee732edefdd2d';
 (async () => {
   const output = mkdtempSync(join(tmpdir(), 'openreader-offline-probe-'));
   let serial = 0;
@@ -51,7 +55,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       };
       globalThis.fetch=()=>{state.requests++;return Promise.reject(new TypeError('Offline test: network disabled'));};
       props('ReaderActions')?.onClose();
-      module('src/app/routes.ts').navigationRef.navigate('Reader',{id:'sha256:11a1ed5406589e23630c8ebba777e46e207342bfcdeb206c28aee732edefdd2d'});
+      module('src/app/routes.ts').navigationRef.navigate('Reader',{id:${JSON.stringify(documentId)}});
       shell().setSettings(s=>({...s,enabledProviders:s.enabledProviders.filter(id=>id!=='fish')}));
       return true;
     })()`);
