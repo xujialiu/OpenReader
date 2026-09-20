@@ -10,10 +10,19 @@ import { PROVIDER_LABELS, selectVoice, settingsForDocument } from './settings';
 import { Sheet } from './sheet';
 import { knownVoice } from './voice-catalog';
 
-export function ReaderActions({ document, onClose, initial = 'menu' }: { document: DocumentId; onClose(): void; initial?: 'menu' | 'download' }) {
+/**
+ * A Document's actions, as one drawer wherever it is asked for.
+ *
+ * `onDelete` is optional because the caller, not this component, knows whether
+ * deleting is on offer. The Library passes one; the reader does not, because the
+ * document is on screen behind the drawer and a `Delete` row there would offer to
+ * throw away the book being read. Asking the component to work that out itself
+ * would mean teaching it which screen it is on, which the caller already knows.
+ */
+export function ReaderActions({ document, onClose, onDelete }: { document: DocumentId; onClose(): void; onDelete?(): void }) {
   const { library, settings, setSettings } = useShell();
   const entry = library.entries.find((e) => e.id === document);
-  const [page, setPage] = useState<'menu' | 'appearance' | 'rename' | 'download'>(initial);
+  const [page, setPage] = useState<'menu' | 'appearance' | 'rename' | 'download'>('menu');
   const [name, setName] = useState(entry?.title ?? '');
   const current = settingsForDocument(settings, entry?.voice ?? null);
   const voice = { provider: current.provider, voice: current.voice, label: current.voice ? knownVoice(current)?.label ?? `${PROVIDER_LABELS[current.provider]} · ${current.voice}` : '' };
@@ -23,9 +32,14 @@ export function ReaderActions({ document, onClose, initial = 'menu' }: { documen
     {page === 'menu' ? <View style={styles.menu}>
       {(['appearance', 'rename', 'download'] as const).map((action) => <Pressable key={action} accessibilityRole="button" accessibilityLabel={titles[action]}
         onPress={() => setPage(action)} style={({ pressed }) => [styles.row, pressed && { opacity: 0.5 }]}>
-        {action === 'appearance' ? <Text style={styles.aa}>Aa</Text> : <Icon name={action} color={INK.text} size={26} />}
+        <Icon name={action} color={INK.text} size={26} />
         <Text style={styles.label}>{titles[action]}</Text>
       </Pressable>)}
+      {onDelete ? <Pressable accessibilityRole="button" accessibilityLabel="Delete" onPress={onDelete}
+        style={({ pressed }) => [styles.row, styles.last, pressed && { opacity: 0.5 }]}>
+        <Icon name="trash" color={INK.attention} size={26} />
+        <Text style={[styles.label, { color: INK.attention }]}>Delete</Text>
+      </Pressable> : null}
     </View> : null}
     {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onChange={(appearance) => setSettings((was) => ({ ...was, appearance }))} /> : null}
     {page === 'rename' ? <View style={styles.rename}>
@@ -42,6 +56,6 @@ export function ReaderActions({ document, onClose, initial = 'menu' }: { documen
 }
 const styles = StyleSheet.create({
   menu: { paddingHorizontal: 24 }, row: { flexDirection: 'row', alignItems: 'center', gap: 20, minHeight: 66, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: INK.line },
-  aa: { color: INK.text, fontSize: 24, width: 26 }, label: { color: INK.text, fontSize: 19 }, rename: { padding: 20, gap: 24 },
+  last: { borderBottomWidth: 0 }, label: { color: INK.text, fontSize: 19 }, rename: { padding: 20, gap: 24 },
   input: { color: INK.text, backgroundColor: INK.page, borderRadius: 12, padding: 14, fontSize: 18 }, buttons: { flexDirection: 'row', justifyContent: 'space-between', padding: 8 },
 });

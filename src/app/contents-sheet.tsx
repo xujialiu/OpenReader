@@ -112,7 +112,7 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
           )}
         />
 
-        {here ? <Note>{precisionLine(here.precision)}</Note> : null}
+        {here && here.precision !== 'exact' ? <Note>{precisionLine(here.precision)}</Note> : null}
     </Sheet>
   );
 }
@@ -124,9 +124,13 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
  * where the contents cannot resolve finer than a file, the list marks the part
  * rather than guessing at the chapter, and a reader who is told nothing would read
  * the mark as exact.
+ *
+ * Which is why the exact case says nothing at all: there the mark *is* exact, so
+ * a sentence saying so repeats what the owner is already looking at. Only the two
+ * approximate cases carry something the mark cannot show, and the caller renders
+ * no `Note` frame when there is no sentence to put in it.
  */
-function precisionLine(precision: 'exact' | 'shared' | 'before'): string {
-  if (precision === 'exact') return 'The marked row is the one being read.';
+function precisionLine(precision: 'shared' | 'before'): string {
   if (precision === 'shared') {
     return 'Several rows share this file, so the marked one is the part being read rather than the chapter within it.';
   }

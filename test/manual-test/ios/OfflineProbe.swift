@@ -53,7 +53,7 @@ final class OfflineProbe: XCTestCase {
     }
     if mode == "management" {
       app.buttons["Download"].tap()
-      XCTAssertTrue(app.staticTexts["Whole document downloaded"].waitForExistence(timeout: 10))
+      XCTAssertTrue(app.staticTexts["2 chapters downloaded"].waitForExistence(timeout: 10))
       app.buttons["Manage downloads"].tap()
       XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'saved'")).firstMatch.waitForExistence(timeout: 3))
       let first = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter, downloaded'")).firstMatch
@@ -94,7 +94,7 @@ final class OfflineProbe: XCTestCase {
       app.buttons["More actions"].tap()
     }
     app.buttons["Download"].tap()
-    if mode == "inspect" && app.staticTexts["Whole document downloaded"].waitForExistence(timeout: 3) {
+    if mode == "inspect" && app.staticTexts["2 chapters downloaded"].waitForExistence(timeout: 3) {
       capture("persisted-downloads", app)
       return
     }
@@ -108,7 +108,7 @@ final class OfflineProbe: XCTestCase {
     capture("chapters-selected", app)
     if mode == "download" {
       start.tap()
-      let complete = app.staticTexts["Whole document downloaded"]
+      let complete = app.staticTexts["2 chapters downloaded"]
       XCTAssertTrue(complete.waitForExistence(timeout: 90))
       capture("download-complete", app)
     }

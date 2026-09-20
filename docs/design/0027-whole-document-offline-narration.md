@@ -4,23 +4,23 @@ The owner can prepare a document's complete narration before travelling, then li
 
 The initial scope is listening inside the reader. Exporting an audiobook to another player would serve a different need: carrying the recording elsewhere. That is left out so the first experience can focus on knowing the entire document is ready before leaving.
 
-The action is described as downloading the whole document's audio. Preparing that audio uses the selected voice and may incur charges from the owner's speech provider; it is not merely saving an existing recording.
+The action is described as downloading the whole document's audio. Preparing that audio uses the selected voice and may incur charges from the owner's speech provider; it is not merely saving an existing recording. That last fact is carried by the word download and by the choice of voice shown above the list, not by a standing notice: a sentence repeated above every download on every visit is read once and then never again.
 
 ## Choose chapters or the whole document
 
-Download opens a drawer listing chapter names with selection controls on the right. Select all sits at the upper right; Download selected stays at the bottom. Downloaded chapters carry a completion check. Selecting all offers the original whole-document preparation, while selecting individual chapters lets the owner prepare only what they need.
+Download opens a drawer listing chapter names with selection controls on the right. Select all sits at the upper right; Download selected stays at the bottom. Downloaded chapters carry a completion check, and nothing beside it: the check is the word. Selecting all offers the original whole-document preparation, while selecting individual chapters lets the owner prepare only what they need.
 
 The chapter list appears from the document's existing contents before its body is prepared for speech. Opening this drawer does not start reading through the entire document. Only Download selected starts that work: prepare a selected chapter, download its audio, then move to the next. Someone choosing chapter 103 must not wait for chapters 1 through 102 to be prepared first. Preparation status stays in this view alongside the selectable list. Waiting for the whole document before showing any choices was rejected because it makes a small selection in a long book unnecessarily slow.
 
 The drawer names the current voice, and every chapter status refers to that voice. Initially nothing is selected. Select all includes only incomplete chapters that are not already downloading, and becomes an action to clear the selection. The bottom button includes the selected chapter count and is disabled when nothing is selected.
 
-An empty selection circle marks an available chapter; a coloured selected circle marks a chapter chosen for preparation. Downloading chapters show progress, and completed chapters show a check with Downloaded. Neither is added again. Failed or incomplete chapters remain selectable, and another attempt fills in missing audio rather than repeating completed work.
+An empty selection circle marks an available chapter; a coloured selected circle marks a chapter chosen for preparation. Downloading chapters show progress, and completed chapters show a check. Neither is added again. Failed or incomplete chapters remain selectable, and another attempt fills in missing audio rather than repeating completed work.
 
-Download selected starts preparation immediately, without a second confirmation dialog. The selected voice, chapter count and a notice that generating audio may incur provider charges are visible before the button is pressed.
+Download selected starts preparation immediately, without a second confirmation dialog. The selected voice and the chapter count are visible before the button is pressed.
 
 The chapter list preserves collapsible volume/chapter relationships; selecting a volume selects its chapters. Prefaces, afterwords and speakable content absent from the document's contents list are included, with neutral labels where titles are missing. Image-only and empty parts are excluded. Select all covers the entire speakable document, so omitted contents entries cannot create a false claim of complete offline availability.
 
-Progress is displayed in the download view: completed chapters out of the selected total and progress within the active chapter. Before content has been counted, the view says Preparing rather than inventing a percentage or remaining time. Completing a subset says that the selected chapters are downloaded; only complete coverage for the current voice earns Whole document downloaded.
+Progress is displayed in the download view: completed chapters out of the selected total and progress within the active chapter. Before content has been counted, the view says Preparing rather than inventing a percentage or remaining time. Completing a subset says that the selected chapters are downloaded. A document that is wholly downloaded is not announced separately: the count of downloaded chapters is already there, and every chapter carries its check, so a further line saying the same thing in other words is one the owner reads twice.
 
 ## A saved voice survives a change of narrator
 

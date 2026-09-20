@@ -37,7 +37,12 @@ Failures and missing setup appear only when they need the owner's attention,
 with a short explanation; they do not reserve space during normal reading.
 
 The reading header keeps the document title, uses a back arrow without the
-Library label, and replaces the Appearance label with Aa.
+Library label, and replaces the Appearance label with an icon of a large and a
+small letter side by side. An earlier revision set those two letters in type
+instead, which left the row narrower than the letters needed and broke them onto
+two lines, so the one row in the drawer that was not drawn ended up the only one
+that looked wrong. Drawing it keeps the letters on one line at every size and
+matches the rest of the set.
 
 ## A voice is shown by its name
 

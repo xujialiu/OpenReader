@@ -56,16 +56,19 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const { settings, library } = useShell();
   const [picking, setPicking] = useState(false);
   const [actions, setActions] = useState<LibraryEntry | null>(null);
-  const menu = (entry: LibraryEntry) => Alert.alert(entry.title, undefined, [
-    { text: 'Download', onPress: () => setActions(entry) },
-    { text: 'Remove from Library', style: 'destructive', onPress: () => { void requestInventory(entry.id).then(()=>Alert.alert('Remove from Library?',
-      `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
-        { text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => {
-          void removeDownloads(entry.id).then(()=>library.remove(entry.id),error=>library.report(String(error)));
-        } },
-      ]),error=>library.report(String(error))); } },
-    { text: 'Cancel', style: 'cancel' },
-  ]);
+  /**
+   * The confirmation stays a system alert while the actions around it became a
+   * drawer, because this is the one question here with two answers and a
+   * destructive one: iOS draws that in red and puts it where the thumb expects,
+   * and a drawer would have to imitate both. The sentence says how much space
+   * comes back, which is why the inventory is asked for first.
+   */
+  const remove = (entry: LibraryEntry) => { void requestInventory(entry.id).then(() => Alert.alert('Delete this book?',
+    `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
+      { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => {
+        void removeDownloads(entry.id).then(() => { library.remove(entry.id); setActions(null); }, (error) => library.report(String(error)));
+      } },
+    ]), (error) => library.report(String(error))); };
   const key = useProviderKey(settings.provider);
 
   const add = useCallback(async () => {
@@ -151,8 +154,9 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
             entry={item}
             present={present.has(item.id)}
             onPress={() => navigation.navigate('Reader', { id: item.id })}
-          /><Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${item.title}`} onPress={() => menu(item)}
-            style={{ position: 'absolute', right: 12, top: 8, padding: 10 }}><Icon name="more" color={INK.quiet} size={22} /></Pressable></View>
+            onLongPress={() => setActions(item)}
+          /><Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${item.title}`} onPress={() => setActions(item)}
+            style={styles.actions}><Icon name="more" color={INK.quiet} size={22} /></Pressable></View>
         )}
         ListHeaderComponent={library.note ? <View style={styles.banner}><Note attention>{library.note}</Note></View> : null}
         ListEmptyComponent={
@@ -175,17 +179,18 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
           )
         }
       />
-      {actions ? <ReaderActions document={actions.id} initial="download" onClose={() => setActions(null)} /> : null}
+      {actions ? <ReaderActions document={actions.id} onClose={() => setActions(null)} onDelete={() => remove(actions)} /> : null}
     </View>
   );
 }
 
-function LibraryDocument({ entry, present, onPress }: { entry: LibraryEntry; present: boolean; onPress(): void }) {
+function LibraryDocument({ entry, present, onPress, onLongPress }: { entry: LibraryEntry; present: boolean; onPress(): void; onLongPress(): void }) {
   const cover = useDocumentCover(entry);
-  return <DocumentRow title={entry.title} progress={progressOf(entry, present)} cover={cover} onPress={onPress} />;
+  return <DocumentRow title={entry.title} progress={progressOf(entry, present)} cover={cover} onPress={onPress} onLongPress={onLongPress} />;
 }
 
 const styles = StyleSheet.create({
+  actions: { position: 'absolute', right: 12, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 10 },
   banner: { paddingHorizontal: 16, paddingTop: 12 },
   empty: { alignItems: 'flex-start', gap: 12, padding: 24 },
   emptyTitle: { color: INK.text, fontSize: 20, fontWeight: '700' },

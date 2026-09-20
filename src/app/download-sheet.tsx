@@ -67,7 +67,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
     {downloads.downloadError() ? <Text style={styles.error}>{downloads.downloadError()}</Text> : null}
     {plan && !progressReady ? <Text style={styles.secondary}>Checking saved downloads…</Text> : null}
     {plan ? <Text style={styles.secondary}>{manage ? `${downloads.formatBytes(downloads.occupied(document, choice))} saved` :
-      whole ? 'Whole document downloaded' : `${completed} chapters downloaded`}</Text> : null}
+      `${completed} chapters downloaded`}</Text> : null}
     {task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length && whole) ? <View style={styles.top}>
       <Text style={[styles.secondary, { flex: 1 }]}>{task.state === 'done' ? task.failed.length ? `${task.failed.length} chapters failed` : 'Selected chapters downloaded' :
         ({ preparing: 'Preparing selected chapter…', downloading: 'Downloading…', queued: 'Queued', waiting: 'No network connection, waiting to reconnect', paused: 'Paused',
@@ -96,7 +96,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
               {!done && (busy(item.id) || count || task?.failed.includes(item.id)) ? <Text style={styles.secondary}>
                 {task?.failed.includes(item.id) ? 'Failed · ' : ''}{item.prepared === false ? 'Waiting for preparation' : `${count} / ${chapterTextCount(item)}`}
               </Text> : null}</View>
-            {done && !manage ? <View style={styles.downloaded}><Icon name="check" color={INK.reading} size={19} /><Text style={styles.small}>Downloaded</Text></View> :
+            {done && !manage ? <Icon name="check" color={INK.reading} size={22} /> :
               <View style={[styles.circle, picked && styles.checked]}>{picked ? <Icon name="check" color={INK.page} size={17} /> : null}</View>}
           </Pressable>
         </View>;
@@ -105,7 +105,6 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
       onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.(v); }}><Text style={styles.link}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</Text></Pressable>)}</View> : null}
     <View style={styles.footer}>
       <Pressable accessibilityRole="button" onPress={() => { setSelected(new Set()); setManage(!manage); setManagedVoice(null); }}><Text style={styles.link}>{manage ? 'Back to downloads' : 'Manage downloads'}</Text></Pressable>
-      {!manage ? <Text style={styles.small}>Generating audio may incur speech service charges.</Text> : null}
       <Pressable accessibilityRole="button" accessibilityLabel={manage ? `Delete selected (${chosen.length})` : `Download selected (${chosen.length})`}
         disabled={!progressReady || !downloads.downloadsReady() || !chosen.length || !choice.voice || !!downloads.downloadError()} onPress={act}
         style={[styles.button, (!chosen.length || !choice.voice) && { opacity: 0.35 }]}>
@@ -117,11 +116,11 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, gap: 12, flexShrink: 1 }, top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   voice: { color: INK.text, fontSize: 15, flex: 1 }, link: { color: INK.reading, fontSize: 14, paddingVertical: 8 },
-  secondary: { color: INK.quiet, fontSize: 13 }, small: { color: INK.quiet, fontSize: 11 }, error: { color: INK.text, fontSize: 13 },
+  secondary: { color: INK.quiet, fontSize: 13 }, error: { color: INK.text, fontSize: 13 },
   preparing: { padding: 20, gap: 14, alignItems: 'center' }, list: { height: 330, flexGrow: 0, flexShrink: 1 },
   row: { minHeight: 62, flexDirection: 'row', borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth },
   chapter: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12, paddingVertical: 12 }, title: { color: INK.text, fontSize: 16 },
   collapse: { width: 30, alignItems: 'center', justifyContent: 'center' }, circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: INK.quiet, alignItems: 'center', justifyContent: 'center' },
-  checked: { backgroundColor: INK.reading, borderColor: INK.reading }, downloaded: { alignItems: 'center', gap: 3 },
+  checked: { backgroundColor: INK.reading, borderColor: INK.reading },
   footer: { gap: 6 }, button: { backgroundColor: INK.text, borderRadius: 24, alignItems: 'center', paddingVertical: 15 }, buttonText: { color: INK.page, fontWeight: '600', fontSize: 16 }, other: { gap: 4 },
 });

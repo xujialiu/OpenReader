@@ -397,6 +397,12 @@ coarse it is:
   the owner's book exactly once: 2,077 spine items, 2,076 entries, and the one with
   no entry is spine item 1, `Text/copyright.xhtml`. Reading it reports the cover.
 
+Only `shared` and `before` are said out loud under the list. `exact` is not: there
+the mark on the row is already the whole answer, and a sentence repeating it is the
+one the owner reads twice. `precisionLine` therefore takes the two coarse values
+and the caller renders no note at all for the third — the coarseness is what needed
+saying, never the mark.
+
 Two facts about the library's own data that the list must not trust. Its `Section`
 type says `id: string`; `ncxItem` computes `getAttribute('id') || false`, so a
 `navPoint` with no id yields the boolean `false`, and a navigation document's

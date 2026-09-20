@@ -255,12 +255,12 @@ export function HeaderButton({ label, icon, title, onPress, disabled }: {
 }
 
 /** One Document in the Library: what it is called, and how far the reading got. */
-export function DocumentRow({ title, progress, cover, onPress }: {
-  title: string; progress: string; cover?: string | null; onPress(): void;
+export function DocumentRow({ title, progress, cover, onPress, onLongPress }: {
+  title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   return (
-    <Pressable accessibilityRole="button" onPress={onPress}
+    <Pressable accessibilityRole="button" onPress={onPress} onLongPress={onLongPress}
       style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}>
       <View style={styles.cover} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {cover && failed !== cover ? <Image source={{ uri: cover }} style={styles.coverImage}
