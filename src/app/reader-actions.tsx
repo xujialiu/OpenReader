@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { DocumentId } from '../core/document';
-import { AppearanceControls } from './appearance-sheet';
+import { AppearanceControls, FontList } from './appearance-sheet';
 import { INK } from './controls';
 import { DownloadContent } from './download-sheet';
 import { Icon } from './icon';
@@ -22,13 +22,16 @@ import { knownVoice } from './voice-catalog';
 export function ReaderActions({ document, onClose, onDelete }: { document: DocumentId; onClose(): void; onDelete?(): void }) {
   const { library, settings, setSettings } = useShell();
   const entry = library.entries.find((e) => e.id === document);
-  const [page, setPage] = useState<'menu' | 'appearance' | 'rename' | 'download'>('menu');
+  const [page, setPage] = useState<'menu' | 'appearance' | 'rename' | 'download' | 'fonts'>('menu');
   const [name, setName] = useState(entry?.title ?? '');
   const current = settingsForDocument(settings, entry?.voice ?? null);
   const voice = { provider: current.provider, voice: current.voice, label: current.voice ? knownVoice(current)?.label ?? `${PROVIDER_LABELS[current.provider]} · ${current.voice}` : '' };
   if (!entry) return null;
-  const titles = { menu: entry.title, appearance: 'Appearance', rename: 'Rename', download: 'Download' };
-  return <Sheet visible title={titles[page]} onClose={onClose}>
+  const titles = { menu: entry.title, appearance: 'Appearance', rename: 'Rename', download: 'Download', fonts: 'Fonts' };
+  // Only Fonts goes back, because only Fonts is a page inside a page. The three
+  // pages off the menu are dismissed rather than returned from, which is what
+  // the drag on the handle already does.
+  return <Sheet visible title={titles[page]} onClose={onClose} onBack={page === 'fonts' ? () => setPage('appearance') : undefined}>
     {page === 'menu' ? <View style={styles.menu}>
       {(['appearance', 'rename', 'download'] as const).map((action) => <Pressable key={action} accessibilityRole="button" accessibilityLabel={titles[action]}
         onPress={() => setPage(action)} style={({ pressed }) => [styles.row, pressed && { opacity: 0.5 }]}>
@@ -41,7 +44,9 @@ export function ReaderActions({ document, onClose, onDelete }: { document: Docum
         <Text style={[styles.label, { color: INK.attention }]}>Delete</Text>
       </Pressable> : null}
     </View> : null}
-    {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onChange={(appearance) => setSettings((was) => ({ ...was, appearance }))} /> : null}
+    {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onFonts={() => setPage('fonts')}
+      onChange={(appearance) => setSettings((was) => ({ ...was, appearance }))} /> : null}
+    {page === 'fonts' ? <FontList appearance={settings.appearance} onChange={(appearance) => setSettings((was) => ({ ...was, appearance }))} /> : null}
     {page === 'rename' ? <View style={styles.rename}>
       <TextInput accessibilityLabel="Display name" value={name} onChangeText={setName} autoFocus selectTextOnFocus clearButtonMode="while-editing" style={styles.input} returnKeyType="done"
         onSubmitEditing={() => { if (name.trim()) { library.rename(document, name); onClose(); } }} />
@@ -55,7 +60,7 @@ export function ReaderActions({ document, onClose, onDelete }: { document: Docum
   </Sheet>;
 }
 const styles = StyleSheet.create({
-  menu: { paddingHorizontal: 24 }, row: { flexDirection: 'row', alignItems: 'center', gap: 20, minHeight: 66, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: INK.line },
-  last: { borderBottomWidth: 0 }, label: { color: INK.text, fontSize: 19 }, rename: { padding: 20, gap: 24 },
-  input: { color: INK.text, backgroundColor: INK.page, borderRadius: 12, padding: 14, fontSize: 18 }, buttons: { flexDirection: 'row', justifyContent: 'space-between', padding: 8 },
+  menu: { paddingHorizontal: 24 }, row: { flexDirection: 'row', alignItems: 'center', gap: 18, minHeight: 58, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: INK.line },
+  last: { borderBottomWidth: 0 }, label: { color: INK.text, fontSize: 16 }, rename: { padding: 20, gap: 24 },
+  input: { color: INK.text, backgroundColor: INK.page, borderRadius: 12, padding: 14, fontSize: 16 }, buttons: { flexDirection: 'row', justifyContent: 'space-between', padding: 8 },
 });

@@ -116,11 +116,18 @@ export const DEFAULT_HIGHLIGHT: HighlightStyles = {
  * per script, so a Chinese book under "Serif" is laid out in the system's own
  * serif CJK face rather than in a font that has no glyphs for it — which is the
  * behaviour a list of four Latin faces could not have given it.
+ *
+ * `preview` is the same face named for React Native rather than for CSS, so the
+ * Appearance list can set each row in the font it offers. It is a **Latin
+ * sample and not a promise**: what a document actually gets for any other script
+ * is decided by the fall-through above, so two rows previewing differently can
+ * still lay a Chinese book out identically. `null` is the interface font, which
+ * is what `system` means on this platform.
  */
 export const READING_FONTS = [
-  { id: 'system', label: 'System', stack: '-apple-system, system-ui, sans-serif' },
-  { id: 'serif', label: 'Serif', stack: 'Georgia, "Times New Roman", serif' },
-  { id: 'sans', label: 'Sans-serif', stack: 'Helvetica, Arial, sans-serif' },
+  { id: 'system', label: 'System', stack: '-apple-system, system-ui, sans-serif', preview: null },
+  { id: 'serif', label: 'Serif', stack: 'Georgia, "Times New Roman", serif', preview: 'Georgia' },
+  { id: 'sans', label: 'Sans-serif', stack: 'Helvetica, Arial, sans-serif', preview: 'Helvetica' },
 ] as const;
 
 /** One of `READING_FONTS`. Not a free string: see that list. */
