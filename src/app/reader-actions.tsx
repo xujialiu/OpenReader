@@ -18,8 +18,14 @@ import { knownVoice } from './voice-catalog';
  * document is on screen behind the drawer and a `Delete` row there would offer to
  * throw away the book being read. Asking the component to work that out itself
  * would mean teaching it which screen it is on, which the caller already knows.
+ *
+ * `appearance` is granted the same way and for the mirror reason (#22): only the
+ * reader has a page behind the drawer, so only there does changing the font or
+ * its size show anything. From the Library the row changed a setting the owner
+ * could not see, and it is not the book's to begin with — it is the owner's, for
+ * every Document (CONTEXT.md, **Appearance**).
  */
-export function ReaderActions({ document, onClose, onDelete }: { document: DocumentId; onClose(): void; onDelete?(): void }) {
+export function ReaderActions({ document, onClose, onDelete, appearance = false }: { document: DocumentId; onClose(): void; onDelete?(): void; appearance?: boolean }) {
   const { library, settings, setSettings } = useShell();
   const entry = library.entries.find((e) => e.id === document);
   const [page, setPage] = useState<'menu' | 'appearance' | 'rename' | 'download' | 'fonts'>('menu');
@@ -28,12 +34,13 @@ export function ReaderActions({ document, onClose, onDelete }: { document: Docum
   const voice = { provider: current.provider, voice: current.voice, label: current.voice ? knownVoice(current)?.label ?? `${PROVIDER_LABELS[current.provider]} · ${current.voice}` : '' };
   if (!entry) return null;
   const titles = { menu: entry.title, appearance: 'Appearance', rename: 'Rename', download: 'Download', fonts: 'Fonts' };
+  const rows: readonly ('appearance' | 'rename' | 'download')[] = appearance ? ['appearance', 'rename', 'download'] : ['rename', 'download'];
   // Only Fonts goes back, because only Fonts is a page inside a page. The three
   // pages off the menu are dismissed rather than returned from, which is what
   // the drag on the handle already does.
   return <Sheet visible title={titles[page]} onClose={onClose} onBack={page === 'fonts' ? () => setPage('appearance') : undefined}>
     {page === 'menu' ? <View style={styles.menu}>
-      {(['appearance', 'rename', 'download'] as const).map((action) => <Pressable key={action} accessibilityRole="button" accessibilityLabel={titles[action]}
+      {rows.map((action) => <Pressable key={action} accessibilityRole="button" accessibilityLabel={titles[action]}
         onPress={() => setPage(action)} style={({ pressed }) => [styles.row, pressed && { opacity: 0.5 }]}>
         <Icon name={action} color={INK.text} size={26} />
         <Text style={styles.label}>{titles[action]}</Text>

@@ -38,6 +38,8 @@ Saved audio remains playable when its provider is disabled or its credentials ar
 
 The reader's upper appearance button becomes an ellipsis. It opens a drawer containing three actions in order: Appearance with an Aa symbol, Rename with a pencil icon, and Download with a download icon.
 
+The same drawer opens from a book in the Library, where it offers Rename, Download and Delete but not Appearance. In the Library there is no page behind the drawer, so choosing a font or a size there changed nothing the owner could see, and they had to open a book to find out what they had picked. Appearance is also not a thing about one book: it applies to every book, so offering it among one book's actions suggested otherwise. What was given up is the Library and the reader offering exactly the same rows; Delete already differed between them, for the mirror reason.
+
 Appearance uses a simple Font row with the selected font on the right and a disclosure indicator. Font Size uses a compact rounded minus/plus control on the right, following the owner's visual reference, with the current size shown between the two (design 0030).
 
 Rename changes only the display name in the library and reader. The original file, text, document identity, reading position and downloads are unaffected. The field starts with the current name, with Cancel and Save actions; a blank name cannot be saved.

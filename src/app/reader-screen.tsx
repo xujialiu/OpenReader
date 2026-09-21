@@ -295,7 +295,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
         appearance={settings.appearance}
         onChange={(next) => setSettings({ ...settings, appearance: next })}
       />
-      {actions ? <ReaderActions document={id} onClose={() => setActions(false)} /> : null}
+      {actions ? <ReaderActions document={id} appearance onClose={() => setActions(false)} /> : null}
     </View>
   );
 }
