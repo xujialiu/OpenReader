@@ -314,12 +314,15 @@ fix (AGENTS.md).
   2.9 s; after 104 s of quiet a POST failed this way about 6 s after it was
   sent; the next POST answered 401 in 0.6 s; after another 102 s a GET answered
   200, but in about 9 s.
-  - Cause, as far as it was established: this Mac reaches `api.fish.audio`
-    through a TUN-mode proxy (it resolves to `198.18.0.126`, the fake-IP range),
-    an idle connection is dead by then, and the POST that reuses it is not
-    retried, while a GET apparently is, which is why it only took longer. Every
-    synthesis is a POST. Whether a phone on another network does the same was
-    not established.
+  - Cause, established on 2026-09-22 (notes/NOTES_2026-09-22.md, 02:29, and
+    #26): Fish's API is reached over HTTP/3, which is UDP, and this Mac's
+    Clash Verge Rev (mihomo, TUN mode; `api.fish.audio` resolves to the fake
+    address `198.18.0.126`) drops a UDP mapping about 60 s after its last
+    packet. A connection reused after that stalls for about 7 s and fails with
+    -1005. The system retries a GET on a new connection, so a GET only takes
+    longer, and does not retry a POST, which every synthesis is. It happens
+    with no key and with nothing else using the account. Whether a phone on
+    another network does the same was not established.
   - Fix for a measurement: Play again. A failed Utterance is retried when Play
     is pressed on it, over a new connection. A run that met this is not a
     result about the change under test. Start a timed play within about 45 s of
