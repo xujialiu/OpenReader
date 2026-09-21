@@ -103,6 +103,32 @@ fix (AGENTS.md).
 - **An iPad behaves differently from an iPhone.** An iPad-sized WKWebView defaults to the desktop content mode, where WebKit ignores `text-size-adjust` (ADR 0030). The reader asks for the mobile mode through `patches/`. Anything that depends on WebKit is worth checking on an iPad simulator too.
 - **The app's console is not in the simulator's log.** `log show` has no `console.log` or `HX` lines; they are only in Metro's output. Note the time with `date` when you take a measurement, because it cannot be recovered afterwards.
 
+### Screenshots of a sheet
+
+- **A sheet photographed as it opens can be 1 pt short of where it rests, and
+  that reads as a layout change.**
+  - Symptom: two screenshots of the same sheet differ by one vertical offset of
+    everything in it. On 2026-09-22 the #28 before-shot of the loading voice
+    sheet sat 3 px lower than the fixed build's, title, chip and note alike,
+    and the grip's last pixel row was only partly covered.
+  - Cause: the modal's slide-in eases out and pauses one point short. Recorded
+    with `simctl io recordVideo`, the sheet's top edge went 1318, 1316, 1315,
+    **1314** px, stayed at 1314 for 30–70 ms, then jumped to 1311 and rested
+    there. That pause is the frame a `simctl io screenshot` most easily lands
+    on. The old build's before-shot and a new-build frame at 1314 were
+    pixel-identical over the whole sheet except the note #28 moved.
+  - Fix: before comparing positions across screenshots, check that the sheet's
+    top edge is at rest: two consecutive frames that agree, or the frames of a
+    recording (`voice-sheet-loading.cjs` with `VIDEO=1`, below). Compare
+    resting frames with resting frames, or 1314 with 1314.
+- **The voice sheet's loading state after a cold start can be shorter than one
+  screenshot.** Measured 2026-09-22 in three cold starts: in the two that were
+  recorded, the Voices arrived 0.5 s and 1.0 s after the sheet came to rest
+  (the #24 run saw about 5 s), and each `simctl io screenshot` took 0.4–0.6 s,
+  once 1.1 s. A burst caught the loading state at rest in one frame, one, and
+  two. Record the screen instead (`VIDEO=1`): `ffmpeg` or `cv2.VideoCapture`
+  reads every frame, and the recording keeps the device's 1206×2622 pixels.
+
 ### The walkthrough harness (`Documents/harness.json`)
 
 - **A command does nothing.** Each command needs a new `seq`; the same `seq` twice runs once.
@@ -331,6 +357,10 @@ fix (AGENTS.md).
 - **`$?` after a pipe is the pipe's last command.** `bash sync.sh … | tail -5;
   echo $?` printed `0` for a test run that had failed. Redirect the script's
   output to a file and test its own status, or read `PIPESTATUS`.
+- **`PIPESTATUS` is bash's, and an agent's commands here run in zsh 5.9.**
+  `… | tee run.out; echo "exit ${PIPESTATUS[0]}"` printed `exit ` with nothing
+  after it (2026-09-22): zsh has no `PIPESTATUS`, and an unset name expands to
+  nothing. zsh's array is `pipestatus`, counted from 1: `${pipestatus[1]}`.
 - **`xcodebuild` can outlive the test it ran.** A `-only-testing` run whose test
   was already reported as finished in `test.log` kept its `xcodebuild` alive
   past a ten-minute timeout. Watch `test.log` for `Test Suite … at <time>`, then
@@ -1076,6 +1106,44 @@ said "Asking Fish Audio for its Voices…", and 5 s later `n=338 asking=false`
 with no note. Fish's own session cache also shares an official listing that is
 in flight, so a request count cannot show which layer joined; the unit tests in
 `test/app/voice-lists.test.ts` are what hold the loader's joining.
+
+### The sheet while it is still asking (`voice-sheet-loading.cjs`)
+
+The harness sequence above as a script, so its timing does not depend on
+someone watching the log:
+
+```sh
+VIDEO=1 node test/manual-test/voice-sheet-loading.cjs SIMULATOR_UDID METRO_LOG DOCUMENT_ID /tmp/openreader-sheet-loading-01 [SHOTS]
+```
+
+It cold-launches the app with `open` already in `harness.json`, sends
+`voicesheet` as soon as the reader's first `HX playing=` line reaches METRO_LOG,
+takes SHOTS screenshots (`loading-NN.png`, default 10), sends `voicelist` once
+the sheet command has been read, waits for the listing to finish, photographs
+the loaded sheet (`loaded.png`), closes the sheet and removes `harness.json`.
+`VIDEO=1` also records `sheet.mp4`, from before the launch to the loaded sheet.
+Needs this worktree's Metro writing to METRO_LOG, Fish enabled with its key and
+the Document in the Library. Never plays.
+
+Measured 2026-09-22 for #28 with `Stat Line Fixture`, in frames at rest (the
+sheet's top edge at y = 1311 px): the title's first ink at x = 50 px, the Fish
+Audio chip's edge at 48 px (16 pt), and "Asking Fish Audio for its Voices…" at
+49 px, where the old build put it at 1 px against the screen edge. The extra
+pixel is the A's own side bearing. Measure each row band by its leftmost pixel
+that differs from the sheet's colour, `#1c1c21`, by more than 30 in any channel.
+
+The contents sheet's note is on the short fixture: `shut`, `open` it, send `say`
+until `spine=` is above 0, then `{"do":"contents","on":true}` shows "None of
+these rows names a file in this book…". Measured the same day, its three lines
+start at x = 51 px like the title (the old build: 3, 2 and 1 px) and end by
+1135 px, inside the right inset at 1158. The 2026-09-20 `Contents-open`
+attachment of a `reader.sh` run is the same sheet before #28. None of the
+fixtures has no contents, or a marked row that is only approximate, so the
+sheet's other two notes were not seen.
+
+What it cannot show: a touch (the harness opens the sheet), or a loading state
+the network did not give. Check the `voicelist` answers and the frames rather
+than assuming the burst caught it.
 
 ## Short lines, brackets and the Fish language hint (#23, #25)
 
