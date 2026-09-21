@@ -13,6 +13,66 @@ Follow the simulator installation guide and AGENTS.md's silence, playback-durati
 and final-running-app requirements. Choose playback duration for the fact being
 measured, and stop immediately afterwards, including after failures.
 
+## Pitfalls
+
+What has gone wrong before, and what fixed it. When `xcrun`, Metro, XCTest or a
+manual step goes wrong or misleads you, add it here, with its symptom, cause and
+fix (AGENTS.md).
+
+### Metro and the bundle
+
+- **The app runs code you have already changed.**
+  - Cause: Metro started with `CI=1` does not watch files. It serves what it read at start, and its log says so once: "Metro is running in CI mode, reloads are disabled".
+  - Fix: start it as `npx expo start --port PORT < /dev/null`. It will not prompt, because stdin is not a terminal.
+  - To confirm the change is in what Metro serves: `curl -s "http://localhost:PORT/index.bundle?platform=ios&dev=true&minify=false" | grep -c <identifier from your change>`.
+- **The bundle is stale or broken after `npm ci` or a new patch.** `node_modules` was replaced under a running Metro. Restart it with `--clear` and check the bundle as above.
+- **A port is taken by a Metro that serves another tree.**
+  - Check with `lsof -nP -iTCP:PORT -sTCP:LISTEN`, then `lsof -a -p PID -d cwd`.
+  - A cwd in another worktree, or under `.orca-worktree-trash`, is not yours. Take the next free port rather than stop something another session may be using.
+  - The stale-directory case is also in `docs/install-on-simulator.md`.
+- **The installed Debug app can follow another port without a rebuild.**
+  - Run `xcrun simctl spawn UDID defaults write top.xujialiu.openreader RCT_jsLocation localhost:PORT`, then relaunch the app.
+  - Look for the device in `curl -s http://localhost:PORT/json/list`.
+
+### Simulators and installs
+
+- **Several sessions share this Mac's simulators.** Use the one the owner or the task names, and check `xcrun simctl list devices booted` first. Leave alone any simulator another session is booting, driving or reinstalling.
+- **`xcrun simctl get_app_container` refuses a shut-down device.** Boot it first.
+- **Another simulator needs the same Debug app.** `xcrun simctl install DEST "$(xcrun simctl get_app_container SOURCE top.xujialiu.openreader app)"` copies it without a build, to any device family the app supports, iPad included.
+- **An iPad behaves differently from an iPhone.** An iPad-sized WKWebView defaults to the desktop content mode, where WebKit ignores `text-size-adjust` (ADR 0030). The reader asks for the mobile mode through `patches/`. Anything that depends on WebKit is worth checking on an iPad simulator too.
+- **The app's console is not in the simulator's log.** `log show` has no `console.log` or `HX` lines; they are only in Metro's output. Note the time with `date` when you take a measurement, because it cannot be recovered afterwards.
+
+### The walkthrough harness (`Documents/harness.json`)
+
+- **A command does nothing.** Each command needs a new `seq`; the same `seq` twice runs once.
+- **Waiting for an `HX` line hangs.**
+  - Cause: only an open reader logs on a timer. The Library logs only when a command answers.
+  - Fix: wait for the effect itself, such as a file being written or the answer to `navstate`.
+- **A `js` answer reads as empty or cut off.**
+  - Cause: it arrives in Metro's log as `note="The highlight could not be drawn: PROBE …"`, JSON-escaped and cut at 500 characters.
+  - Fix: parse the quoted string after `note=` as JSON instead of grepping up to the next `"`, and keep answers short.
+- **Two readers answer.** `open` pushes a reader on top of any reader already open, and every mounted reader answers `js`. Send `shut` first.
+- **The Library shows two Documents with one title.** `add` names the entry after its file in `Documents/Inbox/`. Give each copy its own file name, and open by Document Id when titles collide.
+- **An old probe looks like a new error.** A `js` answer stays in the reader's notice as "The highlight could not be drawn: PROBE …" until the reader is opened again.
+
+### XCTest
+
+- **A relaunch lands in the last reader instead of the Library.** That is state restoration. Tap `Back`, if it exists, before looking for Library rows.
+- **A tap right after the reader opens hits a blank page.** The header and "More actions" exist before the Document is laid out. Wait for `Play` or `Choose a Voice`, then for "Laying the document out…" to go.
+- **Waiting for "Laying the document out…" never waits.** It is the label of the WebView's scroll view, an `Other`, not a static text. Query `app.descendants(matching: .any)`.
+- **A cold launch straight into 仙逆 takes over 40 seconds to lay out.** A warm open takes 3–6 seconds. Time tests from a warm open.
+- **A coordinate tap on text does nothing.** It landed between two lines, which the reader treats as blank space by design. Take the point from a screenshot of the middle of the line.
+
+### Measuring inside the reader's WebView
+
+- **`performance.now()` is coarsened to 1 ms.** Time N repetitions and divide.
+- **Computed sizes include text-size-adjust on an iPhone, and not on an iPad in the desktop content mode.** Divide by the percentage in effect only where it applies (ADR 0030).
+- **A probe's own root-only text-size-adjust rule loses to the app's.** The app declares text-size-adjust on every element in `#openreader-highlight`. Take those lines out for the probe and put them back afterwards.
+
+### The shell
+
+- **A loop over `"a b c"` strings passes each as one argument.** zsh does not split an unquoted `$var`. Run such scripts with `bash`, or use arrays.
+
 ## Lock-screen screenshot and button inspection
 
 Prerequisites: macOS, Xcode selected by `xcode-select`, a booted iOS simulator,

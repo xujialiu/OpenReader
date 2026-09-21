@@ -178,6 +178,9 @@ Give the tester the issue/specification, changed interactions, verification alre
 
 Before running or writing device/manual tests, read
 [`test/manual-test/README.md`](test/manual-test/README.md) and reuse its scripts.
+When `xcrun`, Metro, XCTest or a manual step goes wrong or misleads you, add it
+to that README's **Pitfalls**, with its symptom, cause and fix, before you
+finish. That includes problems you only worked around.
 
 Prefer `xcrun` (especially `xcrun simctl`), `xcodebuild`, and the existing
 XCTest/manual-test scripts for device and simulator work. Use Computer Use only
