@@ -468,21 +468,19 @@ also becomes the settings default, this is the only document that needs it:
 the mini fixture's first open inherits the same voice.
 
 `testDownloadShortFixture` and `testDownloadMiniFixture` select all and
-download for real (real Fish Audio spend: 17 utterances, then 1). **Both
-failed once, in this order, with "Needs attention · The saved audio could not
-be verified." on the very first write into a brand-new voice directory**, and
-both succeeded immediately on `testRetryBlockedShortFixture` (taps
-`Continue`) with no other change. `src/offline/storage.ts`'s `saveClip` calls
-`temp.move(target, { overwrite: true })` without `await` and reads
-`target.size` on the next line; `expo-file-system`'s `move` is `async` (a
-separate `moveSync` exists for the synchronous case — confirmed against
-`node_modules/expo-file-system`'s own mock, which implements `move` as `async
-move() { this.moveSync(...) }`), so that read can race the native move and
-observe a size of `null`, which is exactly the sidecar this reproduction
-found on disk with no payload file next to it. This is pre-existing
-(`storage.ts` is untouched by #13/#14) and one `Continue` tap always recovered
-it in this run, but it means an ordinary fresh install has a real chance of
-seeing a scary-looking error on its very first download. Worth its own issue.
+download for real (real Fish Audio spend: 17 utterances, then 1). Expected:
+the task completes on its first attempt, including its very first write into
+a brand-new voice directory. Before #15 both failed once there, in this order,
+with "Needs attention · The saved audio could not be verified." and recovered
+on `testRetryBlockedShortFixture` (taps `Continue`): `saveClip` read the
+payload's size without awaiting expo-file-system's asynchronous `move`, so the
+sidecar recorded `size: null` and no payload survived (ADR 0027). A pass here
+is one sample of a timing, not proof of the order; the faithful `move` in
+`test/offline/storage.test.ts` is what holds it. To check a run, compare the
+sidecar's `size` with the payload's bytes on disk. For a fresh directory
+without spending on the short fixture, run `testDeleteAllSavedAudioReal`
+against the mini fixture first: it removes that document's directory, so the
+next `testDownloadMiniFixture` writes into a new one.
 
 `testDeleteAllSavedAudioReal` and `testDeleteThisBookReal` are the
 actually-confirm versions of `GeneralFontsProbe.testManageDownloadsDeleteAll`

@@ -21,7 +21,7 @@ export function writeJson(file: File, value: unknown): void {
   }
   const temp = new File(`${file.uri}.pending`);
   temp.write(JSON.stringify(value));
-  temp.move(file, { overwrite: true });
+  temp.moveSync(file, { overwrite: true });
 }
 interface ClipMeta {
   format: "alac" | "gzip-pcm" | "encoded";
@@ -56,7 +56,7 @@ export async function saveClip(
       await offlineNative.compress(raw.uri, temp.uri, clip.sampleRate);
     } else temp.write(clip.audio === "pcm" ? gzipSync(bytes) : bytes);
     if (!stillWanted()) return false;
-    temp.move(target, { overwrite: true });
+    temp.moveSync(target, { overwrite: true });
     writeJson(metadataFile(address), {
       format,
       size: target.size,
