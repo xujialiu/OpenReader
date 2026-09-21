@@ -95,7 +95,20 @@ export interface BlocksMessage {
   /** The spine item's href. */
   section: string;
   blocks: ReportedBlock[];
+  /**
+   * While the Document's body text size is being measured (ADR 0030): this
+   * section's characters by the size the Document itself set them in, counted
+   * until `COUNT_LIMIT` is reached. Null once it has been decided, or when there
+   * was nothing to measure for.
+   */
+  sizes: CharactersBySize | null;
 }
+
+/**
+ * Characters of a Document's text, by the size in CSS pixels the Document itself
+ * set them in: what the WebView counts and `body-text.ts` decides from.
+ */
+export type CharactersBySize = readonly (readonly [px: number, characters: number])[];
 
 /**
  * The shape of the document, sent once when the program installs itself.
@@ -346,8 +359,18 @@ export interface InsetMessage {
  */
 export interface AppearanceMessage {
   kind: 'appearance';
-  /** CSS declarations for the document's roots, or the empty string to follow the document's own typography. */
+  /** CSS declarations for every element of the document: the owner's Font Size, and the font when one is chosen. */
   css: string;
+}
+
+/**
+ * The Document's body text size has been decided (ADR 0030), so the WebView
+ * stops counting characters by size in each section it renders. It changes no
+ * style and moves nothing; the CSS for the decided size arrives as an ordinary
+ * `AppearanceMessage`.
+ */
+export interface MeasuredMessage {
+  kind: 'measured';
 }
 
 /**
@@ -380,4 +403,5 @@ export type HighlightMessage =
   | ClearMessage
   | InsetMessage
   | AppearanceMessage
+  | MeasuredMessage
   | ThemeMessage;

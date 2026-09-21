@@ -38,7 +38,7 @@ Saved audio remains playable when its provider is disabled or its credentials ar
 
 The reader's upper appearance button becomes an ellipsis. It opens a drawer containing three actions in order: Appearance with an Aa symbol, Rename with a pencil icon, and Download with a download icon.
 
-Appearance uses a simple Font row with the selected font on the right and a disclosure indicator. Font Size uses a compact rounded minus/plus control on the right, following the owner's visual reference.
+Appearance uses a simple Font row with the selected font on the right and a disclosure indicator. Font Size uses a compact rounded minus/plus control on the right, following the owner's visual reference, with the current size shown between the two (design 0030).
 
 Rename changes only the display name in the library and reader. The original file, text, document identity, reading position and downloads are unaffected. The field starts with the current name, with Cancel and Save actions; a blank name cannot be saved.
 

@@ -33,6 +33,11 @@ A run of text the document itself presents as one unit — a paragraph, a
 heading, a list item.
 _Avoid_: segment, paragraph (as a type name), node
 
+**Body Text**:
+The text a document sets most of its characters in: its paragraphs, as against
+its headings, notes and small print.
+_Avoid_: running text, main text
+
 **Utterance**:
 The unit of the document's text that becomes one synthesis request, in practice
 one sentence. The unit of caching, of prefetching and of resuming.
@@ -118,11 +123,16 @@ wrote it, used to decide which of two copies of an entry wins.
 _Avoid_: timestamp, ts, version, clock
 
 **Appearance**:
-How the text of a document is set: which font it is shown in and how big. It
-belongs to the owner rather than to a document, so it is the same in every one
-of them, and both parts start out following whatever the document itself asked
-for.
+How the text of a document is set: which font it is shown in and its font
+size. It belongs to the owner rather than to a document, so one choice applies
+to every document; the font starts out following whatever the document itself
+asked for, and the font size never does.
 _Avoid_: theme, style, typography, display settings, font settings
+
+**Font Size**:
+How big the body text of every document is shown. It is the owner's and never
+the document's, so body text is the same size in every document.
+_Avoid_: scale, zoom, text size, percentage
 
 **Theme**:
 Whether the app is shown light or dark, including the document itself. It

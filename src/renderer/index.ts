@@ -24,10 +24,9 @@ export {
 
 export {
   appearanceCss,
+  DEFAULT_APPEARANCE,
   DEFAULT_HIGHLIGHT,
-  DOCUMENT_APPEARANCE,
   READING_FONTS,
-  READING_SCALES,
   themeCss,
   UTTERANCE_HIGHLIGHT,
   WORD_HIGHLIGHT,
@@ -50,6 +49,7 @@ export {
   type DocumentMessage,
   type HighlightMessage,
   type InsetMessage,
+  type MeasuredMessage,
   type ProblemMessage,
   type ReportedBlock,
   type SpeakMessage,

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { BLOCKS_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from '../../src/renderer/messages';
 import {
   appearanceCss,
+  DEFAULT_APPEARANCE,
   DEFAULT_HIGHLIGHT,
   HIGHLIGHTER,
   highlightCall,
@@ -15,7 +16,7 @@ import {
   UTTERANCE_HIGHLIGHT,
   WORD_HIGHLIGHT,
 } from '../../src/renderer/highlighter';
-import { pin } from '../structural';
+import { pin, pinCount } from '../structural';
 
 /**
  * The three things ADR 0005 says this directory must never do, checked against the
@@ -306,6 +307,7 @@ describe('the two halves stay in separate files (README.md)', () => {
     // A missing bracket would first appear as a book that renders and never
     // highlights, on a device, with no error anywhere.
     expect(() => new vm.Script(highlighterSource(), { filename: 'highlighter.js' })).not.toThrow();
+    expect(() => new vm.Script(highlighterSource(undefined, undefined, 'dark', null), { filename: 'measuring.js' })).not.toThrow();
     expect(() => new vm.Script(highlightCall({ kind: 'clear' }), { filename: 'call.js' })).not.toThrow();
   });
 
@@ -524,20 +526,66 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     // changes nothing on a book that is already open — it fails as a setting that
     // appears to do nothing, which is exactly how the 01:01 note was bought.
     const bridge = code('reader-bridge.ts');
-    expect(bridge).toContain("send({ kind: 'appearance', css: appearanceCss(next) })");
+    expect(bridge).toContain("send({ kind: 'appearance', css: appearanceCss(next, bodyTextSize.current) })");
     // Built once, from the first render's options, and never rebuilt.
     expect(bridge).toContain(
-      "highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DOCUMENT_APPEARANCE, options.scheme ?? 'light')",
+      "highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null)",
     );
     // The theme is the same message-not-a-rebuild, and it is the same trap.
     expect(bridge).toContain("send({ kind: 'theme', css: themeCss(next) })");
     expect(bridge).not.toContain('[options.styles]');
   });
 
-  it('bakes the owner’s choice into the program as well, so a book opens laid out in it', () => {
-    const chosen = highlighterSource(undefined, { font: 'georgia', scale: 150 });
-    expect(chosen).toContain('var APPEARANCE = ' + JSON.stringify(appearanceCss({ font: 'georgia', scale: 150 })));
-    expect(highlighterSource()).toContain('var APPEARANCE = "";');
+  it('bakes the owner’s choice into the program as well, against the Document’s own body text', () => {
+    // A Document measured before opens at the owner's size on its first paint,
+    // and is not measured again (ADR 0030).
+    const measured = highlighterSource(undefined, { font: 'georgia', size: 20 }, 'light', 12);
+    pin(measured, 'var APPEARANCE = ' + JSON.stringify(appearanceCss({ font: 'georgia', size: 20 }, 12)) + ';', 'a measured Document');
+    pin(measured, 'var MEASURE = false;', 'a measured Document');
+    // One never measured opens as if its body text were 16 — which is what every
+    // current Document's is — and is measured.
+    const unknown = highlighterSource(undefined, undefined, 'light', null);
+    pin(unknown, 'var APPEARANCE = ' + JSON.stringify(appearanceCss(DEFAULT_APPEARANCE, 16)) + ';', 'an unmeasured Document');
+    pin(unknown, 'var MEASURE = true;', 'an unmeasured Document');
+    // The download indexer's program lays nothing out for the owner to read.
+    pin(highlighterSource(), 'var MEASURE = false;', 'the indexer’s program');
+  });
+
+  it('counts the Document’s own sizes only while it is being measured, and a bounded amount per page', () => {
+    const program = code('highlighter.ts');
+    pin(fn(program, 'adopt'), 'sizes: MEASURE ? sizesOf(contents, found) : null', 'highlighter.ts, function adopt');
+    const sizesOf = fn(program, 'sizesOf');
+    // However long the page: the owner ruled out a stall to measure a book (#17).
+    // Both loops stop, so a page of one huge paragraph stops too.
+    pinCount(sizesOf, 'counted < COUNT_LIMIT', 2, 'highlighter.ts, function sizesOf');
+    // A computed size already carries the owner's percentage (measured, ADR 0030),
+    // so it is divided back out to reach the size the Document set.
+    pin(sizesOf, "getPropertyValue('-webkit-text-size-adjust')", 'highlighter.ts, function sizesOf');
+    pin(sizesOf, '/ factor', 'highlighter.ts, function sizesOf');
+  });
+
+  it('stops counting once the bridge has decided, and moves nothing when it does', () => {
+    const program = code('highlighter.ts');
+    const branch = program.slice(program.indexOf("message.kind === 'measured'"), program.indexOf("message.kind === 'theme'"));
+    pin(branch, 'MEASURE = false;', "the 'measured' branch");
+    expect(branch).not.toContain('settle(');
+    // Decided once, from one count per section, and handed to the app to keep —
+    // after the section's Blocks, so nothing the app does with it can cost them.
+    const bridge = code('reader-bridge.ts');
+    pin(bridge, 'const counted = countPage(pages.current, message.sectionIndex, message.sizes);', 'reader-bridge.ts');
+    pin(bridge, "send({ kind: 'measured' });", 'reader-bridge.ts');
+    const handed = bridge.indexOf('latest.current.onBodyTextSize?.(decided);');
+    pin(bridge, 'latest.current.onBodyTextSize?.(decided);', 'reader-bridge.ts');
+    expect(handed).toBeGreaterThan(bridge.indexOf('latest.current.onBlocks?.(next.blocks'));
+  });
+
+  it('asks the WebView for its mobile content mode, which an iPad needs for text-size-adjust to do anything', () => {
+    // An iPad-sized WKWebView defaults to the desktop content mode, where the
+    // percentage computes and nothing moves: 12px stayed 12px at 200% on the
+    // iPad Air simulator, and was 24px once the mode was mobile (ADR 0030). The
+    // library passes the WebView a fixed list of props, so the one it needs is
+    // added by `patches/` through `postinstall`; this reads the installed file.
+    pin(library('View.js'), 'contentMode: "mobile",', 'the installed @epubjs-react-native/core View.js');
   });
 
   it('restyles every rendered section and then re-centres, because the text has moved', () => {

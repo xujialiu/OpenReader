@@ -23,7 +23,7 @@ import { DEFAULT_BRACKET_PAIRS } from '../core/speech-text';
 // The renderer's, because it is the renderer that paints it — and imported from
 // the file rather than from the directory's index, which would drag the bridge
 // and React Native into a module whose whole point is that neither is here.
-import { DOCUMENT_APPEARANCE, type Appearance, type ReadingScheme } from '../renderer/highlighter';
+import { DEFAULT_APPEARANCE, type Appearance, type ReadingScheme } from '../renderer/highlighter';
 import type { ProviderDeps, ProviderSettings } from '../core/providers/factory';
 import { getLocalEngine, LOCAL_ENGINES } from '../core/providers/local/registry';
 import type { ProviderId } from '../core/providers/types';
@@ -129,19 +129,21 @@ export interface AppSettings {
    * **Per app and not per Document**, which is the one thing about it that could
    * have gone either way. A Voice belongs to a document (ADR 0010) because it is
    * a property of *that book being read*; how big the text is belongs to the
-   * owner's eyes, and they do not change between books. The cost is that a book
-   * whose own typography the owner liked has to be put back by hand — which is
-   * what "follow the document" being the default makes rare.
+   * owner's eyes, and they do not change between books.
+   *
+   * The size goes one step further and is never the book's at all (ADR 0030):
+   * two books typeset differently read at the same size. The font still starts
+   * on each book's own, so a face the owner liked needs no putting back.
    */
   appearance: Appearance;
   /**
    * Light, dark, or whatever the phone is doing: the **theme** (ADR 0022).
    *
    * In General and not in the Appearance sheet, and the two are not the same
-   * question. Appearance is how *this book's* text is set and defaults to
-   * following the document; the theme is what the whole app looks like, in the
-   * room the owner is in, and it reaches the Library and the Settings screens as
-   * well as the page.
+   * question. Appearance is how the text on the page is set — the owner's size,
+   * and a font that starts on the book's own; the theme is what the whole app
+   * looks like, in the room the owner is in, and it reaches the Library and the
+   * Settings screens as well as the page.
    */
   theme: ThemeSetting;
   /**
@@ -231,9 +233,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   local: { engine: LOCAL_ENGINES[0].id, baseURL: LOCAL_ENGINES[0].defaultBaseURL },
   voice: '',
   rate: 1.5,
-  // Follow the document, in both. A book that ships its own typography keeps it
-  // until the owner overrides it (`highlighter.ts`'s `Appearance`).
-  appearance: DOCUMENT_APPEARANCE,
+  // 16px, which is what every current Document's body text already is, and each
+  // Document's own font until the owner picks one (`highlighter.ts`'s
+  // `Appearance`, ADR 0030).
+  appearance: DEFAULT_APPEARANCE,
   // Follow the system, which is the only default that is not a guess about the
   // room the owner is in.
   theme: 'system',

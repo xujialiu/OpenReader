@@ -12,6 +12,13 @@ three kinds, and `serif` and `sans` are retired ids that `settings-storage.ts`
 migrates. The prohibition on naming a CJK face is lifted, though no entry uses
 that yet. Everything else here stands.
 
+**ADR 0030 revises the size.** It is no longer a percentage of what the
+Document set and no longer starts on the Document's own: it is how big every
+Document's body text is shown, from 16px, applied as one `text-size-adjust` on
+every element against each Document's measured body text size. The two size
+rules below are what this ADR shipped; the message, the one `<style>` element,
+the re-centre and the font rule all stand.
+
 ADR 0019 decided that Appearance is a **sheet over the reader** and not a route,
 and left what it holds to this one. It holds two rows, a font and a size, and
 both default to **follow the document** — `Appearance` in `src/renderer/highlighter.ts`,
@@ -90,8 +97,9 @@ Three decisions in three lines:
   is there to overrule a book that sets a size on `body`, not to scale again.
 - **The font is set on the descendants too.** `font-family` inherits, so a rule on
   the two roots alone is beaten by any book with `p { font-family: … }` in its own
-  stylesheet — and the owner's novel has `div { font-family: "zw" }`, which is
-  where every line of its text is.
+  stylesheet — and the owner's novel names a face on `body` and on `div`. (Its
+  text is in bare `body > p` and inherits `body`'s face; the `div`s hold only a
+  logo image — notes 2026-09-21, 11:35.)
 - **`!important` on all three**, because an EPUB's own stylesheet is loaded into
   the same document and is as entitled to these properties as we are. The owner's
   override is the later word and has to win.
@@ -100,8 +108,10 @@ Three decisions in three lines:
 size on its paragraphs rather than on its body keeps that size, because an
 inherited root size is not what those paragraphs are reading. Neither book this
 was measured against does — the fixture ships no stylesheet at all, and 仙逆's sets
-`font-family` on `body`, `p` and `div` and a `font-size` on none of them, so both
-scale (notes, 03:16).
+`font-family` on `body` and `div`, and a `font-size` on six selectors none of which
+is its running text, so both scale (notes, 03:16; corrected 2026-09-21, 11:35). One
+of those six is the chapter-number badge, `span.num { font-size: x-small }`: a
+keyword size ignores the root, so it never scaled — which ADR 0030 fixes.
 
 No CJK face is named in any stack, deliberately. WebKit falls through a font stack
 per script, so a Chinese book under "Serif" is laid out in the system's own serif
@@ -148,6 +158,7 @@ a stronger absence than the rate's: the rate at least reaches the audio graph,
 while Appearance changes no character of what is spoken, so an engine rebuilt for
 it would re-spend the quota to change a font.
 
-Nothing is stored, because nothing in `AppSettings` is (`settings.ts` says why —
-its eventual home is ADR 0003's Sync Folder, which is not written). The sheet says
-so rather than leaving it to be discovered.
+It is stored on the device, in `Documents/settings.json` through
+`settings-storage.ts`, and not synced: its eventual home is ADR 0003's Sync Folder,
+which is not written. (This paragraph said nothing was stored, which stopped being
+true when `settings-storage.ts` arrived; the heading keeps its original wording.)

@@ -74,7 +74,9 @@ final class OfflineProbe: XCTestCase {
       XCTAssertTrue(app.buttons["Increase font size"].waitForExistence(timeout: 3))
       app.buttons["Increase font size"].tap()
       capture("appearance-stepper", app)
-      app.buttons["Use document appearance"].tap()
+      // Back where it was: the stepper is the only way back since #17 removed the
+      // reset line, and one tap each way leaves the owner's size as it was.
+      app.buttons["Decrease font size"].tap()
       app.buttons["Close Appearance"].tap()
       app.buttons["More actions"].tap()
       app.buttons["Rename"].tap()

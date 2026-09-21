@@ -135,6 +135,12 @@ rebuilt program because `injectedJavascript` is evaluated at page load and the
 program refuses a second installation, so a new source string would change
 nothing on a book that is already open.
 
+The size is the owner's in every Document (ADR 0030), so it is measured against
+each Document's own **body text size**. Until that is known, each section's
+Blocks message also carries how its characters are sized, counted over a
+bounded number of them; the bridge decides once, sends `measured` so the
+counting stops, and hands the size to the app to keep for the next open.
+
 The clock those corrections carry is the source node's own content position — see
 [`../playback/`](../playback/) and ADR 0012 for why the audio context's clock is
 the wrong one to read despite looking like the obvious choice.
@@ -169,6 +175,7 @@ The split is where the platform is, and it is the whole of the test strategy.
 | `cursor.ts` | A Word Timing into a place in the document, and which word is current at time *t*. Three coordinate systems and every decision the renderer makes — plus the two walks back along that chain, a tapped point and a stored Reading Position, into the Utterance to read from. |
 | `blocks.ts` | The Blocks the WebView has reported, in reading order — sections arrive out of it and more than once. |
 | `messages.ts` | The protocol between the two halves. Types, and the four message names that must not collide with the library's own. |
+| `body-text.ts` | A Document's body text size, from the character counts the WebView reports: the size most of the text is set in, once enough text has been seen. |
 
 | Runs in Safari's JavaScript, not tested here | |
 | --- | --- |

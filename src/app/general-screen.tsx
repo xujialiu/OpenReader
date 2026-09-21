@@ -3,10 +3,11 @@
  *
  * Two things are. The **theme** (ADR 0022) — light, dark, or whatever the phone
  * is doing — which belongs here rather than in the Appearance sheet because
- * those are two different questions: Appearance is how *this book's* text is
- * set and defaults to following the document, while the theme is what the whole
- * app looks like in the room the owner is sitting in, and it reaches the Library
- * and these Settings screens as much as it reaches the page.
+ * those are two different questions: Appearance is how the text on the page is
+ * set — the owner's size, and a font that starts on the book's own — while the
+ * theme is what the whole app looks like in the room the owner is sitting in, and
+ * it reaches the Library and these Settings screens as much as it reaches the
+ * page.
  *
  * And whether an Utterance wrapped entirely in brackets is spoken with them
  * (ADR 0028), which is app-wide for the same reason: it is true of every Voice

@@ -33,11 +33,12 @@ import type { Utterance } from '../core/segmenter';
 import type { ClipCue, PositionCorrection, ReaderClock } from '../playback/reader-clock';
 
 import { blockIds, EMPTY_BLOCKS, withSection, type BlockIndex } from './blocks';
+import { countPage, PLAIN_BODY_TEXT_SIZE } from './body-text';
 import { correctMessage, speakMessage, utteranceAt } from './cursor';
 import {
   appearanceCss,
   DEFAULT_HIGHLIGHT,
-  DOCUMENT_APPEARANCE,
+  DEFAULT_APPEARANCE,
   highlightCall,
   highlighterSource,
   themeCss,
@@ -50,6 +51,7 @@ import {
   DOCUMENT_MESSAGE,
   PROBLEM_MESSAGE,
   TAP_MESSAGE,
+  type CharactersBySize,
   type HighlightMessage,
   type ProblemMessage,
   type ReportedBlock,
@@ -133,6 +135,13 @@ export interface ReaderBridgeOptions {
   /** A highlight the WebView could not draw. Rare, and never a guess: see `ProblemMessage`. */
   onProblem?(problem: ProblemMessage): void;
   /**
+   * The Document's body text size has just been measured (ADR 0030): keep it, so
+   * that the next open passes it back as `bodyTextSize` and is laid out at the
+   * owner's size on its first paint. Called at most once per mount, only when
+   * `bodyTextSize` was not known, and after that section's Blocks.
+   */
+  onBodyTextSize?(px: number): void;
+  /**
    * Scroll the document so the Utterance being spoken is **centred**. Default
    * true.
    *
@@ -158,6 +167,15 @@ export interface ReaderBridgeOptions {
    * that way rather than reflowing once the first message arrives.
    */
   appearance?: Appearance;
+  /**
+   * The Document's own body text size, from an earlier open (ADR 0030), or null
+   * when it has never been measured — in which case the program measures it from
+   * the first pages it renders and `onBodyTextSize` hands the answer back.
+   *
+   * Fixed at mount like `appearance`: it is baked into the program, so a Document
+   * measured before is laid out at the owner's size on its first paint.
+   */
+  bodyTextSize?: number | null;
   /**
    * Light or dark, as the book opens (ADR 0022).
    *
@@ -351,8 +369,19 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    * book laid out in the wrong font until something else happens; the second is
    * an injection and a reflow per document for nothing.
    */
-  const installed = useRef(options.appearance ?? DOCUMENT_APPEARANCE);
-  const appearance = useRef(options.appearance ?? DOCUMENT_APPEARANCE);
+  const installed = useRef(options.appearance ?? DEFAULT_APPEARANCE);
+  const appearance = useRef(options.appearance ?? DEFAULT_APPEARANCE);
+  /**
+   * The Document's own body text size (ADR 0030): what the Font Size is measured
+   * against. Null until it is known — from an earlier open, or once enough of the
+   * pages rendered here have been counted — and the CSS is built against
+   * `PLAIN_BODY_TEXT_SIZE` meanwhile, which is every current Document's actual size.
+   */
+  const bodyTextSize = useRef<number | null>(options.bodyTextSize ?? null);
+  /** What each page rendered so far said, one entry per section, while `bodyTextSize` is still null. */
+  const pages = useRef<ReadonlyMap<number, CharactersBySize>>(new Map());
+  /** The body text size the program was built with, the other half of `installed`. */
+  const installedBodyTextSize = useRef(options.bodyTextSize ?? null);
   /** The same pair for the theme, and for the same reason. */
   const installedScheme = useRef<ReadingScheme>(options.scheme ?? 'light');
   const scheme = useRef<ReadingScheme>(options.scheme ?? 'light');
@@ -425,7 +454,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   const setAppearance = useCallback(
     (next: Appearance) => {
       appearance.current = next;
-      send({ kind: 'appearance', css: appearanceCss(next) });
+      send({ kind: 'appearance', css: appearanceCss(next, bodyTextSize.current) });
     },
     [send],
   );
@@ -476,8 +505,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         spine.current = message.spine;
         // The program has installed, so the two things it may have missed go again.
         if (inset.current > 0) send({ kind: 'inset', bottomPx: inset.current });
-        if (appearance.current !== installed.current) {
-          send({ kind: 'appearance', css: appearanceCss(appearance.current) });
+        if (appearance.current !== installed.current || bodyTextSize.current !== installedBodyTextSize.current) {
+          send({ kind: 'appearance', css: appearanceCss(appearance.current, bodyTextSize.current) });
         }
         if (scheme.current !== installedScheme.current) {
           send({ kind: 'theme', css: themeCss(scheme.current) });
@@ -492,17 +521,39 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         if (at !== null) latest.current.onTap?.(at);
         return;
       }
+      // The Document's body text size, decided once from the first pages with
+      // enough text on them (ADR 0030). Until then every section reports how its
+      // characters are sized; `countPage` keeps one count per section.
+      let decided: number | null = null;
+      if (bodyTextSize.current === null && message.sizes) {
+        const counted = countPage(pages.current, message.sectionIndex, message.sizes);
+        pages.current = counted.pages;
+        decided = counted.bodyTextSize;
+        if (decided !== null) {
+          bodyTextSize.current = decided;
+          pages.current = new Map();
+          send({ kind: 'measured' });
+          // The page was laid out against PLAIN_BODY_TEXT_SIZE; only a Document
+          // whose own body text differs is restyled, so every current one — whose
+          // body text is exactly that — never reflows for this.
+          if (decided !== PLAIN_BODY_TEXT_SIZE) send({ kind: 'appearance', css: appearanceCss(appearance.current, decided) });
+        }
+      }
       const next = withSection(blocks.current, message);
       // Unchanged means epub.js rendered a section whose text is the same, which
       // happens whenever the reader crosses back into one. Re-segmenting the book
       // for that would be the renderer's most expensive habit.
-      if (next === blocks.current) return;
-      blocks.current = next;
-      latest.current.onBlocks?.(next.blocks, {
-        index: message.sectionIndex,
-        href: message.section,
-        spine: spine.current,
-      });
+      if (next !== blocks.current) {
+        blocks.current = next;
+        latest.current.onBlocks?.(next.blocks, {
+          index: message.sectionIndex,
+          href: message.section,
+          spine: spine.current,
+        });
+      }
+      // After the Blocks, which the reading cannot do without: keeping the size
+      // for the next open is the app's business, and nothing it does can cost them.
+      if (decided !== null) latest.current.onBodyTextSize?.(decided);
     },
     [send],
   );
@@ -518,7 +569,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    * `setAppearance`, and the two halves are told apart by `installed` above.
    */
   const injectedJavascript = useMemo(
-    () => highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DOCUMENT_APPEARANCE, options.scheme ?? 'light'),
+    () =>
+      highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );

@@ -37,7 +37,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { createLocator, readingPositionAt, type ReadingPosition } from '../core/document';
+import { asDocumentId, createLocator, readingPositionAt, type ReadingPosition } from '../core/document';
 import { hasSavedVoice, inventoryReady, offlineProvider } from '../offline/runtime';
 import type { ProviderId } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
@@ -63,6 +63,7 @@ import {
   type ReportedDocument,
 } from '../renderer';
 
+import { readBodyTextSize, writeBodyTextSize } from './body-text-sizes';
 import { documentLanguage, firstUtteranceOfSection, outOfTextSentence, samePrefix, segmentDocument } from './segment';
 import {
   engineIdentity,
@@ -717,11 +718,28 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     setStatus((was) => ({ ...was, spineHrefs: document.hrefs }));
   }, []);
 
+  /**
+   * The Document's own body text size from an earlier open, which the owner's
+   * Font Size is measured against (ADR 0030). Read once, at mount, because the
+   * bridge bakes it into the program; null makes the program measure it, and
+   * `handleBodyTextSize` keeps the answer for next time.
+   */
+  const [bodyTextSize] = useState(() => {
+    const id = asDocumentId(document);
+    return id ? readBodyTextSize(id) : null;
+  });
+  const handleBodyTextSize = useCallback((px: number) => {
+    const id = asDocumentId(document);
+    if (id) writeBodyTextSize(id, px);
+  }, [document]);
+
   const bridge = useReaderBridge({
     // Fixed at mount, because the program is installed once: the owner's current
     // choice is what a book opens laid out in, and every change after that is a
     // message (`setAppearance`).
     appearance: settings.appearance,
+    bodyTextSize,
+    onBodyTextSize: handleBodyTextSize,
     // Fixed at mount for the same reason, and it buys the same thing: a book
     // opened under a dark theme is dark on the frame it appears rather than
     // flashing white until the first message lands.

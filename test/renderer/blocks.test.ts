@@ -24,6 +24,7 @@ function message(sectionIndex: number, texts: readonly string[]): BlocksMessage 
     sectionIndex,
     section: 'c' + sectionIndex + '.xhtml',
     blocks: texts.map((text, at) => block(sectionIndex + '.' + at, text, sectionIndex)),
+    sizes: null,
   };
 }
 

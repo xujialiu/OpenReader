@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { READING_FONTS, READING_SCALES, type Appearance } from '../renderer/highlighter';
+import { READING_FONTS, stepFontSize, type Appearance } from '../renderer/highlighter';
 import { INK } from './controls';
 import { Icon } from './icon';
 import { Sheet } from './sheet';
@@ -12,24 +12,25 @@ export function AppearanceControls({ appearance, onChange, onFonts }: {
   appearance: Appearance; onChange(next: Appearance): void; onFonts(): void;
 }) {
   const chosen = READING_FONTS.find((font) => font.id === appearance.font)?.label ?? ORIGINAL_FONT;
-  const scales = [...READING_SCALES, 100].sort((a, b) => a - b);
-  const at = scales.indexOf(appearance.scale ?? 100);
+  const step = (direction: 1 | -1) => {
+    const size = stepFontSize(appearance.size, direction);
+    const disabled = size === null;
+    return <Pressable accessibilityRole="button" accessibilityLabel={direction < 0 ? 'Decrease font size' : 'Increase font size'}
+      accessibilityState={{ disabled }} disabled={disabled} style={[styles.step, disabled && { opacity: 0.3 }]}
+      onPress={() => { if (size !== null) onChange({ ...appearance, size }); }}>
+      <Icon name={direction < 0 ? 'minus' : 'plus'} color={INK.text} size={26} />
+    </Pressable>;
+  };
   return <View style={styles.content}>
     <Pressable accessibilityRole="button" accessibilityLabel={`Font, ${chosen}`} onPress={onFonts} style={styles.row}>
       <Text style={styles.label}>Font</Text>
       <View style={styles.value}><Text style={styles.detail} numberOfLines={1}>{chosen}</Text><Icon name="next" color={INK.quiet} size={18} /></View>
     </Pressable>
+    {/* The size itself between the two buttons: a number, which is the one thing
+        about it the page behind cannot show — how far a tap moved it (#17). */}
     <View style={styles.row}><Text style={styles.label}>Font Size</Text><View style={styles.stepper}>
-      {[-1, 1].map((direction) => { const disabled = at + direction < 0 || at + direction >= scales.length;
-        return <Pressable key={direction} accessibilityRole="button" accessibilityLabel={direction < 0 ? 'Decrease font size' : 'Increase font size'}
-          accessibilityState={{ disabled }} disabled={disabled} style={[styles.step, disabled && { opacity: 0.3 }]}
-          onPress={() => { const size = scales[at + direction]; onChange({ ...appearance, scale: size === 100 ? null : size as Appearance['scale'] }); }}>
-          <Icon name={direction < 0 ? 'minus' : 'plus'} color={INK.text} size={26} />
-        </Pressable>; })}
+      {step(-1)}<Text style={styles.size}>{appearance.size}</Text>{step(1)}
     </View></View>
-    <Pressable accessibilityRole="button" onPress={() => onChange({ font: null, scale: null })} style={styles.reset}>
-      <Text style={styles.secondary}>Use document appearance</Text>
-    </Pressable>
   </View>;
 }
 
@@ -81,8 +82,7 @@ const styles = StyleSheet.create({
   fontRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: 12, paddingHorizontal: 20, borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth },
   fontChoice: { color: INK.text, fontSize: 17, flexShrink: 1 },
-  stepper: { flexDirection: 'row', backgroundColor: INK.line, borderRadius: 30 },
+  stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: INK.line, borderRadius: 30 },
   step: { width: 62, height: 44, alignItems: 'center', justifyContent: 'center' },
-  reset: { paddingVertical: 14 },
-  secondary: { color: INK.quiet, fontSize: 14 },
+  size: { color: INK.text, fontSize: 16, fontVariant: ['tabular-nums'], minWidth: 24, textAlign: 'center' },
 });

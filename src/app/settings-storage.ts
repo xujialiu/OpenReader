@@ -1,6 +1,6 @@
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
-import { READING_FONTS, type ReadingFont } from '../renderer/highlighter';
+import { FONT_SIZES, READING_FONTS, type FontSize, type ReadingFont } from '../renderer/highlighter';
 import { DEFAULT_SETTINGS, isProviderId, type AppSettings, type DocumentVoice } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
@@ -20,6 +20,15 @@ function readFont(value: unknown): AppSettings['appearance']['font'] {
   if (typeof value !== 'string') return DEFAULT_SETTINGS.appearance.font;
   if (READING_FONTS.some((font) => font.id === value)) return value as ReadingFont;
   return RETIRED_FONTS[value] ?? DEFAULT_SETTINGS.appearance.font;
+}
+
+/**
+ * A size on the ladder, or the default. Nothing is converted: a percentage saved
+ * by the build before ADR 0030 is simply not a size, and the app has not been
+ * released, so the owner starts again at 16 rather than being carried across.
+ */
+function readSize(value: unknown): FontSize {
+  return FONT_SIZES.find((size) => size === value) ?? DEFAULT_SETTINGS.appearance.size;
 }
 
 /** Explicit projection also prevents legacy credential fields from being persisted. */
@@ -56,7 +65,7 @@ export function parseSettings(value: unknown): AppSettings {
     bracketPairs: string(data.bracketPairs, DEFAULT_SETTINGS.bracketPairs),
     appearance: {
       font: readFont(appearance.font),
-      scale: typeof appearance.scale === 'number' && Number.isFinite(appearance.scale) && appearance.scale > 0 ? appearance.scale : DEFAULT_SETTINGS.appearance.scale,
+      size: readSize(appearance.size),
     },
   };
 }

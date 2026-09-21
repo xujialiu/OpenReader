@@ -18,7 +18,7 @@ describe('local settings persistence', () => {
   });
   it('roundtrips enablement, voice history, sources and appearance across reloads', () => {
     const settings = selectVoice({ ...DEFAULT_SETTINGS, enabledProviders: ['fish'],
-      appearance: { font: 'helvetica', scale: 125 }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
+      appearance: { font: 'helvetica', size: 20 }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
     writeSettings(settings);
     expect(readSettings()).toEqual(settings);
   });
@@ -26,6 +26,17 @@ describe('local settings persistence', () => {
     const settings = { ...DEFAULT_SETTINGS, apiKey: 'secret', fish: { ...DEFAULT_SETTINGS.fish, apiKey: 'secret' }, local: { ...DEFAULT_SETTINGS.local, headers: 'secret' } };
     writeSettings(settings);
     expect(disk.get('settings.json')).not.toContain('secret');
+  });
+  it('keeps a Font Size on the ladder and drops anything else, including the percentages of the build before', () => {
+    // The app has not been released, so a percentage saved by the previous build is
+    // not converted: it is dropped and the owner starts at 16 (#17).
+    expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', size: 20 } } }).appearance)
+      .toEqual({ font: 'georgia', size: 20 });
+    expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', scale: 150 } } }).appearance)
+      .toEqual({ font: 'georgia', size: 16 });
+    for (const size of [25, 17.5, '18', 0, -1, null]) {
+      expect(parseSettings({ version: 1, settings: { appearance: { size } } }).appearance.size).toBe(16);
+    }
   });
   it('defaults missing sources to official only and rejects unknown enabled ids', () => {
     expect(parseSettings({ version: 1, settings: { enabledProviders: ['fish', 'other', 'fish'] } })).toMatchObject({

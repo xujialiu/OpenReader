@@ -73,6 +73,7 @@
  * text, offset, span or CFI moves.
  */
 
+import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
 import type { HighlightMessage } from './messages';
 import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from './messages';
 
@@ -159,70 +160,85 @@ export const READING_FONTS = [
 export type ReadingFont = (typeof READING_FONTS)[number]['id'];
 
 /**
+ * The sizes the Font Size row steps through, in CSS pixels of body text: one
+ * pixel at a time from 12 to 24, where people read and a pixel is visible, then
+ * two at a time up to 32, where one pixel is not.
+ */
+export const FONT_SIZES = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 26, 28, 30, 32] as const;
+
+/** One of `FONT_SIZES`. */
+export type FontSize = (typeof FONT_SIZES)[number];
+
+/** The size one tap away, or null where the ladder ends in that direction. */
+export function stepFontSize(size: FontSize, direction: 1 | -1): FontSize | null {
+  return FONT_SIZES[FONT_SIZES.indexOf(size) + direction] ?? null;
+}
+
+/**
  * How the document's text is set: **Appearance** (ADR 0019), which is the sheet
  * over the reader.
  *
- * **Null is "follow the document", and it is the default for both.** A book that
- * ships its own typography keeps it until the owner overrides it — an EPUB's
- * stylesheet is part of what its publisher made, and a reader that silently
- * replaces it has decided something nobody asked it to decide.
+ * **The size is the owner's and never the document's** (ADR 0030, which revises
+ * ADR 0021 here). `size` is how big the body text of *every* Document is shown,
+ * in CSS pixels, so two books typeset differently read at the same size and a
+ * tap on + is always one step of what is on the screen.
  *
- * `scale` is a percentage of what the document asked for rather than a size in
- * points, for the same reason: the owner is saying "bigger than this book set
- * it", not "eighteen points regardless of what it set".
+ * **The font still starts on the document's own.** `null` is "follow the
+ * document", which a book's face keeps until the owner picks one.
  */
 export interface Appearance {
   font: ReadingFont | null;
-  scale: number | null;
+  size: FontSize;
 }
 
-/** Follow the document in both, which is what a Document is read as until the owner says otherwise. */
-export const DOCUMENT_APPEARANCE: Appearance = { font: null, scale: null };
+/** 16px and the Document's own font, which is what a Document is read as until the owner says otherwise. */
+export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 16 };
+
+/** A quarter to four times, whatever the two numbers were: a measurement gone wrong must not make a book unreadable. */
+const MIN_PERCENT = 25;
+const MAX_PERCENT = 400;
 
 /**
- * The percentages the sheet offers, and the bounds `appearanceCss` clamps to.
+ * Appearance as CSS, for a Document whose own body text is `bodyTextSize`
+ * pixels, or `PLAIN_BODY_TEXT_SIZE` while that is not known.
  *
- * There is no 100 in the list: "the size this book chose" is `null`, and a second
- * spelling of it would be a row that looks like a choice and changes nothing —
- * which philosophy rule 6 is about.
- */
-export const READING_SCALES = [75, 90, 110, 125, 150, 175, 200] as const;
-const MIN_SCALE = 50;
-const MAX_SCALE = 400;
-
-/**
- * Appearance as CSS, or the empty string where the document's own typography is
- * being followed.
+ * **The size is one percentage over everything the Document set**, through
+ * `text-size-adjust` rather than `font-size`. Measured on the iOS 27.0 simulator
+ * inside the reader's own section documents (ADR 0030): it multiplies em, rem,
+ * px and keyword sizes alike, so the body text lands on the owner's size and a
+ * heading, a note or a chapter badge keeps its proportion to it. A root
+ * `font-size` reaches only what is sized relative to the root, and a keyword such
+ * as `x-small` is not.
  *
- * Two rules at most, and they are the two the sheet offers. It cannot produce a
- * third: the font is looked up in `READING_FONTS` rather than interpolated, and
- * the size is a number that is clamped — so nothing an owner could type reaches
- * a stylesheet, and in particular **nothing here can declare `user-select`**,
- * which silently stops `::highlight()` from painting (see `SELECTABLE`). That is
- * asserted in `test/renderer/rules.test.ts` rather than left to care.
+ * **On every element, not only the root.** A Document's own
+ * `body { -webkit-text-size-adjust: 100% }` beat a root-only rule and left its
+ * text at its own size; the same value declared on every element is still
+ * applied once, not compounded through nesting. Both spellings, because that is
+ * the pair that was measured.
+ *
+ * It cannot produce a third kind of rule: the font is looked up in
+ * `READING_FONTS` rather than interpolated, and the size is arithmetic on two
+ * numbers — so nothing an owner could type reaches a stylesheet, and in
+ * particular **nothing here can declare `user-select`**, which silently stops
+ * `::highlight()` from painting (see `SELECTABLE`). That is asserted in
+ * `test/renderer/appearance.test.ts` rather than left to care.
  *
  * `!important` because an EPUB's own stylesheet is loaded into the same document
- * and is as entitled to `p { font-family: … }` as this is; the owner's override
- * is the later word and has to win. `html` carries the size and `body` is pinned
- * to the root's rather than scaled again — a percentage resolves against the
- * parent's computed size, so a second percentage would multiply, and a book that
- * sets a size on `body` would otherwise keep it.
- *
- * **What it cannot do, stated rather than discovered:** a book that sets an
- * absolute size on its paragraphs rather than on its body keeps that size, because
- * an inherited root size is not what those paragraphs are reading. Neither of the
- * two books this was measured against does (`notes/NOTES_2026-09-20.md`).
+ * and is as entitled to these properties as this is; the owner's choice is the
+ * later word and has to win.
  */
-export function appearanceCss(appearance: Appearance): string {
-  let css = '';
-  if (appearance.scale !== null && Number.isFinite(appearance.scale)) {
-    const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(appearance.scale)));
-    css += 'html { font-size: ' + scale + '% !important; }\n' + 'body { font-size: 100% !important; }\n';
-  }
+export function appearanceCss(appearance: Appearance, bodyTextSize?: number | null): string {
+  const size = isPixelSize(appearance.size) ? appearance.size : PLAIN_BODY_TEXT_SIZE;
+  const body = isPixelSize(bodyTextSize) ? bodyTextSize : PLAIN_BODY_TEXT_SIZE;
+  const scaled = Math.min(MAX_PERCENT, Math.max(MIN_PERCENT, (size / body) * 100));
+  const percent = String(Math.round(scaled * 10_000) / 10_000) + '%';
+  let css =
+    'html, body, body * { -webkit-text-size-adjust: ' + percent + ' !important; }\n' +
+    'html, body, body * { text-size-adjust: ' + percent + ' !important; }\n';
   const font = READING_FONTS.find((one) => one.id === appearance.font);
   // The descendants too, and not only the two roots: `font-family` inherits, so a
-  // book with `div { font-family: … }` in its own stylesheet — which the owner's
-  // novel has — would keep its own face everywhere the text actually is.
+  // Document that names a face on an element holding its text — a `p`, a `div`, a
+  // `span` — would keep that face wherever it named one.
   if (font) css += 'html, body, body * { font-family: ' + font.stack + ' !important; }\n';
   return css;
 }
@@ -351,8 +367,15 @@ export function highlightCall(message: HighlightMessage): string {
  */
 export function highlighterSource(
   styles: HighlightStyles = DEFAULT_HIGHLIGHT,
-  appearance: Appearance = DOCUMENT_APPEARANCE,
+  appearance: Appearance = DEFAULT_APPEARANCE,
   scheme: ReadingScheme = 'light',
+  /**
+   * The Document's own body text size, when it has been measured before; null
+   * when it has not, which makes the program measure it (ADR 0030). The default
+   * is for a program that lays nothing out for the owner to read — the download
+   * indexer's — and so has nothing to measure for.
+   */
+  bodyTextSize: number | null = PLAIN_BODY_TEXT_SIZE,
 ): string {
   const constants =
     'var WORD = ' + JSON.stringify(WORD_HIGHLIGHT) + ';\n' +
@@ -367,7 +390,16 @@ export function highlighterSource(
        choice is baked in here as well as sent, so a book opened with an override
        already set is laid out that way on its first paint instead of reflowing
        once the message arrives. */
-    'var APPEARANCE = ' + JSON.stringify(appearanceCss(appearance)) + ';\n' +
+    'var APPEARANCE = ' + JSON.stringify(appearanceCss(appearance, bodyTextSize)) + ';\n' +
+    /* Whether each section's characters are still being counted by size, which
+       they are until the bridge has decided the Document's body text size and
+       says so ('measured'). A Document measured on an earlier open starts with
+       the answer baked into APPEARANCE above and is never counted again. */
+    'var MEASURE = ' + String(bodyTextSize === null) + ';\n' +
+    /* Where a section's count stops: at the text node that reaches this many
+       characters. Enough for a page of prose to outvote its headings, and a bound
+       on what a very long section can cost the frame it renders on. */
+    'var COUNT_LIMIT = 5000;\n' +
     /* The other one that changes while the document is open, and baked in for the
        same reason: a book opened under a dark theme is painted dark on its first
        paint rather than flashing white until the message lands. */
@@ -513,6 +545,49 @@ ${constants}
     if (body) visit(body, body);
     close();
     return found;
+  }
+
+  /* This section's characters by the size the **Document** set them in, for the
+     bridge to decide its body text size from (ADR 0030). Reads only: the walk has
+     already found the text nodes, and each costs one computed style of its
+     element, cached per element.
+
+     A computed font size already carries the owner's text-size-adjust — measured:
+     at 150% a paragraph the Document set at 16px reports 24px — so the percentage
+     in effect is divided back out. It is the same on every element, because
+     APPEARANCE declares it on every element. What that division leaves is exact
+     only up to floating point, and body-text.ts, which is tested, rounds it.
+
+     It stops at the text node that reaches COUNT_LIMIT characters, whatever the
+     length of the section: the owner ruled out a stall to measure a book (#17). */
+  function sizesOf(contents, found) {
+    var win = contents.window;
+    var adjust = String(win.getComputedStyle(contents.document.documentElement).getPropertyValue('-webkit-text-size-adjust') || '');
+    var factor = /%$/.test(adjust) ? parseFloat(adjust) / 100 : 1;
+    if (!(factor > 0)) factor = 1;
+    var bySize = new Map();
+    var seen = new Map();
+    var counted = 0;
+    for (var i = 0; i < found.length && counted < COUNT_LIMIT; i++) {
+      var parts = found[i].parts;
+      for (var j = 0; j < parts.length && counted < COUNT_LIMIT; j++) {
+        var element = parts[j].node.parentElement;
+        if (!element) continue;
+        var characters = parts[j].node.data.replace(/\\s+/g, '').length;
+        if (!characters) continue;
+        var px = seen.get(element);
+        if (px === undefined) {
+          px = parseFloat(win.getComputedStyle(element).fontSize) / factor;
+          seen.set(element, px);
+        }
+        if (!(px > 0)) continue;
+        bySize.set(px, (bySize.get(px) || 0) + characters);
+        counted += characters;
+      }
+    }
+    var sizes = [];
+    bySize.forEach(function (count, size) { sizes.push([size, count]); });
+    return sizes;
   }
 
   /* The download indexer runs in its own rendition. It uses this exact walk,
@@ -731,7 +806,7 @@ ${constants}
     }
     maps.set(contents.document, map);
     bySection.set(index, ids);
-    post({ type: BLOCKS, sectionIndex: index, section: href, blocks: reported });
+    post({ type: BLOCKS, sectionIndex: index, section: href, blocks: reported, sizes: MEASURE ? sizesOf(contents, found) : null });
   }
 
   /* The rendered Contents for a section, or null — which is the ordinary "the
@@ -1431,6 +1506,14 @@ ${constants}
       APPEARANCE = typeof message.css === 'string' ? message.css : '';
       restyle();
       settle(SETTLE_FRAMES, null, 0);
+      return;
+    }
+    if (message.kind === 'measured') {
+      /* The bridge has decided the Document's body text size (ADR 0030), so the
+         sections still to render are not counted. Nothing is restyled or
+         re-centred here: the CSS for the decided size, if it differs from what
+         is installed, arrives as an ordinary 'appearance' message. */
+      MEASURE = false;
       return;
     }
     if (message.kind === 'theme') {

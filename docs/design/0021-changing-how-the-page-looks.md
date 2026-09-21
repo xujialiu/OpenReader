@@ -3,6 +3,11 @@
 _The engineering half of this decision is
 [ADR 0021](../adr/0021-appearance-is-one-stylesheet-the-page-already-has.md)._
 
+_[Design 0030](0030-one-size-for-every-document.md) revises the size half of
+this decision: the size is now one size for every Document, chosen by the owner,
+and no longer a proportion of what each Document set. What follows about the font, about
+the sheet rising over the page and about keeping the sentence in view stands._
+
 The reader's header has always had a control on the right for how the page
 looks, and until now it opened onto an admission that there was nothing there
 yet. It now holds two things: which font the book is shown in, and how big the
@@ -54,8 +59,8 @@ The alternative — per book — was turned down because of what it feels like o
 the tenth book: every new book opens at a size the owner has already rejected
 nine times, and there is no way to say "this, always" except by saying it again.
 
-Nothing is remembered when the app is closed, which is true of every setting in
-the app today and is said on the sheet itself rather than left to be discovered.
+The choice is kept on this device when the app is closed, like every other
+setting.
 
 ## Why it rises over the page instead of replacing it
 
