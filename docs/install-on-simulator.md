@@ -175,11 +175,19 @@ Then run the Debug build from the repository root as above. A simulator launch f
 3. Report build, installation, launch, and interaction verification separately. Calling a control handler is not equivalent to testing a physical touch.
 4. Stop playback and leave the latest app open on a convenient page for inspection. For a Debug delivery, also leave the correct Metro process running.
 
-Purely visual checks do not require playback. When audio is needed, turn the
-simulator volume all the way down first, then derive the playback duration from
-the fact the test needs to establish and stop playback immediately after that
-fact is established. Read credentials from the repository's `.secrets/` only as
-needed; do not put them in screenshots, logs, or documentation.
+Purely visual checks do not require playback. When audio is needed, turn that
+simulator's own volume all the way down first — never the Mac's:
+
+```bash
+bash test/manual-test/silence.sh set SIMULATOR_UDID
+```
+
+The device must already be booted, and a boot resets it to 60, so set it after
+the boot and before launching the app; an app that is already playing keeps the
+volume it started with. Then derive the playback duration from the fact the test
+needs to establish and stop playback immediately after that fact is established.
+Read credentials from the repository's `.secrets/` only as needed; do not put
+them in screenshots, logs, or documentation.
 
 ### No usable simulator window
 

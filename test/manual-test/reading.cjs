@@ -2,13 +2,14 @@
 // Targeted React handler probe, NOT a physical touch test. Reports no credentials.
 const WebSocket = require('ws');
 const { execFileSync } = require('node:child_process');
-const [action, duration] = process.argv.slice(2);
+const [action, duration, device = process.env.SIMULATOR_UDID] = process.argv.slice(2);
 const milliseconds = Number(duration) * 1000;
 if (!['state', 'pause', 'play-for'].includes(action) || (action === 'play-for' && (!Number.isFinite(milliseconds) || milliseconds <= 0 || milliseconds > 10000))) {
-  console.error('Usage: reading.cjs state|pause | play-for SECONDS (0 < seconds <= 10)'); process.exit(2);
+  console.error('Usage: reading.cjs state|pause | play-for SECONDS [SIMULATOR_UDID] (0 < seconds <= 10)'); process.exit(2);
 }
-if (action === 'play-for' && execFileSync('osascript', ['-e', 'output volume of (get volume settings)'], { encoding: 'utf8' }).trim() !== '0') {
-  console.error('Mute the simulator and machine output before playback'); process.exit(2);
+// The simulator's own volume, not the Mac's.
+if (action === 'play-for') {
+  try { execFileSync('bash', [require.resolve('./silence.sh'), 'check', ...(device ? [device] : [])], { stdio: 'inherit' }); } catch { process.exit(2); }
 }
 (async () => {
   const targets = (await fetch('http://127.0.0.1:8081/json/list').then(r => r.json())).filter(p => p.appId === 'top.xujialiu.openreader');

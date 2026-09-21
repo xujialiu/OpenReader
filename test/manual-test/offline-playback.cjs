@@ -6,7 +6,9 @@ const { execFileSync, execFile } = require('node:child_process');
 const { mkdtempSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
-if (execFileSync('osascript', ['-e', 'output volume of (get volume settings)'], { encoding: 'utf8' }).trim() !== '0') throw Error('Mute host output first');
+// The simulator's own volume, not the Mac's. Its UDID may be omitted only when one simulator is booted.
+const device = process.argv[2] || process.env.SIMULATOR_UDID;
+try { execFileSync('bash', [require.resolve('./silence.sh'), 'check', ...(device ? [device] : [])], { stdio: 'inherit' }); } catch { process.exit(2); }
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Overridable so a worktree whose Library was seeded with a differently-built
 // copy of the fixture (a different manifest digest, same title/chapters) can

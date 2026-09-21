@@ -5,7 +5,8 @@ const WebSocket = require('ws');
 const { execFileSync, execFile } = require('node:child_process');
 const [device, output, mode] = process.argv.slice(2);
 if (!device || !output) throw new Error('Usage: voice-playback.cjs SIMULATOR_UDID EXISTING_ARTIFACT_DIR');
-if (execFileSync('osascript', ['-e', 'output volume of (get volume settings)'], { encoding: 'utf8' }).trim() !== '0') throw new Error('Mute machine and simulator before testing');
+// That device's own volume, not the Mac's.
+try { execFileSync('bash', [require.resolve('./silence.sh'), 'check', device], { stdio: 'inherit' }); } catch { process.exit(2); }
 
 const fixture = probeMode => {
   function props(name) {

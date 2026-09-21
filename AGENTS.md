@@ -215,6 +215,13 @@ Turn the simulator's volume all the way down **before** the first `play`, not
 after someone hears it. The simulator plays through the machine's own speakers,
 and this work happens at every hour.
 
+The simulator's volume, not the Mac's: `bash test/manual-test/silence.sh set
+SIMULATOR_UDID` sets that one device to zero and reads it back. **Never mute the
+machine.** The owner is listening to it while the test runs, and a machine that
+is muted for a test stays muted afterwards. A boot puts the device back to 60, so
+set it after every boot and before launching the app, and the kit's scripts check
+it before every `play`.
+
 ## Play only while measuring, then stop
 
 Stop playback the moment the thing being tested is established. Never leave a
