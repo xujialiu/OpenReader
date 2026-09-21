@@ -88,8 +88,8 @@ export interface ClipFetcherDeps {
   /** Injected so a test can watch the abort; `AbortController` is a global on Hermes. */
   newAbortController?(): AbortController;
   /**
-   * Whether an Utterance wrapped entirely in brackets is spoken with them, and
-   * which pairs count: the **Speech Text** (CONTEXT.md, ADR 0028).
+   * Whether an Utterance's brackets are spoken, and which pairs count: the
+   * **Speech Text** (CONTEXT.md, ADR 0028).
    *
    * Optional, and absent means off, because every caller that does not care
    * about brackets — and most tests — should not have to say so.

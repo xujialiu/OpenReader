@@ -240,18 +240,49 @@ export class OfflineRepository {
   async chapter(document: string, id: string) {
     return this.catalog.chapter(documentKey(document), id);
   }
-  async saveSection(document: string, section: number, chapters: Chapter[]) {
+  /**
+   * A chapter's texts are the Utterances' own; its membership keys name the
+   * Speech Text each one is saved under, which is what `keyOf` computes (#25).
+   * Left out, a text is its own Speech Text.
+   */
+  async saveSection(document: string, section: number, chapters: Chapter[], keyOf: (text: string) => string = audioKey) {
     const prepared: PreparedChapter[] = [];
     for (const chapter of chapters) {
       const keys: string[] = [];
       for (let i = 0; i < chapter.texts.length; i++) {
-        keys.push(audioKey(chapter.texts[i]));
+        keys.push(keyOf(chapter.texts[i]));
         if (i % 128 === 127)
           await new Promise((resolve) => setTimeout(resolve, 0));
       }
       prepared.push({ ...chapter, keys });
     }
     await this.catalog.saveSection(documentKey(document), section, prepared);
+  }
+  /**
+   * Every prepared chapter's membership keys computed again from its stored
+   * texts, and the setting they now answer to recorded (#25).
+   *
+   * Run when the bracket setting differs from the one the keys were computed
+   * under. It is design 0028's promise kept: after a change a downloaded
+   * chapter needs downloading again, because its sentences are now named by
+   * their new Speech Text, and switching back makes the old audio count again
+   * without a byte of it having moved. One chapter per transaction, so a book
+   * of two thousand chapters does not hold the store for the whole walk; an
+   * interrupted walk leaves the old record, and the next start walks again.
+   */
+  async rekey(keyOf: (text: string) => string, keying: string) {
+    for (const { document, id } of await this.catalog.preparedChapters()) {
+      const chapter = await this.catalog.chapter(document, id);
+      if (!chapter) continue;
+      const keys: string[] = [];
+      for (let i = 0; i < chapter.texts.length; i++) {
+        keys.push(keyOf(chapter.texts[i]));
+        if (i % 128 === 127)
+          await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      await this.catalog.rekeyChapter(document, id, keys);
+    }
+    await this.catalog.recordSpeechKeying(keying);
   }
   async progress(document: string, voice: OfflineVoice) {
     return this.catalog.progress(documentKey(document), voiceKey(voice));

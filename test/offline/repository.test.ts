@@ -9,6 +9,7 @@ import {
   voiceKey,
 } from "../../src/offline/catalog-keys";
 import { testCatalog } from "./sqlite";
+import { downloadSpeech } from "../../src/offline/speech";
 import type { StoredAudio } from "../../src/offline/catalog";
 const voice = { provider: "fish" as const, voice: "A", label: "A" };
 
@@ -210,6 +211,45 @@ it("hides selected chapters first, then removes their files and their rows in on
     expect(counts.transactions).toBe(3);
     expect(await catalog.pendingDeletes()).toEqual([]);
     expect(await repository.inventory("book")).toEqual([]);
+  } finally {
+    close();
+  }
+});
+
+it("names a chapter's sentences by their Speech Text, and re-keys them when the bracket setting changes (#25)", async () => {
+  const { catalog, close } = testCatalog();
+  await catalog.initialize();
+  const { files } = countingFiles();
+  try {
+    const repository = new OfflineRepository(catalog, files);
+    await repository.savePlan("book", {
+      version: 2,
+      sections: [{ href: "0", path: "0" }],
+      preparedSections: [],
+      chapters: [
+        { id: "one", title: "One", depth: 0, parent: null, section: 0, prepared: false, texts: [] },
+      ],
+    });
+    const texts = ["He cast [Fireball] at the wolf.", "Plain."];
+    const strip = { stripBrackets: true, bracketPairs: "<> []" };
+    const stripped = (t: string) => audioKey(downloadSpeech(t, strip));
+    await repository.saveSection("book", 0, [{ id: "one", title: "One", depth: 0, parent: null, texts }], stripped);
+    // Saved the way reading will ask for it: under the Speech Text.
+    for (const t of texts)
+      await repository.saveClip("book", voice, downloadSpeech(t, strip), { audio: "encoded", bytes: new Uint8Array([1]), mediaType: "audio/mp4" }, () => true);
+    expect((await repository.progress("book", voice))[0]).toMatchObject({ count: 2, complete: true });
+
+    // Switched off: the bracketed sentence is now named by its own text, which
+    // nothing was saved under, so the chapter needs downloading again.
+    await repository.rekey((t) => audioKey(t), '[false]');
+    expect((await repository.progress("book", voice))[0]).toMatchObject({ count: 1, complete: false });
+    expect(await catalog.speechKeying()).toBe('[false]');
+    // The texts themselves are untouched.
+    expect((await repository.chapter("book", "one"))?.texts).toEqual(texts);
+
+    // Switched back: the old audio counts again without being touched.
+    await repository.rekey(stripped, '[true,"<> []"]');
+    expect((await repository.progress("book", voice))[0]).toMatchObject({ count: 2, complete: true });
   } finally {
     close();
   }

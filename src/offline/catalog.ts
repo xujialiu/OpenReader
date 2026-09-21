@@ -346,6 +346,55 @@ export class OfflineCatalog {
       );
     });
   }
+  /**
+   * The bracket setting the membership keys were computed under (#25), or null
+   * for a catalogue that never recorded one. A membership key names the Speech
+   * Text a chapter's utterance is saved under, so it is only right for the
+   * setting it was computed with.
+   */
+  async speechKeying(): Promise<string | null> {
+    const [row] = await this.db.getAllAsync<{ value: string }>(
+      "SELECT value FROM state WHERE name='speech'",
+    );
+    return row?.value ?? null;
+  }
+  async recordSpeechKeying(value: string) {
+    await this.write(async (tx) => {
+      await tx.runAsync(
+        "INSERT INTO state VALUES('speech',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+        value,
+      );
+    });
+  }
+  /** Every chapter whose text has been prepared, across documents: what re-keying walks. */
+  async preparedChapters(): Promise<{ document: string; id: string }[]> {
+    return this.db.getAllAsync<{ document: string; id: string }>(
+      "SELECT document,id FROM chapters WHERE prepared=1 ORDER BY document,ordinal",
+    );
+  }
+  /** One chapter's membership keys replaced, its texts and everything else untouched. */
+  async rekeyChapter(document: string, chapter: string, keys: string[]) {
+    await this.write(async (tx) => {
+      const [row] = await tx.getAllAsync<{ text_count: number }>(
+        "SELECT text_count FROM chapters WHERE document=? AND id=?",
+        document,
+        chapter,
+      );
+      if (!row || row.text_count !== keys.length)
+        throw new Error("Every prepared text must have one membership key.");
+      await tx.runAsync(
+        "DELETE FROM memberships WHERE document=? AND chapter=?",
+        document,
+        chapter,
+      );
+      await tx.runAsync(
+        "INSERT INTO memberships SELECT ?,?,CAST(key AS INTEGER),value FROM json_each(?)",
+        document,
+        chapter,
+        JSON.stringify(keys),
+      );
+    });
+  }
   async removeDocument(document: string) {
     await this.write(async (tx) => {
       await tx.runAsync(

@@ -29,3 +29,38 @@ The audio of the old answer is not thrown away either. Switching back makes it p
 **Keeping the old audio and adjusting it.** This would avoid re-downloading anything. It was turned down because it requires the app to work out, every time it plays a saved passage, which answer that passage was saved under — and if it ever gets that wrong, nothing announces it. The highlight simply sits on the wrong word. Paying to download a chapter again is a cost the owner can see and decide about; a highlight quietly landing one word out is not.
 
 **Deleting the old audio when the setting changes, or refusing to change the setting until the downloads are cleared.** Both keep the device tidy. Both were turned down for the same reason: they spend the owner's downloads to tidy up after a switch that is flipped once, and the second makes a setting refuse to change because of something that has nothing to do with it.
+
+## Brackets inside a sentence (2026-09-22)
+
+_Revised by #25. The part above about the list, the lock and what a change
+costs stands; the rule for which brackets go does not._
+
+**What changed.** Brackets now go wherever they wrap words in a sentence, not
+only when the whole passage is brackets: "He cast [Fireball] at the wolf." is
+read as "He cast Fireball at the wolf." Brackets inside brackets all go. A
+bracket with no partner stays as written.
+
+**Why the old rule turned round.** It was written for a voice that reads a
+bracket out loud, where leaving one in costs a little noise and taking one out
+risks a word. Fish Audio does the opposite with square brackets: it takes what
+is inside them for an instruction and says none of it. "He cast [Fireball] at
+the wolf." was heard as "He cast at the wolf." So, by the old rule's own
+reasoning, leaving the brackets in was now the way words were lost.
+
+**One exception, the desktop's.** Angle brackets used as "less than" and
+"greater than" stay: when both signs of a pair stand between spaces, between
+letters or digits, next to an equals sign, or form an arrow, the pair is read as
+a comparison and left alone. The owner chose this over removing every pair, so
+that "if x < 5 and y > 3" keeps its meaning for the voices that read signs. The
+desktop reads the same way, so the same book sounds the same on both.
+
+**It also works now.** Until this change the setting never actually reached the
+reading: switching it on changed nothing that was spoken. Downloads now use the
+same form of each sentence that reading does, so a downloaded sentence with
+brackets plays from the download instead of being fetched again.
+
+**What it costs.** A few unusual texts read differently: a type name such as
+"List<String>" loses its brackets; a pair of signs that are both spaced, as in
+"You have < 2/50 HP > left.", stays even when it was meant as brackets; and a
+reference number in square brackets becomes audible on Fish, as it already was
+on the other voices.

@@ -147,8 +147,9 @@ export interface AppSettings {
    */
   theme: ThemeSetting;
   /**
-   * Whether a group of text wrapped entirely in brackets is spoken with its
-   * brackets: the **Speech Text** (CONTEXT.md), and ADR 0028.
+   * Whether the brackets around text are spoken with it — wherever they stand
+   * in a sentence since #25 — which is the **Speech Text** (CONTEXT.md), and
+   * ADR 0028.
    *
    * On by default, which is the one default here that is not a guess: a voice
    * reading `<Log in>` as its punctuation is unlistenable, and an owner who
@@ -537,5 +538,9 @@ export function providerSettings(settings: AppSettings, secrets: ProviderSecrets
 export function engineIdentity(settings: AppSettings): string {
   const config = settings.provider === 'local' ? settings.local : settings.provider === 'compatible' ? settings.compatible :
     settings.provider === 'openai-official' ? settings.openai : settings.provider === 'fish' ? settings.fish : null;
-  return JSON.stringify([settings.provider, settings.enabledProviders.includes(settings.provider), settings.voice, config]);
+  // The bracket setting decides the Speech Text, so it is part of what is
+  // spoken: a change rebuilds the engine instead of mixing the two forms in
+  // one reading (#25).
+  return JSON.stringify([settings.provider, settings.enabledProviders.includes(settings.provider), settings.voice, config,
+    settings.stripBrackets, settings.bracketPairs]);
 }

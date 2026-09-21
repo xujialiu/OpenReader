@@ -121,6 +121,13 @@ export interface PlaybackEngineDeps {
    */
   outputLatencySeconds?: number;
   synthesisTimeoutMs?: number;
+  /**
+   * The owner's bracket setting, for both of the engine's clip fetchers: the
+   * reading one and a voice switch's (ADR 0028). It used to reach neither —
+   * `clips.ts` could strip, and nothing handed it the setting, so every bracket
+   * went to the Provider as written (#25).
+   */
+  brackets?: { strip: boolean; pairs: string };
 }
 
 /** Enough to draw a player and to tell a stall from a pause, which is the question a device session asks. */
@@ -181,6 +188,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     voice: deps.voice,
     cache,
     timeoutMs: deps.synthesisTimeoutMs,
+    brackets: deps.brackets,
   });
   const timeline = createTimeline();
 
@@ -652,7 +660,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
     switchVoice(provider, voice, selected, failed) {
       cancelVoiceSwitch();
-      const target: PendingSwitch = { id: ++switchSerial, fetcher: createClipFetcher({ provider, voice, cache, timeoutMs: deps.synthesisTimeoutMs }),
+      const target: PendingSwitch = { id: ++switchSerial, fetcher: createClipFetcher({ provider, voice, cache, timeoutMs: deps.synthesisTimeoutMs, brackets: deps.brackets }),
         ready: new Map(), fetching: new Set(), selected, failed, armed: null, deadline: null };
       pending = target;
       // A slow target must not chase a fast reading forever. Pausing still keeps

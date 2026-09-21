@@ -9,9 +9,10 @@
  * it reaches the Library and these Settings screens as much as it reaches the
  * page.
  *
- * And whether an Utterance wrapped entirely in brackets is spoken with them
- * (ADR 0028), which is app-wide for the same reason: it is true of every Voice
- * and every Document, so it is not a property of the book being read.
+ * And whether an Utterance's brackets are spoken with it (ADR 0028, and #25
+ * for wherever they stand), which is app-wide for the same reason: it is true
+ * of every Voice and every Document, so it is not a property of the book being
+ * read.
  *
  * What is still not here is the text size. That is in Appearance, over the book,
  * because it is judged by looking at the book while it changes.

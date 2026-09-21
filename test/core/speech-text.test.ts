@@ -31,10 +31,14 @@ describe('configurable bracket pairs', () => {
     ['<Hello> [World]', '<> []', 'Hello World'],
     ['[Hello]', '<>', '[Hello]'],
     ['【Hello】 (World)!', '() 【】', 'Hello World!'],
-    ['<[Hello]> [<World>]', '<> []', '[Hello] <World>'],
-    ['<Hello> and [World]', '<> []', '<Hello> and [World]'],
-    ['<Hello> [World', '<> []', '<Hello> [World'],
-    ['<[Hello>]', '<> []', '<[Hello>]'],
+    // Every layer goes (#25): a nested group is still brackets around words.
+    ['<[Hello]> [<World>]', '<> []', 'Hello World'],
+    // Wherever the pair stands, not only when the whole text is brackets (#25).
+    ['<Hello> and [World]', '<> []', 'Hello and World'],
+    // A bracket without its partner stays as written.
+    ['<Hello> [World', '<> []', 'Hello [World'],
+    // Pairs that cross resolve, because each type is matched on its own.
+    ['<[Hello>]', '<> []', 'Hello'],
     ['<a < b>', '<> []', 'a < b'],
     ['😀Hello😁 [World]', '😀😁 []', 'Hello World'],
   ])('prepares %s', (input, pairs, expected) => {
@@ -60,16 +64,19 @@ describe('angle brackets at the speech boundary', () => {
     ['<A><B>', 'AB'],
     ['“<A>”, <B>!', '“A”, B!'],
     [' <A>\n<B> ', ' A\nB '],
-    ['<<A>> <B>', '<A> B'],
-    ['<<A> <B>>', '<A> <B>'],
-    ['<a < b> <C>', '<a < b> <C>'],
+    ['<<A>> <B>', 'A B'],
+    ['<<A> <B>>', 'A B'],
+    // The spaced `<` reads as a sign, so the plain `>` takes the plain `<` in
+    // front of it: #94's wrapper around a comparison, then a group of its own.
+    ['<a < b> <C>', 'a < b C'],
+    // Both signs read as math, so the pair stays (xujialiu/Zotero-TTS#127).
     ['a < b > c', 'a < b > c'],
-    ['<A> and <B>', '<A> and <B>'],
-    ['<A> <B', '<A> <B'],
-    ['A> <B>', 'A> <B>'],
-    ['<A>> <B>', '<A>> <B>'],
-    ['<A> <B>>', '<A> <B>>'],
-    ['<a < b> <', '<a < b> <'],
+    ['<A> and <B>', 'A and B'],
+    ['<A> <B', 'A <B'],
+    ['A> <B>', 'A> B'],
+    ['<A>> <B>', 'A> B'],
+    ['<A> <B>>', 'A B>'],
+    ['<a < b> <', 'a < b <'],
   ])('handles bracket groups in %s', (input, expected) => {
     expect(prepareSpeechText(input, true).text).toBe(expected);
     expect(prepareSpeechText(input, false)).toEqual({ text: input, removed: [] });
@@ -77,7 +84,7 @@ describe('angle brackets at the speech boundary', () => {
 
   it.each([
     ['<Hello world.>', 'Hello world.'],
-    ['<<Hello>>', '<Hello>'],
+    ['<<Hello>>', 'Hello'],
     ['<a < b>', 'a < b'],
     ['Hello < world', 'Hello < world'],
     ['<Hello', '<Hello'],
@@ -85,7 +92,7 @@ describe('angle brackets at the speech boundary', () => {
     ['<Hello>.', 'Hello.'],
     [' <Hello> ', ' Hello '],
     ['“<Hello>!”', '“Hello!”'],
-    ['Hello <world>.', 'Hello <world>.'],
+    ['Hello <world>.', 'Hello world.'],
     // Fullwidth angle brackets are not in the list, so they are spoken
     ['＜Hello＞', '＜Hello＞'],
   ])('prepares %s as %s', (text, expected) => {
@@ -135,5 +142,66 @@ describe('angle brackets at the speech boundary', () => {
     const mapped = restoreSpeechOffsets(words, prepared.removed);
     expect(mapped.map((t) => source.slice(t.charStart, t.charEnd))).toEqual(['“', 'Hello', '!”']);
     expect(mapped.map((t) => [t.start, t.end])).toEqual(words.map((t) => [t.start, t.end]));
+  });
+});
+
+/**
+ * #25: a pair goes wherever it encloses text. Fish Audio takes `[…]` for an
+ * instruction and says none of it, so a sentence that kept its brackets lost
+ * its words (notes/NOTES_2026-09-22.md, 00:08).
+ */
+describe('brackets inside a sentence', () => {
+  it.each([
+    ['He cast [Fireball] at the wolf.', 'He cast Fireball at the wolf.'],
+    ['[Level Up] You gained 100 exp.', 'Level Up You gained 100 exp.'],
+    ['You gained 100 exp. [Level Up]', 'You gained 100 exp. Level Up'],
+    ['You gained < 100 exp> today.', 'You gained  100 exp today.'],
+    ['[Skill: Fireball] [Level 2]', 'Skill: Fireball Level 2'],
+    ['a [b [c] d] e', 'a b c d e'],
+    ['[a <b] c>', 'a b c'],
+    // Unpartnered brackets stay: removing a lone sign would change what it says.
+    ['x < 5', 'x < 5'],
+    // `<>` whose two signs both read as math stays, the plugin's rule
+    // (xujialiu/Zotero-TTS#127): spaced, between letters or digits, touching
+    // `=`, or `->`. Fish does not voice either sign even here (measured).
+    ['If x < 5 and y > 3, stop.', 'If x < 5 and y > 3, stop.'],
+    ['x <= 5 and y >= 3', 'x <= 5 and y >= 3'],
+    ['p<0.05 and q>0.1', 'p<0.05 and q>0.1'],
+    ['aged < 65 years and BMI > 30', 'aged < 65 years and BMI > 30'],
+    ['<a -> b>', 'a -> b'],
+    ['<Warning: HP < 10%>', 'Warning: HP < 10%'],
+    // The misreads the plugin accepted with the rule, pinned so they are chosen
+    // rather than discovered: both signs spaced stay, and a generic loses its.
+    ['You have < 2/50 HP > left.', 'You have < 2/50 HP > left.'],
+    ['List<String>', 'ListString'],
+    ['P<.001 and Q>.05', 'P.001 and Q.05'],
+    // Every layer of a nested group goes; Fish would swallow the inner one.
+    ['[Skill: [Fireball]] now', 'Skill: Fireball now'],
+    // A citation becomes audible under Fish, as it already is under the others.
+    ['as shown [12].', 'as shown 12.'],
+    ['Section 3] continues', 'Section 3] continues'],
+    ['He said [sic', 'He said [sic'],
+  ])('prepares %s as %s', (input, expected) => {
+    expect(prepareSpeechText(input, true).text).toBe(expected);
+    expect(prepareSpeechText(input, false).text).toBe(input);
+  });
+
+  it('leaves the text alone when the list makes a character in it ambiguous', () => {
+    // `<` opens two pairs, so which one a `<` belongs to would be a guess.
+    expect(prepareSpeechText('[a] <b)', true, '<> <) []').text).toBe('[a] <b)');
+    // `>` closes one pair and opens another.
+    expect(prepareSpeechText('[a] <b>', true, '<> >] []').text).toBe('[a] <b>');
+    // A text without the ambiguous character is prepared as usual.
+    expect(prepareSpeechText('[a] b', true, '<> <) []').text).toBe('a b');
+  });
+
+  it('maps a provider’s words back across brackets in the middle of the sentence', () => {
+    const source = 'He cast [Fireball] at the wolf.';
+    const prepared = prepareSpeechText(source, true);
+    expect(prepared.removed).toEqual([8, 17]);
+    const speech = prepared.text;
+    const at = (word: string) => ({ start: 0, end: 1, charStart: speech.indexOf(word), charEnd: speech.indexOf(word) + word.length });
+    const mapped = restoreSpeechOffsets([at('cast'), at('Fireball'), at('wolf')], prepared.removed);
+    expect(mapped.map((t) => source.slice(t.charStart, t.charEnd))).toEqual(['cast', 'Fireball', 'wolf']);
   });
 });

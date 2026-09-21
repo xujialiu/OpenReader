@@ -951,6 +951,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       },
       onOutOfText: ranOutOfText,
       rate: settings.rate,
+      brackets: { strip: settings.stripBrackets, pairs: settings.bracketPairs },
     });
     engineRef.current = engine;
     // Where the reading has been pointed, not the top of the document: a word tapped

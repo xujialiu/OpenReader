@@ -41,7 +41,8 @@ import {
 } from "./model";
 import { createScheduler } from "./scheduler";
 import { offlineRepository } from "./database";
-import { voiceKey } from "./catalog-keys";
+import { audioKey, voiceKey } from "./catalog-keys";
+import { downloadSpeech, speechKeying } from "./speech";
 import type { ChapterProgress, VoiceInventory } from "./catalog";
 
 let revision = 0;
@@ -410,8 +411,14 @@ const scheduler = createScheduler({
   connected: () => online,
   allowed: () => loaded && !storeError && !playing && (foreground || !expired),
   changed: persist,
+  // The texts a chapter holds are the Utterances' own; what is checked, spoken
+  // and saved is their Speech Text, as reading asks for it (#25).
   exists: async (task, text) =>
-    (await offlineRepository()).hasClip(task.document, task.voice, text),
+    (await offlineRepository()).hasClip(
+      task.document,
+      task.voice,
+      downloadSpeech(text, settings),
+    ),
   load: async (task, chapter) => {
     const loaded = await (
       await offlineRepository()
@@ -465,7 +472,8 @@ const scheduler = createScheduler({
       chapter,
     ]);
     const epoch = deletionEpochs.get(key) ?? 0;
-    const clip = await synthesize(task.document, task.voice, text, settings);
+    const speech = downloadSpeech(text, settings);
+    const clip = await synthesize(task.document, task.voice, speech, settings);
     // A paused task can keep its paid in-flight result; a removed chapter cannot.
     const wanted = () =>
       tasks.includes(task) &&
@@ -475,7 +483,7 @@ const scheduler = createScheduler({
     if (
       !(await (
         await offlineRepository()
-      ).saveClip(task.document, task.voice, text, clip, wanted))
+      ).saveClip(task.document, task.voice, speech, clip, wanted))
     )
       return;
     await refresh(task.document);
@@ -499,7 +507,34 @@ const kick = () => {
     });
 };
 export function configureDownloads(next: AppSettings): void {
+  const rekey = !!settings && speechKeying(settings) !== speechKeying(next);
   settings = next;
+  if (rekey) void ensureSpeechKeys();
+}
+let keying: Promise<void> = Promise.resolve();
+/**
+ * A chapter's membership keys name its sentences' Speech Text, so they answer
+ * to the bracket setting they were computed under. When that is not the current
+ * one — recorded as something else, or never recorded — they are computed again
+ * from the stored texts (#25, design 0028). Chained, so two changes in a row
+ * walk in order rather than at once; `force` is for a section saved while the
+ * setting changed under it.
+ */
+function ensureSpeechKeys(force = false): Promise<void> {
+  keying = keying
+    .then(async () => {
+      if (!settings) return;
+      const current = settings;
+      const repository = await offlineRepository();
+      const wanted = speechKeying(current);
+      if (!force && (await repository.catalog.speechKeying()) === wanted) return;
+      await repository.rekey((text) => audioKey(downloadSpeech(text, current)), wanted);
+      for (const item of progressVoices.values())
+        requestProgress(item.document, item.voice);
+      emit();
+    })
+    .catch(reportStore);
+  return keying;
 }
 export function startDownloads(): () => void {
   if (!loaded && !starting) {
@@ -515,6 +550,9 @@ export function startDownloads(): () => void {
           task.state = "queued";
       loaded = true;
       await persist();
+      // Before the first run, so the scheduler never trusts keys computed under
+      // a setting the owner has since changed.
+      await ensureSpeechKeys();
       kick();
     })();
     void starting.catch(reportStore).finally(() => {
@@ -734,7 +772,11 @@ export function finishPreparation(token: number, chapters: Chapter[]): void {
     try {
       const repository = await offlineRepository();
       if (preparation !== request) return;
-      await repository.saveSection(request.document, request.section, chapters);
+      const current = settings;
+      await repository.saveSection(request.document, request.section, chapters, (text) =>
+        audioKey(downloadSpeech(text, current)),
+      );
+      if (speechKeying(settings) !== speechKeying(current)) void ensureSpeechKeys(true);
       const plan = await repository.plan(request.document);
       if (preparation !== request) return;
       if (plan) plans.set(request.document, plan);
