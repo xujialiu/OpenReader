@@ -4,7 +4,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 # GitHub workflow — issue first
 
-Use `gh` for `xujialiu/openreader`. Every change starts with an issue,
+Use `gh` for `xujialiu/OpenReader`. Every change starts with an issue,
 including bugs, features, documentation and housekeeping. The owner's standing
 instruction authorizes creating issues and posting work comments as part of
 the task; no separate permission is needed each time.
@@ -33,7 +33,7 @@ separate blocks with blank lines, because GitHub renders single newlines.
 
 The GitHub label names, colors and descriptions mirror
 `xujialiu/Zotero-TTS`. Inspect them with `gh label list`; when synchronizing,
-use `gh label clone xujialiu/Zotero-TTS --repo xujialiu/openreader --force`.
+use `gh label clone xujialiu/Zotero-TTS --repo xujialiu/OpenReader --force`.
 
 For everyday work, choose one category:
 
