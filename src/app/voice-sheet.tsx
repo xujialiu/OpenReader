@@ -84,12 +84,15 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
   const open = locale ?? inUse ?? levels[0]?.locale ?? null;
 
   /**
-   * Opening the sheet asks the Provider in use for its Voices, if it has not been
-   * asked this session.
+   * Opening the sheet asks the Provider in use for its Voices, if its list is not
+   * already held.
    *
-   * The one fetch that is not a tap, and it is the owner's own act: they opened the
-   * Voice list, which is a request to see the Voices. Nothing is fetched for the
-   * four Providers they are not looking at.
+   * Usually it is: every enabled Provider is asked when the app starts (#24),
+   * because waiting on the first tap of every fresh start was the price of the
+   * old rule, that nothing was fetched before the owner opened this list. What
+   * is left here is the Provider whose start-up listing failed, or is still out
+   * — `ask` joins that request rather than sending another — and a Provider
+   * enabled since the start.
    */
   const askRef = useRef(lists);
   useEffect(() => {
@@ -151,7 +154,7 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
               ))}
             </View>
 
-            {lists.asking === looking ? <Note>Asking {PROVIDER_LABELS[looking]} for its Voices…</Note> : null}
+            {lists.asking(looking) ? <Note>Asking {PROVIDER_LABELS[looking]} for its Voices…</Note> : null}
 
             {levels.length > 0 ? (
               <ScrollView

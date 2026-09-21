@@ -11,7 +11,7 @@ const listeners = new Set<() => void>();
 const file = () => new File(Paths.document, 'voice-names.json');
 
 // A self-hosted server's ids are only meaningful at that server.
-function scope(settings: AppSettings, provider: ProviderId): string {
+export function scope(settings: AppSettings, provider: ProviderId): string {
   if (provider === 'fish') return JSON.stringify([provider, settings.fish]);
   return JSON.stringify([provider, provider === 'compatible' ? settings.compatible.baseURL.trim() :
     provider === 'local' ? `${settings.local.engine}:${settings.local.baseURL.trim()}` : '']);

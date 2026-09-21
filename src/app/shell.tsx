@@ -52,6 +52,7 @@ import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
 import { SyncScreen } from './sync-screen';
 import { useLibrary } from './use-library';
+import { voiceLists } from './use-voices';
 import { useSync } from './use-sync';
 import { configureDownloads, startDownloads } from '../offline/runtime';
 import { DownloadIndexer } from '../offline/indexer';
@@ -100,6 +101,14 @@ export function OpenReader() {
   }, [sync]);
   useEffect(() => { configureDownloads(settings); }, [settings]);
   useEffect(() => startDownloads(), []);
+  /**
+   * Every enabled Provider's Voices, asked for in the background as the app
+   * starts (#24), so the voice list is already there on the first tap. Once per
+   * start: the lists stay in memory for the run, so coming back from the
+   * background has nothing to fetch, and a failure here stays silent — the sheet
+   * asks again, and reports, when it is opened.
+   */
+  useEffect(() => { voiceLists.prefetch(settingsRef.current); }, []);
   /**
    * How many credentials have been written this session. `routes.ts` says what
    * it is for; what it is *not* is a credential, or even whether there is one —

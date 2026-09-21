@@ -501,7 +501,7 @@ export function ReadingView({
     }
     if (what === 'voicelist') {
       const list = voices.voicesOf(command.provider as ProviderId);
-      hlog(`voicelist ${String(command.provider)} n=${list === null ? 'null' : list.length} asking=${voices.asking} note=${JSON.stringify(voices.note)}`);
+      hlog(`voicelist ${String(command.provider)} n=${list === null ? 'null' : list.length} asking=${voices.asking(command.provider as ProviderId)} note=${JSON.stringify(voices.note)}`);
       const want = String(command.locale ?? '');
       for (const one of (list ?? []).filter((v) => !want || v.id.startsWith(want)).slice(0, Number(command.n ?? 8)))
         hlog(`  voice ${one.id} | ${one.label} | ${one.locale}`);
