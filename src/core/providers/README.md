@@ -50,23 +50,24 @@ platform capabilities: each has a working default inside `fish.ts`, the way
 can be fast and isolated without stubbing a global. A dependency is listed when
 a provider that needs it exists, not before.
 
-### The one thing Fish could not bring with it
+### The language hint, which came across later
 
-`src/core/fish-language-hint.ts`, which prefixed the request text with
-`[Speak in American English]` for an utterance of one to three words, because
-Fish's language detection drifts on context-poor text (`100 exp` read as
-"cn xp"). It counts words with **`Intl.Segmenter`, which this Hermes does not
-have**, so ported as it stands it would return the empty string on every call on
-the device while passing its tests under Node — the trap
-notes/NOTES_2026-09-19.md records for the segmenter polyfill, in the one shape
-that fails silently instead of throwing. The cue also carries this project's one
-forbidden failure: Fish is *not proven* to leave it unspoken, and a cue it reads
-aloud shifts every reported time by the cue's own length.
+The plugin's `src/core/fish-language-hint.ts` prefixes `[Speak in American
+English]` to a Fish request of one to three words, because Fish's language
+detection drifts on context-poor text (`100 exp` read as "cn xp"). The first
+port left it out for two reasons: it counts words with **`Intl.Segmenter`,
+which this Hermes does not have**, so ported as it stood it would have returned
+the empty string on every call on the device while passing its tests under Node;
+and Fish was not proven to leave the cue unspoken.
 
-So Fish sends the utterance and nothing else, and `SynthesisOptions` keeps its
-two fields. The locale the hint needs is already inside the provider — a
-published Fish voice id is `<locale>/<modelId>` — so reviving it needs a
-decision and an English language name, not a contract change.
+It came across with #23 (ADR 0032). The count is written by hand in
+`src/core/fish-language-hint.ts`, held to Node's `Intl.Segmenter` by a test for
+text with spaces and counting one word per letter in scripts without them; the
+names are a table, `src/core/language-names.ts`, held to `Intl.DisplayNames`.
+The cue is not spoken (measured, notes/NOTES_2026-09-21.md, 23:45). The locale
+is found inside `fish.ts` from the voice — its id's language, or for an `en/…`
+or `mul/…` voice the region its listing published — so `SynthesisOptions` still
+has its two fields.
 
 Two smaller things went with the contract rather than with Fish.
 `ListVoicesOptions` here has no `refresh`, so the plugin's superseded-generation

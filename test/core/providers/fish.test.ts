@@ -62,11 +62,29 @@ function provider(fetchImpl: unknown, over: Partial<FishConfig> = {}, deps: Part
   return createFishProvider({ ...cfg, ...over }, { fetch: fetchImpl as typeof fetch, wait: async (ms) => void waits.push(ms), cache: new FishVoiceCache(), ...deps });
 }
 
+/** A cache that already holds these voices, as a listing or a lookup would have left it, keyed by the test key's account. */
+function knowing(...voices: { id: string; label: string; locale: string }[]): FishVoiceCache {
+  const cache = new FishVoiceCache();
+  cache.pasted.set(cfg.apiKey, new Map(voices.map((voice) => [voice.id.slice(voice.id.indexOf('/') + 1), voice])));
+  return cache;
+}
+
+/** The synthesis tests' provider: one whose session already knows the narrator, so nothing is looked up. */
+function speaker(fetchImpl: unknown, over: Partial<FishConfig> = {}, deps: Partial<FishDeps> = {}) {
+  return provider(fetchImpl, over, { cache: knowing(NARRATOR_ENTRY), ...deps });
+}
+
 const controller = new AbortController();
 const ID_A = 'a'.repeat(32);
 const ID_B = 'b'.repeat(32);
 const ID_C = 'c'.repeat(32);
-const NARRATOR = { voice: `en/${ID_A}`, signal: controller.signal };
+/**
+ * The narrator of the synthesis tests: a voice filed under several languages,
+ * so a short text on it carries no language hint and those tests stay about the
+ * route. The hint has its own tests at the end of this file (#23).
+ */
+const NARRATOR = { voice: `mul/${ID_A}`, signal: controller.signal };
+const NARRATOR_ENTRY = { id: `mul/${ID_A}`, label: 'Narrator', locale: 'mul' };
 const DEFAULT = { voice: `mul/${DEFAULT_VOICE}`, signal: controller.signal };
 const DEFAULT_ENTRY = { id: `mul/${DEFAULT_VOICE}`, label: 'Default', locale: 'mul' };
 
@@ -710,7 +728,7 @@ describe('official pagination', () => {
 describe('synthesize', () => {
   it('asks the timestamp route for MP3 at 64 kbps on the free model, and aligns the stream’s words to the text', async () => {
     const fetchImpl = vi.fn(async () => stream(event(MP3_A, null), event(MP3_B, [['Hello', 0, 0.4], ['world', 0.4, 0.86]])));
-    const result = await provider(fetchImpl).synthesize('Hello, world!', NARRATOR);
+    const result = await speaker(fetchImpl).synthesize('Hello, world!', NARRATOR);
     const { url, init, body } = call(fetchImpl);
     expect(url).toBe(`${FISH_API}/v1/tts/stream/with-timestamp`);
     expect(init.method).toBe('POST');
@@ -726,27 +744,27 @@ describe('synthesize', () => {
     expect(result.note).toBe(MODEL_FREE);
   });
 
-  it('sends the utterance and nothing else — no speed, no language cue, not one character added', async () => {
-    // ADR 0009 has no speed to add, and the plugin's `[Speak in …]` cue is not
-    // ported: a cue Fish reads aloud shifts every reported time by its own
-    // length, which is the drift ADR 0005 exists to prevent. The leading space
+  it('sends the utterance and nothing else on a voice filed under several languages — no speed, no hint, not one character added', async () => {
+    // ADR 0009 has no speed to add, and a voice of several languages has no one
+    // language to name, so a short text goes as it is (#23). The leading space
     // survives, because the alignment’s character offsets are against this text.
     const fetchImpl = vi.fn(async () => stream(event(MP3_A, [['exp', 0.2, 0.6]])));
-    await provider(fetchImpl).synthesize(' 100 exp', NARRATOR);
+    await speaker(fetchImpl).synthesize(' 100 exp', NARRATOR);
     expect(Object.keys(call(fetchImpl).body).sort()).toEqual(['format', 'latency', 'mp3_bitrate', 'reference_id', 'text']);
     expect(call(fetchImpl).body.text).toBe(' 100 exp');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('names the paid model in the header when the switch is off, and sends no reference for the default voice', async () => {
     const fetchImpl = vi.fn(async () => stream(event(MP3_A, [['Hi', 0, 0.3]])));
-    await provider(fetchImpl, { freeOnly: false }).synthesize('Hi', DEFAULT);
+    await speaker(fetchImpl, { freeOnly: false }).synthesize('Hi', DEFAULT);
     expect(call(fetchImpl).init.headers.model).toBe(MODEL_PAID);
     expect(call(fetchImpl).body).toEqual({ text: 'Hi', format: 'mp3', mp3_bitrate: MP3_BITRATE, latency: 'normal' });
   });
 
   it('moves a later text chunk’s words by its offset and counts the chunks in the note', async () => {
     const fetchImpl = vi.fn(async () => stream(event(MP3_A, [['One', 0, 0.5]], 0, 0), event(MP3_B, [['two', 0.1, 0.4]], 1, 0.5)));
-    const result = await provider(fetchImpl).synthesize('One two', NARRATOR);
+    const result = await speaker(fetchImpl).synthesize('One two', NARRATOR);
     expect(result.timestamps).toEqual([
       { start: 0, end: 0.5, charStart: 0, charEnd: 3 },
       { start: 0.6, end: 0.9, charStart: 4, charEnd: 7 },
@@ -756,7 +774,7 @@ describe('synthesize', () => {
 
   it('puts a later chunk that arrived first back in its place, so the timings stay in the order the audio plays', async () => {
     const fetchImpl = vi.fn(async () => stream(event(MP3_B, [['two', 0.1, 0.4]], 1, 0.5), event(MP3_A, [['One', 0, 0.5]], 0, 0)));
-    const result = await provider(fetchImpl).synthesize('One two', NARRATOR);
+    const result = await speaker(fetchImpl).synthesize('One two', NARRATOR);
     expect(result.timestamps).toEqual([
       { start: 0, end: 0.5, charStart: 0, charEnd: 3 },
       { start: 0.6, end: 0.9, charStart: 4, charEnd: 7 },
@@ -772,14 +790,14 @@ describe('synthesize', () => {
       stream(event(MP3_A, [['他', 0, 0.2], ['说', 0.2, 0.4], ['Zotero', 0.4, 1], ['很', 1, 1.2], ['好', 1.2, 1.4]])),
     );
     const text = '他说Zotero很好。';
-    const result = await provider(fetchImpl).synthesize(text, NARRATOR);
+    const result = await speaker(fetchImpl).synthesize(text, NARRATOR);
     expect(result.timestamps?.map((t) => text.slice(t.charStart, t.charEnd))).toEqual(['他', '说', 'Zotero', '很', '好']);
     expect(result.timestamps?.map((t) => t.start)).toEqual([0, 0.2, 0.4, 1, 1.2]);
   });
 
   it('falls back to the utterance with a note when no event carried an alignment', async () => {
     const fetchImpl = vi.fn(async () => stream(event(MP3_A, null), event(MP3_B, null)));
-    const result = await provider(fetchImpl).synthesize('Hello', NARRATOR);
+    const result = await speaker(fetchImpl).synthesize('Hello', NARRATOR);
     expect(result.timestamps).toBeUndefined();
     expect(result.note).toBe(`${MODEL_FREE}: no word timings in the stream`);
     expect(result.audio === 'encoded' && [...result.bytes]).toEqual([...MP3_A, ...MP3_B]);
@@ -787,14 +805,14 @@ describe('synthesize', () => {
 
   it('falls back to the utterance when none of the stream’s words is in the text', async () => {
     const fetchImpl = vi.fn(async () => stream(event(MP3_A, [['completely', 0, 0.5], ['different', 0.5, 1]])));
-    const result = await provider(fetchImpl).synthesize('Hello', NARRATOR);
+    const result = await speaker(fetchImpl).synthesize('Hello', NARRATOR);
     expect(result.timestamps).toBeUndefined();
     expect(result.note).toContain('none of the 2 words');
   });
 
   it('says in the note how much of the alignment had to be bridged', async () => {
     const fetchImpl = vi.fn(async () => stream(event(MP3_A, [['Hello', 0, 0.4], ['extra', 0.4, 0.5], ['world', 0.5, 0.9]])));
-    const result = await provider(fetchImpl).synthesize('Hello world', NARRATOR);
+    const result = await speaker(fetchImpl).synthesize('Hello world', NARRATOR);
     expect(result.note).toBe(`${MODEL_FREE}, 1 dropped`);
   });
 
@@ -805,7 +823,7 @@ describe('synthesize', () => {
     // 24 kHz, and a wrong rate is drift in the playback clock rather than a
     // visible error.
     const fetchImpl = vi.fn(async () => stream(event(MP3_A, [['Hi', 0, 0.3]])));
-    const result = await provider(fetchImpl).synthesize('Hi', NARRATOR);
+    const result = await speaker(fetchImpl).synthesize('Hi', NARRATOR);
     expect(result.audio).toBe('encoded');
     expect(result).not.toHaveProperty('sampleRate');
     expect(result).not.toHaveProperty('samples');
@@ -813,56 +831,56 @@ describe('synthesize', () => {
 
   it('lets the bytes overrule that declaration: a WAV or an ID3 tag in the stream is reported as what it is', async () => {
     const wav = vi.fn(async () => stream(event(WAV, [['Hi', 0, 0.3]])));
-    expect(await provider(wav).synthesize('Hi', NARRATOR)).toMatchObject({ audio: 'encoded', mediaType: 'audio/wav' });
+    expect(await speaker(wav).synthesize('Hi', NARRATOR)).toMatchObject({ audio: 'encoded', mediaType: 'audio/wav' });
     const tagged = vi.fn(async () => stream(event(ID3, [['Hi', 0, 0.3]])));
-    expect(await provider(tagged).synthesize('Hi', NARRATOR)).toMatchObject({ audio: 'encoded', mediaType: 'audio/mpeg' });
+    expect(await speaker(tagged).synthesize('Hi', NARRATOR)).toMatchObject({ audio: 'encoded', mediaType: 'audio/mpeg' });
   });
 
   it('is an error when the stream carried no audio', async () => {
     const fetchImpl = vi.fn(async () => stream(event(null, [['Hello', 0, 0.4]])));
-    await expect(provider(fetchImpl).synthesize('Hello', NARRATOR)).rejects.toMatchObject({ kind: 'unknown', message: expect.stringContaining('no audio') });
+    await expect(speaker(fetchImpl).synthesize('Hello', NARRATOR)).rejects.toMatchObject({ kind: 'unknown', message: expect.stringContaining('no audio') });
   });
 
   it('is an error when a 200 is not an event stream at all', async () => {
     const fetchImpl = vi.fn(async () => Response.json({ ok: true }));
-    await expect(provider(fetchImpl).synthesize('Hello', NARRATOR)).rejects.toMatchObject({ kind: 'unknown' });
+    await expect(speaker(fetchImpl).synthesize('Hello', NARRATOR)).rejects.toMatchObject({ kind: 'unknown' });
   });
 
   it('is a decode failure when a chunk is not base64', async () => {
     const fetchImpl = vi.fn(async () => stream(JSON.stringify({ audio_base64: '***', chunk_seq: 0, alignment: null })));
-    await expect(provider(fetchImpl).synthesize('Hello', NARRATOR)).rejects.toMatchObject({ kind: 'decode-failed', message: expect.stringContaining('base64') });
+    await expect(speaker(fetchImpl).synthesize('Hello', NARRATOR)).rejects.toMatchObject({ kind: 'decode-failed', message: expect.stringContaining('base64') });
   });
 
   it('sends nothing for text with no letter or digit and answers no samples, which plays as a pause', async () => {
     const fetchImpl = vi.fn();
-    const result = await provider(fetchImpl).synthesize('* * *', NARRATOR);
+    const result = await speaker(fetchImpl).synthesize('* * *', NARRATOR);
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(result).toEqual({ audio: 'pcm', samples: new Uint8Array(0), sampleRate: PCM_SAMPLE_RATE, note: 'no speakable text' });
   });
 
   it('refuses a voice id it did not publish', async () => {
     const fetchImpl = vi.fn();
-    await expect(provider(fetchImpl).synthesize('Hi', { voice: 'alloy', signal: controller.signal })).rejects.toMatchObject({ kind: 'unknown' });
+    await expect(speaker(fetchImpl).synthesize('Hi', { voice: 'alloy', signal: controller.signal })).rejects.toMatchObject({ kind: 'unknown' });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('reports 401 as the key, 402 as the credit, and a 400 with the server’s reason', async () => {
-    await expect(provider(vi.fn(async () => refusal(401, 'Invalid Token'))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
+    await expect(speaker(vi.fn(async () => refusal(401, 'Invalid Token'))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
       kind: 'auth',
       message: expect.stringContaining('Invalid Token'),
     });
     const credit = 'Insufficient API credit. API credit is managed independently from platform credit.';
     await expect(
-      provider(vi.fn(async () => refusal(402, credit, { 'x-fish-error-code': 'insufficient_balance' })), { freeOnly: false }).synthesize('Hi', NARRATOR),
+      speaker(vi.fn(async () => refusal(402, credit, { 'x-fish-error-code': 'insufficient_balance' })), { freeOnly: false }).synthesize('Hi', NARRATOR),
     ).rejects.toMatchObject({ kind: 'quota', message: expect.stringContaining('Insufficient API credit') });
-    await expect(provider(vi.fn(async () => refusal(400, 'Reference not found'))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
+    await expect(speaker(vi.fn(async () => refusal(400, 'Reference not found'))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
       kind: 'unknown',
       message: `Fish Audio ${MODEL_FREE}: HTTP 400 — Reference not found`,
     });
   });
 
   it('reads the gateway’s balance header as the credit whatever the status', async () => {
-    await expect(provider(vi.fn(async () => refusal(403, 'nope', { 'x-fish-error-code': 'insufficient_balance' }))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
+    await expect(speaker(vi.fn(async () => refusal(403, 'nope', { 'x-fish-error-code': 'insufficient_balance' }))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
       kind: 'quota',
     });
   });
@@ -870,7 +888,7 @@ describe('synthesize', () => {
   it('waits what a 429 asks and tries again, then reports the rate limit', async () => {
     waits = [];
     const fetchImpl = vi.fn(async () => refusal(429, 'Too many requests', { 'Retry-After': '2' }));
-    await expect(provider(fetchImpl).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'rate-limit' });
+    await expect(speaker(fetchImpl).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'rate-limit' });
     expect(fetchImpl).toHaveBeenCalledTimes(RATE_LIMIT_RETRIES + 1);
     expect(waits).toEqual([2000, 2000, 2000]);
   });
@@ -878,7 +896,7 @@ describe('synthesize', () => {
   it('does not wait out a 429 that is really the credit', async () => {
     waits = [];
     const fetchImpl = vi.fn(async () => refusal(429, 'no credit', { 'x-fish-error-code': 'insufficient_balance' }));
-    await expect(provider(fetchImpl).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'quota' });
+    await expect(speaker(fetchImpl).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'quota' });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(waits).toEqual([]);
   });
@@ -886,11 +904,11 @@ describe('synthesize', () => {
   it('asks once more after a 5xx, and says so in the note', async () => {
     waits = [];
     const fetchImpl = vi.fn().mockResolvedValueOnce(new Response('Bad Gateway', { status: 502 })).mockResolvedValueOnce(stream(event(MP3_A, [['Hi', 0, 0.3]])));
-    const result = await provider(fetchImpl).synthesize('Hi', NARRATOR);
+    const result = await speaker(fetchImpl).synthesize('Hi', NARRATOR);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(waits).toEqual([RETRY_DELAY_MS]);
     expect(result.note).toBe(`${MODEL_FREE} after a retry of HTTP 502`);
-    await expect(provider(vi.fn(async () => new Response('down', { status: 503 }))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
+    await expect(speaker(vi.fn(async () => new Response('down', { status: 503 }))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
       kind: 'unknown',
       message: expect.stringContaining('503'),
     });
@@ -900,12 +918,12 @@ describe('synthesize', () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError('NetworkError when attempting to fetch resource.');
     });
-    await expect(provider(fetchImpl).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'network', message: expect.stringContaining('api.fish.audio') });
+    await expect(speaker(fetchImpl).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'network', message: expect.stringContaining('api.fish.audio') });
   });
 
   it('refuses to synthesize without a key, and sends nothing', async () => {
     const fetchImpl = vi.fn();
-    await expect(provider(fetchImpl, { apiKey: '  ' }).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'no-key' });
+    await expect(speaker(fetchImpl, { apiKey: '  ' }).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'no-key' });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
@@ -937,5 +955,132 @@ describe('the checks', () => {
     const p = provider(vi.fn());
     expect(p.id).toBe('fish');
     expect(p.capabilities.wordTimestamps).toBe(true);
+  });
+});
+
+/**
+ * #23: the plugin's language hint (xujialiu/Zotero-TTS#98). Fish takes the
+ * language from the text, and one to three words are too few, so they go with
+ * the voice's own language in front — named from the locale the voice was
+ * published under, which for an English voice may carry its region.
+ */
+describe('language hint', () => {
+  const DAX = { voice: `en/${ID_B}`, signal: controller.signal };
+  const DAX_ENTRY = { id: `en/${ID_B}`, label: 'Dax', locale: 'en-US' };
+  const stat = () => stream(event(MP3_A, [['100', 0, 0.4], ['exp', 0.4, 0.56]]));
+
+  it('puts the voice’s language in front of a short stat, and aligns the words to the stat alone', async () => {
+    const fetchImpl = vi.fn(async () => stat());
+    const result = await provider(fetchImpl, {}, { cache: knowing(DAX_ENTRY) }).synthesize('100 exp', DAX);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(call(fetchImpl).body.text).toBe('[Speak in American English] 100 exp');
+    expect(result.timestamps).toEqual([
+      { start: 0, end: 0.4, charStart: 0, charEnd: 3 },
+      { start: 0.4, end: 0.56, charStart: 4, charEnd: 7 },
+    ]);
+    expect(result.note).toBe(`${MODEL_FREE}, language hint [Speak in American English]`);
+  });
+
+  it('adds no space of its own in front of a text that already starts with one', async () => {
+    const fetchImpl = vi.fn(async () => stat());
+    await provider(fetchImpl, {}, { cache: knowing(DAX_ENTRY) }).synthesize(' 100 exp', DAX);
+    expect(call(fetchImpl).body.text).toBe('[Speak in American English] 100 exp');
+  });
+
+  it.each([
+    ['2/50 HP', true],
+    ['Level Up!', true],
+    ['— 100 —', true],
+    ['You gained 100 exp.', false],
+    ['one two three four', false],
+  ])('counts numbers and not punctuation: %j is hinted: %s', async (text, hinted) => {
+    const fetchImpl = vi.fn(async () => stat());
+    await provider(fetchImpl, {}, { cache: knowing(DAX_ENTRY) }).synthesize(text, DAX);
+    expect(call(fetchImpl).body.text).toBe(hinted ? `[Speak in American English] ${text}` : text);
+  });
+
+  it('names an English voice without a region plainly', async () => {
+    const fetchImpl = vi.fn(async () => stat());
+    await provider(fetchImpl, {}, { cache: knowing({ ...DAX_ENTRY, locale: 'en' }) }).synthesize('100 exp', DAX);
+    expect(call(fetchImpl).body.text).toBe('[Speak in English] 100 exp');
+  });
+
+  it('sends a short text bare on a voice of several languages, and on Default, which it never looks up', async () => {
+    const several = vi.fn(async () => stat());
+    await provider(several, {}, { cache: knowing(NARRATOR_ENTRY) }).synthesize('100 exp', NARRATOR);
+    expect(call(several).body.text).toBe('100 exp');
+    const byDefault = vi.fn(async () => stat());
+    await provider(byDefault).synthesize('100 exp', DEFAULT);
+    expect(byDefault).toHaveBeenCalledTimes(1);
+    expect(call(byDefault).body.text).toBe('100 exp');
+  });
+
+  it('names a voice filed under one other language from its id, without asking anything', async () => {
+    const fetchImpl = vi.fn(async () => stream(event(MP3_A, [['第', 0, 0.2], ['一', 0.2, 0.4], ['章', 0.4, 0.6]])));
+    const zh = { voice: `zh/${ID_C}`, signal: controller.signal };
+    await provider(fetchImpl).synthesize('第一章', zh);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(call(fetchImpl).body.text).toBe('[Speak in Chinese] 第一章');
+    // Four characters are four words here (the owner's choice for #23), so no hint.
+    await provider(fetchImpl).synthesize('第十一章', zh);
+    expect(call(fetchImpl, 1).body.text).toBe('第十一章');
+  });
+
+  it('gives no hint for a language it cannot name', async () => {
+    const fetchImpl = vi.fn(async () => stat());
+    await provider(fetchImpl, {}, { cache: knowing({ ...DAX_ENTRY, locale: 'qq' }) }).synthesize('100 exp', DAX);
+    expect(call(fetchImpl).body.text).toBe('100 exp');
+  });
+
+  it('asks the model once for a voice the session has not listed, and remembers the answer', async () => {
+    const fetchImpl = vi.fn(async (url: string) =>
+      url.endsWith(`/model/${ID_B}`) ? Response.json({ ...model(ID_B, 'Dax', ['en']), tags: ['American'] }) : stat(),
+    );
+    const p = provider(fetchImpl);
+    await p.synthesize('100 exp', DAX);
+    await p.synthesize('2/50 HP', DAX);
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      `${FISH_API}/model/${ID_B}`,
+      `${FISH_API}/v1/tts/stream/with-timestamp`,
+      `${FISH_API}/v1/tts/stream/with-timestamp`,
+    ]);
+    expect(call(fetchImpl, 1).body.text).toBe('[Speak in American English] 100 exp');
+    expect(call(fetchImpl, 2).body.text).toBe('[Speak in American English] 2/50 HP');
+  });
+
+  it('waits for a listing already on its way — the one the app starts with — instead of asking the model', async () => {
+    const listing = deferred<Response>();
+    const fetchImpl = vi.fn(async (url: string) => (url.includes(`author_id=${OFFICIAL_AUTHOR_ID}`) ? listing.promise : stat()));
+    const p = provider(fetchImpl, { includeOwn: false, includeManual: false });
+    const listed = p.listVoices();
+    const spoken = p.synthesize('100 exp', DAX);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    listing.resolve(publicPage([model(ID_B, 'Dax American', ['en'])]));
+    await Promise.all([listed, spoken]);
+    expect(fetchImpl.mock.calls.map(([url]) => url)).not.toContain(`${FISH_API}/model/${ID_B}`);
+    expect(call(fetchImpl, 1).body.text).toBe('[Speak in American English] 100 exp');
+  });
+
+  it('fails the utterance when the voice cannot be looked up, rather than sending it without its hint', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith(`/model/${ID_B}`)) throw new TypeError('Network request failed');
+      return stat();
+    });
+    await expect(provider(fetchImpl).synthesize('100 exp', DAX)).rejects.toMatchObject({ kind: 'network' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('never makes a long sentence wait on a lookup', async () => {
+    const fetchImpl = vi.fn(async () => stat());
+    await provider(fetchImpl).synthesize('You gained 100 exp today.', DAX);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(call(fetchImpl).body.text).toBe('You gained 100 exp today.');
+  });
+
+  it('sends the connection check bare, and looks nothing up', async () => {
+    const fetchImpl = vi.fn(async () => stream(event(MP3_A, [['Hi', 0, 0.3]])));
+    await provider(fetchImpl).checkSynthesis!(DAX.voice);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(call(fetchImpl).body.text).toBe('Hi');
   });
 });

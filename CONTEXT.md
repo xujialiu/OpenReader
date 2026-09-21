@@ -70,12 +70,19 @@ a key does, and is never sent to another.
 _Avoid_: auth headers, token, proxy headers, custom headers, access token
 
 **Speech Text**:
-The form of an utterance's text that is actually sent to a provider. It differs
-from the utterance's own text only where the owner has asked for enclosing
-brackets to be removed. A provider's word timings are reported in its
+The form of an utterance's text that is actually sent to a provider to be
+spoken. It differs from the utterance's own text only where the owner has asked
+for enclosing brackets to be removed; a language hint may travel in front of it
+but is not part of it. A provider's word timings are reported in its
 coordinates and are turned back into the utterance's before anything is
 highlighted.
 _Avoid_: stripped text, cleaned text, normalized text, TTS text
+
+**Language Hint**:
+A note sent in front of a very short speech text, naming the language its voice
+speaks, so that a provider given too few words to judge by does not read them
+as another language. It is never spoken, and nothing is highlighted for it.
+_Avoid_: cue, prefix, prompt, tag, language tag
 
 **Clip**:
 The audio a provider returns for one utterance.

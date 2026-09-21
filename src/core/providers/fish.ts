@@ -1,4 +1,5 @@
 import { alignWords, describeAlignment, type TimedWord } from '../align';
+import { countWords, fishLanguageHint, HINT_WORDS } from '../fish-language-hint';
 import { withTimeout } from '../timeout';
 import { PCM_SAMPLE_RATE, base64ToBytes, concatBytes, readClip } from './audio';
 import { SynthesisError } from './errors';
@@ -58,17 +59,16 @@ import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type Synth
  * the decision — the bytes overrule the declaration, so a Fish that one day
  * answers a container says so.
  *
- * **No language hint.** The plugin prefixed the request text with
- * `[Speak in American English]` for utterances of one to three words, because
- * Fish's automatic language detection drifts on context-poor text (`100 exp`
- * read as "cn xp"). It is not ported: `src/core/fish-language-hint.ts` counts
- * words with `Intl.Segmenter`, which **this Hermes does not have**
- * (notes/NOTES_2026-09-19.md), so the function would return the empty string
- * on every call on the device while passing its tests under Node — and the
- * cue's own risk is this project's one forbidden failure, since a cue Fish
- * reads aloud shifts every reported time by the length of the cue. The locale
- * it needs is in the published voice id if a decision is ever recorded for it;
- * `SynthesisOptions` stays `{ voice, signal }`.
+ * **A language hint in front of a short Speech Text** (#23, ADR 0032). Fish
+ * decides the language from the text, and one to three words are too few:
+ * `100 exp` read by an English voice came out as "cn xp". So, as the plugin has
+ * done since 2026-09-13, a request of that length carries `[Speak in American
+ * English]` or whatever names the voice's own locale — `core/fish-language-hint.ts`
+ * says how it counts without the `Intl.Segmenter` Hermes lacks. The first port
+ * left it out for fear Fish would speak it and push every timing late; it does
+ * not (measured, notes/NOTES_2026-09-21.md, 23:45). The words are still aligned to the
+ * Speech Text alone, and `SynthesisOptions` stays `{ voice, signal }`: the
+ * locale is found here, from the voice, as `voiceLocale` below says.
  *
  * **No speed, ever** (ADR 0009). Fish's body has no speed field and none is
  * being added.
@@ -695,16 +695,63 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
     return promise;
   }
 
-  async function speak(text: string, voice: string, signal?: AbortSignal): Promise<SynthesisResult> {
+  /** A voice the session already knows, from either listing or a lookup of its own, by its model id. */
+  function knownVoice(account: string, id: string): VoiceInfo | undefined {
+    for (const list of [cache.official.get(account)?.value, cache.own.get(account)?.value]) {
+      const voice = list?.find((one) => modelId(one) === id);
+      if (voice) return voice;
+    }
+    return cache.pasted.get(account)?.get(id);
+  }
+
+  /**
+   * The locale a voice was published under, which is what names its hint (#23).
+   *
+   * The id carries a language and never a region — `fishVoice` keeps the id's
+   * prefix stable so a saved Voice still resolves when a region label changes —
+   * so for most voices the id is enough: one filed under Chinese is `zh`, and
+   * `Default` speaks whatever it is given. Only an `en/…` voice can carry a
+   * region, and only a `mul/…` one can be an English-labelled multilingual
+   * voice, so only those two are looked up: in the listings this session
+   * already holds, which the app asks for as it starts (#24); in a listing
+   * still on its way, waited for; or, failing both, in the model itself, one
+   * request remembered for the session. A lookup that fails fails the utterance
+   * rather than sending it, and perhaps saving it, without its hint.
+   */
+  async function voiceLocale(decoded: { locale: string; id: string }): Promise<string> {
+    if (decoded.id === DEFAULT_VOICE) return MULTILINGUAL;
+    if (decoded.locale !== 'en' && decoded.locale !== MULTILINGUAL) return decoded.locale;
+    const account = apiKey();
+    const id = decoded.id.toLowerCase();
+    const known = knownVoice(account, id);
+    if (known) return known.locale;
+    const pending = [cache.official.get(account)?.inFlight, cache.own.get(account)?.inFlight].filter((load) => load !== undefined);
+    if (pending.length) {
+      await Promise.allSettled(pending);
+      const listed = knownVoice(account, id);
+      if (listed) return listed.locale;
+    }
+    return (await sharedPastedRequest(id, Date.now() + listTimeoutMs)).locale;
+  }
+
+  /** The hint for this text on this voice, or the empty string: counted first, so a long sentence never waits on a lookup. */
+  async function languageHint(text: string, decoded: { locale: string; id: string }): Promise<string> {
+    const words = countWords(text, HINT_WORDS);
+    if (words === 0 || words >= HINT_WORDS) return '';
+    return fishLanguageHint(text, await voiceLocale(decoded));
+  }
+
+  async function speak(text: string, voice: string, signal?: AbortSignal, hinted = true): Promise<SynthesisResult> {
     requireKey();
     const decoded = decodeFishVoice(voice);
     if (!decoded) throw new SynthesisError('unknown', `Unknown Fish Audio voice: ${voice}`);
     // Nothing to say: no request, and no samples, which plays as a pause
     if (!isSpeakable(text)) return { audio: 'pcm', samples: new Uint8Array(0), sampleRate: PCM_SAMPLE_RATE, note: 'no speakable text' };
     const what = `Fish Audio ${model()}`;
-    // No speed and no language cue: the text is the utterance, exactly, so the
-    // words the stream reports are the words of the text the aligner is given.
-    const body = { text, format: FISH_FORMAT, mp3_bitrate: MP3_BITRATE, latency: 'normal', ...(decoded.id === DEFAULT_VOICE ? {} : { reference_id: decoded.id }) };
+    // No speed, ever. A language hint goes in front of a short text and is sent
+    // only: the words the stream reports are still aligned to `text` alone.
+    const hint = hinted ? await languageHint(text, decoded) : '';
+    const body = { text: hint + text, format: FISH_FORMAT, mp3_bitrate: MP3_BITRATE, latency: 'normal', ...(decoded.id === DEFAULT_VOICE ? {} : { reference_id: decoded.id }) };
     const init: RequestInit = { method: 'POST', headers: headers({ 'Content-Type': 'application/json', model: model() }), body: JSON.stringify(body), signal };
     const { response, note } = await exchange('/v1/tts/stream/with-timestamp', init, what);
     const events = parseEventStream(await response.text());
@@ -719,7 +766,7 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
     // `text/event-stream` and nothing about the samples. What is declared here
     // is what was asked for, and `readClip` lets the bytes overrule it.
     const clip = readClip(merged.audio, FISH_MEDIA_TYPE);
-    const chunks = merged.chunks > 1 ? `, ${merged.chunks} chunks` : '';
+    const chunks = `${merged.chunks > 1 ? `, ${merged.chunks} chunks` : ''}${hint ? `, language hint ${hint.trim()}` : ''}`;
     if (!merged.words.length) return { ...clip, note: `${model()}${chunks}${note}: no word timings in the stream` };
     // The stream reports words in the text's own spelling with the punctuation
     // gone, and its character offsets are not trusted at all: the aligner pairs
@@ -824,9 +871,14 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
       if (!response.ok) throw refusal(response, await response.text().catch(() => ''), what);
     },
 
-    /** Two letters on the voice, discarded: proves the model answers — and, with the free switch off, that the credit is there. */
+    /**
+     * Two letters on the voice, discarded: proves the model answers — and, with
+     * the free switch off, that the credit is there. Without a hint, as the
+     * plugin sends its samples: it proves the route, and a lookup would only
+     * add a request that can fail for reasons the check is not about.
+     */
     async checkSynthesis(voice: string): Promise<void> {
-      await speak('Hi', voice);
+      await speak('Hi', voice, undefined, false);
     },
 
     synthesize(text: string, o: SynthesisOptions): Promise<SynthesisResult> {
