@@ -53,7 +53,7 @@ function progressOf(entry: LibraryEntry, present: boolean): string {
 }
 
 export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
-  const { settings, library } = useShell();
+  const { settings, library, sync } = useShell();
   const [picking, setPicking] = useState(false);
   const [actions, setActions] = useState<LibraryEntry | null>(null);
   /**
@@ -80,6 +80,8 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
         // Moved, not copied: iOS already made this copy in the app's temporary
         // directory before JavaScript saw it (`document.ts`).
         const entry = await library.add(picked, { move: true });
+        // A book the desktop has read opens at the desktop's place (issue #20).
+        sync.poke('add');
         navigation.navigate('Reader', { id: entry.id });
       } catch (refused) {
         /**
@@ -104,7 +106,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     } finally {
       setPicking(false);
     }
-  }, [library, navigation]);
+  }, [library, navigation, sync]);
 
   /**
    * The two buttons ADR 0019 puts at the top.

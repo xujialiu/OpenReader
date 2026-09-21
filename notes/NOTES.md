@@ -18,12 +18,11 @@ items are struck as they are answered, and the answer goes in that day's log.
 2. ~~`TextDecoder` on Hermes~~ — **yes.** Same measurement. But `Intl.Segmenter`
    is **absent**, which was not on this list and makes the `unicode-segmenter`
    polyfill mandatory rather than optional.
-3. **CFI round-trip against Zotero, both directions.** Take one EPUB. Store a
-   position from the desktop plugin and resolve it in an epub.js reader; generate
-   a CFI with standard epub.js and hand it to Zotero's `toDisplayedRange`. Record
-   not just whether it resolves, but whether it resolves to the *right* text —
-   the known failure mode is silently landing on the wrong node. Zotero uses its
-   own copy of epub.js, which is why this is in doubt. See ADR 0008.
+3. ~~**CFI round-trip against Zotero, both directions.**~~ — **settled.**
+   Measured 2026-09-21 on four books, 132,467 Blocks, both directions, live in
+   Zotero; see `NOTES_2026-09-21.md`, 17:11. An **element** CFI names the same
+   paragraph on both sides for every `.xhtml` book tested; the seam is
+   OpenReader's HTML parse of `.html` members, which the text anchor covers.
 4. ~~A 60–90 minute backgrounded playback session on a real device~~ — **the
    three named failure modes are answered; two things are not.** 2026-09-20,
    17 minutes backgrounded on the simulator, 10½ of them reading: the audio
@@ -210,15 +209,9 @@ or striking it here with the day's log named.
 
 ### Needs neither the device nor hardware, and nobody has done it
 
-- **The CFI round-trip against Zotero, both directions** — item 3 above, and ADR
-  0007 calls it a separate open question. What is in doubt is not whether a CFI
-  resolves but whether it resolves to the *right text*: Zotero's own generator and
-  resolver disagree about text steps, which is why the desktop plugin never
-  generates one. *Would establish it:* one EPUB, a position stored from the plugin
-  and resolved in an epub.js reader, and a CFI from standard epub.js handed to
-  Zotero's `toDisplayedRange`, comparing the text each lands on. *Cost:* a bounded
-  afternoon with Zotero running; no device, no simulator. **This is the largest
-  unproven thing in the project that is cheap to settle.**
+- ~~**The CFI round-trip against Zotero, both directions**~~ — item 3 above,
+  settled 2026-09-21 (`NOTES_2026-09-21.md`, 17:11). It cost the bounded
+  afternoon predicted: 34 minutes of a delegated agent, four books, live.
 - **Sentence-splitting quality on real books** — item 7 above. What is being judged
   is the polyfill's output rather than the platform's, and it is the first
   segmenter, not the final one. *Would establish it:* run the plugin's

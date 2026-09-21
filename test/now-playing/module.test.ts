@@ -165,7 +165,10 @@ describe('one pause, one path', () => {
     // leave the app in a state the screen disagrees with, and the two would drift
     // apart in behaviour from there.
     const screen = code('src/app/reading-view.tsx');
-    expect(screen).toContain('onIntent: (intent) => (intent === \'play\' ? reading.play() : pause())');
+    // `play` rather than `reading.play` since issue #20: the button's Play looks at
+    // the Sync Folder first, and a remote press has to look the same way.
+    expect(screen).toContain('onIntent: (intent) => (intent === \'play\' ? play() : pause())');
+    expect(screen).toContain('else play(); }}');
     expect(screen).toContain('onPause={pause}');
     // And the coupling itself is in that one handler rather than in the button.
     expect(screen).toMatch(/const pause = useCallback\(\(\) => \{\s*reading\.pause\(\);\s*setCollapsed\(false\);/);

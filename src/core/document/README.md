@@ -72,17 +72,26 @@ from headers, footers and citations, and following a paragraph across columns
 and pages, is work the desktop plugin explicitly refused, and on a phone there
 is no Zotero to do it.
 
-## A position is a locator plus a text anchor (ADR 0008)
+## A position is a locator plus a text anchor (ADR 0008), with its own Stamp (ADR 0031)
 
 A reading position records **both**:
 
-- a native locator for its format — for EPUB, the CFI the desktop plugin already
-  stores;
+- a native locator for its format — for EPUB, the element CFI of the Block the
+  sentence is in, **assertion-stripped** (`epubcfi(/6/34!/4/2/4/2/4)`), which
+  is the one spelling the Positions File allows and the one the desktop plugin
+  writes;
 - a **text anchor**: a quotation of the utterance with enough surrounding
   context to find it again.
 
 Resolving uses the locator first, compares the text actually found against the
-anchor, and falls back to searching for the anchor when they disagree.
+anchor, and falls back to searching for the anchor when they disagree. Those two
+are a `ReadingPlace`, which is what the renderer produces and what resolving
+takes. A `ReadingPosition` is a place **with its own Stamp** (`stamp.ts`): when
+speech stopped there and on which device. That Stamp moves only when the reading
+does, and it — not the Library entry's, which moves whenever the owner touches
+the book — is what a merge between devices compares. The Library stamps a place
+as it stores it, above whatever it held (`nextStamp`), so a slow clock cannot
+lose the place it is reading to one it adopted a moment ago.
 
 ### Why not the CFI alone
 
@@ -117,9 +126,10 @@ exactly.
 ## What a store keeps
 
 One **Library entry** per Document: its identity, its format, its title, its
-Reading Position and its Voice (ADR 0010). ADR 0003 shapes the record even though
-no WebDAV is built here, because two of the three properties it verified apply
-from the first line.
+Reading Position and its Voice (ADR 0010). ADR 0003 shapes the record because two
+of the three properties it verified apply from the first line. The file is at
+**version 2** since the position carries its own Stamp; a version-1 file is read,
+and its positions, which had none, are given the oldest Stamp there is.
 
 - **The version lives on the file, and a parser rejects a file whose `version` is
   higher than it knows and leaves it alone.** `parseLibrary` returns
@@ -153,8 +163,10 @@ matchAnchor(anchor, text) → AnchorMatch | null
 
 createLocator(format, text) → Locator                      // the renderer only
 readLocator(locator, format) → string | null               // and only that renderer
-readingPositionAt(locator, text, start, end) → ReadingPosition
-resolveReadingPosition(position, placeReader) → PositionResolution
+readingPlaceAt(locator, text, start, end) → ReadingPlace   // what the renderer produces
+stampPlace(place, stamp) → ReadingPosition                 // what the Library keeps
+nextStamp(now, device, previous) → Stamp                   // max(now, previous + 1)
+resolveReadingPosition(place, placeReader) → PositionResolution
 
 serializeLibrary(entries) → string
 parseLibrary(text) → LibraryParse

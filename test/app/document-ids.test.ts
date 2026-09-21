@@ -26,7 +26,7 @@ function entry(id: string, title: string, at: number, position = true): LibraryE
     publicationId: null,
     publicationIdSource: 'none',
     title,
-    position: position ? readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/4)'), 'A sentence in the book.', 2, 10) : null,
+    position: position ? readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/4)'), 'A sentence in the book.', 2, 10, { at: 1, device: 'phone' }) : null,
     voice: { provider: 'fish', voice: 'a-voice' },
     stamp: stamp(at),
   };

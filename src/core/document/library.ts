@@ -39,27 +39,20 @@
 import { createLocator, readLocator, type ReadingPosition } from './position';
 import { asDocumentFormat, asDocumentId, type DocumentFormat, type DocumentId, type DocumentIdentity, type PublicationIdSource } from './identity';
 import type { TextAnchor } from './anchor';
+import { OLDEST_STAMP, type Stamp } from './stamp';
 
-/** The only version this build writes, and the highest it will read. */
-export const LIBRARY_VERSION = 1;
+export type { Stamp } from './stamp';
 
 /**
- * A **Stamp** (CONTEXT.md): when an entry was last written and which device
- * wrote it, used to decide which of two copies of an entry wins.
+ * The only version this build writes, and the highest it will read.
  *
- * Here from the start even though nothing merges yet, because under ADR 0003
- * adding it later is the expensive move — an older reader strips a field it does
- * not know, silently, on every machine.
- *
- * `at` is wall-clock milliseconds since the epoch. A number rather than a
- * formatted date because a number has one spelling and a date string has
- * several, and two devices comparing spellings is not a comparison.
+ * **2 since the Reading Position carries its own Stamp** (`stamp.ts`, issue
+ * #20). A version-1 file is still read: its positions have no Stamp and are
+ * given the oldest one, so the first merge with another device loses them to
+ * whatever that device holds — the app is unreleased, and the owner said a
+ * place lost that way costs nothing (no migration, by the project's rule).
  */
-export interface Stamp {
-  at: number;
-  /** Which device wrote it. Opaque to this module: it only ever has to differ between devices. */
-  device: string;
-}
+export const LIBRARY_VERSION = 2;
 
 /**
  * The **Voice** a Document is read in (ADR 0010): a document keeps its own, and
@@ -80,10 +73,11 @@ export interface VoiceChoice {
 export interface LibraryEntry extends DocumentIdentity {
   /** What to call the Document. The file's own name when the document does not say (`src/app/document.ts`). */
   title: string;
-  /** Where speech stopped. Null until the owner has read some of it. */
+  /** Where speech stopped, with its own Stamp. Null until the owner has read some of it. */
   position: ReadingPosition | null;
   /** Null means this Document has not been opened yet and will inherit whatever the global default is at that moment (ADR 0010). */
   voice: VoiceChoice | null;
+  /** When the owner last touched this Document, on which device. Orders the shelf; never compared across devices. */
   stamp: Stamp;
 }
 
@@ -129,6 +123,7 @@ function serializePosition(entry: LibraryEntry, position: ReadingPosition) {
   return {
     locator,
     anchor: { exact: position.anchor.exact, prefix: position.anchor.prefix, suffix: position.anchor.suffix },
+    stamp: { at: position.stamp.at, device: position.stamp.device },
   };
 }
 
@@ -144,7 +139,7 @@ export interface LibraryProblem {
    * which is the better trade — an unreadable Voice must not cost the owner a
    * Reading Position.
    */
-  dropped: 'entry' | 'title' | 'position' | 'voice' | 'stamp';
+  dropped: 'entry' | 'title' | 'position' | 'voice' | 'stamp' | 'position-stamp';
   why: 'not-an-object' | 'id' | 'format' | 'malformed';
 }
 
@@ -178,7 +173,7 @@ export type LibraryParse =
 
 const FILE_KEYS = ['version', 'entries'];
 const ENTRY_KEYS = ['id', 'format', 'publicationId', 'publicationIdSource', 'title', 'position', 'voice', 'stamp'];
-const POSITION_KEYS = ['locator', 'anchor'];
+const POSITION_KEYS = ['locator', 'anchor', 'stamp'];
 const ANCHOR_KEYS = ['exact', 'prefix', 'suffix'];
 const VOICE_KEYS = ['provider', 'voice'];
 const STAMP_KEYS = ['at', 'device'];
@@ -297,7 +292,27 @@ function parsePosition(
     prefix: typeof anchorRaw.prefix === 'string' ? anchorRaw.prefix : '',
     suffix: typeof anchorRaw.suffix === 'string' ? anchorRaw.suffix : '',
   };
-  return { locator: createLocator(format, raw.locator), anchor };
+  return { locator: createLocator(format, raw.locator), anchor, stamp: parsePositionStamp(raw.stamp, at, id, problems, ignored) };
+}
+
+/**
+ * The position's own Stamp, or the oldest possible one.
+ *
+ * Absent is not a problem: a version-1 file's positions never had one. Present
+ * and malformed is reported, and still reads as the oldest — the same rule as
+ * the entry's Stamp, for the same reason: a Stamp that could not be read must
+ * lose a merge rather than win it.
+ */
+function parsePositionStamp(raw: unknown, at: number, id: DocumentId, problems: LibraryProblem[], ignored: string[]): Stamp {
+  if (raw === undefined) return OLDEST_STAMP;
+  if (isRecord(raw)) {
+    collectUnknown(raw, STAMP_KEYS, `entries[${at}].position.stamp.`, ignored);
+    if (typeof raw.at === 'number' && Number.isFinite(raw.at) && typeof raw.device === 'string') {
+      return { at: raw.at, device: raw.device };
+    }
+  }
+  problems.push({ at, id, dropped: 'position-stamp', why: 'malformed' });
+  return OLDEST_STAMP;
 }
 
 function parseVoice(raw: unknown, at: number, id: DocumentId, problems: LibraryProblem[], ignored: string[]): VoiceChoice | null {

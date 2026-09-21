@@ -37,7 +37,7 @@ import { Reader, useReader } from '@epubjs-react-native/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
-import { readLocator, type ReadingPosition } from '../core/document';
+import { readLocator, type ReadingPlace, type ReadingPosition } from '../core/document';
 import { contentsOf, type NavigationEntry } from '../core/document/contents';
 import { chapterOf, useNowPlaying } from '../now-playing';
 import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
@@ -47,6 +47,7 @@ import { INK } from './controls';
 import type { OpenDocument } from './document';
 import { Player } from './player';
 import { useReaderFileSystem } from './reader-file-system';
+import { useShell } from './routes';
 import { PROVIDER_LABELS, readiness, readinessSentence, type AppSettings } from './settings';
 import type { SecretPresence } from './use-provider-secrets';
 import { useReading, type ReadingStatus } from './use-reading';
@@ -119,11 +120,17 @@ export interface ReadingViewProps {
    * nothing to the voice — is what ADR 0019 recorded as not done.
    */
   position: ReadingPosition | null;
+  /**
+   * A place that arrived from another device while this book is open, or null
+   * (issue #20): `at` is when it arrived, which is what the effect keys on, and
+   * `position` is where it points. The reading moves there unless it is playing.
+   */
+  adopted: { at: number; position: ReadingPlace } | null;
   onRate(rate: number): void;
   /** A Provider and a Voice together: a Voice belongs to exactly one Provider (CONTEXT.md, ADR 0010). */
   onVoice(provider: ProviderId, voice: string): void;
-  /** Where speech got to. Called on a Clip boundary at most every `POSITION_INTERVAL_MS`, and once more on the way out. */
-  onReached(position: ReadingPosition): void;
+  /** Where speech got to. Called on a Clip boundary at most every `POSITION_INTERVAL_MS`, on a pause, and once more on the way out. */
+  onReached(place: ReadingPlace): void;
   /** What the EPUB calls itself, once epub.js has its metadata. */
   onTitle(title: string): void;
 }
@@ -190,12 +197,14 @@ export function ReadingView({
   keyPresence,
   credentialsWrittenAt,
   position,
+  adopted,
   onRate,
   onVoice,
   onReached,
   onTitle,
 }: ReadingViewProps) {
   const fileSystem = useReaderFileSystem;
+  const { sync, library } = useShell();
   /**
    * `toc` as well as `getMeta` now. The library's own template already posts the
    * whole navigation at load and stores it here; nothing in `src/` had read it. It
@@ -272,7 +281,7 @@ export function ReadingView({
    * writes.
    */
   const status = reading.status;
-  const positionRef = useRef<ReadingPosition | null>(null);
+  const positionRef = useRef<ReadingPlace | null>(null);
   const onReachedRef = useRef(onReached);
   useEffect(() => {
     onReachedRef.current = onReached;
@@ -282,7 +291,13 @@ export function ReadingView({
   const readingPosition = reading.readingPosition;
   useEffect(() => {
     const position = readingPosition();
-    if (!position) return;
+    if (!position) {
+      // A cursor that yields no place is the sentence a resume landed on: the
+      // stored position already is that place, with its true Stamp, and the
+      // place held here for the way out must not overwrite it with an older one.
+      if (status.utterance !== null) positionRef.current = null;
+      return;
+    }
     positionRef.current = position;
     const now = Date.now();
     if (now - writtenAtRef.current < POSITION_INTERVAL_MS) return;
@@ -292,12 +307,31 @@ export function ReadingView({
     // render and depending on it would run this on every one of them.
   }, [status.utterance, readingPosition]);
 
+  const syncRef = useRef(sync);
+  useEffect(() => {
+    syncRef.current = sync;
+  }, [sync]);
   useEffect(
     () => () => {
+      // Leaving is a sync moment (issue #20): the place is written first, so the
+      // run that follows carries it.
       if (positionRef.current) onReachedRef.current(positionRef.current);
+      syncRef.current.poke('leave');
     },
     [],
   );
+
+  /**
+   * A place from another device, while this book is open (issue #20). Keyed on
+   * when it arrived, so each arrival is offered once; `resumeAt` declines while
+   * playing, which is the whole of the rule.
+   */
+  const takePlace = reading.resumeAt;
+  useEffect(() => {
+    // Taken, so the place held for the way out is the adopted one — which is
+    // already stored and is not written again (`use-reading.ts`, `resumedAtRef`).
+    if (adopted && takePlace(adopted.position)) positionRef.current = null;
+  }, [adopted, takePlace]);
 
   /**
    * The document's contents, flattened once per document.
@@ -326,9 +360,38 @@ export function ReadingView({
   const pause = useCallback(() => {
     reading.pause();
     setCollapsed(false);
+    // A pause is a sync moment (issue #20), and the moment a locked phone may
+    // be suspended, so the place is written now rather than at the ten-second
+    // mark and the run starts at once.
+    const place = readingPosition();
+    if (place) {
+      positionRef.current = place;
+      writtenAtRef.current = Date.now();
+      onReachedRef.current(place);
+    }
+    sync.poke('pause');
     // `reading` is a fresh object every render; its `pause` is the stable callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reading.pause]);
+  }, [reading.pause, readingPosition, sync]);
+
+  /**
+   * Play, after one look at the folder (issue #20): a place from another device
+   * that is newer than this one wins while the book is paused, so the run is
+   * waited for — up to `WAIT_MS` — and the reading starts from wherever is
+   * newest. Past the bound, or with the server down, it starts from here and
+   * does not move afterwards.
+   */
+  const play = useCallback(() => {
+    void sync.wait('play').then((outcome) => {
+      if (outcome && outcome !== 'late' && outcome.adopted.includes(document.identity.id)) {
+        const place = library.current(document.identity.id)?.position;
+        if (place && reading.resumeAt(place)) positionRef.current = null;
+      }
+      reading.play();
+    });
+    // `reading` is a fresh object every render; the two callbacks are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reading.play, reading.resumeAt, sync, library, document.identity.id]);
 
   /**
    * The lock screen, Control Centre and the headphone remote (ADR 0016).
@@ -354,7 +417,7 @@ export function ReadingView({
     playing: status.playing,
     rate: settings.rate,
     live: status.utterance !== null,
-    onIntent: (intent) => (intent === 'play' ? reading.play() : pause()),
+    onIntent: (intent) => (intent === 'play' ? play() : pause()),
   });
 
   const ready = readiness(settings, keyPresence.state === 'held');
@@ -518,7 +581,7 @@ export function ReadingView({
         enabled={savedVoice || ready.ready || status.playing || !settings.enabledProviders.includes(settings.provider) || !settings.voice.trim()}
         voiceInUse={voiceInUse}
         notes={notes}
-        onPlay={() => { if ((!settings.enabledProviders.includes(settings.provider) && inventoryReady(document.identity.id) && !savedVoice) || !settings.voice.trim()) setVoicesOpen(true); else reading.play(); }}
+        onPlay={() => { if ((!settings.enabledProviders.includes(settings.provider) && inventoryReady(document.identity.id) && !savedVoice) || !settings.voice.trim()) setVoicesOpen(true); else play(); }}
         onPause={pause}
         onSkip={reading.skip}
         onRate={onRate}

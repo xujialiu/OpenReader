@@ -32,7 +32,7 @@
 
 import * as SecureStore from 'expo-secure-store';
 
-import { gatewayHeadersEntryName, providerKeyEntryName } from './entry-name';
+import { gatewayHeadersEntryName, providerKeyEntryName, SYNC_PASSWORD_ENTRY_NAME } from './entry-name';
 import { keychainRefusal, type KeychainRefusal } from './refusal';
 
 export type { KeychainRefusal } from './refusal';
@@ -232,4 +232,24 @@ export async function readGatewayHeaders(provider: string): Promise<SecretLookup
 /** Remove `provider`'s gateway headers, for the same reason a key can be removed: the entry outlives the app. */
 export async function forgetGatewayHeaders(provider: string): Promise<SecretChange> {
   return removeSecret(gatewayHeadersEntryName(provider));
+}
+
+/**
+ * The WebDAV password of the Sync Folder (issue #20). One entry, the same
+ * options object as every other secret here — a second object would be a
+ * second place for the service name to drift — and the same three acts.
+ */
+export async function saveSyncPassword(password: string): Promise<SecretChange> {
+  if (password === '') throw new Error('The WebDAV password cannot be the empty string; forget it instead.');
+  return writeSecret(SYNC_PASSWORD_ENTRY_NAME, password);
+}
+
+/** Read the WebDAV password. */
+export async function readSyncPassword(): Promise<SecretLookup> {
+  return readSecret(SYNC_PASSWORD_ENTRY_NAME);
+}
+
+/** Remove the WebDAV password from the Keychain. */
+export async function forgetSyncPassword(): Promise<SecretChange> {
+  return removeSecret(SYNC_PASSWORD_ENTRY_NAME);
 }

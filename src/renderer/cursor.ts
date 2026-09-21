@@ -51,7 +51,7 @@
  * milliseconds and nothing else. There is no rate in it.
  */
 
-import type { AnchorAgreement, LocatorProblem, Place, PlaceReader, ReadingPosition } from '../core/document';
+import type { AnchorAgreement, LocatorProblem, Place, PlaceReader, ReadingPlace } from '../core/document';
 import { createLocator, readLocator, resolveReadingPosition } from '../core/document';
 import type { Timestamp } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
@@ -329,14 +329,36 @@ export function reportedPlaces(blocks: readonly ReportedBlock[]): PlaceReader {
       // An empty locator matches the Blocks that have no CFI rather than none of
       // them, which is the one way this lookup could answer with the wrong text.
       if (!cfi) return null;
-      return blocks.find((block) => block.cfi === cfi)?.text ?? null;
+      return findBlock(blocks, cfi)?.text ?? null;
     },
     *places(): Iterable<Place> {
       for (const block of blocks) {
-        if (block.cfi) yield { locator: createLocator('epub', block.cfi), text: block.text };
+        if (block.cfi) yield { locator: createLocator('epub', canonicalCfi(block.cfi)), text: block.text };
       }
     },
   };
+}
+
+/**
+ * A CFI in the one spelling the Positions File allows: **no assertions**.
+ *
+ * epub.js writes an element's `id` into the step it generates —
+ * `/6/8[cop]!/4/2/4/40[release_identifier_line]` — and the desktop plugin's
+ * matcher compares paths as strings, so a Block's CFI and the same Block named
+ * from the desktop differ only by these brackets. They are removed at the one
+ * place a locator is minted for storage, and every comparison below is made on
+ * the stripped form, so a locator written by either side finds its Block here.
+ * The renderer keeps the assertions for its own `rendition.display`, where they
+ * are harmless (spec 6.4; measured 2026-09-21, notes/NOTES_2026-09-21.md 17:11).
+ */
+export function canonicalCfi(cfi: string): string {
+  return cfi.replace(/\[[^\]]*\]/g, '');
+}
+
+/** The Block a CFI names, whichever side spelled it. */
+function findBlock(blocks: readonly ReportedBlock[], cfi: string): ReportedBlock | undefined {
+  const wanted = canonicalCfi(cfi);
+  return blocks.find((block) => block.cfi !== '' && canonicalCfi(block.cfi) === wanted);
 }
 
 /** Why a stored Reading Position did not name an Utterance. */
@@ -394,7 +416,7 @@ export type Resume =
  * so their CFIs are an EPUB dialect by construction.
  */
 export function resolveResume(
-  position: ReadingPosition,
+  position: ReadingPlace,
   utterances: readonly Utterance[],
   blocks: readonly ReportedBlock[],
 ): Resume {
@@ -405,7 +427,7 @@ export function resolveResume(
 
   const moved = resolution.outcome === 'recovered' ? resolution.because : null;
   const cfi = readLocator(resolution.locator, 'epub');
-  const found = cfi ? blocks.find((block) => block.cfi === cfi) : undefined;
+  const found = cfi ? findBlock(blocks, cfi) : undefined;
   const at = found
     ? utteranceAt(utterances, blocks.map((block) => block.id), found.id, resolution.start)
     : null;

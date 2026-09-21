@@ -135,21 +135,27 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
    * in here, and getting that wrong is silent: the page is right, the highlight is
    * right for an instant, and the voice starts somewhere else.
    */
-  it('finds the Utterance in one place, and that place is where the Blocks arrive', () => {
+  it('finds the Utterance in one place, and that place is tried where the Blocks arrive', () => {
+    // One attempt function since issue #20, because a place can now arrive from
+    // another device while the book is open and has to be tried the same way the
+    // one it opened with is. Two copies of the attempt would be two chances for
+    // the order below to differ.
     const reading = code('use-reading.ts');
     expect(reading.match(/resolveResume\(/g)).toHaveLength(1);
-    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, seekTo]');
-    expect(blocks).toContain('resolveResume(stored, next, reported)');
+    const attempt = within(reading, 'const tryResume = useCallback(', '[seekTo],');
+    expect(attempt).toContain('resolveResume(stored, next, reported)');
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace],');
+    expect(blocks).toContain('tryResume(next, reported, () => adopt(next))');
   });
 
   it('anchors the engine at the resumed Utterance before the longer list is adopted', () => {
     // The Utterance being seeked to exists only in the new list, so `adopt` has to
     // have handed it to the engine before `seekTo` names it — seeking into the old
-    // list lands somewhere else entirely. The contents tap two branches below has
-    // the same ordering for the same reason.
-    const resume = within(code('use-reading.ts'), 'const stored = resumeRef.current;', 'resumeLostRef.current = resumeSentence(found);');
-    expect(resume.indexOf('atRef.current = found.utterance;')).toBeLessThan(resume.indexOf('adopt(next);'));
-    expect(resume.indexOf('adopt(next);')).toBeLessThan(resume.indexOf('seekTo(found.utterance);'));
+    // list lands somewhere else entirely. `before` is that `adopt`, handed in by
+    // `handleBlocks`; the contents tap has the same ordering for the same reason.
+    const resume = within(code('use-reading.ts'), 'const tryResume = useCallback(', '[seekTo],');
+    expect(resume.indexOf('atRef.current = found.utterance;')).toBeLessThan(resume.indexOf('before?.();'));
+    expect(resume.indexOf('before?.();')).toBeLessThan(resume.indexOf('seekTo(found.utterance);'));
   });
 
   it('stops competing the moment the owner points somewhere else', () => {
@@ -255,7 +261,7 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
     // Sections render out of order, so the last to report is routinely behind the
     // furthest — and a document's last spine items are where the sections that
     // render with no text in them live.
-    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, seekTo],');
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace],');
     expect(blocks).toContain('furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);');
   });
 });

@@ -4,6 +4,10 @@ status: accepted
 
 # A reading position is a CFI checked against a text anchor
 
+_Measured and refined by [ADR 0031](0031-positions-cross-products-by-document-id.md):
+the round trip was run on 2026-09-21, the locator is an **element** CFI with no
+text step and no assertions, and the retreat named at the end was not needed._
+
 A reading position records both a native locator for its format — for EPUB, the
 CFI the desktop plugin already stores — and a text anchor: a quotation of the
 utterance with enough surrounding context to find it again. Resolving a position

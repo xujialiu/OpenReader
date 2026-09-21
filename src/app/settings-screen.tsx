@@ -10,6 +10,7 @@ export function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
       <SettingRow title="General" detail="Theme" onPress={() => navigation.navigate('General')} />
       <SettingRow title="Providers" detail={`${settings.enabledProviders.length} enabled`}
         onPress={() => navigation.navigate('Providers')} />
+      <SettingRow title="Sync" detail={settings.sync.enabled ? 'On' : 'Off'} onPress={() => navigation.navigate('Sync')} />
     </View>
   );
 }

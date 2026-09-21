@@ -26,11 +26,13 @@ import type { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { APP_NAME } from '../../app-name';
-import type { DocumentId, LibraryEntry, ReadingPosition, VoiceChoice } from '../core/document';
+import { nextStamp, stampPlace, type DocumentId, type LibraryEntry, type ReadingPlace, type VoiceChoice } from '../core/document';
+import type { PositionsItem } from '../core/sync/positions-file';
 
 import { addDocument } from './document';
 import { displayNames, saveDisplayName } from './display-names';
 import { migrateDocumentIds, readLibrary, thisDevice, writeLibrary, type LoadedLibrary } from './library';
+import { itemsOf, planAdoption, samePlace } from './sync-items';
 
 /** What the Library screen shows and what the Reader route resolves a Document Id against. */
 export interface Library {
@@ -55,8 +57,40 @@ export interface Library {
   retitled(id: DocumentId, title: string): void;
   rename(id: DocumentId, title: string): void;
   remove(id: DocumentId): void;
-  /** Where speech stopped (ADR 0008). Written through to the file like every other change. */
-  reached(id: DocumentId, position: ReadingPosition): void;
+  /**
+   * Where speech stopped (ADR 0008). Written through to the file like every
+   * other change, **stamped here**: the renderer knows where speech is and this
+   * is what knows the time and the device, and the position's Stamp is written
+   * above whatever it held (`nextStamp`), so a slow clock cannot lose the place
+   * it is reading to one it adopted a moment ago.
+   */
+  reached(id: DocumentId, place: ReadingPlace): void;
+  /** This device's Device Name (CONTEXT.md), which every Stamp written here carries. */
+  device: string;
+  /**
+   * The entry as it is **now**, not as of the last render: read from the ref
+   * that `commit` writes synchronously, for a caller that has just waited on a
+   * sync and needs the position that sync adopted before React has drawn it.
+   */
+  current(id: DocumentId): LibraryEntry | null;
+  /**
+   * The shelf's positions as items of the Positions File, for the transport.
+   * Read at the moment of a sync, not held: a position written a second ago is
+   * in it.
+   */
+  positionsItems(): PositionsItem[];
+  /**
+   * Take every item newer than what the shelf holds, in one write. Returns the
+   * Document Ids whose position moved. Nothing is taken from a Library this
+   * build may not write (`frozen`, `ignored`) — the write would be refused, and
+   * a shelf that disagrees with its file is the worse state.
+   */
+  adopt(items: readonly PositionsItem[]): readonly DocumentId[];
+  /**
+   * When each Document's position was last taken from another device, for the
+   * one screen that has to notice — the Reader with that book open.
+   */
+  adoptedAt: Readonly<Partial<Record<DocumentId, number>>>;
   /**
    * The Voice this Document is read in (ADR 0010).
    *
@@ -91,6 +125,8 @@ export function useLibrary(): Library {
   const [entries, setEntries] = useState<readonly LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState<string | null>(null);
+  const [adoptedAt, setAdoptedAt] = useState<Partial<Record<DocumentId, number>>>({});
+  const [device, setDevice] = useState('');
 
   const entriesRef = useRef<readonly LibraryEntry[]>([]);
   /**
@@ -110,6 +146,7 @@ export function useLibrary(): Library {
       const loaded = readLibrary();
       loadedRef.current = loaded;
       deviceRef.current = thisDevice();
+      setDevice(deviceRef.current);
       /**
        * Before anything reads an entry, because an entry named under the rule ADR
        * 0004 replaced points at a file this build will not find by name — and the
@@ -187,8 +224,39 @@ export function useLibrary(): Library {
   );
 
   const reached = useCallback(
-    (id: DocumentId, position: ReadingPosition) => change(id, (entry) => ({ ...entry, position, stamp: stamp() })),
+    (id: DocumentId, place: ReadingPlace) => {
+      // The sentence the entry already holds: nothing moved, nothing is written,
+      // and the Stamp it carries — the desktop's, when the place came from
+      // there — stands (`samePlace`).
+      const held = entriesRef.current.find((one) => one.id === id);
+      if (held?.position && samePlace(held.position, place, held.format)) return;
+      change(id, (entry) => ({
+        ...entry,
+        position: stampPlace(place, nextStamp(Date.now(), deviceRef.current, entry.position?.stamp)),
+        stamp: stamp(),
+      }));
+    },
     [change, stamp],
+  );
+
+  const positionsItems = useCallback(() => itemsOf(entriesRef.current, deviceRef.current), []);
+  const current = useCallback((id: DocumentId) => entriesRef.current.find((one) => one.id === id) ?? null, []);
+
+  const adopt = useCallback(
+    (items: readonly PositionsItem[]): readonly DocumentId[] => {
+      if (loadedRef.current.frozen || loadedRef.current.ignored.length > 0) return [];
+      const plan = planAdoption(entriesRef.current, items);
+      if (plan.adopted.length === 0) return [];
+      commit(() => plan.entries);
+      const now = Date.now();
+      setAdoptedAt((was) => {
+        const next = { ...was };
+        for (const id of plan.adopted) next[id] = now;
+        return next;
+      });
+      return plan.adopted;
+    },
+    [commit],
   );
 
   const voiced = useCallback(
@@ -209,7 +277,7 @@ export function useLibrary(): Library {
     }
   }, [change, stamp]);
   const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id)), [commit]);
-  return { entries, loading, note, add, opened, retitled, rename, remove, reached, voiced, report };
+  return { entries, loading, note, add, opened, retitled, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
 }
 
 /**

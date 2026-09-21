@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createLocator, readingPositionAt, type ReadingPosition } from '../../src/core/document';
+import { createLocator, readLocator, readingPlaceAt, type ReadingPlace } from '../../src/core/document';
 import type { Timestamp } from '../../src/core/providers/types';
 import { segmentBlocks, type Block, type Utterance } from '../../src/core/segmenter';
 import { splitWithSentencex } from '../../src/core/segmenter/sentencex';
@@ -8,6 +8,7 @@ import type { ClipCue, PositionCorrection } from '../../src/playback/reader-cloc
 import type { ReportedBlock, SpeakMessage } from '../../src/renderer/messages';
 import {
   anchoredRangesOf,
+  canonicalCfi,
   clampElapsed,
   correctMessage,
   rangesOf,
@@ -443,7 +444,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
    *
    * The fixtures go the whole way round rather than starting from a hand-written
    * anchor — the position is built by the very call `use-reading.ts` makes,
-   * `readingPositionAt(locator, block.text, span.start, span.end)` — because an
+   * `readingPlaceAt(locator, block.text, span.start, span.end)` — because an
    * anchor written by hand is a restatement of the belief being tested.
    */
 
@@ -460,10 +461,10 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
   }
 
   /** The Reading Position `use-reading.ts` writes for an Utterance: the Block's CFI, the Block's own text, the Utterance's span in it. */
-  function positionOf(utterances: readonly Utterance[], blocks: readonly ReportedBlock[], at: number): ReadingPosition {
+  function positionOf(utterances: readonly Utterance[], blocks: readonly ReportedBlock[], at: number): ReadingPlace {
     const span = utterances[at].spans[0];
     const block = blocks[span.block];
-    return readingPositionAt(createLocator('epub', block.cfi), block.text, span.start, span.end);
+    return readingPlaceAt(createLocator('epub', block.cfi), block.text, span.start, span.end);
   }
 
   const paragraph = 'One sentence here. A second sentence follows it. And a third ends the paragraph.';
@@ -541,7 +542,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     // owner's Chinese novel, not a corner case. Nothing may choose between them.
     const twice = reported(['He said nothing.', 'He said nothing.'], ['epubcfi(/6/2!/4/2)', 'epubcfi(/6/2!/4/4)']);
     const utterances = segment(twice);
-    const written = readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/99)'), twice[0].text, 0, twice[0].text.length);
+    const written = readingPlaceAt(createLocator('epub', 'epubcfi(/6/2!/4/99)'), twice[0].text, 0, twice[0].text.length);
     expect(resolveResume(written, utterances, twice)).toEqual({
       outcome: 'lost',
       because: 'locator-did-not-resolve',
@@ -557,7 +558,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     const utterances = segment(nameless);
     expect([...reportedPlaces(nameless).places()]).toHaveLength(0);
     expect(reportedPlaces(nameless).textAt(createLocator('epub', ''))).toBeNull();
-    const written = readingPositionAt(createLocator('epub', ''), paragraph, 19, 48);
+    const written = readingPlaceAt(createLocator('epub', ''), paragraph, 19, 48);
     expect(resolveResume(written, utterances, nameless)).toMatchObject({ outcome: 'lost' });
   });
 
@@ -583,5 +584,32 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     expect(moved).toContain('found by its own text');
     expect(lost).toContain('starts at the top of this section');
     expect(new Set([plain, moved, lost]).size).toBe(3);
+  });
+});
+
+describe('canonicalCfi: the one spelling the Positions File allows (issue #20)', () => {
+  const block = (id: string, cfi: string, text: string): ReportedBlock => ({ id, cfi, text, role: 'paragraph', section: 'a.xhtml', sectionIndex: 4 });
+
+  it('strips every [id] assertion and nothing else', () => {
+    expect(canonicalCfi('epubcfi(/6/8[cop]!/4/2/4/40[release_identifier_line])')).toBe('epubcfi(/6/8!/4/2/4/40)');
+    expect(canonicalCfi('epubcfi(/6/34!/4/2/4/2/4)')).toBe('epubcfi(/6/34!/4/2/4/2/4)');
+    expect(canonicalCfi('')).toBe('');
+  });
+
+  it('lets a locator written by the desktop, without assertions, find the Block epub.js named with them', () => {
+    const blocks = [
+      block('1.0', 'epubcfi(/6/8[cop]!/4/2/4/2)', 'This Is a Borzoi Book'),
+      block('1.1', 'epubcfi(/6/8[cop]!/4/2/4/4[p2])', 'Copyright by the author.'),
+    ];
+    const places = reportedPlaces(blocks);
+    expect(places.textAt(createLocator('epub', 'epubcfi(/6/8!/4/2/4/4)'))).toBe('Copyright by the author.');
+    expect(places.textAt(createLocator('epub', 'epubcfi(/6/8[cop]!/4/2/4/4[p2])'))).toBe('Copyright by the author.');
+    expect([...places.places()].map((place) => readLocator(place.locator, 'epub'))).toEqual(['epubcfi(/6/8!/4/2/4/2)', 'epubcfi(/6/8!/4/2/4/4)']);
+  });
+
+  it('never lets a Block with no CFI answer for one', () => {
+    const places = reportedPlaces([block('1.0', '', 'Nameless')]);
+    expect(places.textAt(createLocator('epub', ''))).toBeNull();
+    expect([...places.places()]).toEqual([]);
   });
 });

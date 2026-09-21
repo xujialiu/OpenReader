@@ -3,7 +3,7 @@ import {
   createLocator,
   findAnchor,
   readLocator,
-  readingPositionAt,
+  readingPlaceAt,
   resolveReadingPosition,
   sameLocator,
   type Locator,
@@ -58,7 +58,7 @@ function documentOf(blocks: readonly Block[], resolved: Record<string, string>, 
 const asResolved = (blocks: readonly Block[]): Record<string, string> => Object.fromEntries(blocks.map((block) => [block.cfi, block.text]));
 
 /** The position the owner would have left behind after the fox sentence was spoken. */
-const foxPosition = () => readingPositionAt(createLocator('epub', '/6/2!/4/4'), CHAPTER[1].text, 0, FOX.length);
+const foxPosition = () => readingPlaceAt(createLocator('epub', '/6/2!/4/4'), CHAPTER[1].text, 0, FOX.length);
 
 describe('the locator is opaque (ADR 0007)', () => {
   it('gives its string only to a renderer that names the format it speaks', () => {
@@ -102,7 +102,7 @@ describe('the locator is opaque (ADR 0007)', () => {
   });
 });
 
-describe('readingPositionAt', () => {
+describe('readingPlaceAt', () => {
   it('builds both halves from one call, so they describe the same place', () => {
     const position = foxPosition();
     expect(readLocator(position.locator, 'epub')).toBe('/6/2!/4/4');
@@ -201,7 +201,7 @@ describe('resolveReadingPosition, when the locator does not resolve at all', () 
  */
 describe('resolveReadingPosition, when it cannot name a place', () => {
   it('is unresolved when the passage is nowhere in the Document', () => {
-    const position = readingPositionAt(createLocator('epub', '/6/9!/4/2'), 'A passage that this Document no longer contains anywhere.', 0, 57);
+    const position = readingPlaceAt(createLocator('epub', '/6/9!/4/2'), 'A passage that this Document no longer contains anywhere.', 0, 57);
     expect(resolveReadingPosition(position, documentOf(CHAPTER, {}))).toEqual({
       outcome: 'unresolved',
       because: 'locator-did-not-resolve',
@@ -227,7 +227,7 @@ describe('resolveReadingPosition, when it cannot name a place', () => {
       { cfi: '/6/2!/4/2', text: 'Before the storm. He said nothing. The rain began.' },
       { cfi: '/6/8!/4/2', text: 'After the storm. He said nothing. The sun came out.' },
     ];
-    const position = readingPositionAt(createLocator('epub', '/6/8!/4/2'), twins[1].text, 17, 33);
+    const position = readingPlaceAt(createLocator('epub', '/6/8!/4/2'), twins[1].text, 17, 33);
     const resolution = resolveReadingPosition(position, documentOf(twins, {}));
     expect(resolution.outcome).toBe('recovered');
     expect(resolution.outcome === 'recovered' && readLocator(resolution.locator, 'epub')).toBe('/6/8!/4/2');
@@ -245,7 +245,7 @@ describe('resolveReadingPosition, when it cannot name a place', () => {
   });
 
   it('distinguishes the two ways the locator let it down', () => {
-    const gone = readingPositionAt(createLocator('epub', '/6/9!/4/2'), 'A passage that this Document no longer contains anywhere.', 0, 57);
+    const gone = readingPlaceAt(createLocator('epub', '/6/9!/4/2'), 'A passage that this Document no longer contains anywhere.', 0, 57);
     expect(resolveReadingPosition(gone, documentOf(CHAPTER, {}))).toMatchObject({ because: 'locator-did-not-resolve' });
     expect(resolveReadingPosition(gone, documentOf(CHAPTER, { '/6/9!/4/2': 'Something else.' }))).toMatchObject({ because: 'text-disagreed' });
   });

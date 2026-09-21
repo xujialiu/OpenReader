@@ -21,8 +21,11 @@ import { APP_NAME } from '../../app-name';
 import type { DocumentId } from '../core/document';
 import type { ProviderId } from '../core/providers/types';
 
+import type { SyncOutcome } from '../core/sync/transport';
+
 import type { AppSettings } from './settings';
 import type { Library } from './use-library';
+import type { SyncHandle } from './use-sync';
 
 /**
  * `Settings` is a list of two, and `Providers` opens **one Provider at a time**
@@ -43,6 +46,7 @@ export type RootStackParamList = {
   General: undefined;
   Providers: undefined;
   Provider: { id: ProviderId };
+  Sync: undefined;
 };
 
 export type ScreenProps<Route extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, Route>;
@@ -89,6 +93,16 @@ export interface Shell {
   secretRevisions: Partial<Record<import('../core/providers/types').ProviderId, number>>;
   /** Called by `use-provider-secrets.ts` after a save or a forget, and by nothing else. */
   noteSecretWritten(provider?: import('../core/providers/types').ProviderId): void;
+  /**
+   * The Sync Folder's transport (issue #20): poked from the shell, the
+   * Library screen and the Reader, and waited on by the Reader before Play.
+   * Here for the same reason the Library is: one transport outlives every
+   * screen, and two would race each other for one file. Stable for the app's
+   * life, so an effect may depend on it.
+   */
+  sync: SyncHandle;
+  /** What the last sync did, for the Sync screen's status line. Changes after every completed run: never a dependency of anything that pokes. */
+  syncLast: SyncOutcome | null;
 }
 
 export const ShellContext = createContext<Shell | null>(null);

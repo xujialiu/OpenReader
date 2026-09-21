@@ -1,5 +1,9 @@
 # Resuming where you actually stopped — and saying so when it can't
 
+*The crossing between the phone and the desktop was measured and settled in
+[decision 0031](0031-your-place-follows-you-to-the-desktop-and-back.md); the retreat
+at the end was not needed.*
+
 When the app saves the owner's place in a document it saves two things: where in
 the document speech stopped, and a quotation of the words that were being spoken
 there. Reopening the document goes to the place, then checks that the words found

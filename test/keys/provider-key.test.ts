@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { providerKeyEntryName } from '../../src/keys/entry-name';
+import { providerKeyEntryName, SYNC_PASSWORD_ENTRY_NAME } from '../../src/keys/entry-name';
 import { keychainRefusal } from '../../src/keys/refusal';
 
 /**
@@ -86,6 +86,14 @@ describe('ADR 0002: one key per Keychain entry, keyed by Provider', () => {
     for (const id of PROVIDER_IDS) {
       expect(isValidKey.test(providerKeyEntryName(id)), id).toBe(true);
     }
+  });
+
+  it('names the Sync Folder password entry so expo-secure-store accepts it, apart from every Provider entry', () => {
+    // One folder, one entry (issue #20). It shares nothing with a Provider's
+    // prefix, so a Keychain viewer can tell whose it is.
+    expect(/^[\w.-]+$/.test(SYNC_PASSWORD_ENTRY_NAME)).toBe(true);
+    expect(PROVIDER_IDS.map(providerKeyEntryName)).not.toContain(SYNC_PASSWORD_ENTRY_NAME);
+    expect(SYNC_PASSWORD_ENTRY_NAME.startsWith('provider-key.')).toBe(false);
   });
 
   it('refuses an empty Provider id, which that same rule would let through', () => {

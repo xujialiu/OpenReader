@@ -1,61 +1,58 @@
-# src/core/sync — ADR 0003
+# src/core/sync — ADR 0003, ADR 0031
 
-Reading positions and shared settings, over the owner's own WebDAV server, in
-the **same folder** the Zotero-TTS desktop plugin already uses.
+Reading positions over the owner's own WebDAV server, in the **same folder** the
+Zotero-TTS desktop plugin already uses.
 
 This is not a feature bolted on. ADR 0003 is blunt about it: sync is the reason
 this app exists at all — the owner left Speechify specifically because it could
 not keep a place across devices.
 
-WebDAV over iCloud, which would exclude Android, and over a server of ours,
-which ADR 0002 rules out. It also reuses work already done and already portable:
-`core/webdav.ts` parses PROPFIND responses with regular expressions rather than
-a DOM — a decision originally made so the plugin's tests could run under Node,
-and which therefore works unchanged here.
+## The contract is the plugin's `docs/spec/SYNC-FORMAT.md`
 
-## The folder is a contract between two products
+The folder became a contract between two products on 2026-09-21, and the
+contract is written down in the plugin repository, not here. This directory
+implements section 6 of it — the **Positions File**, `xujialiu-positions.json`
+— and adds nothing. Where a rule below looks arbitrary, the spec says why.
 
-Three properties of the existing format constrain how it can evolve. They were
-verified in the plugin's code, not assumed:
+Three files:
 
-- The shared-settings and positions parsers **reject a file whose `version` is
-  higher than they know**, and the caller must leave it alone. A file written by
-  a newer app stops every already-installed desktop copy from syncing that file
-  until its owner updates.
-- The three files do **not** share a version policy. The settings-backup parser
-  never reads `version` at all and instead collects unknown keys into `ignored`.
-  Harmless while one product wrote all three; not harmless now.
-- The positions file is serialised canonically to **exactly four fields per
-  entry**, so an older desktop build silently strips any field added to an entry
-  on its next merge-and-upload — for every machine, with nothing reported.
+- `webdav.ts` — the plugin's client, **copied** (ADR 0013's rule), with its test
+  brought across. `fetch` is injected; `btoa` and `TextEncoder`, which it rests
+  on, are both on this Hermes (notes/NOTES_2026-09-19.md, 12:21).
+- `positions-file.ts` — parse, canonical serialise, merge. Canonical bytes so the
+  transport can compare text; **carry through, never drop** an item this build
+  cannot use, because a phone that dropped the desktop's PDF positions on its way
+  through would erase them for every machine; a newer `version` is left alone; a
+  malformed file is treated as absent and healed by the next upload.
+- `transport.ts` — download, merge, adopt, conditional upload, single-flight,
+  one report per retry window. The Library enters through `local()` and
+  `adopt()`; nothing here imports the platform.
 
-**So new information belongs in a new file, never a new field.** The only two
-places that read the folder listing filter it to names they already know, so
-nothing enumerates, rewrites or deletes a file it does not recognise. An unknown
-file name is free; a version bump is not.
+## What is decided here, and what is not
 
-Written up as issue #126 against the desktop plugin, which asks for a
-`zotero-tts-documents.json` and a `docs/SYNC-FORMAT.md`.
+The **merge** is the spec's: union by Document Id, the greater `stamp.at` wins,
+an equal one keeps this device's, nothing is ever removed. The Stamp compared is
+the **position's own** (`core/document/stamp.ts`), which moves only when speech
+stops somewhere new — not the Library entry's, which moves whenever the owner
+touches the book and would let a glance at the shelf beat a chapter read on the
+desktop.
 
-## The three things that sync
+**When** a sync runs is not decided here. `src/app/use-sync.ts` pokes the
+transport at launch, on returning to the foreground, on entering the background,
+on opening a book, on adding one, on a pause, and on leaving the reader; never on
+a timer while reading. It also waits on one, bounded, before Play.
 
-**Reading Position** — where speech stopped in a document. One per document,
-overwritten as the owner reads. Not a bookmark, not a list the owner sees. How
-one is expressed is ADR 0008.
+**What the shelf does** with an adopted item is `src/app/sync-items.ts`: an item
+newer than the entry's position replaces it, the shelf Stamp follows when the
+item is newer still, and a Document this device does not hold is not its to
+keep.
 
-**Shared Settings** — merged setting by setting, so two devices changing
-different settings both keep their change.
+## The other three files in the folder
 
-**Settings Backup** — one device's complete settings, written for that device
-alone and never merged. Restoring one replaces settings rather than combining
-them.
-
-A **Stamp** — wall-clock time plus which device wrote it — decides which of two
-copies of an entry wins.
-
-## Injected, like everything in core
-
-`fetch` comes in as a dependency. Nothing here imports `expo-file-system` or
-anything else from the platform; `eslint.config.js` enforces that. It is what
-lets the plugin's `test/core/webdav.test.ts` and the settings-sync tests come
-across and run under Node.
+`zotero-tts-settings_<machine>.json`, `zotero-tts-shared-settings.json` and
+`zotero-tts-positions.json` are the plugin's own and are neither read nor written
+here. The last is keyed by Zotero's `{lib, key}`, which a phone cannot produce,
+and is serialised to exactly four fields, so a document id or a text anchor could
+not be added to it without a version bump that stops every installed desktop
+copy from syncing — which is why the Positions File is a new file (ADR 0003,
+plugin issue #126).

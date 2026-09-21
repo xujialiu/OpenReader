@@ -35,6 +35,7 @@
 
 import { anchorHasWords, compareMatches, createTextAnchor, matchAnchor, type AnchorAgreement, type AnchorMatch, type TextAnchor } from './anchor';
 import type { DocumentFormat } from './identity';
+import type { Stamp } from './stamp';
 
 /**
  * Symbol keys, so the properties cannot be named from outside this file. Not
@@ -74,24 +75,52 @@ export function sameLocator(a: Locator, b: Locator): boolean {
 }
 
 /**
- * Where speech stopped. One per Document, overwritten as the owner reads
- * (CONTEXT.md) — not a list the owner sees, and not something they create.
+ * A place in a Document that speech can be resumed from: a locator and the
+ * text anchor that verifies it. What the renderer produces at a Clip boundary,
+ * and what resolving works on — everything about finding the sentence again is
+ * decided by these two and nothing else.
  */
-export interface ReadingPosition {
+export interface ReadingPlace {
   locator: Locator;
   anchor: TextAnchor;
 }
 
 /**
- * A position for the characters `[start, end)` of the text at `locator`.
+ * Where speech stopped. One per Document, overwritten as the owner reads
+ * (CONTEXT.md) — not a list the owner sees, and not something they create.
+ *
+ * A place **with its own Stamp** (`stamp.ts`): when speech stopped there and on
+ * which device. The Stamp is the position's and not the Library entry's, because
+ * the entry's moves whenever the owner touches the book and this one only when
+ * the reading does — and it is this one a merge between devices compares.
+ */
+export interface ReadingPosition extends ReadingPlace {
+  stamp: Stamp;
+}
+
+/**
+ * A place for the characters `[start, end)` of the text at `locator`.
  *
  * Both halves from one call, because they have to describe the same place and
  * building them separately is how they stop doing so. For EPUB: the Block's CFI,
  * the Block's own verbatim text, and the Utterance's span within it — which is
  * exactly what the renderer has when speech reaches an Utterance.
+ *
+ * No Stamp: the renderer knows where speech is and not what time it is on which
+ * device. The Library stamps a place as it stores it (`stampPlace`).
  */
-export function readingPositionAt(locator: Locator, text: string, start: number, end: number): ReadingPosition {
+export function readingPlaceAt(locator: Locator, text: string, start: number, end: number): ReadingPlace {
   return { locator, anchor: createTextAnchor(text, start, end) };
+}
+
+/** A place, stamped: what the Library keeps and what crosses to other devices. */
+export function stampPlace(place: ReadingPlace, stamp: Stamp): ReadingPosition {
+  return { locator: place.locator, anchor: place.anchor, stamp };
+}
+
+/** `readingPlaceAt` and `stampPlace` in one call, for a caller that has the Stamp in hand. */
+export function readingPositionAt(locator: Locator, text: string, start: number, end: number, stamp: Stamp): ReadingPosition {
+  return stampPlace(readingPlaceAt(locator, text, start, end), stamp);
 }
 
 /** One candidate place and its own text. For EPUB, a Block: its element CFI and the text the renderer reports for it, verbatim. */
@@ -204,7 +233,7 @@ export type PositionResolution =
  * 3. failing that, a search for the anchor, which is slow and is what makes a
  *    position survive a document the locator no longer describes.
  */
-export function resolveReadingPosition(position: ReadingPosition, document: PlaceReader): PositionResolution {
+export function resolveReadingPosition(position: ReadingPlace, document: PlaceReader): PositionResolution {
   const text = document.textAt(position.locator);
   if (text !== null) {
     const match = matchAnchor(position.anchor, text);

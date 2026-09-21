@@ -114,13 +114,35 @@ _Avoid_: shelf, catalogue, collection, bookshelf, recents
 
 **Reading Position**:
 Where speech stopped in a document. One per document, overwritten as the
-owner reads, and not something the owner creates or sees in a list.
+owner reads, and not something the owner creates or sees in a list. It is a
+locator and a text anchor together.
 _Avoid_: bookmark, progress, location, savedPosition
 
+**Locator**:
+Where a reading position points, in the document's own format: for an EPUB,
+the paragraph the reading stopped in. A paragraph, never a sentence.
+_Avoid_: CFI (as a type name), path, selector, pointer
+
+**Text Anchor**:
+The quotation half of a reading position: the sentence speech stopped on,
+with a little of the text either side of it, by which the place is found
+again and a locator is checked.
+_Avoid_: quote, snippet, excerpt, context
+
 **Stamp**:
-The wall-clock time an entry was last written, together with which device
-wrote it, used to decide which of two copies of an entry wins.
+The wall-clock time something was last written, together with the device
+name of whoever wrote it, used to decide which of two copies wins. A library
+entry carries one that moves whenever the owner touches the document; a
+reading position carries its own, which moves only when speech stops
+somewhere new.
 _Avoid_: timestamp, ts, version, clock
+
+**Device Name**:
+The readable name a device signs its stamps with, so that a position can be
+told to have come from the desktop or from a phone. Made once by the device
+itself and never chosen or changed by the owner: a phone's names its kind and
+ends in a few random characters.
+_Avoid_: machine id, device id, host name
 
 **Appearance**:
 How the text of a document is set: which font it is shown in and its font
@@ -151,7 +173,13 @@ merged. Restoring one replaces settings rather than combining them.
 _Avoid_: snapshot, export, sync
 
 **Sync Folder**:
-The folder on the owner's own WebDAV server that holds shared settings,
-reading positions and the document catalogue. Shared with the desktop
-Zotero-TTS plugin, which reads and writes the same files.
+The folder on the owner's own WebDAV server that holds shared settings and
+the positions file. Shared with the desktop Zotero-TTS plugin, which reads
+and writes the same files.
 _Avoid_: remote, cloud, server, bucket
+
+**Positions File**:
+The one file in the sync folder, `xujialiu-positions.json`, that holds every
+device's reading positions by document id, written by the phones and by the
+desktop plugin alike.
+_Avoid_: sync file, remote library, catalogue, documents file

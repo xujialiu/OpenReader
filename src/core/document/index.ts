@@ -21,6 +21,8 @@
  * - `position.ts` — ADR 0008's Reading Position, an opaque locator (ADR 0007)
  *   plus that anchor, and the fixed resolution order: locator, then verify,
  *   then search.
+ * - `stamp.ts` — the Stamp a position and an entry each carry, and the rule
+ *   for writing the next one above whatever was held.
  * - `library.ts` — one entry per Document as a store persists it: a versioned
  *   file, parsed defensively, with ADR 0003's "reject a newer version and leave
  *   it alone" and "new information goes in a new file" designed in.
@@ -72,18 +74,23 @@ export {
   createLocator,
   findAnchor,
   readLocator,
+  readingPlaceAt,
   readingPositionAt,
   resolveReadingPosition,
   sameLocator,
+  stampPlace,
   type AnchorSearch,
   type Locator,
   type LocatorProblem,
   type Place,
   type PlaceReader,
   type PositionResolution,
+  type ReadingPlace,
   type ReadingPosition,
   type SearchProblem,
 } from './position';
+
+export { OLDEST_STAMP, newerThan, nextStamp, type Stamp } from './stamp';
 
 export {
   LIBRARY_VERSION,
@@ -92,7 +99,6 @@ export {
   type LibraryEntry,
   type LibraryParse,
   type LibraryProblem,
-  type Stamp,
   type VoiceChoice,
 } from './library';
 

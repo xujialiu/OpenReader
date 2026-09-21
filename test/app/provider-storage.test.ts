@@ -39,6 +39,11 @@ describe('local settings persistence', () => {
     }
   });
   it('defaults missing sources to official only and rejects unknown enabled ids', () => {
+    expect(parseSettings({ version: 1, settings: { sync: { url: 'https://dav.example/or', username: 'ann', enabled: true } } }).sync)
+      .toEqual({ url: 'https://dav.example/or', username: 'ann', enabled: true });
+    // Never a password in the settings file, and the switch is off unless it was written on.
+    expect(parseSettings({ version: 1, settings: { sync: { url: 'x', password: 'secret', enabled: 'yes' } } }).sync)
+      .toEqual({ url: 'x', username: '', enabled: false });
     expect(parseSettings({ version: 1, settings: { enabledProviders: ['fish', 'other', 'fish'] } })).toMatchObject({
       enabledProviders: ['fish'], fish: { includeOfficial: true, includeOwn: false, includeManual: false },
     });

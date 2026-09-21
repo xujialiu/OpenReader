@@ -89,6 +89,16 @@ function entryName(prefix: string, provider: string, holds: string): string {
   return name;
 }
 
+/**
+ * The third kind: the password of the owner's WebDAV folder (issue #20), one
+ * entry for the one folder. Not a Provider's, so it takes no id — and the same
+ * argument as the other two puts it here rather than in `settings.json`: it is
+ * a bearer credential, it is needed with the screen locked when a paused
+ * reading syncs its place, and the settings file is the one thing that must
+ * never carry a secret.
+ */
+export const SYNC_PASSWORD_ENTRY_NAME = 'sync-password.webdav';
+
 /** The name of the Keychain entry holding `provider`'s API key. */
 export function providerKeyEntryName(provider: string): string {
   return entryName(ENTRY_NAME_PREFIX, provider, 'API key');

@@ -24,6 +24,8 @@ import { epub, opf } from './zip-fixture';
  */
 const ID = documentIdOf(bytesAsArchive(epub(opf('    <dc:title>A Small Book</dc:title>'))));
 const BLOCK = 'The quick brown fox jumps over the lazy dog. And then it stopped.';
+/** The position's own Stamp: when speech stopped there, older than the entry's, which moved when the book was opened again. */
+const STAMP = { at: 1_758_230_000_000, device: 'phone' };
 
 const entry = (over: Partial<LibraryEntry> = {}): LibraryEntry => ({
   id: ID,
@@ -31,7 +33,7 @@ const entry = (over: Partial<LibraryEntry> = {}): LibraryEntry => ({
   publicationId: 'urn:uuid:9f1b2c3d-1111-4000-8000-abcdefabcdef',
   publicationIdSource: 'unique-identifier',
   title: 'A Small Book',
-  position: readingPositionAt(createLocator('epub', '/6/2!/4/4'), BLOCK, 0, 43),
+  position: readingPositionAt(createLocator('epub', '/6/2!/4/4'), BLOCK, 0, 43, STAMP),
   voice: { provider: 'openai-official', voice: 'alloy' },
   stamp: { at: 1_758_240_000_000, device: 'phone' },
   ...over,
@@ -68,6 +70,7 @@ describe('serializeLibrary', () => {
     expect(file.entries[0].position).toEqual({
       locator: '/6/2!/4/4',
       anchor: { exact: 'The quick brown fox jumps over the lazy dog', prefix: '', suffix: '. And then it stopped.' },
+      stamp: STAMP,
     });
   });
 
@@ -82,7 +85,7 @@ describe('serializeLibrary', () => {
    * noticed at all.
    */
   it('refuses an entry whose position is a locator for a different format', () => {
-    const wrong = entry({ position: readingPositionAt(createLocator('pdf' as DocumentFormat, '#page=4'), BLOCK, 0, 43) });
+    const wrong = entry({ position: readingPositionAt(createLocator('pdf' as DocumentFormat, '#page=4'), BLOCK, 0, 43, STAMP) });
     expect(() => serializeLibrary([wrong])).toThrow(/another format/);
   });
 });
@@ -107,6 +110,7 @@ describe('parseLibrary, round trip', () => {
     });
     expect(readLocator(read.position!.locator, 'epub')).toBe('/6/2!/4/4');
     expect(read.position!.anchor.exact).toBe('The quick brown fox jumps over the lazy dog');
+    expect(read.position!.stamp).toEqual(STAMP);
   });
 
   it('writes what it read back to the same bytes', () => {
@@ -287,6 +291,21 @@ describe('parseLibrary, entries it cannot fully read', () => {
     const parsed = withEntries({ ...sound(), position: { locator: '', anchor: { exact: 'something' } } });
     expect(parsed.ok && parsed.entries[0]).toMatchObject({ id: ID, title: 'A Small Book', position: null });
     expect(parsed.ok && parsed.problems).toEqual([{ at: 0, id: ID, dropped: 'position', why: 'malformed' }]);
+  });
+
+  it('gives a version-1 position, which had no Stamp of its own, the oldest one, without complaint', () => {
+    // The app is unreleased and the owner said a place lost to the first merge
+    // costs nothing; what must not happen is a position that cannot be read at
+    // all, because that is the place gone rather than outranked.
+    const parsed = parseLibrary(JSON.stringify({ version: 1, entries: [{ ...sound(), position: { locator: '/6/2!/4/4', anchor: { exact: 'something' } } }] }));
+    expect(parsed.ok && parsed.problems).toEqual([]);
+    expect(parsed.ok && parsed.entries[0].position!.stamp).toEqual({ at: 0, device: '' });
+  });
+
+  it('reports a position stamp that is there and malformed, and still reads the position as the oldest', () => {
+    const parsed = withEntries({ ...sound(), position: { locator: '/6/2!/4/4', anchor: { exact: 'something' }, stamp: { at: 'now' } } });
+    expect(parsed.ok && parsed.entries[0].position!.stamp).toEqual({ at: 0, device: '' });
+    expect(parsed.ok && parsed.problems).toEqual([{ at: 0, id: ID, dropped: 'position-stamp', why: 'malformed' }]);
   });
 
   it('reads a position whose anchor has no context, which is what an anchor at the end of a Block looks like', () => {

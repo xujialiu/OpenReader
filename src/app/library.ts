@@ -45,11 +45,11 @@
  * - `library.json` — the Library, exactly as `serializeLibrary` writes it. This
  *   is the file ADR 0003 may one day sync, and it holds nothing device-local.
  * - `library/<document-id>.epub` — a Document's bytes, named by its Document Id.
- * - `this-device` — an opaque string that differs between devices, for the
- *   **Stamp** (CONTEXT.md). It is in its own file for the same reason the
- *   bookmark is not in the Library file: it means nothing anywhere else. It must
- *   survive a relaunch or the Stamp says nothing, which is why it is written
- *   down rather than generated per session.
+ * - `this-device` — the **Device Name** (CONTEXT.md), `iPhone-3f9a2c1b`, for the
+ *   **Stamp**. It is in its own file for the same reason the bookmark is not in
+ *   the Library file: it means nothing anywhere else. It must survive a relaunch
+ *   or the Stamp says nothing, which is why it is written down rather than
+ *   generated per session.
  * - `library-id-rule` — which **Document Id rule** the names in `library/` were
  *   computed by (ADR 0004). Also device-local: it describes the files on this
  *   disk. A new file rather than a field, which is ADR 0003's rule for growth and
@@ -59,6 +59,7 @@
  */
 
 import { Directory, File, FileMode, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
 
 import { APP_NAME } from '../../app-name';
 
@@ -337,23 +338,42 @@ function writeIdRule(rule: File): void {
 }
 
 /**
- * This device, for a Stamp.
+ * The shape of a Device Name this app makes: the kind of device, a dash, eight
+ * random characters. `iPhone-3f9a2c1b`.
  *
- * Opaque, and it only ever has to differ between devices (`core/document/library.ts`).
- * Written down on first use because a Stamp that changes every launch decides
- * nothing: it is there to say which of two copies of an entry wins.
+ * Readable on purpose, because it ends up in the positions file on the owner's
+ * own server beside the desktop's machine name, and a person looking at that
+ * file should be able to tell which line came from which device. Unique on
+ * purpose, because two iPhones of one owner are two devices: the random half is
+ * what tells them apart, and the kind is only there for the person reading.
+ */
+const DEVICE_NAME = /^(iPhone|iPad|Android|device)-[a-z0-9]{8}$/;
+
+/**
+ * This device's **Device Name** (CONTEXT.md), for a Stamp.
  *
- * `Math.random` rather than a UUID API: `crypto.randomUUID` is not among the
- * globals measured on this Hermes (notes/NOTES_2026-09-19.md, 12:21 and 13:20),
- * and not measured means not assumed.
+ * Made once and never chosen or changed by the owner (issue #20): the merge
+ * never reads it, so a setting for it would be a setting that does nothing
+ * (philosophy rule 6). Written down on first use because a name that changed
+ * every launch would say nothing about where a position came from.
+ *
+ * The kind comes from React Native: `Platform.isPad` on iOS, `Platform.OS`
+ * elsewhere. `Math.random` rather than a UUID API: `crypto.randomUUID` is not
+ * among the globals measured on this Hermes (notes/NOTES_2026-09-19.md, 12:21
+ * and 13:20), and not measured means not assumed.
+ *
+ * A name in the shape an earlier build wrote (`device-…` and sixteen
+ * characters) is replaced: the app is unreleased and no other device has ever
+ * read it.
  */
 export function thisDevice(): string {
   const file = new File(Paths.document, DEVICE_FILE);
   if (file.exists) {
     const held = file.textSync().trim();
-    if (held) return held;
+    if (DEVICE_NAME.test(held)) return held;
   }
-  const made = `device-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+  const kind = Platform.OS === 'ios' ? (Platform.isPad ? 'iPad' : 'iPhone') : Platform.OS === 'android' ? 'Android' : 'device';
+  const made = `${kind}-${(Math.random().toString(36).slice(2, 10) + '00000000').slice(0, 8)}`;
   file.write(made);
   return made;
 }

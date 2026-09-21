@@ -37,7 +37,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { asDocumentId, createLocator, readingPositionAt, type ReadingPosition } from '../core/document';
+import { asDocumentId, createLocator, readLocator, readingPlaceAt, type ReadingPlace } from '../core/document';
 import { hasSavedVoice, inventoryReady, offlineProvider } from '../offline/runtime';
 import type { ProviderId } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
@@ -53,6 +53,7 @@ import {
   type ReaderClock,
 } from '../playback';
 import {
+  canonicalCfi,
   resolveResume,
   resumeSentence,
   useReaderBridge,
@@ -226,7 +227,34 @@ export interface Reading {
    * re-render is what blows the frame budget. Nothing here touches state; the
    * caller asks when it is about to write the Library.
    */
-  readingPosition(): ReadingPosition | null;
+  readingPosition(): ReadingPlace | null;
+  /**
+   * A place that arrived from another device while this book is open (issue
+   * #20): move the reading there, unless it is playing.
+   *
+   * Paused or not yet started, the newest place wins — the highlight and the
+   * page go to that sentence through the same seek a tapped word takes, and
+   * pressing Play reads from it. Playing, nothing moves: the reading here is
+   * newer than anything that could arrive, and being dragged somewhere else
+   * mid-sentence is the failure design 0020 keeps out of the player. Returns
+   * whether the place was taken; a place whose section has not rendered yet
+   * is held and tried on every report, like the one the book opened with.
+   */
+  resumeAt(place: ReadingPlace): boolean;
+}
+
+/**
+ * The spine index an EPUB locator names, or null: the spine step `/6/N` is
+ * `N = 2 × (index + 1)`, the numbering upstream epub.js and Zotero share
+ * (measured on every section of four books, notes/NOTES_2026-09-21.md 17:11).
+ * Read here only to ask "has that section reported"; the CFI itself is what is
+ * handed to the renderer.
+ */
+export function spineIndexOf(cfi: string): number | null {
+  const step = /^epubcfi\(\/6\/(\d+)/.exec(cfi);
+  if (!step) return null;
+  const n = Number(step[1]);
+  return n >= 2 && n % 2 === 0 ? n / 2 - 1 : null;
 }
 
 /** Whatever refused, in its own words. A `SynthesisError`'s message already names the address it tried and asks the one question there is. */
@@ -257,7 +285,7 @@ export interface KnownCredentials {
  * every few sentences while the reading runs, so a value that kept arriving
  * would be the reading chasing its own tail.
  */
-export function useReading(settings: AppSettings, credentials: KnownCredentials, resume: ReadingPosition | null, document: string): Reading {
+export function useReading(settings: AppSettings, credentials: KnownCredentials, resume: ReadingPlace | null, document: string): Reading {
   const { hasKey, writtenAt } = credentials;
   /**
    * The theme the page is painted in (ADR 0022), resolved the same way the shell
@@ -340,7 +368,31 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * because `<Reader initialLocation>` was given that CFI, but a cover page and a
    * chapter epub.js renders on the way can arrive first.
    */
-  const resumeRef = useRef<ReadingPosition | null>(resume);
+  const resumeRef = useRef<ReadingPlace | null>(resume);
+  /**
+   * The Utterance a resume landed on, while the cursor is still there.
+   *
+   * The stored Reading Position already **is** that place, with its true Stamp —
+   * the desktop's, when the place came from there. Writing it again would put
+   * this device's name and a newer time on a sentence nobody has read here
+   * (measured 2026-09-21: +200 ms and +473 ms after the desktop's stamp), the
+   * upload would carry it, and the desktop would then take its own place back
+   * under the phone's name. ADR 0031: a position's Stamp moves only when speech
+   * stops somewhere new. So `readingPosition()` answers null while the cursor is
+   * exactly here, and this is cleared the moment it moves for any other reason.
+   */
+  const resumedAtRef = useRef<number | null>(null);
+  /**
+   * A place taken from another device is pending and may name a section that
+   * has not rendered. The place a book *opens* with is displayed by
+   * `<Reader initialLocation>`; an adopted one arrives after that and nothing
+   * displays its section for it — measured 2026-09-21: a fixture handed over
+   * while nothing was open opened at chapter 1 and the adopted place, three
+   * sections on, sat pending for sixteen minutes until the owner swiped there.
+   * So `revealPendingPlace` asks the renderer for that section, from `resumeAt`
+   * and again on each report that fails while this is set.
+   */
+  const adoptedPendingRef = useRef(false);
   /**
    * The sentence to show if the resume is given up on, from the last attempt
    * that failed.
@@ -370,6 +422,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const abandonResume = useCallback(() => {
     if (!resumeRef.current) return;
     resumeRef.current = null;
+    adoptedPendingRef.current = false;
     const lost = resumeLostRef.current;
     setStatus((was) => ({
       ...was,
@@ -412,6 +465,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
         bridgeRef.current?.clock.onClip(cue);
         if (!playIntent.current) bridgeRef.current?.hold();
         atRef.current = cue.utterance;
+        // Speech has moved on from the resumed sentence; the next place is new.
+        if (cue.utterance !== resumedAtRef.current) resumedAtRef.current = null;
         // Once per Clip. `cue.words === null` is the Provider reporting no Word
         // Timings, which is the whole of the Highlight Level (ADR 0005): the
         // Utterance is highlighted, nothing is estimated, and the screen says
@@ -472,6 +527,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       bridgeRef.current?.clear();
       engine?.load(next, 0);
       atRef.current = null;
+      resumedAtRef.current = null;
       setStatus((was) => ({
         ...was,
         playing: false,
@@ -549,6 +605,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     const at = Math.min(list.length - 1, Math.max(0, Math.trunc(utterance)));
     pendingSeekRef.current = at;
     atRef.current = at;
+    // Pointed somewhere, so wherever the cursor is next is a place to write —
+    // the resume's own seek sets this again right after, which is the exception.
+    resumedAtRef.current = null;
     bridgeRef.current?.show(at);
     // The Utterance, but not the Highlight Level: whether the Clip that is about to
     // be fetched carries Word Timings is not known yet, and the last Clip's answer
@@ -628,6 +687,75 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     [seekTo],
   );
 
+  /**
+   * One attempt at the stored place against the Blocks reported so far.
+   *
+   * Landed: the place is done asking, the cursor moves, `before` runs (the
+   * engine takes the new list, when there is one), the seek moves the highlight
+   * and the page, and the screen learns how sure the landing was. Not landed:
+   * the sentence that would explain it is kept for `abandonResume`, and the
+   * place stays pending for the next report.
+   */
+  const tryResume = useCallback(
+    (next: readonly Utterance[], reported: readonly ReportedBlock[], before?: () => void): boolean => {
+      const stored = resumeRef.current;
+      if (!stored) return false;
+      const found = resolveResume(stored, next, reported);
+      if (found.outcome !== 'resumed') {
+        resumeLostRef.current = resumeSentence(found);
+        return false;
+      }
+      resumeRef.current = null;
+      resumeLostRef.current = null;
+      adoptedPendingRef.current = false;
+      const sentence = resumeSentence(found);
+      atRef.current = found.utterance;
+      before?.();
+      seekTo(found.utterance);
+      resumedAtRef.current = found.utterance;
+      setStatus((was) => ({ ...was, resume: sentence, resumeNeedsAttention: found.moved !== null || found.agreement === 'aligned' }));
+      return true;
+    },
+    [seekTo],
+  );
+
+  /**
+   * Ask the renderer to display the section a pending place names, when that
+   * section has reported no Block yet — the one thing `<Reader initialLocation>`
+   * does for the place a book opens with and nothing did for an adopted one.
+   *
+   * The spine index is read off the locator (`/6/N` → N/2 − 1, the rule both
+   * readers share, spec 6.4) only to know whether the section has reported;
+   * what is handed to the renderer is the whole CFI, through the same `goTo`
+   * a contents row goes through. A section that has reported and does not
+   * hold the anchor is not a case a display can fix, and is left pending as
+   * before. Returns whether a display was asked for.
+   */
+  const revealPendingPlace = useCallback((place: ReadingPlace): boolean => {
+    const cfi = readLocator(place.locator, 'epub');
+    if (!cfi) return false;
+    const section = spineIndexOf(cfi);
+    if (section !== null && blocksRef.current.some((block) => block.sectionIndex === section)) return false;
+    bridgeRef.current?.goTo(cfi);
+    return true;
+  }, []);
+
+  const resumeAt = useCallback(
+    (place: ReadingPlace): boolean => {
+      if (playIntent.current) return false;
+      resumeRef.current = place;
+      resumeLostRef.current = null;
+      adoptedPendingRef.current = true;
+      setStatus((was) => ({ ...was, resume: null, resumeNeedsAttention: false }));
+      if (loadedRef.current.length > 0 && tryResume(loadedRef.current, blocksRef.current)) return true;
+      // Pending, the way the place a book opens with is — and, unlike that one,
+      // with its section asked for, since nothing else will ask.
+      revealPendingPlace(place);
+      return true;
+    },
+    [tryResume, revealPendingPlace],
+  );
+
   /** The Blocks of every section rendered so far, as Utterances — for the renderer, which draws them, and for the engine, which speaks them. */
   const handleBlocks = useCallback(
     (reported: readonly ReportedBlock[], section: RenderedSection) => {
@@ -669,21 +797,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        * Utterance being seeked to exists only in the new list, so the engine has
        * to be holding it before anything asks to be taken there.
        */
-      const stored = resumeRef.current;
-      if (stored) {
-        const found = resolveResume(stored, next, reported);
-        if (found.outcome === 'resumed') {
-          resumeRef.current = null;
-          resumeLostRef.current = null;
-          const sentence = resumeSentence(found);
-          atRef.current = found.utterance;
-          adopt(next);
-          seekTo(found.utterance);
-          setStatus((was) => ({ ...was, resume: sentence, resumeNeedsAttention: found.moved !== null || found.agreement === 'aligned' }));
-          return;
-        }
-        resumeLostRef.current = resumeSentence(found);
-      }
+      if (resumeRef.current && tryResume(next, reported, () => adopt(next))) return;
+      // An adopted place still pending after this report: the section it names
+      // may be one nobody has asked for yet, or the ask went out before the page
+      // could hear it. Asked once per report, never for a section that reported.
+      if (resumeRef.current && adoptedPendingRef.current) revealPendingPlace(resumeRef.current);
 
       /**
        * The second step of a contents tap: the section the owner asked for has
@@ -703,7 +821,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
 
       adopt(next);
     },
-    [adopt, walkForward, seekTo],
+    [adopt, walkForward, tryResume, seekTo, revealPendingPlace],
   );
 
   const handleProblem = useCallback((problem: ProblemMessage) => {
@@ -1129,16 +1247,22 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * this reads the format from whatever produced the Block rather than from a
    * screen that would have to be told.
    */
-  const readingPosition = useCallback((): ReadingPosition | null => {
+  const readingPosition = useCallback((): ReadingPlace | null => {
     const at = atRef.current;
     if (at === null) return null;
+    // Still on the sentence a resume landed on: the stored position is already
+    // this place, with its true Stamp, and nothing is written (`resumedAtRef`).
+    if (at === resumedAtRef.current) return null;
     const utterance = loadedRef.current[at];
     const span = utterance?.spans[0];
     if (!span) return null;
     const block = blocksRef.current[span.block];
     if (!block) return null;
-    return readingPositionAt(createLocator('epub', block.cfi), block.text, span.start, span.end);
+    // Assertion-stripped: the one spelling the Positions File allows, and the
+    // one the renderer compares by (`canonicalCfi`). The Block keeps epub.js's
+    // own spelling for its own `display`.
+    return readingPlaceAt(createLocator('epub', canonicalCfi(block.cfi)), block.text, span.start, span.end);
   }, []);
 
-  return { bridge, status, opened, play, pause, chooseVoice, seekTo, skip, goToSection, readingPosition };
+  return { bridge, status, opened, play, pause, chooseVoice, seekTo, skip, goToSection, readingPosition, resumeAt };
 }

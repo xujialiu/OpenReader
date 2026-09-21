@@ -1,5 +1,9 @@
 # Your place follows you, through storage you already own
 
+*Revised by [decision 0031](0031-your-place-follows-you-to-the-desktop-and-back.md): the
+folder now holds one file that both products write, and the list the desktop was
+asked to publish is not needed.*
+
 *The engineering half of this decision is [ADR 0003](../adr/0003-sync-over-the-owners-webdav.md).*
 
 Where the owner stopped listening, and the settings they have chosen, are kept in

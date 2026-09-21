@@ -167,6 +167,23 @@ export interface AppSettings {
    * the books it was asked for.
    */
   bracketPairs: string;
+  /**
+   * The **Sync Folder** (CONTEXT.md, ADR 0003): where it is and who this device
+   * is to it, and whether sync is on. The password is not here — it is a
+   * Keychain entry (`src/keys/`) — and the Device Name is not either, being a
+   * fact about the device rather than a choice (`src/app/library.ts`).
+   *
+   * `enabled` is a switch with a check behind it: turning it on runs the
+   * connection check and it stays on only if that passed, and while it is on
+   * the address and the username are frozen — the way a Provider is enabled.
+   */
+  sync: SyncSettings;
+}
+
+export interface SyncSettings {
+  url: string;
+  username: string;
+  enabled: boolean;
 }
 
 /**
@@ -243,6 +260,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // On, and the same list the desktop plugin starts from (ADR 0028).
   stripBrackets: true,
   bracketPairs: DEFAULT_BRACKET_PAIRS,
+  // Off, with nothing filled in: sync starts the moment the owner names a
+  // folder and turns it on, and not before (issue #20).
+  sync: { url: '', username: '', enabled: false },
 };
 
 /**

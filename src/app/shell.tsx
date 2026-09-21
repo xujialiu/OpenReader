@@ -36,7 +36,7 @@ import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Appearance, useColorScheme } from 'react-native';
+import { Alert, Appearance, AppState, useColorScheme } from 'react-native';
 
 
 import { PALETTE } from './controls';
@@ -50,7 +50,9 @@ import { navigationRef, ShellContext, type RootStackParamList, type Shell } from
 import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
+import { SyncScreen } from './sync-screen';
 import { useLibrary } from './use-library';
+import { useSync } from './use-sync';
 import { configureDownloads, startDownloads } from '../offline/runtime';
 import { DownloadIndexer } from '../offline/indexer';
 
@@ -74,6 +76,28 @@ export function OpenReader() {
     updateSettings(value);
   }, []);
   const library = useLibrary();
+  const { sync, last: syncLast } = useSync(settings, library);
+  /**
+   * The moments the whole app syncs at (issue #20): once the Library has been
+   * read at launch, and whenever the app comes to the foreground or goes to the
+   * background. The Reader and the Library screen add theirs — opening a book,
+   * pausing, leaving, adding — and nothing runs on a timer.
+   *
+   * Both effects depend on `sync`, which is stable for the app's life; `syncLast`
+   * changes on every completed run and must never be in a dependency list here,
+   * or each completion pokes the next run for ever (`use-sync.ts`).
+   */
+  const libraryLoading = library.loading;
+  useEffect(() => {
+    if (!libraryLoading) sync.poke('launch');
+  }, [libraryLoading, sync]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') sync.poke('foreground');
+      else if (state === 'background') sync.poke('background');
+    });
+    return () => subscription.remove();
+  }, [sync]);
   useEffect(() => { configureDownloads(settings); }, [settings]);
   useEffect(() => startDownloads(), []);
   /**
@@ -89,8 +113,8 @@ export function OpenReader() {
     if (provider) setSecretRevisions((was) => ({ ...was, [provider]: (was[provider] ?? 0) + 1 }));
   }, []);
   const shell = useMemo<Shell>(
-    () => ({ settings, setSettings, library, secretsWritten, secretRevisions, noteSecretWritten }),
-    [settings, setSettings, library, secretsWritten, secretRevisions, noteSecretWritten],
+    () => ({ settings, setSettings, library, secretsWritten, secretRevisions, noteSecretWritten, sync, syncLast }),
+    [settings, setSettings, library, secretsWritten, secretRevisions, noteSecretWritten, sync, syncLast],
   );
 
   // WALKTHROUGH-HARNESS
@@ -187,13 +211,15 @@ export function OpenReader() {
       void library
         .add(handed.file, { move: handed.move })
         .then((entry) => {
+          // A book the desktop has read opens at the desktop's place (issue #20).
+          sync.poke('add');
           if (navigationRef.isReady()) navigationRef.navigate('Reader', { id: entry.id });
         })
         .catch((problem: unknown) => {
           library.report(`That document could not be opened: ${problem instanceof Error ? problem.message : String(problem)}`);
         });
     },
-    [library],
+    [library, sync],
   );
   useHandedOverDocuments(arrived);
 
@@ -267,6 +293,7 @@ export function OpenReader() {
             <Stack.Screen name="Providers" component={ProvidersScreen} options={{ title: 'Providers', headerBackTitle: 'Settings' }} />
             {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
             <Stack.Screen name="Provider" component={ProviderScreen} />
+            <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings' }} />
           </Stack.Navigator>
         </NavigationContainer>
       </ReaderProvider>

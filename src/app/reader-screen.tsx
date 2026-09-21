@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { ReadingPosition } from '../core/document';
+import type { ReadingPlace, ReadingPosition } from '../core/document';
 import type { ProviderId } from '../core/providers/types';
 
 // WALKTHROUGH-HARNESS
@@ -39,7 +39,7 @@ import { useProviderKey } from './use-provider-secrets';
 
 export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const { id } = route.params;
-  const { settings, setSettings, library, secretRevisions } = useShell();
+  const { settings, setSettings, library, secretRevisions, sync } = useShell();
   const entry = useMemo(() => library.entries.find((one) => one.id === id) ?? null, [library.entries, id]);
 
   /**
@@ -80,6 +80,10 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
     if (!entry) return;
     let alive = true;
     library.opened(entry.id);
+    // Opening a book is a sync moment (issue #20). It runs beside the open, and a
+    // newer place that arrives before the owner acts takes over the resume
+    // through `adopted` below.
+    sync.poke('open');
     // A `LibraryEntry` *is* a `DocumentIdentity` plus what the Library
     // remembers, so there is nothing to pick out of it.
     openDocument(entry, entry.title)
@@ -148,6 +152,22 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   );
   const voiceProvider = openedEntry?.voice?.provider ?? '';
   const voiceId = openedEntry?.voice?.voice ?? '';
+  /**
+   * A place taken from another device while this book is open (issue #20):
+   * when it was taken, and where it points. `adoptedAt` moves once per
+   * adoption and the position is read live from the entry, so the effect in
+   * `<ReadingView>` runs once per arrival and never for this screen's own
+   * `reached` writes — those do not move `adoptedAt`.
+   */
+  const adoptedAt = openedId ? library.adoptedAt[openedId] ?? null : null;
+  const adoptedPosition = openedEntry?.position ?? null;
+  const adopted = useMemo(
+    () => (adoptedAt !== null && adoptedPosition ? { at: adoptedAt, position: adoptedPosition } : null),
+    // The position object is rebuilt on every Library write; `adoptedAt` is the
+    // event, and the position that goes with it is whatever the entry holds then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [adoptedAt],
+  );
   const documentVoice = useMemo(
     () => (voiceId ? { provider: voiceProvider, voice: voiceId } : null),
     [voiceProvider, voiceId],
@@ -210,8 +230,8 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   });
 
   const reached = useCallback(
-    (position: ReadingPosition) => {
-      if (openedId) library.reached(openedId, position);
+    (place: ReadingPlace) => {
+      if (openedId) library.reached(openedId, place);
     },
     [library, openedId],
   );
@@ -243,6 +263,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
           keyPresence={key.presence}
           credentialsWrittenAt={secretRevisions[forDocument.provider] ?? 0}
           position={opened.position}
+          adopted={adopted}
           onRate={setRate}
           onVoice={setVoice}
           onReached={reached}

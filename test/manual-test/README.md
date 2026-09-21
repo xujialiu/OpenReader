@@ -13,6 +13,33 @@ Follow the simulator installation guide and AGENTS.md's silence, playback-durati
 and final-running-app requirements. Choose playback duration for the fact being
 measured, and stop immediately afterwards, including after failures.
 
+## Silence the simulator, never the Mac
+
+```sh
+bash test/manual-test/silence.sh set SIMULATOR_UDID     # that device to zero, read back
+bash test/manual-test/silence.sh check SIMULATOR_UDID   # exit 2 unless it is zero
+```
+
+This writes `sim_volume` in that one device's own
+`~/Library/Developer/CoreSimulator/Devices/UDID/data/var/run/simulatoraudio/audiosettings.plist`.
+It is the simulated device's volume, on the 0-100 scale its volume buttons use,
+and the app on it reads the same number back as `AVAudioSession.outputVolume`.
+Nothing outside that device changes: not the Mac's output, not another
+simulator. The UDID may be left out only when exactly one simulator is booted.
+
+Measured on 2026-09-21 with a throwaway iOS 27.0 device, an app playing a 440 Hz
+tone through `AVAudioSession(.playback)` and `AVAudioEngine`, and a CoreAudio
+process tap recording what that guest process actually delivered to the host:
+at `sim_volume` 60 the tap read peak `0.090000`, rms `0.063639` over 286,720
+samples; at `sim_volume` 0 it read peak `0.000000`, rms `0.000000`, and the app
+reported `outputVolume=0.0`. The Mac's own volume was not touched for either.
+
+Three properties decide how to use it, all of them in Pitfalls below: a boot
+resets it to 60, an app takes the value when it activates its audio session, and
+a shut-down device has no file at all. So: boot, `set`, then launch the app.
+`lock-screen.sh` (tap mode), `reading.cjs play-for`, `voice-playback.cjs` and
+`offline-playback.cjs` all `check` it before they play.
+
 ## Pitfalls
 
 What has gone wrong before, and what fixed it. When `xcrun`, Metro, XCTest or a
@@ -30,9 +57,30 @@ fix (AGENTS.md).
   - Check with `lsof -nP -iTCP:PORT -sTCP:LISTEN`, then `lsof -a -p PID -d cwd`.
   - A cwd in another worktree, or under `.orca-worktree-trash`, is not yours. Take the next free port rather than stop something another session may be using.
   - The stale-directory case is also in `docs/install-on-simulator.md`.
-- **The installed Debug app can follow another port without a rebuild.**
-  - Run `xcrun simctl spawn UDID defaults write top.xujialiu.openreader RCT_jsLocation localhost:PORT`, then relaunch the app.
-  - Look for the device in `curl -s http://localhost:PORT/json/list`.
+- **The installed Debug app can follow another port without a rebuild**, but
+  `xcrun simctl spawn UDID defaults write …` is not how, whatever it reads back.
+  - Symptom: `xcrun simctl spawn UDID defaults write top.xujialiu.openreader
+    RCT_jsLocation localhost:8084` is accepted, `defaults read` answers
+    `localhost:8084`, and the app still fetches its bundle from the old port —
+    it showed the *other* worktree's `ConfigError: The expected package.json
+    path … does not exist` in a red box.
+  - Cause: `simctl spawn` runs outside the app's container, so it writes
+    `<device>/data/Library/Preferences/<bundle>.plist`, while the app reads
+    `<device>/data/Containers/Data/Application/<uuid>/Library/Preferences/<bundle>.plist`.
+    Editing *that* file with `plutil -replace` while the device is booted also
+    changes nothing: the simulator's `cfprefsd` is still serving the old value.
+  - Fix: terminate the app, `plutil -replace RCT_jsLocation -string
+    localhost:PORT` on the **container** plist, then `xcrun simctl shutdown` and
+    `boot` so `cfprefsd` re-reads it. Prove it from the app's own side rather
+    than from `defaults`:
+    `xcrun simctl launch --console-pty UDID top.xujialiu.openreader` prints
+    `[RCTMultipartDataTask] GET http://localhost:PORT/.expo/.virtual-metro-entry.bundle…`,
+    and the device then appears in `curl -s http://localhost:PORT/json/list`.
+- **Reusing another worktree's installed Debug app is safe only while the native
+  side matches.** Compare `git diff --name-only main` against `package.json`,
+  `app.json`, `plugins/` and `patches/`; a change to `patches/` or to a
+  `scripts` entry is JavaScript and rides over Metro, a change to a dependency
+  or a config plugin is not.
 
 ### Simulators and installs
 
@@ -62,6 +110,44 @@ fix (AGENTS.md).
 - **Waiting for "Laying the document out…" never waits.** It is the label of the WebView's scroll view, an `Other`, not a static text. Query `app.descendants(matching: .any)`.
 - **A cold launch straight into 仙逆 takes over 40 seconds to lay out.** A warm open takes 3–6 seconds. Time tests from a warm open.
 - **A coordinate tap on text does nothing.** It landed between two lines, which the reader treats as blank space by design. Take the point from a screenshot of the middle of the line.
+- **One tap on `Pause` is not always a pause.** Measured 2026-09-21: a tap three
+  seconds after Play left the reading running — no pause handler, no `pause`
+  sync run, and the reading went on to the end of the book while the probe sat
+  in its fifteen-second wait for `Play` to come back. The same one-tap pause had
+  worked in the two runs before it. Tap, wait for `Play` to exist, and tap again
+  (`SyncProbe.testSeekAwayAndBack` does it four times at most), and treat a run
+  whose transport still says `Pause` as a failed measurement, not a slow one.
+- **A timed tap cannot be aimed at a window a few hundred milliseconds wide.**
+  Issue #20's claim rule needs a real tap between "an adopted place is pending"
+  and "the section it names has rendered". Against the owner's own folder that
+  window is inside the 1.40 s measured from `app.activate()` to the highlight
+  landing (2026-09-21), network round trip included, and one `.tap()` on a
+  coordinate took **1.60 s** to dispatch — wider than the window it was aiming
+  at. Point `sync.url` at the stalling stub (`slow-webdav.py`, **Against the
+  owner's real folder** below) instead: the stub decides when the place
+  arrives, so the tap can be scheduled against its delay.
+- **`press(.home)` pokes a sync of its own, so a timed tap's clock starts
+  there.** `shell.tsx` pokes on `background` as well as on `active`, and
+  single-flight coalesces the activation's poke into the run the Home press
+  already started. With a 6 s stall the place therefore arrived ~6.1 s after
+  **Home**, not after `activate()` three seconds later; a delay measured from
+  the activation missed by the whole three seconds.
+- **A tap that lands too early looks exactly like the claim rule failing**, so
+  say which one happened. The tell is `status.resume`: `abandonResume` shows the
+  sentence a *failed* resume left behind ("The sentence this book was left on is
+  not in the text that has rendered…"), which only exists once the place has
+  arrived and missed. A tap before the place arrives clears nothing, leaves
+  `resume` null, and the place then wins — the same screen as a broken claim
+  rule, from the opposite cause.
+- **`Back` is not what the back button is called.** It is named after the screen
+  behind it: the Sync screen's is `Settings`, the Settings screen's is `Library`.
+  Only the reader's is `Back`. A book handed over with `simctl openurl` is pushed
+  onto whatever stack is on screen, so a reader opened over Settings goes back to
+  *Settings*, and `app.buttons["Back"]` then finds nothing — the run reports
+  "… is not on the shelf" for a book that is on the shelf. Walk towards the
+  Library by something the Library has (`label BEGINSWITH 'Actions for '`), tap
+  `app.navigationBars.buttons.element(boundBy: 0)` rather than a label, and
+  relaunch the app when there is no back button left (`SyncProbe.openBook`).
 
 ### Measuring inside the reader's WebView
 
@@ -69,9 +155,154 @@ fix (AGENTS.md).
 - **Computed sizes include text-size-adjust on an iPhone, and not on an iPad in the desktop content mode.** Divide by the percentage in effect only where it applies (ADR 0030).
 - **A probe's own root-only text-size-adjust rule loses to the app's.** The app declares text-size-adjust on every element in `#openreader-highlight`. Take those lines out for the probe and put them back afterwards.
 
+### Typing, environment and silence
+
+- **`typeText` with a long value kills a settings screen.**
+  - Symptom: a red box, `Render Error — Maximum update depth exceeded`, and the
+    next query answers `No matches found for Descendants matching type
+    TextField`. The value typed so far is in `settings.json`, truncated.
+  - Cause: every keystroke calls `setSettings`, which writes `settings.json` and
+    re-renders the controlled `Field`; one `typeText` delivers a hundred
+    characters with no gap between them, far faster than a person types, and
+    React ends the nested-update chain. **Not specific to any one screen**: the
+    same 107 characters kill `main`'s provider Address the same way
+    (`SyncProbe.testTypeLongIntoProviderAddress` is the control).
+  - Fix: type in chunks of ten (`SyncProbe.clearAndType`). Chunking is a
+    workaround for a machine typing faster than a person, not a fix.
+- **Backspaces do not reliably clear a controlled `Field`, and a half-cleared
+  address is invisible.** Measured 2026-09-21: `clearAndType` typed the same
+  88-character address over the 88-character one already there and left **155**
+  characters in the field; a second attempt with 300 backspaces left **221**,
+  with the path doubled (`…/sync/zotero-tts/xujialiu.top/…/sync/zotero-tts//`).
+  The keystrokes race the re-render the pitfall above describes, so the caret is
+  not where the backspaces think it is. What makes this expensive is that the
+  app then syncs against a folder that does not exist, and **that looks exactly
+  like a folder with nothing in it**: the switch's check accepts a missing folder
+  by design, the status line says `Synced at …`, nothing is adopted and nothing
+  is uploaded. An hour was spent reading `use-library.ts` for a bug that was in
+  the typing. After any run that types an address, read it back —
+  `python3 -c "import json;print(json.load(open(D+'/Documents/settings.json'))['settings']['sync']['url'])"`
+  — and compare it with the value you meant to type before believing any sync
+  result. The probe now asserts the field is empty before it types.
+- **`xcodebuild … test` does not pass the caller's environment to the test
+  process.** `PLAY_SECONDS=12 bash sync.sh …` silently uses the probe's default,
+  and a run "of twelve seconds" is really five. Pass parameters in a file the
+  probe reads instead (`/tmp/openreader-sync-params.txt`, `SyncProbe.param`).
+- **The walkthrough harness re-runs its last command on every launch.**
+  `seenRef` starts at `-1`, so the first poll after a launch runs whatever
+  `Documents/harness.json` still holds. A `settings` patch sent half an hour
+  earlier silently rewrote the Sync settings of an app that XCTest had just
+  relaunched, and the run that followed measured the wrong thing. `rm
+  Documents/harness.json` before every relaunch, and treat a leftover harness
+  file as device state.
+- **Muting the Mac is not silencing the simulator, and the Mac's mute comes back
+  on its own.** After a `simctl shutdown`/`boot` cycle and a series of XCTest
+  runs, `osascript -e 'get volume settings'` reported `output volume:56, output
+  muted:false` although it had been muted earlier in the session — and the next
+  Play was audible. The machine's volume is the owner's, not the test's: it is
+  restored by things outside the run, and muting it takes the owner's sound away
+  for as long as the run lasts and after it. Silence the device instead, with
+  `bash test/manual-test/silence.sh set SIMULATOR_UDID` (above); never
+  `set volume output volume 0`.
+- **`sim_volume` can go back to 60 without a boot.** Measured 2026-09-21:
+  `silence.sh set` read `0` back at 22:43, the device was never shut down or
+  rebooted, and at 22:45:36 `audiosettings.plist` was rewritten — 437 bytes
+  where the silenced one was 432 — with `sim_volume` at 60 again. A `check`
+  half an hour later failed, and the next Play would have been audible. What
+  rewrote it was not established; an XCTest run had just finished on that
+  device. So a boot is not the only thing to `set` after: run
+  `silence.sh check SIMULATOR_UDID` **before every Play** and `set` again when
+  it refuses, which is what the kit's scripts do and why they do it.
+- **A boot puts the simulator back to 60.** `sim_volume` survives a
+  `simctl shutdown` in the file, but the next `boot` rewrites
+  `audiosettings.plist` with the CoreSimulator defaults, measured as `0` before
+  the shutdown and `60` after the boot. Run `silence.sh set` again after every
+  boot, and `check` before every Play; that is what the scripts do.
+- **Lowering the volume while the app is playing changes nothing.** With the
+  probe already playing, flipping `sim_volume` from `60` to `0` left the audio
+  it delivered to the host at peak `0.090000`; the next launch measured
+  `0.000000`. The value is taken when an app activates its audio session, so set
+  it **before** `simctl launch`, not during a reading.
+- **A shut-down device has no audio settings at all.**
+  `data/var/run/simulatoraudio/audiosettings.plist` appears at boot, so
+  `silence.sh` refuses a device that is not booted rather than silently doing
+  nothing.
+- **There is no per-app mute on the Mac to reach for instead.** macOS does list
+  each simulator app as its own host audio process
+  (`kAudioHardwarePropertyProcessObjectList` shows `top.xujialiu.openreader`
+  with the device's own path), but `AudioObjectIsPropertySettable` answers no
+  for volume and mute on those objects in every scope. They can only be read.
+- **DeviceHub's own audio switch cannot be scripted.** Xcode 27's DeviceHub has
+  "Enable audio output from devices" in its settings, but it is one switch for
+  every simulator, its preferences live in a sandboxed container
+  (`defaults write com.apple.dt.Devices …` fails with "Could not write domain"),
+  and the process exposes no menu bar to AppleScript: `System Events` answers
+  "Can't get menu bar 1 of process DeviceHub. Invalid index." Do not plan a run
+  around it.
+- **`simctl` has no audio command.** `xcrun simctl io UDID enumerate` prints the
+  device's `com.apple.CoreSimulator.Audio.HostRoute` port, its guest-to-host
+  routes and the host devices it could use, but `simctl io` can only change
+  screens. The route setter (`routeGuestDeviceScope:toHostDeviceUID:…`) is
+  private CoreSimulator API, and it only picks which host device receives the
+  audio, so it would still need a silent device to point at.
+- **`simctl spawn` answered `LaunchdSimError 111` for every runtime binary** on
+  the iOS 27.0 device created for this probe — `/usr/bin/uname`, `/bin/ls`,
+  both after `bootstatus` reported the boot finished — while `simctl install`
+  and `simctl launch` worked on the same device. Treat a 111 as that device's
+  problem and reach for `simctl launch` instead of spending time on it.
+- **A throwaway iOS app that has no scene manifest dies at launch.** A minimal
+  `UIApplicationMain` bundle crashed with `EXC_BREAKPOINT` in
+  `__UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke`
+  on iOS 27.0. Give its `Info.plist` a `UIApplicationSceneManifest` with a
+  `UISceneDelegateClassName`, and give the Swift class `@objc(SceneDelegate)` so
+  the name in the plist resolves.
+
+### Talking to the owner's WebDAV host from the Mac
+
+- **Every request answers `403` with the body `error code: 1010`, including a
+  `PROPFIND` on a folder that is certainly there.** It is not the credentials
+  and not the path: Cloudflare is refusing the client by its `User-Agent`, and
+  `Python-urllib/3.x` is on its list. An hour can go into re-checking a
+  percent-encoded address that was right all along.
+  - Fix: send a browser `User-Agent` on every host-side request. With that one
+    header the same `PROPFIND` answered `207`. The app itself is never affected
+    — `fetch` on iOS sends its own agent.
+- **`urllib`'s `MKCOL` with no body raises instead of answering.** `Request(url,
+  method='MKCOL')` with `data=None` sends no `Content-Length`, and the helper
+  reported status `0` (its exception branch) for a folder that was never
+  created; the next `PROPFIND` then said `404` and the run looked like a folder
+  the server would not make. Pass `data=b''`.
+- **Deleting the positions file mid-run brings it straight back.** With a book
+  still on the shelf, the next sync moment finds a `404`, treats it as the
+  ordinary first run, re-creates the folder and uploads the phone's items —
+  measured 2026-09-21: the file was gone at 22:50:55 and back, byte-identical,
+  by 22:51:10. Empty the shelf first, or point the app elsewhere, before
+  clearing the file for a fresh baseline.
+- **A helper that deletes the folder as well as the file needs the folder put
+  back.** `MKCOL` on an existing folder answers `405`, which is the "already
+  there" answer and not a failure.
+
 ### The shell
 
 - **A loop over `"a b c"` strings passes each as one argument.** zsh does not split an unquoted `$var`. Run such scripts with `bash`, or use arrays.
+- **`$?` after a pipe is the pipe's last command.** `bash sync.sh … | tail -5;
+  echo $?` printed `0` for a test run that had failed. Redirect the script's
+  output to a file and test its own status, or read `PIPESTATUS`.
+- **`xcodebuild` can outlive the test it ran.** A `-only-testing` run whose test
+  was already reported as finished in `test.log` kept its `xcodebuild` alive
+  past a ten-minute timeout. Watch `test.log` for `Test Suite … at <time>`, then
+  kill that exact `xcodebuild -project <your artifact dir>` process; the result
+  bundle is already complete. It happens after a **failed** test too (measured
+  2026-09-21: the failure was written at 21:06 and the process was still there at
+  21:16), so a run that has gone quiet is worth checking against `test.log`
+  rather than waited out.
+- **A Library entry's file is named with a dash, not a colon.**
+  `Documents/library/sha256-<hex>.epub`, while the Document Id is
+  `sha256:<hex>`. A `cp "$D/Documents/library/$id.epub" …` fails, and in a
+  `cp || ls` chain it fails quietly.
+- **`app.staticTexts["FOLDER"]` matches twice.** React Native nests a duplicate
+  static text inside every `Text`, so an exact-identifier tap raises `Multiple
+  matching elements found`. Use `.matching(identifier:).firstMatch`.
 
 ## Lock-screen screenshot and button inspection
 
@@ -124,7 +355,9 @@ behaviour is exactly as before. `offline-playback.cjs` picks this up for free
 by inheriting the environment into its own `cdp.cjs` calls; it separately
 reads `OPENREADER_DOCUMENT_ID` to target a Document other than the short
 fixture's historical id, for a Library seeded with a differently-built copy
-of it (same title and chapters, different manifest digest).
+of it (same title and chapters, different manifest digest). `OPENREADER_DEVICE`
+is the Metro target's name; the silence check is a different question about the
+same device and takes its UDID.
 
 Warning capture includes buffered warnings and errors, without verbose stack
 traces or ordinary playback logs. No output means no warnings were received in
@@ -156,7 +389,7 @@ lock-screen screenshot and enabled-button observation.
 
 ### Tap the actual lock-screen transport
 
-After muting the simulator and machine output, with the reading already paused:
+After `silence.sh set SIMULATOR_UDID`, with the reading already paused:
 
 ```sh
 bash test/manual-test/lock-screen.sh SIMULATOR_UDID /tmp/openreader-transport-01 top.xujialiu.openreader YES tap
@@ -165,7 +398,7 @@ bash test/manual-test/lock-screen.sh SIMULATOR_UDID /tmp/openreader-transport-01
 This takes the paused screenshot, taps the system's Play button, waits up to
 three seconds for its label to become Pause, then immediately taps Pause and
 checks for Play again. Failure paths also attempt to pause in the app. It refuses
-nonzero host output volume as an additional silence guard. Read the test log to
+a simulator whose own volume is not zero. Read the test log to
 report the actual interval between the two taps. This exercises real simulator
 touches; it still needs screenshot inspection to establish icon visibility.
 
@@ -187,11 +420,13 @@ the screenshot and geometry, and visually confirm any pass.
 ```sh
 node test/manual-test/reading.cjs state
 node test/manual-test/reading.cjs pause
-node test/manual-test/reading.cjs play-for 5
+node test/manual-test/reading.cjs play-for 5 SIMULATOR_UDID
 ```
 
 Open a Document first. `play-for` requires an explicitly chosen duration up to
-10 seconds and zero machine output volume; mute the simulator too. Five seconds
+10 seconds and a simulator whose own volume is zero; it names the device so it
+can check that, and takes `SIMULATOR_UDID` from the environment instead when the
+argument is left out. Five seconds
 was used here to establish an active Now Playing session before a paused-card
 inspection. The script pauses via both a host cleanup path and an app watchdog.
 If either reports an unconfirmed pause, stop in the app and verify its state.
@@ -255,13 +490,13 @@ bash test/manual-test/second-voice-progress.sh SIMULATOR_UDID /tmp/openreader-se
 
 The wrapper backs up and restores the complete v2 offline directory, Library and settings, then adds one known shared clip for a synthetic second voice to the short fixture. The XCTest uses real touches to open Download, choose that saved voice and require `0 chapters downloaded` plus `1 / 7` for the second chapter. The synthetic row and copied audio are removed by restoring the backup even when the test fails. This checks indexed SQLite progress and the omitted-text `textCount` display; it does not test provider synthesis or playback.
 
-After the fixture is downloaded, terminate and relaunch the app with `xcrun simctl` to empty the memory cache, mute host output, then run:
+After the fixture is downloaded, silence the device with `silence.sh set SIMULATOR_UDID`, terminate and relaunch the app with `xcrun simctl` to empty the memory cache, then run:
 
 ```sh
-node test/manual-test/offline-playback.cjs
+node test/manual-test/offline-playback.cjs SIMULATOR_UDID
 ```
 
-This reuses `cdp.cjs` to reject all fetches, temporarily disable the fixture's Fish provider, and route every newly created native audio source through a zero-gain node before Play. It checks actual saved-audio decoding, an active native playback queue and word-timing state, then immediately pauses. A five-second app watchdog and host cleanup also pause on failure. It prints the measured duration and network request count, restores settings/fetch, and keeps generated debugger expressions in a temporary directory. The zero-gain route is additional silence protection for the iOS 27 simulator, whose Control Centre had no volume slider and whose standalone volume APIs left outputVolume at 0.6. This is a handler probe, not a real Play touch, a physical connectivity test or a drift measurement. Restart the app afterwards to remove debugger instrumentation and verify it remains paused.
+This reuses `cdp.cjs` to reject all fetches, temporarily disable the fixture's Fish provider, and route every newly created native audio source through a zero-gain node before Play. It checks actual saved-audio decoding, an active native playback queue and word-timing state, then immediately pauses. A five-second app watchdog and host cleanup also pause on failure. It prints the measured duration and network request count, restores settings/fetch, and keeps generated debugger expressions in a temporary directory. The zero-gain route is additional silence protection for the iOS 27 simulator, whose Control Centre had no volume slider; the `0.6` its `outputVolume` reported is the device's own `sim_volume`, which `silence.sh` now sets to zero. This is a handler probe, not a real Play touch, a physical connectivity test or a drift measurement. Restart the app afterwards to remove debugger instrumentation and verify it remains paused.
 
 The `background` mode of `offline.sh` presses Home, waits 40 seconds to cover the bounded UIKit background-task window, then returns to the app without playback. Use it with a controlled queued task and observe the persisted task state from the host; the UI test alone proves only that the app can be left and reopened, not that synthesis continued or resumed.
 
@@ -279,8 +514,8 @@ Sarah/Adrian rows are present. It never presses Play. Inspect exported screensho
 as well as assertions. It leaves the reader paused. The optional voice choice
 check restores Sarah; use this on the fixture document, not the owner's reading.
 
-For deterministic transport/handover checks, first mute machine and simulator,
-open the fixture Document, and open Voice once so its Fish list is loaded. Fish
+For deterministic transport/handover checks, first silence the simulator with
+`silence.sh set`, open the fixture Document, and open Voice once so its Fish list is loaded. Fish
 must already be enabled with its key in the app. No credential is read by or
 printed from the test script. The first eight list entries supply distinct
 choices; an English fixture supplies the test text.
@@ -315,7 +550,7 @@ to remove all temporary debugger globals and verify final delivery separately.
 
 ### Paused sentence seeking after background receipt
 
-With the same muted simulator, fixture Document and loaded Fish list as above:
+With the same silenced simulator, fixture Document and loaded Fish list as above:
 
 ```sh
 mkdir -p /tmp/openreader-paused-seek-01
@@ -620,3 +855,125 @@ What it cannot establish:
 
 - The first open of `Sized Fixture Small`, shown at 12px and then redrawn once at 16. That happens faster than `simctl io … screenshot` can catch.
 - Whether a swipe scrolls epub.js's page. The iPad's synthetic swipe produced no visible scroll, which was not pursued.
+
+## Sync: the Sync screen, the switch, and places crossing devices (#20)
+
+Real touches on Settings → Sync, and on the reader's transport, against a
+WebDAV folder. Prerequisites: the latest Debug app connected to Metro, both
+`A Short Test of Reading Aloud` and `仙逆` in the Library, and four credential
+files written by the caller with mode 600 and **removed afterwards** — never
+printed, never in a screenshot, never committed:
+
+```sh
+: > /tmp/openreader-sync-url.txt        # the folder, percent-encoded and ASCII
+: > /tmp/openreader-sync-user.txt
+: > /tmp/openreader-sync-pass.txt
+: > /tmp/openreader-sync-wrongpass.txt  # the same password with a character added
+chmod 600 /tmp/openreader-sync-*.txt
+bash test/manual-test/sync.sh SIMULATOR_UDID /tmp/openreader-sync-01 \
+  -only-testing:testSyncSwitchOutcomes
+```
+
+**Use a test subfolder of the owner's sync folder, never the folder itself.**
+The real one holds the desktop plugin's live files, and `Address` is
+photographed by every capture. A subfolder that does not exist yet also
+exercises the 404 path the switch is supposed to accept. Delete the subfolder
+and its file when the run ends.
+
+Run parameters go in `/tmp/openreader-sync-params.txt` as `KEY=VALUE` lines
+(`PLAY_SECONDS`, `SKIPS`, `PARAGRAPH_STEPS`, `SETTLE`, `BOOK_TITLE`), because
+`xcodebuild` does not pass the environment through.
+
+The methods, in the order a full run uses them:
+
+- `testSyncSwitchOutcomes` — types the folder, the username and a **wrong**
+  password, turns the switch on and requires it back off with the reason on the
+  status line and the fields still editable; retypes the right password and
+  requires the switch on, all three fields frozen, and the missing-folder line;
+  turns it off and requires the fields editable with their values kept; turns it
+  back on and leaves it there. The only method that types.
+- `testTypeAddressInChunks` / `testTypeLongIntoProviderAddress` — the pair that
+  separates "typing at all" from "one long `typeText`" (see **Pitfalls**). The
+  second is the control on a screen that exists on `main`; run it only to
+  re-establish that the crash is not this screen's.
+- `testSwitchOnAndWait` — turns the switch on with nothing else happening: no
+  launch, no book, no backgrounding. Whether the first sync runs is then decided
+  by the switch alone, and the caller reads the answer off the server.
+- `testPlayPauseUploadsPlace` — opens `BOOK_TITLE` with a real touch, presses
+  Play, prints **tap-to-playing** (the bound `use-sync.ts` puts on the pre-Play
+  sync), plays for `PLAY_SECONDS` and presses Pause. Check the server from the
+  host afterwards: the item's `stamp.device`, `locator` and `anchor.exact`.
+- `testMoveOnParagraphs` — `PARAGRAPH_STEPS` taps on Next/Previous paragraph in
+  the already-open reader, then a short Play and Pause, which is what writes the
+  place and starts the sync: the reader writes on its own only every ten
+  seconds.
+- `testForegroundAdoption` — Home, wait, activate: the `foreground` sync moment,
+  photographed before and after.
+- `testReadSyncScreen` — reads the screen without touching the switch; used
+  after a relaunch to show that sync came back on, frozen, without a new check.
+- `testOpenBookOnly` — opens `BOOK_TITLE` with a real touch and leaves it paused:
+  the `open` sync moment and nothing else, which is what an idle measurement
+  needs to start from.
+- `testSeekAwayAndBack` — the clear-on-seek path: a real tap on a word of the
+  next sentence (`WORD_X`, `WORD_Y`, in points, taken from a screenshot of the
+  middle of a line), one tap on Previous sentence to come back, then a short
+  Play and Pause. The pause must write **this** device's Stamp on the sentence a
+  resume landed on, because the cursor has been pointed somewhere in between.
+- `testClaimBeforeRender` — the claim rule: Home, activate, then one real tap on
+  a word of chapter 1 at `CLAIM_DELAY` seconds after the **Home press** (see
+  **Pitfalls**), with the stalling stub deciding when the adopted place lands.
+  Prints the Home, activation and tap times so a run that tapped too early is
+  reported rather than counted.
+- `testLeaveUnmovedWritesNothing` — defect 4, in three printed steps: play into
+  the next sentence and pause, wait and leave with Back without playing, then
+  re-open, play on and leave. The host's poller is read against `STEP-A/B/C`.
+  `PLAY_SECONDS` must cross a sentence boundary (10 s in the three-chapter
+  fixture); a pause on the sentence the reading was already on correctly writes
+  nothing, which cannot be told from the defect.
+- `testSwipeForward` — six swipes up the open reader, to find out whether a place
+  adopted while the book is open is waiting for the section it names to render.
+- `testRemoveEveryBook` — long press, Delete, confirm, for every row there is.
+  Run it before any run against the owner's **real** folder, so that nothing of
+  this simulator's can be uploaded into it.
+- `testEnterFolderAndSwitchOn` / `testSwitchOffAndLeave` / `testReadSyncStatusOnly`
+  — the three that are safe to point at the owner's real folder, because they
+  **capture nothing**: no screenshot, no element-tree dump. Both a capture and a
+  full-screen `xcrun simctl io … screenshot` taken while the Sync screen is up
+  carry the address and the username, so take neither while that screen is on.
+
+### Against the owner's real folder
+
+A cross-product test needs the real folder, and then the subfolder rule above
+cannot be followed. What replaces it:
+
+- Empty the shelf first (`testRemoveEveryBook`). A place of this simulator's in
+  the owner's file is the thing that cannot be undone.
+- Use only the three capture-free methods on the Sync screen, and read the status
+  line from their `print`, which does not carry the address.
+- Keep a baseline: `curl` the file before the run and `shasum -a 256` it. With an
+  empty shelf the phone must leave it **byte-identical** — the desktop plugin's
+  file is already in the canonical spelling this build writes, so an upload is a
+  finding, not a formality.
+- Watch it while the run goes on, rather than only afterwards: a poller that
+  `GET`s every two seconds and prints the hash and one item's `stamp` is how the
+  upload was timed to within a second of the pause.
+- A fixture the app must add: `xcrun simctl openurl UDID "file:///host/path.epub"`
+  hands a host path straight to the app's document handler — the reader opens on
+  it, and no `Inbox` copy or harness `add` is needed.
+
+What none of it proves: nothing here is a physical-device test, a drift
+measurement, or a test of the desktop plugin's own writer. The screenshots, not
+the assertions, are what show the highlight moved; `statusLines` cannot see
+inside the reader's WebView, so an empty "sentences added" list means only that
+the chrome did not change.
+
+A folder that answers the check and then stalls the download — for the two-second
+Play bound, and for a place arriving while a reading is playing — is a stub the
+caller runs on the host and points `sync.url` at:
+
+```python
+# PROPFIND -> 207 at once, GET -> sleep N then serve reply.json, PUT -> 201
+```
+
+A stub is the only way found to measure the bound: a wrong address cannot be
+typed while the switch is on, and a simulator has no way to lose its network.

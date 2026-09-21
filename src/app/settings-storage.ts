@@ -36,7 +36,7 @@ export function parseSettings(value: unknown): AppSettings {
   const root = object(value);
   const data = object(root.settings ?? value);
   const openai = object(data.openai), compatible = object(data.compatible), local = object(data.local);
-  const fish = object(data.fish), appearance = object(data.appearance);
+  const fish = object(data.fish), appearance = object(data.appearance), sync = object(data.sync);
   const voices: DocumentVoice[] = Array.isArray(data.recentVoices) ? data.recentVoices.flatMap((entry: unknown) => {
     const item = object(entry);
     return typeof item.provider === 'string' && isProviderId(item.provider) && typeof item.voice === 'string' && item.voice.trim()
@@ -67,6 +67,9 @@ export function parseSettings(value: unknown): AppSettings {
       font: readFont(appearance.font),
       size: readSize(appearance.size),
     },
+    // The switch is read as written: it was turned on after a check passed,
+    // and the next launch syncs without checking again (issue #20).
+    sync: { url: string(sync.url, ''), username: string(sync.username, ''), enabled: sync.enabled === true },
   };
 }
 export function readSettings(): AppSettings {

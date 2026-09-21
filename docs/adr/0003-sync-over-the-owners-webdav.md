@@ -4,6 +4,12 @@ status: accepted
 
 # Sync over the owner's WebDAV, in the desktop plugin's own folder
 
+_Revised by [ADR 0031](0031-positions-cross-products-by-document-id.md): the
+`zotero-tts-documents.json` asked for below is not built. Positions cross
+products in `xujialiu-positions.json`, keyed by Document Id, and the contract
+is the plugin's `docs/spec/SYNC-FORMAT.md`. The three properties verified
+below still hold and still shape that file._
+
 *The product argument — what this is for and what it gives up — is
 `docs/design/0003-your-place-follows-you-on-storage-you-own.md`.*
 
