@@ -33,8 +33,8 @@ import { FlatList, Pressable, StyleSheet, Text } from 'react-native';
 
 import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
 
-import { INK, Note } from './controls';
-import { Sheet } from './sheet';
+import { INK } from './controls';
+import { Sheet, SheetNote } from './sheet';
 
 /** One line per row, and the same height for every one of them: what makes the list open where it should. */
 const ROW_HEIGHT = 46;
@@ -74,18 +74,18 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
     <Sheet visible={visible} title="Contents" onClose={onClose}>
 
         {contents.rows.length === 0 ? (
-          <Note>
+          <SheetNote>
             This book has no contents of its own. That is ordinary rather than a fault — some EPUBs carry none — and
             nothing else stops working: tapping a sentence still reads from there.
-          </Note>
+          </SheetNote>
         ) : null}
 
         {contents.rows.length > 0 && contents.unreachable === contents.rows.length ? (
-          <Note attention>
+          <SheetNote attention>
             {!spineKnown
               ? 'The list of this book’s own files has not arrived yet, so no row can be opened. It arrives as the document installs.'
               : 'None of these rows names a file in this book. The contents live in a different folder from the pages, which this app matches by name — so the list can be read but not followed.'}
-          </Note>
+          </SheetNote>
         ) : null}
 
         <FlatList
@@ -112,7 +112,7 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
           )}
         />
 
-        {here && here.precision !== 'exact' ? <Note>{precisionLine(here.precision)}</Note> : null}
+        {here && here.precision !== 'exact' ? <SheetNote>{precisionLine(here.precision)}</SheetNote> : null}
     </Sheet>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { INK } from './controls';
+import { INK, Note } from './controls';
 import { Icon } from './icon';
 
 /**
@@ -54,6 +54,19 @@ export function Sheet({ visible, title, onClose, onBack, children, style }: {
   );
 }
 
+/**
+ * A `Note` set in from the sheet's edge like everything else in it (#28).
+ *
+ * The sheet's body has no horizontal padding of its own: every row sets itself
+ * in by 16 — the title above, a sheet's chips and rows — so a `Note` placed
+ * straight in the body started at the screen's edge and lost half its first
+ * letter. `Note` stays unpadded, because on the settings screens it already
+ * sits in a padded container.
+ */
+export function SheetNote({ children, attention }: { children: ReactNode; attention?: boolean }) {
+  return <View style={styles.inset}><Note attention={attention}>{children}</Note></View>;
+}
+
 const styles = StyleSheet.create({
   behind: { flex: 1 },
   sheet: { backgroundColor: INK.panel, borderTopColor: INK.line, borderTopWidth: StyleSheet.hairlineWidth,
@@ -61,6 +74,7 @@ const styles = StyleSheet.create({
   header: { paddingTop: 10, paddingBottom: 4, gap: 16, minHeight: 62 },
   grip: { alignSelf: 'center', backgroundColor: INK.line, borderRadius: 3, height: 5, width: 40 },
   title: { color: INK.text, fontSize: 18, fontWeight: '700', paddingHorizontal: 16 },
+  inset: { paddingHorizontal: 16 },
   headerRow: { alignItems: 'center', flexDirection: 'row', paddingHorizontal: 10 },
   // Absolute, so the title is centred on the sheet rather than on what is left
   // of it after the button.

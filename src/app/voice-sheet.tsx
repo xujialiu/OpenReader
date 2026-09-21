@@ -39,12 +39,12 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ProviderId } from '../core/providers/types';
 
-import { INK, Note } from './controls';
+import { INK } from './controls';
 import { Icon } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { VoiceLists } from './use-voices';
 import { levelOfVoice, voiceLevels } from './voices';
-import { Sheet } from './sheet';
+import { Sheet, SheetNote } from './sheet';
 import { LoadingSpinner } from './loading-spinner';
 
 export interface VoiceSheetProps {
@@ -127,9 +127,9 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
       <View style={{ gap: 10 }}>
 
         {enabled.length === 0 ? (
-          <Note attention>
+          <SheetNote attention>
             Enable a provider in Settings to choose a voice.
-          </Note>
+          </SheetNote>
         ) : (
           <>
             {/*
@@ -154,7 +154,7 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
               ))}
             </View>
 
-            {lists.asking(looking) ? <Note>Asking {PROVIDER_LABELS[looking]} for its Voices…</Note> : null}
+            {lists.asking(looking) ? <SheetNote>Asking {PROVIDER_LABELS[looking]} for its Voices…</SheetNote> : null}
 
             {levels.length > 0 ? (
               <ScrollView
@@ -212,8 +212,8 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
           </>
         )}
 
-        {lists.note ? <Note attention>{lists.note}</Note> : null}
-        {error ? <Note attention>{error}</Note> : null}
+        {lists.note ? <SheetNote attention>{lists.note}</SheetNote> : null}
+        {error ? <SheetNote attention>{error}</SheetNote> : null}
       </View>
     </>
   );
