@@ -5,7 +5,9 @@ import XCTest
 /// '...' both raising the shared drawer with no system alert, the Delete row's
 /// wording and confirmation, the '...' button centred against a wrapped title,
 /// and the reader's own drawer still opening its pages with no Delete row.
-/// Never presses Play; only pauses if a reading was already active.
+/// Since #22 the Library's drawer offers no Appearance (nothing behind it shows
+/// the change); the reader's keeps it. Never presses Play; only pauses if a
+/// reading was already active.
 final class LibraryActionsProbe: XCTestCase {
   let shortTitle = "A Short Test of Reading Aloud"
   let longTitle = "A Considerably Long Title That Will Certainly Wrap Onto Two Lines"
@@ -27,20 +29,21 @@ final class LibraryActionsProbe: XCTestCase {
 
     // Item 4: a real long press raises the same bottom drawer.
     row.press(forDuration: 0.7)
-    XCTAssertTrue(app.buttons["Appearance"].waitForExistence(timeout: 3), "Long press did not raise the actions drawer")
-    XCTAssertTrue(app.buttons["Rename"].exists)
+    XCTAssertTrue(app.buttons["Rename"].waitForExistence(timeout: 3), "Long press did not raise the actions drawer")
+    XCTAssertFalse(app.buttons["Appearance"].exists, "#22: the Library's drawer offers no Appearance")
     XCTAssertTrue(app.buttons["Download"].exists)
     XCTAssertTrue(app.buttons["Delete"].exists, "Library-opened drawer must offer Delete")
     capture("library-long-press-drawer", app)
     app.buttons["Close " + shortTitle].tap()
     XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Appearance"])], timeout: 3), .completed)
+      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Rename"])], timeout: 3), .completed)
 
     // Item 5: '...' raises the same drawer, and no system alert appears.
     let ellipsis = app.buttons["Actions for " + shortTitle]
     XCTAssertTrue(ellipsis.waitForExistence(timeout: 3))
     ellipsis.tap()
-    XCTAssertTrue(app.buttons["Appearance"].waitForExistence(timeout: 3), "'...' did not raise the actions drawer")
+    XCTAssertTrue(app.buttons["Rename"].waitForExistence(timeout: 3), "'...' did not raise the actions drawer")
+    XCTAssertFalse(app.buttons["Appearance"].exists, "#22: the Library's drawer offers no Appearance")
     XCTAssertEqual(app.alerts.count, 0, "'...' must not raise a system alert")
     capture("library-ellipsis-drawer", app)
 
@@ -101,6 +104,18 @@ final class LibraryActionsProbe: XCTestCase {
 
     app.buttons["Appearance"].tap()
     XCTAssertTrue(app.buttons["Increase font size"].waitForExistence(timeout: 3), "Appearance did not open from the reader")
+    // #22: from the reader, Appearance still changes the page behind it. The two
+    // captures are for a pixel comparison of the page above the sheet; the size
+    // goes back to 16 afterwards.
+    XCTAssertTrue(app.staticTexts["16"].waitForExistence(timeout: 2), "Font Size must start at 16")
+    Thread.sleep(forTimeInterval: 1)
+    capture("reader-appearance-16", app)
+    for _ in 0..<4 { app.buttons["Increase font size"].tap() }
+    XCTAssertTrue(app.staticTexts["20"].waitForExistence(timeout: 2), "Four taps on + must reach 20")
+    Thread.sleep(forTimeInterval: 1)
+    capture("reader-appearance-20", app)
+    for _ in 0..<4 { app.buttons["Decrease font size"].tap() }
+    XCTAssertTrue(app.staticTexts["16"].waitForExistence(timeout: 2), "Font Size must be back at 16")
     app.buttons["Close Appearance"].tap()
 
     app.buttons["More actions"].tap()

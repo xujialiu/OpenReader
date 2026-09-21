@@ -27,7 +27,7 @@
 
 // WALKTHROUGH-HARNESS
 import { File as HxFile, Paths as HxPaths } from 'expo-file-system';
-import { hlog, useHarnessCommands, breakFetch, unbreakFetch, type HarnessCommand } from './walkthrough-harness';
+import { hlog, useHarnessCommands, breakFetch, unbreakFetch, watchFetch, type HarnessCommand } from './walkthrough-harness';
 import { asDocumentId } from '../core/document';
 import { readProviderKey, saveProviderKey } from '../keys/store';
 
@@ -205,6 +205,7 @@ export function OpenReader() {
     }
     if (what === 'breakfetch') return breakFetch(String(command.host), Number(command.from));
     if (what === 'unbreakfetch') return unbreakFetch();
+    if (what === 'watchfetch') return watchFetch(String(command.host));
   });
 
   /**

@@ -66,3 +66,18 @@ export function unbreakFetch(): void {
   globalThis.fetch = realFetch;
   hlog('fetch restored');
 }
+
+/**
+ * A `fetch` that logs every request to one host — its method, its URL and a
+ * string body — before passing it on, so a run can read what was actually sent
+ * without a proxy: the Speech Text and a Language Hint (#23, #25). Headers are
+ * never logged, and they are where a key travels. `unbreakfetch` removes it.
+ */
+export function watchFetch(host: string): void {
+  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+    if (url.includes(host)) hlog(`fetch ${init?.method ?? 'GET'} ${url}${typeof init?.body === 'string' ? ` ${init.body.slice(0, 400)}` : ''}`);
+    return realFetch(input as RequestInfo, init);
+  }) as typeof fetch;
+  hlog(`fetch watched for ${host}`);
+}

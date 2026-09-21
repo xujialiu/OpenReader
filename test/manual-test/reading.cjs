@@ -12,7 +12,7 @@ if (action === 'play-for') {
   try { execFileSync('bash', [require.resolve('./silence.sh'), 'check', ...(device ? [device] : [])], { stdio: 'inherit' }); } catch { process.exit(2); }
 }
 (async () => {
-  const targets = (await fetch('http://127.0.0.1:8081/json/list').then(r => r.json())).filter(p => p.appId === 'top.xujialiu.openreader');
+  const targets = (await fetch(new URL('/json/list', process.env.OPENREADER_METRO ?? 'http://127.0.0.1:8081')).then(r => r.json())).filter(p => p.appId === 'top.xujialiu.openreader');
   if (targets.length !== 1) throw new Error(`Expected one OpenReader target, found ${targets.length}`);
   const url = new URL(targets[0].webSocketDebuggerUrl);
   const socket = new WebSocket(url.href, { origin: `http://${url.host}` });

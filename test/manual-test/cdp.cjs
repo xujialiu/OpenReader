@@ -2,7 +2,7 @@
 // Uses the ws installation shipped with Metro. Does not install or inject app code.
 const { readFileSync } = require('node:fs');
 const WebSocket = require('ws');
-const [mode, input, metro = 'http://127.0.0.1:8081'] = process.argv.slice(2);
+const [mode, input, metro = process.env.OPENREADER_METRO ?? 'http://127.0.0.1:8081'] = process.argv.slice(2);
 if (!['--eval', '--warnings'].includes(mode) || (mode === '--eval' && !input)) {
   console.error('Usage: cdp.cjs --eval FILE [METRO_URL] | --warnings [MILLISECONDS=1500] [METRO_URL]');
   process.exit(2);

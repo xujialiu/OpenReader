@@ -21,7 +21,7 @@ for arg in "$@"; do
 done
 xcodebuild -project "$output/ManualTests.xcodeproj" -scheme LockScreenProbe \
   -destination "id=$simulator" -derivedDataPath "$output/build" \
-  -resultBundlePath "$result" "${only_testing[@]}" test > "$output/test-$(date +%s).log" 2>&1 || status=$?
+  -resultBundlePath "$result" ${only_testing[@]+"${only_testing[@]}"} test > "$output/test-$(date +%s).log" 2>&1 || status=$?
 if [[ -d "$result" ]]; then
   xcrun xcresulttool export attachments --path "$result" --output-path "$output/attachments-$(basename "$result" .xcresult)"
 fi

@@ -129,7 +129,7 @@ const fixture = probeMode => {
 };
 
 (async () => {
-  const targets = (await fetch('http://127.0.0.1:8081/json/list').then(r => r.json())).filter(p => p.appId === 'top.xujialiu.openreader');
+  const targets = (await fetch(new URL('/json/list', process.env.OPENREADER_METRO ?? 'http://127.0.0.1:8081')).then(r => r.json())).filter(p => p.appId === 'top.xujialiu.openreader');
   if (targets.length !== 1) throw new Error('Expected one OpenReader debugger');
   const url = new URL(targets[0].webSocketDebuggerUrl), socket = new WebSocket(url.href, { origin: `http://${url.host}` });
   await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });

@@ -81,6 +81,19 @@ fix (AGENTS.md).
   `app.json`, `plugins/` and `patches/`; a change to `patches/` or to a
   `scripts` entry is JavaScript and rides over Metro, a change to a dependency
   or a config plugin is not.
+- **The kit's CDP scripts talked to port 8081 whatever port this tree's Metro
+  is on.** `reading.cjs` and `voice-playback.cjs` had `127.0.0.1:8081` written
+  in, and `offline-playback.cjs` goes through `cdp.cjs`, whose default was the
+  same. On 2026-09-22 every port from 8081 to 8084 held a Metro serving a
+  deleted worktree, so this tree's was on 8085 and the scripts found no target,
+  or the wrong device's.
+  - Fix: `OPENREADER_METRO=http://127.0.0.1:PORT` in the environment; `cdp.cjs`,
+    `reading.cjs`, `voice-playback.cjs` and `stop-on-word.cjs` all take it.
+- **`watchfetch` misses the first request the app makes as it starts.** The
+  shell asks every enabled Provider for its Voices on mount (#24), and the
+  harness's first poll is 250 ms later, so with `watchfetch` already in
+  `harness.json` at launch the log shows Fish's listing pages 2–4 and never
+  page 1. Page 1 was sent; its absence from the log proves nothing.
 
 ### Simulators and installs
 
@@ -139,6 +152,10 @@ fix (AGENTS.md).
   arrived and missed. A tap before the place arrives clears nothing, leaves
   `resume` null, and the place then wins — the same screen as a broken claim
   rule, from the opposite cause.
+- **A chip is not a `.radioButton`.** The voice sheet's provider and locale
+  chips have `accessibilityRole="radio"`, and
+  `app.descendants(matching: .radioButton)` found none of them on iOS 27.0.
+  Find a chip by its label (`label == 'en-US'`), as `ReaderProbe` does.
 - **`Back` is not what the back button is called.** It is named after the screen
   behind it: the Sync screen's is `Settings`, the Settings screen's is `Library`.
   Only the reader's is `Back`. A book handed over with `simctl openurl` is pushed
@@ -257,6 +274,32 @@ fix (AGENTS.md).
   `UISceneDelegateClassName`, and give the Swift class `@objc(SceneDelegate)` so
   the name in the plist resolves.
 
+### Fish Audio from the simulator
+
+- **The first Fish request after a minute or so of quiet fails with "The
+  network connection was lost", and the reading stops.** The reader's note is
+  `Fish Audio s2.1-pro-free: cannot reach api.fish.audio (Error: fetch failed:
+  UnexpectedException: The network connection was lost. (at
+  ExpoModulesCore/Promise.swift:56))`, the same words `breakfetch` imitates, and
+  here nothing had broken anything. Measured 2026-09-22 on the iPhone 17: a
+  reading's first synthesis failed this way 206 s and again 80 s after the last
+  request to the host, and succeeded 45 s and 10 s after one. Through the app's
+  own `fetch` with `cdp.cjs`, no key and no playback: a GET answered 200 in
+  2.9 s; after 104 s of quiet a POST failed this way about 6 s after it was
+  sent; the next POST answered 401 in 0.6 s; after another 102 s a GET answered
+  200, but in about 9 s.
+  - Cause, as far as it was established: this Mac reaches `api.fish.audio`
+    through a TUN-mode proxy (it resolves to `198.18.0.126`, the fake-IP range),
+    an idle connection is dead by then, and the POST that reuses it is not
+    retried, while a GET apparently is, which is why it only took longer. Every
+    synthesis is a POST. Whether a phone on another network does the same was
+    not established.
+  - Fix for a measurement: Play again. A failed Utterance is retried when Play
+    is pressed on it, over a new connection. A run that met this is not a
+    result about the change under test. Start a timed play within about 45 s of
+    the app's last request to the host (a cold launch makes one: the start-up
+    voice listing) if the first attempt must count.
+
 ### Talking to the owner's WebDAV host from the Mac
 
 - **Every request answers `403` with the body `error code: 1010`, including a
@@ -296,6 +339,23 @@ fix (AGENTS.md).
   2026-09-21: the failure was written at 21:06 and the process was still there at
   21:16), so a run that has gone quiet is worth checking against `test.log`
   rather than waited out.
+- **After a failed test, the result bundle is not complete, and killing
+  `xcodebuild` loses the attachments.** Measured 2026-09-22: `library-actions.sh`
+  ran both of its methods, one failed on a missing fixture at 01:21, and
+  `xcodebuild` was still collecting simulator diagnostics
+  (`result.xcresult/Staging/1_Test/Diagnostics/simctl_diagnostics`) at 01:30.
+  Killed then, it left `result.xcresult` with no `Info.plist`, and `xcresulttool
+  export attachments` refused it: "Failed to create a new result bundle reader".
+  - The screenshots are still there, as raw files: `file
+    result.xcresult/Data/data.*` says `PNG image data` for each, and the element
+    trees are the `Zstandard compressed data` ones (`zstd -dc`). Their names are
+    lost; tell them apart by the labels in the trees.
+  - Better, do not run a method that is going to fail: every runner now takes
+    `-only-testing:METHOD`, `library-actions.sh` included.
+- **A runner called with no `-only-testing` died at once with `only_testing[@]:
+  unbound variable`.** macOS's `/bin/bash` is 3.2, where `set -u` treats an empty
+  array as unset, so "omit the arguments to run the whole class" never worked.
+  The runners now expand `${only_testing[@]+"${only_testing[@]}"}`.
 - **A Library entry's file is named with a dash, not a colon.**
   `Documents/library/sha256-<hex>.epub`, while the Document Id is
   `sha256:<hex>`. A `cp "$D/Documents/library/$id.epub" …` fails, and in a
@@ -591,19 +651,27 @@ With the current Debug app connected to Metro and both `A Short Test of Reading
 Aloud` and `仙逆` in the Library:
 
 ```sh
-bash test/manual-test/library-actions.sh SIMULATOR_UDID /tmp/openreader-library-actions-01
+bash test/manual-test/library-actions.sh SIMULATOR_UDID /tmp/openreader-library-actions-01 \
+  -only-testing:testLibraryAndReaderActions
 ```
 
-This uses real XCTest touches, entirely on the short English fixture. It long-
-presses the Library row and taps its `...`, checking both raise the same drawer
-(Appearance/Rename/Download/Delete) with no system alert on the `...` tap. It
-taps Delete, checks the `Delete this book?` confirmation, and **cancels** —
+Without `-only-testing` it runs both methods, and the Contents one below fails
+at once when `仙逆` is not on the shelf, which costs a long `xcodebuild` hang
+(see Pitfalls). This uses real XCTest touches, entirely on the short English
+fixture. It long-presses the Library row and taps its `...`, checking both raise
+the same drawer, Rename/Download/Delete and **no Appearance** (#22: nothing
+behind the Library shows a font change), with no system alert on the `...` tap.
+It taps Delete, checks the `Delete this book?` confirmation, and **cancels** —
 this mode never removes the fixture. It renames the fixture to a long title to
 photograph the `...` button centred against a two-line row, then renames it
 back and confirms the restoration survives a relaunch. It then opens the reader
 itself and checks the Appearance/Rename/Download menu (no Delete row there) and
 that all three still open from that entry point, including the persisted
-Download view. It never presses Play. It does **not** check the Contents note:
+Download view. In Appearance it takes Font Size from 16 to 20 and back,
+capturing the page at 16 and at 20 (`reader-appearance-16`/`-20`): a pixel
+comparison of the page above the sheet is what shows Appearance still changes
+the page (measured 2026-09-22: 14.8% of that region changed, 14 lines of text
+became 11). It never presses Play. It does **not** check the Contents note:
 this fixture's nav hrefs do not match its spine (a pre-existing, unrelated
 fact — see `core/document/contents.ts`), so every row is permanently
 unreachable and `here` is always null here, regardless of position.
@@ -977,3 +1045,121 @@ caller runs on the host and points `sync.url` at:
 
 A stub is the only way found to measure the bound: a wrong address cannot be
 typed while the switch is on, and a simulator has no way to lose its network.
+
+## Voice lists at start (#24)
+
+`voice-list.sh` runs `ios/VoiceListProbe.swift`: a cold launch, about five
+seconds, a real tap on `Stat Line Fixture` (below), a tap on `Choose a Voice`,
+and at once a locale chip (`en-US`) must be there and `Asking Fish Audio for
+its Voices…` must not. It then chooses Dax from en-US with a touch, which while
+paused is a preference and sends nothing, and closes the sheet.
+
+```sh
+bash test/manual-test/voice-list.sh SIMULATOR_UDID /tmp/openreader-voice-list-01
+```
+
+Measured 2026-09-22 (iPhone 17, iOS 27.0, Fish only enabled): Library row at
+6.2–6.4 s after launch, sheet opened at 9.5–9.7 s, listed, no "Asking…". With
+`watchfetch` in `harness.json` before the launch, the only Fish requests of the
+run were the start-up listing's (pages 2–4 of the official list are what the
+log can show; see Pitfalls).
+
+What it cannot tell: whether the list came from the start-up request or from
+one the sheet sent itself, only that the sheet waited for none. The other half,
+a sheet opened while the start-up listing is still out, is a harness sequence
+rather than a touch, because a person cannot reach the sheet that fast: put
+`{"seq":N,"do":"open","id":"sha256:…"}` in `harness.json`, launch, and as soon
+as the reader's first `HX playing=` line appears send `{"do":"voicesheet","on":true}`
+and then `{"do":"voicelist","provider":"fish","n":1}`. Measured 2026-09-22: the
+sheet asked 4.3 s after launch, `voicelist fish n=null asking=true`, the sheet
+said "Asking Fish Audio for its Voices…", and 5 s later `n=338 asking=false`
+with no note. Fish's own session cache also shares an official listing that is
+in flight, so a request count cannot show which layer joined; the unit tests in
+`test/app/voice-lists.test.ts` are what hold the loader's joining.
+
+## Short lines, brackets and the Fish language hint (#23, #25)
+
+`stat-line-fixture.ts` writes `Stat Line Fixture.epub`: one chapter, no
+heading, six paragraphs that are six Utterances — `100 exp`, `2/50 HP`,
+`You gained 100 exp.`, `He cast [Fireball] at the wolf.`, `[Level Up]`,
+`If x < 5 and y > 3, stop.` Put it in `Documents/Inbox/` and send the harness's
+`add`, as for the sized fixtures above.
+
+```sh
+npx tsx test/manual-test/stat-line-fixture.ts /tmp/openreader-stat-lines
+```
+
+### What was sent, and where the highlight fell (`stop-on-word.cjs`)
+
+With the fixture open and paused, the simulator silenced, and this worktree's
+Metro writing to a file:
+
+```sh
+SHOTS_DIR=/tmp/openreader-shots-01 OPENREADER_METRO=http://127.0.0.1:PORT \
+  node test/manual-test/stop-on-word.cjs SIMULATOR_UDID METRO_LOG Fireball 20
+```
+
+It sends the harness's `watchfetch` for `api.fish.audio`, installs a recorder
+in the reader's WebView through the harness's `js` (every change of the
+`openreader-utterance` and `openreader-word` highlights, every 40 ms), presses
+Play through the debugger with an in-app watchdog at MAX_SECONDS, pauses as
+soon as the chosen word is the word highlighted, and prints the highlight
+changes and the request bodies (never headers). `SHOTS_DIR` also takes
+screenshots while it plays. It checks the simulator's own volume first. A
+handler probe for Play and Pause, not a touch test; the recorder reads what the
+WebView painted.
+
+Measured 2026-09-22 with Dax (`en/9fa4b7a1b67446b48208f2f5d4bcd8da`) and the
+default bracket list, 7.12 s from Play to Pause: the request texts were
+`[Speak in American English] 2/50 HP`, `[Speak in American English] 100 exp`
+(the first two are in flight together, so their order in the log is not the
+reading order), `You gained 100 exp.`, `He cast Fireball at the wolf.`,
+`[Speak in American English] Level Up`, `If x < 5 and y > 3, stop.`; no
+`GET /model/9fa4b7a1…` lookup, because the start-up listing held Dax. Word
+highlights: `100`, `exp`; `2`, `50`, `HP`; `You`, `gained`, `100`, `exp`;
+`He`, `cast`, `Fireball`, `at`, `the`, `wolf` — each the document's own word,
+`Fireball` without its brackets, nothing for the hint. Read-ahead is three
+Utterances, so the sixth request goes out while the third line is read. A
+download (`BracketsProbe` below) sent the same six texts, in reading order.
+
+If the first line fails with "cannot reach api.fish.audio … The network
+connection was lost", see Pitfalls: play again, and do not count that run. The
+script does not notice a reading that stopped by itself; it waits out
+MAX_SECONDS with nothing playing (the first measured run waited 20 s after
+the failure at about 8 s), so keep the cap near what the stop word needs.
+
+### The bracket switch over an open reader, and the download it names (`BracketsProbe.swift`)
+
+```sh
+bash test/manual-test/brackets.sh SIMULATOR_UDID /tmp/openreader-brackets-01 -only-testing:testDownloadStatLines
+```
+
+- `testDownloadStatLines`: a cold launch, the Library's `...`, Download, Select
+  all, Download selected, and `1 chapters downloaded` within 90 s. Real Fish
+  requests on the free model; no playback.
+- `testFlipBracketSwitch`: attaches to the running app, which must already be
+  on General. The UI never puts General over an open reader, so push it with
+  the harness: `{"do":"go","route":"General"}` while the reader is open. It
+  flips "Remove enclosing brackets when reading" once and goes back to the
+  paused reader.
+- `testReadDownloadCount`: attaches to an open reader and prints the Download
+  drawer's count.
+
+Check the offline store between them, read-only, from the host:
+`sqlite3 "file:$D/Documents/offline-narration-v2/catalog.sqlite?mode=ro"`
+with `SELECT * FROM state` (the `speech` row is the setting the keys answer
+to), `SELECT ordinal, clip_key FROM memberships WHERE document=…` and
+`SELECT key FROM clips WHERE document=…`. A key is the SHA-256 of the Speech
+Text (`offline/catalog-keys.ts`), so it can be computed on the host with
+`prepareSpeechText`.
+
+Measured 2026-09-22: the download saved six clips under the Speech Text keys
+(`He cast Fireball at the wolf.` as `8773e8c3…`, `Level Up` as `46cc8f36…`).
+Switched off by touch: `speech` became `[false]` at once, those two
+memberships became `57438442…` and `655001ea…` (the bracketed texts), the other
+four stayed, and the drawer said `0 chapters downloaded` with the chapter at
+`4 / 6`. Line 4 then went to Fish as `He cast [Fireball] at the wolf.` and the
+highlight went `He`, `cast`, `at`, `the`, `wolf`, with nothing for the
+swallowed word. Switched back on: `[true,"<> []"]`, the keys back, `1 chapters
+downloaded`, and line 4 played from the saved audio with no request, `Fireball`
+highlighted.
