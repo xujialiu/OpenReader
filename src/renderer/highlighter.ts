@@ -466,6 +466,12 @@ ${constants}
      of it when the reading moves to another section. */
   var installed = null;
   var registries = new WeakMap();
+  /* Each DOM Range a highlight holds -> the element of the Block it was built
+     from, so that put() can repaint that Block when the Range is taken out again
+     (#35). Keyed weakly by the Range, so it lives exactly as long as the Range
+     does, and the element is in the Range's own document; put() still asks that
+     document for its defaultView before it repaints anything. */
+  var owners = new WeakMap();
   var state = null;
   var frame = 0;
   /* How much of the bottom of the scroll container the player is covering, in CSS
@@ -837,7 +843,7 @@ ${constants}
     var map = maps.get(contents.document);
     var found = map ? map.get(id) : null;
     if (!found) return null;
-    return { document: contents.document, parts: found.parts, text: found.text };
+    return { document: contents.document, parts: found.parts, text: found.text, element: found.element };
   }
 
   /* ---- the highlights ---- */
@@ -857,14 +863,68 @@ ${constants}
     win.CSS.highlights.set(UTTERANCE, utterance);
     win.CSS.highlights.set(WORD, word);
     word.priority = 1;
-    found = { utterance: utterance, word: word };
+    /* The third is never registered and no rule names it, so it cannot paint.
+       It exists to be handed a Range and have it taken back: see repaintBlocks. */
+    var repaint = new win.Highlight();
+    found = { utterance: utterance, word: word, repaint: repaint };
     registries.set(win.document, found);
     return found;
   }
 
+  /* Every change to a highlight goes through here, and so does the repaint the
+     change needs and WebKit does not do (#35, ADR 0038).
+
+     WebKit paints a ::highlight() background over the line's selection
+     rectangle, and on a line with another line above it in the same block that
+     rectangle starts at the bottom of the upper line's text: 2 CSS px above the
+     text's own box for WebKit's serif at 28px with a normal line height, 12.8 px
+     at line-height 1.6. It is the leading. When a Highlight's ranges change,
+     WebKit repaints only the renderers of the nodes they cover, and a text node's
+     repaint rectangle is its own box, which on the first line of a text node does
+     not reach up into that strip. So a word added there is drawn short by the
+     strip, and a word taken out never has the strip erased. The strip is painted
+     whenever something repaints that area whole with the word highlighted, and
+     the tiles the centring scroll brings on screen are painted in the frame the
+     first word is. Measured on the iOS 27.0 simulator: a strip 6 device pixels
+     tall above the Utterance's first word after a <br />, left there until the
+     page was repainted for some other reason.
+
+     WebKit repaints the containing blocks itself from 319154@main (2026-08-13),
+     which iOS 27.0 does not have. This does the same from here: the Block of
+     every Range taken out or put in is repainted whole, once per change. */
   function put(highlight, ranges) {
+    var touched = [];
+    highlight.forEach(function (range) {
+      touched.push(owners.get(range));
+    });
     highlight.clear();
-    for (var i = 0; i < ranges.length; i++) highlight.add(ranges[i]);
+    for (var i = 0; i < ranges.length; i++) {
+      highlight.add(ranges[i]);
+      touched.push(owners.get(ranges[i]));
+    }
+    repaintBlocks(touched);
+  }
+
+  /* A Block repainted whole without touching the DOM or a style. Adding a Range
+     to a Highlight, and deleting one, makes WebKit repaint the renderer of every
+     node the Range covers, whether or not the Highlight is registered; its source
+     has done so since at least 2023. A Range made by selectNode() covers the
+     element itself, and an element's repaint rectangle is its whole block. */
+  function repaintBlocks(elements) {
+    var done = [];
+    for (var i = 0; i < elements.length; i++) {
+      var element = elements[i];
+      if (!element || done.indexOf(element) >= 0) continue;
+      done.push(element);
+      var doc = element.ownerDocument;
+      /* A document epub.js has replaced paints nothing, so nothing of it needs repainting. */
+      var registry = doc && doc.defaultView ? registries.get(doc) : null;
+      if (!registry || !element.parentNode) continue;
+      var whole = doc.createRange();
+      whole.selectNode(element);
+      registry.repaint.add(whole);
+      registry.repaint.delete(whole);
+    }
   }
 
   function moveTo(registry) {
@@ -903,6 +963,7 @@ ${constants}
     var dom = live.document.createRange();
     dom.setStart(from.node, range.start - from.at);
     dom.setEnd(to.node, range.end - to.at);
+    owners.set(dom, live.element);
     return dom;
   }
 

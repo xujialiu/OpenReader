@@ -441,6 +441,55 @@ describe('the highlight actually paints', () => {
   });
 });
 
+describe('a highlight that moves takes all of itself with it (#35, ADR 0038)', () => {
+  /**
+   * WebKit paints a `::highlight()` background on a line with a line above it
+   * from the bottom of the upper line's text, and before 319154@main it repaints
+   * only the text's own box when a highlight's ranges change. On the first line
+   * of a text node the strip between the two is painted by any whole repaint and
+   * never erased: on the owner's phone, an amber line above a word the voice had
+   * already left. Nothing in a DOM shows it — the registry holds the right Range
+   * the whole time — so these pin the lines that repaint the Block, and
+   * `test/manual-test/leading-strip.sh` photographs what they paint.
+   */
+  it('repaints the Block of every Range it takes out and of every Range it puts in', () => {
+    const put = fn(code('highlighter.ts'), 'put');
+    pin(put, 'touched.push(owners.get(range));', 'highlighter.ts, function put');
+    pin(put, 'touched.push(owners.get(ranges[i]));', 'highlighter.ts, function put');
+    pin(put, 'repaintBlocks(touched);', 'highlighter.ts, function put');
+    // The ranges going out are read before the clear, when there are still some to read.
+    expect(put.indexOf('highlight.forEach(')).toBeLessThan(put.indexOf('highlight.clear();'));
+  });
+
+  it('knows a Range’s Block because it wrote it down when it built the Range', () => {
+    pin(fn(code('highlighter.ts'), 'domRange'), 'owners.set(dom, live.element);', 'highlighter.ts, function domRange');
+  });
+
+  it('repaints through a Range over the element itself, in a Highlight that can paint nothing', () => {
+    const program = code('highlighter.ts');
+    const repaint = fn(program, 'repaintBlocks');
+    // `selectNode` and not `selectNodeContents`: only a Range that covers the
+    // element makes WebKit repaint the element's own renderer, the whole block.
+    // One over its contents repaints the text nodes, which is the bug.
+    pin(repaint, 'whole.selectNode(element);', 'highlighter.ts, function repaintBlocks');
+    expect(repaint).not.toContain('selectNodeContents');
+    pin(repaint, 'registry.repaint.add(whole);', 'highlighter.ts, function repaintBlocks');
+    pin(repaint, 'registry.repaint.delete(whole);', 'highlighter.ts, function repaintBlocks');
+    // Never registered: a registered Highlight holding a whole Block, even for a
+    // moment, is a Block painted by whatever rule names it.
+    const registry = fn(program, 'registryFor');
+    pin(registry, 'var repaint = new win.Highlight();', 'highlighter.ts, function registryFor');
+    expect(registry.match(/CSS\.highlights\.set\(/g)).toHaveLength(2);
+  });
+
+  it('changes a highlight nowhere but in put, so no change can skip the repaint', () => {
+    const program = code('highlighter.ts');
+    const elsewhere = program.replace(fn(program, 'put'), '');
+    expect(elsewhere).not.toMatch(/\bhighlight\.(clear|add|delete)\(/);
+    expect(elsewhere).not.toMatch(/\.(utterance|word)\.(clear|add|delete)\(/);
+  });
+});
+
 describe('the player floats over the page, and the centring is told (ADR 0020)', () => {
   it('centres in what can be seen rather than in the container', () => {
     // ADR 0011 centres against `clientHeight`; ADR 0020's player covers the bottom

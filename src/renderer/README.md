@@ -232,6 +232,19 @@ therefore text and a CFI, which is what ADR 0008 already made the thing that
 identifies a place, and the text nodes are resolved against the live document at
 paint time, walked once per document and never per word.
 
+## A highlight that moves repaints its Block (ADR 0038)
+
+A `::highlight()` background on a line with another line above it is painted from
+the bottom of the upper line's text, and the WebKit the app ships against
+repaints only a text node's own box when a highlight's ranges change. Above the
+first line of a text node that is not the first line of its paragraph, which is
+the first line after every `<br />`, the leading was painted by the next whole
+repaint and never erased: #35, an amber strip above a word the voice had already
+left. So `put()`, the only function that changes a highlight, repaints the whole
+Block of every Range it takes out or puts in, through a Range over the Block's
+element in a Highlight that is never registered. A screenshot is the only thing
+that sees it; `test/manual-test/leading-strip.sh` takes one.
+
 ## What rests on running the app
 
 The whole of the WebView side. There is no automated coverage of the DOM walk, of
