@@ -148,9 +148,10 @@ the wrong one to read despite looking like the obvious choice.
 ## Highlight Level
 
 How much text is marked as it is spoken: the word, or the whole utterance. A
-provider that reports no word timings can only be highlighted at utterance level.
-Timings are never estimated or interpolated to fill the gap — philosophy rule 1,
-and ADR 0005's matrix names Azure and OpenAI as the providers this costs.
+clip that comes without word timings can only be highlighted at utterance level.
+Timings are never estimated or interpolated to fill the gap — philosophy rule 1.
+It costs every OpenAI voice (ADR 0005), and Azure's `MAI-Voice-2` voices, along
+with any Azure clip whose timings end pinned to one instant (ADR 0037).
 
 ## The two halves of this directory
 

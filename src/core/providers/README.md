@@ -15,8 +15,10 @@ written.
 
 About 3,000 lines of TypeScript, roughly 95% portable as it stands, because the
 dependency injection is already complete: `createProvider(id, settings, deps)`
-takes the platform as an argument. The only Zotero-specific code left in the
-non-system providers is two functions in `azure.ts`.
+takes the platform as an argument. The only Zotero-specific code in the
+non-system providers was two functions in `azure.ts`, `getChromeWebSocket` and
+`newRequestId`; they stayed behind when Azure came across, and the app hands in
+React Native's `WebSocket` and a request id of its own instead.
 
 With it come about 3,200 lines of provider tests, which barely mention Zotero.
 They land in `test/core/providers/`, which is where they already live in the
@@ -25,30 +27,40 @@ plugin, so their relative imports need no editing.
 ### What has landed so far
 
 The OpenAI-compatible client and the three sections built on it (`openai.ts`,
-`compatible.ts`), Speechify, **Fish Audio**, the local-engine registry with
-Kokoro-FastAPI, and the factory, errors, base-URL and audio-bytes pieces they
-share.
+`compatible.ts`), **Azure** (`azure.ts`, `azure-ws.ts`), Speechify, **Fish
+Audio**, the local-engine registry with Kokoro-FastAPI, and the factory,
+errors, base-URL and audio-bytes pieces they share.
 
 That completes ADR 0005's three providers that report Word Timings over plain
 HTTP — Speechify, Fish Audio and a self-hosted Kokoro — and Fish is the only one
 of the three that is a cloud service needing no server of the owner's own.
 
-**Not yet:** `azure.ts` and `azure-ws.ts`, which have no word timings under
-React Native (ADR 0005) and want a WebSocket dependency; `cloudflare.ts`,
-`fishspeech.ts` and `mimo.ts`, which are ordinary ports that nobody has needed
-yet; and `system/`, which is not coming at all — the operating system's own
-voices are a native module under ADR 0014, not a member of this layer.
+**Azure came with ADR 0037,** and with word timings. ADR 0005 had counted it
+out, because `WordBoundary` exists only in the Speech SDK and the SDK does not
+run under React Native. The plugin never used the SDK: `azure-ws.ts` speaks the
+WebSocket protocol by hand, and with `raw-24khz-16bit-mono-pcm` the same frames
+return samples and word boundaries (measured, notes/NOTES_2026-09-22.md, 14:30).
+It is the fourth provider with Word Timings, over a WebSocket rather than plain
+HTTP, and it reports none for its `MAI-Voice-2` voices, which send no
+boundaries at all.
 
-So `ProviderDeps` is **still** `{ fetch }` and nothing else. Azure would add
-`getWebSocket` and `newRequestId` back; Fish was expected to add
-`newAbortController` and did not need to, because that dependency existed only
-to borrow an `AbortController` from a Zotero chrome window and this engine has
-one of its own (measured, notes/NOTES_2026-09-19.md). Fish's other two
-injections — the session voice cache and the pause before a retry — are not
-platform capabilities: each has a working default inside `fish.ts`, the way
-`speechify.ts` keeps its shared serial queue there, and each exists so a test
-can be fast and isolated without stubbing a global. A dependency is listed when
-a provider that needs it exists, not before.
+**Not yet:** `cloudflare.ts`, `fishspeech.ts` and `mimo.ts`, which are ordinary
+ports that nobody has needed yet; and `system/`, which is not coming at all —
+the operating system's own voices are a native module under ADR 0014, not a
+member of this layer.
+
+So `ProviderDeps` is `{ fetch, getWebSocket, newRequestId }`. Azure brought the
+last two back; `getWebSocket` returns React Native's own constructor, typed with
+the request headers it takes as a third argument, which carry the key. Fish was
+expected to add `newAbortController` and did not need to, because that
+dependency existed only to borrow an `AbortController` from a Zotero chrome
+window and this engine has one of its own (measured, notes/NOTES_2026-09-19.md).
+Fish's other two injections — the session voice cache and the pause before a
+retry — are not platform capabilities: each has a working default inside
+`fish.ts`, the way `speechify.ts` keeps its shared serial queue there and
+`azure.ts` its pause, and each exists so a test can be fast and isolated without
+stubbing a global. A dependency is listed when a provider that needs it exists,
+not before.
 
 ### The language hint, which came across later
 

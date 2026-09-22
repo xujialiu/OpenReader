@@ -1,0 +1,137 @@
+{
+ "recorded": "2026-09-22 14:30 HKT from Node 22 with the owner's eastasia key, raw-24khz-16bit-mono-pcm; notes/NOTES_2026-09-22.md. Text frames are verbatim with the request id replaced; each audio frame is its payload length, and the header every audio frame carried.",
+ "voice": "zh-CN-XiaoxiaoNeural",
+ "text": "你好，世界。今天是二〇二六年九月。",
+ "audioHeader": "X-RequestId:<requestId>\r\nContent-Type:audio/basic\r\nX-StreamId:DE56AAA0D574436594EB6526F8DCABD3\r\nPath:audio\r\n",
+ "frames": [
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:turn.start\r\n\r\n{\n  \"context\": {\n    \"serviceTag\": \"4b177dbf72ec4dc28b0da8a5e9e5a5ba\"\n  }\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:response\r\n\r\n{\"context\":{\"serviceTag\":\"4b177dbf72ec4dc28b0da8a5e9e5a5ba\"},\"audio\":{\"type\":\"inline\",\"streamId\":\"DE56AAA0D574436594EB6526F8DCABD3\"}}"
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 2398
+  },
+  {
+   "audio": 2
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 500000,\n        \"Duration\": 4750000,\n        \"text\": {\n          \"Text\": \"你好\",\n          \"Length\": 2,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 8000000,\n        \"Duration\": 5250000,\n        \"text\": {\n          \"Text\": \"世界\",\n          \"Length\": 2,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 18875000,\n        \"Duration\": 3750000,\n        \"text\": {\n          \"Text\": \"今天\",\n          \"Length\": 2,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 22750000,\n        \"Duration\": 2625000,\n        \"text\": {\n          \"Text\": \"是\",\n          \"Length\": 1,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 25625000,\n        \"Duration\": 1750000,\n        \"text\": {\n          \"Text\": \"二\",\n          \"Length\": 1,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 27375000,\n        \"Duration\": 1375000,\n        \"text\": {\n          \"Text\": \"〇\",\n          \"Length\": 1,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 28875000,\n        \"Duration\": 1875000,\n        \"text\": {\n          \"Text\": \"二\",\n          \"Length\": 1,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 30750000,\n        \"Duration\": 1625000,\n        \"text\": {\n          \"Text\": \"六\",\n          \"Length\": 1,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "audio": 48960
+  },
+  {
+   "audio": 840
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 32375000,\n        \"Duration\": 2000000,\n        \"text\": {\n          \"Text\": \"年\",\n          \"Length\": 1,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 34500000,\n        \"Duration\": 5250000,\n        \"text\": {\n          \"Text\": \"九月\",\n          \"Length\": 2,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6600
+  },
+  {
+   "audio": 19200
+  },
+  {
+   "audio": 0
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:turn.end\r\n\r\n{}"
+  }
+ ]
+}

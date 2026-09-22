@@ -253,9 +253,10 @@ export interface SpeakMessage {
   /**
    * One entry per Word Timing, in the order the Provider reported them.
    *
-   * `null` means the Provider reported none, so the Utterance is highlighted
-   * whole. Never a partial array, never an estimate (philosophy rule 1) — ADR
-   * 0005's matrix names Azure and OpenAI as the Providers this costs.
+   * `null` means the clip came without any, so the Utterance is highlighted
+   * whole. Never a partial array, never an estimate (philosophy rule 1). It
+   * costs every OpenAI voice (ADR 0005) and Azure's `MAI-Voice-2` voices (ADR
+   * 0037).
    */
   words: WordCue[] | null;
   /** How long the speech lasts as it will be heard. The interpolation is clamped to it, because the gap that follows belongs to the pause and not to the words. */

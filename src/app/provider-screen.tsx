@@ -48,6 +48,8 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
       onChangeText={(baseURL) => setSettings((previous) => ({ ...previous, [id]: { ...previous[id], baseURL } }))}
       editable={!locked} keyboard="url" placeholder="https://" /> : null}
     {keyIsOffered(id) ? <SecretField key={`${id}:key`} id={id} label="API key" secret={key} locked={locked} /> : null}
+    {id === 'azure' ? <Field label="Region" value={settings.azure.region} editable={!locked} placeholder="eastasia"
+      onChangeText={(region) => setSettings((previous) => ({ ...previous, azure: { region } }))} /> : null}
     {id === 'openai-official' || id === 'compatible' ? <Field label="Model" value={model} editable={!locked}
       placeholder={id === 'openai-official' ? 'gpt-4o-mini-tts' : 'tts-1'}
       onChangeText={(next) => setSettings((previous) => id === 'openai-official'

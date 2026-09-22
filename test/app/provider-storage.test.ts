@@ -17,13 +17,14 @@ describe('local settings persistence', () => {
     expect(migrated.local.baseURL).toBe('https://owner.example');
   });
   it('roundtrips enablement, voice history, sources and appearance across reloads', () => {
-    const settings = selectVoice({ ...DEFAULT_SETTINGS, enabledProviders: ['fish'],
+    const settings = selectVoice({ ...DEFAULT_SETTINGS, enabledProviders: ['fish', 'azure'], azure: { region: 'East Asia' },
       appearance: { font: 'helvetica', size: 20, textAlignment: 'left' }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
     writeSettings(settings);
     expect(readSettings()).toEqual(settings);
   });
   it('projects known fields so credentials cannot leak into the settings file', () => {
-    const settings = { ...DEFAULT_SETTINGS, apiKey: 'secret', fish: { ...DEFAULT_SETTINGS.fish, apiKey: 'secret' }, local: { ...DEFAULT_SETTINGS.local, headers: 'secret' } };
+    const settings = { ...DEFAULT_SETTINGS, apiKey: 'secret', fish: { ...DEFAULT_SETTINGS.fish, apiKey: 'secret' }, local: { ...DEFAULT_SETTINGS.local, headers: 'secret' },
+      azure: { region: 'eastasia', apiKey: 'secret' } };
     writeSettings(settings);
     expect(disk.get('settings.json')).not.toContain('secret');
   });

@@ -1,0 +1,155 @@
+{
+ "recorded": "2026-09-22 14:37 HKT from Node 22 with the owner's eastasia key, raw-24khz-16bit-mono-pcm; notes/NOTES_2026-09-22.md. Text frames are verbatim with the request id replaced; each audio frame is its payload length, and the header every audio frame carried.",
+ "voice": "en-US-Ethan:MAI-Voice-2",
+ "text": "The price rose to 29.83 dollars, said Dr. Smith.",
+ "audioHeader": "X-RequestId:<requestId>\r\nContent-Type:audio/basic\r\nX-StreamId:E4E1547601B04C98974E0180360B7073\r\nPath:audio\r\n",
+ "frames": [
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:turn.start\r\n\r\n{\n  \"context\": {\n    \"serviceTag\": \"07d3c62dee9f421f82f3c64660209612\"\n  }\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:response\r\n\r\n{\"context\":{\"serviceTag\":\"07d3c62dee9f421f82f3c64660209612\"},\"audio\":{\"type\":\"inline\",\"streamId\":\"E4E1547601B04C98974E0180360B7073\"}}"
+  },
+  {
+   "audio": 3684
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 662
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 3270
+  },
+  {
+   "audio": 826
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 1286
+  },
+  {
+   "audio": 48960
+  },
+  {
+   "audio": 2708
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 2670
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 4096
+  },
+  {
+   "audio": 2558
+  },
+  {
+   "audio": 0
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:turn.end\r\n\r\n{}"
+  }
+ ]
+}

@@ -1,5 +1,6 @@
 /** Names already returned by a Provider, independent of any Reader's lifetime. */
 import { File, Paths } from 'expo-file-system';
+import { azureRegion } from '../core/providers/azure';
 import type { ProviderId, VoiceInfo } from '../core/providers/types';
 import type { AppSettings } from './settings';
 
@@ -10,11 +11,13 @@ let loaded = false;
 const listeners = new Set<() => void>();
 const file = () => new File(Paths.document, 'voice-names.json');
 
-// A self-hosted server's ids are only meaningful at that server.
+// A self-hosted server's ids are only meaningful at that server, and Azure's
+// list is the region's own.
 export function scope(settings: AppSettings, provider: ProviderId): string {
   if (provider === 'fish') return JSON.stringify([provider, settings.fish]);
   return JSON.stringify([provider, provider === 'compatible' ? settings.compatible.baseURL.trim() :
-    provider === 'local' ? `${settings.local.engine}:${settings.local.baseURL.trim()}` : '']);
+    provider === 'local' ? `${settings.local.engine}:${settings.local.baseURL.trim()}` :
+      provider === 'azure' ? azureRegion(settings.azure.region) ?? settings.azure.region.trim() : '']);
 }
 
 function loadNames(): void {

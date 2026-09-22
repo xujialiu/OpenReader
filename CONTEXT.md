@@ -95,13 +95,13 @@ _Avoid_: downloaded book, audiobook export, document download
 
 **Word Timing**:
 Where one spoken word falls inside a clip, and which characters of the
-utterance it corresponds to. A provider either reports these or does not;
-they are never estimated or interpolated.
+utterance it corresponds to. A clip either comes with them or does not; they
+are never estimated or interpolated.
 _Avoid_: timestamp, speech mark, boundary, alignment
 
 **Highlight Level**:
 How much text is marked as it is spoken: the word, or the whole utterance. A
-provider that reports no word timings can only be highlighted at utterance
+clip that comes without word timings can only be highlighted at utterance
 level.
 _Avoid_: granularity, highlight mode
 

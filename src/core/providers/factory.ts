@@ -1,4 +1,5 @@
 import { parseHeaderList } from '../headers';
+import { createAzureProvider, type HeaderWebSocket } from './azure';
 import { createCompatibleProvider } from './compatible';
 import { SynthesisError } from './errors';
 import { createFishProvider } from './fish';
@@ -14,22 +15,28 @@ import type { ProviderId, TTSProvider } from './types';
  */
 
 /**
- * Everything the platform has to hand in — still exactly one thing.
+ * Everything the platform has to hand in.
  *
- * In the plugin this also carried `getWebSocket` and `newRequestId` for Azure's
- * WebSocket route, and `newAbortController` for Fish. Azure is not here. Fish
- * now is, and it needed **nothing added**: `newAbortController` existed only
- * because the Zotero sandbox has no `AbortController` of its own and one had to
- * be borrowed from a chrome window, and this engine has it (measured,
+ * `fetch` is the one the whole of ADR 0013 rests on: a provider never reaches
+ * for a global `fetch`, which is what lets the tests run under Node with no
+ * network at all.
+ *
+ * `getWebSocket` and `newRequestId` are the plugin's, and came back with Azure
+ * (ADR 0037), whose synthesis is a WebSocket per Utterance. They are listed
+ * because a provider that needs them now exists, not before. `getWebSocket`
+ * returns React Native's constructor, which takes request headers as a third
+ * argument the DOM's type does not declare. The plugin fetched it from a
+ * chrome window on demand; here it is simply the global, and the getter stays
+ * so the tests hand over a fake socket the same way.
+ *
+ * The plugin's `newAbortController` for Fish did not come back: it existed only
+ * because the Zotero sandbox has no `AbortController` of its own and one had
+ * to be borrowed from a chrome window, and this engine has it (measured,
  * notes/NOTES_2026-09-19.md). Fish's other two injections — a session voice
  * cache and the pause before a retry — are not platform capabilities: each has
  * a working default inside `fish.ts`, the same way `speechify.ts` keeps its
- * shared serial queue there, and each exists so a test can be fast and
- * isolated without stubbing a global.
- *
- * The one dependency that is left is the one the whole of ADR 0013 rests on: a
- * provider never reaches for a global `fetch`, which is what lets the tests run
- * under Node with no network at all.
+ * shared serial queue there and `azure.ts` its pause, and each exists so a
+ * test can be fast and isolated without stubbing a global.
  *
  * The plugin's `system` dependency — the helper process behind the operating
  * system's own voices — is gone for good rather than pending: under ADR 0014
@@ -37,6 +44,9 @@ import type { ProviderId, TTSProvider } from './types';
  */
 export type ProviderDeps = {
   fetch: typeof fetch;
+  getWebSocket: () => HeaderWebSocket;
+  /** 32 hex digits, for Azure's `X-ConnectionId` and `X-RequestId`. */
+  newRequestId: () => string;
 };
 
 /**
@@ -56,6 +66,8 @@ export type ProviderDeps = {
 export type ProviderSettings = {
   'openai-official': { apiKey: string; model: string; voices?: string };
   compatible: { baseURL: string; apiKey: string; model: string; voices?: string; headers?: string };
+  /** `region` as the owner typed it: `azure.ts` makes it a host name, or refuses it (`azureRegion`). */
+  azure: { apiKey: string; region: string };
   speechify: { apiKey: string };
   /**
    * `freeOnly` is not optional and has no default here on purpose: a missing or
@@ -78,6 +90,9 @@ export function createProvider(id: ProviderId, settings: ProviderSettings, deps:
 
     case 'compatible':
       return createCompatibleProvider({ ...settings.compatible, headers: parseHeaderList(settings.compatible.headers) }, { fetch: deps.fetch });
+
+    case 'azure':
+      return createAzureProvider(settings.azure, { fetch: deps.fetch, getWebSocket: deps.getWebSocket, newRequestId: deps.newRequestId });
 
     case 'speechify':
       return createSpeechifyProvider(settings.speechify, { fetch: deps.fetch });

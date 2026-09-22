@@ -388,7 +388,7 @@ export function offlineProvider(
   return {
     id: current.provider,
     capabilities: {
-      wordTimestamps: ["fish", "speechify", "local"].includes(current.provider),
+      wordTimestamps: ["azure", "fish", "speechify", "local"].includes(current.provider),
     },
     listVoices: async () => [],
     synthesize: (text, options) =>
