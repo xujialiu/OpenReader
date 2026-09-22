@@ -14,7 +14,7 @@ The chapter list appears from the document's existing contents before its body i
 
 The drawer names the current voice, and every chapter status refers to that voice. Initially nothing is selected. Select all includes only incomplete chapters that are not already downloading, and becomes an action to clear the selection. The bottom button includes the selected chapter count and is disabled when nothing is selected.
 
-An empty selection circle marks an available chapter; a coloured selected circle marks a chapter chosen for preparation. Downloading chapters show progress, and completed chapters show a check. Neither is added again. Failed or incomplete chapters remain selectable, and another attempt fills in missing audio rather than repeating completed work.
+An empty selection circle marks an available chapter; a coloured selected circle marks a chapter chosen for preparation. A chapter that belongs to a download that has not finished carries a ring in the circle's place, drawn the way the App Store draws a download: a thin track, an arc that fills clockwise as the chapter's audio is saved, and a short arc that turns while the chapter's text is still being counted, because until then there is no fraction to draw. A chapter waiting its turn is an empty ring. A completed chapter shows a check. Neither is added again. Nothing is written under a ring: the arc is the progress, and a count beside it would say the same thing twice. A failed chapter goes back to the selection circle with a Failed line and its count, and another attempt fills in missing audio rather than repeating completed work. The owner chose the ring over a plain spinner on 2026-09-22; a spinner shows no progress, and on every waiting chapter it would have claimed work that was not happening.
 
 Download selected starts preparation immediately, without a second confirmation dialog. The selected voice and the chapter count are visible before the button is pressed.
 
@@ -46,9 +46,9 @@ Rename changes only the display name in the library and reader. The original fil
 
 ## Preparation continues beyond the drawer
 
-Closing the drawer, returning to the library or opening another document does not cancel preparation. Reopening the drawer shows its progress. Pause and resume retain completed work. Playback takes priority so preparing future listening does not noticeably delay what the owner is hearing now.
+Closing the drawer, returning to the library or opening another document does not cancel preparation. Reopening the drawer shows its progress. Pause and resume retain completed work, and the ring is where they happen: it holds a small square while the download will go on by itself, and a tap on any ring pauses the whole download; every ring of that download then holds a small triangle, and a tap continues. There is no separate Pause line above the list, because the rings already say it. The line above the list keeps the state of the download, which matters when its rows are scrolled out of sight, and whatever went wrong. What was given up is re-selecting a paused chapter with the circle: continuing is a tap on its ring. Playback takes priority so preparing future listening does not noticeably delay what the owner is hearing now.
 
-Documents are prepared in the order their tasks were added, one document at a time. Pausing one lets the next proceed. The drawer distinguishes downloading from queued work. Each task keeps the voice it started with even if the owner subsequently changes the playback voice.
+Documents are prepared in the order their tasks were added, one document at a time. Pausing one lets the next proceed. The drawer distinguishes downloading from queued work: the chapter being written has a growing arc, and the rest of the download has empty rings. Each task keeps the voice it started with even if the owner subsequently changes the playback voice.
 
 The desired experience is continued preparation while the screen is locked or another app is open. The extent of that support still needs verification. If the system interrupts preparation, progress is retained and the owner can continue after reopening the app. The app does not promise continued preparation after a force quit, and must not describe interrupted work as actively downloading.
 
@@ -56,13 +56,13 @@ The desired experience is continued preparation while the screen is locked or an
 
 Preparation may use any available network, including cellular. There is no Wi-Fi-only restriction or separate cellular permission switch in the download drawer.
 
-Loss of connection displays No network connection, waiting to reconnect and resumes automatically when connectivity returns. Reopening the app resumes unfinished tasks, except those the owner explicitly paused. Credential and quota failures require the owner to resolve the problem and press Continue.
+Loss of connection displays No network connection, waiting to reconnect and resumes automatically when connectivity returns. Reopening the app resumes unfinished tasks, except those the owner explicitly paused. Credential and quota failures require the owner to resolve the problem and tap a ring, which holds the triangle until then, to continue.
 
 A temporary chapter failure receives a limited number of retries. If it still fails, later chapters continue and the failed chapter remains clearly marked. The result distinguishes completed and failed chapters and offers a retry of failed chapters. A credential or quota problem pauses the task because it affects all remaining chapters. Partial success never earns a whole-document completion label.
 
 ## Keep audio until the owner removes it
 
-Downloaded audio stays until explicitly deleted, including after it has been heard. Manage downloads in the drawer groups saved audio by voice, shows actual occupied space and allows deletion of selected chapters or all audio for that voice. Deleting audio leaves the document and reading position intact.
+Downloaded audio stays until explicitly deleted, including after it has been heard. Manage downloads in the drawer groups saved audio by voice, shows actual occupied space and allows deletion of selected chapters or all audio for that voice. Deleting audio leaves the document and reading position intact. It lists only what takes space or is about to: every chapter with saved audio for that voice, complete or partial, and the chapter being written at that moment, which carries its ring and cannot be selected while it is being written. A chapter waiting its turn with nothing saved is not there, because there is nothing to delete, and a volume heading appears only above listed chapters. Manage downloads itself is offered only while some voice has saved audio for the document or a download is under way. It began by listing every chapter and dimming the ones that could not be selected, and in a long book the few rows that could be deleted were lost among hundreds that could not.
 
 Deleting takes effect at once: the chapters leave the downloaded count as soon as Delete is confirmed, and the space is given back shortly after. If the app is closed in the middle of a large deletion, the rest is finished quietly after the next launch, and reading does not wait for it.
 

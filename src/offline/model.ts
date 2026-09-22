@@ -22,6 +22,8 @@ export type TaskState = 'queued' | 'preparing' | 'downloading' | 'paused' | 'wai
 export interface DownloadTask {
   id: string; document: string; voice: OfflineVoice; chapters: string[];
   state: TaskState; error: string | null; failed: string[];
+  /** The chapter the scheduler is preparing or fetching right now; null between passes. Read only while the task runs (ADR 0027). */
+  current?: string | null;
 }
 export interface NavPoint { id: string; title: string; depth: number; parent: string | null; block: number }
 

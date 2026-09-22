@@ -59,6 +59,7 @@ fix (AGENTS.md).
   - Fix: start it as `npx expo start --port PORT < /dev/null`. It will not prompt, because stdin is not a terminal.
   - To confirm the change is in what Metro serves: `curl -s "http://localhost:PORT/index.bundle?platform=ios&dev=true&minify=false" | grep -c <identifier from your change>`.
 - **The bundle is stale or broken after `npm ci` or a new patch.** `node_modules` was replaced under a running Metro. Restart it with `--clear` and check the bundle as above.
+- **`npm ci` in a new worktree stops with `ERESOLVE could not resolve`.** A new worktree has no `node_modules`, so `npm run typecheck` answers `sh: tsc: command not found` until it is installed, and plain `npm ci` then refused on 2026-09-22: `react-dom@19.3.0`, which `@expo/ui` brings in for its web side as an optional peer, wants `react@^19.3.0`, and the root pins `react@19.2.3`. Fix: `npm ci --legacy-peer-deps`, which installs the lockfile as it stands and runs `patch-package` (`@epubjs-react-native/core@1.4.8 ✔`). `react-dom` does not reach the iOS bundle (engineering log, 2026-09-22 13:02).
 - **A port is taken by a Metro that serves another tree.**
   - Check with `lsof -nP -iTCP:PORT -sTCP:LISTEN`, then `lsof -a -p PID -d cwd`.
   - A cwd in another worktree, or under `.orca-worktree-trash`, is not yours. Take the next free port rather than stop something another session may be using.
@@ -147,6 +148,11 @@ fix (AGENTS.md).
   or the wrong device's.
   - Fix: `OPENREADER_METRO=http://127.0.0.1:PORT` in the environment; `cdp.cjs`,
     `reading.cjs`, `voice-playback.cjs` and `stop-on-word.cjs` all take it.
+- **A detached shell can let a newly started Metro exit immediately.** On
+  2026-09-22 `npx expo start --port 8092 < /dev/null > /tmp/metro.log 2>&1 &`
+  returned without a process or log, so the port never opened. Run Metro in a
+  persistent terminal session and check its cwd, `/status`, and the bundle
+  before launching the app.
 - **`watchfetch` misses the first request the app makes as it starts.** The
   shell asks every enabled Provider for its Voices on mount (#24), and the
   harness's first poll is 250 ms later, so with `watchfetch` already in
@@ -349,6 +355,17 @@ fix (AGENTS.md).
   `identifier` is the SF Symbol (`text.alignleft`, `sun.max`) and whose label is
   the title, and the checked one `isSelected`.
 - **A relaunch lands in the last reader instead of the Library.** That is state restoration. Tap `Back`, if it exists, before looking for Library rows.
+- **Back-to-back `-only-testing` runs against the same live app inherit
+  whatever screen or sheet the previous run left**, since a new `xcodebuild
+  test` invocation's `app.activate()` foregrounds the process as-is rather
+  than relaunching it. Measured 2026-09-22: a method written to start from
+  Library (open the book, `More actions` → `Download`) was run right after an
+  earlier method that had deliberately left the Download sheet open over the
+  reader; `More actions` was never found (it is behind the open sheet), and
+  the next line failed with "No matches found for … 'Download'". `xcrun simctl
+  terminate` + `launch` between runs (not just `app.activate()` inside the
+  test) restores the known starting screen; a method that must tolerate
+  either starting point should check for a sheet-specific element first.
 - **A tap right after the reader opens hits a blank page.** The header and "More actions" exist before the Document is laid out. Wait for `Play` or `Choose a Voice`, then for "Laying the document out…" to go.
 - **Waiting for "Laying the document out…" never waits.** It is the label of the WebView's scroll view, an `Other`, not a static text. Query `app.descendants(matching: .any)`.
 - **A cold launch straight into 仙逆 takes over 40 seconds to lay out.** A warm open takes 3–6 seconds. Time tests from a warm open.
@@ -445,6 +462,57 @@ fix (AGENTS.md).
   a pass here; use the README's own documented shape,
   `-only-testing:testConfigureFishProvider`, and confirm a real duration
   (seconds, not milliseconds) and an assertion count in `test.log`.
+
+- **A Settings-stack screen can be more than one level away, even when it
+  looks like one.** Reaching Fish Audio's provider form is Library → Settings
+  → Providers → Fish Audio, three pushes, and each back button is named after
+  the screen behind it (`Library`, `Settings`, `Providers`), never literally
+  "Back" — the same fact `SyncProbe.openBook`'s comment already records for
+  the reader's own stack. Tapping `app.navigationBars.buttons.element(boundBy:
+  0)` exactly twice after enabling Fish Audio (assuming Settings → Providers →
+  Fish Audio, two levels) landed on **Settings**, not Library (measured
+  2026-09-22, `DownloadRingProbe.testDownloadRingLifecycle`): the next line
+  then failed with "No matches found for … 'A Short Test of Reading Aloud,'".
+  Fix: walk back with a bounded loop against something only the Library has
+  (`label BEGINSWITH 'Actions for '`, the same marker `SyncProbe.openBook`
+  uses), not a fixed tap count.
+- **A successful Settings version probe leaves the app on Settings.** On
+  2026-09-22 `settings-version.sh` passed, then a Library-based download probe
+  could not find `More actions` because the accessibility tree still showed
+  Settings. Relaunch OpenReader before the next Library-based probe, or tap
+  Settings' `Library` navigation button explicitly.
+- **A manual probe can retain an old beta literal.** On 2026-09-22
+  `DownloadRingProbe` still required `Version 0.0.2-beta4` while the working
+  tree and Settings screen were at beta8, which would fail after the download
+  assertions had already passed. Update the probe's explicit version assertion
+  whenever `app-version.ts` receives the next beta; a simulator XCTest must not
+  read the host checkout at runtime to infer it.
+- **A completed-fixture probe can start with only part of the fixture saved.**
+  On 2026-09-22 the download simulator showed `1 chapters downloaded` and the
+  catalog held 10 of 17 clips, so a probe requiring `2 chapters downloaded`
+  failed before exercising its target control. Inspect the drawer first, then
+  complete the missing chapter with `offline.sh ... download` or use a probe
+  whose expected count matches the fixture; back up and restore the offline
+  directory when the run must preserve the starting state.
+- **A failed XCTest can remain in `simctl diagnose` long after its assertions
+  finish.** The failed partial-fixture run left `xcodebuild` in the diagnostic
+  phase with `--timeout=600`, blocking the wrapper for several minutes. Once
+  the failure and its artifacts are captured, stop that exact `xcodebuild` and
+  diagnostic process rather than treating the delay as an app hang.
+- **A probe assertion can encode the very behavior a feature intentionally
+  changes.** `OfflineProbe.swift`'s `management` mode deleted "The First
+  Chapter"'s saved audio and then asserted `label == 'The First Chapter'`
+  still existed — true under the old Manage downloads (list every chapter,
+  issue #37's own problem statement) and false once Manage lists only
+  chapters with saved audio: the row is unlisted outright, not left
+  undecorated. Measured 2026-09-22: `XCTAssertTrue` failed on exactly that
+  line, immediately after the same run's delete and its "saved" wait both
+  passed, so the delete itself worked. Fixed by asserting the opposite (the
+  row's plain and `, downloaded` labels both gone; its sibling's `,
+  downloaded` label the only one left) rather than reading the failure as a
+  regression in the new code — the same staleness question as
+  `GeneralFontsProbe`/`READING_FONTS` above, this time in a probe rather than
+  in the app.
 
 ### Measuring inside the reader's WebView
 
@@ -961,6 +1029,59 @@ no test hooks to production app code. Do not edit app code while a probe runs:
 Fast Refresh can replace the state being inspected. Restart the app afterwards
 to remove all temporary debugger globals and verify final delivery separately.
 
+### The download ring and Manage downloads' listed-chapters rule (#37, #38)
+
+With a fresh Library (no provider configured, no saved audio) holding only `A
+Short Test of Reading Aloud`, and the Fish key staged at
+`/tmp/openreader-fish-key.txt` (`chmod 600`, never printed) as in **Issues
+#13/#14** above:
+
+```sh
+bash test/manual-test/download-ring.sh SIMULATOR_UDID /tmp/openreader-download-ring-01 \
+  -only-testing:testDownloadRingLifecycle
+```
+
+Real XCTest touches throughout, spending the fixture's 17 Fish utterances for
+real: configures Fish Audio and chooses its first-sorting voice exactly as
+`OfflineFixProbe` does, opens Download and requires `0 chapters downloaded`
+with no `Manage downloads` link, selects both chapters and taps `Download
+selected (2)`, then screenshots every ~0.6 s for ~10 s (attachments
+`02-burst-0` … `N`, each paired with an accessibility-tree `-tree` attachment)
+to catch the ring: a spinning arc plus `Preparing selected chapter…` on the
+chapter being counted, an empty ring on the one waiting its turn, then a
+filling arc under `Downloading…`. It taps the running ring itself
+(`app.buttons["Pause download"]`, real touch, not a text link), requires the
+task line to read `Paused` and every ring's label to become `Continue
+download`, opens Manage downloads while paused and screenshots it (only the
+chapter with partial audio is listed, with its `n / total` line), goes back,
+taps the ring again to continue, opportunistically screenshots Manage while
+the download is still running, then waits up to 90 s for `2 chapters
+downloaded` and checks Manage lists both chapters as checkboxes. It leaves the
+Download drawer open on the plain (non-Manage) view. A second method,
+`testReopenDownloadDrawer`, just reopens that same drawer on an
+already-downloaded fixture and leaves it open — used to restore the final
+state after a separate run (such as `offline.sh management`) has left the app
+elsewhere.
+
+Measured 2026-09-22: the full lifecycle passed in 73.6 s including the Fish
+provider setup and voice choice; the spinning-arc "preparing" phase was
+caught in the burst (`Preparing selected chapter…` visible in at least one
+frame) but is not guaranteed to be — the short fixture's per-chapter text is
+small enough to count in well under one screenshot interval, so treat its
+absence in a given run as inconclusive, not a defect, and say in the report
+whether that run happened to catch it. The ring's accessibility tree entries
+are `Button` elements 24×24pt with label `Pause download` or `Continue
+download` (matching `SIZE` in `download-ring.tsx`); a plain chapter checkbox
+row is an `Other` with `value: checkbox`, not a `Button`, so query it with
+`app.descendants(matching: .any)` as the existing offline probes do, never
+`app.buttons`. This establishes the ring's states, labels and the Manage
+listing rule through real touches and screenshots; it does not measure
+highlight timing, drift, or anything about playback, and it does not by
+itself prove the ring is legible against the sheet background in Dark (a
+ring only renders during an incomplete download, so checking Dark without a
+second real download needs either a fresh, unfinished task or visual
+inspection of the saved light-mode screenshots' contrast against the app's
+dark palette).
 
 ### Paused sentence seeking after background receipt
 

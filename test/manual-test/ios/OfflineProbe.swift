@@ -65,7 +65,14 @@ final class OfflineProbe: XCTestCase {
       XCTAssertTrue(app.alerts["Delete downloaded audio?"].waitForExistence(timeout: 3))
       app.alerts["Delete downloaded audio?"].buttons["Delete"].tap()
       XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'saved'")).firstMatch.waitForExistence(timeout: 5))
-      XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter'")).firstMatch.waitForExistence(timeout: 3))
+      // #37: Manage lists only chapters with saved audio, so a chapter just
+      // emptied of it is unlisted outright rather than left as an undecorated
+      // row — only its sibling remains.
+      let firstStillListed = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter' OR label == 'The First Chapter, downloaded'")).firstMatch
+      let goneDeadline = Date().addingTimeInterval(3)
+      while firstStillListed.exists && Date() < goneDeadline { Thread.sleep(forTimeInterval: 0.2) }
+      XCTAssertFalse(firstStillListed.exists, "The First Chapter should be unlisted in Manage once its audio is deleted (#37), not merely undecorated")
+      XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter, downloaded'")).firstMatch.waitForExistence(timeout: 3))
       capture("managed-delete-first-chapter", app)
       return
     }
