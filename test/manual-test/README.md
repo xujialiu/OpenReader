@@ -59,7 +59,8 @@ fix (AGENTS.md).
   - Fix: start it as `npx expo start --port PORT < /dev/null`. It will not prompt, because stdin is not a terminal.
   - To confirm the change is in what Metro serves: `curl -s "http://localhost:PORT/index.bundle?platform=ios&dev=true&minify=false" | grep -c <identifier from your change>`.
 - **The bundle is stale or broken after `npm ci` or a new patch.** `node_modules` was replaced under a running Metro. Restart it with `--clear` and check the bundle as above.
-- **`npm ci` in a new worktree stops with `ERESOLVE could not resolve`.** A new worktree has no `node_modules`, so `npm run typecheck` answers `sh: tsc: command not found` until it is installed, and plain `npm ci` then refused on 2026-09-22: `react-dom@19.3.0`, which `@expo/ui` brings in for its web side as an optional peer, wants `react@^19.3.0`, and the root pins `react@19.2.3`. Fix: `npm ci --legacy-peer-deps`, which installs the lockfile as it stands and runs `patch-package` (`@epubjs-react-native/core@1.4.8 ✔`). `react-dom` does not reach the iOS bundle (engineering log, 2026-09-22 13:02).
+- **A new worktree has no `node_modules`**, so `npm run typecheck` answers `sh: tsc: command not found` until `npm ci` has run. Plain `npm ci`, with nothing passed to it, is the whole command: 831 packages in 4 s, ending in `patch-package` (`@epubjs-react-native/core@1.4.8 ✔`).
+- **`npm ci` stops with `ERESOLVE could not resolve`, naming `react-dom@19.3.0`.** From 538fa10 on 2026-09-22 until 2026-09-23 this was every new worktree's first wall, and `--legacy-peer-deps` was the way past it. It is now fixed at the root (#42, ADR 0039): `package.json` overrides `react-dom` to `$react`, so the lockfile holds the `react-dom` the pinned `react` peers with, and no command in this repository needs the flag. The symptom returns only on a branch from before that fix, or if the override is dropped — pass `--legacy-peer-deps` once to get moving, then merge `main`, rather than writing the flag into an instruction again. `react-dom` does not reach the iOS bundle either way: the same Hermes bundle hash comes out of both trees (engineering log, 2026-09-22 13:02 and 2026-09-23 02:48).
 - **A port is taken by a Metro that serves another tree.**
   - Check with `lsof -nP -iTCP:PORT -sTCP:LISTEN`, then `lsof -a -p PID -d cwd`.
   - A cwd in another worktree, or under `.orca-worktree-trash`, is not yours. Take the next free port rather than stop something another session may be using.
@@ -104,6 +105,15 @@ fix (AGENTS.md).
     `/json/list`.
   - A build whose `RCTMetroPort` is empty does not: `adoptInfoPlistMetroPort()`
     returns before writing anything, and the container's `RCT_jsLocation` stands.
+    With a **fresh** container, which has no `RCT_jsLocation` at all, what stands
+    is the default 8081 — another tree's Metro on this machine. Measured
+    2026-09-23 02:58 (#42): `npx expo run:ios --device UDID --port 8090` built,
+    installed on a device that had never held the app, reported "Waiting on
+    http://localhost:8090" and opened it, and 8090 logged no bundle and answered
+    `[]` on `/json/list`. So `--port` is what `run:ios` waits on, not what the
+    app it opens asks. One `xcrun simctl terminate` and a relaunch with
+    `-RCT_jsLocation localhost:8090` fixed it: `iOS Bundled 3791ms index.ts
+    (1605 modules)` in that Metro, and the device in its `/json/list`.
     That is the other observation of the same day (**Simulators and installs**,
     "A fresh `expo run:ios` install still fetched its bundle from another tree's
     Metro"): the build `expo run:ios --port 8090` made at 12:29 has `RCTMetroPort`
@@ -179,6 +189,7 @@ fix (AGENTS.md).
 - **Several sessions share this Mac's simulators.** Use the one the owner or the task names, and check `xcrun simctl list devices booted` first. Leave alone any simulator another session is booting, driving or reinstalling.
 - **A named simulator can disappear during a manual run.** On 2026-09-22 an owner cleanup deleted the recorded iPhone 17 while an Azure XCTest was waiting, and the next `xcodebuild` answered `Unable to find a device matching` that destination. Re-run `xcrun simctl list devices available`, choose a remaining matching runtime, boot it, reinstall the current Debug app, set its simulated volume to zero again, and treat the interrupted artifacts as incomplete.
 - **A cached Debug app can lack a native module required by the current bundle.** On 2026-09-22 installing an old cached app over the replacement iPhone 17e and loading the current Metro bundle showed `[runtime not ready]: Cannot find native module 'ExpoUI'`. Build the Debug app from the current checkout with the simulator guide's `xcodebuild` command, install that product, then repoint its Metro port before relaunching.
+- **Whether a `.app` has a module is not answered by its `Frameworks` or by its main binary.** Looking for `@expo/ui` on 2026-09-23 (#42), `ls OpenReader.app/Frameworks` listed the five Expo frameworks and no `ExpoUI`, and `strings -a OpenReader.app/OpenReader | grep -ci expoui` answered `0` — for a build that has it. Its symbols are in `OpenReader.debug.dylib` beside the binary, 425 of them. Ask that file, or `ios/Podfile.lock`, or compare the build's own time (`stat -f %Sm`) against the commit that added the dependency; the two caches this looked at, `/tmp/openreader-simulator-build` and the newest `DerivedData` product, were both from before 538fa10 13:52 and genuinely too old to reuse.
 - **`xcrun simctl get_app_container` refuses a shut-down device.** Boot it first.
 - **Another simulator needs the same Debug app.** `xcrun simctl install DEST "$(xcrun simctl get_app_container SOURCE top.xujialiu.openreader app)"` copies it without a build, to any device family the app supports, iPad included.
 - **An iPad behaves differently from an iPhone.** An iPad-sized WKWebView defaults to the desktop content mode, where WebKit ignores `text-size-adjust` (ADR 0030). The reader asks for the mobile mode through `patches/`. Anything that depends on WebKit is worth checking on an iPad simulator too.
@@ -786,14 +797,6 @@ fix (AGENTS.md).
 
 ### The shell
 
-- **`npm ci` in a fresh worktree stops with `ERESOLVE could not resolve`.**
-  Met 2026-09-22 in `add-azure-provider`, and by other worktrees the same day.
-  - Cause: `@expo/ui` (#32) brought `react-dom@19.3.0` into `package-lock.json`
-    as an optional peer, and it wants `react@^19.3.0` while the app pins
-    `19.2.3`. npm's strict peer check refuses the lockfile it was given.
-  - Fix: `npm ci --legacy-peer-deps`. It installs exactly what the lockfile
-    names, `react-dom` included, which the iOS bundle does not contain
-    (`notes/NOTES_2026-09-22.md`, 13:02).
 - **A loop over `"a b c"` strings passes each as one argument.** zsh does not split an unquoted `$var`. Run such scripts with `bash`, or use arrays.
 - **`$?` after a pipe is the pipe's last command.** `bash sync.sh … | tail -5;
   echo $?` printed `0` for a test run that had failed. Redirect the script's
