@@ -153,6 +153,26 @@ Release describes the build configuration and does not mean the signature is
 permanent. Re-sign and reinstall after expiry. Do not uninstall the old app for
 this purpose: uninstalling may delete the local library and settings.
 
+### Native dependency recovery measured on 2026-09-22 (#43)
+
+A later Release build failed in ExpoSQLite with `cannot find 'exsqlite3_open' in scope` and other prefixed symbols. Both the installed package and Pod lock were 57.0.3, and the generated header contained the declarations. Repeating the build with a fresh module cache passed SQLite compilation; stale cache state is a hypothesis, not a proven root cause.
+
+That build then failed at linking with undefined FFmpeg symbols, including `avformat_open_input`. The downloaded xcframeworks existed under RNAudioAPI, but the generated `Pods-OpenReader.release.xcconfig` lacked their framework paths. Running `pod install` from `ios/` registered all four frameworks: `libavcodec`, `libavformat`, `libavutil` and `libswresample`.
+
+After confirming the downloaded frameworks exist, regenerate the Pods integration:
+
+```bash
+(cd ios && pod install)
+```
+
+Then repeat the Release build command above with a new, task-specific cache directory added as a build setting, for example:
+
+```text
+CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20260922
+```
+
+Use the same isolated directory for subsequent attempts. This combined recovery returned build exit code 0, and `codesign --verify --deep --strict APP_PATH` passed for the resulting app. No app source was changed. Installation and launch were deferred because the owner needed to disconnect the phone; these results do not establish either check. The original cause of the missing generated FFmpeg integration was not established.
+
 ## References
 
 - [Expo SDK 57 documentation](https://docs.expo.dev/versions/v57.0.0/)

@@ -46,6 +46,11 @@ What has gone wrong before, and what fixed it. When `xcrun`, Metro, XCTest or a
 manual step goes wrong or misleads you, add it here, with its symptom, cause and
 fix (AGENTS.md).
 
+### Physical iPhone Release builds
+
+- **ExpoSQLite Swift compilation cannot find `exsqlite3_open` and other prefixed symbols** (2026-09-22, #43). The generated header existed and contained the declarations, and both the package and Pod lock reported 57.0.3. Rebuilding with a new `CLANG_MODULE_CACHE_PATH` passed this compilation stage. A stale module cache is suspected, not proven; do not replace SQLite sources or assume the phone's signing is at fault. Keep the isolated cache for subsequent builds while diagnosing.
+- **RNAudioAPI reaches linking but FFmpeg symbols such as `avformat_open_input` are undefined** (same run). The four downloaded FFmpeg xcframeworks existed, but `Pods-OpenReader.release.xcconfig` had no corresponding framework paths. Running `pod install` from `ios/` after the binaries were present registered `libavcodec`, `libavformat`, `libavutil` and `libswresample`. Rebuilding with the isolated module cache returned 0 and `codesign --verify --deep --strict` passed. No app source was changed. The owner disconnected the phone, so this recovery proves the build and signature, not installation or launch. See `docs/install-on-iphone.md` for the commands.
+
 ### Metro and the bundle
 
 - **The app runs code you have already changed.**
