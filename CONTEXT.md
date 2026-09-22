@@ -152,16 +152,22 @@ ends in a few random characters.
 _Avoid_: machine id, device id, host name
 
 **Appearance**:
-How the text of a document is set: which font it is shown in and its font
-size. It belongs to the owner rather than to a document, so one choice applies
-to every document; the font starts out following whatever the document itself
-asked for, and the font size never does.
+How the text of a document is set: which font it is shown in, its font size
+and its text alignment. It belongs to the owner rather than to a document, so
+one choice applies to every document; the font starts out following whatever
+the document itself asked for, and the font size and text alignment never do.
 _Avoid_: theme, style, typography, display settings, font settings
 
 **Font Size**:
 How big the body text of every document is shown. It is the owner's and never
 the document's, so body text is the same size in every document.
 _Avoid_: scale, zoom, text size, percentage
+
+**Text Alignment**:
+How the lines of body text meet the margins: flush with both, or with the left
+one only. It is the owner's and never the document's; text a document centres
+or sets to the right is not body text, and keeps the place the document gave it.
+_Avoid_: alignment (on its own), justification, text-align, paragraph alignment
 
 **Theme**:
 Whether the app is shown light or dark, including the document itself. It

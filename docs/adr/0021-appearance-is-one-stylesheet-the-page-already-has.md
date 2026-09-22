@@ -19,6 +19,13 @@ every element against each Document's measured body text size. The two size
 rules below are what this ADR shipped; the message, the one `<style>` element,
 the re-centre and the font rule all stand.
 
+**ADR 0034 adds a third row, the Text Alignment**, as a third part of the same
+stylesheet. Its rule is `text-align` and not `font-size` or `font-family`, and to
+leave what a Document centred where it was, the program also puts one attribute
+on each such element before the stylesheet is created. So "exactly one"
+DOM mutation below is now two kinds: the `<style>` element, still created
+once, and that attribute.
+
 ADR 0019 decided that Appearance is a **sheet over the reader** and not a route,
 and left what it holds to this one. It holds two rows, a font and a size, and
 both default to **follow the document** — `Appearance` in `src/renderer/highlighter.ts`,

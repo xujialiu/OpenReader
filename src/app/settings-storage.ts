@@ -1,6 +1,6 @@
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
-import { FONT_SIZES, READING_FONTS, type FontSize, type ReadingFont } from '../renderer/highlighter';
+import { FONT_SIZES, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
 import { DEFAULT_SETTINGS, isProviderId, type AppSettings, type DocumentVoice } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
@@ -29,6 +29,11 @@ function readFont(value: unknown): AppSettings['appearance']['font'] {
  */
 function readSize(value: unknown): FontSize {
   return FONT_SIZES.find((size) => size === value) ?? DEFAULT_SETTINGS.appearance.size;
+}
+
+/** One of the two, or Justify: a file written before ADR 0034 has none, and reads as a new install does. */
+function readTextAlignment(value: unknown): TextAlignment {
+  return TEXT_ALIGNMENTS.find((alignment) => alignment === value) ?? DEFAULT_SETTINGS.appearance.textAlignment;
 }
 
 /** Explicit projection also prevents legacy credential fields from being persisted. */
@@ -66,6 +71,7 @@ export function parseSettings(value: unknown): AppSettings {
     appearance: {
       font: readFont(appearance.font),
       size: readSize(appearance.size),
+      textAlignment: readTextAlignment(appearance.textAlignment),
     },
     // The switch is read as written: it was turned on after a check passed,
     // and the next launch syncs without checking again (issue #20).

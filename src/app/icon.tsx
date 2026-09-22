@@ -24,13 +24,6 @@ const paths = {
   // every size, and nothing here can wrap.
   appearance: 'm3 16 4.5-9 4.5 9 M4 14h7 M21 14h-5 M16 16v-3.5a2.5 2.5 0 0 1 5 0V16',
   trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6',
-  // The three the theme is chosen from. `auto` is the half-filled circle iOS
-  // itself uses for "whatever the device is doing": this is its outline, and
-  // the filled half is added by `Icon` below, because every `d` in this set is
-  // stroked and a half-filled shape is the one thing here that cannot be.
-  sun: 'M12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10 M12 2v2 M12 20v2 M2 12h2 M20 12h2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M19.1 4.9l-1.4 1.4 M6.3 17.7l-1.4 1.4',
-  moon: 'M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5',
-  auto: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18 M12 3v18a9 9 0 0 0 0-18',
   // Two chevrons, one up one down: what iOS puts on a row that opens a menu.
   menu: 'm8 10 4-4 4 4 M8 14l4 4 4-4',
   check: 'm5 12 4 4L19 6',
@@ -49,7 +42,6 @@ export function Icon({ name, color, size = 24 }: { name: IconName; color: ColorV
           inside a 22-point icon and the control read as faint rather than as
           three dots. */}
       {name === 'more' ? [5, 12, 19].map((x) => <Circle key={x} cx={x} cy={12} r={1.6} fill={color} stroke="none" />) : null}
-      {name === 'auto' ? <Path d="M12 3a9 9 0 0 1 0 18Z" fill={color} stroke="none" /> : null}
     </Svg>
   );
 }

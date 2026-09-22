@@ -4,10 +4,10 @@
  * Two things are. The **theme** (ADR 0022) — light, dark, or whatever the phone
  * is doing — which belongs here rather than in the Appearance sheet because
  * those are two different questions: Appearance is how the text on the page is
- * set — the owner's size, and a font that starts on the book's own — while the
- * theme is what the whole app looks like in the room the owner is sitting in, and
- * it reaches the Library and these Settings screens as much as it reaches the
- * page.
+ * set — the owner's size and alignment, and a font that starts on the book's
+ * own — while the theme is what the whole app looks like in the room the owner
+ * is sitting in, and it reaches the Library and these Settings screens as much
+ * as it reaches the page.
  *
  * And whether an Utterance's brackets are spoken with it (ADR 0028, and #25
  * for wherever they stand), which is app-wide for the same reason: it is true
@@ -34,13 +34,20 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { DEFAULT_BRACKET_PAIRS, validateBracketPairs } from '../core/speech-text';
-import { ChoiceRow, INK, Note, SettingsGroup, SwitchRow, ValueRow } from './controls';
-import type { IconName } from './icon';
+import { INK, Note, SettingsGroup, SwitchRow, ValueRow, type Choice } from './controls';
 import { useShell } from './routes';
-import { Sheet } from './sheet';
 import { THEME_LABELS, THEME_SETTINGS, type ThemeSetting } from './settings';
 
-const THEME_ICONS: Readonly<Record<ThemeSetting, IconName>> = { light: 'sun', dark: 'moon', system: 'auto' };
+/**
+ * The Theme menu (#33), in `THEME_SETTINGS`' order, each with the system's own
+ * symbol: the half-filled circle is what iOS itself draws for "whatever the
+ * device is doing".
+ */
+const THEME_CHOICES: readonly Choice<ThemeSetting>[] = THEME_SETTINGS.map((value) => ({
+  value,
+  label: THEME_LABELS[value],
+  icon: ({ light: 'sun.max', dark: 'moon', system: 'circle.lefthalf.filled' } as const)[value],
+}));
 
 /**
  * What a refused list of bracket pairs is called, in the owner's words.
@@ -59,7 +66,6 @@ function bracketProblem(value: string): string | null {
 
 export function GeneralScreen() {
   const { settings, setSettings } = useShell();
-  const [themes, setThemes] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   /**
@@ -80,7 +86,8 @@ export function GeneralScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.body}>
       <SettingsGroup title="Theme">
-        <ValueRow label="Theme" value={THEME_LABELS[settings.theme]} onPress={() => setThemes(true)} />
+        <ValueRow label="Theme" choices={THEME_CHOICES} chosen={settings.theme}
+          onChoose={(theme) => setSettings((was) => ({ ...was, theme }))} />
       </SettingsGroup>
 
       <SettingsGroup
@@ -112,18 +119,6 @@ export function GeneralScreen() {
           setSettings((was) => ({ ...was, bracketPairs: DEFAULT_BRACKET_PAIRS, stripBrackets: true }));
         }}><Text style={styles.link}>Use {DEFAULT_BRACKET_PAIRS} instead</Text></Pressable>
       </View> : null}
-
-      <Sheet visible={themes} title="Theme" onClose={() => setThemes(false)}>
-        {THEME_SETTINGS.map((theme) => (
-          <ChoiceRow
-            key={theme}
-            label={THEME_LABELS[theme]}
-            icon={THEME_ICONS[theme]}
-            chosen={settings.theme === theme}
-            onPress={() => { setSettings((was) => ({ ...was, theme })); setThemes(false); }}
-          />
-        ))}
-      </Sheet>
     </ScrollView>
   );
 }
