@@ -134,3 +134,37 @@ it('resumes without loading or re-checking chapters already complete for the voi
   expect(f.fetch.mock.calls.map((c) => c[1])).toEqual(['Three.']);
   expect(f.tasks[0].state).toBe('done');
 });
+
+it('names the chapter it is on and forgets it when the pass ends', async () => {
+  const f = fixture();
+  const seen: (string | null | undefined)[] = [];
+  f.fetch.mockImplementation(async (task, text) => { seen.push(task.current); f.stored.add(text); });
+  await f.scheduler.run();
+  expect(seen).toEqual(['a', 'a', 'b']);
+  expect(f.tasks[0].current).toBeNull();
+});
+
+it('names the chapter while its text is being counted', async () => {
+  const task: DownloadTask = { id: 't', document: 'book', voice: { provider: 'fish', voice: 'A', label: 'A' }, chapters: ['x'], state: 'queued', error: null, failed: [] };
+  const plan: NarrationPlan = { version: 2, chapters: [{ id: 'x', title: 'X', depth: 0, parent: null, texts: [], prepared: false }] };
+  const during: string[] = [];
+  const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+    prepare: async (t, chapter) => { during.push(`${t.state} ${t.current}`); return { ...chapter, prepared: true, texts: ['Hi.'] }; },
+    exists: () => false, fetch: async () => {}, wait: async () => {} });
+  await scheduler.run();
+  expect(during).toEqual(['preparing x']);
+  expect(task.current).toBeNull();
+});
+
+it('forgets a chapter left over from before a restart as soon as the pass starts', async () => {
+  const task: DownloadTask = { id: 't', document: 'book', voice: { provider: 'fish', voice: 'A', label: 'A' }, chapters: ['a', 'b'], state: 'queued', error: null, failed: [], current: 'b' };
+  const plan: NarrationPlan = { version: 2, chapters: [
+    { id: 'a', title: 'A', depth: 0, parent: null, texts: ['One.'] },
+    { id: 'b', title: 'B', depth: 0, parent: null, texts: ['Two.'] },
+  ] };
+  const events: string[] = [];
+  const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => { events.push(`${task.state} ${task.current}`); },
+    connected: () => true, allowed: () => true, exists: () => false, fetch: async () => {}, wait: async () => {} });
+  await scheduler.run();
+  expect(events).toEqual(['downloading null', 'downloading a', 'downloading b', 'done null']);
+});

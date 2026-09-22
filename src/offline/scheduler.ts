@@ -34,7 +34,8 @@ export function createScheduler(deps: SchedulerDeps) {
         if (!deps.tasks().includes(task) || task.state !== 'queued') continue;
         if (!deps.allowed()) break;
         if (!plan) { task.state = 'blocked'; task.error = 'Reopen Download to prepare the chapter list.'; await deps.changed(); continue; }
-        task.state = 'downloading'; task.error = null; await deps.changed();
+        // A restored task still names the chapter it was on; nothing is being written until one is chosen below.
+        task.state = 'downloading'; task.error = null; task.current = null; await deps.changed();
         const completed = (await deps.completed?.(task)) ?? new Set<string>();
         for (const chapterId of [...task.chapters]) {
           if (!active(task)) break;
@@ -42,6 +43,7 @@ export function createScheduler(deps: SchedulerDeps) {
           let chapter = (await deps.plan(task.document))?.chapters.find((c) => c.id === chapterId);
           if (!active(task)) break;
           if (!chapter) continue;
+          task.current = chapterId;
           try {
             if (chapter.prepared === false) {
               if (!deps.prepare) throw new Error('Chapter text is not prepared.');
@@ -77,6 +79,7 @@ export function createScheduler(deps: SchedulerDeps) {
             await deps.changed();
           }
         }
+        task.current = null;
         if (active(task)) task.state = deps.allowed() ? 'done' : 'interrupted';
         await deps.changed();
       }
