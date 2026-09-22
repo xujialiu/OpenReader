@@ -15,6 +15,14 @@ cannot use Expo Go as a substitute.
 - Automatic signing used `Xujia Liu (Personal Team)`, with an Apple Development certificate.
 - The `xcodebuild` command below returned 0; `devicectl` confirmed that the app was installed.
 - Automatic launch returned a Security error containing “profile has not been explicitly trusted by the user”. The user was prompted to trust the developer on the phone; this record does not confirm launch, reading, or audio functionality after trust was granted.
+- 2026-09-22 follow-up: on the same phone and account, a fresh Release build, install,
+  and `devicectl device process launch` all succeeded, and the launch returned no
+  Security/trust error — the developer trust granted earlier persisted across this
+  reinstall. This run only confirms the command-line launch; it does not confirm
+  on-screen behavior, reading, or audio, since it was not visually inspected on the
+  device. It also used a different DerivedData path than the one recorded above
+  (the hash in the path changes per checkout, as this guide already notes), so that
+  recorded path is not reusable as-is.
 
 The device, account, and paths above are specific to this run. Look them up again
 when changing computers or phones. If the user has since trusted the developer
