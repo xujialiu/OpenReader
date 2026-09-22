@@ -261,6 +261,43 @@ fix (AGENTS.md).
   — before suspecting the row under test; fixing the probe's expected list
   (or the stale README prose) is a separate, already-scoped change, not
   something to fold into an unrelated feature's verification.
+- **A dynamic note's `BEGINSWITH` query can match the screen's own nav-bar
+  title instead of the note.** `provider-screen.tsx`'s connection note and the
+  pushed screen's title are both plain `StaticText`s, and `app.staticTexts` is
+  unscoped: on 2026-09-22, `NSPredicate(format: "label BEGINSWITH 'Azure'")`
+  against `app.staticTexts` matched the nav bar's title ("Azure") every time,
+  so `AzureProviderProbe`'s wording assertions all read back the single word
+  "Azure" instead of the real sentence below the Test connection button.
+  Scope the query to the screen's own container instead, e.g.
+  `app.scrollViews.staticTexts`, which excludes the navigation bar.
+- **`.exists` right after a navigation tap can read `false` on a state that
+  is actually `true`.** A helper checked `app.staticTexts["Enabled"].exists`
+  immediately after tapping a Providers row and, on 2026-09-22, read `false`
+  for a provider that actually was enabled — the screen had not finished
+  settling from the tap. The helper then skipped disabling it, and every
+  following `typeText` into the still-locked API key field failed with
+  "Neither element nor any descendant has keyboard focus." Read the control's
+  own state instead, with a wait: a `Switch`'s `.value` (`"0"`/`"1"`) via
+  `XCTNSPredicateExpectation`, not an unretried `.exists` on a label whose
+  appearance depends on a screen transition.
+- **`continueAfterFailure` defaults to `true`, so one wrong assertion
+  cascades silently through the rest of the method.** Combined with the note
+  above misreading every wording as "Azure", `AzureProviderProbe`'s first run
+  logged five failures and kept going regardless, including tapping Enable at
+  the end — which is why the run still ended in a real `Enabled` state
+  despite failing every assertion along the way. For a probe with several
+  sequential, state-dependent steps, set `continueAfterFailure = false` in
+  `setUpWithError()` so a genuine failure is reported where it happened
+  rather than many steps later, with everything after it unproven.
+- **A masked field can screenshot as completely blank right after an
+  Enable/Disable transition, even though it holds the saved value.**
+  `XCUIScreen.main.screenshot()` taken in the same instant as a `Switch`
+  toggling captured Azure's API key `SecureTextField` with no dots and no
+  `Not set` placeholder — on two separate runs, 2026-09-22. A plain
+  `xcrun simctl io … screenshot` taken moments later, nothing else changed,
+  showed the correct masked dots. Before treating a blank masked field as a
+  lost or uncleared value, take a second, plain screenshot outside the XCTest
+  capture to rule out this rendering race.
 
 ### Measuring inside the reader's WebView
 
@@ -454,6 +491,14 @@ fix (AGENTS.md).
 
 ### The shell
 
+- **`npm ci` in a fresh worktree stops with `ERESOLVE could not resolve`.**
+  Met 2026-09-22 in `add-azure-provider`, and by other worktrees the same day.
+  - Cause: `@expo/ui` (#32) brought `react-dom@19.3.0` into `package-lock.json`
+    as an optional peer, and it wants `react@^19.3.0` while the app pins
+    `19.2.3`. npm's strict peer check refuses the lockfile it was given.
+  - Fix: `npm ci --legacy-peer-deps`. It installs exactly what the lockfile
+    names, `react-dom` included, which the iOS bundle does not contain
+    (`notes/NOTES_2026-09-22.md`, 13:02).
 - **A loop over `"a b c"` strings passes each as one argument.** zsh does not split an unquoted `$var`. Run such scripts with `bash`, or use arrays.
 - **`$?` after a pipe is the pipe's last command.** `bash sync.sh … | tail -5;
   echo $?` printed `0` for a test run that had failed. Redirect the script's
@@ -569,6 +614,30 @@ Use synchronous expressions: Hermes can return a Promise object before its work
 finishes. Invoking a React handler through this tool is not a physical touch test.
 Inspect only task-related state and avoid expressions that return credentials.
 The optional final argument selects a different Metro URL.
+
+### Capturing an async event (a WebSocket's `error`/`close`) across two `--eval` calls
+
+Each `--eval` opens its own CDP connection and evaluates one synchronous
+expression, so an event that arrives later — a refused WebSocket upgrade's
+`close`, for instance — is not in that call's result. Split it into two calls
+against the same running app, since Hermes's globals persist between separate
+CDP connections: the first arms a listener that pushes each event into a
+`globalThis` array and returns at once; after a pause for the network round
+trip, the second reads the array back.
+
+```sh
+node test/manual-test/cdp.cjs --eval arm.js http://127.0.0.1:PORT   # registers ws.onerror/onclose, returns 'armed'
+sleep 3
+node test/manual-test/cdp.cjs --eval read.js http://127.0.0.1:PORT  # JSON.stringify(globalThis.__probe.events)
+```
+
+Used this way on 2026-09-22 against `wss://eastasia.tts.speech.microsoft.com/…`
+with a wrong key, `new WebSocket(url, undefined, { headers: {…} })` produced
+exactly the sequence ADR 0037 inferred from source but had not measured on a
+device: a bare `error` event, then `close` with `code: 1006` and
+`reason: "Received bad response code from server: 401."`. Restart the app
+afterwards (or let the next `app.launch()` in a probe do it) to discard the
+armed global.
 
 ## Inspect the simulator's playback icon resource
 
@@ -1447,3 +1516,74 @@ highlight went `He`, `cast`, `at`, `the`, `wolf`, with nothing for the
 swallowed word. Switched back on: `[true,"<> []"]`, the keys back, `1 chapters
 downloaded`, and line 4 played from the saved audio with no request, `Fireball`
 highlighted.
+
+## Azure Speech: configuration, the voice sheet, and word-level highlighting (#39)
+
+`azure-provider.sh` runs `ios/AzureProviderProbe.swift`, the same disposable-project
+shape as `general-fonts.sh` and `offline-fix.sh` (its target scheme is still
+`LockScreenProbe`; only the source file differs):
+
+```sh
+bash test/manual-test/azure-provider.sh SIMULATOR_UDID /tmp/openreader-azure-provider-01 \
+  -only-testing:testProvidersOrderAndAzureScreenControls
+```
+
+Prerequisites: the latest Debug app connected to Metro, the owner's Azure key
+and region in two host-only files (never printed, logged, or checked in —
+`chmod 600` them, one credential per line, and remove them when done):
+
+```sh
+printf '%s' "$AZURE_API_KEY" > /tmp/openreader-azure-key.txt
+printf '%s' "$AZURE_REGION" > /tmp/openreader-azure-region.txt
+chmod 600 /tmp/openreader-azure-key.txt /tmp/openreader-azure-region.txt
+```
+
+The methods, each its own `-only-testing` invocation and meant to run in this
+order because later ones depend on state earlier ones leave (Azure enabled, a
+voice chosen), the same division `OfflineFixProbe`'s methods use:
+
+- `testProvidersOrderAndAzureScreenControls` — no credentials, free: the
+  Providers list order (Azure between OpenAI Compatible and Speechify), the
+  Settings version line, and the Azure screen's controls (Enable switch,
+  masked API key field with Show/Hide, Region field, Test connection).
+- `testAzureConnectionWordingsAndEnable` — free (voice-list checks or
+  client-side format checks, no synthesis): a wrong key, a wrong region, an
+  invalid region id, and an unreachable region each produce their own wording,
+  then the real key and region succeed and Azure is left Enabled. Idempotent:
+  `ensureAzureDisabled` unlocks the fields first regardless of what state the
+  screen starts in.
+- `testVoiceSheetShowsAzureAndChoosesEnglishVoice` — needs the English fixture
+  in the Library. Opens the voice sheet, measures the time from tapping the
+  Azure chip to the locale row appearing, dumps the full accessibility tree
+  (for a host-side count of locale chips — grep it for
+  `label: '[a-z]{2}(-[A-Za-z0-9]+)*'`, about 154 expected), checks zh-CN's
+  `晓晓` and the `multilingual` group's `Ava Multilingual`/`晓晓 多语言`, swipes
+  the locale row, and confirms a MAI voice sits under its own locale (en-US)
+  next to a Neural one — then chooses Andrew and leaves the sheet.
+- `testPlayEnglishAzureVoiceHighlightsWord` / `testChineseAzureVoiceHighlightsWord`
+  — a real Play touch, three screenshots roughly 2.5 s apart (about 5 s of
+  playback, enough to see the mark move), then a real Pause touch. Needs the
+  Chinese fixture for the second one, with zh-CN → 晓晓 chosen first.
+- `testMAIVoiceHighlightsWholeUtterance` — same shape, with `Ethan MAI-Voice-2`
+  chosen first; the mark should cover a whole sentence, never a single word.
+- `testBackgroundDuringAzureReading` — waits past the initial buffering (the
+  `Pause` label exists, and is `busy`, before the first clip arrives — see
+  the playback methods' own first screenshot) so the "before" capture shows
+  real progress, then backgrounds the app for 30 s and returns. Measured
+  2026-09-22: "before" had the heading of Chapter 1 marked (`Ethan
+  MAI-Voice-2` highlights a whole Utterance); "after" had a sentence from the
+  *start of Chapter 2* marked — several Utterances further, across a chapter
+  boundary, entirely while backgrounded, with no red box and the transport
+  still coherent.
+
+None of these methods spends more than a handful of free voice-list requests;
+the playback methods are real synthesis (Azure's free tier) and are the only
+ones that cost characters — a few short sentences each.
+
+What it does not establish: the exact RN facts in ADR 0037 that are not
+visible from a touch or a screenshot — the WebSocket close reason's exact
+text and code, and binary frames arriving as `ArrayBuffer`. The close reason
+is measured with the two-`cdp.cjs`-call technique above; a successful,
+audible play with a moving highlight is what stands for the `ArrayBuffer`
+fact, since `azure-ws.ts`'s `parseBinaryFrame` throws on anything else and no
+audio would have played at all.
