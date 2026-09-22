@@ -1405,13 +1405,13 @@ ${constants}
        the next task until the promise a task returns resolves. This is the same
        task, asked for by the reading instead of by the scroll.
 
-       **And it sweeps itself.** epub.js emits 'rendered' from inside its own hook
-       chain and it does not arrive for a view displayed this way — watched for
-       five seconds at 05:13 while the view reached \`displayed\`, held a live
-       document and a paragraph, and this program had not adopted it. That is the
-       same gap the 'relocated' sweep below covers, so the answer is the same one:
-       what is on the page has been reported, and sweeping is idempotent per
-       document. */
+       **And it sweeps itself**, which the content hook below has since made a
+       second look rather than the only one. Watched for five seconds at 05:13:
+       the view reached \`displayed\`, held a live document and a paragraph, and
+       this program had not adopted it. The cause was not this way of displaying
+       it — no 'rendered' event has ever reached this program, because the
+       library's own listener throws first (ADR 0036). Sweeping is idempotent
+       per document. */
     manager.q.enqueue(function () {
       return manager.append(next).display(manager.request);
     }).then(sweep, function (error) {
@@ -1534,14 +1534,25 @@ ${constants}
     }, 0);
   });
 
-  rendition.on('rendered', sweep);
-  /* And again whenever the reading position moves. A section can be on the page
-     without this program having seen a 'rendered' event for it — the event fires
-     from inside epub.js's own hook chain, and a display() that replaces the view
-     can resolve without it reaching a listener registered later. Sweeping on the
-     move as well makes the invariant the one that matters: what is on the page
-     has been reported. Both are idempotent per document, so the second sweep
-     costs one lookup per rendered view. */
+  /* Every section document epub.js displays, as it displays it: the first one,
+     one the continuous manager appends or prepends, one it rebuilds after
+     destroying it, one renderAhead asked for.
+
+     **Through epub.js's content hook, not its 'rendered' event, which has never
+     reached this program** (ADR 0036, #34). The library's template registers
+     its own 'rendered' listener first, that listener JSON.stringifies the whole
+     Section, a Section is cyclic, and epub.js's emitter has no try — so the
+     dispatch ends at the library's listener, every time. The hook chain runs
+     each hook in its own try, for every display, before the view is shown; it
+     is the chain the library's own theme arrives through. The defect it closes
+     was a chapter carrying that theme and not this program's stylesheet:
+     reached by a fast fling, displayed after the last 'relocated', and left
+     white on a dark page, at the book's own size, deaf to taps. */
+  rendition.hooks.content.register(sweep);
+  /* And again whenever the reading position moves, which is what keeps
+     \`onScreen\` current after the manager trims a view — a trim displays
+     nothing, so the hook does not hear it. Idempotent per document: one lookup
+     per rendered view. */
   rendition.on('relocated', sweep);
   /* Every spine item's href, in spine order and in the spine's own spelling.
 
@@ -1576,8 +1587,8 @@ ${constants}
      without, so by here it is a number. */
   post({ type: DOCUMENT, spine: book.spine.length, hrefs: spineHrefs() });
   /* Installed from the library's onReady, which fires after rendition.display()
-     resolved — so the first section has already rendered and its 'rendered' event
-     has already been and gone. */
+     resolved — so the first section has already been through epub.js's hook
+     chain, before the hook above was registered. */
   sweep();
 
   /* ---- the one entry point ---- */
@@ -1679,9 +1690,11 @@ ${constants}
          and then the section after it asked for if it is missing. Neither depends
          on where the page is or on whether this Utterance could be painted.
 
-         The sweep is here because epub.js's 'rendered' does not always reach a
-         listener, and the two events below are not enough on their own. Measured
-         on the owner's book at 05:31, in the state the 04:43 reading died in:
+         The sweep went here when nothing else reported a section epub.js had put
+         on the page by itself — 'rendered' never reached this program (ADR 0036)
+         and 'relocated' comes only when a scroll stops. The content hook now does;
+         this stays as a second look. Measured on the owner's book at 05:31, in the
+         state the 04:43 reading died in:
          views [3, 4d, 5d] with section 5 holding a live document, \`known\` still
          108, and section 5 never adopted — because \`liveContents\` adopts only the
          section it is asked about, and nothing asks about a section the reading

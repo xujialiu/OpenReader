@@ -877,6 +877,49 @@ describe('what was read out of @epubjs-react-native/core rather than its documen
   });
 });
 
+describe('every section the page shows is adopted, however fast it arrived (ADR 0036)', () => {
+  /**
+   * **Issue #34.** A fast fling left a chapter white on a dark page, at the book's
+   * own size, answering no tap. epub.js had displayed it after the last
+   * `relocated`, and the program's `rendered` listener — the one meant to catch
+   * exactly that — had never run once. Measured 2026-09-22
+   * (notes/NOTES_2026-09-22.md): 6 of 15 flings towards the start of a book left a
+   * displayed chapter without the program's stylesheet, and 0 of 15 once the
+   * library's own `rendered` listener could no longer throw.
+   *
+   * Structural, like the rest of this file: the fling, the queue and the hook
+   * chain live in Safari. `test/manual-test/scroll-theme.cjs` is the run that
+   * shows it on the device.
+   */
+  it('adopts from epub.js’s content hook, and not from its rendered event', () => {
+    const program = code('highlighter.ts');
+    pin(program, 'rendition.hooks.content.register(sweep);', 'highlighter.ts');
+    expect(program).not.toContain("rendition.on('rendered'");
+  });
+
+  it('because the library’s own rendered listener serialises the whole Section, which is cyclic', () => {
+    // Evaluated in the reader's WebView: `TypeError: JSON.stringify cannot
+    // serialize cyclic structures`. A Section's spine hooks are Hook objects whose
+    // `context` is themselves, so this throws for every section.
+    pin(library('template.js'), "type: 'onRendered',\n          section: section,", 'the installed @epubjs-react-native/core template.js');
+  });
+
+  it('and epub.js’s emitter stops at a listener that throws, while its hook chain goes on past one', () => {
+    const epub = library('epubjs.js');
+    // The emitter has no try, so a throw ends the dispatch. The template registers
+    // its listener before the program exists, so every later listener starves.
+    pin(epub, 'for (r = r.slice(), e = 0; (n = r[e]); ++e) d.call(n, this, s);', "the bundled epub.js, the emitter's emit");
+    // The hook chain runs each hook in its own try.
+    pin(epub, 'try {\n                var r = n.apply(e, t);\n              } catch (t) {\n                console.log(t);\n              }', 'the bundled epub.js, Hook.trigger');
+    // And it runs for every section document epub.js displays, before `rendered`.
+    pin(
+      epub,
+      '? this.hooks.content.trigger(t.contents, this).then(() => {\n                    this.emit(l.c.RENDITION.RENDERED, t.section, t);',
+      'the bundled epub.js, Rendition.afterDisplayed',
+    );
+  });
+});
+
 describe('the reading is fed by the reading, not by the scroll (notes/NOTES_2026-09-20.md, 04:43)', () => {
   /**
    * The chain that closed on itself: more text needs epub.js to render the next

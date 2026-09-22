@@ -74,12 +74,25 @@ Four properties of the centring, and each is a rule rather than an accident.
   one being spoken, on the same Clip cue and so with nothing added to the bridge,
   through the manager's own queue — which is what stops the appended view being
   taken apart by an `update()` before its iframe has loaded — and sweeps when its
-  display resolves, because epub.js's `rendered` does not arrive for a view
-  displayed that way. Nothing keeps it alive: the manager trims it as before, the
-  Block records survive it (`blocks.ts`), and `follow()` displays it when the
-  voice arrives. The program also sweeps on every Clip cue, because a section
-  epub.js rendered by itself could otherwise sit on the page unreported — which is
-  the state the reading of 04:43 died in.
+  display resolves, a second look now that the content hook below adopts it.
+  Nothing keeps it alive: the manager trims it as before, the Block records
+  survive it (`blocks.ts`), and `follow()` displays it when the voice arrives. The
+  program also sweeps on every Clip cue, which is what closed the state the
+  reading of 04:43 died in — a section epub.js rendered by itself, sitting on the
+  page unreported — before the content hook did.
+
+**Every section epub.js displays is adopted as it is displayed** (ADR 0036). The
+program's `sweep` — the stylesheet, the Blocks, the tap listener — is registered
+on epub.js's content hook, the chain the library's own theme reaches every
+section document through, and not on its `rendered` event. That event has never
+reached the program: the library's template registers its own `rendered`
+listener first, that listener `JSON.stringify`s the whole Section, which is
+cyclic, and epub.js's emitter has no `try`, so the dispatch ends there. Until the
+hook, the program adopted sections only as it installed, on `relocated` and on
+each Clip cue, and a chapter a fast fling brought in after the last `relocated`
+stayed white on a dark page, at the book's own size and deaf to taps (#34). The
+`relocated` and Clip-cue sweeps stay as second looks; a sweep is idempotent per
+document.
 
 **Several sections are alive at once**, which is what continuous scrolling costs
 and what paginated layout did not. The Block records are keyed by spine index and
