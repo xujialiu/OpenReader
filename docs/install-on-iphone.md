@@ -23,6 +23,7 @@ cannot use Expo Go as a substitute.
   device. It also used a different DerivedData path than the one recorded above
   (the hash in the path changes per checkout, as this guide already notes), so that
   recorded path is not reusable as-is.
+- Later on 2026-09-22, the `0.0.2-beta5` Release build succeeded after the native dependency recovery below, and installation returned `App installed`. Launch then failed with `CoreDeviceError 10002` / `Security`. Local signature and profile checks passed, but device trust and successful launch remain unconfirmed. The earlier successful launch does not establish that this later installation can launch.
 
 The device, account, and paths above are specific to this run. Look them up again
 when changing computers or phones. If the user has since trusted the developer
@@ -171,7 +172,24 @@ Then repeat the Release build command above with a new, task-specific cache dire
 CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20260922
 ```
 
-Use the same isolated directory for subsequent attempts. This combined recovery returned build exit code 0, and `codesign --verify --deep --strict APP_PATH` passed for the resulting app. No app source was changed. Installation and launch were deferred because the owner needed to disconnect the phone; these results do not establish either check. The original cause of the missing generated FFmpeg integration was not established.
+Use the same isolated directory for subsequent attempts. This combined recovery returned build exit code 0, and `codesign --verify --deep --strict APP_PATH` passed for the resulting app. No app source was changed. The original cause of the missing generated FFmpeg integration was not established.
+
+### Installation succeeds, but launch is denied (2026-09-22, #43)
+
+The owner temporarily disconnected the phone while the build was repaired. After reconnection, `devicectl device install app` returned 0 and `App installed` for `top.xujialiu.openreader`. This was an installation over the existing app; the old app was not uninstalled.
+
+The subsequent `devicectl device process launch` returned 1 with `com.apple.dt.CoreDeviceError 10002`, `FBSOpenApplicationServiceErrorDomain 1`, and `FBSOpenApplicationErrorDomain 3`. Its reason was `Security`: “invalid code signature, inadequate entitlements or its profile has not been explicitly trusted by the user”. This message lists possible causes; it does not identify which one applies.
+
+Checks on the installed build's local source package established:
+
+- `codesign --verify --deep --strict APP_PATH` returned 0.
+- The embedded provisioning profile expires at `2026-09-27 03:12:56 UTC`; it was not expired at installation.
+- `ProvisionedDevices` includes the connected phone, represented here as `IPHONE_UDID`.
+- The signature's `application-identifier` matches the profile's, and the signature's team identifier belongs to the profile's `TeamIdentifier` list.
+
+To repeat these checks, use `security cms -D -i APP_PATH/embedded.mobileprovision` to decode the profile and `codesign -d --entitlements :- APP_PATH` to inspect the signature's entitlements. Substitute the actual app path and quote paths containing spaces. Compare the fields above locally; do not commit the decoded profile or the phone's real UDID. These checks do not establish that iOS trusts the developer or that every entitlement is valid for launch.
+
+The next on-device step is Settings → General → VPN & Device Management → the developer entry → Trust, completing any system prompts, then opening OpenReader again. If the entry already shows trust, capture the actual on-device launch message and investigate further rather than declaring trust to be the cause. No successful trust action or subsequent launch was observed in this run. Build and installation are verified; launch, standalone operation and reading/audio remain unverified.
 
 ## References
 
