@@ -463,6 +463,15 @@ fix (AGENTS.md).
   `-only-testing:testConfigureFishProvider`, and confirm a real duration
   (seconds, not milliseconds) and an assertion count in `test.log`.
 
+- **`download-ring.sh` has the same bare-method `-only-testing` contract.**
+  Passing `-only-testing:DownloadRingProbe/testReopenDownloadDrawer` makes the
+  runner prepend the class a second time, yielding
+  `LockScreenProbe/DownloadRingProbe/DownloadRingProbe/testReopenDownloadDrawer`;
+  Xcode exits 0 after reporting zero executed tests. Measured 2026-09-22 while
+  restoring the final simulator screen. Use the documented
+  `-only-testing:testReopenDownloadDrawer` form, then confirm the test log shows
+  the method running and not only `Executed 0 tests`.
+
 - **A Settings-stack screen can be more than one level away, even when it
   looks like one.** Reaching Fish Audio's provider form is Library → Settings
   → Providers → Fish Audio, three pushes, and each back button is named after
