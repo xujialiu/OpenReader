@@ -95,12 +95,14 @@ fix (AGENTS.md).
     `xcrun simctl install UDID COPY.app` over it. The data stays. The next launch
     logged `iOS Bundled … index.ts` in the new port's Metro and appeared in its
     `/json/list`.
-  - Not every build behaves so: the same day, a build made by `expo run:ios
-    --port 8090` kept a container's older `localhost:8087` until the plist fix
-    above (**Simulators and installs**, "A fresh `expo run:ios` install still
-    fetched its bundle from another tree's Metro"). Which of the two a build
-    does was not established; read `RCTMetroPort` in its bundle, then check which
-    Metro the app actually reached.
+  - A build whose `RCTMetroPort` is empty does not: `adoptInfoPlistMetroPort()`
+    returns before writing anything, and the container's `RCT_jsLocation` stands.
+    That is the other observation of the same day (**Simulators and installs**,
+    "A fresh `expo run:ios` install still fetched its bundle from another tree's
+    Metro"): the build `expo run:ios --port 8090` made at 12:29 has `RCTMetroPort`
+    `""` in its `Info.plist`, and it kept a container's older `localhost:8087`
+    until the plist fix above. So read `RCTMetroPort` in the bundle first: empty,
+    use the plist fix; a port, re-sign a copy with the port you want.
 - **Reusing another worktree's installed Debug app is safe only while the native
   side matches.** Compare `git diff --name-only main` against `package.json`,
   `app.json`, `plugins/` and `patches/`; a change to `patches/` or to a
