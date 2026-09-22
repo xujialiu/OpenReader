@@ -76,6 +76,25 @@ fix (AGENTS.md).
     `xcrun simctl launch --console-pty UDID top.xujialiu.openreader` prints
     `[RCTMultipartDataTask] GET http://localhost:PORT/.expo/.virtual-metro-entry.bundle…`,
     and the device then appears in `curl -s http://localhost:PORT/json/list`.
+- **An Expo Debug build writes its own port back over `RCT_jsLocation` at every
+  launch**, so the plist fix above does not hold for it.
+  - Symptom (2026-09-22, iPhone 16, a Debug app built at 04:05 that day): the
+    container plist, edited to `localhost:8089` with the device shut down, read
+    `8089` after the boot and `localhost:8086` again as soon as the app
+    launched. The app loaded from 8086, and 8089's Metro never logged a bundle.
+  - Cause: Expo SDK 57's `adoptInfoPlistMetroPort()`
+    (`node_modules/expo/ios/AppDelegates/ExpoReactNativeFactory.swift`), Debug
+    only. It reads `RCTMetroPort` from the app bundle's own `Info.plist`, which
+    `expo run:ios --port` bakes in, and writes `localhost:PORT` into
+    `RCT_jsLocation` whenever the two differ. `plutil -p "$(xcrun simctl
+    get_app_container UDID top.xujialiu.openreader app)/Info.plist" | grep
+    RCTMetroPort` shows the port a build insists on.
+  - Fix without a rebuild: copy the `.app` out of the device, `plutil -replace
+    RCTMetroPort -string PORT` on the copy's `Info.plist`, `codesign --force
+    --sign - --preserve-metadata=entitlements` the copy, terminate the app and
+    `xcrun simctl install UDID COPY.app` over it. The data stays. The next launch
+    logged `iOS Bundled … index.ts` in the new port's Metro and appeared in its
+    `/json/list`.
 - **Reusing another worktree's installed Debug app is safe only while the native
   side matches.** Compare `git diff --name-only main` against `package.json`,
   `app.json`, `plugins/` and `patches/`; a change to `patches/` or to a
@@ -117,6 +136,19 @@ fix (AGENTS.md).
 - **Another simulator needs the same Debug app.** `xcrun simctl install DEST "$(xcrun simctl get_app_container SOURCE top.xujialiu.openreader app)"` copies it without a build, to any device family the app supports, iPad included.
 - **An iPad behaves differently from an iPhone.** An iPad-sized WKWebView defaults to the desktop content mode, where WebKit ignores `text-size-adjust` (ADR 0030). The reader asks for the mobile mode through `patches/`. Anything that depends on WebKit is worth checking on an iPad simulator too.
 - **The app's console is not in the simulator's log.** `log show` has no `console.log` or `HX` lines; they are only in Metro's output. Note the time with `date` when you take a measurement, because it cannot be recovered afterwards.
+- **A screenshot photographs whatever is in front, and a harness command does
+  not bring the app forward.** After a Safari page run, `leading-strip.sh … app`
+  sent its commands to the backgrounded app, where they ran, and photographed
+  Safari, whose page still held a strip of its own: a RED for the wrong reason
+  (2026-09-22). Fix: `xcrun simctl launch UDID top.xujialiu.openreader` first,
+  which brings a running app to the front without restarting it, and check that
+  the run's own answer reached Metro before believing its screenshot.
+  `leading-strip.sh` does both.
+- **Safari's first `simctl openurl` on a device sits on its Start Page for about
+  25 s.** A screenshot 6 s after it was the Start Page, then a blank page, and
+  the page's own requests reached the server 25 s after the openurl. Poll for
+  what the page draws rather than sleeping a fixed time; `leading-strip.sh page`
+  does.
 
 ### Screenshots of a sheet
 
@@ -143,6 +175,54 @@ fix (AGENTS.md).
   once 1.1 s. A burst caught the loading state at rest in one frame, one, and
   two. Record the screen instead (`VIDEO=1`): `ffmpeg` or `cv2.VideoCapture`
   reads every frame, and the recording keeps the device's 1206×2622 pixels.
+
+### Screenshots of the reading page
+
+- **Paint an earlier run left on the screen is still there when the next run
+  starts, in the same place.** Stale paint stays until something repaints its
+  area, so a probe that ran the same sequence again saw its predecessor's strip
+  and counted it as its own: a run with the trigger removed still read RED
+  (2026-09-22, #35). Fix: begin every run with a fresh render,
+  `rendition.display(0)` in the reader or a reload in Safari, and photograph that
+  baseline once to see it clean.
+- **A thin region of highlight colour is not always a strip.** Inside a
+  highlighted word, the counter of an `e` or a `q` is amber cut off from the
+  rest of the word by the glyph's strokes, 9 to 31 px tall at Font Size 28, and
+  a detector that sorts regions by height reports it as stale. Ignore a region
+  that lies inside a word's box, as `leading-strip.py` does.
+- **A strip on the same line as the held word merges into it if the detector
+  groups pixel rows.** Grouped by rows, the 6 px strip above "He" and
+  "completed" beside it made one 102 px band that read as the held word, and the
+  run as GREEN. Group connected regions instead, and hold on a word on another
+  line.
+- **A RED from `leading-strip.py` can be React Native's own LogBox, not a
+  strip.** Symptom (2026-09-22, #35, iPhone 16 simulator): a STALE region at the
+  same y 2342..2395, x 72..125 on every affected run, colour ~(250,186,48),
+  whatever sentence or line height was under test. Cause: any `console.warn` or
+  `console.error` from the app's own JS (not the reader's WebView) opens the
+  "Open debugger to view warnings." banner, whose amber "!" icon falls inside
+  the detector's colour threshold; the banner is global app state, so it
+  outlives a `shut`/`open` reader cycle and every later screenshot reads it as a
+  stale strip until something clears it. Met from two unrelated triggers here: the
+  `injectedJavaScript` race below, and React Native's own `Sending
+  onAnimatedValueUpdate with no listeners registered` during rapid automated
+  `shut`/`open` cycling — neither related to the highlighter. Fix: `xcrun simctl
+  terminate` then `launch` the app to clear LogBox; the same probe read GREEN
+  immediately after that restart, no code change. `leading-strip.py` now tells
+  the icon apart by its blue, 48 all over the icon against 2 to 5 in the word
+  colour, and reads that same screenshot as GREEN; restart anyway, since the
+  banner covers whatever is under it. A screenshot showing the actual reading
+  text is still worth reading by eye — the true strip and this false one look
+  nothing alike once you see them.
+- **`do:"js"` sent right after `do:"open"` can race the WebView's own bridge.**
+  Symptom (2026-09-22): Metro logged `WARN Error evaluating injectedJavaScript:
+  ... TypeError: undefined is not an object (evaluating
+  'window.ReactNativeWebView.postMessage')` and the harness's answer was "no
+  answer from the reader" (INVALID), although the Document had visibly finished
+  opening. Not reproduced on an immediate retry with the same 8 s gap between
+  `open` and `js`. Treat one INVALID right after an `open` as worth a retry
+  before treating it as a real failure, and check Metro's log for this WARN when
+  it happens — it is also what leaves the LogBox banner above.
 
 ### The walkthrough harness (`Documents/harness.json`)
 
@@ -276,7 +356,9 @@ fix (AGENTS.md).
   rewrote it was not established; an XCTest run had just finished on that
   device. So a boot is not the only thing to `set` after: run
   `silence.sh check SIMULATOR_UDID` **before every Play** and `set` again when
-  it refuses, which is what the kit's scripts do and why they do it.
+  it refuses, which is what the kit's scripts do and why they do it. Seen again
+  on 2026-09-22 on the iPhone 16: `set` read `0` after a boot, and after a
+  `simctl terminate` and a `simctl install` over the app, `check` read 60.
 - **A boot puts the simulator back to 60.** `sim_volume` survives a
   `simctl shutdown` in the file, but the next `boot` rewrites
   `audiosettings.plist` with the CoreSimulator defaults, measured as `0` before
@@ -410,6 +492,12 @@ fix (AGENTS.md).
 - **zsh runs nothing when an unquoted glob matches no file.** `grep -rn X src
   --include=*.ts` answers `no matches found: --include=*.ts` and the command
   never runs. Quote the pattern: `--include='*.ts'`.
+- **macOS's bash 3.2 cannot parse a quoted heredoc inside `$(…)` whose text
+  holds an unbalanced quote.** `CODE=$(cat <<'EOF' … EOF)` around a JavaScript
+  program containing `/[.,!?"]+$/` failed with `unexpected EOF while looking
+  for matching '"'` at the end of the script, although `'EOF'` quotes the body.
+  Keep such text in a file of its own and `cat` it, as
+  `leading-strip-probe.js` is.
 - **`PIPESTATUS` is bash's, and an agent's commands here run in zsh 5.9.**
   `… | tee run.out; echo "exit ${PIPESTATUS[0]}"` printed `exit ` with nothing
   after it (2026-09-22): zsh has no `PIPESTATUS`, and an unset name expands to
@@ -1308,3 +1396,55 @@ highlight went `He`, `cast`, `at`, `the`, `wolf`, with nothing for the
 swallowed word. Switched back on: `[true,"<> []"]`, the keys back, `1 chapters
 downloaded`, and line 4 played from the saved audio with no request, `Fireball`
 highlighted.
+
+## A moved highlight leaves a strip behind (#35, `leading-strip.sh`)
+
+Whether a highlight that has moved on left a strip of its colour along the top
+of the words it left. Only a screenshot can say: the registry holds the right
+Range the whole time, so nothing in the DOM is wrong.
+
+```sh
+npx tsx test/manual-test/leading-strip-fixture.ts /tmp/openreader-leading-strip
+bash test/manual-test/leading-strip.sh SIMULATOR_UDID /tmp/openreader-leading-strip-01 app METRO_LOG DOCUMENT_ID [LINE_HEIGHT]
+bash test/manual-test/leading-strip.sh SIMULATOR_UDID /tmp/openreader-leading-strip-02 page [fix=1|lh=1.6|delay=600]
+```
+
+- `app` drives the reader's own highlighter from inside its WebView
+  (`leading-strip-probe.js`, through the harness's `js`): a fresh display of the
+  fixture's chapter, one `speak` with `reveal` so that the centring scrolls as it
+  does when a Clip starts, a word every 250 ms, and a `hold` on the first word of
+  the sentence's second line. First put `Leading Strip Fixture.epub` in
+  `Documents/Inbox/` and send the harness's `add`; its answer carries the
+  Document Id. It needs this worktree's Metro writing to METRO_LOG. It sets the
+  dark theme and Font Size 28 for the run and restores both afterwards. It never
+  plays, so nothing is synthesized, nothing is heard and no reading position is
+  written: it is safe on a simulator whose sync points at the owner's real folder.
+  LINE_HEIGHT (for example `1.6`) is set on the chapter's `<p>` for the run.
+- `page` opens `leading-strip.html` in Safari, from a server the script starts.
+  That is WebKit alone: one `<p>` whose lines are set apart by `<br />`, one word
+  highlight, and a scroll right before the first word. `fix=1` repaints the
+  word's Block the way the reader does, `lh=1.6` makes the line box taller, and
+  `delay=600` lets the scroll paint before the first word.
+
+The fixture is laid out the way the owner's web-novel books are: a heading and
+one `<p>` whose sentences are set apart by `<br /><br />`. The strip only
+appears on a line that starts a text node but not its paragraph.
+
+`leading-strip.py SCREENSHOT [LINE_PX]` is the detector for both modes. It finds
+every region of the dark theme's word colour: a region nearly a line box tall is
+a word, and a shorter one outside every word is a stale strip. Exit 1 is RED, 0
+GREEN, and 2 INVALID, meaning there was no word on the screen or no answer from
+the reader, so nothing was measured.
+
+Measured 2026-09-22 on the iPhone 16, iOS 27.0. Before the fix, `app` was RED
+with a 6 px strip above "She" (y 930..935); after it, GREEN, also at
+line-height 1.6. `page` is RED with a 6 px strip (37 px at `lh=1.6`) and GREEN
+with `fix=1` or `delay=600`, which says that runtime's WebKit still has the bug.
+`page` with no query going GREEN on a later runtime would mean WebKit's own fix
+(319154@main) has shipped there.
+
+What it cannot show: a real voice, since the words move on a synthetic clock;
+whether a finger scroll or a resize leaves a strip, since only the centring
+scroll is driven; and a physical device's tiling, which may paint the
+scrolled-in tiles a frame later. The owner's phone left its strip above the
+Utterance's second word, where the simulator leaves it above the first.

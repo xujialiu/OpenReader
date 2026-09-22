@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>leading strip</title>
+<!--
+  #35 without the app: WebKit alone leaves a strip of a moved ::highlight() behind.
+  Opened by `leading-strip.sh … page`. No epub.js, no iframe, no scroll container,
+  no Utterance highlight: one <p> whose lines are set apart by <br />, one word
+  highlight moved from Range to Range, and a scroll right before the first word.
+
+  ?fix=1  also repaints the word's Block the way src/renderer/highlighter.ts does
+  ?lh=1.6 a taller line box, which makes the strip taller (it is the leading)
+  ?delay=600 lets the scroll finish painting before the first word, which leaves nothing
+-->
+<style>
+  html, body { background: #111114; margin: 0; }
+  #text { color: #e6e6ea; padding: 0 32.75px; font-size: 28px; }
+  ::highlight(w) { background-color: rgba(255, 176, 0, 0.85); color: #111114; }
+</style>
+</head>
+<body>
+<div id="text"></div>
+<script>
+(async function () {
+  var q = new URLSearchParams(location.search);
+  var FIX = q.get('fix') === '1', MS = 250, HOLD = 5;
+  if (q.get('lh')) document.getElementById('text').style.lineHeight = q.get('lh');
+  var filler = '<p>' + new Array(40).join('Text above, so that there is somewhere to scroll from. ') + '</p>';
+  var LINES = [
+    'Mara had lost her workshop to the flood, and the only thing she had saved was an old ledger she could not read.',
+    'But when the ledger finally opened, Mara found a list of tasks inside it, and her whole life was turned around.',
+    'She finished task after task and grew stronger, until one day the list gave her a task she was not sure she could finish.',
+    '"It is time to begin!"'];
+  var TARGET = LINES[2];
+  var text = document.getElementById('text');
+  text.innerHTML = filler + '<p>' + LINES.join(' <br /><br />') + '<br /></p>' + filler + filler;
+
+  var walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT), node, at = -1;
+  while ((node = walker.nextNode())) if ((at = node.data.indexOf(TARGET)) >= 0) break;
+  function range(from, to) { var r = document.createRange(); r.setStart(node, at + from); r.setEnd(node, at + to); return r; }
+  var words = [], re = /\S+/g, m;
+  while ((m = re.exec(TARGET))) words.push(range(m.index, m.index + m[0].replace(/[.,!?"]+$/, '').length));
+
+  var word = new Highlight(), repainter = new Highlight();
+  CSS.highlights.set('w', word);
+  function put(ranges) {
+    var blocks = [];
+    word.forEach(function (r) { blocks.push(r.startContainer.parentElement); });
+    word.clear();
+    ranges.forEach(function (r) { word.add(r); blocks.push(r.startContainer.parentElement); });
+    if (!FIX) return;
+    // What highlighter.ts does: a Range over the Block's element, in a Highlight
+    // that paints nothing, makes WebKit repaint the element's whole block.
+    blocks.filter(function (b, i) { return blocks.indexOf(b) === i; }).forEach(function (b) {
+      var whole = document.createRange();
+      whole.selectNode(b);
+      repainter.add(whole);
+      repainter.delete(whole);
+    });
+  }
+
+  await new Promise(function (r) { setTimeout(r, 500); });
+  var box = range(0, TARGET.length).getBoundingClientRect();
+  document.scrollingElement.scrollTop += (box.top + box.bottom) / 2 - innerHeight / 2;
+  if (q.get('delay')) await new Promise(function (r) { setTimeout(r, Number(q.get('delay'))); });
+  for (var i = 0; i <= HOLD; i++) {
+    put([words[i]]);
+    if (i < HOLD) await new Promise(function (r) { setTimeout(r, MS); });
+  }
+  document.title = 'held';
+})();
+</script>
+</body>
+</html>
