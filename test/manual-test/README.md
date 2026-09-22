@@ -76,6 +76,30 @@ fix (AGENTS.md).
     `xcrun simctl launch --console-pty UDID top.xujialiu.openreader` prints
     `[RCTMultipartDataTask] GET http://localhost:PORT/.expo/.virtual-metro-entry.bundle…`,
     and the device then appears in `curl -s http://localhost:PORT/json/list`.
+- **A launch argument points a Debug app at another Metro port, with no plist
+  edit and no reboot.** `xcrun simctl launch UDID top.xujialiu.openreader
+  -RCT_jsLocation localhost:PORT` puts the value in the process's argument
+  domain, which `NSUserDefaults` reads before the container plist the bullet
+  above has to edit. Measured 2026-09-22: a Debug app freshly copied onto a new
+  iOS 27.0 device fetched its bundle from port 8088 on its first launch, Metro
+  logged `iOS Bundled`, and the device appeared in `/json/list` there. It
+  belongs to the launch it is passed to, so pass it on every relaunch.
+- **An existing probe's own `app.terminate(); app.launch()` drops that launch
+  argument too, and reconnects to whatever Metro the container plist last
+  held.** Every probe in `ios/` does this at the start of most methods
+  (`OfflineFixProbe.testConfigureFishProvider` among them) because in the
+  common case — one simulator, the default port — a bare relaunch reconnects
+  to the same server. On a device kept on a non-default port by the launch
+  argument alone (a dedicated worktree simulator, this file's own example),
+  it does not: measured 2026-09-22, `xcresulttool`'s failure screenshot showed
+  a red `ConfigError: The expected package.json path …/fix/package.json does
+  not exist` — a **different, already-deleted** worktree's Metro, left over in
+  the container plist from before this session repointed the device with the
+  launch argument. `curl -s http://localhost:PORT/json/list` answered `[]`
+  throughout. Fix as in the bullets above: `xcrun simctl terminate`, then
+  `launch UDID BUNDLE -RCT_jsLocation localhost:PORT` **from the host**, not
+  from inside a test — and prefer a probe method that only `.activate()`s an
+  already-connected process when running against a device like this one.
 - **Reusing another worktree's installed Debug app is safe only while the native
   side matches.** Compare `git diff --name-only main` against `package.json`,
   `app.json`, `plugins/` and `patches/`; a change to `patches/` or to a
@@ -178,6 +202,35 @@ fix (AGENTS.md).
   2026-09-22 Fixture Phone`, measured 2026-09-22). A probe's `BOOK_TITLE`
   matches `label BEGINSWITH`, so the file name finds the row for the first
   open and only the metadata title finds it afterwards.
+- **A stale `harness.json` replays on every reader remount, not only on app
+  launch.** The documented `seenRef` reset (below, "The walkthrough harness
+  re-runs its last command on every launch") also happens on a plain
+  Back-then-reopen: `useHarnessCommands` lives inside the reader screen, so a
+  fresh mount gets a fresh `seenRef` starting at -1 and replays whatever
+  `harness.json` still holds. Measured 2026-09-22: reopening a reader with a
+  three-runs-ago `scroll-theme.cjs` command still on disk logged `WARN Error
+  evaluating injectedJavaScript: … TypeError: undefined is not an object
+  (evaluating 'window.ReactNativeWebView.postMessage')` on each reopen — the
+  injected script's own `window.__scrollTheme` no longer existed in the fresh
+  WebView, and even its `catch` block's `postMessage` call ran before the
+  bridge was ready. `rm Documents/harness.json` after a command has answered,
+  not only before a relaunch.
+- **`Scroll Fixture`'s Contents rows cannot be followed, although its
+  navigation document sits beside its package document.** Opening Contents on
+  it showed "None of these rows names a file in this book. The contents live
+  in a different folder from the pages, which this app matches by name — so
+  the list can be read but not followed," and a real tap on a `Chapter 3:` row
+  found no such button. The folder is not the reason here. Read in the
+  reader's WebView on 2026-09-22, epub.js hands this EPUB 3 navigation
+  document's hrefs over with a leading slash — `book.navigation.toc` gave
+  `/contents.xhtml`, `/ch001.xhtml`, `/ch002.xhtml` — while `book.spine`
+  gave `contents.xhtml`, `ch001.xhtml`, `ch002.xhtml`, so no row matches
+  (`core/document/contents.ts` compares the two as strings). Do not assume a
+  generated fixture's Contents are followable from reading its generator;
+  check the sheet's own banner. `{"do":"section","section":N}`
+  (`reading.goToSection`) jumps to a spine index directly and is unaffected —
+  a cleaner substitute than `Player.onSkip` calls for reaching a specific
+  chapter's top on a Document whose Contents cannot be followed.
 
 ### XCTest
 
@@ -261,12 +314,58 @@ fix (AGENTS.md).
   — before suspecting the row under test; fixing the probe's expected list
   (or the stale README prose) is a separate, already-scoped change, not
   something to fold into an unrelated feature's verification.
+- **A real, accessibility-matched tap can land on a debug overlay instead of
+  the button underneath.** Measured 2026-09-22 verifying #34: `app.buttons["Play"].tap()`
+  resolved and reported success (the test passed), but nothing played — no
+  `playing=true` HX line anywhere in Metro's log, no Fish request attempted —
+  because React Native's own "Open debugger to view warnings." banner (raised
+  earlier by the stale-harness JavaScript exception two bullets below) sits
+  over the floating player, and its rectangle (`{{10.0, 786.7}, {382.0, 67.3}}`
+  in points) overlaps the Play button's (`{{166.0, 793.7}, {56.0, 52.0}}`).
+  XCUITest's `.tap()` dispatches a physical touch at the resolved element's
+  screen point; whatever the OS hit-tests there receives it, accessibility
+  match notwithstanding. Do not assert only that `Play` reappears afterwards
+  — that also holds if Play never started. Assert the transition to `Pause`
+  (`app.buttons["Pause"].waitForExistence(...)`) as the proof playback began,
+  and dismiss or clear the warning banner (a clean relaunch is the reliable
+  way) before trusting a Play tap near it.
+- **`offline-fix.sh`'s `-only-testing` argument is the bare method name; the
+  script prepends the class itself.** Passing
+  `-only-testing:OfflineFixProbe/testConfigureFishProvider` (reasonable by
+  analogy with `reader.sh`'s own `-only-testing:LockScreenProbe/…/testX`
+  examples elsewhere in this file) doubles the class —
+  `LockScreenProbe/OfflineFixProbe/OfflineFixProbe/testConfigureFishProvider`
+  — which matches no test. Measured 2026-09-22: `xcodebuild` still exited 0,
+  in under a tenth of a second, having run nothing. Exit 0 is not evidence of
+  a pass here; use the README's own documented shape,
+  `-only-testing:testConfigureFishProvider`, and confirm a real duration
+  (seconds, not milliseconds) and an assertion count in `test.log`.
 
 ### Measuring inside the reader's WebView
 
 - **`performance.now()` is coarsened to 1 ms.** Time N repetitions and divide.
 - **Computed sizes include text-size-adjust on an iPhone, and not on an iPad in the desktop content mode.** Divide by the percentage in effect only where it applies (ADR 0030).
 - **A probe's own root-only text-size-adjust rule loses to the app's.** The app declares text-size-adjust on every element in `#openreader-highlight`. Take those lines out for the probe and put them back afterwards.
+- **`rendition.on('rendered', …)` never fires for a probe either.** The library's template registers its own `rendered` listener first, it throws on every section, and epub.js's emitter stops there (#34, ADR 0036). A probe that counts `rendered` reads 0 however much renders. Use `rendition.hooks.content.register`, which runs for every displayed section, or read the views (`rendition.manager.views.all()`).
+- **A regex inside a probe's template literal loses its backslashes.** In a `.cjs` script the WebView code is a template literal, where `\d` cooks to `d`: `/^(\d+)/` reached the WebView as `/^(d+)/`, matched nothing, and an event history came back empty rather than failing. Write `\\d` in the script's source.
+- **Resetting the page with `rendition.display()` while epub.js's queue is still busy left the queue stuck for good.** Measured 2026-09-22 at 12:30: after four back-to-back flings the manager's queue held 17 tasks with `running` true, nothing it held ever ran, and every later fling moved nothing (`scrollTop` 0, one view), which reads as the page refusing to scroll rather than as a stuck queue. Wait for `!rendition.manager.q._q.length && !rendition.manager.q.running` before a reset, and treat a queue that does not empty as its own finding; `scroll-theme.cjs` does both.
+- **A screenshot taken right after a reader remounts can be blank even though
+  the DOM underneath is already styled and has its text.** Measured
+  2026-09-22 verifying #34: after leaving the reader and tapping a Library row
+  to reopen it (a fresh `WKWebView`, not the same one Appearance/Font Size
+  reflow), `waitForLayout`'s signal — React Native's "Laying the document
+  out…" placeholder gone — had already cleared, yet two screenshots taken
+  right after came back page-coloured with no glyphs at all, in both themes.
+  A same-second harness `js` audit of the WebView found the section's
+  `#openreader-highlight` style installed and its text present
+  (`bodyRect=[27,7112]`, `text="Chapter 26: …"`), and a screenshot taken about
+  two seconds later than the first pair showed that same text correctly
+  painted. React Native's placeholder tracks the app's own readiness, not
+  whether WebKit has actually composited a frame after a brand-new
+  `WKWebView` is inserted; the two are not the same signal. Add a second or
+  two of settle time after reopening a reader (not needed for
+  Appearance/Font Size changes to an already-visible WebView, which repaint
+  promptly) before trusting a screenshot of it.
 
 ### Typing, environment and silence
 
@@ -323,7 +422,10 @@ fix (AGENTS.md).
   where the silenced one was 432 — with `sim_volume` at 60 again. A `check`
   half an hour later failed, and the next Play would have been audible. What
   rewrote it was not established; an XCTest run had just finished on that
-  device. So a boot is not the only thing to `set` after: run
+  device. Again on 2026-09-22 with no XCTest at all: `set` read `0` at 12:02 on
+  a device that was never rebooted, and a `check` at about 12:59 found it at
+  60; only the app had been terminated and relaunched in between, several
+  times. So a boot is not the only thing to `set` after: run
   `silence.sh check SIMULATOR_UDID` **before every Play** and `set` again when
   it refuses, which is what the kit's scripts do and why they do it.
 - **A `set` made as soon as the boot finished was undone about 20 s later.**
@@ -1447,3 +1549,116 @@ highlight went `He`, `cast`, `at`, `the`, `wolf`, with nothing for the
 swallowed word. Switched back on: `[true,"<> []"]`, the keys back, `1 chapters
 downloaded`, and line 4 played from the saved audio with no request, `Fireball`
 highlighted.
+
+## A chapter left unstyled by a fast fling (#34)
+
+`scroll-fixture.ts` writes `Scroll Fixture.epub`, shaped like a serialised web
+novel: a title page, a contents page that is one long list of chapter links,
+then 60 chapters of 24 paragraphs, several screens each. The text comes from a
+fixed seed, so every run writes the same bytes and the Document Id is always
+`sha256:9acbcbe4480c15ba1319ecf56bad78e13a478470d2107f89791ba0f5b74f1606`.
+
+```sh
+npx tsx test/manual-test/scroll-fixture.ts /tmp/openreader-scroll-fixture
+```
+
+Put it in `Documents/Inbox/` and send the harness's `add`, as for the sized
+fixtures above; set the theme with `{"do":"settings","patch":{"theme":"dark"}}`
+and open it with `open`. Then, with this worktree's Metro writing to METRO_LOG:
+
+```sh
+START=30 SHOTS_DIR=/tmp/openreader-scroll-01 \
+  node test/manual-test/scroll-theme.cjs SIMULATOR_UDID METRO_LOG 15 up 300 150
+```
+
+Each run waits for epub.js's queue to empty, displays section START, flings
+the page 150 frames of 300 px towards the start of the book by setting the
+container's `scrollTop` from inside the WebView, waits for the queue again, and
+reads every view twice, two seconds apart: `INDEX:D` for a section holding the
+program's dark stylesheet, `INDEX:L[sameN epN]` for a displayed one holding none
+(the defect), `x` for a destroyed view, `*` for one on screen. The script's own
+header has the rest, including the exit codes; `down` flings towards the end.
+
+Measured 2026-09-22 on a dedicated iPhone 17 simulator (iOS 27.0): red on 6 of
+15 and, with the final script, 3 of 15 runs before #34's change; 0 of 15, twice,
+after it, and 0 of 6 `down` and 0 of 6 at 150 px. The rate varies from run to
+run, so fifteen runs is the least that says anything; a red run's screenshot is
+one chapter white on the dark page.
+
+What it cannot show: a finger's momentum scroll (it is `scrollTop` from
+JavaScript, which reaches epub.js's `scroll` listener the same way but is not a
+touch), the owner's own books, or anything while reading aloud. It never plays.
+
+### Real touches against the fixture (`ScrollThemeReaderProbe.swift`)
+
+Independent #34 verification, 2026-09-22, against a dedicated simulator kept on
+a non-default Metro port (see **Metro and the bundle** above): real XCTest
+touches `scroll-theme.cjs` cannot give — a finger's fling, a tap on a word
+reached only by one, Theme/Appearance applied live to the page, the
+content-hook change's re-centre risk, and a chapter boundary crossed during
+real Fish playback. `scroll-theme-reader.sh` has the same shape as
+`alignment.sh` — a new output directory generates the project, an existing one
+reuses it, and `-only-testing:` takes the bare method name — and it checks the
+simulator's own volume before anything runs, because two methods press Play:
+
+```sh
+bash test/manual-test/scroll-theme-reader.sh SIMULATOR_UDID /tmp/openreader-scroll-reader-01 \
+  -only-testing:testFastFlingBothDirections
+```
+
+Run the methods one at a time, in this order — several depend on where the
+previous one left the reading, and none of them `.terminate()`s or
+`.launch()`es the app (see the Metro Pitfall this section starts from):
+
+- `testVersionAndThemeLiveOnPage` — real touches: Settings shows `Version
+  <APP_VERSION>`; General → Theme → Light, back into the reader (screenshot);
+  Theme → Dark, restored (screenshot). Confirms the page itself, not only the
+  Settings row, repaints live.
+- `testFastFlingBothDirections` — five `app.swipeUp(velocity: .fast)` (later
+  chapters), twice, then the same with `swipeDown` (earlier chapters), each
+  batch settling 1.5 s before a screenshot. All four came back fully dark,
+  Font Size 20, no white chapter, 2026-09-22.
+- `testTapWordAfterFling` — ten fast swipes, then a real tap on a word.
+  Decisive because `status.section`/`status.utterance` (`use-reading.ts`'s
+  `seekTo`) only change on a tap or Play, never on a scroll: the Metro log's
+  last `HX` lines before and after the tap read `utterance=null section=27`
+  → `utterance=219 section=14`, matching the chapter the tap landed in, and
+  the screenshot shows that sentence highlighted.
+- `testConfigureFishProviderNoRelaunch` — the same real touches as
+  `OfflineFixProbe.testConfigureFishProvider` (masked key from
+  `/tmp/openreader-fish-key.txt`, Enable, wait for "Enabled"), without its
+  `app.terminate(); app.launch()`.
+- `testFontSizeLiveOnPage` — the stepper 20 → 16 → 20 from the reader's own
+  Appearance drawer, screenshotting the page (not just the sheet) at each
+  size.
+- `testHighlightRecenterRisk` — selects a sentence by tapping while paused,
+  flings twenty sections away, then back in four batches, screenshotting
+  throughout. `attach()`/`centreOnce()` in `highlighter.ts` do fire from a
+  destroyed-and-rebuilt section that covers the current `state`, exactly as
+  the code comment there says ("the manager destroyed this section's view
+  and rebuilt it … both want centring now") — `show()` (a tap) sets
+  `state.follow` true by default (`reader-bridge.ts`), so this path is not
+  playback-only. In the measured run the app's own out-of-order-render safety
+  net (the "Utterances were renumbered" note, already in `use-reading.ts`
+  before #34) cleared the stale reading position first, so no disruptive jump
+  was seen; a smaller round trip that rebuilds the section without also
+  triggering that renumbering was not tried. Never presses Play.
+- `testShortPlaybackCrossesChapterBoundary` /
+  `testRetryPlaybackAfterNetworkFailure` — a real Play/Pause at a chapter's
+  last sentence (reached with `{"do":"section","section":N}` and a small real
+  swipe back — see the harness Pitfall above for why Contents cannot do this
+  on this fixture), asserting the transition to `Pause` as proof playback
+  actually started (see the XCTest Pitfall on a tap landing on the debug
+  banner). Both measured attempts, 2026-09-22, hit the already-documented
+  first-Fish-request network failure below before crossing into the next
+  chapter; `playing=true` was confirmed in the Metro log both times, so the
+  content-hook sweep and highlight painting are exercised, but the chapter
+  crossing itself was not established. A third attempt was not made: AGENTS.md
+  derives playback duration from what is being measured, and a network retry
+  loop is not that.
+- `testDownloadDrawerListsChapters` — opens Download with a real touch and
+  requires the `* chapters downloaded` count line; never selects or
+  downloads.
+
+`ScrollThemeReaderProbe.swift` is in `test/manual-test/ios/project.rb`'s
+allow-list.
