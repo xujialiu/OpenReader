@@ -1,0 +1,125 @@
+{
+ "recorded": "2026-09-22 14:30 HKT from Node 22 with the owner's eastasia key, raw-24khz-16bit-mono-pcm; notes/NOTES_2026-09-22.md. Text frames are verbatim with the request id replaced; each audio frame is its payload length, and the header every audio frame carried.",
+ "voice": "en-US-AndrewNeural",
+ "text": "The price rose to 29.83 dollars, said Dr. Smith.",
+ "audioHeader": "X-RequestId:<requestId>\r\nContent-Type:audio/basic\r\nX-StreamId:1A09B926CB7F4CAAB67EAE456E616804\r\nPath:audio\r\n",
+ "frames": [
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:turn.start\r\n\r\n{\n  \"context\": {\n    \"serviceTag\": \"7f8e2294392f4e3a9a27f8b2584eb0d2\"\n  }\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:response\r\n\r\n{\"context\":{\"serviceTag\":\"7f8e2294392f4e3a9a27f8b2584eb0d2\"},\"audio\":{\"type\":\"inline\",\"streamId\":\"1A09B926CB7F4CAAB67EAE456E616804\"}}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 1125000,\n        \"Duration\": 625000,\n        \"text\": {\n          \"Text\": \"The\",\n          \"Length\": 3,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 1875000,\n        \"Duration\": 3250000,\n        \"text\": {\n          \"Text\": \"price\",\n          \"Length\": 5,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 5250000,\n        \"Duration\": 2875000,\n        \"text\": {\n          \"Text\": \"rose\",\n          \"Length\": 4,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 8250000,\n        \"Duration\": 875000,\n        \"text\": {\n          \"Text\": \"to\",\n          \"Length\": 2,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 9250000,\n        \"Duration\": 20000000,\n        \"text\": {\n          \"Text\": \"29.83 dollars\",\n          \"Length\": 13,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 31875000,\n        \"Duration\": 2125000,\n        \"text\": {\n          \"Text\": \"said\",\n          \"Length\": 4,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "audio": 12000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 2398
+  },
+  {
+   "audio": 2
+  },
+  {
+   "audio": 48960
+  },
+  {
+   "audio": 2640
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "audio": 6000
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 34125000,\n        \"Duration\": 3250000,\n        \"text\": {\n          \"Text\": \"Dr.\",\n          \"Length\": 3,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:audio.metadata\r\n\r\n{\n  \"Metadata\": [\n    {\n      \"Type\": \"WordBoundary\",\n      \"Data\": {\n        \"Offset\": 37500000,\n        \"Duration\": 4250000,\n        \"text\": {\n          \"Text\": \"Smith\",\n          \"Length\": 5,\n          \"BoundaryType\": \"WordBoundary\"\n        }\n      }\n    }\n  ]\n}"
+  },
+  {
+   "audio": 19800
+  },
+  {
+   "audio": 9600
+  },
+  {
+   "audio": 0
+  },
+  {
+   "text": "X-RequestId:<requestId>\r\nContent-Type:application/json; charset=utf-8\r\nPath:turn.end\r\n\r\n{}"
+  }
+ ]
+}

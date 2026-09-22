@@ -50,6 +50,12 @@ through a server, which contradicts ADR 0002; spike the JavaScript SDK under
 React Native, which nobody has published a result for; or accept utterance-level
 highlighting for Azure as the plugin already does for OpenAI.
 
+_Superseded for Azure by
+[ADR 0037](0037-azure-word-timings-come-over-a-hand-written-websocket.md)
+(2026-09-22). The SDK is not the only way to Azure's word boundaries. The
+desktop plugin speaks Azure's WebSocket protocol itself, and the same frames
+give this app word boundaries with raw PCM. The rest of this file stands._
+
 The unexpected compensation is that the operating system's own voices report
 word boundaries for free, with no key, no network and no model to ship.
 

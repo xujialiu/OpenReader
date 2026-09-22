@@ -40,7 +40,7 @@ function readTextAlignment(value: unknown): TextAlignment {
 export function parseSettings(value: unknown): AppSettings {
   const root = object(value);
   const data = object(root.settings ?? value);
-  const openai = object(data.openai), compatible = object(data.compatible), local = object(data.local);
+  const openai = object(data.openai), compatible = object(data.compatible), local = object(data.local), azure = object(data.azure);
   const fish = object(data.fish), appearance = object(data.appearance), sync = object(data.sync);
   const voices: DocumentVoice[] = Array.isArray(data.recentVoices) ? data.recentVoices.flatMap((entry: unknown) => {
     const item = object(entry);
@@ -56,6 +56,7 @@ export function parseSettings(value: unknown): AppSettings {
     recentVoices: voices,
     openai: { model: string(openai.model, DEFAULT_SETTINGS.openai.model) },
     compatible: { baseURL: string(compatible.baseURL, ''), model: string(compatible.model, '') },
+    azure: { region: string(azure.region, '') },
     local: { engine: string(local.engine, DEFAULT_SETTINGS.local.engine), baseURL: string(local.baseURL, DEFAULT_SETTINGS.local.baseURL) },
     fish: { includeOfficial: typeof fish.includeOfficial === 'boolean' ? fish.includeOfficial : true,
       includeOwn: fish.includeOwn === true, includeManual: fish.includeManual === true, voices: string(fish.voices, '') },

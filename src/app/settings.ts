@@ -24,19 +24,31 @@ import { DEFAULT_BRACKET_PAIRS } from '../core/speech-text';
 // the file rather than from the directory's index, which would drag the bridge
 // and React Native into a module whose whole point is that neither is here.
 import { DEFAULT_APPEARANCE, type Appearance, type ReadingScheme } from '../renderer/highlighter';
+import { azureRegion, type HeaderWebSocket } from '../core/providers/azure';
 import type { ProviderDeps, ProviderSettings } from '../core/providers/factory';
 import { getLocalEngine, LOCAL_ENGINES } from '../core/providers/local/registry';
 import type { ProviderId } from '../core/providers/types';
 
 /**
- * The other argument `createProvider(id, settings, deps)` takes, which on this
- * platform is one thing: `fetch` (ADR 0013).
+ * The other argument `createProvider(id, settings, deps)` takes: `fetch` (ADR
+ * 0013), and the two Azure's WebSocket route needs (ADR 0037).
  *
- * Wrapped in an arrow rather than passed by name, because a provider calls
- * `deps.fetch(url, init)` with no receiver and handing over the global itself
- * would make that call's `this` undefined.
+ * `fetch` is wrapped in an arrow rather than passed by name, because a provider
+ * calls `deps.fetch(url, init)` with no receiver and handing over the global
+ * itself would make that call's `this` undefined.
+ *
+ * `getWebSocket` is React Native's own `WebSocket`, which takes the upgrade's
+ * request headers as a third argument (`Libraries/WebSocket/WebSocket.js`); the
+ * cast is to that shape, which the DOM's type does not declare. `newRequestId`
+ * is `Math.random`, as the Device Name is: `crypto` is not among the globals
+ * measured on this Hermes, and an id that only has to differ from the next
+ * request's needs nothing stronger.
  */
-export const providerDeps: ProviderDeps = { fetch: (input, init) => fetch(input, init) };
+export const providerDeps: ProviderDeps = {
+  fetch: (input, init) => fetch(input, init),
+  getWebSocket: () => WebSocket as unknown as HeaderWebSocket,
+  newRequestId: () => Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+};
 
 /**
  * The sections the owner can choose between, with the name each is shown under.
@@ -50,13 +62,14 @@ export const providerDeps: ProviderDeps = { fetch: (input, init) => fetch(input,
 export const PROVIDER_LABELS: Readonly<Record<ProviderId, string>> = {
   'openai-official': 'OpenAI',
   compatible: COMPATIBLE_LABEL,
+  azure: 'Azure',
   speechify: 'Speechify',
   fish: 'Fish Audio',
   local: 'Kokoro FastAPI',
 };
 
-/** The order the sections are offered in: the one that needs no credentials last, because it is the one with an address to type. */
-export const PROVIDER_ORDER: readonly ProviderId[] = ['openai-official', 'compatible', 'speechify', 'fish', 'local'];
+/** The order the sections are offered in — the plugin's, for the ones both have — with the one that needs no credentials last, because it is the one with an address to type. */
+export const PROVIDER_ORDER: readonly ProviderId[] = ['openai-official', 'compatible', 'azure', 'speechify', 'fish', 'local'];
 
 /**
  * Whether this section has an API key at all.
@@ -71,9 +84,9 @@ export function keyIsOffered(provider: ProviderId): boolean {
   return provider !== 'local';
 }
 
-/** Whether a request without a key is refused before it goes out. The two hosted services; see `keyRequired` in `openai-compatible.ts`. */
+/** Whether a request without a key is refused before it goes out. The hosted services; see `keyRequired` in `openai-compatible.ts`. */
 export function keyIsRequired(provider: ProviderId): boolean {
-  return provider === 'openai-official' || provider === 'speechify' || provider === 'fish';
+  return provider === 'openai-official' || provider === 'azure' || provider === 'speechify' || provider === 'fish';
 }
 
 /**
@@ -113,6 +126,10 @@ export interface AppSettings {
   compatible: {
     baseURL: string;
     model: string;
+  };
+  azure: {
+    /** As the owner typed it, `East Asia` or `eastasia`; `azureRegion` is what makes it a host name. */
+    region: string;
   };
   local: {
     /** A `LOCAL_ENGINES` id. */
@@ -250,6 +267,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fish: { includeOfficial: true, includeOwn: false, includeManual: false, voices: '' },
   openai: { model: '' },
   compatible: { baseURL: '', model: '' },
+  // Empty rather than the plugin's `eastasia`: a key belongs to one region, and
+  // a guessed one is refused with the same 401 as a wrong key.
+  azure: { region: '' },
   local: { engine: LOCAL_ENGINES[0].id, baseURL: LOCAL_ENGINES[0].defaultBaseURL },
   voice: '',
   rate: 1.5,
@@ -319,6 +339,14 @@ export function missingBeforeVoice(settings: AppSettings, provider: ProviderId, 
     case 'compatible':
       if (!settings.compatible.baseURL.trim()) missing.push('the address of the server');
       if (!settings.compatible.model.trim()) missing.push('a model');
+      break;
+
+    // A key and the region it was made in: the host is the region's own, and a
+    // key sent to another region is refused (ADR 0037).
+    case 'azure':
+      if (!hasKey) missing.push('an API key');
+      if (!settings.azure.region.trim()) missing.push('a region');
+      else if (!azureRegion(settings.azure.region)) missing.push('a region id such as eastasia');
       break;
 
     case 'speechify':
@@ -466,6 +494,7 @@ export function providerFields(provider: ProviderId): readonly string[] {
   if (provider === 'local' || provider === 'compatible') fields.push('the address of the server');
   if (provider === 'openai-official' || provider === 'compatible') fields.push('a model');
   if (keyIsOffered(provider)) fields.push(keyIsRequired(provider) ? 'an API key' : 'an API key if the server wants one');
+  if (provider === 'azure') fields.push('a region');
   if (headersAreOffered(provider)) fields.push('the headers of a gateway in front of it');
   return fields;
 }
@@ -490,8 +519,8 @@ export interface ProviderSecrets {
  * The settings `createProvider` reads, with each credential in the one section
  * it belongs to.
  *
- * Every section is filled in because `ProviderSettings` describes all five and
- * the factory reads one; the four that are not selected get no key and no
+ * Every section is filled in because `ProviderSettings` describes all six and
+ * the factory reads one; the five that are not selected get no key and no
  * headers. That is not defensive tidiness — it is philosophy rule 3 in the only
  * place it can be enforced, since this is the single call that turns a typed
  * credential into something a Provider can use.
@@ -508,6 +537,9 @@ export function providerSettings(settings: AppSettings, secrets: ProviderSecrets
       model: settings.compatible.model.trim(),
       headers: headersFor('compatible'),
     },
+    // The region as typed: `azure.ts` makes it the host, or refuses it before
+    // any request, so the key is never sent to a host it did not name.
+    azure: { apiKey: keyFor('azure'), region: settings.azure.region },
     speechify: { apiKey: keyFor('speechify') },
     // `freeOnly` is on and is not yet a setting: a missing or unknown `model`
     // header makes Fish fall back to the **paid** model, so the value that
@@ -539,7 +571,8 @@ export function providerSettings(settings: AppSettings, secrets: ProviderSecrets
  */
 export function engineIdentity(settings: AppSettings): string {
   const config = settings.provider === 'local' ? settings.local : settings.provider === 'compatible' ? settings.compatible :
-    settings.provider === 'openai-official' ? settings.openai : settings.provider === 'fish' ? settings.fish : null;
+    settings.provider === 'openai-official' ? settings.openai : settings.provider === 'fish' ? settings.fish :
+      settings.provider === 'azure' ? settings.azure : null;
   // The bracket setting decides the Speech Text, so it is part of what is
   // spoken: a change rebuilds the engine instead of mixing the two forms in
   // one reading (#25).

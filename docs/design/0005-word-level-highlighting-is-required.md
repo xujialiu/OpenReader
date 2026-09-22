@@ -56,6 +56,11 @@ time finding out whether that software can be made to run on a phone, which
 nobody has reported doing; or accept sentence-level marking for those voices, as
 the desktop already does for others.
 
+_Since [design 0037](0037-azure-voices-mark-the-word-on-the-phone-too.md), this
+bill is no longer paid. The desktop never needed that software: it asks
+Microsoft's service directly. The phone now asks the same way, and Microsoft's
+voices mark the word here too._
+
 The compensation was not planned and is worth knowing. The voices already on the
 phone, that came with it, do report their words — and they cost nothing, need no
 account, and work with no signal. The cheapest voice available is in the group

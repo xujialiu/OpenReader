@@ -7,8 +7,8 @@
  * carried as decoration.
  */
 
-/** Every provider that exists here. The plugin's `azure`, `cloudflare`, `fishspeech`, `mimo` and `system` have not come across (ADR 0005 for Azure, ADR 0014 for the OS voices). */
-export type ProviderId = 'openai-official' | 'compatible' | 'speechify' | 'fish' | 'local';
+/** Every provider that exists here. The plugin's `cloudflare`, `fishspeech`, `mimo` and `system` have not come across (ADR 0014 for the OS voices); `azure` came with ADR 0037. */
+export type ProviderId = 'openai-official' | 'compatible' | 'azure' | 'speechify' | 'fish' | 'local';
 
 /**
  * One Word Timing: where a spoken word falls inside a clip. `start` and `end`
@@ -20,9 +20,10 @@ export type ProviderId = 'openai-official' | 'compatible' | 'speechify' | 'fish'
  * of copying is that they arrive unchanged. CONTEXT.md's word for what it
  * holds is a **Word Timing**; prefer that in prose.
  *
- * A provider either reports these or it does not. They are never estimated or
- * interpolated: a clip without them is highlighted at utterance level
- * (ADR 0005, philosophy rule 1).
+ * A clip either comes with these or it does not — the unit is the clip, since
+ * one Azure voice times its words and another sends none (ADR 0037). They are
+ * never estimated or interpolated: a clip without them is highlighted at
+ * utterance level (ADR 0005, philosophy rule 1).
  */
 export type Timestamp = {
   start: number;
@@ -121,7 +122,7 @@ export interface TTSProvider {
    * One cheap request that proves the configuration works — server
    * reachable, key accepted. Rejects with a SynthesisError saying what is
    * wrong. Providers whose listVoices already makes such a request
-   * (Speechify, Kokoro) leave this out; OpenAI needs it because its voice
+   * (Azure, Speechify, Kokoro) leave this out; OpenAI needs it because its voice
    * list is static and would "succeed" against any URL and any key.
    */
   checkConnection?(): Promise<void>;

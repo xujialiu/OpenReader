@@ -16,6 +16,7 @@ import {
   keyIsOffered,
   keyIsRequired,
   PROVIDER_ORDER,
+  providerDeps,
   resolveTheme,
   settingsForDocument,
   THEME_LABELS,
@@ -52,6 +53,14 @@ describe('readiness', () => {
   it('is ready once OpenAI has a key, a model and a Voice', () => {
     const found = readiness(settingsWith({ openai: { model: 'a-speech-model' }, voice: 'nova' }), true);
     expect(found).toEqual({ ready: true });
+  });
+
+  it('asks Azure for a key and the region it was made in, and for a region id rather than anything typed', () => {
+    const azure = settingsWith({ provider: 'azure', voice: 'en-US-AndrewNeural' });
+    expect(readiness(azure, false)).toEqual({ ready: false, missing: ['an API key', 'a region'] });
+    expect(readiness({ ...azure, azure: { region: 'east-asia' } }, true)).toEqual({ ready: false, missing: ['a region id such as eastasia'] });
+    expect(readiness({ ...azure, azure: { region: 'East Asia' } }, true)).toEqual({ ready: true });
+    expect(readinessSentence('azure', ['an API key', 'a region'])).toBe('Azure needs an API key and a region.');
   });
 
   it('asks a self-hosted server for an address and never for a key (ADR 0014)', () => {
@@ -113,6 +122,16 @@ describe('providerSettings', () => {
     expect(built.speechify.apiKey).toBe('');
   });
 
+  it('gives Azure its key and region, and its key to no other section', () => {
+    const settings = settingsWith({ provider: 'azure', azure: { region: 'eastasia' } });
+    const built = providerSettings(settings, { key: 'an-azure-key', headers: 'X-Token: abc' });
+    expect(built.azure).toEqual({ apiKey: 'an-azure-key', region: 'eastasia' });
+    expect(built['openai-official'].apiKey).toBe('');
+    expect(built.speechify.apiKey).toBe('');
+    expect(built.compatible.headers).toBe('');
+    expect(providerSettings(settingsWith({ provider: 'speechify' }), { key: 'a-speechify-key', headers: '' }).azure.apiKey).toBe('');
+  });
+
   it('sends nothing typed for OpenAI to an OpenAI-compatible server', () => {
     const settings = settingsWith({
       provider: 'compatible',
@@ -150,6 +169,11 @@ describe('engineIdentity', () => {
     expect(engineIdentity(base)).not.toBe(engineIdentity({ ...base, openai: { model: 'another' } }));
   });
 
+  it('changes with the Azure region, since a different region is a different host', () => {
+    const base = settingsWith({ provider: 'azure', voice: 'en-US-AndrewNeural', azure: { region: 'eastasia' } });
+    expect(engineIdentity(base)).not.toBe(engineIdentity({ ...base, azure: { region: 'westus2' } }));
+  });
+
   it('does not change with the rate: speed is a live parameter of the graph, not a new engine (ADR 0009)', () => {
     const base = settingsWith({ voice: 'nova', rate: 1.5 });
     expect(engineIdentity({ ...base, rate: 3 })).toBe(engineIdentity(base));
@@ -162,6 +186,7 @@ describe('what the owner is offered', () => {
     expect(keyIsOffered('compatible')).toBe(true);
     expect(keyIsRequired('compatible')).toBe(false);
     expect(keyIsRequired('openai-official')).toBe(true);
+    expect(keyIsRequired('azure')).toBe(true);
     expect(keyIsRequired('speechify')).toBe(true);
   });
 
@@ -258,6 +283,7 @@ describe('gateway headers', () => {
         headers: TOKEN,
       }),
       {
+        ...providerDeps,
         fetch: async (_input, init) => {
           sent.push((init?.headers as Record<string, string>) ?? {});
           return new Response(JSON.stringify({ voices: ['zf_xiaoxiao'] }), { status: 200 });
@@ -283,6 +309,7 @@ describe('gateway headers', () => {
         headers: '',
       }),
       {
+        ...providerDeps,
         fetch: async (_input, init) => {
           sent.push((init?.headers as Record<string, string>) ?? {});
           return new Response(JSON.stringify({ voices: [] }), { status: 200 });
@@ -311,6 +338,12 @@ describe('what a Provider’s row says is behind it', () => {
     for (const provider of PROVIDER_ORDER) {
       const mentionsKey = providerFields(provider).some((field) => field.includes('API key'));
       expect(mentionsKey, provider).toBe(keyIsOffered(provider));
+    }
+  });
+
+  it('names the region on Azure’s row, and on no other', () => {
+    for (const provider of PROVIDER_ORDER) {
+      expect(providerFields(provider).includes('a region'), provider).toBe(provider === 'azure');
     }
   });
 

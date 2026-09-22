@@ -49,7 +49,7 @@ final class VoiceListProbe: XCTestCase {
     XCTAssertFalse(app.staticTexts[asking].exists, "#24: the sheet was still asking for the Voices")
     // A React Native radio is not a `.radioButton` to XCUI (README Pitfalls), so
     // the provider chips are found by their labels.
-    let providers = ["OpenAI", "OpenAI Compatible", "Speechify", "Fish Audio", "Kokoro FastAPI"].filter {
+    let providers = ["OpenAI", "OpenAI Compatible", "Azure", "Speechify", "Fish Audio", "Kokoro FastAPI"].filter {
       app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", $0)).firstMatch.exists
     }
     print("PROBE provider chips on opening: \(providers.joined(separator: ", "))")
