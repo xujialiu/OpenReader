@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import config from '../app.config';
+import { APP_VERSION } from '../app-version';
 import manifest from '../package.json';
 
 /**
@@ -104,6 +105,30 @@ describe('ADR 0001: ios/ and android/ are generated, never committed', () => {
     expect(config.slug).toBe('openreader');
     expect(config.ios?.bundleIdentifier).toBeDefined();
     expect(config.android?.package).toBeDefined();
+  });
+});
+
+/** Whether dotted version `a` comes after `b`, compared part by part. */
+function isLater(a: string, b: string): boolean {
+  const [x, y] = [a, b].map((version) => version.split('.').map(Number));
+  const at = x!.findIndex((part, i) => part !== y![i]);
+  return at >= 0 && x![at]! > y![at]!;
+}
+
+describe('AGENTS.md: every app change carries a beta version', () => {
+  it('keeps one released version in app.config.ts and package.json, in a form iOS accepts', () => {
+    // app.config.ts's becomes CFBundleShortVersionString: integers and dots,
+    // never the beta suffix (ITMS-90060). Nothing but this reconciles the two.
+    expect(config.version).toBe(manifest.version);
+    expect(config.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('shows in Settings either that version or a beta of a later one', () => {
+    const shown = /^(\d+\.\d+\.\d+)(?:-beta([1-9]\d*))?$/.exec(APP_VERSION);
+    expect(shown, `${APP_VERSION} is neither X.Y.Z nor X.Y.Z-betaN`).not.toBeNull();
+    const [, base, beta] = shown!;
+    if (beta === undefined) expect(base).toBe(manifest.version);
+    else expect(isLater(base!, manifest.version), `${base} is not after ${manifest.version}`).toBe(true);
   });
 });
 

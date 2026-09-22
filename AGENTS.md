@@ -170,6 +170,21 @@ Until a delegated agent returns, the main agent must wait patiently for its comp
 
 # Testing on the device
 
+## Every app change carries a beta version
+
+Settings shows `APP_VERSION` from `app-version.ts`, so the owner can read off
+the device which build is running. Every app change — each one that ends with
+the latest app in the simulator — sets it before the tree goes to the tester:
+the next patch version plus `-beta1` after a release (`0.0.1` → `0.0.2-beta1`),
+then `-beta2`, `-beta3`, … for each later change. Minor and major bumps are the
+owner's call. `package.json` and `app.config.ts` keep the released version; the
+comment on `version` in `app.config.ts` says why.
+
+Worktrees that start from the same base can pick the same number. Before naming
+one, read `app-version.ts` on `main` and in each worktree (`git worktree list`)
+and take the next after the highest. The number narrows which build is running;
+the change itself, seen in the running app, proves it is the latest.
+
 ## Delegate final iOS verification
 
 After finishing app-code changes and local checks, the implementing agent must hand the final working tree to `ios-tester`. Its shared workflow is [.agents/ios-tester.md](.agents/ios-tester.md); `.codex/agents/ios-tester.toml` and `.claude/agents/ios-tester.md` reference that one source and define their respective model settings. Use the declared model and maximum effort; report an unavailable model rather than silently substituting another.

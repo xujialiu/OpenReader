@@ -59,8 +59,15 @@ const config: ExpoConfig = {
    * `CFBundleShortVersionString` on iOS and `versionName` on Android. There is
    * no separate iOS short-version key to set — this is it.
    *
-   * `package.json` declares the same number and nothing reconciles the two, so
-   * they are changed together or not at all.
+   * It stays at the **released** version; the `-beta<n>` each change carries
+   * lives in app-version.ts, which Settings shows. Two reasons it cannot live
+   * here: Apple takes this key as integers and dots only, and App Store Connect
+   * rejects a suffix (ITMS-90060); and it reaches the installed app only
+   * through a prebuild, which neither a reload from Metro nor the iPhone build
+   * runs, so a beta written here would name a build other than the one running.
+   *
+   * `package.json` declares the same number, and test/app-config.test.ts fails
+   * when the two differ.
    */
   version: '0.0.1',
   orientation: 'portrait',
