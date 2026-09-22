@@ -94,6 +94,21 @@ fix (AGENTS.md).
   harness's first poll is 250 ms later, so with `watchfetch` already in
   `harness.json` at launch the log shows Fish's listing pages 2–4 and never
   page 1. Page 1 was sent; its absence from the log proves nothing.
+- **`simctl launch --console-pty` piped through `timeout` and `grep` printed
+  nothing at all**, right after repointing a Debug app's `RCT_jsLocation` to a
+  new Metro and rebooting the device (the fix two bullets up). `timeout 12
+  xcrun simctl launch --console-pty UDID BUNDLE | grep -i bundle` produced no
+  output — not even a first "Bundling" line — which reads exactly like the app
+  still not reaching the new port. It was reaching it: a plain `xcrun simctl
+  launch UDID BUNDLE` right after, with no pipe, showed a `Bundling NN%…`
+  banner on a `simctl io screenshot` within a few seconds, and `curl -s
+  http://localhost:PORT/json/list` (empty immediately after `launch`, since the
+  debug target only registers once the bundle finishes and the inspector
+  connects) listed the device once that finished. Cause not isolated further
+  (`timeout`'s signal racing the pty's buffering through the `grep` pipe is the
+  suspect). Fix: prove a repointed Metro connection with a plain `simctl
+  launch` plus a screenshot and a couple of seconds of polling `/json/list`,
+  not `--console-pty` piped through `timeout`/`grep`.
 
 ### Simulators and installs
 
@@ -820,6 +835,30 @@ backed-up `settings.json` and relaunch afterward; this mode does not restore
 it for you, since it is meant to be run against a deliberately prepared file.
 
 None of these modes ever presses Play.
+
+### The Settings version line, rows above it, and both themes (issue #30, `SettingsVersionProbe.swift`)
+
+With the current Debug app connected to Metro:
+
+```sh
+bash test/manual-test/settings-version.sh SIMULATOR_UDID /tmp/openreader-settings-version-01
+```
+
+This relaunches the app (so a JavaScript-only change, such as `app-version.ts`,
+is proven current rather than assumed), opens Settings, and requires an
+element labelled exactly `Version <APP_VERSION>` under the Sync row, reading
+`APP_VERSION` from the working tree's `app-version.ts` at run time — the
+accessibility label a screen reader announces, which is not the same thing as
+the line's visible text, since `accessibilityLabel` replaces what iOS exposes
+rather than adding to it (a screenshot is what proves the visible text has no
+"Version" word). It taps General, Providers and Sync in turn, requires each
+one's own nav bar to appear, and returns to Settings each time to confirm the
+version line and the three rows above it are unmoved. It then opens General →
+Theme, picks Light, returns to Settings and photographs it, then Dark and
+photographs it, then restores whichever of Light/Dark/Match Device the device
+had before the run. It never presses Play. Add the probe's filename to
+`ios/project.rb`'s allow-list before first use, the same as any new probe
+source here.
 
 ### Issues #13/#14: a fresh Library, Fish from empty settings, and the two
 ### destructive confirmations the other probes always cancel
