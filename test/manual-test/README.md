@@ -156,6 +156,12 @@ fix (AGENTS.md).
 - **Two readers answer.** `open` pushes a reader on top of any reader already open, and every mounted reader answers `js`. Send `shut` first.
 - **The Library shows two Documents with one title.** `add` names the entry after its file in `Documents/Inbox/`. Give each copy its own file name, and open by Document Id when titles collide.
 - **An old probe looks like a new error.** A `js` answer stays in the reader's notice as "The highlight could not be drawn: PROBE …" until the reader is opened again.
+- **The title `add` gives an entry lasts only until the book's first open.**
+  `add` names the entry after its file (`fixture-phone-129`), and the reader's
+  first open retitles it from the EPUB's own metadata (`ZTTS Positions
+  2026-09-22 Fixture Phone`, measured 2026-09-22). A probe's `BOOK_TITLE`
+  matches `label BEGINSWITH`, so the file name finds the row for the first
+  open and only the metadata title finds it afterwards.
 
 ### XCTest
 
@@ -368,6 +374,27 @@ fix (AGENTS.md).
 - **A helper that deletes the folder as well as the file needs the folder put
   back.** `MKCOL` on an existing folder answers `405`, which is the "already
   there" answer and not a failure.
+- **A host-side poller that dies quietly reads as "the phone never uploaded".**
+  On 2026-09-22 the two-second `GET` poller on the owner's file stopped
+  logging at 11:00:27, the pause at 11:01:41 then appeared to upload nothing,
+  and only a `kill` that answered "no such process" gave it away: one `GET`
+  had raised `URLError` (`[SSL: UNEXPECTED_EOF_WHILE_READING]` from
+  Cloudflare), which `urlopen` does not wrap as `HTTPError`, and the loop had
+  no `except` for it. Catch `URLError`/`OSError` per poll and log the failure
+  as a line, and before trusting an "unchanged" tail check that the poller is
+  still alive — a fresh `GET` afterwards showed the upload had happened; the
+  file's `Last-Modified` header gives the time a dead poller missed.
+- **A shelf that has to stay populated still uploads every position it holds,
+  including the version-1 ones nothing can beat.** Switching sync on against
+  the owner's real folder uploads an item for every entry with a position; a
+  position read out of a version-1 Library file goes out as `stamp.at` 0 under
+  this device's name, no merge ever beats or removes it, and a desktop that
+  holds the same EPUB and has never read it adopts it. On 2026-09-22 仙逆 and
+  the short fixture carried such positions (`{"at":0,"device":""}` in
+  `library.json`) and the owner's file held neither id. When the shelf cannot
+  be emptied (`testRemoveEveryBook`), terminate the app, back up
+  `library.json`, set those entries' `position` to `null`, and check that the
+  file's baseline hash is unchanged after the switch-on sync — it was.
 
 ### The shell
 
@@ -375,6 +402,14 @@ fix (AGENTS.md).
 - **`$?` after a pipe is the pipe's last command.** `bash sync.sh … | tail -5;
   echo $?` printed `0` for a test run that had failed. Redirect the script's
   output to a file and test its own status, or read `PIPESTATUS`.
+- **`lsof -p PID -d 1,2` lists other processes' files too.** `lsof` ORs its
+  selectors, so that command prints every process's descriptors 1 and 2 as
+  well as PID's, and a `tail` shows some other process. Met 2026-09-22 looking
+  for where Metro writes its log, which is the only place the app's console
+  lines are. `-a` ANDs them: `lsof -a -p PID -d 1,2`.
+- **zsh runs nothing when an unquoted glob matches no file.** `grep -rn X src
+  --include=*.ts` answers `no matches found: --include=*.ts` and the command
+  never runs. Quote the pattern: `--include='*.ts'`.
 - **`PIPESTATUS` is bash's, and an agent's commands here run in zsh 5.9.**
   `… | tee run.out; echo "exit ${PIPESTATUS[0]}"` printed `exit ` with nothing
   after it (2026-09-22): zsh has no `PIPESTATUS`, and an unset name expands to
