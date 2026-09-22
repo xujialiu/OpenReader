@@ -80,19 +80,19 @@ final class SettingsVersionProbe: XCTestCase {
     backToSettings(app)
     XCTAssertTrue(version.waitForExistence(timeout: 5), "Version line missing after returning from Sync")
 
-    // Theme: General > Theme sheet > Light, back to Settings, photograph;
+    // Theme: General > Theme menu > Light, back to Settings, photograph;
     // then Dark; then restore whatever the device had before this run.
     general.tap()
     let themeRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Theme,'")).firstMatch
     XCTAssertTrue(themeRow.waitForExistence(timeout: 5), "General has no Theme row")
     themeRow.tap()
-    XCTAssertTrue(app.buttons["Light"].waitForExistence(timeout: 3), "Theme sheet did not open")
+    XCTAssertTrue(app.buttons["Light"].waitForExistence(timeout: 3), "Theme menu did not open")
     let initiallyDark = app.buttons["Dark"].isSelected
     let initiallyMatch = app.buttons["Match Device"].isSelected
 
     app.buttons["Light"].tap()
     XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Light"])], timeout: 3), .completed, "Theme sheet did not close after picking Light")
+      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Light"])], timeout: 3), .completed, "Theme menu did not close after picking Light")
     backToSettings(app)
     XCTAssertTrue(version.waitForExistence(timeout: 5), "Version line missing in the light theme")
     capture("settings-version-2-light", app)
@@ -100,10 +100,10 @@ final class SettingsVersionProbe: XCTestCase {
     general.tap()
     XCTAssertTrue(themeRow.waitForExistence(timeout: 5))
     themeRow.tap()
-    XCTAssertTrue(app.buttons["Dark"].waitForExistence(timeout: 3), "Theme sheet did not open")
+    XCTAssertTrue(app.buttons["Dark"].waitForExistence(timeout: 3), "Theme menu did not open")
     app.buttons["Dark"].tap()
     XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Dark"])], timeout: 3), .completed, "Theme sheet did not close after picking Dark")
+      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Dark"])], timeout: 3), .completed, "Theme menu did not close after picking Dark")
     backToSettings(app)
     XCTAssertTrue(version.waitForExistence(timeout: 5), "Version line missing in the dark theme")
     capture("settings-version-3-dark", app)
@@ -116,7 +116,7 @@ final class SettingsVersionProbe: XCTestCase {
     let restore = initiallyDark ? "Dark" : (initiallyMatch ? "Match Device" : "Light")
     app.buttons[restore].tap()
     XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Light"])], timeout: 3), .completed, "Theme sheet did not close after restoring")
+      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Light"])], timeout: 3), .completed, "Theme menu did not close after restoring")
     backToSettings(app)
     capture("settings-version-4-restored", app)
   }
