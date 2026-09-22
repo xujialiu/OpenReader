@@ -129,8 +129,8 @@ centred rides on the first of those two and adds no third.
 
 Two other messages cross, and neither is on the frame path: how much of the page
 the player is covering, which is the centring's own input (ADR 0020), and the
-owner's **Appearance** — the font and size the document is set in, as a
-stylesheet the program installs (ADR 0021). Appearance is a message and not a
+owner's **Appearance** — the font, size and text alignment the document is set
+in, as a stylesheet the program installs (ADR 0021, ADR 0034). Appearance is a message and not a
 rebuilt program because `injectedJavascript` is evaluated at page load and the
 program refuses a second installation, so a new source string would change
 nothing on a book that is already open.

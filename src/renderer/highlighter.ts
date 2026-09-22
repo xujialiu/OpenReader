@@ -66,11 +66,13 @@
  *   player collapsing moves not one character while a font change moves all of
  *   them.
  *
- * The one DOM mutation it makes is a `<style>` element per rendered document,
- * because a `::highlight()` rule has to live in the document it styles. That is
- * once per document, not once per word, and it changes no text — an Appearance
- * change rewrites that element's contents and renumbers nothing, so no Block's
- * text, offset, span or CFI moves.
+ * The DOM mutations it makes are a `<style>` element per rendered document,
+ * because a `::highlight()` rule has to live in the document it styles, and one
+ * attribute on each element the Document itself centres or sets to the right,
+ * so that the owner's Text Alignment can pass over it (ADR 0034). Both happen
+ * once per document, not once per word, and neither changes any text — an
+ * Appearance change rewrites the element's contents and renumbers nothing, so
+ * no Block's text, offset, span or CFI moves.
  */
 
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
@@ -175,6 +177,37 @@ export function stepFontSize(size: FontSize, direction: 1 | -1): FontSize | null
 }
 
 /**
+ * The two **Text Alignments** (CONTEXT.md), in the order the Appearance menu
+ * offers them: lines flush with the left margin only, or with both (ADR 0034).
+ *
+ * `left` is written as `start` in the stylesheet, the margin a line begins
+ * from, so the word names what the owner sees in the books they read and a
+ * right-to-left Document would still be ragged on the side it ends on.
+ */
+export const TEXT_ALIGNMENTS = ['left', 'justify'] as const;
+
+/** One of `TEXT_ALIGNMENTS`. */
+export type TextAlignment = (typeof TEXT_ALIGNMENTS)[number];
+
+/**
+ * The attribute the program puts on each element a Document itself centres or
+ * sets to the right, so that the owner's Text Alignment passes over it (ADR
+ * 0034). Written once, because `appearanceCss` excludes by it and the program
+ * sets it.
+ */
+export const OWN_ALIGNMENT = 'data-openreader-own-alignment';
+
+/**
+ * The computed `text-align` values that mean the Document placed a line itself
+ * rather than left it to the margin. Everything else — `start`, `left`,
+ * `justify` — is body text, and takes the owner's choice. `end` and `right`
+ * are the same side in a left-to-right Document; `-webkit-center` and
+ * `-webkit-right` are what WebKit computes for the legacy `<center>` and
+ * `align` attributes.
+ */
+export const OWN_ALIGNMENTS = ['center', 'right', 'end', '-webkit-center', '-webkit-right'] as const;
+
+/**
  * How the document's text is set: **Appearance** (ADR 0019), which is the sheet
  * over the reader.
  *
@@ -185,18 +218,38 @@ export function stepFontSize(size: FontSize, direction: 1 | -1): FontSize | null
  *
  * **The font still starts on the document's own.** `null` is "follow the
  * document", which a book's face keeps until the owner picks one.
+ *
+ * **The Text Alignment never does** (ADR 0034): it is the owner's from the
+ * first page, and it reaches body text only — a heading, or a line the
+ * Document centres or sets to the right, keeps the place the Document gave it.
  */
 export interface Appearance {
   font: ReadingFont | null;
   size: FontSize;
+  textAlignment: TextAlignment;
 }
 
-/** 16px and the Document's own font, which is what a Document is read as until the owner says otherwise. */
-export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 16 };
+/** 16px, the Document's own font and justified body text, which is what a Document is read as until the owner says otherwise. */
+export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 16, textAlignment: 'justify' };
 
 /** A quarter to four times, whatever the two numbers were: a measurement gone wrong must not make a book unreadable. */
 const MIN_PERCENT = 25;
 const MAX_PERCENT = 400;
+
+/**
+ * Every element the owner's Text Alignment reaches: all of them inside the body
+ * but a heading, what is inside a heading, and what the Document aligned itself.
+ *
+ * **Not the two roots**, unlike the font. `text-align` inherits, so a heading
+ * that declares nothing takes whatever `body` says; with the owner's value on
+ * `body`, every such heading computed `justify` (measured on the Alignment
+ * Fixture, notes 2026-09-22). Left alone, the roots keep the Document's own
+ * answer for whatever inherits from them, and every element that holds body
+ * text is reached directly anyway.
+ */
+const OWN = '[' + OWN_ALIGNMENT + ']';
+const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+const BODY_TEXT = 'body *:not(' + [...HEADINGS, ...HEADINGS.map((heading) => heading + ' *'), OWN].join(', ') + ')';
 
 /**
  * Appearance as CSS, for a Document whose own body text is `bodyTextSize`
@@ -216,12 +269,22 @@ const MAX_PERCENT = 400;
  * applied once, not compounded through nesting. Both spellings, because that is
  * the pair that was measured.
  *
- * It cannot produce a third kind of rule: the font is looked up in
- * `READING_FONTS` rather than interpolated, and the size is arithmetic on two
- * numbers — so nothing an owner could type reaches a stylesheet, and in
- * particular **nothing here can declare `user-select`**, which silently stops
- * `::highlight()` from painting (see `SELECTABLE`). That is asserted in
- * `test/renderer/appearance.test.ts` rather than left to care.
+ * **The Text Alignment is one rule, over body text only** (ADR 0034). It is set
+ * on every element inside the body, for the reason the font is, except a
+ * heading and what is inside one, and an element carrying `OWN_ALIGNMENT` —
+ * which the program puts on whatever the Document itself centres or sets to the
+ * right, before this stylesheet reaches that document. Justifying everything
+ * instead would be wrong in the most visible place: a one-line centred title
+ * *is* the last line of its block, which justification sets flush left, so
+ * every chapter title would move to the margin.
+ *
+ * It cannot produce a fourth kind of rule: the font is looked up in
+ * `READING_FONTS` rather than interpolated, the size is arithmetic on two
+ * numbers, and the alignment is one of two words written here — so nothing an
+ * owner could type reaches a stylesheet, and in particular **nothing here can
+ * declare `user-select`**, which silently stops `::highlight()` from painting
+ * (see `SELECTABLE`). That is asserted in `test/renderer/appearance.test.ts`
+ * rather than left to care.
  *
  * `!important` because an EPUB's own stylesheet is loaded into the same document
  * and is as entitled to these properties as this is; the owner's choice is the
@@ -240,6 +303,10 @@ export function appearanceCss(appearance: Appearance, bodyTextSize?: number | nu
   // Document that names a face on an element holding its text — a `p`, a `div`, a
   // `span` — would keep that face wherever it named one.
   if (font) css += 'html, body, body * { font-family: ' + font.stack + ' !important; }\n';
+  // Anything that is not `left` is the default, so a value from a settings file
+  // this build does not know still lays the book out the way a new one would.
+  const align = appearance.textAlignment === 'left' ? 'start' : 'justify';
+  css += BODY_TEXT + ' { text-align: ' + align + ' !important; }\n';
   return css;
 }
 
@@ -405,7 +472,12 @@ export function highlighterSource(
        paint rather than flashing white until the message lands. */
     'var THEME = ' + JSON.stringify(themeCss(scheme)) + ';\n' +
     'var SETTLE_FRAMES = 60;\n' +
-    'var STYLE_ID = "openreader-highlight";\n';
+    'var STYLE_ID = "openreader-highlight";\n' +
+    /* The mark a Document's own centred and right-aligned lines get, and the
+       computed values that earn it (ADR 0034). APPEARANCE excludes by the same
+       name, so both halves are written from one constant. */
+    'var OWN_ALIGNMENT = ' + JSON.stringify(OWN_ALIGNMENT) + ';\n' +
+    'var OWN_ALIGNMENTS = ' + JSON.stringify(Object.fromEntries(OWN_ALIGNMENTS.map((value) => [value, 1]))) + ';\n';
 
   return `(function () {
   if (window.${HIGHLIGHTER}) return true;
@@ -629,14 +701,48 @@ ${constants}
     } catch (error) { post({type:'openreader:offline-error', token:token, detail:String(error)}); }
   };
 
+  /* Which lines the Document placed itself (ADR 0034): every element it centres
+     or sets to the right is marked with OWN_ALIGNMENT, and the owner's Text
+     Alignment in APPEARANCE passes over what is marked.
+
+     **Read before this program's stylesheet is in the document, and only then.**
+     That rule sets text-align on every other element with !important, so once it
+     is installed a computed value is the owner's answer and no longer the
+     Document's. ensureStyle() calls this on the one branch that creates the
+     stylesheet, so it runs exactly once per document, whichever of adopt(),
+     restyle() and registryFor() reaches the document first.
+
+     All the reading first, then all the marking: an attribute is a change the
+     style engine has to answer before the next computed value, so interleaving
+     the two would restyle the section once per element marked.
+
+     Every element inside the body, not only Blocks, because inheritance is
+     what carries a centred line down: a paragraph inside a centred division
+     computes center without declaring it, and left unmarked it would take the
+     owner's rule and leave its division's alignment behind. Not the body
+     itself, which the owner's rule never reaches. */
+  function markOwnAlignment(doc) {
+    var win = doc.defaultView;
+    if (!win || !doc.body) return;
+    var elements = doc.body.getElementsByTagName('*');
+    var own = [];
+    for (var i = 0; i < elements.length; i++) {
+      if (OWN_ALIGNMENTS[String(win.getComputedStyle(elements[i]).textAlign || '')]) own.push(elements[i]);
+    }
+    for (var k = 0; k < own.length; k++) own[k].setAttribute(OWN_ALIGNMENT, '');
+  }
+
   function ensureStyle(doc) {
-    /* The one DOM mutation this file makes, and one element per document: the
-       ::highlight() rules and the owner's Appearance are the same stylesheet
-       because they have to live in the document they style and there is no reason
-       for two. Its text is not a constant any more — Appearance changes while the
-       book is open — so this both creates and updates. */
+    /* One element per document: the ::highlight() rules and the owner's
+       Appearance are the same stylesheet because they have to live in the
+       document they style and there is no reason for two. Its text is not a
+       constant any more — Appearance changes while the book is open — so this
+       both creates and updates. The only other DOM change this file makes is the
+       attribute markOwnAlignment() puts on the Document's own centred lines, once,
+       just before the stylesheet is created. */
     var style = doc.getElementById(STYLE_ID);
     if (!style) {
+      markOwnAlignment(doc);
       style = doc.createElement('style');
       style.id = STYLE_ID;
       (doc.head || doc.documentElement).appendChild(style);

@@ -95,6 +95,12 @@ fix (AGENTS.md).
     `xcrun simctl install UDID COPY.app` over it. The data stays. The next launch
     logged `iOS Bundled … index.ts` in the new port's Metro and appeared in its
     `/json/list`.
+  - Not every build behaves so: the same day, a build made by `expo run:ios
+    --port 8090` kept a container's older `localhost:8087` until the plist fix
+    above (**Simulators and installs**, "A fresh `expo run:ios` install still
+    fetched its bundle from another tree's Metro"). Which of the two a build
+    does was not established; read `RCTMetroPort` in its bundle, then check which
+    Metro the app actually reached.
 - **Reusing another worktree's installed Debug app is safe only while the native
   side matches.** Compare `git diff --name-only main` against `package.json`,
   `app.json`, `plugins/` and `patches/`; a change to `patches/` or to a
@@ -149,6 +155,22 @@ fix (AGENTS.md).
   the page's own requests reached the server 25 s after the openurl. Poll for
   what the page draws rather than sleeping a fixed time; `leading-strip.sh page`
   does.
+- **`npx expo run:ios --port N --no-bundler` is refused**, after its CocoaPods
+  step has already run: `CommandError: --port and --no-bundler are mutually
+  exclusive arguments` (2026-09-22). Start this tree's Metro yourself
+  (`npx expo start --port N < /dev/null`), then run `npx expo run:ios --device
+  UDID --port N` without `--no-bundler`: it finds that server ("Waiting on
+  http://localhost:N"), builds, installs over the app and opens it.
+- **A fresh `expo run:ios` install still fetched its bundle from another
+  tree's Metro.** On 2026-09-22, after `run:ios --port 8090` had built with a
+  new native dependency, installed and opened the app, `/json/list` on 8090 stayed
+  empty while the iPhone 17 was listed on 8087, the main checkout's Metro, which
+  was serving JavaScript without that dependency. Installing over an app keeps its container, and the container's
+  `RCT_jsLocation` (`localhost:8087`, left by an earlier session) outranks the
+  port the build was made for. Fix it as in **Metro and the bundle** above:
+  terminate, `plutil -replace RCT_jsLocation` on the container plist, shut down
+  and boot. `run:ios` also opens `top.xujialiu.openreader://expo-development-client/?url=…`;
+  this app has no development client, and that URL did nothing visible.
 
 ### Screenshots of a sheet
 
@@ -245,6 +267,15 @@ fix (AGENTS.md).
 
 ### XCTest
 
+- **A SwiftUI menu row is an `Other` until it has the button trait.** A row
+  built on `ChoiceMenu` (ADR 0035) is one accessibility element made with
+  `accessibilityElement('ignore')`, which starts with no traits, so on
+  2026-09-22 `app.buttons` could not find `Alignment, Justify` and XCTest
+  listed it as `Other`. `ChoiceMenu` adds `isButton`; if a row built some other
+  way is missing from `app.buttons`, look for it with
+  `descendants(matching: .any)`. The open menu's items are `Button`s whose
+  `identifier` is the SF Symbol (`text.alignleft`, `sun.max`) and whose label is
+  the title, and the checked one `isSelected`.
 - **A relaunch lands in the last reader instead of the Library.** That is state restoration. Tap `Back`, if it exists, before looking for Library rows.
 - **A tap right after the reader opens hits a blank page.** The header and "More actions" exist before the Document is laid out. Wait for `Play` or `Choose a Voice`, then for "Laying the document out…" to go.
 - **Waiting for "Laying the document out…" never waits.** It is the label of the WebView's scroll view, an `Other`, not a static text. Query `app.descendants(matching: .any)`.
@@ -292,6 +323,30 @@ fix (AGENTS.md).
   Library by something the Library has (`label BEGINSWITH 'Actions for '`), tap
   `app.navigationBars.buttons.element(boundBy: 0)` rather than a label, and
   relaunch the app when there is no back button left (`SyncProbe.openBook`).
+- **A probe's expected list can go stale when the app's own list changes.**
+  `GeneralFontsProbe.testFontsPageListAndBackButton` still asserted all eleven
+  Fonts-page names, four of them CJK (`苹方`, `宋体`, `楷体`, `圆体`), and failed
+  with six `XCTAssertTrue` failures (2026-09-22, independent #32/#33
+  verification) naming exactly those four as missing. The app is not wrong:
+  `READING_FONTS` in `highlighter.ts` dropped those four in `01ab1c2` (#12,
+  2026-09-21), predating this probe failure and untouched by #32/#33's diff —
+  three of the four do not resolve as distinct faces on this runtime
+  (`UIFont.familyNames` has only PingFang of the four), so the rows were
+  removed rather than left doing nothing (see the comment above
+  `READING_FONTS`, and ADR 0029). The element tree confirms it: the Fonts
+  `ScrollView`'s own accessibility label reads "Vertical scroll bar, **1
+  page**" with exactly the current seven `Button`s inside it (`Original Book
+  Font`, `System`, `Georgia`, `Times New Roman`, `Palatino`, `Avenir Next`,
+  `Helvetica`) — there is nothing further to scroll to, so the `swipeUp()`
+  that follows the missing-row assertions produces a byte-identical
+  accessibility tree, which reads exactly like a broken gesture and is not
+  one. `test/manual-test/README.md`'s own **Font Size against Documents…**
+  section still says "nine named `preview` faces" for the same reason: prose
+  the code has moved past. Treat a Fonts-page name mismatch as a probe/doc
+  staleness question first — diff the failing names against `READING_FONTS`
+  — before suspecting the row under test; fixing the probe's expected list
+  (or the stale README prose) is a separate, already-scoped change, not
+  something to fold into an unrelated feature's verification.
 
 ### Measuring inside the reader's WebView
 
@@ -359,6 +414,13 @@ fix (AGENTS.md).
   it refuses, which is what the kit's scripts do and why they do it. Seen again
   on 2026-09-22 on the iPhone 16: `set` read `0` after a boot, and after a
   `simctl terminate` and a `simctl install` over the app, `check` read 60.
+- **A `set` made as soon as the boot finished was undone about 20 s later.**
+  On 2026-09-22 `xcrun simctl boot` and `bootstatus -b` returned, `silence.sh
+  set` read `0` back, and `audiosettings.plist` was then rewritten at 12:30:51
+  (433 bytes, `sim_volume` 60). The `check` before the launch refused two
+  minutes later, and the app was not launched. After a boot, give the device
+  half a minute before `set`, and `check` right before `simctl launch`, as the
+  scripts do.
 - **A boot puts the simulator back to 60.** `sim_volume` survives a
   `simctl shutdown` in the file, but the next `boot` rewrites
   `audiosettings.plist` with the CoreSimulator defaults, measured as `0` before
@@ -902,10 +964,12 @@ the reported set changes, since a missing face falls back to the system font
 silently rather than erroring, and a screenshot is the only way to see that.
 
 `testGeneralThemeAndBrackets` opens Settings → General with real touches,
-photographs it, opens the Theme sheet, photographs it, picks Light, then
-restores whatever theme the device had before the run (photographed at each
-step, so both themes are covered regardless of which one the device started
-in). It then drives the full bracket interlock in `general-screen.tsx`: the
+photographs it, opens the Theme menu (#33) and requires Light, Dark and Match
+Device in that order with the system symbols `sun.max`, `moon` and
+`circle.lefthalf.filled`, photographs it, picks Light, requires the row to read
+`Theme, Light`, then restores whatever theme the device had before the run,
+Match Device included (photographed at each step, so both themes are covered
+regardless of which one the device started in). It then drives the full bracket interlock in `general-screen.tsx`: the
 field cannot be typed into while the switch is on (no keyboard appears),
 typing `abc` and `() ()` with the switch off and turning it back on is
 refused with the switch staying off, an inline note naming the offending
@@ -1118,6 +1182,87 @@ What it cannot establish:
 
 - The first open of `Sized Fixture Small`, shown at 12px and then redrawn once at 16. That happens faster than `simctl io … screenshot` can catch.
 - Whether a swipe scrolls epub.js's page. The iPad's synthetic swipe produced no visible scroll, which was not pursued.
+
+## Text Alignment and the menu it opens (#32, #33)
+
+Text Alignment reaches body text and passes over what a Document placed itself
+(ADR 0034). `alignment-fixture.ts` writes a Document with one element for each
+way a book aligns a line, each with an id; its header lists them and what each
+should compute under Left and Justify:
+
+```sh
+npx tsx test/manual-test/alignment-fixture.ts /tmp/openreader-alignment-fixture
+```
+
+Copy `Alignment Fixture.epub` into the app's `Documents/Inbox/` and `add` it
+with the harness, as for the sized fixtures above. With it open (`shut`, then
+`open` by its Document Id), this harness `js` probe answers with every id's
+computed `text-align`, a `*` where the program marked it as the Document's own,
+and the section's height:
+
+```js
+var ids=['h-plain','h-centred','h-block','h-left','p-plain','p-left','p-justify','break','verse','verse-1','verse-2','signature','end','inline','legacy','li','td-word','td-num'];
+var c=rendition.getContents()[0]; var d=c.document; var w=c.window;
+return ids.map(function(id){var e=d.getElementById(id); if(!e) return id+'=?'; return id+'='+w.getComputedStyle(e).textAlign+(e.hasAttribute('data-openreader-own-alignment')?'*':'');}).join(' ')+' h='+d.body.scrollHeight;
+```
+
+Switch with `{"do":"settings","patch":{"appearance":{"font":null,"size":16,"textAlignment":"left"}}}`
+and probe again. The answers of 2026-09-22 are in `notes/NOTES_2026-09-22.md`
+(12:46): marked elements unchanged, body text `justify` or `start`, and the same
+height under both. The page program is baked in when the reader opens, so after
+changing `highlighter.ts` shut and reopen the reader before probing. A
+program that opened before the change has none of it.
+
+`alignment.sh` runs `ios/AlignmentProbe.swift`, the same shape as
+`font-size.sh`. None of its methods presses Play.
+
+```sh
+bash test/manual-test/alignment.sh SIMULATOR_UDID /tmp/openreader-alignment-01
+```
+
+- `testChooseFromMenuInsideDrawer` opens the short fixture's Appearance drawer
+  with real taps. It opens the Alignment menu and requires both items. It
+  chooses the one not in force and requires the menu gone, the drawer still open
+  and the row saying the new value, then chooses back.
+- `testDismissWithoutChoosing` opens the menu and taps the drawer's title, then
+  opens it again and taps the page above the drawer, where the backdrop that
+  closes the drawer is. It requires the first to close only the menu, and
+  records whether the drawer survived the second (`backdrop-tap-result`). On
+  2026-09-22 it did.
+- `testHighlightSurvivesASwitch` needs `Alignment Fixture` in the Library, open
+  at the top of its chapter. It taps its first paragraph at normalized
+  (0.5, 0.36), which sets the highlight without playback, then switches Left and
+  back through the menu, photographing each. The judgement is the screenshots:
+  the same words highlighted at the same height.
+
+What it cannot establish: whether VoiceOver reads the row as a button (XCTest
+sees the trait, not speech), and anything about a right-to-left Document,
+since none is here.
+
+Two more methods, added during independent #32/#33 verification (2026-09-22),
+not part of the issue's own plan:
+
+- `testXianniChapterOneBothAlignments` swipes forward from 仙逆's cover (four
+  `app.swipeUp()`s, screenshotting every step, since a synthetic swipe's
+  distance on this content was not known in advance — the first two can still
+  read "Laying the document out…", and the fourth is what lands with `第1章
+  离乡` at the top of the screen) and photographs chapter 1 under Justify,
+  then Left through the menu, then restored. A pixel diff of the Justify and
+  Left screenshots (2026-09-22) found no difference above y=1880 (the cover,
+  the decorative pages and the centred chapter title/number) and 71,205
+  differing pixels of 3,162,132 (2.3%) below it, confined to the paragraph
+  text; the restored-Justify screenshot was byte-identical to the original.
+  CJK justification is a small, real effect — inter-character spacing on a
+  non-final line, not the ragged-versus-flush difference an English fixture
+  shows — so judge it by a diff, not by eye alone.
+- `testAppearanceAndAlignmentMenuInLightTheme` switches the app to Light
+  through General's Theme menu, opens the short fixture's Appearance drawer
+  and the Alignment menu there, dismisses without choosing, and restores
+  whichever theme the device had. Confirms the drawer and the native menu are
+  both drawn light, not only dark.
+
+Independent verification also found `GeneralFontsProbe.testFontsPageListAndBackButton`
+failing for a reason unrelated to #32/#33: see **Pitfalls**, XCTest.
 
 ## Sync: the Sync screen, the switch, and places crossing devices (#20)
 

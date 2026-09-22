@@ -237,12 +237,18 @@ describe('never highlight by mutating the DOM, and never check whether you can (
     expect(everything).not.toMatch(/\bHighlight\s*(===|!==|&&|\|\|)/);
   });
 
-  it('mutates the DOM exactly once, for the stylesheet a ::highlight() rule has to live in', () => {
+  it('mutates the DOM in two ways only: the stylesheet a ::highlight() rule has to live in, and the mark on a Document’s own alignment', () => {
     const program = code('highlighter.ts');
     expect(program.match(/createElement\(/g)).toHaveLength(1);
     expect(program).toContain("createElement('style')");
     expect(program.match(/appendChild\(/g)).toHaveLength(1);
     expect(program).toContain('appendChild(style)');
+    // ADR 0034: one attribute, under one name, on the elements a Document centres
+    // or sets to the right — an attribute moves no text node, offset or CFI, and
+    // nothing else about an element is touched.
+    expect(program.match(/setAttribute\(/g)).toHaveLength(1);
+    expect(program).toContain("own[k].setAttribute(OWN_ALIGNMENT, '');");
+    expect(program).not.toMatch(/removeAttribute|toggleAttribute|setAttributeNS|\.dataset\b|classList|className\s*=|\.style\./);
     for (const mutation of [
       'innerHTML',
       'outerHTML',
@@ -266,6 +272,27 @@ describe('never highlight by mutating the DOM, and never check whether you can (
       }
       expect(program).not.toContain(mutation);
     }
+  });
+
+  it('reads a Document’s own alignment before the owner’s rule is in the document, and all of it before marking any', () => {
+    // After the stylesheet is installed, a computed text-align is the owner's
+    // answer and not the Document's, so the reading has to come first — on the
+    // branch that creates the stylesheet, which runs once per document whichever
+    // caller reaches it.
+    const program = code('highlighter.ts');
+    const ensure = fn(program, 'ensureStyle');
+    const marks = ensure.indexOf('markOwnAlignment(doc);');
+    expect(marks).toBeGreaterThan(-1);
+    expect(marks).toBeLessThan(ensure.indexOf("createElement('style')"));
+    expect(marks).toBeGreaterThan(ensure.indexOf('if (!style) {'));
+    // Reading and writing interleaved would restyle the section once per mark.
+    const mark = fn(program, 'markOwnAlignment');
+    expect(mark.lastIndexOf('getComputedStyle(')).toBeGreaterThan(-1);
+    expect(mark.lastIndexOf('getComputedStyle(')).toBeLessThan(mark.indexOf('setAttribute('));
+    // What counts as the Document's own is the one list, and what is marked is
+    // what the owner's rule excludes.
+    pin(program, "'var OWN_ALIGNMENT = ' + JSON.stringify(OWN_ALIGNMENT)", 'highlighter.ts, highlighterSource');
+    pin(highlighterSource(), 'var OWN_ALIGNMENTS = {"center":1,"right":1,"end":1,"-webkit-center":1,"-webkit-right":1};', 'the program');
   });
 });
 
@@ -588,8 +615,9 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
   it('bakes the owner’s choice into the program as well, against the Document’s own body text', () => {
     // A Document measured before opens at the owner's size on its first paint,
     // and is not measured again (ADR 0030).
-    const measured = highlighterSource(undefined, { font: 'georgia', size: 20 }, 'light', 12);
-    pin(measured, 'var APPEARANCE = ' + JSON.stringify(appearanceCss({ font: 'georgia', size: 20 }, 12)) + ';', 'a measured Document');
+    const chosen = { font: 'georgia', size: 20, textAlignment: 'left' } as const;
+    const measured = highlighterSource(undefined, chosen, 'light', 12);
+    pin(measured, 'var APPEARANCE = ' + JSON.stringify(appearanceCss(chosen, 12)) + ';', 'a measured Document');
     pin(measured, 'var MEASURE = false;', 'a measured Document');
     // One never measured opens as if its body text were 16 — which is what every
     // current Document's is — and is measured.

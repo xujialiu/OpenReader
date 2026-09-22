@@ -8,6 +8,10 @@ this decision: the size is now one size for every Document, chosen by the owner,
 and no longer a proportion of what each Document set. What follows about the font, about
 the sheet rising over the page and about keeping the sentence in view stands._
 
+_[Design 0034](0034-lines-that-meet-both-margins.md) adds a third row, how the
+lines of a paragraph meet the margins, which starts on the owner's choice
+rather than the book's. The panel now holds three things, not two._
+
 The reader's header has always had a control on the right for how the page
 looks, and until now it opened onto an admission that there was nothing there
 yet. It now holds two things: which font the book is shown in, and how big the

@@ -16,6 +16,8 @@
  * checked, because it is no longer something an eye can check.
  */
 
+import { Host, Menu, RNHostView, Toggle, type ToggleProps } from '@expo/ui/swift-ui';
+import { accessibilityAddTraits, accessibilityElement, accessibilityLabel, menuOrder } from '@expo/ui/swift-ui/modifiers';
 import { Children, useState, type ReactNode } from 'react';
 import { Alert, DynamicColorIOS, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
@@ -224,21 +226,27 @@ export function SettingsGroup({ title, footer, children }: {
   );
 }
 
+/** A settings row's height: 48, the smallest a row with one line of 16-point text and room to tap is drawn at. */
+const SETTING_ROW_HEIGHT = 48;
+
 /**
  * A row inside a `SettingsGroup` whose value is chosen from a short list: the
  * label, what it says now, and the two chevrons iOS puts on a row that opens a
- * menu rather than pushing a screen.
+ * menu — which is what it opens (`ChoiceMenu`, #33).
  */
-export function ValueRow({ label, value, onPress }: { label: string; value: string; onPress(): void }) {
+export function ValueRow<T extends string>({ label, choices, chosen, onChoose }: {
+  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
+}) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${label}, ${value}`}
-      onPress={onPress} style={({ pressed }) => [styles.settingRow, pressed && styles.pressed]}>
-      <Text style={styles.settingLabel}>{label}</Text>
-      <View style={styles.settingValue}>
-        <Text style={styles.settingDetail} numberOfLines={1}>{value}</Text>
-        <Icon name="menu" color={INK.quiet} size={18} />
+    <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} height={SETTING_ROW_HEIGHT}>
+      <View style={styles.settingRow}>
+        <Text style={styles.settingLabel}>{label}</Text>
+        <View style={styles.settingValue}>
+          <Text style={styles.settingDetail} numberOfLines={1}>{choices.find((choice) => choice.value === chosen)?.label}</Text>
+          <Icon name="menu" color={INK.quiet} size={18} />
+        </View>
       </View>
-    </Pressable>
+    </ChoiceMenu>
   );
 }
 
@@ -262,17 +270,46 @@ export function SwitchRow({ label, value, onChange, disabled }: {
   );
 }
 
-/** One of a few, with the one in force checked: what a `ValueRow` opens. */
-export function ChoiceRow({ label, icon, chosen, onPress }: {
-  label: string; icon?: IconName; chosen: boolean; onPress(): void;
+/** One entry of a `ChoiceMenu`: what it sets, what it is called, and the system symbol drawn beside it. */
+export interface Choice<T extends string> {
+  value: T;
+  label: string;
+  icon: NonNullable<ToggleProps['systemImage']>;
+}
+
+/**
+ * A short list of choices, opened by a tap on the row it wraps as the system's
+ * own menu, with the one in force checked (ADR 0035).
+ *
+ * `children` is the row as it is drawn, and it is only drawn: the menu owns the
+ * tap, so nothing inside it may be a `Pressable`. `height` is the row's, because
+ * the menu is laid out by SwiftUI and takes the size it is given rather than
+ * one worked out from what is inside it.
+ *
+ * `menuOrder('fixed')`: a menu opened near the bottom of the screen opens
+ * upward, and SwiftUI then lists its items in reverse unless told not to.
+ *
+ * One accessibility element, `Theme, Match Device`, and a button: the drawn
+ * row's words would otherwise be read on their own, and the element that
+ * replaces them starts with no traits at all — measured, XCTest saw it as an
+ * `Other` until `isButton` was added back.
+ */
+export function ChoiceMenu<T extends string>({ label, choices, chosen, onChoose, height, children }: {
+  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void; height: number; children: ReactNode;
 }) {
+  const current = choices.find((choice) => choice.value === chosen)?.label ?? '';
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: chosen }} accessibilityLabel={label}
-      onPress={onPress} style={({ pressed }) => [styles.choiceRow, pressed && styles.pressed]}>
-      {icon ? <Icon name={icon} color={INK.text} size={22} /> : null}
-      <Text style={[styles.settingLabel, { flex: 1 }]}>{label}</Text>
-      {chosen ? <Icon name="check" color={INK.reading} size={20} /> : null}
-    </Pressable>
+    <Host style={{ height, alignSelf: 'stretch' }}>
+      <Menu
+        label={<RNHostView><View style={styles.menuRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{children}</View></RNHostView>}
+        modifiers={[menuOrder('fixed'), accessibilityElement('ignore'), accessibilityLabel(`${label}, ${current}`), accessibilityAddTraits(['isButton'])]}
+      >
+        {choices.map((choice) => (
+          <Toggle key={choice.value} label={choice.label} systemImage={choice.icon} isOn={choice.value === chosen}
+            onIsOnChange={() => onChoose(choice.value)} />
+        ))}
+      </Menu>
+    </Host>
   );
 }
 
@@ -399,10 +436,10 @@ const styles = StyleSheet.create({
   groupFooter: { color: INK.quiet, fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
   // One type scale with Settings: a row's label is 16 and what it says is 16 in
   // the quiet ink, never larger than the label naming it.
-  settingRow: { alignItems: 'center', flexDirection: 'row', gap: 12, justifyContent: 'space-between', minHeight: 48, paddingRight: 16, paddingVertical: 10 },
+  settingRow: { alignItems: 'center', flexDirection: 'row', gap: 12, justifyContent: 'space-between', minHeight: SETTING_ROW_HEIGHT, paddingRight: 16, paddingVertical: 10 },
   settingLabel: { color: INK.text, fontSize: 16, flexShrink: 1 },
   settingDetail: { color: INK.quiet, fontSize: 16, flexShrink: 1 },
   settingValue: { alignItems: 'center', flexDirection: 'row', gap: 6, flexShrink: 1 },
-  choiceRow: { alignItems: 'center', flexDirection: 'row', gap: 14, minHeight: 52, paddingHorizontal: 20 },
+  menuRow: { flex: 1 },
   locked: { opacity: 0.5 },
 });

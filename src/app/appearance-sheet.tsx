@@ -1,12 +1,25 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { READING_FONTS, stepFontSize, type Appearance } from '../renderer/highlighter';
-import { INK } from './controls';
+import { READING_FONTS, stepFontSize, TEXT_ALIGNMENTS, type Appearance, type TextAlignment } from '../renderer/highlighter';
+import { ChoiceMenu, INK, type Choice } from './controls';
 import { Icon } from './icon';
 import { Sheet } from './sheet';
 
 /** What "follow the document" is called where the owner reads it: the book's own, not "the document font". */
 export const ORIGINAL_FONT = 'Original Book Font';
+
+/**
+ * The Alignment menu, in `TEXT_ALIGNMENTS`' order: each word, and the system's
+ * picture of it, which shows the one thing the word does not — a ragged right
+ * edge against a flush one.
+ */
+const ALIGNMENT_CHOICES: readonly Choice<TextAlignment>[] = TEXT_ALIGNMENTS.map((value) => ({
+  value,
+  ...({ left: { label: 'Left', icon: 'text.alignleft' }, justify: { label: 'Justify', icon: 'text.justify' } } as const)[value],
+}));
+
+/** The row's height, which the menu is laid out at (`ChoiceMenu`). */
+const ROW_HEIGHT = 56;
 
 export function AppearanceControls({ appearance, onChange, onFonts }: {
   appearance: Appearance; onChange(next: Appearance): void; onFonts(): void;
@@ -31,6 +44,16 @@ export function AppearanceControls({ appearance, onChange, onFonts }: {
     <View style={styles.row}><Text style={styles.label}>Font Size</Text><View style={styles.stepper}>
       {step(-1)}<Text style={styles.size}>{appearance.size}</Text>{step(1)}
     </View></View>
+    <ChoiceMenu label="Alignment" choices={ALIGNMENT_CHOICES} chosen={appearance.textAlignment} height={ROW_HEIGHT}
+      onChoose={(textAlignment) => onChange({ ...appearance, textAlignment })}>
+      <View style={styles.row}>
+        <Text style={styles.label}>Alignment</Text>
+        <View style={styles.value}>
+          <Text style={styles.detail} numberOfLines={1}>{ALIGNMENT_CHOICES.find((choice) => choice.value === appearance.textAlignment)?.label}</Text>
+          <Icon name="menu" color={INK.quiet} size={18} />
+        </View>
+      </View>
+    </ChoiceMenu>
   </View>;
 }
 
@@ -74,7 +97,7 @@ const styles = StyleSheet.create({
   // One type scale with Settings: a row's label is 16 and what it says is 16 in
   // the quiet ink, never larger than the label naming it.
   content: { paddingHorizontal: 20 },
-  row: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  row: { minHeight: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   label: { color: INK.text, fontSize: 16 },
   value: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   detail: { color: INK.quiet, fontSize: 16, flexShrink: 1 },

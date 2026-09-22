@@ -1,8 +1,8 @@
 import UIKit
 import XCTest
 
-/// Reproduces issues #10/#11/#12's General rebuild, Theme sheet, bracket
-/// interlock, Manage-downloads delete-all action, and the Fonts page —
+/// Reproduces issues #10/#11/#12's General rebuild, the Theme menu (#33), the
+/// bracket interlock, Manage-downloads delete-all action, and the Fonts page —
 /// including whether a font selection actually changes the reading page.
 /// Never presses Play; only pauses if a reading was already active.
 final class GeneralFontsProbe: XCTestCase {
@@ -54,9 +54,9 @@ final class GeneralFontsProbe: XCTestCase {
     }
   }
 
-  /// #11: General as two grouped cards in both themes, the Theme row's Sheet
-  /// with its three icons and moving check, and #10's bracket interlock and
-  /// inline refusal (never a modal alert).
+  /// #11: General as two grouped cards in both themes, the Theme row's menu
+  /// (#33) with its three system symbols and moving check, and #10's bracket
+  /// interlock and inline refusal (never a modal alert).
   func testGeneralThemeAndBrackets() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     app.terminate(); app.launch()
@@ -72,29 +72,36 @@ final class GeneralFontsProbe: XCTestCase {
     XCTAssertTrue(stripSwitch.exists, "Reading aloud group with the bracket switch must be present")
     capture("general-theme-1-initial", app)
 
-    // Theme sheet: three rows, each a distinct icon, a check on the one in force.
+    // Theme menu (#33): three items in order, each the system symbol it names
+    // as its identifier, a check on the one in force.
     themeRow.tap()
-    XCTAssertTrue(app.buttons["Light"].waitForExistence(timeout: 3))
+    XCTAssertTrue(app.buttons["Light"].waitForExistence(timeout: 3), "Theme menu did not open")
     XCTAssertTrue(app.buttons["Dark"].exists)
     XCTAssertTrue(app.buttons["Match Device"].exists)
-    capture("general-theme-2-sheet-initial", app)
-    let initiallyDark = app.buttons["Dark"].isSelected
-    print("THEME initial selection: Dark isSelected=\(app.buttons["Dark"].isSelected) Light isSelected=\(app.buttons["Light"].isSelected) MatchDevice isSelected=\(app.buttons["Match Device"].isSelected)")
+    XCTAssertEqual(app.buttons["Light"].identifier, "sun.max")
+    XCTAssertEqual(app.buttons["Dark"].identifier, "moon")
+    XCTAssertEqual(app.buttons["Match Device"].identifier, "circle.lefthalf.filled")
+    XCTAssertLessThan(app.buttons["Light"].frame.minY, app.buttons["Dark"].frame.minY, "Light is not above Dark")
+    XCTAssertLessThan(app.buttons["Dark"].frame.minY, app.buttons["Match Device"].frame.minY, "Dark is not above Match Device")
+    capture("general-theme-2-menu-initial", app)
+    let initial = ["Light", "Dark", "Match Device"].first { app.buttons[$0].isSelected } ?? "Match Device"
+    print("THEME initial selection: \(initial)")
 
     app.buttons["Light"].tap()
     XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Light"])], timeout: 3), .completed, "Theme sheet did not close after picking Light")
+      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Light"])], timeout: 3), .completed, "Theme menu did not close after picking Light")
     Thread.sleep(forTimeInterval: 0.4)
+    XCTAssertTrue(app.buttons["Theme, Light"].exists, "The row does not say Light")
     capture("general-theme-3-light", app)
 
     themeRow.tap()
     XCTAssertTrue(app.buttons["Light"].waitForExistence(timeout: 3))
     XCTAssertTrue(app.buttons["Light"].isSelected, "Check did not move to Light")
     XCTAssertFalse(app.buttons["Dark"].isSelected)
-    capture("general-theme-4-sheet-light", app)
+    capture("general-theme-4-menu-light", app)
 
-    // Restore the theme this device had before the run.
-    app.buttons[initiallyDark ? "Dark" : "Light"].tap()
+    // Restore the theme this device had before the run, Match Device included.
+    app.buttons[initial].tap()
     Thread.sleep(forTimeInterval: 0.4)
     capture("general-theme-5-restored", app)
 
