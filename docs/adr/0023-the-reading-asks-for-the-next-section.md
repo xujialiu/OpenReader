@@ -4,6 +4,12 @@ status: accepted
 
 # The reading asks for the next section, and the engine says when it has run out
 
+**ADR 0036 corrects the cause given twice below.** `rendered` did not arrive
+because the library's own `rendered` listener throws first, for every section
+and however it was displayed — not because of the way a section was displayed.
+The program now adopts every section through epub.js's content hook. The
+measurements below stand.
+
 Three changes to one chain, made together because none of them is a fix on its
 own. The product argument is in
 `docs/design/0023-the-reading-does-not-stop-at-the-end-of-a-chapter.md`.
