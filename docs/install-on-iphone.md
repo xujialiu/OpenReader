@@ -9,7 +9,7 @@ cannot use Expo Go as a substitute.
 ## Results verified in this run
 
 - Environment: Expo SDK 57, Xcode 27.0 (27A266); the project's minimum iOS version is 17.2.
-- Physical device: `Xujia’s iPhone`, UDID `00008140-001651843E40801C`.
+- Physical device: `Xujia’s iPhone`, written `IPHONE_UDID` in the commands below.
 - Workspace: `ios/OpenReader.xcworkspace`; scheme: `OpenReader`.
 - Bundle ID: `top.xujialiu.openreader`.
 - Automatic signing used `Xujia Liu (Personal Team)`, with an Apple Development certificate.
@@ -55,7 +55,7 @@ xcodebuild -version
 You should see the physical iPhone and at least one valid Apple Development
 identity. `0 valid identities found` means that signing in to the account alone
 was not enough; create a certificate in Xcode. The device list also includes
-simulators, so select the UDID of the physical device.
+simulators; the physical iPhone's UDID is `IPHONE_UDID` in the commands below.
 
 ### 2. Build a standalone Release version
 
@@ -66,17 +66,16 @@ xcodebuild \
   -workspace ios/OpenReader.xcworkspace \
   -scheme OpenReader \
   -configuration Release \
-  -destination 'id=00008140-001651843E40801C' \
+  -destination 'id=IPHONE_UDID' \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
   ENABLE_USER_SCRIPT_SANDBOXING=NO \
   -quiet build
 ```
 
-Replace the destination UDID when using another phone. The first build compiles
-native dependencies and takes significantly longer than later incremental
-builds. Use exit code 0 as the success criterion; do not use warnings in the log
-or the presence of an `.app` directory as the criterion.
+The first build compiles native dependencies and takes significantly longer than
+later incremental builds. Use exit code 0 as the success criterion; do not use
+warnings in the log or the presence of an `.app` directory as the criterion.
 
 - `-allowProvisioningUpdates`: allows Xcode to create or update signing profiles using the logged-in account.
 - `-allowProvisioningDeviceRegistration`: allows automatic signing to register the target device.
@@ -104,7 +103,7 @@ xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \
 
 ```bash
 xcrun devicectl device install app \
-  --device 00008140-001651843E40801C \
+  --device IPHONE_UDID \
   /Users/xujialiu/Library/Developer/Xcode/DerivedData/OpenReader-buxlmytdygazkfacxjuwdxvtamkb/Build/Products/Release-iphoneos/OpenReader.app
 ```
 
@@ -122,7 +121,7 @@ Launch OpenReader from the Home Screen, or run:
 
 ```bash
 xcrun devicectl device process launch \
-  --device 00008140-001651843E40801C \
+  --device IPHONE_UDID \
   top.xujialiu.openreader
 ```
 

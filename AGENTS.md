@@ -268,6 +268,9 @@ For installation on the owner's physical iPhone, device signing or provisioning
 failures, or a standalone Release build for that iPhone, read
 [docs/install-on-iphone.md](docs/install-on-iphone.md) before running build commands.
 
+In anything committed, write that iPhone's UDID as `IPHONE_UDID`, and look up
+the real one at run time with `xcrun devicectl list devices`.
+
 # Installing in the iOS simulator
 
 For simulator installation, updating the running app to the latest working-tree
