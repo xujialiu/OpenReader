@@ -227,6 +227,12 @@ fix (AGENTS.md).
   it and restart the app, which takes the value when it activates its audio
   session. In `check && terminate; launch`, the launch still runs after a failed
   check.
+  It is not only the AirPods. On 2026-09-24 at 00:09:11, a device that had
+  read 0 at 00:06:55 was rewritten to `sim_volume` 60 with
+  `sim_output_device_uid` `BuiltInSpeakerDevice`, and the Mac's default output
+  was then "MacBook Pro Speakers". The check in front of the next play caught
+  it. So do not reason that a `set` holds because the headphones have not
+  moved. The check in front of each play is the only guard.
 - **A newly created device put its own volume back to 60 a couple of minutes
   after its first boot.** Measured 2026-09-23 on a fresh iPhone 17 (iOS 27.0):
   `silence.sh set` right after `bootstatus -b` read back 0, and a few minutes
@@ -356,6 +362,19 @@ fix (AGENTS.md).
 ### The walkthrough harness (`Documents/harness.json`)
 
 - **A command does nothing.** Each command needs a new `seq`; the same `seq` twice runs once.
+- **An answer read after a fixed wait can be missing, and reads as a state.**
+  Symptom (2026-09-24 00:13, #52): a probe that sent `say`, waited 600 ms and
+  took the last `HX status` line found none. It reported `utterance=null` for a
+  reading that the log showed still on Utterance 190. Cause: the harness polls
+  its file every 250 ms, and a reader busy laying out a section answers later.
+  Fix: poll the log for the answer with a deadline, as `browse-probe.cjs`'s
+  `answer()` does. Treat no answer as a harness failure, never as a value.
+- **A play loop bounded by a count of polls is not bounded in time.** On
+  2026-09-24 at 00:13, a shell loop meant to play for at most 8 s (32 × 0.25 s,
+  pausing as soon as `level=word` appeared) played for 22.7 s. Each poll re-read
+  the log, and the first Fish Clip after an app restart took about 20 s. Bound
+  a play by a wall-clock deadline, send `pause` when it passes, and say in the
+  report how long it actually ran.
 - **Waiting for an `HX` line hangs.**
   - Cause: only an open reader logs on a timer. The Library logs only when a command answers.
   - Fix: wait for the effect itself, such as a file being written or the answer to `navstate`.
@@ -433,6 +452,19 @@ fix (AGENTS.md).
   terminate` + `launch` between runs (not just `app.activate()` inside the
   test) restores the known starting screen; a method that must tolerate
   either starting point should check for a sheet-specific element first.
+- **The same inheritance can make a blind tap on a screen-position button hit a
+  stray row of a sheet the previous run left open**, rather than simply miss.
+  Measured 2026-09-24 verifying #52 (`BrowseTouchProbe`): a method failed
+  cleanly and left Contents open over the reader; the next `-only-testing`
+  invocation's `app.buttons["Contents"].tap()` — the *player's* Contents
+  button, not the sheet — landed on whatever Contents row now sat at that
+  screen point instead, silently choosing a chapter in the book meant to stay
+  unread for a later method (harmless here since the choice is not written
+  while the book is unread, but it would not have been in general). Guard the
+  open with `if !app.staticTexts["Contents"].firstMatch.exists { app.buttons["Contents"].tap() }`
+  — the sheet's title is a `staticTexts` element and the player's button a
+  same-labelled `buttons` element, so the two do not collide — rather than
+  tapping unconditionally.
 - **A tap right after the reader opens hits a blank page.** The header and "More actions" exist before the Document is laid out. Wait for `Play` or `Choose a Voice`, then for "Laying the document out…" to go.
 - **Waiting for "Laying the document out…" never waits.** It is the label of the WebView's scroll view, an `Other`, not a static text. Query `app.descendants(matching: .any)`.
 - **A cold launch straight into 仙逆 takes over 40 seconds to lay out.** A warm open takes 3–6 seconds. Time tests from a warm open.
@@ -520,7 +552,14 @@ fix (AGENTS.md).
   way) before trusting a Play tap near it. The same banner swallowed a tap on
   the playback speed (the number at the right end of the player row) on
   2026-09-23, after a fixture reader was opened; the relaunch cleared it, and
-  state restoration reopened the same reader.
+  state restoration reopened the same reader. Measured again 2026-09-24
+  verifying #52: `Contents`, `Play` and `Playback speed` all sat under the
+  banner's `{10, 787.7, 382, 48}` at once (`Contents` at `{12.3, 797.7, 44,
+  44}` almost entirely inside it), and a tap on `Contents` opened nothing.
+  Starting a real-touch sequence's first method with `app.terminate();
+  app.launch()` rather than `app.activate()` avoids it pre-emptively — a
+  fresh launch has logged no warning yet — which is cheaper than detecting
+  and dismissing the banner on every later method.
 - **`offline-fix.sh`'s `-only-testing` argument is the bare method name; the
   script prepends the class itself.** Passing
   `-only-testing:OfflineFixProbe/testConfigureFishProvider` (reasonable by
@@ -558,6 +597,29 @@ fix (AGENTS.md).
   their own output directories, but it applies to a bare `xcodebuild` call
   reusing one fixed path across retries too. `rm -rf` the stale
   `.xcresult` (or pick a new path) before retrying.
+
+- **A Contents row's chapter number is not always followed by a colon.**
+  Verifying #52 (`BrowseTouchProbe`), `label BEGINSWITH 'Chapter '` then
+  taking digits up to `:` parsed `Cultivation Online`'s rows fine (`"Chapter
+  2018: Entering the Starry Sky"` → `2018`) but found zero matches in
+  `Cultivation Online — Chapters 1751–2000`, whose own EPUB source omits the
+  colon (`"Chapter 1751 Embroidery"`), and read back as "Fewer than 3 chapter
+  rows on screen" although the rows were plainly there. Two different
+  fan-translation sources, two different headings; take the digits
+  themselves (`rest.prefix { $0.isNumber }`) rather than assuming a
+  separator.
+
+- **`app.swipeUp(velocity: .fast)`/`swipeDown` move a wildly uneven number of
+  spine sections per call, so "N swipes" is not "N screens" and not even
+  consistent with itself.** Verifying #52's drag-back case on `Cultivation
+  Online`, four swipes moved the page 22→26, then a later four moved 26→25,
+  then 25→24, then 24→23, then 23→6 (a single call), then a forward four only
+  6→7 and another only 7→8 — the same gesture, the same book, an order of
+  magnitude apart, because the spine's own sections vary hugely in how much
+  text (and so how many screens) each one holds. Do not compute a target
+  section from a swipe count; re-read the page's own top section after each
+  batch (`browse-touch-state.cjs`, or an in-app read) and stop once it has
+  crossed the section wanted.
 
 - **A Settings-stack screen can be more than one level away, even when it
   looks like one.** Reaching Fish Audio's provider form is Library → Settings
@@ -2500,3 +2562,129 @@ through the harness; or a section that is slow to load. In the runs with the
 fix, every section arrived within 20 ms of its display. The first run, before
 the fix, took 585 ms, and nothing since has repeated that.
 
+## A Contents row while paused only moves the page (#52)
+
+`browse-probe.cjs` makes the call a Contents row makes,
+`{"do":"section","section":N}`. It checks that the page went there and that the
+reading did not follow:
+
+```sh
+node test/manual-test/browse-probe.cjs SIMULATOR_UDID METRO_LOG SECTION [WAIT_MS]
+```
+
+Prerequisites:
+
+- A reader open and paused, with the reading on a sentence that is its Reading
+  Position. A book reopened on its stored place will do, as will a
+  `{"do":"seek",...}` (a tap), a skip, or a Play and pause.
+- METRO_LOG, the file this tree's Metro writes to.
+
+It plays nothing, so it needs no Provider and no silence. It reads the status
+line, the Library's place for the book (`shelf`), the views, the section at the
+top of the page and every painted highlight Range, sends the row, waits
+(default 2,500 ms), reads again and takes a screenshot beside METRO_LOG.
+
+GREEN (exit 0) means all of these:
+
+- the section at the top of the page is SECTION;
+- the status line's Utterance and section are unchanged;
+- the stored place is unchanged;
+- no Utterance Range is painted that was not painted before;
+- no word is lit.
+
+RED (exit 1) names each failure. Before the fix, on 2026-09-23 at 23:19, the
+run read "the reading moved: utterance 176 -> 423; the stored place changed;
+the highlight moved to "Chapter 2012: Grand Sword Crater"". Exit 2 is a
+precondition or a harness that did not answer.
+
+Choose SECTION two after the reading's. Its display re-renders the reading's
+own section as a neighbour, which is how the WebView used to take the page
+back: 23:30 in `notes/NOTES_2026-09-23.md`, and ADR 0043. A far section tests the
+React Native half alone. With a Provider:
+
+- Run it after a Play and a pause, so that an engine is paused. With
+  `{"do":"watchfetch","host":"api.fish.audio"}` on first, the log shows that a
+  browse sends no synthesis request.
+- The speed (`{"do":"rate",...}`), a Voice (`{"do":"voice",...}`) and the
+  Appearance (`{"do":"settings","patch":{"appearance":...}}`) changed while
+  browsing must leave the section at the top of the page.
+- Play must bring the page back to the paused sentence at its first cue.
+
+What it cannot prove: a real touch on a Contents row, or a finger dragging the
+page, which the WebView also counts as browsing. Both need XCTest.
+
+### Real touches on a Contents row, a sentence and a drag (`BrowseTouchProbe.swift`, #52)
+
+Independent #52 verification, 2026-09-24, of what `browse-probe.cjs` cannot
+touch: a real tap on the Contents button and a real chapter row, a real tap on
+a sentence, and a real finger drag. `browse-touch.sh` has the same shape as
+`scroll-theme-reader.sh` — a new output directory generates the project, an
+existing one reuses it, `-only-testing:` takes the bare method name, and it
+checks the simulator's own volume before anything runs, because three methods
+press Play:
+
+```sh
+bash test/manual-test/browse-touch.sh SIMULATOR_UDID /tmp/openreader-browse-touch-01 \
+  -only-testing:testOpenBookThenBrowseTwoChaptersAhead
+```
+
+A companion host script reads the same facts `browse-probe.cjs` does —
+without sending the `section` command itself — so a real touch's effect can
+be diffed the same way, run from the shell right before and right after each
+method:
+
+```sh
+node test/manual-test/browse-touch-state.cjs SIMULATOR_UDID METRO_LOG LABEL
+```
+
+Run the methods in this order — each depends on where the previous one left
+the reading or the page, and none of them relaunches the app except the
+first (see Pitfalls, the debug banner):
+
+- `testOpenBookThenBrowseTwoChaptersAhead` — opens `Cultivation Online` (real
+  tap, resuming its stored place), confirms paused, then a real tap on
+  Contents and on the chapter row two ahead of the one marked current. The
+  state script confirmed the page alone moved (section 20 → 22), the status
+  line, the stored place and the painted highlight all unchanged. Never
+  presses Play.
+- `testPlayAfterBrowseReturnsAtFirstCue` — a real Play tap; stops the instant
+  the Pause button's own `busy` accessibility state clears (the first Clip's
+  cue), 10.6 s in the recorded run — Fish Audio's real first-clip latency, the
+  shortest this fact can be observed in. The state script read the reading
+  back at the paused Utterance, its highlight centred at 283..341 of the
+  container.
+- `testTapSentenceInBrowsedChapterThenPlays` — browses again, then a real tap
+  on a sentence well below the heading (`bodyPoint`, 0.55 down the page, clear
+  of a freshly browsed chapter's own title). The tap moved the Utterance,
+  its highlight and the stored place to the tapped sentence; a brief real Play
+  (3.1 s to the first cue) then read from it.
+- `testDragAwayFromReading` / `testFontSizeWhileBrowsing` /
+  `testDragBackToReadingSection` — four `swipeUp(velocity: .fast)`, a real
+  Font Size increase and decrease from Appearance, then `swipeUp`/`swipeDown`
+  back. Never presses Play. The state script, taken after the away-drag, after
+  the font change and twice more (immediately and 2.5 s later) once the drag
+  back had crossed into the reading's own section, showed the same top
+  section and — once back — the identical painted highlight Range across the
+  2.5 s gap: no snap-centring, immediate or delayed, and the highlight was
+  still there, off the visible page until a further nudge brought it on.
+- `testContentsRowWhilePlayingJumpsAndKeepsPlaying` — a real Play tap, then a
+  real Contents row two chapters ahead while it plays. The reading jumped to
+  the target's heading and kept playing (Pause still showing 1.5 s later);
+  7.9 s Play-to-Pause in the recorded run.
+- `testOpenUnreadBook` / `testUnreadBookContentsRowHighlightsHeading` /
+  `testLeaveUnreadBookWithoutPlaying` — opens `Cultivation Online — Chapters
+  1751–2000` (never played) for the first time, a real Contents tap on its
+  third chapter row, then a real tap on Back. The heading highlighted and the
+  reading moved for this session, but the Library's place for this book id
+  read `null` both right after the choice and after leaving —
+  `Documents/library.json` read directly, not only the harness echo — and the
+  Library row still read "Not started." afterwards. Never presses Play.
+- `testSettingsShowsVersion`-equivalent coverage is `settings-version.sh`
+  (`SettingsVersionProbe`), reused rather than duplicated: it reads
+  `APP_VERSION` from the working tree at run time, so it needed no change for
+  beta14.
+
+What it does not establish: whether the debug-banner precaution
+(`app.terminate(); app.launch()` at the sequence's start) is still needed once
+nothing else in a run logs a warning; a shorter method sequence was not tried.
+`BrowseTouchProbe.swift` is in `test/manual-test/ios/project.rb`'s allow-list.
