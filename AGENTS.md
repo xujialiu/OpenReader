@@ -4,10 +4,18 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 # GitHub workflow — issue first
 
-Use `gh` for `xujialiu/OpenReader`. Every change starts with an issue,
-including bugs, features, documentation and housekeeping. The owner's standing
-instruction authorizes creating issues and posting work comments as part of
-the task; no separate permission is needed each time.
+Use `gh` for `xujialiu/OpenReader`. Features, bug fixes and substantial changes
+start with an issue. Small, low-risk chores with a clear scope can proceed
+directly: typo fixes, brief instruction updates, removing redundant files,
+or moving local credentials and updating their documented paths. Use judgment
+without asking the owner to approve the exception. For these chores, skip the
+issue lookup, creation, comments and issue references in commits. If the work
+grows into a feature, bug fix or substantial change, follow the issue workflow
+before continuing with that expanded scope.
+
+The owner's standing instruction authorizes creating issues and posting work
+comments as part of the task; no separate permission is needed each time.
+When an issue is required:
 
 1. Read all existing issue titles, open and closed, before starting work
    (`gh issue list --state all --limit 1000`; paginate if needed). Read related
@@ -219,8 +227,8 @@ delivery incomplete; do not claim the work is finished.
 
 ## Local credentials
 
-For provider configuration or live-provider tests, first check `.secrets/` in
-this repository (`/Users/xujialiu/Works/openreader/.secrets`). It contains the
+For provider configuration or live-provider tests, first check
+`~/.secrets/openreader/`. It contains the
 owner's local credentials. Load only the credentials needed for the test; keep
 their values out of logs, screenshots, documentation and commits.
 

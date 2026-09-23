@@ -8,7 +8,7 @@ needed for the next run belongs here.
 
 Keep generated Xcode projects, builds, logs and screenshots outside the
 repository. Accept device IDs and artifact destinations as arguments. Load only
-needed credentials from `.secrets/`; never print or commit their values.
+needed credentials from `~/.secrets/openreader/`; never print or commit their values.
 Follow the simulator installation guide and AGENTS.md's silence, playback-duration
 and final-running-app requirements. Choose playback duration for the fact being
 measured, and stop immediately afterwards, including after failures.
@@ -1405,7 +1405,7 @@ bash test/manual-test/offline-fix.sh SIMULATOR_UDID /tmp/openreader-offline-fix-
 
 Real touches: Settings → Providers → Fish Audio, types the key read from
 `/tmp/openreader-fish-key.txt` (never printed, logged or checked in — write
-it there from `.secrets/` per AGENTS.md before this method runs, `chmod 600`
+it there from `~/.secrets/openreader/` per AGENTS.md before this method runs, `chmod 600`
 it, and remove it afterward) into the still-masked field, taps Enable, and
 waits for "Connection successful". `Show API key` is never tapped, so no
 capture here can show it. Skips the enable step if a previous run already

@@ -186,7 +186,7 @@ The device must already be booted, and a boot resets it to 60, so set it after
 the boot and before launching the app; an app that is already playing keeps the
 volume it started with. Then derive the playback duration from the fact the test
 needs to establish and stop playback immediately after that fact is established.
-Read credentials from the repository's `.secrets/` only as needed; do not put
+Read credentials from `~/.secrets/openreader/` only as needed; do not put
 them in screenshots, logs, or documentation.
 
 ### No usable simulator window
