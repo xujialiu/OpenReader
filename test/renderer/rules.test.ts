@@ -10,6 +10,7 @@ import {
   DEFAULT_HIGHLIGHT,
   HIGHLIGHTER,
   highlightCall,
+  READER_THEME,
   highlightCss,
   highlighterSource,
   themeCss,
@@ -923,6 +924,52 @@ describe('what was read out of @epubjs-react-native/core rather than its documen
     expect(context).toContain('book.current?.injectJavaScript(script)');
     expect(context).toContain("rendition.display('${targetCfi}')");
     expect(code('reader-bridge.ts')).toContain('injectJavascript, goToLocation } = useReader()');
+  });
+});
+
+describe('wherever no section is drawn, the page is the app’s own (#27, ADR 0043)', () => {
+  /** The library's own default theme, evaluated out of the installed package rather than copied from it. */
+  const libraryTheme = (): Record<string, Record<string, string>> => {
+    const context = library('context.js');
+    const start = context.indexOf('{', context.indexOf('const defaultTheme = exports.defaultTheme = {'));
+    return vm.runInNewContext('(' + context.slice(start, context.indexOf('\n};', start) + 2) + ')');
+  };
+
+  it('colours the WebView itself with the theme’s page, which by default is white', () => {
+    // The two facts the white rests on. Before the first section is displayed,
+    // below a short document, and between sections in a fast fling, what shows is
+    // the WebView's own colour — and the library sets it from `theme.body.background`,
+    // whose default is `#fff`.
+    pin(library('View.js'), 'backgroundColor: theme.body.background,', 'the installed @epubjs-react-native/core View.js');
+    expect(libraryTheme().body).toEqual({ background: '#fff' });
+  });
+
+  it('hands the reader the library’s own theme with nothing changed but a transparent page', () => {
+    // Transparent, so the WebView is not opaque and the reader's own view behind it
+    // shows: `INK.page`, dark under the dark theme and `#ffffff` under the light
+    // one. Every other rule is the library's, so the light theme looks as it did.
+    const library = libraryTheme();
+    expect(READER_THEME).toEqual({ ...library, body: { ...library.body, background: 'transparent' } });
+  });
+
+  it('gives it to <Reader> through readerProps, declared and given', () => {
+    const bridge = code('reader-bridge.ts');
+    pin(bridge, 'defaultTheme: Theme;', 'reader-bridge.ts, the readerProps type');
+    pin(bridge, 'defaultTheme: READER_THEME,', 'reader-bridge.ts, the readerProps value');
+  });
+
+  it('puts it in the provider before the first WebView is created, not when the template starts', () => {
+    // The WebView's colour is the provider's theme, not the prop, and the provider
+    // starts on the library's white and takes the prop only from the template's
+    // `onStarted`. A WebView created white stays white after that — until the first
+    // section covers it — so the first open after a launch flashed white in 6 of 6
+    // runs with the prop alone (#27). The provider lives above the navigator and
+    // keeps what it is given, so this happens once per launch.
+    const context = library('context.js');
+    const initial = context.slice(context.indexOf('const initialState = {'), context.indexOf('};', context.indexOf('const initialState = {')));
+    pin(initial, 'theme: defaultTheme,', 'the installed @epubjs-react-native/core context.js, initialState');
+    pin(library('View.js'), 'changeTheme(defaultTheme);', 'the installed @epubjs-react-native/core View.js, onStarted');
+    pin(code('reader-bridge.ts'), 'if (theme !== READER_THEME) changeTheme(READER_THEME);', 'reader-bridge.ts');
   });
 });
 

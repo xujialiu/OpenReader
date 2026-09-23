@@ -26,7 +26,7 @@
  * and after that every message is a call into it.
  */
 
-import { useReader } from '@epubjs-react-native/core';
+import { useReader, type Theme } from '@epubjs-react-native/core';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import type { Utterance } from '../core/segmenter';
@@ -41,6 +41,7 @@ import {
   DEFAULT_APPEARANCE,
   highlightCall,
   highlighterSource,
+  READER_THEME,
   themeCss,
   type Appearance,
   type HighlightStyles,
@@ -179,9 +180,15 @@ export interface ReaderBridgeOptions {
   /**
    * Light or dark, as the book opens (ADR 0022).
    *
-   * Beside `appearance` and for the same reason: this is the **first paint**, so
-   * a book opened under a dark theme is dark on the frame it appears rather than
-   * flashing white until the first message lands. It changes through `setTheme`.
+   * Beside `appearance` and for the same reason: every section the program adopts
+   * is dark from the program's installation, rather than white until the first
+   * message lands. It changes through `setTheme`.
+   *
+   * **Not the first section's first frame.** The library installs the program
+   * only after it has displayed the first section (`onReady`), so that one is
+   * drawn once under the library's own theme before this reaches it. What keeps
+   * that frame from being white is `readerProps.defaultTheme`'s transparent page
+   * (#27, ADR 0043).
    */
   scheme?: ReadingScheme;
 }
@@ -300,6 +307,12 @@ export interface ReaderBridge {
     onWebViewMessage(event: unknown): void;
     manager: 'continuous';
     flow: 'scrolled-continuous';
+    /**
+     * The library's own theme with a transparent page (`READER_THEME`, #27): the
+     * library colours the WebView with it, so wherever no section is drawn the
+     * reader's own page shows rather than the library's white.
+     */
+    defaultTheme: Theme;
   };
 }
 
@@ -324,6 +337,26 @@ function asMessage(event: unknown): WebViewMessage | null {
 
 export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge {
   const { injectJavascript, goToLocation } = useReader();
+
+  /**
+   * `readerProps.defaultTheme`, put in the provider before this reader's WebView
+   * is created (#27, ADR 0043).
+   *
+   * The library colours the WebView from the **provider's** theme, which starts on
+   * its own white and takes the prop only when the template posts `onStarted`. A
+   * WebView created white stays white after that, until the first section covers
+   * it: the first open after every launch flashed white, 6 of 6. The provider sits
+   * above the navigator and keeps what it is given, so after the first open this
+   * finds it already done — which also means the library has no WebView yet
+   * whenever `changeTheme` runs here, and its injection into one is skipped.
+   *
+   * An effect is early enough: `<Reader>` is not rendered until the reading view
+   * has measured itself, a layout later, and React runs this before that render.
+   */
+  const { theme, changeTheme } = useReader();
+  useEffect(() => {
+    if (theme !== READER_THEME) changeTheme(READER_THEME);
+  }, [theme, changeTheme]);
 
   /** The callbacks, kept current without making the bridge itself change identity every render. */
   const latest = useRef(options);
@@ -585,6 +618,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       // into the WebView's template at mount, so they are fixed for a document.
       manager: 'continuous',
       flow: 'scrolled-continuous',
+      defaultTheme: READER_THEME,
     }),
     [injectedJavascript, onWebViewMessage],
   );
