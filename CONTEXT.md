@@ -93,6 +93,12 @@ A document's spoken audio saved on the device for listening inside OpenReader
 without a network connection.
 _Avoid_: downloaded book, audiobook export, document download
 
+**Download**:
+The preparation of one document's offline narration in one voice, for the
+chapters the owner chose, worked through one chapter at a time. Each chapter in
+it is waiting its turn, being written, paused, failed or saved.
+_Avoid_: task, job, queue
+
 **Word Timing**:
 Where one spoken word falls inside a clip, and which characters of the
 utterance it corresponds to. A clip either comes with them or does not; they

@@ -1,11 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { chapterTextCount, descendants, fullyPrepared, type Chapter, type OfflineVoice } from '../offline/model';
+import { chapterTextCount, descendants, fullyPrepared, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
 import { INK } from './controls';
 import { DownloadRing } from './download-ring';
 import { listedInManage, marker, type Marker } from './download-rows';
 import { Icon } from './icon';
+
+/**
+ * The line above the list: the download's state, for when its rows are out of
+ * sight, and what went wrong. Paused is not among them, because Resume all
+ * below the list already says it (#56).
+ */
+const STATE_LINE: Partial<Record<TaskState, string>> = {
+  preparing: 'Preparing selected chapter…', downloading: 'Downloading…', queued: 'Queued', waiting: 'No network connection, waiting to reconnect',
+  blocked: 'Needs attention', interrupted: 'Interrupted · continues when available',
+};
+const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.length ? `${task.failed.length} chapters failed` : 'Selected chapters downloaded' : STATE_LINE[task.state];
 
 export function DownloadContent({ document, title, voice, onVoice, onStart }: {
   document: string; title: string; voice: OfflineVoice; onVoice?(voice: OfflineVoice): void; onStart?(): void;
@@ -98,10 +109,8 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
     {plan && !progressReady ? <Text style={styles.secondary}>Checking saved downloads…</Text> : null}
     {plan ? <Text style={styles.secondary}>{manage ? `${downloads.formatBytes(downloads.occupied(document, choice))} saved` :
       `${completed} chapters downloaded`}</Text> : null}
-    {task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length && whole) ? <View style={styles.top}>
-      <Text style={[styles.secondary, { flex: 1 }]}>{task.state === 'done' ? task.failed.length ? `${task.failed.length} chapters failed` : 'Selected chapters downloaded' :
-        ({ preparing: 'Preparing selected chapter…', downloading: 'Downloading…', queued: 'Queued', waiting: 'No network connection, waiting to reconnect', paused: 'Paused',
-          blocked: 'Needs attention', interrupted: 'Interrupted · continues when available' }[task.state])}{task.error ? `\n${task.error}` : ''}</Text>
+    {task && task.chapters.length > 0 && !manage && task.state !== 'paused' && !(task.state === 'done' && !task.failed.length && whole) ? <View style={styles.top}>
+      <Text style={[styles.secondary, { flex: 1 }]}>{stateLine(task)}{task.error ? `\n${task.error}` : ''}</Text>
       {task.state === 'done' && task.failed.length ? <Pressable accessibilityRole="button" onPress={() => downloads.toggleTask(task)}>
         <Text style={styles.link}>Retry failed</Text>
       </Pressable> : null}
@@ -124,7 +133,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
             <Icon name={collapsed.has(item.id) ? 'next' : 'down'} color={INK.quiet} size={18} />
           </Pressable> : null}
           {mark?.kind === 'ring' && task ? <View style={styles.chapter}><View style={{ flex: 1 }}>{name}</View>
-            <DownloadRing fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={() => downloads.toggleTask(task)} />
+            <DownloadRing fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={() => downloads.toggleChapter(task, item.id)} />
           </View> :
           <Pressable accessibilityRole="checkbox" accessibilityLabel={`${item.title || 'Untitled chapter'}${done ? ', downloaded' : ''}`}
             accessibilityState={{ checked: picked, disabled: !ids.length }} disabled={!ids.length} onPress={() => toggle(ids)} style={styles.chapter}>
@@ -140,8 +149,12 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
     <View style={styles.footer}>
       {manageable ? <View style={styles.top}>
         <Pressable accessibilityRole="button" onPress={() => { setSelected(new Set()); setManage(!manage); setManagedVoice(null); }}><Text style={styles.link}>{manage ? 'Back to downloads' : 'Manage downloads'}</Text></Pressable>
-        {manage && downloads.occupied(document) > 0 ? <Pressable accessibilityRole="button" onPress={deleteEverything}>
+        {manage ? downloads.occupied(document) > 0 ? <Pressable accessibilityRole="button" onPress={deleteEverything}>
           <Text style={[styles.link, { color: INK.attention }]}>Delete all saved audio</Text>
+        </Pressable> : null :
+        // Where Manage downloads offers Delete all saved audio: the whole download, where a ring is one chapter (#56).
+        task && task.state !== 'done' ? <Pressable accessibilityRole="button" onPress={() => downloads.toggleTask(task)}>
+          <Text style={styles.link}>{downloads.goesOn(task) ? 'Pause all' : 'Resume all'}</Text>
         </Pressable> : null}
       </View> : null}
       <Pressable accessibilityRole="button" accessibilityLabel={manage ? `Delete selected (${chosen.length})` : `Download selected (${chosen.length})`}

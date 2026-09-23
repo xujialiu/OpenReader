@@ -1333,7 +1333,7 @@ no test hooks to production app code. Do not edit app code while a probe runs:
 Fast Refresh can replace the state being inspected. Restart the app afterwards
 to remove all temporary debugger globals and verify final delivery separately.
 
-### The download ring and Manage downloads' listed-chapters rule (#37, #38)
+### The download ring, pausing, and Manage downloads' listed-chapters rule (#37, #38, #56)
 
 With a fresh Library (no provider configured, no saved audio) holding only `A
 Short Test of Reading Aloud`, and the Fish key staged at
@@ -1348,44 +1348,63 @@ bash test/manual-test/download-ring.sh SIMULATOR_UDID /tmp/openreader-download-r
 Real XCTest touches throughout, spending the fixture's 17 Fish utterances for
 real: configures Fish Audio and chooses its first-sorting voice exactly as
 `OfflineFixProbe` does, opens Download and requires `0 chapters downloaded`
-with no `Manage downloads` link, selects both chapters and taps `Download
-selected (2)`, then screenshots every ~0.6 s for ~10 s (attachments
-`02-burst-0` … `N`, each paired with an accessibility-tree `-tree` attachment)
-to catch the ring: a spinning arc plus `Preparing selected chapter…` on the
-chapter being counted, an empty ring on the one waiting its turn, then a
-filling arc under `Downloading…`. It taps the running ring itself
-(`app.buttons["Pause download"]`, real touch, not a text link), requires the
-task line to read `Paused` and every ring's label to become `Continue
-download`, opens Manage downloads while paused and screenshots it (only the
-chapter with partial audio is listed, with its `n / total` line), goes back,
-taps the ring again to continue, opportunistically screenshots Manage while
-the download is still running, then waits up to 90 s for `2 chapters
-downloaded` and checks Manage lists both chapters as checkboxes. It leaves the
-Download drawer open on the plain (non-Manage) view. A second method,
-`testReopenDownloadDrawer`, just reopens that same drawer on an
-already-downloaded fixture and leaves it open — used to restore the final
-state after a separate run (such as `offline.sh management`) has left the app
-elsewhere.
+with neither `Manage downloads` nor `Pause all`, selects both chapters and taps
+`Download selected (2)`. Chapters are written from the top of the list down
+(#56), so it waits for the first chapter's ring to read `Pause download` and
+requires `Pause all` opposite `Manage downloads`. It then:
 
-Measured 2026-09-22: the full lifecycle passed in 73.6 s including the Fish
-provider setup and voice choice; the spinning-arc "preparing" phase was
-caught in the burst (`Preparing selected chapter…` visible in at least one
-frame) but is not guaranteed to be — the short fixture's per-chapter text is
-small enough to count in well under one screenshot interval, so treat its
-absence in a given run as inconclusive, not a defect, and say in the report
-whether that run happened to catch it. The ring's accessibility tree entries
-are `Button` elements 24×24pt with label `Pause download` or `Continue
-download` (matching `SIZE` in `download-ring.tsx`); a plain chapter checkbox
-row is an `Other` with `value: checkbox`, not a `Button`, so query it with
+1. taps the first chapter's own ring and requires that ring alone to become
+   `Resume download` while the second chapter's still reads `Pause download`,
+   and no `Paused` line anywhere (three screenshots follow, `03-second-running-N`);
+2. taps `Pause all` (if the second chapter has not already finished) and
+   requires `Resume all` in its place, no ring reading `Pause download`, and
+   still no `Paused` line;
+3. opens Manage downloads while paused, where the same place holds `Delete all
+   saved audio` and not `Resume all`, and goes back;
+4. taps the first chapter's ring again and requires it alone to resume;
+5. waits up to 60 s for `The First Chapter, downloaded`; if the second chapter
+   is still paused, requires `Resume all` (the download is paused with only
+   that chapter left) and taps it;
+6. waits up to 90 s for `2 chapters downloaded`, with no ring and neither
+   `Pause all` nor `Resume all` left, checks Manage lists both chapters as
+   checkboxes, and leaves the Download drawer open on the plain view.
+
+A ring's label says what a tap does, not which chapter it is on, so the probe
+finds a chapter's ring by position: the `Pause download` or `Resume download`
+button at the height of the chapter's title and to its right
+(`ring(beside:)`). A second method, `testReopenDownloadDrawer`, just reopens
+that same drawer on an already-downloaded fixture and leaves it open — used to
+restore the final state after a separate run (such as `offline.sh management`)
+has left the app elsewhere.
+
+The first two steps race the provider: the fixture's chapters take seconds
+each, and a fast connection can finish the second chapter before `Pause all`
+is tapped, which the probe allows for rather than fails. Say in the report
+which branch a run took. It establishes the per-chapter and whole-download
+pause through real touches and screenshots; the order rules the fixture cannot
+show (a chapter resumed above the one being written waits for it; adding
+chapters leaves paused ones paused) are unit-tested in
+`test/offline/scheduler.test.ts` and `test/offline/runtime-pausing.test.ts`.
+
+Measured 2026-09-22, on the #38 version of this probe, whose ring paused the
+whole download: the full lifecycle passed in 73.6 s including the Fish
+provider setup and voice choice; the spinning-arc "preparing" phase was caught
+(`Preparing selected chapter…` visible in at least one frame) but is not
+guaranteed to be — the short fixture's per-chapter text is small enough to
+count in well under one screenshot interval, so treat its absence in a given
+run as inconclusive, not a defect, and say in the report whether that run
+happened to catch it (the probe prints `SAW PREPARING TEXT BEFORE THE FIRST
+RING`). The ring's accessibility tree entries are `Button` elements 24×24pt
+with label `Pause download` or `Resume download` (`Continue download` before
+#56; matching `SIZE` in `download-ring.tsx`); a plain chapter checkbox row is
+an `Other` with `value: checkbox`, not a `Button`, so query it with
 `app.descendants(matching: .any)` as the existing offline probes do, never
-`app.buttons`. This establishes the ring's states, labels and the Manage
-listing rule through real touches and screenshots; it does not measure
-highlight timing, drift, or anything about playback, and it does not by
-itself prove the ring is legible against the sheet background in Dark (a
-ring only renders during an incomplete download, so checking Dark without a
-second real download needs either a fresh, unfinished task or visual
-inspection of the saved light-mode screenshots' contrast against the app's
-dark palette).
+`app.buttons`. This does not measure highlight timing, drift, or anything
+about playback, and it does not by itself prove the ring is legible against
+the sheet background in Dark (a ring only renders during an incomplete
+download, so checking Dark without a second real download needs either a
+fresh, unfinished task or visual inspection of the saved light-mode
+screenshots' contrast against the app's dark palette).
 
 ### Paused sentence seeking after background receipt
 

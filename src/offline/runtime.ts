@@ -42,6 +42,7 @@ import {
   type OfflineVoice,
 } from "./model";
 import { createScheduler } from "./scheduler";
+import * as pausing from "./pausing";
 import { offlineRepository } from "./database";
 import { audioKey, voiceKey } from "./catalog-keys";
 import { downloadSpeech, speechKeying } from "./speech";
@@ -137,6 +138,7 @@ async function persist() {
     voice: { ...task.voice },
     chapters: [...task.chapters],
     failed: [...task.failed],
+    paused: [...(task.paused ?? [])],
   }));
   try {
     await (await offlineRepository()).catalog.saveTasks(snapshot);
@@ -650,7 +652,9 @@ export function enqueue(
     (t) => t.document === document && sameVoice(t.voice, voice),
   );
   if (task) {
+    // Chapters the owner paused stay paused: adding others is not resuming them (#56).
     task.chapters = [...new Set([...task.chapters, ...chapters])];
+    task.paused = task.paused?.filter((id) => !chapters.includes(id));
     task.failed = [];
     task.state = "queued";
     task.error = null;
@@ -667,14 +671,29 @@ export function enqueue(
   registerVoice(voice);
   fire(persist().then(kick));
 }
+/**
+ * The download's complete chapters as far as the drawer's progress for its
+ * voice knows them; the drawer asks for that progress while it is open, which
+ * is when a ring or Pause all can be tapped.
+ */
+const completeIn = (task: DownloadTask) =>
+  new Set(
+    [...chapterProgress(task.document, task.voice).values()]
+      .filter((chapter) => chapter.complete)
+      .map((chapter) => chapter.id),
+  );
+/** Whether Pause all, rather than Resume all, is what the download offers (#56). */
+export const goesOn = (task: DownloadTask) =>
+  pausing.goesOn(task, completeIn(task));
+/** Pause all while any chapter goes on by itself; otherwise Resume all, which is also Retry failed. */
 export function toggleTask(task: DownloadTask): void {
-  if (["queued", "preparing", "downloading", "waiting"].includes(task.state))
-    task.state = "paused";
-  else {
-    task.state = "queued";
-    task.failed = [];
-    task.error = null;
-  }
+  if (goesOn(task)) pausing.pauseAll(task);
+  else pausing.resumeAll(task);
+  fire(persist().then(kick));
+}
+/** A tap on one chapter's ring (#56). */
+export function toggleChapter(task: DownloadTask, chapter: string): void {
+  pausing.tapChapter(task, chapter, completeIn(task));
   fire(persist().then(kick));
 }
 export async function deleteDownloaded(
@@ -698,6 +717,7 @@ export async function deleteDownloaded(
     if (task.document === document && sameVoice(task.voice, voice)) {
       task.chapters = task.chapters.filter((id) => !selected.has(id));
       task.failed = task.failed.filter((id) => !selected.has(id));
+      task.paused = task.paused?.filter((id) => !selected.has(id));
       if (!task.chapters.length) task.state = "done";
     }
   tasks = tasks.filter((task) => task.chapters.length > 0);

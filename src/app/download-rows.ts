@@ -1,5 +1,6 @@
 import type { ChapterProgress } from '../offline/catalog';
 import { chapterTextCount, type Chapter, type DownloadTask, type TaskState } from '../offline/model';
+import { isPaused } from '../offline/pausing';
 
 /**
  * What the right-hand column of a chapter row shows, decided here so that the
@@ -21,7 +22,11 @@ export type Marker =
   | { kind: 'checkbox' }
   | { kind: 'ring'; fraction: number; spinning: boolean; halted: boolean };
 
-/** States in which the download waits for the owner: the ring holds a triangle and a tap continues. Every other unfinished state goes on by itself, and its ring holds a square. */
+/**
+ * States in which the whole download waits for the owner: every ring holds a
+ * triangle. In the others the download goes on by itself, and a ring holds the
+ * square unless the owner paused its own chapter (#56).
+ */
 export const HALTED: readonly TaskState[] = ['paused', 'blocked', 'interrupted'];
 /**
  * States in which the scheduler is writing a chapter and `task.current` names
@@ -56,7 +61,7 @@ export function marker(
     return count > 0 ? { kind: 'checkbox' } : null;
   }
   if (progress?.complete) return { kind: 'check' };
-  if (inTask(chapter, task)) return ring(HALTED.includes(task.state));
+  if (inTask(chapter, task)) return ring(HALTED.includes(task.state) || isPaused(task, chapter.id));
   return { kind: 'checkbox' };
 }
 
