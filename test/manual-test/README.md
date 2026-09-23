@@ -58,6 +58,7 @@ fix (AGENTS.md).
   - Cause: Metro started with `CI=1` does not watch files. It serves what it read at start, and its log says so once: "Metro is running in CI mode, reloads are disabled".
   - Fix: start it as `npx expo start --port PORT < /dev/null`. It will not prompt, because stdin is not a terminal.
   - To confirm the change is in what Metro serves: `curl -s "http://localhost:PORT/index.bundle?platform=ios&dev=true&minify=false" | grep -c <identifier from your change>`.
+  - Ask a few seconds after the write, not in the same breath. Measured 2026-09-23: a bundle fetched straight after a `cp` put a file back still held the code the `cp` had replaced, and one fetched 3 s later did not. One stale answer is Metro's watcher catching up, not CI mode.
 - **The bundle is stale or broken after `npm ci` or a new patch.** `node_modules` was replaced under a running Metro. Restart it with `--clear` and check the bundle as above.
 - **A new worktree has no `node_modules`**, so `npm run typecheck` answers `sh: tsc: command not found` until `npm ci` has run. Plain `npm ci`, with nothing passed to it, is the whole command: 831 packages in 4 s, ending in `patch-package` (`@epubjs-react-native/core@1.4.8 ✔`).
 - **`npm ci` stops with `ERESOLVE could not resolve`, naming `react-dom@19.3.0`.** From 538fa10 on 2026-09-22 until 2026-09-23 this was every new worktree's first wall, and `--legacy-peer-deps` was the way past it. It is now fixed at the root (#42, ADR 0039): `package.json` overrides `react-dom` to `$react`, so the lockfile holds the `react-dom` the pinned `react` peers with, and no command in this repository needs the flag. The symptom returns only on a branch from before that fix, or if the override is dropped — pass `--legacy-peer-deps` once to get moving, then merge `main`, rather than writing the flag into an instruction again. `react-dom` does not reach the iOS bundle either way: the same Hermes bundle hash comes out of both trees (engineering log, 2026-09-22 13:02 and 2026-09-23 02:48).
@@ -463,7 +464,10 @@ fix (AGENTS.md).
   — that also holds if Play never started. Assert the transition to `Pause`
   (`app.buttons["Pause"].waitForExistence(...)`) as the proof playback began,
   and dismiss or clear the warning banner (a clean relaunch is the reliable
-  way) before trusting a Play tap near it.
+  way) before trusting a Play tap near it. The same banner swallowed a tap on
+  the playback speed (the number at the right end of the player row) on
+  2026-09-23, after a fixture reader was opened; the relaunch cleared it, and
+  state restoration reopened the same reader.
 - **`offline-fix.sh`'s `-only-testing` argument is the bare method name; the
   script prepends the class itself.** Passing
   `-only-testing:OfflineFixProbe/testConfigureFishProvider` (reasonable by
@@ -487,10 +491,11 @@ fix (AGENTS.md).
 
 - **A Settings-stack screen can be more than one level away, even when it
   looks like one.** Reaching Fish Audio's provider form is Library → Settings
-  → Providers → Fish Audio, three pushes, and each back button is named after
-  the screen behind it (`Library`, `Settings`, `Providers`), never literally
-  "Back" — the same fact `SyncProbe.openBook`'s comment already records for
-  the reader's own stack. Tapping `app.navigationBars.buttons.element(boundBy:
+  → Providers → Fish Audio, three pushes. Until #48 each back button was named
+  after the screen behind it (`Library`, `Settings`, `Providers`); since #48
+  every one shows the arrow alone and is labelled `Back`, like the reader's
+  (measured 2026-09-23, `DesignShotsProbe.testBackButtonLabels`), so the label
+  says nothing about how deep the stack is. Tapping `app.navigationBars.buttons.element(boundBy:
   0)` exactly twice after enabling Fish Audio (assuming Settings → Providers →
   Fish Audio, two levels) landed on **Settings**, not Library (measured
   2026-09-22, `DownloadRingProbe.testDownloadRingLifecycle`): the next line
@@ -561,6 +566,15 @@ fix (AGENTS.md).
   own state instead, with a wait: a `Switch`'s `.value` (`"0"`/`"1"`) via
   `XCTNSPredicateExpectation`, not an unretried `.exists` on a label whose
   appearance depends on a screen transition.
+- **Since #48 a provider's switch label is always `Enabled`, so waiting for it
+  proves nothing.** Before #48 the label read `Disabled`, `Testing…` or
+  `Enabled`, and probes waited for `app.staticTexts["Enabled"]` after tapping
+  the switch. With the label fixed, that query matches at once, before the
+  connection check has even started. Wait for `Turn off to edit.` instead,
+  which is drawn only once the check has passed and the provider is enabled,
+  then read the switch's `.value`. Likewise `Test connection` keeps its label
+  while the check runs, and is disabled instead: wait for its `isEnabled`, not
+  for its label to leave `Testing…`.
 - **`continueAfterFailure` defaults to `true`, so one wrong assertion
   cascades silently through the rest of the method.** Combined with the note
   above misreading every wording as "Azure", `AzureProviderProbe`'s first run
@@ -579,6 +593,73 @@ fix (AGENTS.md).
   showed the correct masked dots. Before treating a blank masked field as a
   lost or uncleared value, take a second, plain screenshot outside the XCTest
   capture to rule out this rendering race.
+
+- **`xcodebuild … test` can stay alive long after its test has finished.**
+  Measured 2026-09-23: `design-shots.sh`'s dark run wrote "Executed 1 test, with
+  1 failure" to `test.log` at 17:50:36, and its `xcodebuild` was still running
+  more than ten minutes later with nothing more written. Killing it ends the log
+  with `** BUILD INTERRUPTED **`, and the result bundle then yields no
+  attachments: the outcome survives in `test.log`, the screenshots do not. The
+  cause is not established; the light run just before it, on the same
+  simulator, failed the same assertion and exited at once. Watch `test.log` for
+  the `Executed` line, and if `xcodebuild` is still alive a minute after it,
+  kill that process and rerun rather than wait.
+
+- **A disabled React Native `Switch`'s XCUITest `.isEnabled` can read `true`
+  even though a tap on it does nothing.** Verifying #48's "the whole Voice
+  sources card must freeze with the rest once enabled"
+  (`ProviderFreezeProbe.testFishVoicesFieldAndEnableDisableCycle`), asserting
+  `XCTAssertFalse(manualVoices.isEnabled, …)` right after a real Fish Audio
+  enable failed — `isEnabled` read `true` — which looks exactly like the
+  freeze not working. It is not: a follow-up method
+  (`testVoiceSourcesLockIsFunctionalThenCleanUp`) started from that same live
+  state (Fish already enabled, read from the device, not assumed) and tapped
+  `Manual voices` for real — its value stayed `0` before and after the tap,
+  printed as evidence. `disabled={locked}` (`provider-screen.tsx`) does
+  correctly stop the switch from responding; the accessibility `enabled` trait
+  XCUITest reads from an RN `Switch` just does not reflect it on this runtime.
+  Test a `Switch`'s lock functionally — tap it and compare the value before
+  and after — never with `.isEnabled`, the same way a `TextField`'s lock is
+  already tested by tapping and checking for a keyboard rather than reading
+  its own `.isEnabled` (`GeneralFontsProbe`'s bracket-field check, `isLocked`
+  above).
+- **`XCTNSPredicateExpectation` created right after `.tap()` can already match
+  the state from *before* the tap.** The general form of the pitfall above
+  "`.exists` right after a navigation tap can read `false` on a state that is
+  actually `true`": here it ran the other way, reading a not-yet-changed
+  value as already settled. Measured 2026-09-23: `ProviderFreezeProbe`'s first
+  version tapped Sync's switch, then immediately built
+  `XCTNSPredicateExpectation(format: "isEnabled == 1", object: syncSwitch)`
+  and waited on it — since `.tap()` returns once the touch is delivered, not
+  once React has re-rendered `disabled={checking}` to `true`, the expectation
+  can observe the *pre-tap* `isEnabled == 1` and fulfil immediately, before
+  the check has done anything. The method then read the switch's `value`
+  (still `"0"`, true either way for a check that has not — or has — failed)
+  and the footer text (found none yet, so it fell through to "Folder", the
+  next card's own title, misread as the refusal) as if the check had already
+  settled. Fix: wait for the busy state to *begin* first
+  (`isEnabled == 0`) before waiting for it to end, or wait on a second,
+  independent control the same operation disables (`AzureProviderProbe`
+  and `ProviderFreezeProbe`'s provider checks wait on `Test connection`, a
+  separate row, for exactly this reason — Sync's switch has no such second
+  control, which is why it needs the extra step).
+  `ProviderFreezeProbe.testSyncRefusalPathAlone` does both fixes and is the
+  one to reuse.
+- **A Sync refusal in a probe can come from mistyped text, not the network.**
+  Measured 2026-09-23: `ProviderFreezeProbe.testSyncRefusalPathAlone` typed
+  `https://openreader-test-unreachable.invalid/dav` into Sync's Address and got
+  `The WebDAV URL must start with http:// or https://.` after 34 s. Its
+  screenshot shows the field holding `h://openreader-test-unreacha…`: the first
+  ten-character chunk, typed straight after the field was emptied with its clear
+  button, lost `ttps`, the controlled-field typing race described above. So that
+  refusal never reached the network. An earlier run of
+  `testFailurePathsNoCredentials` with the same address took 2350 s end to end,
+  during an outage that also cut off the testing agent's own connection
+  (`ENOTFOUND`); its cause was not isolated. The app's check itself is bounded:
+  `use-sync.ts`'s `check()` is one PROPFIND through `createWebDAVClient`'s
+  `request()`, which wraps every fetch in `withTimeout` at `WEBDAV_TIMEOUT_MS`,
+  15 s. Read the Address back, from a screenshot or `settings.json`, before
+  believing a Sync refusal.
 
 ### Measuring inside the reader's WebView
 
@@ -635,6 +716,16 @@ fix (AGENTS.md).
   `python3 -c "import json;print(json.load(open(D+'/Documents/settings.json'))['settings']['sync']['url'])"`
   — and compare it with the value you meant to type before believing any sync
   result. The probe now asserts the field is empty before it types.
+  Measured again 2026-09-23 on #48's field rows: a tap on the middle of a
+  62-character address followed by 100 backspaces left its tail, from
+  `.com/remote.php/…` on. The caret lands where the tap does, and a backspace
+  deletes only what is before it, so no count of backspaces is enough on its
+  own, and tapping the field's far end first does not help either: a value
+  longer than the field scrolls, and the far end of the field is not the end of
+  the text (four such passes left 49 of a doubled address). Since #48 every
+  settings field has the phone's own clear button while it is being edited, and
+  `SyncProbe.clearAndType` and `DesignShotsProbe.clearAndType` tap
+  `field.buttons["Clear text"]` instead, then assert the field is empty.
 - **`xcodebuild … test` does not pass the caller's environment to the test
   process.** `PLAY_SECONDS=12 bash sync.sh …` silently uses the probe's default,
   and a run "of twelve seconds" is really five. Pass parameters in a file the
@@ -669,6 +760,13 @@ fix (AGENTS.md).
   it refuses, which is what the kit's scripts do and why they do it. Seen again
   on 2026-09-22 on the iPhone 16: `set` read `0` after a boot, and after a
   `simctl terminate` and a `simctl install` over the app, `check` read 60.
+  Twice more on 2026-09-23 on a dedicated iPhone 17: `set` read `0` at 20:17
+  and the file was rewritten (433 bytes, 60) at 20:21:40 with no boot, no
+  XCTest run and no relaunch in between — the app sat idle on a settings page
+  while a file it had loaded was edited under a watching Metro; then again
+  somewhere in twelve minutes of XCTest runs, appearance switches and another
+  edit. Measured one at a time afterwards, an XCTest run and two `simctl ui
+  appearance` switches each left the file untouched.
 - **A `set` made as soon as the boot finished was undone about 20 s later.**
   On 2026-09-22 `xcrun simctl boot` and `bootstatus -b` returned, `silence.sh
   set` read `0` back, and `audiosettings.plist` was then rewritten at 12:30:51
@@ -806,6 +904,10 @@ fix (AGENTS.md).
   well as PID's, and a `tail` shows some other process. Met 2026-09-22 looking
   for where Metro writes its log, which is the only place the app's console
   lines are. `-a` ANDs them: `lsof -a -p PID -d 1,2`.
+- **macOS's `wc -l` pads its count with spaces**, so reading Metro's log on
+  from a remembered line with `tail -n +$(cat saved-count)` failed with
+  `tail: illegal offset -- +    1097` (2026-09-23). Save the count as
+  `wc -l < FILE | tr -d ' '`.
 - **zsh runs nothing when an unquoted glob matches no file.** `grep -rn X src
   --include=*.ts` answers `no matches found: --include=*.ts` and the command
   never runs. Quote the pattern: `--include='*.ts'`.
@@ -848,9 +950,11 @@ fix (AGENTS.md).
   `Documents/library/sha256-<hex>.epub`, while the Document Id is
   `sha256:<hex>`. A `cp "$D/Documents/library/$id.epub" …` fails, and in a
   `cp || ls` chain it fails quietly.
-- **`app.staticTexts["FOLDER"]` matches twice.** React Native nests a duplicate
+- **`app.staticTexts["Folder"]` matches twice.** React Native nests a duplicate
   static text inside every `Text`, so an exact-identifier tap raises `Multiple
-  matching elements found`. Use `.matching(identifier:).firstMatch`.
+  matching elements found`. Use `.matching(identifier:).firstMatch`. Group
+  headers are set as written since #48 (`Folder`, not `FOLDER`), so a probe
+  that still names the capitals finds nothing.
 
 ## Lock-screen screenshot and button inspection
 
@@ -1473,6 +1577,86 @@ delete, no PRAGMA restore, no backup/restore of the offline directory or
 `library.json`) — every destructive one expects the caller to have backed up
 first and to restore afterward, the same division of labour as `management`
 mode above.
+
+## Settings against the phone's own Settings (#48, design 0042)
+
+Design 0042 draws the settings pages the phone's way, measured from the phone
+rather than remembered, and `SETTINGS` in `src/app/controls.tsx` holds the
+numbers. Two runners make the comparison cheap to repeat when the phone's look
+changes; each runs its probe once in the light appearance and once in the dark,
+then gives the simulator back the appearance it had:
+
+```bash
+bash test/manual-test/native-reference.sh SIMULATOR_UDID /tmp/openreader-native-01
+bash test/manual-test/design-shots.sh SIMULATOR_UDID /tmp/openreader-design-01
+```
+
+- `native-reference.sh` (`NativeReferenceProbe.swift`) opens only the phone's
+  own Settings: its front page, General, General › About, and General ›
+  Keyboard at the top and scrolled down, which is where a section header over a
+  card and a footer under one can be measured.
+- `design-shots.sh` (`DesignShotsProbe.swift`) walks OpenReader's Settings,
+  General, Providers, Fish Audio, OpenAI Compatible, Sync empty and filled with
+  sample values (never switched on, and emptied again afterwards), a reader's
+  player and its speed bubble. It never presses Play. The same probe's
+  `testSpeedBubble` checks the bubble (one tap is 0.05 each way, a hold
+  repeats, the speed is put back, and a tap on Contents while it is open only
+  closes it), and `testBackButtonLabels` that every back arrow is labelled
+  `Back`; run either with `-only-testing:LockScreenProbe/DesignShotsProbe/<name>`
+  as `design-shots.sh` runs its own.
+
+Screenshots land in `<dir>/<appearance>/attachments/`, named by
+`manifest.json`. Measure with PIL at the screenshot's own scale (3 pixels to
+the point on an iPhone 17): sample a colour in the middle of a surface, and
+take a card's edges at its vertical middle, since its rounded top cuts in.
+
+- **The simulator's Settings has no page of labelled text fields.** iOS 27.0's
+  simulator has no VPN configuration and no Mail, the two places the phone sets
+  up an account in rows of `Label  value` fields, so `NativeReferenceProbe`
+  captures neither, and the field rows' value column is the one thing on these
+  pages not checked against a measurement.
+
+A third runner covers what the two above do not — real touches on the freeze
+rule itself, not just its resting screenshots:
+
+```bash
+bash test/manual-test/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-01 -only-testing:testFailurePathsNoCredentials
+bash test/manual-test/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-02 -only-testing:testSyncRefusalPathAlone
+bash test/manual-test/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-03 -only-testing:testFishVoicesFieldAndEnableDisableCycle
+bash test/manual-test/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-04 -only-testing:testPressedRowHighlightsEdgeToEdge
+bash test/manual-test/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-05 -only-testing:testDynamicTypeSpotCheck
+```
+
+`ProviderFreezeProbe.swift` (independent #48 verification, 2026-09-23):
+
+- `testFailurePathsNoCredentials` — a bogus OpenAI key and an unreachable
+  OpenAI Compatible address (in practice both are refused by a client-side
+  "needs a model" check before either would reach the network — see
+  Pitfalls, Sync's own timeout gap), then Sync against an address that cannot
+  resolve. Each must end its switch off with a reason under the first card
+  and its fields still editable; leaves every provider disabled and Sync
+  empty. Prefer `testSyncRefusalPathAlone` for Sync alone — it waits for the
+  check to *begin* before waiting for it to end (see Pitfalls) and is faster.
+- `testFishVoicesFieldAndEnableDisableCycle` — needs the real key in
+  `/tmp/openreader-fish-key.txt` (skips itself otherwise). The Voices field
+  revealed by Manual voices, while unlocked: its placeholder, that it raises
+  the keyboard, and that it stays reachable above it. Then the real
+  enable/disable cycle: `Testing…` best-effort caught live, `Turn off to
+  edit.`, `Connection successful`, the fields and the whole Voice sources
+  card locked, the eye toggle's existence (never tapped — no capture here can
+  then show the key), the Providers/Settings counts, and disabling again.
+  Ends with Fish disabled and no stored key. If it fails partway (it did
+  once, on an unrelated assertion — see Pitfalls), Fish may be left enabled
+  with a real key stored: `testVoiceSourcesLockIsFunctionalThenCleanUp`
+  reads the live state rather than assuming it, and disables/clears either way.
+- `testPressedRowHighlightsEdgeToEdge` — a mid-hold screenshot taken from a
+  background queue during `press(forDuration:)`, rather than a video
+  recording, to catch a pressed `NavigationRow`'s highlight.
+- `testDynamicTypeSpotCheck` — captures only, judged by eye; run with
+  `xcrun simctl ui UDID content_size extra-extra-large` set first and
+  restored after (the caller's job, not the probe's).
+- `testReturnToLibrary` — walks back to the Library from wherever the app was
+  left, for ending a session cleanly.
 
 ## Font Size against Documents that set their own sizes (#17)
 

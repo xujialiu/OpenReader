@@ -79,10 +79,11 @@ final class AzureProviderProbe: XCTestCase {
     azureRow.tap()
   }
 
-  /// Waits for the connection check to settle (the Action's label leaves
-  /// "Testing…") and returns whatever Note text is now showing.
+  /// Waits for the connection check to settle (the Test connection row is
+  /// enabled again; its label no longer changes to "Testing…", #48) and
+  /// returns whatever Note text is now showing.
   func waitForNote(_ app: XCUIApplication, timeout: TimeInterval = 15) -> String {
-    let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Test connection'"), object: app.buttons["Test connection"])
+    let settled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == 1"), object: app.buttons["Test connection"])
     _ = XCTWaiter.wait(for: [settled], timeout: timeout)
     // Scoped to the screen's own ScrollView (provider-screen.tsx), because
     // `app.staticTexts` unscoped also matches the navigation bar's own title
@@ -125,8 +126,8 @@ final class AzureProviderProbe: XCTestCase {
 
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
     app.buttons["Settings"].tap()
-    let versionLine = app.staticTexts.matching(NSPredicate(format: "label == 'Version 0.0.2-beta9'")).firstMatch
-    XCTAssertTrue(versionLine.waitForExistence(timeout: 5), "Settings did not show Version 0.0.2-beta9")
+    let versionLine = app.staticTexts.matching(NSPredicate(format: "label == 'Version 0.0.2-beta11'")).firstMatch
+    XCTAssertTrue(versionLine.waitForExistence(timeout: 5), "Settings did not show Version 0.0.2-beta11")
 
     let providersRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Providers'")).firstMatch
     XCTAssertTrue(providersRow.waitForExistence(timeout: 5))
@@ -143,9 +144,9 @@ final class AzureProviderProbe: XCTestCase {
     let azureRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Azure,'")).firstMatch
     azureRow.tap()
 
-    XCTAssertTrue(app.staticTexts["Disabled"].waitForExistence(timeout: 5))
+    // The switch's label is always "Enabled" now (#48); its value is the state.
     let enableSwitch = app.switches["Enable Azure"]
-    XCTAssertTrue(enableSwitch.exists, "Enable switch missing")
+    XCTAssertTrue(enableSwitch.waitForExistence(timeout: 5), "Enable switch missing")
     XCTAssertEqual(enableSwitch.value as? String, "0", "Azure must start disabled")
 
     let keyField = app.textFields["API key"].exists ? app.textFields["API key"] : app.secureTextFields["API key"]
@@ -230,9 +231,10 @@ final class AzureProviderProbe: XCTestCase {
 
     let enableSwitch = app.switches["Enable Azure"]
     enableSwitch.tap()
-    let enabledText = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Enabled'"), object: app.staticTexts.matching(NSPredicate(format: "label == 'Enabled' OR label == 'Testing…'")).firstMatch)
-    _ = XCTWaiter.wait(for: [enabledText], timeout: 20)
-    XCTAssertTrue(app.staticTexts["Enabled"].waitForExistence(timeout: 20), "Azure did not report Enabled")
+    // "Turn off to edit." is drawn only once the check has passed and Azure is
+    // enabled; the label reads "Enabled" throughout (#48).
+    XCTAssertTrue(app.staticTexts["Turn off to edit."].waitForExistence(timeout: 20), "Azure did not report Enabled")
+    XCTAssertEqual(enableSwitch.value as? String, "1", "Azure's switch is not on after the check")
     capture("azure-enabled-masked", app)
   }
 

@@ -265,9 +265,9 @@ final class ScrollThemeReaderProbe: XCTestCase {
       let enableSwitch = app.switches["Enable Fish Audio"]
       XCTAssertTrue(enableSwitch.waitForExistence(timeout: 3))
       enableSwitch.tap()
-      let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Enabled'"), object: app.staticTexts.matching(NSPredicate(format: "label == 'Enabled' OR label == 'Testing…'")).firstMatch)
-      _ = XCTWaiter.wait(for: [enabled], timeout: 20)
-      XCTAssertTrue(app.staticTexts["Enabled"].waitForExistence(timeout: 20), "Fish Audio did not report Enabled after the connection check")
+      // "Turn off to edit." is drawn only once the check has passed; the label
+      // reads "Enabled" throughout (#48).
+      XCTAssertTrue(app.staticTexts["Turn off to edit."].waitForExistence(timeout: 20), "Fish Audio did not report Enabled after the connection check")
     }
     capture("fish-provider-enabled", app)
   }

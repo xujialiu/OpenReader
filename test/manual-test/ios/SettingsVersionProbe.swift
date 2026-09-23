@@ -35,10 +35,8 @@ final class SettingsVersionProbe: XCTestCase {
     return line.split(separator: "'").dropFirst().first.map(String.init)
   }
 
-  /// General/Providers/Sync all set `headerBackTitle: 'Settings'`; Settings'
-  /// own back button reads 'Library' (README pitfall: named after the screen
-  /// behind it, not always literally "Back"). The first nav-bar button is
-  /// always that one, whatever it is labelled.
+  /// Every back button reads `Back` since #48 (README Pitfalls); the first
+  /// nav-bar button is always that one, whatever it is labelled.
   func backToSettings(_ app: XCUIApplication) {
     app.navigationBars.buttons.element(boundBy: 0).tap()
   }

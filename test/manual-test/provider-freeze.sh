@@ -1,0 +1,30 @@
+#!/bin/bash
+# The freeze-while-on rule (#48, design 0041): a provider's failure path with
+# no credentials, Sync's refusal path, the Fish Voices field, a real Fish
+# enable/disable cycle, and a pressed row's edge-to-edge highlight.
+set -euo pipefail
+if [[ $# -lt 2 ]]; then echo 'Usage: provider-freeze.sh SIMULATOR_UDID NEW_OUTPUT_DIR [-only-testing:ProviderFreezeProbe/testName]' >&2; exit 2; fi
+simulator=$1
+output=$2
+shift 2
+source_dir=$(cd "$(dirname "$0")" && pwd)
+mkdir -p "$output"
+output=$(cd "$output" && pwd)
+[[ ! -e "$output/result.xcresult" ]] || { echo 'Use a new artifact directory' >&2; exit 2; }
+ruby "$source_dir/ios/project.rb" "$output" top.xujialiu.openreader NO inspect ProviderFreezeProbe.swift
+status=0
+only_testing=()
+for arg in "$@"; do
+  case "$arg" in
+    -only-testing:*) only_testing+=("-only-testing:LockScreenProbe/ProviderFreezeProbe/${arg#-only-testing:}") ;;
+    *) only_testing+=("$arg") ;;
+  esac
+done
+xcodebuild -project "$output/ManualTests.xcodeproj" -scheme LockScreenProbe \
+  -destination "id=$simulator" -derivedDataPath "$output/build" \
+  -resultBundlePath "$output/result.xcresult" ${only_testing[@]+"${only_testing[@]}"} test > "$output/test.log" 2>&1 || status=$?
+if [[ -d "$output/result.xcresult" ]]; then
+  xcrun xcresulttool export attachments --path "$output/result.xcresult" --output-path "$output/attachments"
+fi
+printf 'Artifacts: %s\n' "$output"
+exit "$status"

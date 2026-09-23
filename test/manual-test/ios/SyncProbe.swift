@@ -56,9 +56,12 @@ final class SyncProbe: XCTestCase {
     // 140 backspaces were not always enough: measured 2026-09-21, an 88-character
     // address typed over an 88-character one left 155 characters in the field,
     // and the app then synced against a folder that does not exist — which looks
-    // exactly like a folder that is empty. Clear far past the longest value, and
-    // check what the field holds afterwards.
-    field.typeText(String(repeating: "\u{8}", count: 300))
+    // exactly like a folder that is empty. A tap leaves the caret where it lands,
+    // and a backspace deletes only what is before it, so no count of them is
+    // enough (measured again 2026-09-23, README Pitfalls). Since #48 every
+    // settings field has the phone's own clear button while it is edited.
+    let clear = field.buttons["Clear text"]
+    if clear.waitForExistence(timeout: 1) { clear.tap() }
     XCTAssertEqual((field.value as? String) ?? "", (field.placeholderValue ?? ""), "The field did not clear before typing")
     let characters = Array(text)
     var at = 0
@@ -69,10 +72,11 @@ final class SyncProbe: XCTestCase {
     }
   }
 
-  /// The keyboard covers the switch; `keyboardShouldPersistTaps="handled"`
-  /// means a tap on the plain group header dismisses it without doing anything.
+  /// `keyboardShouldPersistTaps="handled"` means a tap on the plain group
+  /// header dismisses the keyboard without doing anything else. The header is
+  /// set as written since #48, `Folder` rather than `FOLDER`.
   func dismissKeyboard(_ app: XCUIApplication) {
-    if app.keyboards.count > 0 { app.staticTexts.matching(identifier: "FOLDER").firstMatch.tap() }
+    if app.keyboards.count > 0 { app.staticTexts.matching(identifier: "Folder").firstMatch.tap() }
     _ = XCTWaiter.wait(for: [XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "count == 0"), object: app.keyboards)], timeout: 3)
   }
