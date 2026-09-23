@@ -56,6 +56,7 @@ import {
   canonicalCfi,
   resolveResume,
   resumeSentence,
+  spineIndexOf,
   useReaderBridge,
   type ProblemMessage,
   type ReaderBridge,
@@ -251,20 +252,6 @@ export interface Reading {
   resumeAt(place: ReadingPlace): boolean;
 }
 
-/**
- * The spine index an EPUB locator names, or null: the spine step `/6/N` is
- * `N = 2 × (index + 1)`, the numbering upstream epub.js and Zotero share
- * (measured on every section of four books, notes/NOTES_2026-09-21.md 17:11).
- * Read here only to ask "has that section reported"; the CFI itself is what is
- * handed to the renderer.
- */
-export function spineIndexOf(cfi: string): number | null {
-  const step = /^epubcfi\(\/6\/(\d+)/.exec(cfi);
-  if (!step) return null;
-  const n = Number(step[1]);
-  return n >= 2 && n % 2 === 0 ? n / 2 - 1 : null;
-}
-
 /** Whatever refused, in its own words. A `SynthesisError`'s message already names the address it tried and asks the one question there is. */
 function describe(problem: unknown): string {
   return problem instanceof Error ? problem.message : String(problem);
@@ -341,6 +328,13 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    */
   const furthestSectionRef = useRef(-1);
   /**
+   * Every spine item that has reported, including one that held no Block — which
+   * `blocksRef` cannot say, and which is what a stored place asks before it looks
+   * for its words anywhere (`resolveResume`, #51). Only ever grows: a section's
+   * Blocks are kept once reported (`blocks.ts`).
+   */
+  const reportedSectionsRef = useRef(new Set<number>());
+  /**
    * The Blocks the Utterances were segmented from — the very array the renderer
    * sent, because `UtteranceSpan.block` is an index into it.
    *
@@ -382,9 +376,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    *
    * It cannot be resolved at mount: the anchor is matched against **Blocks**, and
    * no section has reported any yet. So it waits here and every `onBlocks` tries
-   * again — the first sections to render are the ones around the stored CFI,
-   * because `<Reader initialLocation>` was given that CFI, but a cover page and a
-   * chapter epub.js renders on the way can arrive first.
+   * again. The first sections to report are **not** the ones around the stored
+   * CFI: the highlighter installs, and reports what is on the page, before epub.js
+   * runs the display `<Reader initialLocation>` asked for, so they are the start
+   * of the book (#51, measured 2026-09-23). The place waits for its own section
+   * rather than looking for its words in those (`resolveResume`).
    */
   const resumeRef = useRef<ReadingPlace | null>(resume);
   /**
@@ -772,13 +768,20 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * engine takes the new list, when there is one), the seek moves the highlight
    * and the page, and the screen learns how sure the landing was. Not landed:
    * the sentence that would explain it is kept for `abandonResume`, and the
-   * place stays pending for the next report.
+   * place stays pending for the next report. Still waiting for its own section:
+   * pending as well, with no sentence kept — `abandonResume`'s own, that the place
+   * had not rendered yet, is then the true one (#51).
    */
   const tryResume = useCallback(
     (next: readonly Utterance[], reported: readonly ReportedBlock[], before?: () => void): boolean => {
       const stored = resumeRef.current;
       if (!stored) return false;
-      const found = resolveResume(stored, next, reported);
+      const rendered = { spine: renderedRef.current?.spine ?? 0, reported: reportedSectionsRef.current };
+      const found = resolveResume(stored, next, reported, rendered);
+      if (found.outcome === 'waiting') {
+        resumeLostRef.current = null;
+        return false;
+      }
       if (found.outcome !== 'resumed') {
         resumeLostRef.current = resumeSentence(found);
         return false;
@@ -803,17 +806,24 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * does for the place a book opens with and nothing did for an adopted one.
    *
    * The spine index is read off the locator (`/6/N` → N/2 − 1, the rule both
-   * readers share, spec 6.4) only to know whether the section has reported;
+   * readers share, spec 6.4) only to know whether the section has reported —
+   * the same question `resolveResume` asks before it looks anywhere else;
    * what is handed to the renderer is the whole CFI, through the same `goTo`
    * a contents row goes through. A section that has reported and does not
    * hold the anchor is not a case a display can fix, and is left pending as
    * before. Returns whether a display was asked for.
+   *
+   * **Not for the place the book opened with**, whose section `<Reader
+   * initialLocation>` has already asked for. A second display of it is not free:
+   * while the first is loading it clears the half-built view and starts again
+   * (epub.js's `Views.find` sees only displayed views), and once the section is
+   * there it scrolls the Block back to the top, under the resume's own centring.
    */
   const revealPendingPlace = useCallback((place: ReadingPlace): boolean => {
     const cfi = readLocator(place.locator, 'epub');
     if (!cfi) return false;
     const section = spineIndexOf(cfi);
-    if (section !== null && blocksRef.current.some((block) => block.sectionIndex === section)) return false;
+    if (section !== null && reportedSectionsRef.current.has(section)) return false;
     bridgeRef.current?.goTo(cfi);
     return true;
   }, []);
@@ -843,6 +853,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       bridgeRef.current?.setUtterances(next, reported);
       blocksRef.current = reported;
       renderedRef.current = section;
+      reportedSectionsRef.current.add(section.index);
       furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);
       setStatus((was) => ({ ...was, known: next.length, rendered: section }));
 
@@ -865,11 +876,13 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        * quotation (ADR 0008); the Utterance it names cannot exist until the
        * Blocks it quotes have been reported, which is now.
        *
-       * Tried on every report until it lands, because the first section to render
-       * is not always the one the position names — a cover renders first and
-       * yields nothing, and the section `initialLocation` asked for arrives when
-       * epub.js has displayed it. A report that fails leaves the position
-       * pending and keeps its sentence for `abandonResume`.
+       * Tried on every report until it lands, because the first sections to
+       * report are the start of the book, and the section `initialLocation`
+       * asked for arrives when epub.js has displayed it. Until then the place
+       * waits for it rather than looking for its words in what came first — a
+       * contents page lists the heading a chapter starts with (#51). A report
+       * that fails leaves the position pending and keeps its sentence for
+       * `abandonResume`.
        *
        * The same order as the contents tap below and for the same reason: the
        * Utterance being seeked to exists only in the new list, so the engine has

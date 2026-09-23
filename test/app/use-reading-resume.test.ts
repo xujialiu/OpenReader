@@ -6,7 +6,7 @@ import { createLocator, readingPlaceAt, type ReadingPlace } from '../../src/core
 import type { ReportedBlock } from '../../src/renderer/messages';
 import { segmentDocument } from '../../src/app/segment';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
-import { spineIndexOf, useReading, type Reading } from '../../src/app/use-reading';
+import { useReading, type Reading } from '../../src/app/use-reading';
 
 /**
  * A place taken from another device while a book is open, in a section the
@@ -153,17 +153,6 @@ function mount(options: { settings?: AppSettings; resume?: ReadingPlace | null; 
   };
 }
 
-describe('spineIndexOf', () => {
-  it('reads the spine index off the step both readers number the same way', () => {
-    expect(spineIndexOf('epubcfi(/6/2!/4/4)')).toBe(0);
-    expect(spineIndexOf('epubcfi(/6/6!/4/2/4)')).toBe(2);
-    expect(spineIndexOf('epubcfi(/6/34!/4/2/4/2/4)')).toBe(16);
-    expect(spineIndexOf('epubcfi(/6/3!/4)')).toBeNull();
-    expect(spineIndexOf('/6/6!/4/4')).toBeNull();
-    expect(spineIndexOf('')).toBeNull();
-  });
-});
-
 describe('an adopted place in a section not yet reported (defect 3)', () => {
   it('asks the renderer for that section once, and lands the moment the section reports', async () => {
     const m = mount();
@@ -232,6 +221,64 @@ describe('an adopted place in a section not yet reported (defect 3)', () => {
     expect(bridge.goTo).not.toHaveBeenCalled();
     // And the place it landed on is not a place to write again (observation b).
     expect(m.reading.readingPosition()).toBeNull();
+    await m.down();
+  });
+});
+
+/**
+ * Coming back to a book left on a chapter heading (#51). The first sections to
+ * report are the start of the book, because the highlighter installs before
+ * epub.js runs the display `initialLocation` asked for; a web novel's contents
+ * page is among them and lists the heading word for word. Measured on the owner's
+ * book on 2026-09-23: the reading resumed on the contents line, the page went
+ * there, and Play would have read the list of chapter titles.
+ */
+describe('a place on a chapter heading, with a contents page that lists it (#51)', () => {
+  const CONTENTS = blocks(1, ['Contents', 'Chapter Three: The Forge', 'Chapter Four: The Letter', 'Chapter Five: The River']);
+  const CHAPTER_FOUR = blocks(4, ['Chapter Four: The Letter', 'A letter arrived without a seal. Its ink was still wet.']);
+  /** The heading, as `use-reading.ts` writes it: its Block's CFI without the assertion, and all of its text. */
+  const heading = readingPlaceAt(createLocator('epub', 'epubcfi(/6/10!/4/2)'), CHAPTER_FOUR[0].text, 0, CHAPTER_FOUR[0].text.length);
+  const READY: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
+
+  it('waits through the contents page, and lands on the heading when its chapter reports', async () => {
+    const m = mount({ resume: heading, spine: 8 });
+    await m.up();
+    await m.report(CONTENTS, 1);
+    // The words are on this page, and are not the place: nothing lands, nothing is
+    // shown, and nothing is said yet.
+    expect(m.reading.status.utterance).toBeNull();
+    expect(m.reading.status.resume).toBeNull();
+    expect(bridge.show).not.toHaveBeenCalled();
+    // The book's own opening already asked for the chapter, through `initialLocation`.
+    expect(bridge.goTo).not.toHaveBeenCalled();
+
+    const both = [...CONTENTS, ...CHAPTER_FOUR];
+    await m.report(both, 4);
+    const at = segmentDocument(both, 'en').findIndex((utterance) => utterance.text === 'Chapter Four: The Letter' && utterance.spans[0].block === CONTENTS.length);
+    expect(at).toBe(4);
+    expect(m.reading.status.utterance).toBe(at);
+    expect(m.reading.status.section).toBe(4);
+    expect(m.reading.status.resume).toBe('Resumed at the sentence the reading stopped on.');
+    expect(m.reading.status.resumeNeedsAttention).toBe(false);
+    expect(bridge.show).toHaveBeenLastCalledWith(at);
+    expect(bridge.goTo).not.toHaveBeenCalled();
+    await m.down();
+  });
+
+  it('gives the place up when Play comes first, and says it had not rendered yet', async () => {
+    const m = mount({ settings: READY, resume: heading, spine: 8 });
+    await m.up();
+    await m.report(CONTENTS, 1);
+    await m.press((reading) => reading.play());
+    expect(m.reading.status.resume).toBe(
+      'The place this book was left at had not rendered yet when the reading was asked to start, so it starts here instead.',
+    );
+    expect(m.reading.status.resumeNeedsAttention).toBe(true);
+    expect(engines.built[0].loads).toEqual([{ length: 4, from: 0, quiet: false }]);
+    // The chapter arriving afterwards does not take the reading away from where Play started it.
+    bridge.show.mockClear();
+    await m.report([...CONTENTS, ...CHAPTER_FOUR], 4);
+    expect(bridge.show).not.toHaveBeenCalled();
     await m.down();
   });
 });

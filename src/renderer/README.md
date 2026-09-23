@@ -44,7 +44,7 @@ own scroll container. Paginated layout, which is the library's default and what
 the highlighter was first built against, is rejected: a page turn replaces the
 whole screen and throws the eye back to the top, every minute or two, for hours.
 
-Four properties of the centring, and each is a rule rather than an accident.
+Five properties of the centring, and each is a rule rather than an accident.
 
 - **It is centred, not merely on screen.** The middle of the Utterance goes to
   the middle of the viewport, measured from the `Range`s that were just painted
@@ -80,6 +80,15 @@ Four properties of the centring, and each is a rule rather than an accident.
   program also sweeps on every Clip cue, which is what closed the state the
   reading of 04:43 died in — a section epub.js rendered by itself, sitting on the
   page unreported — before the content hook did.
+- **A section `follow()` had to display is centred on the frame after it
+  arrives** (#50, ADR 0023). The content hook that adopts it runs inside that
+  display, before epub.js's own `moveTo` to the Block the display named, and in
+  the same task. Centring there added the two scrolls together: measured at
+  725 px and then 958 px more, with the painted sentence 724 px above the screen.
+  So the highlight is painted at once, and the centring runs on the next frame
+  through `settle()`, which then keeps the sentence centred while epub.js lays the
+  neighbouring sections out. Any other section that arrives, such as a view the
+  manager rebuilt, is centred at once, as before.
 
 **Every section epub.js displays is adopted as it is displayed** (ADR 0036). The
 program's `sweep` — the stylesheet, the Blocks, the tap listener — is registered

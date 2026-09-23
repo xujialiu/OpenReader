@@ -143,7 +143,10 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     const reading = code('use-reading.ts');
     expect(reading.match(/resolveResume\(/g)).toHaveLength(1);
     const attempt = within(reading, 'const tryResume = useCallback(', '[seekTo],');
-    expect(attempt).toContain('resolveResume(stored, next, reported)');
+    expect(attempt).toContain('resolveResume(stored, next, reported, rendered)');
+    // What has rendered goes with it, so a place waits for its own section rather
+    // than being found in whatever reported first — a contents page (#51).
+    expect(attempt).toContain('reported: reportedSectionsRef.current');
     const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace],');
     // `true`: the resume has pointed the cursor into the new list already, so a
     // renumbering must not carry it across a second time (#46).

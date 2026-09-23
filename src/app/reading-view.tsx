@@ -109,9 +109,10 @@ export interface ReadingViewProps {
    * and they are not the same thing.
    *
    * Its locator goes to `<Reader initialLocation>`, which the library applies
-   * inside its own `onReady` — before it injects the highlighter, so the section
-   * that reports its Blocks first is the one the owner was left in rather than
-   * the cover. That moves the **page**.
+   * inside its own `onReady` by asking epub.js to display it. That moves the
+   * **page** — a frame later: epub.js runs the display on its next animation
+   * frame, and the highlighter installed just after the ask reports what is on
+   * the page before then, which is the start of the book (#51).
    *
    * Its anchor is what moves the **reading**: `use-reading.ts` resolves it
    * against the Blocks as they report and hands the Utterance to the engine. The
