@@ -234,7 +234,11 @@ fix (AGENTS.md).
   minutes after the set and before anything had played. The first boot's own
   setup rewrote it. Set it again once the new device has settled — a `set`
   followed 20 s later by a `check` that still reads 0 — then relaunch the app,
-  and keep the `check` in front of every play.
+  and keep the `check` in front of every play. It happened later too:
+  on 2026-09-24 a new iPhone 17 booted at 01:56 read 0 at a set about 02:04:00
+  and at a `check` 25 s after it, and read 60 at 02:24; its file had been
+  rewritten at 02:04:54, as the device's first XCTest run was starting. Nothing
+  had played.
 - **`xcrun simctl get_app_container` refuses a shut-down device.** Boot it first.
 - **Another simulator needs the same Debug app.** `xcrun simctl install DEST "$(xcrun simctl get_app_container SOURCE top.xujialiu.openreader app)"` copies it without a build, to any device family the app supports, iPad included.
 - **An iPad behaves differently from an iPhone.** An iPad-sized WKWebView defaults to the desktop content mode, where WebKit ignores `text-size-adjust` (ADR 0030). The reader asks for the mobile mode through `patches/`. Anything that depends on WebKit is worth checking on an iPad simulator too.
@@ -412,6 +416,31 @@ fix (AGENTS.md).
 
 ### XCTest
 
+- **XCTest has no public way to move two fingers together.** `XCUICoordinate`
+  drags one finger; `pinch` and `rotate` move two apart or around each other.
+  `TwoFingerProbe.swift`'s `Fingers` plays one path per finger through
+  XCUIAutomation's private `XCPointerEventPath`, `XCSynthesizedEventRecord` and
+  `eventSynthesizer` (selectors read out of Xcode 27.0's binary; notes
+  2026-09-24, 02:15). Reuse it rather than reaching for Computer Use.
+- **A private-API completion block declared without `@escaping` traps, and
+  then xcodebuild sits.** Symptom (2026-09-24): the two-finger drag reached the
+  app, the runner died at once with "closure argument passed as @noescape to
+  Objective-C has escaped", xcodebuild printed "Restarting after unexpected
+  exit, crash, or test timeout", ran 0 tests and did nothing more for seven
+  minutes. Cause: the event synthesizer keeps the block it is given. Fix: type
+  the block `@escaping @convention(block)`, and kill a stuck xcodebuild by its
+  PID (`pgrep -f "xcodebuild -project OUTPUT"`).
+- **`swipeUp()` and `swipeDown()` on the download drawer's list chose the row
+  they began on.** Measured 2026-09-24 on the tree before #57: the
+  `Download selected (N)` count changed on 5 of 6 alternating swipes, as well as
+  the list scrolling; a synthesized one-finger drag of 160 pt over 0.5 s changed
+  it on 0 of 6 (`TwoFingerProbe.testDrawerOneFingerNeverChooses`). A probe that
+  scrolls a list of checkboxes and then counts what is chosen scrolls with a
+  synthesized drag, never with `swipeUp()`.
+- **`More actions` tapped straight after `Close Download` opens nothing.** The
+  drawer is still sliding out, and the next line fails with "No matches found
+  for … 'Download'" (2026-09-24). Wait for `Close Download` to be gone first, as
+  `TwoFingerProbe.openDrawer()` does.
 - **A SwiftUI menu row is an `Other` until it has the button trait.** A row
   built on `ChoiceMenu` (ADR 0035) is one accessibility element made with
   `accessibilityElement('ignore')`, which starts with no traits, so on
@@ -968,6 +997,10 @@ fix (AGENTS.md).
 ### The shell
 
 - **A loop over `"a b c"` strings passes each as one argument.** zsh does not split an unquoted `$var`. Run such scripts with `bash`, or use arrays.
+- **There is no `timeout` command on this Mac.** `timeout 900 bash two-finger.sh …`
+  answered `command not found: timeout` (2026-09-24); coreutils is not
+  installed. Run a long probe in the background and wait for it to finish
+  instead.
 - **`$?` after a pipe is the pipe's last command.** `bash sync.sh … | tail -5;
   echo $?` printed `0` for a test run that had failed. Redirect the script's
   output to a file and test its own status, or read `PIPESTATUS`.
@@ -1405,6 +1438,48 @@ the sheet background in Dark (a ring only renders during an incomplete
 download, so checking Dark without a second real download needs either a
 fresh, unfinished task or visual inspection of the saved light-mode
 screenshots' contrast against the app's dark palette).
+
+### Two fingers: Files' own selection, and the download drawer's copy (#57)
+
+`TwoFingerProbe.swift` makes two-finger drags (see **Pitfalls › XCTest**) and
+`two-finger.sh` runs it. Files first needs rows to sweep: launch Files once on
+the device, then
+
+```sh
+bash test/manual-test/two-finger.sh SIMULATOR_UDID stage   # 60 files in On My iPhone › Rows
+bash test/manual-test/two-finger.sh SIMULATOR_UDID /tmp/openreader-two-finger-01 \
+  -only-testing:TwoFingerProbe/testFilesBackTowardStart
+```
+
+The `testFiles…` methods are the measurements of ADR 0045 (notes 2026-09-24,
+02:23 to 03:13); each opens Files afresh on `Rows`, switches the folder from
+icons to a list through `More` › `List` if it is showing icons, sweeps, and
+prints a `MEASURE` line with the rows Files reports selected (`isSelected`) and
+the first row fully in view, which says how far the list scrolled (64 pt a
+row). `testFilesEdgeTrembling` holds the fingers with a 1.5 pt tremble: a
+perfectly still synthesized hold sometimes stopped Files scrolling at all,
+which a real finger does not do. A quick start (19.2 pt every 60 ms) begins
+Files' run a row late, because its recogniser fires 26–38 pt after the fingers
+come down; move slower when the first row matters.
+
+The `testDrawer…` methods need OpenReader already on a reader whose drawer has
+a long list — a part from `~/Works/epub_books` (**Real books**) shows the edge
+scrolling; `Shadow Slave 1-250` gives 256 rows — and they `activate` the app
+rather than relaunch it, so a worktree's device stays on its Metro (launch it
+with `-RCT_jsLocation localhost:PORT` from the host first). Each opens the
+Download drawer afresh. `testDrawerSweeps` prints `DRAWER` lines with the
+`Download selected (N)` count after each sweep: measured 2026-09-24 at 03:04, 4
+for the first row to the fourth, 2 after a sweep that begins on a selected row
+goes to the fourth and back to the second, 4 when one finger carries on alone,
+26 after a hold past the list's bottom edge for 1 s (Chapters 16–20 then in
+view), and unchanged after a one-finger drag. `testDrawerOneFingerNeverChooses`
+compares `swipeUp()` with a synthesized drag (**Pitfalls › XCTest**).
+
+What it cannot establish: that a real hand does the same — a real finger
+trembles, flicks and lands 20–40 pt apart, where these are two exact paths 36 pt
+apart; Files' top edge band (a hold over its search field could not be read
+back); and how smoothly the drawer keeps up on a device while it scrolls itself
+through hundreds of rows.
 
 ### Paused sentence seeking after background receipt
 

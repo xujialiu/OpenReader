@@ -1,3 +1,4 @@
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { OpenReader } from './src/app';
 
 /**
@@ -9,7 +10,13 @@ import { OpenReader } from './src/app';
  * as a crash log. That screen said it would go when the reader arrived, and the
  * property it was protecting is kept: `src/app/reader-screen.tsx` renders
  * something at every stage, including before a document has been picked.
+ *
+ * The gesture root is here because a two-finger drag over the download
+ * drawer's list selects the chapters under it (#57, ADR 0045), and a gesture
+ * detector with no root above it throws.
  */
 export default function App() {
-  return <OpenReader />;
+  return <GestureHandlerRootView style={{ flex: 1 }}>
+    <OpenReader />
+  </GestureHandlerRootView>;
 }
