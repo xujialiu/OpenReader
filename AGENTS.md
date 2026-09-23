@@ -230,7 +230,18 @@ delivery incomplete; do not claim the work is finished.
 For provider configuration or live-provider tests, first check
 `~/.secrets/openreader/`. It contains the
 owner's local credentials. Load only the credentials needed for the test; keep
-their values out of logs, screenshots, documentation and commits.
+their values out of logs, screenshots, documentation and commits. Its WebDAV
+folder is a test folder, not where the owner's reading syncs: a sync test may
+write positions there freely.
+
+## Real books
+
+When a device or manual test needs a real document — hundreds of sections,
+chapters several screens tall, real navigation — take one from the owner's
+library in `~/Works/epub_books` before generating a fixture. They are the
+owner's personal copies: copy a part into the app and keep the originals
+unchanged and outside this repository. Loading one is in
+[`test/manual-test/README.md`](test/manual-test/README.md), **Real books**.
 
 ## Silence the simulator before playing anything
 

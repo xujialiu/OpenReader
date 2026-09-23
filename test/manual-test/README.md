@@ -40,6 +40,23 @@ a shut-down device has no file at all. So: boot, `set`, then launch the app.
 `lock-screen.sh` (tap mode), `reading.cjs play-for`, `voice-playback.cjs` and
 `offline-playback.cjs` all `check` it before they play.
 
+## Real books
+
+`~/Works/epub_books` is the owner's own library: long English web novels, each
+split into parts of about 250 chapters (`<Book>/<Book> <start>-<end>.epub`, a
+few MB each; its own README says how they were split). Take one when a generated
+fixture is too tidy to show the behaviour: a part has hundreds of spine items,
+chapters several screens tall and a real navigation document, which is what
+section boundaries, `renderAhead`, `display()` and a chapter download meet in
+the owner's actual reading.
+
+Load a part the way any fixture is loaded: copy it into the app's
+`Documents/Inbox` (`xcrun simctl get_app_container SIMULATOR_UDID
+top.xujialiu.openreader data`) and add it with the harness,
+`{"seq":N,"do":"add","file":"NAME.epub"}`, then open it by the Document Id the
+answer names. The books are personal copies: they stay outside the repository,
+and what is committed is what was measured, never their text.
+
 ## Pitfalls
 
 What has gone wrong before, and what fixed it. When `xcrun`, Metro, XCTest or a
@@ -1618,7 +1635,10 @@ bash test/manual-test/sync.sh SIMULATOR_UDID /tmp/openreader-sync-01 \
 The real one holds the desktop plugin's live files, and `Address` is
 photographed by every capture. A subfolder that does not exist yet also
 exercises the 404 path the switch is supposed to accept. Delete the subfolder
-and its file when the run ends.
+and its file when the run ends. The WebDAV folder in `~/.secrets/openreader/`
+is already such a test folder (the owner, 2026-09-23): use it directly, and a
+place written there costs nothing. The owner's real folder is not in that
+directory, and **Against the owner's real folder** below is about that one.
 
 Run parameters go in `/tmp/openreader-sync-params.txt` as `KEY=VALUE` lines
 (`PLAY_SECONDS`, `SKIPS`, `PARAGRAPH_STEPS`, `SETTLE`, `BOOK_TITLE`), because
