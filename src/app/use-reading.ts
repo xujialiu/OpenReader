@@ -65,7 +65,15 @@ import {
 } from '../renderer';
 
 import { readBodyTextSize, writeBodyTextSize } from './body-text-sizes';
-import { documentLanguage, firstUtteranceOfSection, outOfTextSentence, samePrefix, segmentDocument } from './segment';
+import {
+  carryUtterance,
+  documentLanguage,
+  firstUtteranceOfSection,
+  outOfTextSentence,
+  samePrefix,
+  segmentDocument,
+  type Segmented,
+} from './segment';
 import {
   engineIdentity,
   readiness,
@@ -305,6 +313,16 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const buildingRef = useRef<Promise<PlaybackEngine | null> | null>(null);
   /** The Utterances the engine holds. Its indices are what every cue and every correction is about. */
   const loadedRef = useRef<readonly Utterance[]>([]);
+  /**
+   * The Blocks `loadedRef`'s Utterances were segmented from: the array their
+   * `UtteranceSpan.block` indexes into.
+   *
+   * Not `blocksRef`, which `handleBlocks` replaces before the list it segmented is
+   * adopted, and which a report holding nothing to read replaces without one. A
+   * renumbering names the sentence the reading is on by its Block (#46), and that
+   * takes the Blocks of the list the reading is on.
+   */
+  const loadedBlocksRef = useRef<readonly ReportedBlock[]>([]);
   /** The Utterance being read, outside React state, so the callbacks below are never one render behind. */
   const atRef = useRef<number | null>(null);
   /** The section the renderer reported last, for the same reason: `play` reads it at the moment it is pressed. */
@@ -510,22 +528,69 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * it from inside the renderer's own message handler is safe where `load` was
    * not: `drain` may be mid-await, and there is nothing here for it to lose.
    *
-   * If the prefix changed, the indices the engine and the WebView are holding
-   * mean other sentences (see `samePrefix`), and the reading stops and says so.
-   * A highlight three paragraphs from the voice is precisely what this project
-   * exists to prevent, and guessing which sentence was meant would be an
-   * estimate (philosophy rule 1). That is the one case that still needs the
-   * destructive `load`, and it is the case where destroying is the point.
+   * **If the prefix changed, the list was renumbered** (see `samePrefix`): a
+   * section reported above the ones already reported, and every index held here,
+   * in the engine and in the WebView now means another sentence. It is ordinary,
+   * not rare: epub.js's continuous manager renders the section above whatever it
+   * displays near the top of its scroll, so a Contents jump and a return to a
+   * book both do it (#46, measured 2026-09-23). Dropping the reading there cost
+   * the owner their place at exactly those two moments, and the next Play read
+   * the book's first line and wrote it over the stored place.
+   *
+   * So every index that names a sentence of the old list — the cursor, the
+   * sentence a resume landed on, a seek still waiting out its debounce — is
+   * carried to the same sentence in the new one (`carryUtterance`: its first
+   * Block, where it starts there, and its text, which is an exact match and not
+   * an estimate), and the engine is loaded again there. `load` is still the one
+   * destructive call here, because the queue and the clock hold old numbers that
+   * cannot be renumbered in place; but a playing reading goes on playing, from
+   * the start of the same sentence, a paused one keeps its highlight on it, and
+   * nothing is said, because for the owner nothing has moved. With no cursor the
+   * engine is loaded at the top, which is where such a reading starts anyway.
+   *
+   * Only a sentence that is no longer in the document at all — its own section
+   * reported different text — cannot be carried. There the reading stops and
+   * says so: guessing which sentence was meant would be an estimate
+   * (philosophy rule 1), and a highlight three paragraphs from the voice is what
+   * this project exists to prevent.
+   *
+   * @param reported the Blocks `next` was segmented from.
+   * @param pointed the caller has already pointed `atRef` at an index of `next` —
+   * a resume that landed, a Contents row whose section has reported — so the
+   * cursor is not carried a second time.
    */
-  const adopt = useCallback((next: readonly Utterance[]) => {
+  const adopt = useCallback((next: readonly Utterance[], reported: readonly ReportedBlock[], pointed = false) => {
     const engine = engineRef.current;
-    const renumbered = !samePrefix(loadedRef.current, next);
+    const held: Segmented = { utterances: loadedRef.current, blocks: loadedBlocksRef.current };
+    const incoming: Segmented = { utterances: next, blocks: reported };
     loadedRef.current = next;
+    loadedBlocksRef.current = reported;
 
-    if (renumbered) {
+    if (samePrefix(held.utterances, next)) {
+      engine?.extend(next);
+      return;
+    }
+
+    const carry = (index: number | null) => (index === null ? null : carryUtterance(index, held, incoming));
+    const cursor = atRef.current;
+    const at = pointed ? cursor : carry(cursor);
+    resumedAtRef.current = carry(resumedAtRef.current);
+    pendingSeekRef.current = carry(pendingSeekRef.current);
+
+    // `load` cancels a voice switch the engine was preparing (`restart`), so the
+    // choice is let go here as a seek lets it go, rather than left spinning.
+    if (engine && pendingChoice.current) {
+      switchRequest.current++;
+      pendingChoice.current = null;
+      setStatus((was) => ({ ...was, pendingVoice: null }));
+    }
+
+    if (cursor !== null && at === null) {
       engine?.pause();
       bridgeRef.current?.clear();
-      engine?.load(next, 0);
+      // Quiet, as every paused reload here is: a cue of the top of the document
+      // would move the page there, under a note saying the reading stopped here.
+      engine?.load(next, 0, { quiet: true });
       atRef.current = null;
       resumedAtRef.current = null;
       setStatus((was) => ({
@@ -540,8 +605,21 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       return;
     }
 
-    engine?.extend(next);
-  }, []);
+    atRef.current = at;
+    // Playing, the reload's first Clip is the reading's own cue, and the page
+    // follows the voice as it always does. Paused, the reload is quiet and nothing
+    // is shown: a renumbering while paused is what scrolling up does — epub.js
+    // renders a section above that has not reported — and a `show`, or the
+    // reload's first cue, would centre the page on the reading while the owner
+    // scrolls away from it. The bridge keeps the old number until Play, and
+    // nothing reads it before then: its `cued` is matched only by position
+    // corrections, which arrive only while the node renders
+    // (react-native-audio-api 0.13.5 advances its position dispatcher only while
+    // `isPlaying()`), and `play()` cues the front before it corrects.
+    engine?.load(next, at ?? 0, { quiet: !playIntent.current });
+    if (at === null) return;
+    setStatus((was) => ({ ...was, utterance: at, section: sectionOf(at) }));
+  }, [sectionOf]);
 
   /**
    * One spine item on, or the end of the document.
@@ -797,7 +875,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        * Utterance being seeked to exists only in the new list, so the engine has
        * to be holding it before anything asks to be taken there.
        */
-      if (resumeRef.current && tryResume(next, reported, () => adopt(next))) return;
+      if (resumeRef.current && tryResume(next, reported, () => adopt(next, reported, true))) return;
       // An adopted place still pending after this report: the section it names
       // may be one nobody has asked for yet, or the ask went out before the page
       // could hear it. Asked once per report, never for a section that reported.
@@ -813,13 +891,13 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
         const first = firstUtteranceOfSection(next, reported, wanted);
         if (first !== null) {
           atRef.current = first;
-          adopt(next);
+          adopt(next, reported, true);
           seekTo(first);
           return;
         }
       }
 
-      adopt(next);
+      adopt(next, reported);
     },
     [adopt, walkForward, tryResume, seekTo, revealPendingPlace],
   );
@@ -892,8 +970,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * engine resumes by itself the moment a section reports (footgun 3, and
    * `extend`). And an exhaustion with Utterances the Provider refused is neither:
    * `outOfTextSentence` says the reading stopped because synthesis failed, and
-   * names the refusal, because none of the four conditions can see a Clip that was
-   * skipped (ADR 0023, and notes/NOTES_2026-09-20.md, 07:48).
+   * names the refusal, because none of the four conditions could see a Clip that
+   * was skipped (ADR 0023, and notes/NOTES_2026-09-20.md, 07:48). Since ADR 0027 a
+   * refused Clip stops the reading instead of being skipped, so that third state is
+   * kept as a guard.
    */
   const ranOutOfText = useCallback((report: OutOfTextReport) => {
     const { ended, sentence } = outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0, {

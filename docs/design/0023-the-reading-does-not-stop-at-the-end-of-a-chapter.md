@@ -61,6 +61,11 @@ Nothing is tried again behind the owner's back, because every attempt is theirs 
 pay for; going back to one of those sentences is how it is asked for a second time,
 and the app says so in the same breath.
 
+_Revised by design 0027 and #45: a sentence the service refused now stops the
+reading on that sentence instead of being passed over, and one press of Play asks
+again for every sentence that failed. So the reading no longer reaches the end
+with sentences skipped, and this third sentence is kept only as a safeguard._
+
 **Saying nothing in that case was the obvious alternative and it was refused.** It
 would have put the reading straight back into the silence this whole decision
 exists to end — stopped, still claiming to be reading, with nothing on the screen.

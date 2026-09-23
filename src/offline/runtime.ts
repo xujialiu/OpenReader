@@ -25,11 +25,13 @@ import {
 } from "../playback/clip-cache";
 import {
   headersAreOffered,
+  keepWarm,
   keyIsOffered,
   providerDeps,
   providerSettings,
   readiness,
   readinessSentence,
+  synthesisOrigin,
   type AppSettings,
 } from "../app/settings";
 import {
@@ -295,6 +297,12 @@ export const formatBytes = (bytes: number) =>
  * reported once, where downloads are managed, and the reading goes on over the
  * network as if nothing were saved: the catalogue decides what is played from
  * disk, never whether anything is played at all (#13).
+ *
+ * A miss goes straight on to the Provider. The inventory is read again only
+ * when the read dropped a record whose file had gone, which is the one miss
+ * that changed the saved audio (#47): refreshing on every miss re-read the
+ * inventory and re-rendered the reader in front of each sentence that was
+ * simply never downloaded (notes/NOTES_2026-09-23.md, 13:48).
  */
 async function savedClip(
   document: string,
@@ -304,16 +312,26 @@ async function savedClip(
   try {
     const repository = await offlineRepository();
     const saved = await repository.readClip(document, voice, text);
-    if (saved) return saved;
-    if (hasSavedVoice(document, voice.provider, voice.voice))
-      await refresh(document);
+    if (saved.clip) return saved.clip;
+    if (saved.dropped) await refresh(document);
     return null;
   } catch (error) {
     reportStore(error);
     return null;
   }
 }
-/** Credentials are read only on a miss, so saved audio works without a key or enabled provider. */
+/**
+ * Credentials are read only on a miss, so saved audio works without a key or enabled provider.
+ *
+ * Saved audio sends nothing, so while a downloaded chapter plays, the Provider's
+ * synthesis connection idles, and one idle for about a minute can be dead: the
+ * first sentence of the next chapter, which is not downloaded, was refused with
+ * "The network connection was lost" and stopped the reading (#26;
+ * notes/NOTES_2026-09-23.md, 12:57). Each saved sentence therefore asks for that
+ * connection to be kept warm, and `keepWarm` decides whether anything goes out:
+ * at most a GET per 20 s, and only to an origin already reached (ADR 0040).
+ * Never while the device is offline, when there is no connection to keep.
+ */
 async function synthesize(
   document: string,
   voice: OfflineVoice,
@@ -321,7 +339,10 @@ async function synthesize(
   current: AppSettings,
 ): Promise<SynthesisResult> {
   const saved = await savedClip(document, voice, text);
-  if (saved) return saved;
+  if (saved) {
+    if (online) keepWarm(synthesisOrigin(current, voice.provider));
+    return saved;
+  }
   const key = keyOf(document, voice, text);
   let flight = flights.get(key);
   if (!flight) {

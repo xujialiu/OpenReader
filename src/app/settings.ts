@@ -26,16 +26,34 @@ import { DEFAULT_BRACKET_PAIRS } from '../core/speech-text';
 import { DEFAULT_APPEARANCE, type Appearance, type ReadingScheme } from '../renderer/highlighter';
 import { azureRegion, type HeaderWebSocket } from '../core/providers/azure';
 import type { ProviderDeps, ProviderSettings } from '../core/providers/factory';
+import { FISH_API } from '../core/providers/fish';
 import { getLocalEngine, LOCAL_ENGINES } from '../core/providers/local/registry';
+import { OPENAI_URL } from '../core/providers/openai';
+import { SPEECHIFY_API } from '../core/providers/speechify';
 import type { ProviderId } from '../core/providers/types';
+import { createWarmConnections, originOf } from '../core/warm-connections';
+
+/**
+ * The one set of Provider connections the app has, kept from dying of quiet
+ * (#26, ADR 0040): every request a Provider makes goes through its `fetch`, and
+ * saved audio asks it to keep the synthesis connection warm (`keepWarm`). One
+ * instance for both, because what it knows is which origins have been reached
+ * and when.
+ *
+ * The global `fetch` is looked up at each call rather than held, so whatever
+ * stands in for it — the walkthrough harness's `watchfetch` — sees the warm-ups
+ * too.
+ */
+const connections = createWarmConnections({ fetch: (input, init) => fetch(input, init), now: () => Date.now() });
 
 /**
  * The other argument `createProvider(id, settings, deps)` takes: `fetch` (ADR
  * 0013), and the two Azure's WebSocket route needs (ADR 0037).
  *
- * `fetch` is wrapped in an arrow rather than passed by name, because a provider
- * calls `deps.fetch(url, init)` with no receiver and handing over the global
- * itself would make that call's `this` undefined.
+ * `fetch` is the platform's, through `connections` above. The platform's itself
+ * is wrapped in an arrow rather than passed by name, because it is called with
+ * no receiver and handing over the global itself would make that call's `this`
+ * undefined.
  *
  * `getWebSocket` is React Native's own `WebSocket`, which takes the upgrade's
  * request headers as a third argument (`Libraries/WebSocket/WebSocket.js`); the
@@ -45,10 +63,46 @@ import type { ProviderId } from '../core/providers/types';
  * request's needs nothing stronger.
  */
 export const providerDeps: ProviderDeps = {
-  fetch: (input, init) => fetch(input, init),
+  fetch: connections.fetch,
   getWebSocket: () => WebSocket as unknown as HeaderWebSocket,
   newRequestId: () => Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
 };
+
+/**
+ * Where a Provider's synthesis goes, as an origin, or null when there is no
+ * connection of its own to keep warm (ADR 0040).
+ *
+ * The three hosted Providers have one fixed address each; the two that speak to a
+ * server of the owner's own go wherever the owner typed. Azure is null: its
+ * synthesis opens a WebSocket of its own for every Utterance (`turn` in
+ * `azure.ts`), so it never reuses an idle connection and has none to lose.
+ */
+export function synthesisOrigin(settings: AppSettings, provider: ProviderId): string | null {
+  switch (provider) {
+    case 'fish':
+      return originOf(FISH_API);
+    case 'openai-official':
+      return originOf(OPENAI_URL);
+    case 'speechify':
+      return originOf(SPEECHIFY_API);
+    case 'compatible':
+      return originOf(settings.compatible.baseURL);
+    case 'local':
+      return originOf(settings.local.baseURL);
+    case 'azure':
+      return null;
+  }
+}
+
+/**
+ * Keep a Provider's connection from going quiet while nothing else is sent to it
+ * (ADR 0040): a credential-free GET to the origin's root that nothing waits for,
+ * at most once per 20 s of quiet, and only for an origin a request has reached.
+ * Null does nothing.
+ */
+export function keepWarm(origin: string | null): void {
+  if (origin !== null) connections.keepWarm(origin);
+}
 
 /**
  * The sections the owner can choose between, with the name each is shown under.

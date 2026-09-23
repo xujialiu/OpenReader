@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Block } from '../../src/core/segmenter';
-import { documentLanguage, firstUtteranceOfSection, outOfTextSentence, samePrefix, segmentDocument } from '../../src/app/segment';
+import {
+  carryUtterance,
+  documentLanguage,
+  firstUtteranceOfSection,
+  outOfTextSentence,
+  samePrefix,
+  segmentDocument,
+} from '../../src/app/segment';
 
 /**
  * The splitter is bound here and nowhere else (ADR 0006), and the app segments
@@ -65,6 +72,87 @@ describe('samePrefix', () => {
 
   it('compares the text rather than the objects, because the list is built again each time', () => {
     expect(samePrefix(first, first.map((utterance) => ({ ...utterance })))).toBe(true);
+  });
+});
+
+/**
+ * The sentence the reading is on, found again after a renumbering (#46).
+ *
+ * Sections report out of reading order — measured on 2026-09-23, a Contents jump
+ * reported sections 1 and 2, then 5 and 6, then 3 and 4 above them — and every
+ * section reported above the reading shifts the index of every later Utterance.
+ * What does not shift is the sentence itself: the Block it starts in, whose id is
+ * its section and its place there, where in that Block it starts, and its text.
+ */
+describe('carryUtterance', () => {
+  /** A section's Blocks as the renderer reports them, with the ids `highlighter.ts` gives them. */
+  const section = (index: number, ...texts: string[]) =>
+    texts.map((text, i) => ({ id: `${index}.${i}`, text, section: `s${index}.xhtml`, sectionIndex: index, role: 'paragraph' as const }));
+  const segmented = (...sections: ReturnType<typeof section>[]) => {
+    const blocks = sections.flat();
+    return { utterances: segmentDocument(blocks, 'en'), blocks };
+  };
+
+  const one = section(1, 'Section one opens. It goes on.');
+  const two = section(2, 'Section two is short.');
+  const five = section(5, 'Chapter five.', 'The reading is on this sentence. And then this one.');
+  const six = section(6, 'Chapter six follows it.');
+
+  const before = segmented(one, two, five, six);
+  const at = before.utterances.findIndex((utterance) => utterance.text === 'The reading is on this sentence.');
+
+  it('finds the sentence after a section reports above it, at its new index', () => {
+    const three = section(3, 'Section three arrives late. With two sentences.');
+    const after = segmented(one, two, three, five, six);
+    const found = carryUtterance(at, before, after);
+    expect(found).toBe(at + 2);
+    expect(after.utterances[found!].text).toBe('The reading is on this sentence.');
+  });
+
+  it('finds it at the same index when the section reports below it', () => {
+    const seven = section(7, 'Section seven, after everything.');
+    expect(carryUtterance(at, before, segmented(one, two, five, six, seven))).toBe(at);
+  });
+
+  it('does not find it when its own section reported different text', () => {
+    // The one case where the sentence the reading was on is not in the document
+    // any more, and saying so is all that is left (philosophy rule 1).
+    const rewritten = section(5, 'Chapter five.', 'The reading was on a sentence that is gone now.');
+    expect(carryUtterance(at, before, segmented(one, two, rewritten, six))).toBeNull();
+  });
+
+  it('tells a repeated sentence from its twin by the Block it starts in', () => {
+    // The same heading in two chapters is two sentences, and the text alone would
+    // carry the reading to the wrong one.
+    const repeated = segmented(section(1, 'Interlude.'), section(4, 'Interlude.'));
+    const later = repeated.utterances.length - 1;
+    const after = segmented(section(1, 'Interlude.'), section(2, 'Something in between.'), section(4, 'Interlude.'));
+    expect(carryUtterance(later, repeated, after)).toBe(2);
+    expect(carryUtterance(0, repeated, after)).toBe(0);
+  });
+
+  it('tells a sentence said twice in one Block from its twin by where it starts', () => {
+    const twice = segmented(section(5, 'Yes. He left. Yes.'));
+    expect(twice.utterances.map((utterance) => utterance.text)).toEqual(['Yes.', 'He left.', 'Yes.']);
+    const after = segmented(section(3, 'A section above.'), section(5, 'Yes. He left. Yes.'));
+    expect(carryUtterance(2, twice, after)).toBe(3);
+    expect(carryUtterance(0, twice, after)).toBe(1);
+  });
+
+  it('finds a sentence the repair layer welded across two Blocks by where it starts', () => {
+    // `rejoin.ts` puts back a sentence the markup cut in two within a section; its
+    // identity is the Block it starts in, as a Reading Position's is (ADR 0008).
+    const cut = section(5, 'The door closed', 'behind him at last.');
+    const was = segmented(one, cut);
+    expect(was.utterances.map((utterance) => utterance.spans.length)).toContain(2);
+    const welded = was.utterances.findIndex((utterance) => utterance.spans.length === 2);
+    const now = segmented(one, two, cut);
+    expect(now.utterances[carryUtterance(welded, was, now)!].text).toBe(was.utterances[welded].text);
+  });
+
+  it('has nothing to carry for an index the first list does not have', () => {
+    expect(carryUtterance(before.utterances.length, before, before)).toBeNull();
+    expect(carryUtterance(-1, before, before)).toBeNull();
   });
 });
 
@@ -191,9 +279,10 @@ describe('outOfTextSentence', () => {
  * On 2026-09-20 at 07:48 Fish Audio lost the network for the last clips of a
  * document. The reading stopped at Utterance 17 of 18 and the player said "That was
  * the last of this document. The reading has stopped at the end of the book." Every
- * one of `hasRunOut`'s four conditions held, because a Clip that was refused leaves
- * `inFlight` and the queue drains past it — so the answer is a sentence and not a
- * fifth condition, which would have restored the silence of 04:43 instead.
+ * one of `hasRunOut`'s four conditions held, because a Clip that was refused left
+ * `inFlight` and the queue drained past it — so the answer is a sentence and not a
+ * fifth condition, which would have restored the silence of 04:43 instead. Since
+ * ADR 0027 the queue stops at a refusal instead, so the sentence is kept as a guard.
  */
 describe('outOfTextSentence, with Utterances that were never spoken', () => {
   const lost = 'Fish Audio could not reach api.fish.audio: The network connection was lost.';

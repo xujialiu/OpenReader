@@ -32,7 +32,7 @@ it("answers empty inventory without inspecting any potential audio files", async
     expect(await repository.inventory("long-book")).toEqual([]);
     expect(
       await repository.readClip("long-book", voice, "Just this sentence."),
-    ).toBeNull();
+    ).toEqual({ clip: null, dropped: false });
   } finally {
     close();
   }
@@ -75,12 +75,22 @@ it("recovers a file stored before its database commit, and invalidates a missing
     const repository = new OfflineRepository(catalog, files);
     await repository.recover();
     expect((await repository.inventory("book"))[0]?.count).toBe(1);
-    expect((await repository.readClip("book", voice, "Hi"))?.audio).toBe(
-      "encoded",
-    );
+    const found = await repository.readClip("book", voice, "Hi");
+    expect(found.clip?.audio).toBe("encoded");
+    expect(found.dropped).toBe(false);
     audio = null;
-    expect(await repository.readClip("book", voice, "Hi")).toBeNull();
+    // The record whose file has gone is dropped, and the answer says so: it is
+    // the one read that changes the saved audio (#47).
+    expect(await repository.readClip("book", voice, "Hi")).toEqual({
+      clip: null,
+      dropped: true,
+    });
     expect(await repository.inventory("book")).toEqual([]);
+    // Asked again, it is a plain miss: there is no record left to drop.
+    expect(await repository.readClip("book", voice, "Hi")).toEqual({
+      clip: null,
+      dropped: false,
+    });
   } finally {
     close();
   }
@@ -164,7 +174,10 @@ it("answers before an interrupted document removal is finished, then finishes it
     await repository.recover();
     expect(calls.removeDocumentFiles).toBe(0);
     expect(await repository.inventory("book")).toEqual([]);
-    expect(await repository.readClip("book", voice, text(0))).toBeNull();
+    expect(await repository.readClip("book", voice, text(0))).toEqual({
+      clip: null,
+      dropped: false,
+    });
     release();
     await repository.cleanup;
     expect(calls).toEqual({ remove: 0, removeDocumentFiles: 1 });

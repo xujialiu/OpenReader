@@ -266,12 +266,13 @@ describe('footgun 3 again: the engine says when the silence is permanent', () =>
 
   /**
    * The failures go in the **report**, not in a fifth condition (ADR 0023). A Clip
-   * that was refused leaves `inFlight`, `drain` steps over it and `nextToEnqueue`
-   * passes it, so all four conditions hold exactly as they do for a finished book —
-   * which is how "That was the last of this document" was said to an owner whose
-   * Provider had dropped the last clips (notes/NOTES_2026-09-20.md, 07:48). Without
-   * `unspoken` reaching the app there is nothing to say the third sentence from, and
-   * the lie comes back silently.
+   * that was refused used to leave `inFlight` while `drain` stepped over it and
+   * `nextToEnqueue` passed it, so all four conditions held exactly as they do for a
+   * finished book — which is how "That was the last of this document" was said to
+   * an owner whose Provider had dropped the last clips (notes/NOTES_2026-09-20.md,
+   * 07:48). Since ADR 0027 `drain` stops on a refusal instead, so the report is kept
+   * as a guard; without `unspoken` reaching the app there would be nothing to say
+   * the third sentence from, and the lie would come back silently.
    */
   it('counts what was never spoken beside the exhaustion, from the set it already keeps', () => {
     // Set where an Utterance is marked failed, both times, and cleared where the set
@@ -287,6 +288,13 @@ describe('footgun 3 again: the engine says when the silence is permanent', () =>
     const restart = engine.slice(engine.indexOf('function restart('), engine.indexOf('function cancelVoiceSwitch('));
     pin(restart, 'failed.clear();', 'engine.ts, restart');
     pin(restart, 'lastRefusal = null;', 'engine.ts, restart');
+    // And a press of Play, which asks again for every refusal (#45): the refusal
+    // from before the press goes with them, or the next stop would name it again
+    // when the network was already back (notes/NOTES_2026-09-23.md, 13:30).
+    const play = member('    play() {');
+    pin(play, 'const retry = retryOnPlay({ cursor, nextToEnqueue, failed });', 'engine.ts, play');
+    pin(play, 'failed = new Set(retry.failed);', 'engine.ts, play');
+    pin(play, 'lastRefusal = null;', 'engine.ts, play');
   });
 
   it('says it once, and is armed again by anything that gives the engine somewhere to go', () => {
@@ -306,7 +314,7 @@ describe('a longer Utterance list restarts nothing (notes/NOTES_2026-09-20.md, 0
   it('slices the member this section is about, and no more', () => {
     expect(extend).toContain('extend(list) {');
     expect(extend).not.toContain('play()');
-    expect(extend).not.toContain('load(list, from = 0)');
+    expect(extend).not.toContain('load(list, from = 0');
   });
 
   it('never clears the queue, re-anchors the clock or invalidates a fetch', () => {
@@ -327,7 +335,56 @@ describe('a longer Utterance list restarts nothing (notes/NOTES_2026-09-20.md, 0
 
   it('leaves load destructive, because the renumbering case needs it to be', () => {
     // A document that rendered out of reading order renumbers every index the queue
-    // and the WebView are holding; there the clearing is the point.
-    expect(engine.slice(engine.indexOf('load(list, from = 0) {'))).toMatch(/load\(list, from = 0\) \{[\s\S]*?generation\+\+;[\s\S]*?restart\(from\);/);
+    // and the WebView are holding; the engine is loaded again at the sentence
+    // carried across (#46), and the clearing is what makes the old numbers go.
+    expect(engine.slice(engine.indexOf('load(list, from = 0, options = {}) {'))).toMatch(
+      /load\(list, from = 0, options = \{\}\) \{[\s\S]*?generation\+\+;[\s\S]*?restart\(from\);/,
+    );
+  });
+});
+
+describe('a Clip is kept only until it is queued (#49)', () => {
+  /**
+   * `drain` takes a Clip out of `prepared` as it queues it, so a queued Utterance
+   * reports `absent`. A window starting at the cursor fetched every sentence a
+   * second time, and `startFetch` kept that copy, which nothing behind
+   * `nextToEnqueue` ever takes out again: ten sentences cost twenty cache lookups
+   * in a probe of the real engine, and a PCM Clip is about 480 KB of float samples.
+   * It fails as nothing at all — the reading is right, and memory grows.
+   */
+  const engine = code('engine.ts');
+
+  it('asks the window to start at the first sentence not yet queued, and keeps nothing behind it', () => {
+    const pump = engine.slice(engine.indexOf('function pump()'), engine.indexOf('function outOfText()'));
+    pin(pump, 'fetchWindow({ cursor, nextToEnqueue, total: utterances.length, inFlight: inFlight.size, stateOf })', 'engine.ts, pump');
+    const startFetch = engine.slice(engine.indexOf('function startFetch('), engine.indexOf('async function drain('));
+    pin(startFetch, 'index >= nextToEnqueue && index <= enqueueCeiling(cursor)', 'engine.ts, startFetch');
+  });
+});
+
+describe('a quiet load cues nothing until Play (#46)', () => {
+  /**
+   * A cue carries the renderer's `reveal`, which centres the page on its sentence.
+   * A renumbering while paused is what scrolling up does — epub.js renders a
+   * section above that has not reported — and the first cue of an engine reloaded
+   * then pulled the page back to the reading while the owner scrolled away from
+   * it. So `load` can be quiet, and its first cue waits for `play()`, a seek or a
+   * load that is not. Nothing else cues while paused: positions and buffer ends
+   * come only while the node renders, and `drain` stops on a refusal only while
+   * playing.
+   */
+  const engine = code('engine.ts');
+  const slice = (from: string, to: string) => engine.slice(engine.indexOf(from), engine.indexOf(to, engine.indexOf(from)));
+
+  it('guards the first cue, sets the flag only on a paused quiet load, and clears it on Play and on every restart', () => {
+    pin(slice('async function enqueue(', 'async function ensureGraph('), 'if (cued === null && front && !quiet) cue(front);', 'engine.ts, enqueue');
+    pin(slice('load(list, from = 0, options = {}) {', 'extend(list) {'), 'quiet = options.quiet === true && !playing;', 'engine.ts, load');
+    pin(slice('function restart(', 'function cancelVoiceSwitch('), 'quiet = false;', 'engine.ts, restart');
+    const play = slice('    play() {', 'pause: pauseNow,');
+    pin(play, 'quiet = false;', 'engine.ts, play');
+    // Cleared before the front is cued, or Play would cue nothing either.
+    expect(play.indexOf('quiet = false;')).toBeLessThan(play.indexOf('cue(front);'));
+    // And a rate change does not cue what a quiet load held back.
+    pin(slice('setRate(next) {', 'switchVoice('), 'if (front && !quiet) cue(front);', 'engine.ts, setRate');
   });
 });

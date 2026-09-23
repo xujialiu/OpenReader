@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   andList,
@@ -8,6 +8,7 @@ import {
   DEFAULT_SETTINGS,
   headersAreOffered,
   isProviderId,
+  keepWarm,
   providerFields,
   providerSettings,
   readiness,
@@ -19,6 +20,7 @@ import {
   providerDeps,
   resolveTheme,
   settingsForDocument,
+  synthesisOrigin,
   THEME_LABELS,
   THEME_SETTINGS,
   unusableVoiceSentence,
@@ -460,6 +462,64 @@ describe('settingsForDocument', () => {
     expect(said).toContain('this version of the app does not have');
     expect(unusableVoiceSentence({ provider: 'fish', voice: 'zh/74c6aba5' })).toBeNull();
     expect(unusableVoiceSentence(null)).toBeNull();
+  });
+});
+
+/**
+ * Where each Provider's synthesis goes, so that saved audio can keep that
+ * connection warm while it plays (#26, ADR 0040).
+ */
+describe('synthesisOrigin', () => {
+  it('is the fixed address of each hosted Provider', () => {
+    expect(synthesisOrigin(DEFAULT_SETTINGS, 'fish')).toBe('https://api.fish.audio');
+    expect(synthesisOrigin(DEFAULT_SETTINGS, 'openai-official')).toBe('https://api.openai.com');
+    expect(synthesisOrigin(DEFAULT_SETTINGS, 'speechify')).toBe('https://api.speechify.ai');
+  });
+
+  it('is the address the owner typed for a server of their own', () => {
+    const typed = settingsWith({
+      compatible: { baseURL: ' https://api.groq.com/openai/v1 ', model: 'playai-tts' },
+      local: { engine: 'kokoro', baseURL: 'http://192.168.31.28:8880/v1' },
+    });
+    expect(synthesisOrigin(typed, 'compatible')).toBe('https://api.groq.com');
+    expect(synthesisOrigin(typed, 'local')).toBe('http://192.168.31.28:8880');
+    // None typed yet: nothing to keep warm.
+    expect(synthesisOrigin(DEFAULT_SETTINGS, 'compatible')).toBeNull();
+  });
+
+  it('is none for Azure, which opens a connection of its own for every synthesis', () => {
+    expect(synthesisOrigin(settingsWith({ azure: { region: 'eastasia' } }), 'azure')).toBeNull();
+  });
+});
+
+describe('the connection every Provider request goes through (#26)', () => {
+  it('warms a quiet origin before a POST, and keeps warm the same connections it has seen', async () => {
+    const start = Date.parse('2026-09-23T12:57:00Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(start);
+    const sent: string[] = [];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      sent.push(`${init?.method ?? 'GET'} ${String(input)}`);
+      return new Response(null, { status: 200 });
+    }) as typeof fetch;
+    try {
+      await providerDeps.fetch('https://quiet.example/v1/models');
+      vi.setSystemTime(start + 107_000);
+      await providerDeps.fetch('https://quiet.example/v1/audio/speech', { method: 'POST', body: '{}' });
+      // One instance behind both: `keepWarm` knows the origin because a Provider reached it.
+      vi.setSystemTime(start + 127_000);
+      keepWarm('https://quiet.example');
+      keepWarm(null);
+      await Promise.resolve();
+      expect(sent).toEqual([
+        'GET https://quiet.example/v1/models',
+        'GET https://quiet.example/',
+        'POST https://quiet.example/v1/audio/speech',
+        'GET https://quiet.example/',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

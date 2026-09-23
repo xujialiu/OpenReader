@@ -92,3 +92,16 @@ that was cleared. The Reading Position written to the Library is built from
 `atRef` (ADR 0008), so a cursor cleared at the rebuild also meant
 `readingPosition()` answering null for the whole gap between the rebuild and the
 next Clip.
+
+## Amendment (2026-09-23, #46)
+
+"It is cleared in exactly one place: `adopt`'s renumbering branch, where
+`samePrefix` has established that every index now means a different sentence and
+clearing is the whole point" no longer describes a renumbering. Clearing there
+was this ADR's defect arriving from another side: the next Play found no cursor
+and read from the top, and the stored place was written over within seconds
+(`notes/NOTES_2026-09-23.md`, 13:35). `adopt` now carries the cursor to the same
+sentence in the new list (`carryUtterance`; ADR 0023's amendment of the same
+date). The one place the cursor is still cleared is a renumbering that cannot
+find its sentence at all, because that sentence's own section reported different
+text; `test/app/player-rules.test.ts` still pins it to one line.

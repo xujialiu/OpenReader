@@ -18,9 +18,16 @@
  *   rate limit is hit; two also means the Utterance actually being read is never
  *   queued behind a pile of speculative ones.
  *
- * The window includes the Utterance at the cursor. On a fresh start or after a
- * seek, that one has not been fetched either, and it is the one playback is
- * waiting for.
+ * The window starts at the first Utterance not yet on the queue and reaches three
+ * past the cursor. On a fresh start or after a seek that is the cursor itself,
+ * which has not been fetched either and is the one playback is waiting for. Once
+ * a Clip is queued it is never asked for again: `drain` takes it out of the
+ * prepared set as it queues it, so it reports `absent`, and a window starting at
+ * the cursor fetched every sentence a second time and kept the copy (#49).
+ *
+ * A refused Utterance stays refused until the owner asks for it again, and what
+ * a press of Play asks for is decided here too (`retryOnPlay`): every refusal,
+ * not only the one the reading stopped on (#45).
  */
 
 /** Utterances kept prepared beyond the one being read. */
@@ -37,13 +44,16 @@ export const CONCURRENT_FETCHES = 2;
  * carries over: a Provider that refused once will refuse again, a retry loop in
  * the background spends the owner's quota out of sight of anything that could
  * show it, and philosophy rule 1 wants the failure reported rather than hidden
- * behind attempts. A retry is an explicit act — a seek back to that Utterance.
+ * behind attempts. A retry is an explicit act: a press of Play, which asks again
+ * for every refused Utterance (`retryOnPlay`, #45), or a seek back to one.
  */
 export type UtteranceState = 'absent' | 'fetching' | 'ready' | 'failed';
 
 export interface FetchWindowInput {
   /** The Utterance being read — the one whose Clip is playing, or the one playback is waiting for. */
   cursor: number;
+  /** The next Utterance the queue would take. Everything before it is on the queue already, where `stateOf` cannot see it. */
+  nextToEnqueue: number;
   /** How many Utterances the document has. */
   total: number;
   /** Requests in flight right now, wherever they are. Counted rather than derived: a seek leaves fetches running outside the window, and they still cost the Provider. */
@@ -62,8 +72,8 @@ export interface FetchWindowInput {
  * holding a Clip it cannot play yet.
  *
  * Returns at most `concurrency - inFlight` indices, and never one that is
- * already ready, already fetching or already failed. An empty array is the
- * normal answer — most of the time everything in the window is in hand.
+ * already queued, ready, fetching or failed. An empty array is the normal
+ * answer — most of the time everything in the window is in hand.
  */
 export function fetchWindow(input: FetchWindowInput): number[] {
   const readAhead = input.readAhead ?? READ_AHEAD_UTTERANCES;
@@ -71,13 +81,53 @@ export function fetchWindow(input: FetchWindowInput): number[] {
   const slots = concurrency - input.inFlight;
   if (slots <= 0) return [];
 
-  const from = Math.max(0, input.cursor);
-  const to = Math.min(input.total - 1, from + readAhead);
+  const from = Math.max(0, input.cursor, input.nextToEnqueue);
+  const to = Math.min(input.total - 1, Math.max(0, input.cursor) + readAhead);
   const start: number[] = [];
   for (let index = from; index <= to && start.length < slots; index++) {
     if (input.stateOf(index) === 'absent') start.push(index);
   }
   return start;
+}
+
+/** What the engine knows about its refusals at the moment Play is pressed. */
+export interface RetryInput {
+  /** The Utterance being read, which is the refused one when the reading stopped on a refusal. */
+  cursor: number;
+  /** The next Utterance the queue would take. */
+  nextToEnqueue: number;
+  /** The Utterances whose synthesis was refused, or whose Clip would not decode. */
+  failed: ReadonlySet<number>;
+}
+
+/** Where the engine stands once the press has been taken as a retry. */
+export interface Retry {
+  /** Empty: every refusal is asked for again as the window reaches it. */
+  failed: ReadonlySet<number>;
+  nextToEnqueue: number;
+}
+
+/**
+ * A press of Play, as a retry of **every** Utterance that was refused (#45).
+ *
+ * The read-ahead asks for two sentences at a time, so a network failure refuses
+ * more than one of them. Retrying only the one the reading stopped on played it
+ * and stopped again at the next, which nobody had asked for again, still showing
+ * the error from before the press: measured on 2026-09-23, 279, 280 and 281 were
+ * refused together, Play asked again for 279 alone, and the reading stopped at
+ * 280 with no request sent for it (notes/NOTES_2026-09-23.md, 13:30). The press
+ * is one explicit act, and it asks again for all of them; nothing is asked again
+ * without one.
+ *
+ * `nextToEnqueue` moves back to the cursor only when the cursor's own Utterance
+ * is one of them. `drain` never steps over a refusal, so otherwise the cursor's
+ * Clip is on the queue already, and moving back would queue it a second time.
+ */
+export function retryOnPlay(input: RetryInput): Retry {
+  return {
+    failed: new Set<number>(),
+    nextToEnqueue: input.failed.has(input.cursor) ? input.cursor : input.nextToEnqueue,
+  };
 }
 
 /** What the engine knows about itself when it asks whether there is anything left to play. */
@@ -114,15 +164,17 @@ export interface RunOutInput {
  *   a stall the reader hears and which ends by itself.
  *
  * **There is deliberately no fifth condition about the failed set** (ADR 0023). A
- * Clip that was refused leaves `inFlight`, `nextToEnqueue` steps over it, and all
- * four of the above hold — so a Provider that dropped the last clips of a document
- * ran out of text exactly the way a finished book does, and the owner was told
- * "the reading has stopped at the end of the book" with two thousand chapters
+ * Clip that was refused used to leave `inFlight` while `nextToEnqueue` stepped over
+ * it, so all four of the above held — a Provider that dropped the last clips of a
+ * document ran out of text exactly the way a finished book does, and the owner was
+ * told "the reading has stopped at the end of the book" with two thousand chapters
  * still ahead (notes/NOTES_2026-09-20.md, 07:48). Making the failures a fifth
  * condition would say nothing at all instead, which is the six minutes of silence
  * this function was written to end. So the reading **has** run out, and what it is
  * told to say gains a third sentence: `outOfTextSentence` in `src/app/segment.ts`
  * takes the count of Utterances that were never spoken and names the refusal.
+ * Since ADR 0027 `drain` stops the reading on a refusal instead, and since #49
+ * nothing refused lies behind `nextToEnqueue`, so that sentence is kept as a guard.
  */
 export function hasRunOut(input: RunOutInput): boolean {
   if (!input.playing) return false;

@@ -40,7 +40,7 @@ import { createClipFetcher, DEFAULT_CACHE_BYTES, type PreparedClip } from './cli
 import type { ClipCache, StoredClip } from './clip-cache';
 import { DEFAULT_GAP, gapContentSeconds, startsNewBlock, type GapSettings } from './gap';
 import { atTheEar, clampRate, heardSeconds, NATURAL_PACE, scaleTimings } from './rate';
-import { enqueueCeiling, fetchWindow, hasRunOut, type UtteranceState } from './read-ahead';
+import { enqueueCeiling, fetchWindow, hasRunOut, retryOnPlay, type UtteranceState } from './read-ahead';
 import type { ReaderClock } from './reader-clock';
 import { createTimeline, type QueuedClip, type TimelinePosition } from './timeline';
 import { wordHandoff } from './voice-boundary';
@@ -50,24 +50,28 @@ import { wordHandoff } from './voice-boundary';
  * happened".
  *
  * **Why the failures are in here rather than in a condition.** A Clip that was
- * refused leaves `inFlight`, `drain` steps over it and `nextToEnqueue` passes it,
- * so every one of `hasRunOut`'s four conditions holds exactly as it does for a
- * book that finished — and the app said "the reading has stopped at the end of
- * the book" to an owner whose Provider had dropped the last clips of a document
- * (notes/NOTES_2026-09-20.md, 07:48). Suppressing the announcement instead would
- * restore the silence the announcement exists to end, so the engine reports what
- * it already tracks and the app has a third sentence to say (ADR 0023).
+ * refused used to leave `inFlight` while `drain` stepped over it and
+ * `nextToEnqueue` passed it, so every one of `hasRunOut`'s four conditions held
+ * exactly as it does for a book that finished — and the app said "the reading has
+ * stopped at the end of the book" to an owner whose Provider had dropped the last
+ * clips of a document (notes/NOTES_2026-09-20.md, 07:48). Suppressing the
+ * announcement instead would restore the silence the announcement exists to end,
+ * so the engine reports what it already tracks and the app has a third sentence to
+ * say (ADR 0023). Since ADR 0027 `drain` stops the reading on a refusal instead,
+ * and since #49 nothing refused lies behind `nextToEnqueue`, so a reading no longer
+ * runs out with refusals behind it and this report of them is kept as a guard.
  */
 export interface OutOfTextReport {
   /** How many Utterances the engine had when it ran out. */
   known: number;
   /**
    * How many of them were **never spoken** — a synthesis that was refused, or a
-   * Clip that would not decode — since the last `load` or `seek`.
+   * Clip that would not decode — since the last `load`, `seek` or `play`.
    *
    * Since then and not ever, because that is what the owner just listened to: a
-   * seek back to a failed Utterance is how a retry is asked for (`read-ahead.ts`),
-   * and it clears this with the rest of the restart.
+   * press of Play, or a seek back to a failed Utterance, is how a retry is asked
+   * for (`read-ahead.ts`). Play clears this because it asks again for every one
+   * of them (#45); a seek clears it with the rest of the restart.
    */
   unspoken: number;
   /**
@@ -142,9 +146,23 @@ export interface PlaybackSnapshot {
   fetching: number;
 }
 
+/** How `load` starts the engine on its new list. */
+export interface LoadOptions {
+  /**
+   * Load a paused engine without cueing its first Clip: nothing reaches the
+   * renderer until `play()`, which cues the front of the queue, or a `seek` or a
+   * load that is not quiet. A cue carries the renderer's `reveal`, so it centres
+   * the page on its sentence; for a renumbering while paused (#46), which is what
+   * scrolling up does, that would pull the page back to the reading while the
+   * owner scrolls away from it. Ignored while playing, where the first cue is the
+   * reading's own.
+   */
+  quiet?: boolean;
+}
+
 export interface PlaybackEngine {
   /** A document's Utterances in reading order, and where to start. Does not begin playing. */
-  load(utterances: readonly Utterance[], from?: number): void;
+  load(utterances: readonly Utterance[], from?: number, options?: LoadOptions): void;
   /**
    * The same document, with more Utterances on the end of it — and **nothing
    * restarted**.
@@ -206,14 +224,16 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
   const prepared = new Map<number, PreparedClip>();
   const inFlight = new Set<number>();
-  const failed = new Set<number>();
+  /** Replaced whole by a press of Play (`retryOnPlay`), cleared by anything that restarts. */
+  let failed = new Set<number>();
   /**
    * The last problem that left an Utterance unspoken, for `OutOfTextReport`.
    *
    * Not every problem: a session that would not activate is reported through
    * `onError` and is not a sentence that was skipped. This is set beside
-   * `failed.add` and cleared beside `failed.clear`, so the two cannot disagree
-   * about whether anything was lost.
+   * `failed.add` and cleared wherever `failed` is emptied — `restart`, a voice
+   * landing, and a press of Play — so the two cannot disagree about whether
+   * anything was lost.
    */
   let lastRefusal: unknown = null;
 
@@ -222,6 +242,12 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   let draining = false;
   /** The Utterance the renderer has been given a cue for, so a cue is sent once per Clip. */
   let cued: number | null = null;
+  /**
+   * Loaded quietly while paused (`LoadOptions.quiet`): the first Clip is queued
+   * but not cued. Set only by such a `load`, cleared by `restart` and by `play()`,
+   * so the first cue waits for Play, a seek or a load that is not quiet.
+   */
+  let quiet = false;
   /** The last position reported, kept so a rate change can re-cue from where the reading actually is. */
   let last: TimelinePosition | null = null;
   /** Whether running out of text has already been said. Cleared by anything that gives the engine somewhere else to go. */
@@ -258,7 +284,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
   function pump(): void {
     if (disposed) return;
-    for (const index of pending?.armed ? [] : fetchWindow({ cursor, total: utterances.length, inFlight: inFlight.size, stateOf })) {
+    for (const index of pending?.armed ? [] : fetchWindow({ cursor, nextToEnqueue, total: utterances.length, inFlight: inFlight.size, stateOf })) {
       startFetch(index);
     }
     void drain();
@@ -289,10 +315,13 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     inFlight.add(index);
     fetcher.fetch(index, utterance.text, utterance.speakable).then(
       (clip) => {
-        // A Clip for a document that is no longer open, or one a seek has left
-        // behind, is dropped rather than held: its bytes are in the cache, so
-        // reaching it again costs nothing and nobody is billed twice.
-        if (mine === generation && index >= cursor && index <= enqueueCeiling(cursor)) prepared.set(index, clip);
+        // A Clip for a document that is no longer open, one a seek has left
+        // behind, or one whose sentence is already on the queue is dropped rather
+        // than held: its bytes are in the cache, so reaching it again costs
+        // nothing and nobody is billed twice. `drain` takes `prepared` only from
+        // `nextToEnqueue` on, so a Clip kept behind it would stay until the next
+        // restart (#49).
+        if (mine === generation && index >= nextToEnqueue && index <= enqueueCeiling(cursor)) prepared.set(index, clip);
       },
       (error) => {
         if (mine === generation) {
@@ -321,7 +350,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
         const clip = prepared.get(nextToEnqueue);
         if (!clip) {
           // Never skip missing content. Let already-queued audio finish, then
-          // stop exactly at the missing utterance; Play explicitly retries it.
+          // stop exactly at the missing utterance; Play explicitly retries it,
+          // and every other refused one with it (#45).
           if (failed.has(nextToEnqueue)) {
             if (timeline.pending() === 0 && playing) {
               cursor = nextToEnqueue;
@@ -384,10 +414,11 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     if (playing) built.resume();
 
     // The first Clip after a load or a seek has no preceding `onBufferEnded` to
-    // announce it, so its cue goes out here. Every later cue comes from the
-    // boundary itself.
+    // announce it, so its cue goes out here — unless the load was quiet, when it
+    // waits for `play()`, which cues the front itself. Every later cue comes from
+    // the boundary itself.
     const front = timeline.front();
-    if (cued === null && front) cue(front);
+    if (cued === null && front && !quiet) cue(front);
     prepareSwitch();
     publish();
   }
@@ -494,6 +525,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     failed.clear();
     lastRefusal = null;
     cued = null;
+    quiet = false;
     last = null;
     announced = false;
     graph?.clear();
@@ -592,10 +624,11 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   }
 
   return {
-    load(list, from = 0) {
+    load(list, from = 0, options = {}) {
       generation++;
       utterances = list;
       restart(from);
+      quiet = options.quiet === true && !playing;
       pump();
     },
 
@@ -613,10 +646,17 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
     play() {
       if (disposed) return;
-      if (failed.has(cursor)) {
-        failed.delete(cursor);
-        nextToEnqueue = cursor;
-      }
+      // The press is the explicit act a retry waits for, and it asks again for
+      // every refused Utterance rather than the one the reading stopped on (#45).
+      // The refusal it answers goes with them, so a stop after this press names
+      // a failure that happened after it.
+      const retry = retryOnPlay({ cursor, nextToEnqueue, failed });
+      failed = new Set(retry.failed);
+      nextToEnqueue = retry.nextToEnqueue;
+      lastRefusal = null;
+      // A quiet load's first cue was waiting for this press: the front is cued
+      // just below, or by `enqueue` when its Clip arrives.
+      quiet = false;
       playing = true;
       graph?.resume();
       const front = timeline.front();
@@ -653,9 +693,11 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       }
       // Changed before the first position arrived — within the first second of a
       // Clip. There is nothing to correct against yet, so the array goes out
-      // again and the correction that follows within the second anchors it.
+      // again and the correction that follows within the second anchors it. Not
+      // after a quiet load: nothing has been cued to re-scale, and `play()` cues
+      // at the rate in force then.
       const front = timeline.front();
-      if (front) cue(front);
+      if (front && !quiet) cue(front);
     },
 
     switchVoice(provider, voice, selected, failed) {

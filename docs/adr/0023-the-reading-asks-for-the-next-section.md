@@ -175,3 +175,68 @@ cannot be highlighted is the real thing.
 Measured on the fixture and on the owner's 2,077-section book; the figures are in
 `notes/NOTES_2026-09-20.md` at 05:03, 05:09, 05:13, 05:16, 05:19, 05:31 and 05:53,
 and the memory table is checked against ADR 0011's own.
+
+## Amendment (2026-09-23, #45, #46 and #49)
+
+**A press of Play asks again for every refused Utterance (#45).** "How many were
+**never spoken** since the last `load` or `seek`" above is now since the last
+`load`, `seek` or `play`. `play()` in `engine.ts` asked again only for the
+Utterance at the cursor, while the read-ahead refuses two at a time: measured on
+2026-09-23 (`notes/NOTES_2026-09-23.md`, 13:30), 279, 280 and 281 were refused
+together, Play asked again for 279 alone, and the reading stopped at 280 with no
+request sent for it and the old refusal still on the screen. `retryOnPlay` in
+`read-ahead.ts` now answers with an empty failed set, and moves `nextToEnqueue`
+back to the cursor only when the cursor's own Utterance was refused — `drain`
+never steps over a refusal, so otherwise the cursor's Clip is already queued —
+and `play()` clears `lastRefusal` with them. "Going back to those sentences is
+how they are asked for again" stays true of a seek; a press of Play is the other
+explicit act, and nothing is asked for again without one.
+
+**A renumbered list carries the reading across (#46).** `extend` above is for a
+list that continues the one the engine holds. The other case, a section reported
+above sections already reported, shifts every later index, and it stopped the
+reading: `adopt` paused the engine, cleared the highlight, loaded the engine at
+0, set the cursor to null and said so, and its docblock called it "the one case
+that still needs the destructive `load`, and it is the case where destroying is
+the point". It is not rare. epub.js's continuous manager renders the section
+above whatever it displays near the top of its scroll, and on the owner's book
+(`notes/NOTES_2026-09-23.md`, 13:35) a Contents jump reported sections 1 and 2,
+then 5 and 6, then 3 and 4 above them; a reopen at a stored place in section 6
+was renumbered after the resume had landed; Play then read the book's first
+line, and after six seconds and a pause the Library's place was "9kafe.com" with
+a new Stamp.
+
+`carryUtterance` in `src/app/segment.ts` now finds each held sentence in the new
+list by its first Block's id (`sectionIndex + '.' + i`, `highlighter.ts`), its
+start offset in that Block and its text. That is exact rather than an estimate:
+the Blocks stay in spine order (`withSection` in `blocks.ts`) and `rejoin.ts`
+never welds across a section, so every other section's Utterances are segmented
+as before. `adopt` carries the cursor, the sentence a resume landed on and a
+seek still in its debounce — but not a cursor its caller, a landed resume or a
+Contents row, has already pointed into the new list — and loads the engine again
+at the carried index without pausing it. Playing, the reload's first cue is the
+reading's own, and the page follows the voice as always. Paused, the reload is
+quiet (`LoadOptions.quiet`) and nothing is shown: a renumbering while paused is
+what scrolling up does, and a `show` or the reload's first cue — a cue carries
+the renderer's `reveal`, which centres the page on its sentence — would pull the
+page back to the reading while the owner scrolls away from it. The first cue
+waits for `play()`, which cues the front before it corrects, and nothing reads
+the bridge's old number before then: corrections arrive only while the node
+renders (react-native-audio-api 0.13.5 advances its position dispatcher only
+while `isPlaying()`). Nothing is said. With no cursor the engine loads at 0,
+silently. `load` is still the destructive call, because the queue, the timeline
+and the WebView hold old numbers, so a playing reading restarts the sentence it
+was on. The stop, the clear and the note remain only for a sentence that is not
+in the new list at all, because its own section reported different text; that
+reload is quiet too, so the page stays under the note. The old list's own Blocks
+are kept beside it (`loadedBlocksRef`), since `UtteranceSpan.block` indexes into
+them and `blocksRef` has already moved on by the time the new list is adopted.
+
+**"The third sentence" above is out of date (#45, #49).** It says `drain` steps
+over a refused Utterance, so that a reading runs out of text with refusals behind
+it. Since ADR 0027 `drain` blocks on a refusal instead: it waits for the queue to
+empty, stops the reading on that Utterance and reports the refusal. With #49,
+`failed` never holds an index behind `nextToEnqueue` either. So a reading no
+longer runs out of text with refusals behind the cursor, and the "synthesis
+failed" sentence of `outOfTextSentence` is kept as a guard only. The measurements
+of 2026-09-20 stand as the record of what happened then.

@@ -33,6 +33,20 @@ export interface AudioFiles {
 /** Rows one DELETE takes. A JSON array of this many keys is about 34 KB. */
 const DELETE_BATCH = 500;
 
+/**
+ * A saved clip, or none, and whether looking for it changed the saved audio.
+ *
+ * `dropped` is true only for a record whose file had gone, which the read drops:
+ * the one read that changes what is saved, and so the one miss after which the
+ * inventory is worth reading again (#47). A plain miss, which is every sentence
+ * that was never downloaded, changes nothing.
+ */
+export type SavedClipRead =
+  | { clip: SynthesisResult; dropped: false }
+  | { clip: null; dropped: boolean };
+
+const MISS: SavedClipRead = { clip: null, dropped: false };
+
 export class OfflineRepository {
   private fileJobs = new Map<string, Promise<unknown>>();
   /**
@@ -126,7 +140,7 @@ export class OfflineRepository {
     document: string,
     voice: OfflineVoice,
     text: string,
-  ): Promise<SynthesisResult | null> {
+  ): Promise<SavedClipRead> {
     const address = this.address(document, voice, text);
     if (
       await this.catalog.isDeleting(
@@ -135,13 +149,13 @@ export class OfflineRepository {
         address.key,
       )
     )
-      return null;
+      return MISS;
     const audio = await this.catalog.getClip(
       address.document,
       address.voice,
       address.key,
     );
-    if (!audio) return null;
+    if (!audio) return MISS;
     const clip = await this.files.read(audio);
     if (!clip) {
       await this.catalog.finishDelete(
@@ -149,9 +163,9 @@ export class OfflineRepository {
         address.voice,
         address.key,
       );
-      return null;
+      return { clip: null, dropped: true };
     }
-    return clip;
+    return { clip, dropped: false };
   }
   async hasClip(
     document: string,
