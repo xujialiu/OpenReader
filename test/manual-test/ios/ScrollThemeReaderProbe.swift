@@ -171,6 +171,22 @@ final class ScrollThemeReaderProbe: XCTestCase {
     capture("tapword-01-after-tap", app)
   }
 
+  // MARK: - #27: a long run of fast flings, each way, for a screen recording
+  // to be read frame by frame for a white page. No screenshots: the recording
+  // is the evidence, and a capture would pause the flings it is watching.
+  func testLongFlingForRecording() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.activate()
+    XCTAssertTrue(waitForReaderReady(app))
+    if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
+    waitForLayout(app)
+    let count = Int(ProcessInfo.processInfo.environment["FLINGS"] ?? "") ?? 15
+    for _ in 0..<count { app.swipeUp(velocity: .fast) }
+    Thread.sleep(forTimeInterval: 1.0)
+    for _ in 0..<count { app.swipeDown(velocity: .fast) }
+    Thread.sleep(forTimeInterval: 1.0)
+  }
+
   // MARK: - Item 4 (font-size half): the stepper still reflows this page live.
   func testFontSizeLiveOnPage() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
@@ -343,5 +359,101 @@ final class ScrollThemeReaderProbe: XCTestCase {
     app.swipeUp()
     capture("download-02-list-scrolled", app)
     app.buttons["Close Download"].tap()
+  }
+
+  // MARK: - #27 independent verification, against this session's own Library
+  // (the owner's book and the short fixture) rather than Scroll Fixture, which
+  // this run's Library does not hold. A real tap on the named row, the owner's
+  // own trigger for the white flash: the host script starts the screen
+  // recording once the Library is already confirmed shown (so the recording
+  // holds only the tap and what follows, never Metro's own boot screen), and
+  // this method only waits for the row and taps it. No screenshot, so a
+  // capture never pauses the transition being recorded.
+  func testRealTapOpenForRecording() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.activate()
+    let title = ProcessInfo.processInfo.environment["BOOK_TITLE"] ?? "My Vampire System"
+    let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+    var backs = 0
+    while backs < 4 && !row.exists && app.buttons["Back"].exists {
+      app.buttons["Back"].tap(); backs += 1; Thread.sleep(forTimeInterval: 0.5)
+    }
+    XCTAssertTrue(row.waitForExistence(timeout: 20), "\(title) row not found in Library")
+    row.tap()
+    Thread.sleep(forTimeInterval: 2.5)
+  }
+
+  // MARK: - #27 independent verification, items 1 and 5: Settings shows the
+  // working tree's version, and the light theme on the real book and the
+  // short fixture looks as before — white page, black text, white below the
+  // fixture's last line — with a live switch back to Dark. Same shape as
+  // testVersionAndThemeLiveOnPage, against this session's own Library.
+  // "Live" here means without an app relaunch, as that method establishes:
+  // Settings and the reader are mutually exclusive on one navigation stack
+  // (reaching Settings pops the reader), so the only way to show a theme
+  // change on a reader page without a relaunch is to reopen it from the
+  // Library right after changing the setting.
+  func testVersionAndLightThemeOnRealDocuments() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.activate()
+    if app.buttons["Back"].waitForExistence(timeout: 5) { app.buttons["Back"].tap() }
+    let settings = app.buttons["Settings"]
+    XCTAssertTrue(settings.waitForExistence(timeout: 15), "Library header did not appear")
+    settings.tap()
+
+    guard let expected = workingTreeVersion() else { XCTFail("Could not read APP_VERSION from app-version.ts"); return }
+    let version = app.staticTexts["Version \(expected)"]
+    XCTAssertTrue(version.waitForExistence(timeout: 5), "No element labelled 'Version \(expected)'")
+    capture("realdocs-01-settings-version", app)
+
+    let general = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'General'")).firstMatch
+    XCTAssertTrue(general.waitForExistence(timeout: 5))
+    general.tap()
+    let themeRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Theme,'")).firstMatch
+    XCTAssertTrue(themeRow.waitForExistence(timeout: 5), "General has no Theme row")
+    themeRow.tap()
+    XCTAssertTrue(app.buttons["Light"].waitForExistence(timeout: 3), "Theme menu did not open")
+    app.buttons["Light"].tap()
+    XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Light"])], timeout: 3), .completed, "Theme menu did not close after Light")
+    navBack(app) // General -> Settings
+    navBack(app) // Settings -> Library
+
+    func openByTitle(_ title: String) {
+      let book = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+      XCTAssertTrue(book.waitForExistence(timeout: 10), "\(title) is not on the shelf")
+      book.tap()
+      XCTAssertTrue(waitForReaderReady(app), "Reader did not become ready for \(title)")
+      if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
+      waitForLayout(app)
+      Thread.sleep(forTimeInterval: 2.0)
+    }
+
+    openByTitle("My Vampire System")
+    capture("realdocs-02-book-light-theme", app)
+    navBack(app) // reader -> Library
+
+    openByTitle("Stat Line Fixture")
+    // Below the fixture's six lines: a short document may already show its
+    // page's end without scrolling; the swipe is a no-op then, harmless.
+    app.swipeUp()
+    Thread.sleep(forTimeInterval: 1.0)
+    capture("realdocs-03-fixture-light-theme-below-lines", app)
+
+    // Restore Dark with this reader open (in the sense established above),
+    // and confirm it goes dark without an app relaunch.
+    navBack(app) // reader -> Library
+    settings.tap()
+    general.tap()
+    XCTAssertTrue(themeRow.waitForExistence(timeout: 5))
+    themeRow.tap()
+    XCTAssertTrue(app.buttons["Dark"].waitForExistence(timeout: 3))
+    app.buttons["Dark"].tap()
+    XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: app.buttons["Dark"])], timeout: 3), .completed, "Theme menu did not close after Dark")
+    navBack(app); navBack(app) // Settings -> Library
+
+    openByTitle("Stat Line Fixture")
+    capture("realdocs-04-fixture-dark-theme-restored", app)
   }
 }
