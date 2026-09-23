@@ -67,6 +67,9 @@ The owner approved implementation after the interview.
 
 ## Speed adjustment opens when needed
 
+_Revised in [decision 0041](0041-one-look-for-settings-and-the-speed-control.md):
+the speed now opens in a small bubble at the number, not in a drawer._
+
 The player keeps the current speed visible as a tappable number. Tapping it
 opens a bottom drawer with minus and plus controls for adjusting the speed.
 The minus and plus controls leave the main player: keeping them always visible
@@ -184,6 +187,9 @@ interrupt its availability unnecessarily. Editing still requires disabling.
 The owner confirmed this interaction.
 
 ## Drawers dismiss by dragging their handles
+
+_Speed is no longer a drawer; it opens in a bubble
+([decision 0041](0041-one-look-for-settings-and-the-speed-control.md))._
 
 Voice, Speed, Contents and Appearance close when the owner drags down from the
 handle or the surrounding title area. A visible handle that does nothing was

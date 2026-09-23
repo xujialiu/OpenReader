@@ -18,8 +18,8 @@
 
 import { Host, Menu, RNHostView, Toggle, type ToggleProps } from '@expo/ui/swift-ui';
 import { accessibilityAddTraits, accessibilityElement, accessibilityLabel, menuOrder } from '@expo/ui/swift-ui/modifiers';
-import { Children, useState, type ReactNode } from 'react';
-import { Alert, DynamicColorIOS, Image, Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Children, createContext, isValidElement, useContext, useMemo, useState, type ReactNode } from 'react';
+import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { Icon, type IconName } from './icon';
 
@@ -88,6 +88,22 @@ function ink(light: string, dark: string): ColorValue {
   return DynamicColorIOS({ light, dark });
 }
 
+/**
+ * The settings pages' two surfaces, the page and the cards on it, as plain
+ * strings for the navigation header that sits over the page (`shell.tsx`).
+ *
+ * No new colours: the two columns of `PALETTE` swap places in the light theme.
+ * The phone lays its own Settings out as white cards on a light grey page, the
+ * card above its page in both themes, and General used to have it the other
+ * way round in the light theme only — a faint grey card sunk into a white page
+ * (#48, design 0041). In the dark the cards were already the lighter of the two,
+ * and the page stays the near-black the document is read on (ADR 0022).
+ */
+export const SETTINGS_SURFACE = {
+  light: { page: PALETTE.light.panel, card: PALETTE.light.page },
+  dark: { page: PALETTE.dark.page, card: PALETTE.dark.panel },
+} as const;
+
 /** The app's colours, each one both of `PALETTE`'s. */
 export const INK = {
   page: ink(PALETTE.light.page, PALETTE.dark.page),
@@ -99,135 +115,121 @@ export const INK = {
   reading: ink(PALETTE.light.reading, PALETTE.dark.reading),
   /** Something the owner has to act on: a missing key, a server that did not answer. Not an alarm. */
   attention: ink('#8a2f18', '#f08c6e'),
+  /** A settings page, behind its cards (`SETTINGS_SURFACE`). */
+  settingsPage: ink(SETTINGS_SURFACE.light.page, SETTINGS_SURFACE.dark.page),
+  /** A settings card, above its page (`SETTINGS_SURFACE`). */
+  card: ink(SETTINGS_SURFACE.light.card, SETTINGS_SURFACE.dark.card),
+  /**
+   * The phone's own greys for the text of a settings page (design 0042): a
+   * row's value, a group's header and footer, and the second line of a row.
+   * Translucent, as the phone's are, so one colour reads right on the card and
+   * on the page: measured on iOS 27.0 as #8a8a8e on a white card and #85858b on
+   * the grey page, #98989f and #8d8d93 in the dark (notes, 2026-09-23).
+   */
+  secondary: ink('rgba(60,60,67,0.6)', 'rgba(235,235,245,0.6)'),
+  /** Fainter still: a row's chevron and an empty field's placeholder (measured #c5c5c7 and #5a5a5e on a card). */
+  tertiary: ink('rgba(60,60,67,0.3)', 'rgba(235,235,245,0.3)'),
+  /** The line between a card's rows, as the phone draws it: 1 point, measured #e8e8e8 and #38383b. */
+  separator: ink('#e8e8e8', '#38383b'),
 };
 
-export function Action({
-  label,
-  onPress,
-  disabled,
-  primary,
-}: {
-  label: string;
-  onPress(): void;
-  disabled?: boolean;
-  primary?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.action,
-        primary && styles.actionPrimary,
-        pressed && styles.pressed,
-        disabled && styles.disabled,
-      ]}
-    >
-      <Text style={[styles.actionLabel, primary && styles.actionLabelPrimary]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-/** A labelled line of text the owner types, with room underneath for the sentence that says what it is for. */
-export function Field({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  hint,
-  help,
-  editable = true,
-  secure,
-  keyboard,
-  lines,
-  accessory,
-}: {
-  label: string;
-  value: string;
-  onChangeText(next: string): void;
-  placeholder?: string;
-  hint?: ReactNode;
-  help?: string;
-  editable?: boolean;
-  secure?: boolean;
-  keyboard?: 'url';
-  accessory?: ReactNode;
-  /**
-   * More than one line, for a field whose content has line breaks in it — the
-   * gateway headers are `Name: value` pairs and the owner may paste them one to
-   * a line.
-   *
-   * It is not combined with `secure`, and cannot be: iOS ignores
-   * `secureTextEntry` on a multiline input and React Native warns that the pair
-   * is unsupported. The field that needs several lines is the one whose content
-   * has to be readable to be checked at all, so nothing is lost here — see
-   * `provider-screen.tsx`.
-   */
-  lines?: number;
-}) {
-  return (
-    <View style={styles.field}>
-      <View style={styles.fieldHead}>
-        <Text style={styles.fieldLabel}>{label}</Text>
-        {help ? <HeaderButton title="?" label={`${label} help`} onPress={() => Alert.alert(label, help)} /> : null}
-      </View>
-      <View style={accessory ? styles.inputWithAccessory : undefined}>
-      <TextInput
-        style={[styles.input, accessory ? styles.accessoryInput : null, lines ? { height: 22 * lines + 20, textAlignVertical: 'top' } : null]}
-        accessibilityLabel={label}
-        editable={editable}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={INK.quiet}
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
-        secureTextEntry={secure}
-        multiline={lines !== undefined}
-        numberOfLines={lines}
-        keyboardType={keyboard === 'url' ? 'url' : 'default'}
-      />
-      {accessory}
-      </View>
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-    </View>
-  );
-}
+/**
+ * The measurements the settings pages are drawn to (#48).
+ *
+ * The phone's own, not the app's: taken from the phone's Settings on an iPhone
+ * 17 simulator running iOS 27.0 (`test/manual-test/native-reference.sh`, notes
+ * 2026-09-23), and checked against the phone rather than against each other
+ * (design 0042). When the phone's look changes, measure again and change them
+ * here.
+ */
+const SETTINGS = {
+  /** From the screen's edge to a card's. */
+  margin: 20,
+  /** A row's height, with one line of 17-point text. */
+  rowHeight: 53,
+  /** From a card's edge to its rows' text, at both ends, and so where each separator starts and stops. */
+  inset: 16,
+  /** A card's corners, drawn as the phone's continuous curve rather than a circle's arc. */
+  cardRadius: 26,
+  /** Between one group and the next. The phone's varies from 30 to 40 with what is on either side; this is one number between. */
+  groupGap: 32,
+  /** The text of a row, and of what it says on its right. */
+  fontSize: 17,
+} as const;
 
 /**
- * A group of settings, drawn the way iOS draws one: a small grey header, an
- * inset card of rows separated by hairlines, and a sentence underneath.
+ * A settings page: the grey page every settings screen scrolls on (#48).
  *
- * The **footer** is the part worth having. It is where the explanation of a
- * setting belongs, which is what stops each setting carrying its own paragraph
- * inside the row — and a screen of rows with paragraphs between them is what
- * General used to be one setting away from becoming.
+ * One component rather than five `ScrollView`s with the same props, for the
+ * reason the rows below exist: five copies of a page's padding is how five
+ * pages end up a few points apart.
  *
- * The separator is drawn by the rows rather than between them, and the last one
- * turns its own off (`groupRowLast`), because a card whose final row still has a
- * hairline reads as a list that was cut off.
+ * `automaticallyAdjustKeyboardInsets`, because the fields are rows of cards now,
+ * and the lowest of them (Fish Audio's own voices) sits where the keyboard rises.
  */
-export function SettingsGroup({ title, footer, children }: {
-  title: string; footer?: string; children: ReactNode;
-}) {
-  const rows = Children.toArray(children).filter(Boolean);
+export function SettingsPage({ children }: { children: ReactNode }) {
   return (
-    <View style={styles.group}>
-      <Text style={styles.groupTitle}>{title.toUpperCase()}</Text>
-      <View style={styles.groupCard}>
-        {rows.map((row, at) => (
-          <View key={at} style={[styles.groupRow, at === rows.length - 1 && styles.groupRowLast]}>{row}</View>
-        ))}
-      </View>
-      {footer ? <Text style={styles.groupFooter}>{footer}</Text> : null}
-    </View>
+    <ScrollView style={styles.settingsPage} contentContainerStyle={styles.settingsBody}
+      keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets>
+      {children}
+    </ScrollView>
   );
 }
 
-/** A settings row's height: 48, the smallest a row with one line of 16-point text and room to tap is drawn at. */
-const SETTING_ROW_HEIGHT = 48;
+/** The width of the widest field name in one card, and how a field reports its own (`SettingsGroup`). */
+const LabelColumn = createContext<{ width: number; measure(width: number): void } | null>(null);
+
+/**
+ * A group of settings, drawn the way iOS draws one: a small grey header, a card
+ * of rows separated by hairlines, and a sentence underneath (design 0041).
+ *
+ * The **footer** is where anything said about the card goes: an explanation, a
+ * result, a refusal. It takes a node as well as a string because a result is a
+ * `Footnote` that may be in the attention colour, and General's refusal carries
+ * its way out beside it. The title is optional because a card whose page already
+ * names it (a provider's switch, the front page of Settings) has nothing to add.
+ * It is set as written, not in capitals: the phone's own headers stopped being
+ * small capitals, and are now its 17-point semibold in the secondary grey.
+ *
+ * The separators are laid **over** the rows, inset to where their text starts,
+ * rather than drawn as the border of a row pulled in from the card's edge. So a
+ * row is as wide as its card, pads itself, and highlights edge to edge when it
+ * is pressed, as the phone's own rows do. The last row has none, because a card
+ * whose final row still has a hairline reads as a list that was cut off.
+ *
+ * Every `FieldRow` in the card starts its value where the widest field name
+ * ends (`LabelColumn`), as on the phone's own account pages. The column is
+ * measured rather than fixed because the app's text follows the phone's text
+ * size, and a width that fits at the default clips at a larger one. It only
+ * grows: a field a switch reveals can widen the column, and one that goes away
+ * does not make the others jump.
+ */
+export function SettingsGroup({ title, footer, children }: {
+  title?: string; footer?: ReactNode; children: ReactNode;
+}) {
+  const rows = Children.toArray(children).filter(Boolean);
+  const [labelWidth, setLabelWidth] = useState(0);
+  const column = useMemo(() => ({
+    width: labelWidth,
+    measure: (width: number) => setLabelWidth((widest) => Math.max(widest, Math.ceil(width))),
+  }), [labelWidth]);
+  return (
+    <View>
+      {title ? <Text style={styles.groupTitle}>{title}</Text> : null}
+      <LabelColumn.Provider value={column}>
+        <View style={styles.groupCard}>
+          {rows.map((row, at) => (
+            <View key={isValidElement(row) && row.key !== null ? row.key : at}>
+              {row}
+              {at < rows.length - 1 ? <View style={styles.separator} /> : null}
+            </View>
+          ))}
+        </View>
+      </LabelColumn.Provider>
+      {footer ? <View style={styles.groupFooter}>{typeof footer === 'string' ? <Footnote>{footer}</Footnote> : footer}</View> : null}
+    </View>
+  );
+}
 
 /**
  * A row inside a `SettingsGroup` whose value is chosen from a short list: the
@@ -238,12 +240,12 @@ export function ValueRow<T extends string>({ label, choices, chosen, onChoose }:
   label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
 }) {
   return (
-    <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} height={SETTING_ROW_HEIGHT}>
+    <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} height={SETTINGS.rowHeight}>
       <View style={styles.settingRow}>
         <Text style={styles.settingLabel}>{label}</Text>
         <View style={styles.settingValue}>
           <Text style={styles.settingDetail} numberOfLines={1}>{choices.find((choice) => choice.value === chosen)?.label}</Text>
-          <Icon name="menu" color={INK.quiet} size={18} />
+          <Icon name="menu" color={INK.secondary} size={18} />
         </View>
       </View>
     </ChoiceMenu>
@@ -258,16 +260,168 @@ export function ValueRow<T extends string>({ label, choices, chosen, onChoose }:
  * in two places a tap apart, and `disabled` is here for the same reason it was
  * there: a setting that guards something is frozen while it is on, and the way
  * to edit it is to turn it off.
+ *
+ * `note` is the line under the label that says what is happening now (design
+ * 0041): `Turn off to edit.` while a setting that freezes its fields is on, and
+ * `Testing…` or `Checking the folder…` while turning one on is being checked. It
+ * sits in the switch's own row because decision 0026 found that, set apart from
+ * its switch, it read as an instruction for the field beside it.
+ *
+ * `accessibilityLabel` is the switch's, for a switch whose visible label is not
+ * enough on its own: a provider's always reads `Enabled`, and is announced as
+ * `Enable Fish Audio`.
  */
-export function SwitchRow({ label, value, onChange, disabled }: {
-  label: string; value: boolean; onChange(next: boolean): void; disabled?: boolean;
+export function SwitchRow({ label, value, onChange, disabled, note, accessibilityLabel }: {
+  label: string; value: boolean; onChange(next: boolean): void; disabled?: boolean; note?: string; accessibilityLabel?: string;
 }) {
   return (
     <View style={styles.settingRow}>
-      <Text style={[styles.settingLabel, disabled && styles.locked]}>{label}</Text>
-      <Switch accessibilityLabel={label} value={value} disabled={disabled} onValueChange={onChange} />
+      <View style={styles.switchWords}>
+        <Text style={[styles.settingLabel, disabled && styles.locked]}>{label}</Text>
+        {note ? <Text style={styles.rowNote}>{note}</Text> : null}
+      </View>
+      <Switch accessibilityLabel={accessibilityLabel ?? label} value={value} disabled={disabled} onValueChange={onChange} />
     </View>
   );
+}
+
+/**
+ * A row that opens another screen: its name, what is true there now, and the
+ * chevron (design 0041).
+ *
+ * `value` is a fact, in the quiet ink where the phone puts a row's current value
+ * (`2 enabled`, `On`), and is left out rather than filled with a description of
+ * what is behind the row. `checked` is the Providers list's mark for an enabled
+ * Provider (design 0026), in the reading amber where the phone would use its own
+ * blue (design 0042).
+ *
+ * The same row as every other settings row on purpose. The Providers list and
+ * the front page of Settings used to be two different full-width rows a tap
+ * apart, which is the first thing #48 found.
+ */
+export function NavigationRow({ label, value, checked, onPress, accessibilityLabel }: {
+  label: string; value?: string; checked?: boolean; onPress(): void; accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress}
+      style={({ pressed }) => [styles.settingRow, pressed && styles.rowPressed]}>
+      <Text style={styles.settingLabel} numberOfLines={1}>{label}</Text>
+      <View style={styles.settingValue}>
+        {value ? <Text style={styles.settingDetail} numberOfLines={1}>{value}</Text> : null}
+        {checked ? <Icon name="check" color={INK.reading} size={20} strokeWidth={2.2} /> : null}
+        <View style={styles.chevron}><Icon name="next" color={INK.tertiary} size={22} strokeWidth={2} /></View>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
+ * A field as a row of its card: its name on the left and what was typed to the
+ * right, as on the phone's own page for adding a mail account (design 0041).
+ *
+ * No box: the card is the box. A boxed field inside a card was the box inside a
+ * box that made Sync the page the owner singled out (#48). The input is as tall
+ * as the row, so a tap anywhere to the right of the name lands in it.
+ *
+ * `accessory` sits at the row's end (the API key's eye) and takes over most of
+ * the row's right padding, because a 44-point target carries its own.
+ *
+ * A field that cannot be edited is drawn at half strength, as a frozen switch's
+ * label is; the line under the switch that froze it says why (`SwitchRow`).
+ *
+ * While it is being edited it has the phone's own clear button, as the phone's
+ * text fields do. A long address is otherwise emptied one backspace at a time
+ * from wherever the caret landed, which only removes what is before it.
+ */
+export function FieldRow({ label, value, onChangeText, placeholder, editable = true, secure, keyboard, accessory }: {
+  label: string;
+  value: string;
+  onChangeText(next: string): void;
+  placeholder?: string;
+  editable?: boolean;
+  secure?: boolean;
+  keyboard?: 'url';
+  accessory?: ReactNode;
+}) {
+  const column = useContext(LabelColumn);
+  return (
+    <View style={[styles.fieldRow, accessory ? styles.fieldRowWithAccessory : null]}>
+      <Text style={[styles.settingLabel, styles.fieldLabel, column ? { minWidth: column.width } : null]} numberOfLines={1}
+        onLayout={column ? (event) => column.measure(event.nativeEvent.layout.width) : undefined}>
+        {label}
+      </Text>
+      <TextInput
+        style={[styles.fieldInput, !editable && styles.locked]}
+        accessibilityLabel={label}
+        editable={editable}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={INK.tertiary}
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        secureTextEntry={secure}
+        keyboardType={keyboard === 'url' ? 'url' : 'default'}
+        clearButtonMode="while-editing"
+      />
+      {accessory}
+    </View>
+  );
+}
+
+/**
+ * A field with no name of its own, the whole width of its card: a list that the
+ * switch above it reveals, which already says what the list is for (the bracket
+ * pairs, and Fish Audio's own voices; design 0041). What goes in it is said by
+ * its placeholder, which shows exactly while the field is empty and a format is
+ * worth knowing.
+ */
+export function TextRow({ label, value, onChangeText, placeholder, editable = true }: {
+  label: string; value: string; onChangeText(next: string): void; placeholder?: string; editable?: boolean;
+}) {
+  return (
+    <TextInput
+      style={[styles.textRow, !editable && styles.locked]}
+      accessibilityLabel={label}
+      editable={editable}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={INK.tertiary}
+      autoCapitalize="none"
+      autoCorrect={false}
+      spellCheck={false}
+      clearButtonMode="while-editing"
+    />
+  );
+}
+
+/**
+ * An action as a row of its card (`Test connection`), in the reading amber
+ * where the phone would use its own blue (design 0042).
+ *
+ * While it cannot be pressed it keeps its words and dims. What is happening is
+ * said once, under the switch (`SwitchRow`'s `note`), and not again here.
+ */
+export function ActionRow({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} disabled={disabled}
+      style={({ pressed }) => [styles.settingRow, pressed && styles.rowPressed]}>
+      <Text style={[styles.actionLabel, disabled && styles.locked]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * A line under a settings card: an explanation, a result, a refusal, the
+ * version. The phone's footer text, 13 on 16 in its secondary grey, or the
+ * attention colour for something the owner has to act on.
+ */
+export function Footnote({ children, attention, accessibilityLabel }: {
+  children: ReactNode; attention?: boolean; accessibilityLabel?: string;
+}) {
+  return <Text style={[styles.footnote, attention && styles.noteAttention]} accessibilityLabel={accessibilityLabel}>{children}</Text>;
 }
 
 /** One entry of a `ChoiceMenu`: what it sets, what it is called, and the system symbol drawn beside it. */
@@ -314,8 +468,10 @@ export function ChoiceMenu<T extends string>({ label, choices, chosen, onChoose,
 }
 
 /** Something the owner should read: what is missing, or what a server said. Never an alert — the reading carries on around it. */
-export function Note({ children, attention }: { children: ReactNode; attention?: boolean }) {
-  return <Text style={[styles.note, attention && styles.noteAttention]}>{children}</Text>;
+export function Note({ children, attention, accessibilityLabel }: {
+  children: ReactNode; attention?: boolean; accessibilityLabel?: string;
+}) {
+  return <Text style={[styles.note, attention && styles.noteAttention]} accessibilityLabel={accessibilityLabel}>{children}</Text>;
 }
 
 /** A labelled 44-point target, drawn as an icon or a short typographic mark. */
@@ -350,63 +506,8 @@ export function DocumentRow({ title, progress, cover, onPress, onLongPress }: {
   );
 }
 
-/**
- * A row that opens another screen: what is behind it, and one line saying what
- * is there.
- *
- * The same shape as a Document's row on purpose — Settings is now a list of the
- * same kind as the Library (ADR 0019), and two list idioms in one app would be
- * two things to learn. The chevron is a character in the system font and not an
- * icon, for the reason `HeaderButton` gives: there is no icon set in this
- * binary.
- */
-export function SettingRow({ title, detail, onPress }: { title: string; detail: string; onPress(): void }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-      <View style={styles.rowHead}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {title}
-        </Text>
-        <Icon name="next" color={INK.quiet} size={18} />
-      </View>
-      <Text style={styles.rowProgress}>{detail}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  action: {
-    alignItems: 'center',
-    backgroundColor: INK.panel,
-    borderColor: INK.line,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    justifyContent: 'center',
-    minWidth: 76,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  actionLabel: { color: INK.text, fontSize: 15, fontWeight: '600' },
-  actionLabelPrimary: { color: INK.page },
-  actionPrimary: { backgroundColor: INK.text, borderColor: INK.text },
   disabled: { opacity: 0.4 },
-  field: { gap: 6 },
-  fieldHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  fieldLabel: { color: INK.text, fontSize: 14, fontWeight: '600' },
-  hint: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
-  inputWithAccessory: { flexDirection: 'row', alignItems: 'center', borderColor: INK.line,
-    borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
-  accessoryInput: { flex: 1, minWidth: 0, borderWidth: 0 },
-  input: {
-    backgroundColor: INK.page,
-    borderColor: INK.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    color: INK.text,
-    fontSize: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
   note: { color: INK.quiet, fontSize: 13, lineHeight: 19 },
   noteAttention: { color: INK.attention },
   pressed: { opacity: 0.65 },
@@ -417,29 +518,33 @@ const styles = StyleSheet.create({
   documentWords: { flex: 1, gap: 7 },
   documentTitle: { color: INK.text, fontSize: 17, fontWeight: '500', lineHeight: 23 },
   headerButton: { color: INK.text, fontSize: 16, fontWeight: '600' },
-  row: {
-    borderBottomColor: INK.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 4,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
   rowProgress: { color: INK.quiet, fontSize: 13, lineHeight: 18 },
-  rowTitle: { color: INK.text, fontSize: 16, fontWeight: '600' },
-  rowHead: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  chevron: { color: INK.quiet, fontSize: 20, lineHeight: 22 },
-  group: { gap: 7 },
-  groupTitle: { color: INK.quiet, fontSize: 13, fontWeight: '600', letterSpacing: 0.6, paddingHorizontal: 16 },
-  groupCard: { backgroundColor: INK.panel, borderRadius: 10, overflow: 'hidden' },
-  groupRow: { borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth, marginLeft: 16 },
-  groupRowLast: { borderBottomWidth: 0 },
-  groupFooter: { color: INK.quiet, fontSize: 13, lineHeight: 18, paddingHorizontal: 16 },
-  // One type scale with Settings: a row's label is 16 and what it says is 16 in
-  // the quiet ink, never larger than the label naming it.
-  settingRow: { alignItems: 'center', flexDirection: 'row', gap: 12, justifyContent: 'space-between', minHeight: SETTING_ROW_HEIGHT, paddingRight: 16, paddingVertical: 10 },
-  settingLabel: { color: INK.text, fontSize: 16, flexShrink: 1 },
-  settingDetail: { color: INK.quiet, fontSize: 16, flexShrink: 1 },
-  settingValue: { alignItems: 'center', flexDirection: 'row', gap: 6, flexShrink: 1 },
+  settingsPage: { backgroundColor: INK.settingsPage, flex: 1 },
+  settingsBody: { gap: SETTINGS.groupGap, paddingBottom: 64, paddingHorizontal: SETTINGS.margin, paddingTop: 16 },
+  groupTitle: { color: INK.secondary, fontSize: 17, fontWeight: '600', lineHeight: 22, marginBottom: 6, paddingHorizontal: SETTINGS.inset },
+  groupCard: { backgroundColor: INK.card, borderCurve: 'continuous', borderRadius: SETTINGS.cardRadius, overflow: 'hidden' },
+  separator: { backgroundColor: INK.separator, bottom: 0, height: 1, left: SETTINGS.inset, position: 'absolute', right: SETTINGS.inset },
+  groupFooter: { gap: 6, marginTop: 8, paddingHorizontal: SETTINGS.inset },
+  footnote: { color: INK.secondary, fontSize: 13, lineHeight: 16 },
+  // One type scale with the phone's Settings: a row's label and what it says
+  // are both 17, the value in the secondary grey.
+  settingRow: { alignItems: 'center', flexDirection: 'row', gap: 12, justifyContent: 'space-between', minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 10 },
+  rowPressed: { backgroundColor: INK.line },
+  settingLabel: { color: INK.text, fontSize: SETTINGS.fontSize, flexShrink: 1 },
+  settingDetail: { color: INK.secondary, fontSize: SETTINGS.fontSize, flexShrink: 1 },
+  settingValue: { alignItems: 'center', flexDirection: 'row', gap: 4, flexShrink: 1 },
+  // The glyph's own box leaves room on its right; pulled in so the chevron's
+  // stroke ends where the phone's does, about 21 points from the card's edge.
+  chevron: { marginRight: -3 },
+  switchWords: { flexShrink: 1, gap: 2 },
+  rowNote: { color: INK.secondary, fontSize: 15, lineHeight: 20 },
+  fieldRow: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset },
+  fieldRowWithAccessory: { paddingRight: 4 },
+  fieldLabel: { flexShrink: 0 },
+  // As tall as the row, so the whole of the row right of the name is the input.
+  fieldInput: { alignSelf: 'stretch', color: INK.text, flex: 1, fontSize: SETTINGS.fontSize, minWidth: 0, paddingVertical: 12 },
+  textRow: { color: INK.text, fontSize: SETTINGS.fontSize, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 12 },
+  actionLabel: { color: INK.reading, fontSize: SETTINGS.fontSize },
   menuRow: { flex: 1 },
   locked: { opacity: 0.5 },
 });

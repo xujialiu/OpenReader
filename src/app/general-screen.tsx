@@ -22,19 +22,20 @@
  * changed — moving it here would mean leaving the book to adjust the voice
  * reading it.
  *
- * ## Why the group headers are not `Appearance`
+ * ## Why the theme's card has no header
  *
- * CONTEXT.md gives that word to how a *document's* text is set. A header using
- * it for the app's own light and dark would put two meanings on one term in the
- * one file whose job is to stop exactly that, so the first group is `Theme`,
- * after the term that actually means this.
+ * Its one row is called `Theme`, and a header saying `Theme` over it said the
+ * same word twice (#48). It was never going to say `Appearance`: CONTEXT.md
+ * gives that word to how a *document's* text is set, and a header using it for
+ * the app's own light and dark would put two meanings on one term in the one
+ * file whose job is to stop exactly that.
  */
 
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { DEFAULT_BRACKET_PAIRS, validateBracketPairs } from '../core/speech-text';
-import { INK, Note, SettingsGroup, SwitchRow, ValueRow, type Choice } from './controls';
+import { Footnote, INK, SettingsGroup, SettingsPage, SwitchRow, TextRow, ValueRow, type Choice } from './controls';
 import { useShell } from './routes';
 import { THEME_LABELS, THEME_SETTINGS, type ThemeSetting } from './settings';
 
@@ -84,52 +85,46 @@ export function GeneralScreen() {
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.body}>
-      <SettingsGroup title="Theme">
+    <SettingsPage>
+      <SettingsGroup>
         <ValueRow label="Theme" choices={THEME_CHOICES} chosen={settings.theme}
           onChoose={(theme) => setSettings((was) => ({ ...was, theme }))} />
       </SettingsGroup>
 
+      {/* A refused list is said under the card, in place rather than in a box
+          that interrupts: a mistyped bracket is a small mistake and does not
+          deserve a bigger interruption than the mistake itself. The way out is
+          offered next to it, because an owner who cannot see what is wrong with
+          their list needs somewhere to go. The sentence about downloaded
+          chapters stays under the card whatever the switch says: nothing else on
+          any screen shows it (design 0041). */}
       <SettingsGroup
         title="Reading aloud"
-        footer="Turn it off to edit the pairs, then on again to use them. Chapters already downloaded keep the audio they were saved with until they are downloaded again."
+        footer={<>
+          {problem ? <Footnote attention>{problem}</Footnote> : null}
+          {problem ? <Pressable accessibilityRole="button" onPress={() => {
+            setProblem(null);
+            setSettings((was) => ({ ...was, bracketPairs: DEFAULT_BRACKET_PAIRS, stripBrackets: true }));
+          }}><Text style={styles.link}>Use {DEFAULT_BRACKET_PAIRS} instead</Text></Pressable> : null}
+          <Footnote>Chapters already downloaded keep the audio they were saved with until they are downloaded again.</Footnote>
+        </>}
       >
-        <SwitchRow label="Remove enclosing brackets when reading" value={settings.stripBrackets} onChange={strip} />
-        <TextInput
-          accessibilityLabel="Bracket pairs"
+        <SwitchRow label="Remove enclosing brackets when reading" value={settings.stripBrackets} onChange={strip}
+          note={settings.stripBrackets ? 'Turn off to edit.' : undefined} />
+        {/* Set in the interface font rather than the document's: these are
+            characters being listed, not text being read. */}
+        <TextRow
+          label="Bracket pairs"
           value={settings.bracketPairs}
           editable={!settings.stripBrackets}
           onChangeText={(bracketPairs) => { setProblem(null); setSettings((was) => ({ ...was, bracketPairs })); }}
           placeholder={DEFAULT_BRACKET_PAIRS}
-          placeholderTextColor={INK.quiet}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={[styles.pairs, settings.stripBrackets && styles.locked]}
         />
       </SettingsGroup>
-
-      {/* Said in place rather than in a box that interrupts: a mistyped bracket
-          is a small mistake and does not deserve a bigger interruption than the
-          mistake itself. The way out is offered next to it, because an owner who
-          cannot see what is wrong with their list needs somewhere to go. */}
-      {problem ? <View style={styles.problem}>
-        <Note attention>{problem}</Note>
-        <Pressable accessibilityRole="button" onPress={() => {
-          setProblem(null);
-          setSettings((was) => ({ ...was, bracketPairs: DEFAULT_BRACKET_PAIRS, stripBrackets: true }));
-        }}><Text style={styles.link}>Use {DEFAULT_BRACKET_PAIRS} instead</Text></Pressable>
-      </View> : null}
-    </ScrollView>
+    </SettingsPage>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { gap: 26, paddingBottom: 64, paddingHorizontal: 16, paddingTop: 16 },
-  screen: { backgroundColor: INK.page, flex: 1 },
-  // Set in the interface font rather than the document's: these are characters
-  // being listed, not text being read.
-  pairs: { color: INK.text, fontSize: 16, minHeight: 48, paddingRight: 16, paddingVertical: 10 },
-  locked: { opacity: 0.5 },
-  problem: { gap: 6, paddingHorizontal: 16 },
-  link: { color: INK.reading, fontSize: 14, paddingVertical: 6 },
+  link: { color: INK.reading, fontSize: 13, lineHeight: 16, paddingVertical: 6 },
 });

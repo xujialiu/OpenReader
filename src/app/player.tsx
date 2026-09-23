@@ -22,6 +22,7 @@
  * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
 
+import { Host, Popover, RNHostView } from '@expo/ui/swift-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
@@ -31,7 +32,6 @@ import { INK } from './controls';
 import { Icon, type IconName } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { SkipTarget } from './use-reading';
-import { Sheet } from './sheet';
 import { LoadingSpinner } from './loading-spinner';
 
 /**
@@ -200,20 +200,16 @@ export function Player({
         <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
         <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
         <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Playback speed, ${snapRate(settings.rate).toFixed(2)} times`}
-          onPress={() => setSpeedOpen(true)}
-          style={({ pressed }) => [styles.rateTap, pressed && styles.pressed]}
-        >
-          <Text style={styles.rateLabel}>{snapRate(settings.rate).toFixed(2)}×</Text>
-        </Pressable>
+        <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen} />
       </View>
-      {speedOpen && (
-        <Sheet visible title="Playback speed" onClose={closeSpeed}>
-            <Speed rate={settings.rate} onRate={onRate} />
-        </Sheet>
-      )}
+      {/* A tap outside the phone's bubble closes it, and without this it also
+          pressed whatever React Native button it landed on: measured, a tap on
+          Contents closed the bubble and opened the contents too (notes,
+          2026-09-23). The page and the header take no such tap. Laid over the
+          player and nothing else, so an outside tap only closes, as the phone's
+          own bubbles and the drawer this replaced both behave. */}
+      {speedOpen ? <Pressable style={StyleSheet.absoluteFill} onPress={closeSpeed}
+        accessible={false} importantForAccessibility="no-hide-descendants" /> : null}
     </View>
   );
 }
@@ -254,7 +250,54 @@ function Transport({
 }
 
 /**
- * The speed: two arrows and a number, holding to repeat (ADR 0020).
+ * The speed at the end of the transport row, and the phone's own bubble it
+ * opens above itself (design 0041, #48).
+ *
+ * The bubble is the system's popover, drawn and dismissed by the phone, with the
+ * stepper inside it as React Native (`RNHostView`), which keeps the stepper's
+ * own taps and hold-to-repeat: measured, one tap is 0.05 and a two-second hold
+ * 21 steps, the same as in the drawer it replaces. It opens where the number is
+ * because a drawer for one number was taller than the player it adjusted (175
+ * points against 134), and a short choice opens where it was tapped (design
+ * 0035). A second tap on the number closes it again.
+ *
+ * `Host` is the size the label's tap target always was; the label fills it.
+ */
+function SpeedBubble({ rate, onRate, open, onOpen }: {
+  rate: number; onRate(next: number): void; open: boolean; onOpen(open: boolean): void;
+}) {
+  const shown = snapRate(rate).toFixed(2);
+  return (
+    <Host style={styles.rateHost}>
+      <Popover isPresented={open} onIsPresentedChange={onOpen} attachmentAnchor="top" arrowEdge="bottom">
+        <Popover.Trigger>
+          <RNHostView>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Playback speed, ${shown} times`}
+              onPress={() => onOpen(!open)} style={({ pressed }) => [styles.rateTap, pressed && styles.pressed]}>
+              <Text style={styles.rateLabel}>{shown}×</Text>
+            </Pressable>
+          </RNHostView>
+        </Popover.Trigger>
+        <Popover.Content>
+          <RNHostView matchContents>
+            <View style={styles.bubble} accessibilityLabel="Playback speed">
+              <Speed rate={rate} onRate={onRate} />
+            </View>
+          </RNHostView>
+        </Popover.Content>
+      </Popover>
+    </Host>
+  );
+}
+
+/**
+ * The speed: two round buttons and a number, holding to repeat (ADR 0020).
+ *
+ * Sized to the player it belongs to rather than to a drawer of its own: the
+ * number at the phone's body size, a step above the player's own, and the
+ * buttons small round ones with a full-size target (design 0041). A first
+ * version drew a 34-point number between 56-point buttons, and next to the
+ * player's 13-point number it read as belonging to something else.
  *
  * A stepper and not a menu of presets, because people settle on a pace that is
  * theirs and it is rarely one of five. It goes **slower** than natural speech as
@@ -316,13 +359,13 @@ function Speed({ rate, onRate }: { rate: number; onRate(next: number): void }) {
         onPressIn={() => hold(-1)}
         onPressOut={release}
         disabled={shown <= MIN_STEPPER_RATE}
-        hitSlop={6}
+        hitSlop={4}
         style={({ pressed }) => [styles.step, pressed && styles.pressed, shown <= MIN_STEPPER_RATE && styles.disabled]}
       >
-        <Icon name="minus" color={INK.text} size={18} />
+        <Icon name="minus" color={INK.text} size={18} strokeWidth={2} />
       </Pressable>
       {/* Two decimals always, so the number does not change width as it is held and
-          the two arrows do not move under the finger. */}
+          the two buttons do not move under the finger. */}
       <Text style={styles.rate}>{shown.toFixed(2)}×</Text>
       <Pressable
         accessibilityRole="button"
@@ -330,10 +373,10 @@ function Speed({ rate, onRate }: { rate: number; onRate(next: number): void }) {
         onPressIn={() => hold(1)}
         onPressOut={release}
         disabled={shown >= MAX_STEPPER_RATE}
-        hitSlop={6}
+        hitSlop={4}
         style={({ pressed }) => [styles.step, pressed && styles.pressed, shown >= MAX_STEPPER_RATE && styles.disabled]}
       >
-        <Icon name="plus" color={INK.text} size={18} />
+        <Icon name="plus" color={INK.text} size={18} strokeWidth={2} />
       </Pressable>
     </View>
   );
@@ -355,7 +398,10 @@ const styles = StyleSheet.create({
     minWidth: 44,
     paddingHorizontal: 0,
   },
-  buttonPrimary: { backgroundColor: INK.text, borderColor: INK.text, minWidth: 56, height: 52, borderRadius: 26 },
+  // A circle, as tall as the player already was. It was 56 wide by 52 tall, a
+  // capsule that read as an oval (#48); a larger circle would make the player
+  // taller, and every point of it is a point of the page it covers.
+  buttonPrimary: { backgroundColor: INK.text, borderColor: INK.text, width: 52, minWidth: 52, height: 52, borderRadius: 26 },
   chevronTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   collapsed: { alignItems: 'flex-end', bottom: 28, position: 'absolute', right: 16 },
   disabled: { opacity: 0.35 },
@@ -395,20 +441,17 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   sheetTitle: { color: INK.text, fontSize: 18, fontWeight: '700' },
-  rateTap: { minWidth: 58, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  rateLabel: { color: INK.text, fontSize: 13, fontVariant: ['tabular-nums'], fontWeight: '600' },
-  rate: { color: INK.text, fontSize: 15, fontVariant: ['tabular-nums'], fontWeight: '600', minWidth: 62, textAlign: 'center' },
-  speed: { alignItems: 'center', alignSelf: 'center', flexDirection: 'row', gap: 20 },
-  step: {
-    alignItems: 'center',
-    backgroundColor: INK.page,
-    borderColor: INK.line,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
+  rateHost: { height: 44, width: 58 },
+  rateTap: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  // A step above the voice's 14 beside it; at 13 it was the smallest thing on
+  // the row of 24-point icons it ends.
+  rateLabel: { color: INK.text, fontSize: 15, fontVariant: ['tabular-nums'], fontWeight: '600' },
+  bubble: { paddingHorizontal: 14, paddingVertical: 12 },
+  rate: { color: INK.text, fontSize: 17, fontVariant: ['tabular-nums'], fontWeight: '600', minWidth: 64, textAlign: 'center' },
+  speed: { alignItems: 'center', flexDirection: 'row', gap: 16 },
+  // Filled rather than outlined, the player's family of round buttons, at 36 with
+  // `hitSlop` making up the 44-point target.
+  step: { alignItems: 'center', backgroundColor: INK.line, borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
   transport: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   voice: { flex: 1, minHeight: 44, justifyContent: 'center', paddingLeft: 8 },
   voiceLabel: { color: INK.text, fontSize: 14, fontWeight: '500' },

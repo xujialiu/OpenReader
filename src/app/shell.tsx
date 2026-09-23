@@ -39,7 +39,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Appearance, AppState, useColorScheme } from 'react-native';
 
 
-import { PALETTE } from './controls';
+import { PALETTE, SETTINGS_SURFACE } from './controls';
 import { GeneralScreen } from './general-screen';
 import { LibraryScreen } from './library-screen';
 import { useHandedOverDocuments, type HandedOverFile } from './opened-document';
@@ -245,6 +245,16 @@ export function OpenReader() {
     return { ...base, colors: { ...base.colors, background: PALETTE[scheme].page,
       card: PALETTE[scheme].page, text: PALETTE[scheme].text, border: PALETTE[scheme].line } };
   }, [scheme]);
+  /**
+   * The settings screens sit on the settings page's grey rather than on the
+   * white the Library and the reader have, header included, so the header and
+   * the page under it are one surface as on the phone's own Settings (design
+   * 0041). Plain strings, for the reason `screenOptions` gives below.
+   */
+  const settingsScreen = useMemo(() => ({
+    headerStyle: { backgroundColor: SETTINGS_SURFACE[scheme].page },
+    contentStyle: { backgroundColor: SETTINGS_SURFACE[scheme].page },
+  }), [scheme]);
 
   /**
    * Tell UIKit, which is what actually repaints.
@@ -291,6 +301,13 @@ export function OpenReader() {
               // place the theme is resolved in JavaScript rather than by UIKit.
               headerStyle: { backgroundColor: PALETTE[scheme].page },
               headerShadowVisible: false,
+              // The way back is the arrow alone, as on the phone's own Settings,
+              // which no longer names the screen behind it (#48). VoiceOver calls
+              // it `Back` (measured), where the phone's own Settings says the
+              // screen's name; minimal mode offers no label of its own. The
+              // screens keep their `headerBackTitle` for the back button's
+              // long-press menu, which still lists it.
+              headerBackButtonDisplayMode: 'minimal',
               headerTintColor: PALETTE[scheme].text,
               headerTitleStyle: { color: PALETTE[scheme].text },
               contentStyle: { backgroundColor: PALETTE[scheme].page },
@@ -298,12 +315,12 @@ export function OpenReader() {
           >
             <Stack.Screen name="Library" component={LibraryScreen} options={{ title: 'Library' }} />
             <Stack.Screen name="Reader" component={ReaderScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-            <Stack.Screen name="General" component={GeneralScreen} options={{ title: 'General', headerBackTitle: 'Settings' }} />
-            <Stack.Screen name="Providers" component={ProvidersScreen} options={{ title: 'Providers', headerBackTitle: 'Settings' }} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings', ...settingsScreen }} />
+            <Stack.Screen name="General" component={GeneralScreen} options={{ title: 'General', headerBackTitle: 'Settings', ...settingsScreen }} />
+            <Stack.Screen name="Providers" component={ProvidersScreen} options={{ title: 'Providers', headerBackTitle: 'Settings', ...settingsScreen }} />
             {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
-            <Stack.Screen name="Provider" component={ProviderScreen} />
-            <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings' }} />
+            <Stack.Screen name="Provider" component={ProviderScreen} options={settingsScreen} />
+            <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings', ...settingsScreen }} />
           </Stack.Navigator>
         </NavigationContainer>
       </ReaderProvider>

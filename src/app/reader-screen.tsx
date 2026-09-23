@@ -105,7 +105,6 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   useLayoutEffect(() => {
     navigation.setOptions({
       title,
-      headerBackButtonDisplayMode: 'minimal',
       headerRight: () => <HeaderButton label="More actions" icon="more" onPress={() => setActions(true)} />,
     });
   }, [navigation, title]);

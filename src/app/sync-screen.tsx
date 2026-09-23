@@ -12,23 +12,25 @@
  * does, and never into the settings file. The Device Name is not here: it is a
  * fact about the device, not a choice (`library.ts`).
  *
- * One status line, and nothing else on the screen: what the last sync did, or
- * why the switch would not go on. It carries a fact each time — a time, a
- * count, a refusal — which is what a line has to do to be here at all.
+ * One status line under the switch's card: what the last sync did, or why the
+ * switch would not go on. It carries a fact each time — a time, a count, a
+ * refusal — which is what a line has to do to be here at all. What is happening
+ * now (`Checking the folder…`, or `Turn off to edit.` while it is on) is the line
+ * under the switch's own label, and the switch comes before the folder, as a
+ * Provider's comes before its fields (design 0041). A password the Keychain
+ * would not keep is said under the Folder card, beside the field it is about.
  */
 
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { forgetSyncPassword, readSyncPassword, saveSyncPassword } from '../keys/store';
 import type { SyncOutcome } from '../core/sync/transport';
 
-import { Field, INK, Note, SettingsGroup, SwitchRow } from './controls';
+import { FieldRow, Footnote, SettingsGroup, SettingsPage, SwitchRow } from './controls';
 import { useShell } from './routes';
 
 /** The status line: the last sync in one sentence, or the reason the switch went back off. */
-function statusLine(last: SyncOutcome | null, refused: string | null, checking: boolean, folderMissing: boolean): string | null {
-  if (checking) return 'Checking the folder…';
+function statusLine(last: SyncOutcome | null, refused: string | null, folderMissing: boolean): string | null {
   if (refused) return refused;
   if (folderMissing) return 'The folder is not there yet. It is created at the first sync.';
   if (!last) return null;
@@ -46,6 +48,8 @@ export function SyncScreen() {
   const [passwordReady, setPasswordReady] = useState(false);
   const [checking, setChecking] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
+  /** What the Keychain said about the password, said under the Folder card rather than as the switch's refusal. */
+  const [keychain, setKeychain] = useState<string | null>(null);
   /**
    * What the check found about the folder, and which run was the last one
    * when it found it. The folder line is true only until a run completes after
@@ -62,7 +66,7 @@ export function SyncScreen() {
     void readSyncPassword().then((lookup) => {
       if (!mounted) return;
       if (lookup.outcome === 'found') setPassword(lookup.secret);
-      if (lookup.outcome === 'refused') setRefused(`The Keychain would not say whether a password is saved: ${lookup.refusal.message}`);
+      if (lookup.outcome === 'refused') setKeychain(`The Keychain would not say whether a password is saved: ${lookup.refusal.message}`);
       setPasswordReady(true);
     });
     return () => {
@@ -75,7 +79,7 @@ export function SyncScreen() {
   const changePassword = (next: string) => {
     setPassword(next);
     void (next ? saveSyncPassword(next) : forgetSyncPassword()).then((change) => {
-      if (change.outcome === 'refused') setRefused(`The password could not be saved: ${change.refusal.message}`);
+      setKeychain(change.outcome === 'refused' ? `The password could not be saved: ${change.refusal.message}` : null);
     });
   };
 
@@ -105,12 +109,19 @@ export function SyncScreen() {
     setSettings((was) => ({ ...was, sync: { ...was.sync, enabled: true } }));
   };
 
-  const line = statusLine(syncLast, refused, checking, folderMissing);
+  const line = statusLine(syncLast, refused, folderMissing);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-      <SettingsGroup title="Folder" footer="Turn sync off to change the folder.">
-        <Field
+    <SettingsPage>
+      <SettingsGroup footer={line
+        ? <Footnote attention={!!refused || syncLast?.result === 'error' || syncLast?.result === 'frozen'}>{line}</Footnote> : undefined}>
+        <SwitchRow label="Keep my place across devices" value={settings.sync.enabled} disabled={checking}
+          onChange={(on) => void toggle(on)}
+          note={checking ? 'Checking the folder…' : settings.sync.enabled ? 'Turn off to edit.' : undefined} />
+      </SettingsGroup>
+
+      <SettingsGroup title="Folder" footer={keychain ? <Footnote attention>{keychain}</Footnote> : undefined}>
+        <FieldRow
           label="Address"
           value={settings.sync.url}
           editable={!locked}
@@ -118,30 +129,14 @@ export function SyncScreen() {
           placeholder="https://"
           onChangeText={(url) => setSettings((was) => ({ ...was, sync: { ...was.sync, url } }))}
         />
-        <Field
+        <FieldRow
           label="Username"
           value={settings.sync.username}
           editable={!locked}
           onChangeText={(username) => setSettings((was) => ({ ...was, sync: { ...was.sync, username } }))}
         />
-        <Field label="Password" value={password} editable={passwordReady && !locked} secure onChangeText={changePassword} placeholder="Not set" />
+        <FieldRow label="Password" value={password} editable={passwordReady && !locked} secure onChangeText={changePassword} placeholder="Not set" />
       </SettingsGroup>
-
-      <SettingsGroup title="Sync">
-        <SwitchRow label="Keep my place across devices" value={settings.sync.enabled} disabled={checking} onChange={(on) => void toggle(on)} />
-      </SettingsGroup>
-
-      {line ? (
-        <View style={styles.status}>
-          <Note attention={!!refused || syncLast?.result === 'error' || syncLast?.result === 'frozen'}>{line}</Note>
-        </View>
-      ) : null}
-    </ScrollView>
+    </SettingsPage>
   );
 }
-
-const styles = StyleSheet.create({
-  body: { gap: 26, paddingBottom: 64, paddingHorizontal: 16, paddingTop: 16 },
-  screen: { backgroundColor: INK.page, flex: 1 },
-  status: { paddingHorizontal: 16 },
-});

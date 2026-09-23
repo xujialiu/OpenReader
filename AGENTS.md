@@ -92,6 +92,13 @@ same fact in other words and goes.
 This applies to the words *and* the space they take. On a phone every removed
 line is a line of the list the owner came for.
 
+# How the interface looks
+
+**Native first**: before designing or restyling a screen, control or drawer,
+read [design 0042](docs/design/0042-the-app-follows-the-phones-own-look.md).
+Let the phone draw it where it can; otherwise copy the phone's own look,
+measured from the phone rather than remembered.
+
 # Where a thing gets written down
 
 Four places. Putting something in the wrong one is how it stops being read.
