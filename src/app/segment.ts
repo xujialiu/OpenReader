@@ -114,15 +114,17 @@ const NOTHING_UNSPOKEN: Unspoken = { count: 0, reason: null };
  * `extend`).
  *
  * **And running out with Utterances that were never spoken is neither of those.**
- * A Clip the Provider refused leaves no trace in any of `hasRunOut`'s four
- * conditions — it is not in flight, it is stepped over, and the queue empties
+ * A Clip the Provider refused left no trace in any of `hasRunOut`'s four
+ * conditions — it was not in flight, it was stepped over, and the queue emptied
  * behind it — so a run of failures at the end of a document reached this function
  * as a finished book and was announced as one: "That was the last of this
  * document", said to an owner whose Fish Audio had lost the network for the last
  * clips (notes/NOTES_2026-09-20.md, 07:48). Design 0023 names that exact lie as
  * worse than the silence it replaced, so it gets the third sentence rather than a
  * fifth condition: the sentence says the reading stopped because something failed,
- * and what failed.
+ * and what failed. Since ADR 0027 the queue stops at a refusal instead of stepping
+ * over it, and the reading stops there (#45, #49), so this sentence is kept as a
+ * guard.
  *
  * `ended` is unchanged by a failure, and deliberately: it decides whether the
  * engine is paused, and at the last spine item there is nothing left to resume for
@@ -186,7 +188,8 @@ function fullStop(said: string): string {
  * So the prefix is compared before the longer list is trusted. Text, not object
  * identity — the list is built again from scratch each time — and the same
  * principle as ADR 0008's text anchor: the text is what says whether two
- * locators mean the same place.
+ * locators mean the same place. When the prefix has changed, `carryUtterance`
+ * below is what finds each held sentence again in the new list (#46).
  */
 export function samePrefix(loaded: readonly Utterance[], next: readonly Utterance[]): boolean {
   if (next.length < loaded.length) return false;
@@ -194,4 +197,52 @@ export function samePrefix(loaded: readonly Utterance[], next: readonly Utteranc
     if (next[at].text !== loaded[at].text) return false;
   }
   return true;
+}
+
+/** The one thing this file needs of a reported Block to name a sentence: its id, which is its section and its place in that section. Structural, like `SectionedBlock`. */
+export interface IdentifiedBlock {
+  id: string;
+}
+
+/** Utterances, and the very Blocks they were segmented from — the array `UtteranceSpan.block` indexes into. */
+export interface Segmented {
+  utterances: readonly Utterance[];
+  blocks: readonly IdentifiedBlock[];
+}
+
+/**
+ * Where Utterance `at` of one segmentation is in another, or null when it is not
+ * there (#46).
+ *
+ * `samePrefix` says when a longer list renumbers the one the engine holds; this is
+ * what carries the reading across it. An Utterance is fixed by three things that a
+ * section reporting elsewhere cannot change: the **Block** its first span starts
+ * in, named by id — `sectionIndex + '.' + i` in `highlighter.ts`, so a section
+ * reported above leaves it alone — **where in that Block** it starts, and **its
+ * text**. The Blocks are kept in spine order (`withSection` in `blocks.ts`) and
+ * `rejoin.ts` never welds across a section, so the Utterances of every other
+ * section are segmented exactly as before. That makes this an exact match and not
+ * an estimate (philosophy rule 1): each of the three is needed — the text alone
+ * would carry the reading to the same heading in another chapter — and the three
+ * together name one sentence or none.
+ *
+ * None is the one case this cannot carry: the sentence's own section reported
+ * different text, so the sentence the reading was on is no longer in the document.
+ *
+ * `from.blocks` must be the Blocks `from.utterances` were segmented from, not the
+ * ones just reported: `span.block` is an index into its own array.
+ */
+export function carryUtterance(at: number, from: Segmented, to: Segmented): number | null {
+  const utterance = from.utterances[at];
+  const span = utterance?.spans[0];
+  const block = span ? from.blocks[span.block] : undefined;
+  if (!utterance || !span || !block) return null;
+  for (let index = 0; index < to.utterances.length; index++) {
+    const candidate = to.utterances[index];
+    const first = candidate.spans[0];
+    if (first && first.start === span.start && candidate.text === utterance.text && to.blocks[first.block]?.id === block.id) {
+      return index;
+    }
+  }
+  return null;
 }

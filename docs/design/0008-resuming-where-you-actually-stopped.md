@@ -85,6 +85,18 @@ wait, and it does not quietly move the reading once the place turns up: being
 dragged somewhere else a few seconds after you asked to start is worse than
 starting where you asked.
 
+The saved words are looked for in the chapter the place is in, and nowhere else
+until that chapter has been laid out. Web novels usually open with a contents
+page listing every chapter's title, and the app lays the opening pages out
+before the chapter the owner stopped in. Stopping at the start of a chapter is
+ordinary, and there the saved words are the chapter's title, with nothing either
+side of them. The app used to find those words on the contents page first. It
+said the place had moved and went there, so pressing play would have read out
+the list of chapters, and the next place saved would have been the contents
+page, on every device. Now it waits for the chapter the place names. That costs
+only the wait already described above, which a place deep in a long book always
+had.
+
 ## The retreat, if the crossing turns out not to work
 
 If it becomes clear that a place genuinely cannot survive the trip between the

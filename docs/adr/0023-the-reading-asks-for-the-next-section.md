@@ -165,13 +165,152 @@ later. Reporting that moment as a highlight that could not be drawn left the
 sentence "Block 11.0 is in section 11, which is not on the page" standing on the
 screen while the highlight was, in fact, drawn — seen at 05:16 at every one of
 eleven boundaries. `showUtterance` is therefore silent for that one reason, and
-only when its caller is about to bring the section on to the page. A Block nobody
-reported, and a Block the rendered section no longer holds, are still reported;
-`attach` asks without the flag, because a section that has arrived and still
-cannot be highlighted is the real thing.
+only while the page is following the reading, which is what brings the section
+on to the page (the amendment below extends this to the word, #50). A Block
+nobody reported, and a Block the rendered section no longer holds, are still
+reported; so is anything `attach` cannot highlight, because the section it asks
+about has arrived, and a section that has arrived and still cannot be
+highlighted is the real thing.
 
 ## What it cost
 
 Measured on the fixture and on the owner's 2,077-section book; the figures are in
 `notes/NOTES_2026-09-20.md` at 05:03, 05:09, 05:13, 05:16, 05:19, 05:31 and 05:53,
 and the memory table is checked against ADR 0011's own.
+
+## Amendment (2026-09-23, #45, #46 and #49)
+
+**A press of Play asks again for every refused Utterance (#45).** "How many were
+**never spoken** since the last `load` or `seek`" above is now since the last
+`load`, `seek` or `play`. `play()` in `engine.ts` asked again only for the
+Utterance at the cursor, while the read-ahead refuses two at a time: measured on
+2026-09-23 (`notes/NOTES_2026-09-23.md`, 13:30), 279, 280 and 281 were refused
+together, Play asked again for 279 alone, and the reading stopped at 280 with no
+request sent for it and the old refusal still on the screen. `retryOnPlay` in
+`read-ahead.ts` now answers with an empty failed set, and moves `nextToEnqueue`
+back to the cursor only when the cursor's own Utterance was refused — `drain`
+never steps over a refusal, so otherwise the cursor's Clip is already queued —
+and `play()` clears `lastRefusal` with them. "Going back to those sentences is
+how they are asked for again" stays true of a seek; a press of Play is the other
+explicit act, and nothing is asked for again without one.
+
+**A renumbered list carries the reading across (#46).** `extend` above is for a
+list that continues the one the engine holds. The other case, a section reported
+above sections already reported, shifts every later index, and it stopped the
+reading: `adopt` paused the engine, cleared the highlight, loaded the engine at
+0, set the cursor to null and said so, and its docblock called it "the one case
+that still needs the destructive `load`, and it is the case where destroying is
+the point". It is not rare. epub.js's continuous manager renders the section
+above whatever it displays near the top of its scroll, and on the owner's book
+(`notes/NOTES_2026-09-23.md`, 13:35) a Contents jump reported sections 1 and 2,
+then 5 and 6, then 3 and 4 above them; a reopen at a stored place in section 6
+was renumbered after the resume had landed; Play then read the book's first
+line, and after six seconds and a pause the Library's place was "9kafe.com" with
+a new Stamp.
+
+`carryUtterance` in `src/app/segment.ts` now finds each held sentence in the new
+list by its first Block's id (`sectionIndex + '.' + i`, `highlighter.ts`), its
+start offset in that Block and its text. That is exact rather than an estimate:
+the Blocks stay in spine order (`withSection` in `blocks.ts`) and `rejoin.ts`
+never welds across a section, so every other section's Utterances are segmented
+as before. `adopt` carries the cursor, the sentence a resume landed on and a
+seek still in its debounce — but not a cursor its caller, a landed resume or a
+Contents row, has already pointed into the new list — and loads the engine again
+at the carried index without pausing it. Playing, the reload's first cue is the
+reading's own, and the page follows the voice as always. Paused, the reload is
+quiet (`LoadOptions.quiet`) and nothing is shown: a renumbering while paused is
+what scrolling up does, and a `show` or the reload's first cue — a cue carries
+the renderer's `reveal`, which centres the page on its sentence — would pull the
+page back to the reading while the owner scrolls away from it. The first cue
+waits for `play()`, which cues the front before it corrects, and nothing reads
+the bridge's old number before then: corrections arrive only while the node
+renders (react-native-audio-api 0.13.5 advances its position dispatcher only
+while `isPlaying()`). Nothing is said. With no cursor the engine loads at 0,
+silently. `load` is still the destructive call, because the queue, the timeline
+and the WebView hold old numbers, so a playing reading restarts the sentence it
+was on. The stop, the clear and the note remain only for a sentence that is not
+in the new list at all, because its own section reported different text; that
+reload is quiet too, so the page stays under the note. The old list's own Blocks
+are kept beside it (`loadedBlocksRef`), since `UtteranceSpan.block` indexes into
+them and `blocksRef` has already moved on by the time the new list is adopted.
+
+**"The third sentence" above is out of date (#45, #49).** It says `drain` steps
+over a refused Utterance, so that a reading runs out of text with refusals behind
+it. Since ADR 0027 `drain` blocks on a refusal instead: it waits for the queue to
+empty, stops the reading on that Utterance and reports the refusal. With #49,
+`failed` never holds an index behind `nextToEnqueue` either. So a reading no
+longer runs out of text with refusals behind the cursor, and the "synthesis
+failed" sentence of `outOfTextSentence` is kept as a guard only. The measurements
+of 2026-09-20 stand as the record of what happened then.
+
+## Amendment (2026-09-23, #50): the centring waits for epub.js, and the word waits like the Utterance
+
+**Play with the page scrolled away from the reading painted the sentence and
+then scrolled away from it.** Measured on the owner's book on 2026-09-23 at
+19:28 (`notes/NOTES_2026-09-23.md`). The reading was paused on Block 6.13 and the
+page scrolled until section 6 was trimmed. On Play, `follow()` displayed the
+Block's CFI, and the section arrived 585 ms later. Inside epub.js's content
+hook, `attach()` painted the Utterance and the word and then centred them,
+scrolling 725 px. epub.js's own `DefaultViewManager.display` then carried on in
+the same task with its `moveTo` to the CFI target, 958 px more. The sentence
+ended 724 px above the top of the screen.
+
+The order is epub.js's, read out of the bundle. `IframeView.display` calls
+`onDisplayed`, which leads to the content hook, before it resolves the promise
+`add()` returned, and the manager's `moveTo` hangs off that promise. The content
+hook therefore always runs before the `moveTo` of the same display. The error
+equals the Block's own offset in its section. That is why it went unnoticed at
+the section boundaries this ADR is about, where the first Block sits at the top
+of its section.
+
+**So a section `follow()` asked for is centred on the next frame, through
+`settle()`.** `follow()` marks on the Utterance's state which section it asked
+for (`state.awaiting`). When that section arrives, `attach()` paints at once,
+exactly as before, and hands the centring to a `requestAnimationFrame`. The
+`moveTo`, `views.show()` and the rest of that display run in the same task
+before the frame. `settle()` then keeps the Utterance in the middle until the
+layout has held still for three frames, while `fill()` lays the neighbouring
+sections out around it. Measured afterwards: `moveTo` 958 px at +20 ms,
+`settle()` −281 px at +29 ms, and the Utterance at y 283..342 of 758. A section
+that arrives any other way has no scroll of epub.js's behind it and keeps
+`centreOnce`: the manager rebuilding a view, or the owner scrolling back to the
+reading. `settle()` would fight such a scroll for up to a second.
+
+**And the word is silent for the same reason as the Utterance.** `play()` in
+`engine.ts` corrects straight after it cues, so the first thing to meet a
+section on its way was the word. `showWord` reported unconditionally, and the
+screen said "Block 6.13 is in section 6, which is not on the page" under a
+highlight that was drawn half a second later. One predicate, `awaited()`, now
+covers both: every Block known, its section not rendered, and the page following
+the reading. It replaces the `coming` flag `showUtterance` took from the `speak`
+branch. That flag was always the Utterance's own `follow`, so it could not
+disagree with the word.
+
+Three things were weighed and not done:
+
+- **Centring when `rendition.display()` resolves.** That promise is resolved as
+  the section's iframe starts loading, not when the section arrives.
+  `@epubjs-react-native/core`'s `onShouldStartLoadWithRequest` answers the
+  iframe's `about:srcdoc` with a `goToLocation` of it, and `Rendition.display`
+  resolves the display in flight whenever another is asked for. Measured: at
+  491 ms in the 19:28 run, 94 ms before the section, and 6 ms before it on a
+  cached one.
+  `displayed` would come only after `fill()`, with the page sitting at the
+  Block's top meanwhile.
+- **Displaying the section by index, so that epub.js has no `moveTo` to make.**
+  If the centring could not run, the page would then land at the top of the
+  chapter rather than at the Block.
+- **Holding the voice until the page is there**, so that the highlight is drawn
+  from the first word spoken after Play. It needs a message from the WebView and
+  an engine that waits on the page, which is the dependency ADR 0005 keeps
+  pointing the other way. What is left instead is the time a section takes to
+  arrive: 17 ms cached, 585 ms in the first run. During it the voice speaks with
+  nothing to highlight, the same gap this ADR accepts at every boundary.
+
+The plan posted on #50 also had `follow()` ask for a section only once while it
+was on its way. It came out, because the hazard it answered does not exist.
+`Views.find` matches only displayed views, so a second display of a section
+still loading clears the half-built view and starts again; it never reads the
+location of a document that has not loaded. The only signal that could have told
+the guard to lift is the promise above.
+

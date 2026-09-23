@@ -56,6 +56,7 @@ import {
   canonicalCfi,
   resolveResume,
   resumeSentence,
+  spineIndexOf,
   useReaderBridge,
   type ProblemMessage,
   type ReaderBridge,
@@ -65,7 +66,15 @@ import {
 } from '../renderer';
 
 import { readBodyTextSize, writeBodyTextSize } from './body-text-sizes';
-import { documentLanguage, firstUtteranceOfSection, outOfTextSentence, samePrefix, segmentDocument } from './segment';
+import {
+  carryUtterance,
+  documentLanguage,
+  firstUtteranceOfSection,
+  outOfTextSentence,
+  samePrefix,
+  segmentDocument,
+  type Segmented,
+} from './segment';
 import {
   engineIdentity,
   readiness,
@@ -243,20 +252,6 @@ export interface Reading {
   resumeAt(place: ReadingPlace): boolean;
 }
 
-/**
- * The spine index an EPUB locator names, or null: the spine step `/6/N` is
- * `N = 2 × (index + 1)`, the numbering upstream epub.js and Zotero share
- * (measured on every section of four books, notes/NOTES_2026-09-21.md 17:11).
- * Read here only to ask "has that section reported"; the CFI itself is what is
- * handed to the renderer.
- */
-export function spineIndexOf(cfi: string): number | null {
-  const step = /^epubcfi\(\/6\/(\d+)/.exec(cfi);
-  if (!step) return null;
-  const n = Number(step[1]);
-  return n >= 2 && n % 2 === 0 ? n / 2 - 1 : null;
-}
-
 /** Whatever refused, in its own words. A `SynthesisError`'s message already names the address it tried and asks the one question there is. */
 function describe(problem: unknown): string {
   return problem instanceof Error ? problem.message : String(problem);
@@ -305,6 +300,16 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const buildingRef = useRef<Promise<PlaybackEngine | null> | null>(null);
   /** The Utterances the engine holds. Its indices are what every cue and every correction is about. */
   const loadedRef = useRef<readonly Utterance[]>([]);
+  /**
+   * The Blocks `loadedRef`'s Utterances were segmented from: the array their
+   * `UtteranceSpan.block` indexes into.
+   *
+   * Not `blocksRef`, which `handleBlocks` replaces before the list it segmented is
+   * adopted, and which a report holding nothing to read replaces without one. A
+   * renumbering names the sentence the reading is on by its Block (#46), and that
+   * takes the Blocks of the list the reading is on.
+   */
+  const loadedBlocksRef = useRef<readonly ReportedBlock[]>([]);
   /** The Utterance being read, outside React state, so the callbacks below are never one render behind. */
   const atRef = useRef<number | null>(null);
   /** The section the renderer reported last, for the same reason: `play` reads it at the moment it is pressed. */
@@ -322,6 +327,13 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * and held no text, and the end of a book is exactly where those live.
    */
   const furthestSectionRef = useRef(-1);
+  /**
+   * Every spine item that has reported, including one that held no Block — which
+   * `blocksRef` cannot say, and which is what a stored place asks before it looks
+   * for its words anywhere (`resolveResume`, #51). Only ever grows: a section's
+   * Blocks are kept once reported (`blocks.ts`).
+   */
+  const reportedSectionsRef = useRef(new Set<number>());
   /**
    * The Blocks the Utterances were segmented from — the very array the renderer
    * sent, because `UtteranceSpan.block` is an index into it.
@@ -364,9 +376,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    *
    * It cannot be resolved at mount: the anchor is matched against **Blocks**, and
    * no section has reported any yet. So it waits here and every `onBlocks` tries
-   * again — the first sections to render are the ones around the stored CFI,
-   * because `<Reader initialLocation>` was given that CFI, but a cover page and a
-   * chapter epub.js renders on the way can arrive first.
+   * again. The first sections to report are **not** the ones around the stored
+   * CFI: the highlighter installs, and reports what is on the page, before epub.js
+   * runs the display `<Reader initialLocation>` asked for, so they are the start
+   * of the book (#51, measured 2026-09-23). The place waits for its own section
+   * rather than looking for its words in those (`resolveResume`).
    */
   const resumeRef = useRef<ReadingPlace | null>(resume);
   /**
@@ -510,22 +524,69 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * it from inside the renderer's own message handler is safe where `load` was
    * not: `drain` may be mid-await, and there is nothing here for it to lose.
    *
-   * If the prefix changed, the indices the engine and the WebView are holding
-   * mean other sentences (see `samePrefix`), and the reading stops and says so.
-   * A highlight three paragraphs from the voice is precisely what this project
-   * exists to prevent, and guessing which sentence was meant would be an
-   * estimate (philosophy rule 1). That is the one case that still needs the
-   * destructive `load`, and it is the case where destroying is the point.
+   * **If the prefix changed, the list was renumbered** (see `samePrefix`): a
+   * section reported above the ones already reported, and every index held here,
+   * in the engine and in the WebView now means another sentence. It is ordinary,
+   * not rare: epub.js's continuous manager renders the section above whatever it
+   * displays near the top of its scroll, so a Contents jump and a return to a
+   * book both do it (#46, measured 2026-09-23). Dropping the reading there cost
+   * the owner their place at exactly those two moments, and the next Play read
+   * the book's first line and wrote it over the stored place.
+   *
+   * So every index that names a sentence of the old list — the cursor, the
+   * sentence a resume landed on, a seek still waiting out its debounce — is
+   * carried to the same sentence in the new one (`carryUtterance`: its first
+   * Block, where it starts there, and its text, which is an exact match and not
+   * an estimate), and the engine is loaded again there. `load` is still the one
+   * destructive call here, because the queue and the clock hold old numbers that
+   * cannot be renumbered in place; but a playing reading goes on playing, from
+   * the start of the same sentence, a paused one keeps its highlight on it, and
+   * nothing is said, because for the owner nothing has moved. With no cursor the
+   * engine is loaded at the top, which is where such a reading starts anyway.
+   *
+   * Only a sentence that is no longer in the document at all — its own section
+   * reported different text — cannot be carried. There the reading stops and
+   * says so: guessing which sentence was meant would be an estimate
+   * (philosophy rule 1), and a highlight three paragraphs from the voice is what
+   * this project exists to prevent.
+   *
+   * @param reported the Blocks `next` was segmented from.
+   * @param pointed the caller has already pointed `atRef` at an index of `next` —
+   * a resume that landed, a Contents row whose section has reported — so the
+   * cursor is not carried a second time.
    */
-  const adopt = useCallback((next: readonly Utterance[]) => {
+  const adopt = useCallback((next: readonly Utterance[], reported: readonly ReportedBlock[], pointed = false) => {
     const engine = engineRef.current;
-    const renumbered = !samePrefix(loadedRef.current, next);
+    const held: Segmented = { utterances: loadedRef.current, blocks: loadedBlocksRef.current };
+    const incoming: Segmented = { utterances: next, blocks: reported };
     loadedRef.current = next;
+    loadedBlocksRef.current = reported;
 
-    if (renumbered) {
+    if (samePrefix(held.utterances, next)) {
+      engine?.extend(next);
+      return;
+    }
+
+    const carry = (index: number | null) => (index === null ? null : carryUtterance(index, held, incoming));
+    const cursor = atRef.current;
+    const at = pointed ? cursor : carry(cursor);
+    resumedAtRef.current = carry(resumedAtRef.current);
+    pendingSeekRef.current = carry(pendingSeekRef.current);
+
+    // `load` cancels a voice switch the engine was preparing (`restart`), so the
+    // choice is let go here as a seek lets it go, rather than left spinning.
+    if (engine && pendingChoice.current) {
+      switchRequest.current++;
+      pendingChoice.current = null;
+      setStatus((was) => ({ ...was, pendingVoice: null }));
+    }
+
+    if (cursor !== null && at === null) {
       engine?.pause();
       bridgeRef.current?.clear();
-      engine?.load(next, 0);
+      // Quiet, as every paused reload here is: a cue of the top of the document
+      // would move the page there, under a note saying the reading stopped here.
+      engine?.load(next, 0, { quiet: true });
       atRef.current = null;
       resumedAtRef.current = null;
       setStatus((was) => ({
@@ -540,8 +601,21 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       return;
     }
 
-    engine?.extend(next);
-  }, []);
+    atRef.current = at;
+    // Playing, the reload's first Clip is the reading's own cue, and the page
+    // follows the voice as it always does. Paused, the reload is quiet and nothing
+    // is shown: a renumbering while paused is what scrolling up does — epub.js
+    // renders a section above that has not reported — and a `show`, or the
+    // reload's first cue, would centre the page on the reading while the owner
+    // scrolls away from it. The bridge keeps the old number until Play, and
+    // nothing reads it before then: its `cued` is matched only by position
+    // corrections, which arrive only while the node renders
+    // (react-native-audio-api 0.13.5 advances its position dispatcher only while
+    // `isPlaying()`), and `play()` cues the front before it corrects.
+    engine?.load(next, at ?? 0, { quiet: !playIntent.current });
+    if (at === null) return;
+    setStatus((was) => ({ ...was, utterance: at, section: sectionOf(at) }));
+  }, [sectionOf]);
 
   /**
    * One spine item on, or the end of the document.
@@ -694,13 +768,20 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * engine takes the new list, when there is one), the seek moves the highlight
    * and the page, and the screen learns how sure the landing was. Not landed:
    * the sentence that would explain it is kept for `abandonResume`, and the
-   * place stays pending for the next report.
+   * place stays pending for the next report. Still waiting for its own section:
+   * pending as well, with no sentence kept — `abandonResume`'s own, that the place
+   * had not rendered yet, is then the true one (#51).
    */
   const tryResume = useCallback(
     (next: readonly Utterance[], reported: readonly ReportedBlock[], before?: () => void): boolean => {
       const stored = resumeRef.current;
       if (!stored) return false;
-      const found = resolveResume(stored, next, reported);
+      const rendered = { spine: renderedRef.current?.spine ?? 0, reported: reportedSectionsRef.current };
+      const found = resolveResume(stored, next, reported, rendered);
+      if (found.outcome === 'waiting') {
+        resumeLostRef.current = null;
+        return false;
+      }
       if (found.outcome !== 'resumed') {
         resumeLostRef.current = resumeSentence(found);
         return false;
@@ -725,17 +806,24 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * does for the place a book opens with and nothing did for an adopted one.
    *
    * The spine index is read off the locator (`/6/N` → N/2 − 1, the rule both
-   * readers share, spec 6.4) only to know whether the section has reported;
+   * readers share, spec 6.4) only to know whether the section has reported —
+   * the same question `resolveResume` asks before it looks anywhere else;
    * what is handed to the renderer is the whole CFI, through the same `goTo`
    * a contents row goes through. A section that has reported and does not
    * hold the anchor is not a case a display can fix, and is left pending as
    * before. Returns whether a display was asked for.
+   *
+   * **Not for the place the book opened with**, whose section `<Reader
+   * initialLocation>` has already asked for. A second display of it is not free:
+   * while the first is loading it clears the half-built view and starts again
+   * (epub.js's `Views.find` sees only displayed views), and once the section is
+   * there it scrolls the Block back to the top, under the resume's own centring.
    */
   const revealPendingPlace = useCallback((place: ReadingPlace): boolean => {
     const cfi = readLocator(place.locator, 'epub');
     if (!cfi) return false;
     const section = spineIndexOf(cfi);
-    if (section !== null && blocksRef.current.some((block) => block.sectionIndex === section)) return false;
+    if (section !== null && reportedSectionsRef.current.has(section)) return false;
     bridgeRef.current?.goTo(cfi);
     return true;
   }, []);
@@ -765,6 +853,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       bridgeRef.current?.setUtterances(next, reported);
       blocksRef.current = reported;
       renderedRef.current = section;
+      reportedSectionsRef.current.add(section.index);
       furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);
       setStatus((was) => ({ ...was, known: next.length, rendered: section }));
 
@@ -787,17 +876,19 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        * quotation (ADR 0008); the Utterance it names cannot exist until the
        * Blocks it quotes have been reported, which is now.
        *
-       * Tried on every report until it lands, because the first section to render
-       * is not always the one the position names — a cover renders first and
-       * yields nothing, and the section `initialLocation` asked for arrives when
-       * epub.js has displayed it. A report that fails leaves the position
-       * pending and keeps its sentence for `abandonResume`.
+       * Tried on every report until it lands, because the first sections to
+       * report are the start of the book, and the section `initialLocation`
+       * asked for arrives when epub.js has displayed it. Until then the place
+       * waits for it rather than looking for its words in what came first — a
+       * contents page lists the heading a chapter starts with (#51). A report
+       * that fails leaves the position pending and keeps its sentence for
+       * `abandonResume`.
        *
        * The same order as the contents tap below and for the same reason: the
        * Utterance being seeked to exists only in the new list, so the engine has
        * to be holding it before anything asks to be taken there.
        */
-      if (resumeRef.current && tryResume(next, reported, () => adopt(next))) return;
+      if (resumeRef.current && tryResume(next, reported, () => adopt(next, reported, true))) return;
       // An adopted place still pending after this report: the section it names
       // may be one nobody has asked for yet, or the ask went out before the page
       // could hear it. Asked once per report, never for a section that reported.
@@ -813,13 +904,13 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
         const first = firstUtteranceOfSection(next, reported, wanted);
         if (first !== null) {
           atRef.current = first;
-          adopt(next);
+          adopt(next, reported, true);
           seekTo(first);
           return;
         }
       }
 
-      adopt(next);
+      adopt(next, reported);
     },
     [adopt, walkForward, tryResume, seekTo, revealPendingPlace],
   );
@@ -892,8 +983,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * engine resumes by itself the moment a section reports (footgun 3, and
    * `extend`). And an exhaustion with Utterances the Provider refused is neither:
    * `outOfTextSentence` says the reading stopped because synthesis failed, and
-   * names the refusal, because none of the four conditions can see a Clip that was
-   * skipped (ADR 0023, and notes/NOTES_2026-09-20.md, 07:48).
+   * names the refusal, because none of the four conditions could see a Clip that
+   * was skipped (ADR 0023, and notes/NOTES_2026-09-20.md, 07:48). Since ADR 0027 a
+   * refused Clip stops the reading instead of being skipped, so that third state is
+   * kept as a guard.
    */
   const ranOutOfText = useCallback((report: OutOfTextReport) => {
     const { ended, sentence } = outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0, {

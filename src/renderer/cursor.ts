@@ -361,6 +361,33 @@ function findBlock(blocks: readonly ReportedBlock[], cfi: string): ReportedBlock
   return blocks.find((block) => block.cfi !== '' && canonicalCfi(block.cfi) === wanted);
 }
 
+/**
+ * The spine index an EPUB locator names, or null: the spine step `/6/N` is
+ * `N = 2 × (index + 1)`, the numbering upstream epub.js and Zotero share
+ * (measured on every section of four books, notes/NOTES_2026-09-21.md 17:11).
+ * Read only to ask whether that section has reported yet; the CFI itself is
+ * what is resolved, and what is handed to the renderer.
+ */
+export function spineIndexOf(cfi: string): number | null {
+  const step = /^epubcfi\(\/6\/(\d+)/.exec(cfi);
+  if (!step) return null;
+  const n = Number(step[1]);
+  return n >= 2 && n % 2 === 0 ? n / 2 - 1 : null;
+}
+
+/**
+ * How much of the Document has rendered, as a stored place needs to know it.
+ *
+ * Not the Blocks: a section that rendered and holds no text has reported and
+ * contributed no Block, and a place must not wait for ever on one of those.
+ */
+export interface RenderedSections {
+  /** How many spine items the Document has. Zero while that is not known, which makes nothing wait. */
+  spine: number;
+  /** The spine items that have reported, whether or not they held a Block. */
+  reported: ReadonlySet<number>;
+}
+
 /** Why a stored Reading Position did not name an Utterance. */
 export type ResumeFailure =
   /** The anchor is nowhere in the Blocks reported so far, or nowhere that agrees well enough. */
@@ -381,8 +408,15 @@ export type ResumeFailure =
  * to estimate a Word Timing for the same reason ADR 0008 refuses to resume three
  * paragraphs away, and "the first Utterance of what has rendered" is a decision
  * for the caller to make openly rather than one to disguise as a resolution.
+ * `waiting` is neither yet: the section the locator names has not rendered, so
+ * nothing has been compared with anything (#51).
  */
 export type Resume =
+  | {
+      outcome: 'waiting';
+      /** The spine item the stored locator names, which has not reported yet. */
+      section: number;
+    }
   | {
       outcome: 'resumed';
       utterance: number;
@@ -414,12 +448,32 @@ export type Resume =
  *
  * `'epub'` is not an assumption: these Blocks came out of the epub.js renderer,
  * so their CFIs are an EPUB dialect by construction.
+ *
+ * **A place waits for the section its locator names** (#51). Until that
+ * section has reported, its Blocks are not here to look the locator up in, and
+ * that is not the same as a locator that does not resolve: the search would run
+ * over whatever happened to report first — on a return to a book, the book's
+ * own first pages — and a web novel's contents page lists every chapter's
+ * title. A place stopped on a chapter heading is a Block of its own, so its
+ * anchor has no context either side to tell the two apart, and the contents
+ * line was taken as the place having moved. So nothing is compared until the
+ * locator's own section is in, and the search, when it runs, runs over that
+ * section too. A locator that names no spine item of this Document — no spine
+ * step, or one past the end — has no section to wait for and is searched for at
+ * once, as before.
  */
 export function resolveResume(
   position: ReadingPlace,
   utterances: readonly Utterance[],
   blocks: readonly ReportedBlock[],
+  rendered: RenderedSections,
 ): Resume {
+  const named = readLocator(position.locator, 'epub');
+  const section = named === null ? null : spineIndexOf(named);
+  if (section !== null && section < rendered.spine && !rendered.reported.has(section)) {
+    return { outcome: 'waiting', section };
+  }
+
   const resolution = resolveReadingPosition(position, reportedPlaces(blocks));
   if (resolution.outcome === 'unresolved') {
     return { outcome: 'lost', because: resolution.because, why: resolution.search };
@@ -446,8 +500,11 @@ export function resolveResume(
  * was found — are `PositionResolution`'s own, and a screen restating them is a
  * second place for them to drift. It is philosophy rule 1 in its smallest form:
  * a bookmark that might be wrong says so.
+ *
+ * Not for `waiting`, which has nothing to say yet: the place is still on its
+ * way, and the screen says so only if the owner asks for something else first.
  */
-export function resumeSentence(resume: Resume): string {
+export function resumeSentence(resume: Exclude<Resume, { outcome: 'waiting' }>): string {
   if (resume.outcome === 'resumed') {
     if (resume.moved !== null) {
       return (

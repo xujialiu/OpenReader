@@ -40,6 +40,23 @@ a shut-down device has no file at all. So: boot, `set`, then launch the app.
 `lock-screen.sh` (tap mode), `reading.cjs play-for`, `voice-playback.cjs` and
 `offline-playback.cjs` all `check` it before they play.
 
+## Real books
+
+`~/Works/epub_books` is the owner's own library: long English web novels, each
+split into parts of about 250 chapters (`<Book>/<Book> <start>-<end>.epub`, a
+few MB each; its own README says how they were split). Take one when a generated
+fixture is too tidy to show the behaviour: a part has hundreds of spine items,
+chapters several screens tall and a real navigation document, which is what
+section boundaries, `renderAhead`, `display()` and a chapter download meet in
+the owner's actual reading.
+
+Load a part the way any fixture is loaded: copy it into the app's
+`Documents/Inbox` (`xcrun simctl get_app_container SIMULATOR_UDID
+top.xujialiu.openreader data`) and add it with the harness,
+`{"seq":N,"do":"add","file":"NAME.epub"}`, then open it by the Document Id the
+answer names. The books are personal copies: they stay outside the repository,
+and what is committed is what was measured, never their text.
+
 ## Pitfalls
 
 What has gone wrong before, and what fixed it. When `xcrun`, Metro, XCTest or a
@@ -191,6 +208,33 @@ fix (AGENTS.md).
 - **A named simulator can disappear during a manual run.** On 2026-09-22 an owner cleanup deleted the recorded iPhone 17 while an Azure XCTest was waiting, and the next `xcodebuild` answered `Unable to find a device matching` that destination. Re-run `xcrun simctl list devices available`, choose a remaining matching runtime, boot it, reinstall the current Debug app, set its simulated volume to zero again, and treat the interrupted artifacts as incomplete.
 - **A cached Debug app can lack a native module required by the current bundle.** On 2026-09-22 installing an old cached app over the replacement iPhone 17e and loading the current Metro bundle showed `[runtime not ready]: Cannot find native module 'ExpoUI'`. Build the Debug app from the current checkout with the simulator guide's `xcodebuild` command, install that product, then repoint its Metro port before relaunching.
 - **Whether a `.app` has a module is not answered by its `Frameworks` or by its main binary.** Looking for `@expo/ui` on 2026-09-23 (#42), `ls OpenReader.app/Frameworks` listed the five Expo frameworks and no `ExpoUI`, and `strings -a OpenReader.app/OpenReader | grep -ci expoui` answered `0` — for a build that has it. Its symbols are in `OpenReader.debug.dylib` beside the binary, 425 of them. Ask that file, or `ios/Podfile.lock`, or compare the build's own time (`stat -f %Sm`) against the commit that added the dependency; the two caches this looked at, `/tmp/openreader-simulator-build` and the newest `DerivedData` product, were both from before 538fa10 13:52 and genuinely too old to reuse.
+- **A new output device on the Mac puts booted simulators back to volume 60,
+  with nothing booted or launched.** Measured 2026-09-23 at 19:44: the owner's
+  AirPods Pro became the Mac's default output, and within a second the
+  `audiosettings.plist` of both booted simulators that follow the default output
+  read `sim_volume` 60 with the AirPods as `sim_output_device_uid`. One of them
+  had been set to 0 half an hour earlier. A third booted device, whose output
+  was `BuiltInSpeakerDevice`, was not touched. The owner is then listening on
+  the very headphones a test would play into. It happened again: at 20:24:06
+  the AirPods were already the default output, and the same two devices were
+  reset to 60 in the same second. That was two minutes after a test run had
+  ended, and nothing had been launched. Whatever the AirPods do when they
+  reconnect, or switch back to the Mac, is enough. So a `set` holds only until
+  the next such event. The same evening an ios-tester run played 3.7 s at
+  volume 60, because a standalone `check` failed and its script went on to play
+  anyway. Fix: `silence.sh check` immediately before every play, as the kit's
+  scripts do, with the play chained to it by `&&`. After a failed check, `set`
+  it and restart the app, which takes the value when it activates its audio
+  session. In `check && terminate; launch`, the launch still runs after a failed
+  check.
+- **A newly created device put its own volume back to 60 a couple of minutes
+  after its first boot.** Measured 2026-09-23 on a fresh iPhone 17 (iOS 27.0):
+  `silence.sh set` right after `bootstatus -b` read back 0, and a few minutes
+  later `check` answered 60, with the file's modification time 12:47, about two
+  minutes after the set and before anything had played. The first boot's own
+  setup rewrote it. Set it again once the new device has settled — a `set`
+  followed 20 s later by a `check` that still reads 0 — then relaunch the app,
+  and keep the `check` in front of every play.
 - **`xcrun simctl get_app_container` refuses a shut-down device.** Boot it first.
 - **Another simulator needs the same Debug app.** `xcrun simctl install DEST "$(xcrun simctl get_app_container SOURCE top.xujialiu.openreader app)"` copies it without a build, to any device family the app supports, iPad included.
 - **An iPad behaves differently from an iPhone.** An iPad-sized WKWebView defaults to the desktop content mode, where WebKit ignores `text-size-adjust` (ADR 0030). The reader asks for the mobile mode through `patches/`. Anything that depends on WebKit is worth checking on an iPad simulator too.
@@ -315,12 +359,21 @@ fix (AGENTS.md).
 - **Waiting for an `HX` line hangs.**
   - Cause: only an open reader logs on a timer. The Library logs only when a command answers.
   - Fix: wait for the effect itself, such as a file being written or the answer to `navstate`.
+- **`known` in the status line right after a resume does not say which sections
+  have reported.** #51 was filed with "spine item 20 never rendered", from a
+  status line of 122 Utterances. The same reopen repeated on 2026-09-23 at 19:24
+  showed `known=179` a second later. A Contents jump to item 20 then answered
+  at once, with `utterance=122` and `known` still 179, which means item 20 had
+  reported its 57 Utterances before the jump. To tell whether a section has
+  reported, jump to it with `{"do":"section","section":N}`. A section that has
+  reported answers at once and leaves `known` as it was.
 - **A `js` answer reads as empty or cut off.**
   - Cause: it arrives in Metro's log as `note="The highlight could not be drawn: PROBE …"`, JSON-escaped and cut at 500 characters.
   - Fix: parse the quoted string after `note=` as JSON instead of grepping up to the next `"`, and keep answers short.
 - **Two readers answer.** `open` pushes a reader on top of any reader already open, and every mounted reader answers `js`. Send `shut` first.
 - **The Library shows two Documents with one title.** `add` names the entry after its file in `Documents/Inbox/`. Give each copy its own file name, and open by Document Id when titles collide.
 - **An old probe looks like a new error.** A `js` answer stays in the reader's notice as "The highlight could not be drawn: PROBE …" until the reader is opened again.
+- **A screenshot taken right after a GREEN `follow-probe.cjs` run still shows a red "could not be drawn: PROBE …" banner.** Not a stale leftover this time: the script's own `read()` is itself a `js` command, and `reading-view.tsx`'s `js` handler posts *every* answer — success or not — through the same `openreader:problem` channel a real highlight failure uses, prefixed `PROBE `. So the banner in the screenshot is the script's own measurement being echoed back, not a defect; `follow-probe.cjs` already excludes it from its own GREEN/RED verdict (`detail.indexOf('PROBE') !== 0`), and the embedded JSON's own `"problems":[]` says the same. Measured 2026-09-23 verifying #50: a run scored GREEN (no problem posted, Utterance on screen) while the very screenshot taken immediately after read "The highlight could not be drawn: PROBE {...}". Trust the script's verdict (or grep the log for `could not be drawn` lines that do **not** contain `PROBE`) over a screenshot's banner text, and note in a report that the banner is the harness's own artifact when it appears after a passing run.
 - **The title `add` gives an entry lasts only until the book's first open.**
   `add` names the entry after its file (`fixture-phone-129`), and the reader's
   first open retitles it from the EPUB's own metadata (`ZTTS Positions
@@ -488,6 +541,23 @@ fix (AGENTS.md).
   restoring the final simulator screen. Use the documented
   `-only-testing:testReopenDownloadDrawer` form, then confirm the test log shows
   the method running and not only `Executed 0 tests`.
+
+- **Calling `xcodebuild` directly, not through one of the wrapper scripts,
+  needs the full `TARGET/CLASS/METHOD` path.** The wrapper scripts' own bare
+  method name (above) works only because each one prepends `LockScreenProbe/`
+  itself — `project.rb` always names the generated target `LockScreenProbe`,
+  whatever probe source file is added to it. Passing
+  `-only-testing:PausedTransportProbe/testPlayAfterIdlePause` straight to
+  `xcodebuild` (no wrapper script) failed at once (exit 70): `Tests in the
+  target "PausedTransportProbe" can't be run because "PausedTransportProbe"
+  isn't a member of the specified test plan or scheme.` Measured 2026-09-23.
+  Fix: `-only-testing:LockScreenProbe/PausedTransportProbe/testPlayAfterIdlePause`.
+- **`-resultBundlePath` refuses a path a previous attempt already created,**
+  including a failed one — exit 64, `Existing file at -resultBundlePath …` —
+  the same "use a new artifact directory" rule the wrapper scripts enforce for
+  their own output directories, but it applies to a bare `xcodebuild` call
+  reusing one fixed path across retries too. `rm -rf` the stale
+  `.xcresult` (or pick a new path) before retrying.
 
 - **A Settings-stack screen can be more than one level away, even when it
   looks like one.** Reaching Fish Audio's provider form is Library → Settings
@@ -668,6 +738,8 @@ fix (AGENTS.md).
 - **A probe's own root-only text-size-adjust rule loses to the app's.** The app declares text-size-adjust on every element in `#openreader-highlight`. Take those lines out for the probe and put them back afterwards.
 - **`rendition.on('rendered', …)` never fires for a probe either.** The library's template registers its own `rendered` listener first, it throws on every section, and epub.js's emitter stops there (#34, ADR 0036). A probe that counts `rendered` reads 0 however much renders. Use `rendition.hooks.content.register`, which runs for every displayed section, or read the views (`rendition.manager.views.all()`).
 - **A regex inside a probe's template literal loses its backslashes.** In a `.cjs` script the WebView code is a template literal, where `\d` cooks to `d`: `/^(\d+)/` reached the WebView as `/^(d+)/`, matched nothing, and an event history came back empty rather than failing. Write `\\d` in the script's source.
+- **`scrollTop = 0` does not take the page away from the reading.** It goes to the top of the first view. epub.js answers by prepending the section above, scrolling down by its height so the text stays where it was, and trimming the new sections again about 350 ms later. Measured 2026-09-23 at 19:48: twelve of them left the views at `[5, 6, 7]`. Scroll in relative steps (`scrollTop -= 1500`), as `follow-probe.cjs` does. Five `scrollTop = 0`s did walk the page up at 19:26, from a different starting place, so do not rely on either result.
+- **A display's promise resolves as the section's iframe starts loading, not when the section is on the page.** For every load request that is not its main document, `@epubjs-react-native/core`'s `onShouldStartLoadWithRequest` calls `goToLocation(url)`. A section's `srcdoc` iframe is one, so the library itself runs `rendition.display('about:srcdoc')`, and epub.js's `Rendition.display` resolves the display in flight whenever another is asked for (measured 2026-09-23, 19:53, by recording a stack for it). A probe that waits on `rendition.display(…).then` reads the page before the section is there. Wait for the content hook, or for the queue to empty, instead.
 - **Resetting the page with `rendition.display()` while epub.js's queue is still busy left the queue stuck for good.** Measured 2026-09-22 at 12:30: after four back-to-back flings the manager's queue held 17 tasks with `running` true, nothing it held ever ran, and every later fling moved nothing (`scrollTop` 0, one view), which reads as the page refusing to scroll rather than as a stuck queue. Wait for `!rendition.manager.q._q.length && !rendition.manager.q.running` before a reset, and treat a queue that does not empty as its own finding; `scroll-theme.cjs` does both.
 - **A screenshot taken right after a reader remounts can be blank even though
   the DOM underneath is already styled and has its text.** Measured
@@ -955,6 +1027,44 @@ fix (AGENTS.md).
   matching elements found`. Use `.matching(identifier:).firstMatch`. Group
   headers are set as written since #48 (`Folder`, not `FOLDER`), so a probe
   that still names the capitals finds nothing.
+
+### Evaluating in the app through `cdp.cjs`
+
+- **A loop's closures all see its last value.** What `--eval` sends is compiled
+  by Hermes as written, with no Babel pass, and a `for (const x of list)` loop
+  does not give each turn its own `x`. Measured 2026-09-23: three wrappers made
+  in such a loop over `['a', 'b', 'c']` all called the third method, and three
+  arrow functions over `[1, 2, 3]` all returned 3. Four counting wrappers put on
+  the offline repository that way all ran `readClip`, the runtime stored its
+  answer as a document's inventory, and `hasSavedVoice` said false for a book
+  with 72 saved clips until the app was restarted. Loop with `list.forEach(x =>
+  …)`, which gives each item a function of its own, and restart the app after
+  any probe that replaced a method, before measuring anything else.
+- **Each of the harness's `fetch` commands replaces whatever `fetch` was there.**
+  `breakFetch`, `watchFetch` and `unbreakFetch` in `walkthrough-harness.ts` each
+  set `globalThis.fetch` to a new wrapper around the `fetch` captured when the
+  module loaded, never around the one installed now. So `breakfetch` after
+  `watchfetch` drops the request log, and `unbreakfetch` leaves no wrapper at
+  all: neither `watchfetch`'s nor one a probe installed through `--eval`.
+  Measured 2026-09-23, twice, verifying #45: after a `breakfetch`/Play/
+  `unbreakfetch` cycle, the retried Play's requests produced no `HX fetch …`
+  line, and a probe's own request log went empty. Send `watchfetch`, or
+  reinstall the probe's wrapper, straight after `unbreakfetch`.
+- **A request `breakfetch` refuses still counts as contact for #26's warm-up.**
+  `warm-connections.ts` counts any settled request as having reached its
+  origin, a refusal included, because a real refusal did go over the
+  connection. `breakfetch`'s refusals never touch the network, so after
+  `unbreakfetch` the next request within 30 s is sent without a warm-up, over
+  a connection that may have idled for minutes. On 2026-09-23 that retry
+  failed for real, with the production wording `Error: fetch failed: … The
+  network connection was lost …` rather than the harness's `TypeError: …`, and
+  a second Play a minute later, preceded by a warm-up GET, went through. Wait
+  30 s after `unbreakfetch`, or expect that one real failure.
+- **zsh's `echo` turns a `\n` inside a probe into a real newline.** A probe
+  written with `echo '(() => … join("\n") …)()' > probe.js` held a line break
+  inside its string, and `cdp.cjs --eval probe.js` answered `Compiling JS
+  failed: 1:86:non-terminated string`. Write probes with a quoted heredoc
+  (`cat <<'EOF' … EOF`) or in an editor.
 
 ## Lock-screen screenshot and button inspection
 
@@ -1802,7 +1912,10 @@ bash test/manual-test/sync.sh SIMULATOR_UDID /tmp/openreader-sync-01 \
 The real one holds the desktop plugin's live files, and `Address` is
 photographed by every capture. A subfolder that does not exist yet also
 exercises the 404 path the switch is supposed to accept. Delete the subfolder
-and its file when the run ends.
+and its file when the run ends. The WebDAV folder in `~/.secrets/openreader/`
+is already such a test folder (the owner, 2026-09-23): use it directly, and a
+place written there costs nothing. The owner's real folder is not in that
+directory, and **Against the owner's real folder** below is about that one.
 
 Run parameters go in `/tmp/openreader-sync-params.txt` as `KEY=VALUE` lines
 (`PLAY_SECONDS`, `SKIPS`, `PARAGRAPH_STEPS`, `SETTLE`, `BOOK_TITLE`), because
@@ -2293,3 +2406,97 @@ is measured with the two-`cdp.cjs`-call technique above; a successful,
 audible play with a moving highlight is what stands for the `ArrayBuffer`
 fact, since `azure-ws.ts`'s `parseBinaryFrame` throws on anything else and no
 audio would have played at all.
+
+## Reading across the end of a downloaded chapter, and a place kept across a renumbering (#26, #45, #46)
+
+`boundary-fixture.ts` writes `Boundary Fixture.epub`: two chapters in two spine
+files, a heading and four sentences each, all different, so Utterances 0–4 are
+chapter one and 5–9 chapter two.
+
+```sh
+npx tsx test/manual-test/boundary-fixture.ts OUTPUT_DIRECTORY
+```
+
+Load it like any fixture (**Real books** above). Download chapter one alone,
+without the sheet, through the app's own runtime; it synthesizes that chapter's
+five sentences for real, and nothing plays:
+
+```sh
+node test/manual-test/download-chapter.cjs DOCUMENT_ID "Boundary Fixture" fish VOICE_ID --list
+node test/manual-test/download-chapter.cjs DOCUMENT_ID "Boundary Fixture" fish VOICE_ID nav.0
+```
+
+`VOICE_ID` is the app's own id, locale first (`en/<model id>` for Fish): a bare
+model id is refused as an unknown voice. The same script downloads a chapter of a
+real book, which is how the #46 runs below had Chapter 2003 of `Cultivation
+Online 2001-2044` saved and Chapter 2004 not.
+
+**#26 at the boundary.** The failure needs a connection that has idled for more
+than about 60 s but that iOS has not yet closed: measured 2026-09-23, it failed
+107 s and about 70 s after the last request to `api.fish.audio` and not about
+3 min after (`notes/NOTES_2026-09-23.md`). So restart the app (its launch asks
+Fish for voices, which is the last request), wait 90–100 s with the reader open,
+seek to Utterance 3 and play: chapter one's last two sentences come from disk in
+about 0.1 s each, and the requests for 5 and 6 are what is being tested. Before
+the fix both failed after about 6.4 s and the reading stopped on chapter two's
+heading. Stop as soon as Utterance 6 has started or the reading has stopped.
+
+**#45.** With a reading paused mid-chapter, the harness's `breakfetch` on
+`api.fish.audio` refuses every request from the one named, and `unbreakfetch`
+lifts it (`src/app/walkthrough-harness.ts`). Play until the reading stops on a
+refused sentence with at least two refused, lift the refusal, press Play once:
+the reading must go past all of them.
+
+**#46.** On a real book, choose a chapter in Contents whose predecessor has not
+rendered, or leave a book with its place in a middle chapter and open it again.
+Before the fix the status line became `utterance=null` with "The document
+rendered its sections out of reading order…", and Play read the book's first
+page. The Library's stored place is in `Documents/library.json`, or in the
+harness's `{"do":"shelf"}` answer.
+
+What none of it proves: whether the owner's phone meets #26 at all, which
+depends on its own network path, or anything about real touches.
+
+## Play with the page scrolled away, and a place on a chapter heading (#50, #51)
+
+**#50.** `follow-probe.cjs` measures the page from the moment Play is pressed:
+every scroll, every display, every section adopted, every problem the program
+posts, and then where the two highlights are:
+
+```sh
+node test/manual-test/follow-probe.cjs SIMULATOR_UDID METRO_LOG SECTION [SECONDS]
+```
+
+Prerequisites: a reader open, the reading **paused on a sentence of spine item
+SECTION after its Clip has started**, the simulator silenced, and METRO_LOG, the
+file this tree's Metro writes to. On `Cultivation Online 2001-2044`, go to that
+place with `{"do":"section","section":6}` followed by thirteen
+`{"do":"skip","target":"next-paragraph"}`, which lands on "Suddenly, a golden
+energy surged…" (Block 6.13). Then play until the status line reads
+`level=word`, and pause. The script scrolls up 1,500 px at a time until SECTION
+is off the page, checks the silence, plays for SECONDS (default 2.5), reads, and
+pauses.
+
+GREEN (exit 0) means no problem was posted and the Utterance's highlight lies
+between 0 and the container's height. Measured with the fix on 2026-09-23: the
+section's content hook at +17 ms, epub.js's `moveTo` +958 px at +20, the
+centring −281 px at +29, and the Utterance at 283..342 of 758. Before the fix
+the same run read the Utterance at −724..−665 and the problem "Block 6.13 is in
+section 6, which is not on the page". For the variant after a renumbering
+(#46), reopen the book on that sentence instead of jumping there: the scroll up
+reports sections 5, 4 and 3 above the paused reading, and the result must be
+the same.
+
+**#51.** On the same book: `{"do":"section","section":20}`, then `shut`.
+`Documents/library.json` now holds `epubcfi(/6/42!/4/2/2/2)`, "Chapter 2018:
+Entering the Starry Sky", with no prefix or suffix. Open the book again. With
+the fix, the status line reads `section=20` and "Resumed at the sentence the
+reading stopped on.", and the heading is highlighted on Chapter 2018. Before
+the fix it read `section=2`, the contents page's line, and "The paragraph this
+book was left in is not where it was…".
+
+What neither proves: a real touch on the Player or on the page, since both go
+through the harness; or a section that is slow to load. In the runs with the
+fix, every section arrived within 20 ms of its display. The first run, before
+the fix, took 585 ms, and nothing since has repeated that.
+

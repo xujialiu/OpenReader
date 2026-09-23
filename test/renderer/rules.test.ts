@@ -1076,16 +1076,30 @@ describe('the reading is fed by the reading, not by the scroll (notes/NOTES_2026
 describe('a section the page has not reached is not a highlight that failed', () => {
   const program = highlighterSource();
 
-  it('is silent only when the caller is about to bring the section on to the page', () => {
+  it('is silent only while the page follows the reading, which is what brings the section back', () => {
     // Since renderAhead this happens at every section boundary of a document whose
     // sections are taller than their text, and follow() answers it by displaying the
     // section — so calling it a highlight that could not be drawn would leave that
     // sentence standing while the highlight was, in fact, drawn a moment later.
-    expect(fn(program, 'showUtterance')).toContain(
-      'if (!coming || !offPage(state.utteranceRanges)) report(why(state.utteranceRanges));',
+    pin(fn(program, 'awaited'), 'return !!(state && state.follow && offPage(ranges));', 'highlighter.ts, function awaited');
+    pin(
+      fn(program, 'showUtterance'),
+      'if (!awaited(state.utteranceRanges)) report(why(state.utteranceRanges));',
+      'highlighter.ts, function showUtterance',
     );
     const speak = program.slice(program.indexOf("message.kind === 'speak'"), program.indexOf("message.kind === 'correct'"));
-    expect(speak).toContain('var shown = showUtterance(message.reveal);');
+    expect(speak).toContain('var shown = showUtterance();');
+    expect(speak).toContain('if (message.reveal) follow(shown);');
+  });
+
+  it('is silent for the word by the same rule, since the correction arrives before the section does (#50)', () => {
+    // play() cues and then corrects at once, so the first thing to meet a section on
+    // its way was the word, and it reported unconditionally: "Block 6.13 is in
+    // section 6, which is not on the page", under a highlight drawn half a second
+    // later (measured 2026-09-23 19:28). The word and the Utterance now wait by one
+    // predicate, so they cannot disagree about whether a section is coming.
+    pin(fn(program, 'showWord'), 'if (!awaited(ranges)) report(why(ranges));', 'highlighter.ts, function showWord');
+    expect(program.match(/awaited\(/g)).toHaveLength(3);
   });
 
   it('still reports every other reason a highlight could not be drawn', () => {
@@ -1098,5 +1112,73 @@ describe('a section the page has not reached is not a highlight that failed', ()
     // attach() asks without `coming`, because a section that has arrived and still
     // cannot be highlighted is the real thing.
     expect(fn(program, 'attach')).toContain('var built = showUtterance();');
+  });
+});
+
+describe('a section follow() asked for is centred after epub.js has placed it (#50)', () => {
+  /**
+   * Measured on the owner's book on 2026-09-23 at 19:28 with a probe on every
+   * scroll: Play with the page scrolled away from Block 6.13 displayed its section,
+   * `attach()` centred it from inside epub.js's content hook by scrolling 725 px,
+   * and the same display then ran its own `moveTo` to the Block's CFI and scrolled
+   * 958 px more. The sentence was painted and sat 724 px above the top of the
+   * screen. Structural, like the rest of this file; `test/manual-test/follow-probe.cjs`
+   * is the run that shows it on the device.
+   */
+  const program = highlighterSource();
+
+  it('marks the section it asked for on the Utterance it asked for it for', () => {
+    const follow = fn(program, 'follow');
+    pin(follow, 'state.awaiting = record.section;', 'highlighter.ts, function follow');
+    expect(follow.indexOf('state.awaiting = record.section;')).toBeLessThan(follow.indexOf('rendition.display(record.cfi);'));
+    // Per Utterance: a new cue starts with nothing awaited.
+    const speak = program.slice(program.indexOf("message.kind === 'speak'"), program.indexOf("message.kind === 'correct'"));
+    pin(speak, 'awaiting: null', "highlighter.ts, the 'speak' branch");
+  });
+
+  it('paints that section at once and centres it on the next frame, through settle', () => {
+    const attach = fn(program, 'attach');
+    pin(attach, 'if (state.awaiting === contents.sectionIndex) {', 'highlighter.ts, function attach');
+    pin(
+      attach,
+      'window.requestAnimationFrame(function () {\n        if (state === mine) settle(SETTLE_FRAMES, null, 0);',
+      'highlighter.ts, function attach',
+    );
+    // The highlight is not deferred with it: only the scroll waits for epub.js.
+    expect(attach.indexOf('var built = showUtterance();')).toBeLessThan(attach.indexOf('if (state.awaiting ==='));
+    expect(attach.indexOf('showAt(state.next - 1);')).toBeLessThan(attach.indexOf('if (state.awaiting ==='));
+    // Any other arrival has no scroll of epub.js's behind it and is centred at once.
+    pin(attach, '    } else {\n      centreOnce(built);\n    }', 'highlighter.ts, function attach');
+  });
+
+  it('because epub.js runs the content hook before the moveTo of the same display', () => {
+    const epub = library('epubjs.js');
+    // IframeView.display: onDisplayed — which reaches the content hook — before the
+    // promise add() returns is resolved.
+    pin(
+      epub,
+      'this.emit(h.c.VIEWS.DISPLAYED, this),\n                      this.onDisplayed(this),\n                      (this.displayed = !0),\n                      e.resolve(this);',
+      'the bundled epub.js, IframeView.display',
+    );
+    // DefaultViewManager.display: the moveTo to the target, once add() has resolved.
+    pin(
+      epub,
+      'this.add(t, o)\n              .then(\n                function (t) {\n                  if (e) {\n                    let i = t.locationOf(e),\n                      n = t.width();\n                    this.moveTo(i, n);',
+      'the bundled epub.js, DefaultViewManager.display',
+    );
+  });
+
+  it('and not on the display’s promise, which the library resolves as soon as the section’s iframe starts loading', () => {
+    // Measured 2026-09-23: every section iframe's `about:srcdoc` load reaches the
+    // library's onShouldStartLoadWithRequest, which answers with
+    // `goToLocation('about:srcdoc')` — and epub.js resolves the display in flight
+    // whenever another is asked for. Before the section arrives, not on arrival.
+    pin(library('View.js'), "goToLocation(request.url.replace(request.mainDocumentURL, ''));", 'the installed @epubjs-react-native/core View.js');
+    pin(
+      library('epubjs.js'),
+      'this.displaying && this.displaying.resolve(),\n            this.q.enqueue(this._display, t)',
+      'the bundled epub.js, Rendition.display',
+    );
+    expect(fn(program, 'follow')).not.toContain('.then(');
   });
 });

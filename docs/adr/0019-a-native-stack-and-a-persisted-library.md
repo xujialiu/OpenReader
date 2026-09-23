@@ -133,9 +133,14 @@ than held in React state: a Reading Position changes once an Utterance, and
 re-rendering the reader at that rate is the cost ADR 0005 forbids for the same
 reason it forbids a position in state.
 
-**Read back** as `<Reader initialLocation>`, which the renderer applies inside its
-own `onReady` and before it injects the highlighter — so the first section to
-report its Blocks is the one the owner was left in rather than the cover.
+**Read back** as `<Reader initialLocation>`, which the library applies inside its
+own `onReady` by injecting `rendition.display(cfi)`, just before it injects the
+highlighter. That moves the page, but a frame later than this paragraph used to
+say. epub.js runs a display on its next animation frame, while the highlighter
+installs at once and reports what the library's own opening `rendition.display()`
+has already put on the page: the book's first sections, not the one the owner
+was left in. Measured on 2026-09-23, #51: items 1, 2 and 3 of the owner's book
+reported first, and the stored item 20 after them.
 
 **Read back a second time, as the Utterance to read from.** This ADR recorded
 that it was not: "playback does not resume *at* that Utterance. The page is where
@@ -159,6 +164,27 @@ Four things about it that are decisions rather than plumbing:
   first section to render is not always the one the position names: a cover renders
   first and yields nothing, and the section `initialLocation` asked for arrives when
   epub.js has displayed it. On the 2,077-section novel that is twenty seconds away.
+- **Until the section its locator names has reported, it is looked for nowhere
+  else** (#51). `resolveResume` takes the spine's length and the set of items that
+  have reported, including an item that reported no Block, and answers `waiting`
+  while the locator's own item is missing. Before this, a missing section read as
+  a locator that did not resolve, and the anchor was searched for in whatever had
+  reported. For a place on a chapter heading that was the contents page. The
+  heading is a Block of its own, so its anchor has no context either side, and the
+  contents line matched it exactly and uniquely. The reading resumed there with
+  "The paragraph this book was left in is not where it was", and the next place
+  written over the stored one would have been the contents page (measured
+  2026-09-23, `notes/NOTES_2026-09-23.md` 19:24). Once the section is in, nothing
+  is different: the locator is verified, or the anchor is searched for everywhere
+  reported, now including that section. A locator with no spine step, or one past
+  the end of the spine, names nothing that will ever report and is searched for at
+  once. The opening place's section is asked for by `initialLocation` alone. A
+  second `goTo` would be a second `rendition.display()` of the same section. While
+  the first is still loading, that clears the half-built view and starts again,
+  because `Views.find` matches only displayed views. Once the section is there, it
+  scrolls the Block back to the top of the screen, under the centring the resume's
+  own `show` has just done. An adopted place still asks on each report
+  (`revealPendingPlace`), because nothing else would.
 - **Anything else deciding where to read ends the bookmark's claim.** A press of
   Play, a tapped word, a skip, a contents row. Without that, a position resolving
   late would take the reading away from wherever the owner had just put it — which

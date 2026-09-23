@@ -43,3 +43,7 @@ Files that several of them share sit directly in `core/`. In the plugin those
 are `align.ts`, `wav.ts`, `timeout.ts`, `single-flight.ts`, `memory-cache.ts`
 and `speech-text.ts`, and they keep those names and this location when they
 come across, so the plugin's `test/core/*.test.ts` land unchanged too.
+
+So does `warm-connections.ts` (ADR 0040), which is OpenReader's own: the
+`fetch` every Provider is given, warming a connection that has been quiet
+before a request that cannot be retried goes over it.

@@ -16,10 +16,13 @@ import {
   resolveResume,
   resumeSentence,
   speakMessage,
+  spineIndexOf,
   utteranceAt,
   utteranceRanges,
   wordCues,
   wordIndexAt,
+  type RenderedSections,
+  type Resume,
 } from '../../src/renderer/cursor';
 
 /**
@@ -469,6 +472,21 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
 
   const paragraph = 'One sentence here. A second sentence follows it. And a third ends the paragraph.';
 
+  /**
+   * Every section these Blocks came from has reported, in a spine long enough to
+   * hold any locator below: what the renderer has done by the time the resume is
+   * asked about them. #51's waiting is tested on its own further down.
+   */
+  function renderedOf(blocks: readonly ReportedBlock[]): RenderedSections {
+    return { spine: 100, reported: new Set(blocks.map((block) => block.sectionIndex)) };
+  }
+
+  /** The answer to show, which a resume that is still waiting does not have yet. */
+  function settled(resume: Resume): Exclude<Resume, { outcome: 'waiting' }> {
+    if (resume.outcome === 'waiting') throw new Error('still waiting for section ' + resume.section);
+    return resume;
+  }
+
   it('comes back to the sentence, not to the top of the paragraph it is in', () => {
     // The defect this exists to fix, as a number: three sentences in one Block, so
     // "the first Utterance of what has rendered" and "where the reading stopped"
@@ -476,7 +494,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     const blocks = reported([paragraph]);
     const utterances = segment(blocks);
     expect(utterances).toHaveLength(3);
-    const resume = resolveResume(positionOf(utterances, blocks, 2), utterances, blocks);
+    const resume = resolveResume(positionOf(utterances, blocks, 2), utterances, blocks, renderedOf(blocks));
     expect(resume).toEqual({ outcome: 'resumed', utterance: 2, agreement: 'exact', moved: null });
   });
 
@@ -491,7 +509,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     const utterances = segment(later);
     // Same sentence, different number: 2 before, 3 now.
     expect(utterances[3].text).toBe('And a third ends the paragraph.');
-    expect(resolveResume(written, utterances, later)).toMatchObject({ outcome: 'resumed', utterance: 3 });
+    expect(resolveResume(written, utterances, later, renderedOf(later))).toMatchObject({ outcome: 'resumed', utterance: 3 });
   });
 
   it('finds the sentence by its text when the locator no longer names it', () => {
@@ -501,7 +519,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     const utterances = segment(blocks);
     const written = positionOf(utterances, blocks, 1);
     const moved = reported([paragraph], ['epubcfi(/6/2!/4/88)']);
-    expect(resolveResume(written, utterances, moved)).toEqual({
+    expect(resolveResume(written, utterances, moved, renderedOf(moved))).toEqual({
       outcome: 'resumed',
       utterance: 1,
       agreement: 'exact',
@@ -520,7 +538,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     // its CFIs the same way, which is what makes the locator resolve here.
     const elsewhere = reported(['Some completely different words about nothing at all.']);
     const written = positionOf(segment(blocks), blocks, 1);
-    const resume = resolveResume(written, segment(elsewhere), elsewhere);
+    const resume = resolveResume(written, segment(elsewhere), elsewhere, renderedOf(elsewhere));
     expect(resume).toEqual({ outcome: 'lost', because: 'text-disagreed', why: 'not-found' });
     expect(resume).not.toHaveProperty('utterance');
   });
@@ -529,7 +547,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     const blocks = reported([paragraph]);
     const written = positionOf(segment(blocks), blocks, 1);
     const elsewhere = reported(['Some completely different words about nothing at all.'], ['epubcfi(/6/8!/4/2)']);
-    expect(resolveResume(written, segment(elsewhere), elsewhere)).toEqual({
+    expect(resolveResume(written, segment(elsewhere), elsewhere, renderedOf(elsewhere))).toEqual({
       outcome: 'lost',
       because: 'locator-did-not-resolve',
       why: 'not-found',
@@ -543,7 +561,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     const twice = reported(['He said nothing.', 'He said nothing.'], ['epubcfi(/6/2!/4/2)', 'epubcfi(/6/2!/4/4)']);
     const utterances = segment(twice);
     const written = readingPlaceAt(createLocator('epub', 'epubcfi(/6/2!/4/99)'), twice[0].text, 0, twice[0].text.length);
-    expect(resolveResume(written, utterances, twice)).toEqual({
+    expect(resolveResume(written, utterances, twice, renderedOf(twice))).toEqual({
       outcome: 'lost',
       because: 'locator-did-not-resolve',
       why: 'ambiguous',
@@ -559,7 +577,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     expect([...reportedPlaces(nameless).places()]).toHaveLength(0);
     expect(reportedPlaces(nameless).textAt(createLocator('epub', ''))).toBeNull();
     const written = readingPlaceAt(createLocator('epub', ''), paragraph, 19, 48);
-    expect(resolveResume(written, utterances, nameless)).toMatchObject({ outcome: 'lost' });
+    expect(resolveResume(written, utterances, nameless, renderedOf(nameless))).toMatchObject({ outcome: 'lost' });
   });
 
   it('refuses a place whose Block has nothing to read aloud', () => {
@@ -567,7 +585,7 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     // not finding it — and is still not a reason to pick the sentence next door.
     const blocks = reported([paragraph]);
     const written = positionOf(segment(blocks), blocks, 1);
-    expect(resolveResume(written, [], blocks)).toEqual({
+    expect(resolveResume(written, [], blocks, renderedOf(blocks))).toEqual({
       outcome: 'lost',
       because: null,
       why: 'no-utterance',
@@ -577,13 +595,102 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
   it('says which of the three happened, in words the player can show', () => {
     const blocks = reported([paragraph]);
     const utterances = segment(blocks);
-    const plain = resumeSentence(resolveResume(positionOf(utterances, blocks, 2), utterances, blocks));
-    const moved = resumeSentence(resolveResume(positionOf(utterances, blocks, 2), utterances, reported([paragraph], ['epubcfi(/9/9)'])));
+    const plain = resumeSentence(settled(resolveResume(positionOf(utterances, blocks, 2), utterances, blocks, renderedOf(blocks))));
+    const moved = resumeSentence(settled(resolveResume(positionOf(utterances, blocks, 2), utterances, reported([paragraph], ['epubcfi(/9/9)']), renderedOf(blocks))));
     const lost = resumeSentence({ outcome: 'lost', because: 'locator-did-not-resolve', why: 'not-found' });
     expect(plain).toBe('Resumed at the sentence the reading stopped on.');
     expect(moved).toContain('found by its own text');
     expect(lost).toContain('starts at the top of this section');
     expect(new Set([plain, moved, lost]).size).toBe(3);
+  });
+
+  describe('a place whose own section has not rendered yet (#51)', () => {
+    /**
+     * Measured on the owner's book on 2026-09-23: the reading was left on
+     * "Chapter 2018: Entering the Starry Sky", spine item 20 and a Block of its
+     * own, and the book's contents page — spine item 2 — lists the same title.
+     * Coming back, items 1, 2 and 3 reported before item 20, the search ran over
+     * them, and the contents line was taken for the place having moved.
+     */
+    const HEADING = 'Chapter 2018: Entering the Starry Sky';
+
+    /** A spine item's Blocks as the renderer reports them: ids and element CFIs numbered the way `highlighter.ts` numbers them. */
+    function section(index: number, texts: readonly string[]): ReportedBlock[] {
+      return texts.map((text, at) => ({
+        id: index + '.' + at,
+        text,
+        role: 'paragraph' as const,
+        section: 's' + index + '.xhtml',
+        sectionIndex: index,
+        cfi: 'epubcfi(/6/' + 2 * (index + 1) + '!/4/2/' + (2 * at + 2) + ')',
+      }));
+    }
+
+    const contents = section(2, ['Contents', 'Chapter 2017: The Golden Empress', HEADING, 'Chapter 2019: The Starry Sky Continent']);
+    const chapter = section(20, [HEADING, 'Yuan looked up at the stars. They did not look back.']);
+    /** What `use-reading.ts` writes for the heading: its Block's CFI, and the whole of its text, with nothing either side. */
+    const stored = readingPlaceAt(createLocator('epub', chapter[0].cfi), HEADING, 0, HEADING.length);
+    const rendered = (...sections: number[]): RenderedSections => ({ spine: 48, reported: new Set(sections) });
+
+    it('waits for that section rather than taking the same words from the contents page', () => {
+      const early = [...section(1, ['Cultivation Online']), ...contents, ...section(3, ['Chapter 2001: A Beginning', 'It began.'])];
+      // The contents line matches exactly and uniquely, and the anchor has no context
+      // to say otherwise — which is why nothing may be compared before item 20 is in.
+      expect(stored.anchor).toEqual({ exact: HEADING, prefix: '', suffix: '' });
+      expect(resolveResume(stored, segment(early), early, rendered(1, 2, 3))).toEqual({ outcome: 'waiting', section: 20 });
+    });
+
+    it('lands on the heading it was left on once that section has reported, with nothing to say about it', () => {
+      const later = [...contents, ...chapter];
+      const utterances = segment(later);
+      const heading = utterances.findIndex((utterance) => later[utterance.spans[0].block].id === '20.0');
+      expect(utterances[heading].text).toBe(HEADING);
+      expect(resolveResume(stored, utterances, later, rendered(2, 20))).toEqual({
+        outcome: 'resumed',
+        utterance: heading,
+        agreement: 'exact',
+        moved: null,
+      });
+    });
+
+    it('still searches at once where the locator names no spine item of this Document', () => {
+      // Past the end of the spine, or no spine step at all: nothing will ever report
+      // under it, so waiting would be waiting for ever.
+      const utterances = segment(contents);
+      const line = utterances.findIndex((utterance) => utterance.text === HEADING);
+      for (const cfi of ['epubcfi(/6/200!/4/2/2)', 'epubcfi(/4/2)']) {
+        const place = readingPlaceAt(createLocator('epub', cfi), HEADING, 0, HEADING.length);
+        expect({ cfi, resume: resolveResume(place, utterances, contents, rendered(2)) }).toEqual({
+          cfi,
+          resume: { outcome: 'resumed', utterance: line, agreement: 'exact', moved: 'locator-did-not-resolve' },
+        });
+      }
+    });
+
+    it('does not wait on a section that has reported with no Block in it', () => {
+      // A page of images reports and contributes no Block, so the Blocks alone cannot
+      // say that it rendered, and a place in it would wait for ever. `reported` can.
+      expect(resolveResume(stored, segment(contents), contents, rendered(2, 20))).toMatchObject({
+        outcome: 'resumed',
+        moved: 'locator-did-not-resolve',
+      });
+    });
+
+    it('waits for nothing while the length of the spine is not known', () => {
+      expect(resolveResume(stored, segment(contents), contents, { spine: 0, reported: new Set([2]) })).toMatchObject({ outcome: 'resumed' });
+    });
+  });
+});
+
+describe('spineIndexOf', () => {
+  it('reads the spine index off the step both readers number the same way', () => {
+    expect(spineIndexOf('epubcfi(/6/2!/4/4)')).toBe(0);
+    expect(spineIndexOf('epubcfi(/6/6!/4/2/4)')).toBe(2);
+    expect(spineIndexOf('epubcfi(/6/34!/4/2/4/2/4)')).toBe(16);
+    expect(spineIndexOf('epubcfi(/6/42!/4/2/2/2)')).toBe(20);
+    expect(spineIndexOf('epubcfi(/6/3!/4)')).toBeNull();
+    expect(spineIndexOf('/6/6!/4/4')).toBeNull();
+    expect(spineIndexOf('')).toBeNull();
   });
 });
 

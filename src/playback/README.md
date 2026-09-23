@@ -114,7 +114,7 @@ The split is where the platform is, and it is the whole of the test strategy.
 | `timeline.ts` | The content position as "so far into Utterance 41". ADR 0012's argument, in arithmetic. |
 | `rate.ts` | The playback rate, and everything that has to be scaled by it — above all the Word Timings. The stepper of ADR 0020 is here too, on an integer grid. |
 | `navigation.ts` | The four skip targets (ADR 0020). Six controls are six ways of naming one Utterance, so each is an index handed to the `seek` that already exists. |
-| `read-ahead.ts` | Three Utterances ahead, two fetches at a time, as one pure function — and the four conditions that tell running out of text from waiting for some. |
+| `read-ahead.ts` | Three Utterances ahead, from the first one not yet queued (#49), two fetches at a time, as one pure function — and the four conditions that tell running out of text from waiting for some, and what a press of Play asks for again (#45). |
 | `gap.ts` | The gap timer, which here is silence appended to the Utterance's own buffer. |
 | `pcm.ts` | 16-bit little-endian mono into float samples, and the one resampling. |
 | `clip-cache.ts` | Provider + Voice + text, and never speed. |

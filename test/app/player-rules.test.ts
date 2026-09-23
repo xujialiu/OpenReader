@@ -143,9 +143,14 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     const reading = code('use-reading.ts');
     expect(reading.match(/resolveResume\(/g)).toHaveLength(1);
     const attempt = within(reading, 'const tryResume = useCallback(', '[seekTo],');
-    expect(attempt).toContain('resolveResume(stored, next, reported)');
+    expect(attempt).toContain('resolveResume(stored, next, reported, rendered)');
+    // What has rendered goes with it, so a place waits for its own section rather
+    // than being found in whatever reported first — a contents page (#51).
+    expect(attempt).toContain('reported: reportedSectionsRef.current');
     const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace],');
-    expect(blocks).toContain('tryResume(next, reported, () => adopt(next))');
+    // `true`: the resume has pointed the cursor into the new list already, so a
+    // renumbering must not carry it across a second time (#46).
+    expect(blocks).toContain('tryResume(next, reported, () => adopt(next, reported, true))');
   });
 
   it('anchors the engine at the resumed Utterance before the longer list is adopted', () => {
@@ -181,11 +186,19 @@ describe('a section that arrives mid-reading reaches the engine at once (notes/N
   const reading = code('use-reading.ts');
 
   it('hands a longer list over through extend, not load', () => {
-    const adopt = within(reading, 'const adopt = useCallback(', '}, []);');
-    expect(adopt).toContain('engine?.extend(next);');
-    // The one `load` left is the renumbering branch, where clearing is the point.
-    expect(adopt).toContain('engine?.load(next, 0);');
-    expect(adopt.indexOf('engine?.load(next, 0);')).toBeLessThan(adopt.indexOf('engine?.extend(next);'));
+    const adopt = within(reading, 'const adopt = useCallback(', '}, [sectionOf]);');
+    // A list that continues the one the engine holds goes over whole, and returns
+    // before any `load` is reached.
+    const continued = within(adopt, 'if (samePrefix(held.utterances, next)) {', 'return;');
+    expect(continued).toContain('engine?.extend(next);');
+    expect(continued).not.toContain('load(');
+    // The `load`s left are a renumbering's (#46): at the sentence carried across,
+    // or at the top where the sentence itself has gone — and quiet while paused,
+    // so that nothing centres the page on the reading while the owner scrolls.
+    expect(adopt).toContain('engine?.load(next, at ?? 0, { quiet: !playIntent.current });');
+    expect(adopt).toContain('engine?.load(next, 0, { quiet: true });');
+    expect(adopt).not.toContain('show(');
+    expect(adopt.indexOf('engine?.load(')).toBeGreaterThan(adopt.indexOf('engine?.extend(next);'));
   });
 
   it('holds nothing back for a Clip boundary', () => {
@@ -241,10 +254,11 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
     expect(cleanup).toContain('void engine?.dispose();');
     expect(cleanup).not.toContain('atRef.current = null;');
     expect(cleanup).not.toContain('utterance: null,');
-    // The one place the cursor is cleared is the renumbering branch, where every
-    // index means a different sentence and clearing is the whole point (`samePrefix`).
+    // The one place the cursor is cleared is a renumbering that could not find its
+    // sentence again, because that sentence's own section changed (#46): every
+    // other renumbering carries the cursor across (`carryUtterance`).
     expect(reading.match(/atRef\.current = null;/g)).toHaveLength(1);
-    pin(within(reading, 'const adopt = useCallback(', '}, []);'), 'atRef.current = null;', 'use-reading.ts, adopt');
+    pin(within(reading, 'const adopt = useCallback(', '}, [sectionOf]);'), 'atRef.current = null;', 'use-reading.ts, adopt');
   });
 
   it('leaves the highlight on the sentence the cursor names, rather than clearing it', () => {

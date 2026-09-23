@@ -1144,21 +1144,32 @@ ${constants}
     return true;
   }
 
+  /* Ranges that could not be built only because their section is not on the
+     page, while the page is following the reading — which is what brings that
+     section back: follow() has asked for it, or will at the next Utterance's cue,
+     and attach() paints the highlight when it arrives. Waiting, not failing.
+
+     One predicate for the Utterance and the word (#50). The word used to report
+     unconditionally, so Play with the page scrolled away said "Block 6.13 is in
+     section 6, which is not on the page" through the correction play() sends
+     straight after its cue, while the section was on its way and the highlight
+     was, a moment later, drawn. */
+  function awaited(ranges) {
+    return !!(state && state.follow && offPage(ranges));
+  }
+
   /* Returns the built ranges rather than a boolean, so that the caller which has
      just painted them measures *those* rather than building a second set to
      measure — the centring below needs the very Ranges that are on the page.
-     Null where nothing could be drawn.
-
-     \`coming\` is the caller saying it is about to bring the section onto the
-     page, which only the 'speak' branch is in a position to say. */
-  function showUtterance(coming) {
+     Null where nothing could be drawn. */
+  function showUtterance() {
     var built = build(state.utteranceRanges);
     if (!built) {
       clearHighlights();
       /* Reported, not swallowed. Philosophy rule 1, and the reason the problem
          message exists: once per Utterance, so a reading that is ahead of the page
          says so once rather than sixty times a second. */
-      if (!coming || !offPage(state.utteranceRanges)) report(why(state.utteranceRanges));
+      if (!awaited(state.utteranceRanges)) report(why(state.utteranceRanges));
       return null;
     }
     var registry = registryFor(built.window);
@@ -1171,7 +1182,7 @@ ${constants}
   function showWord(ranges) {
     var built = build(ranges);
     if (!built) {
-      report(why(ranges));
+      if (!awaited(ranges)) report(why(ranges));
       return;
     }
     var registry = registryFor(built.window);
@@ -1383,6 +1394,14 @@ ${constants}
     }
     var record = blocks.get(state.utteranceRanges[0].block);
     if (!record || !record.cfi) return;
+    /* attach() centres this section on the frame after it arrives rather than
+       at once, because this display is not finished when it arrives: see there.
+       Not on the display's promise, which says nothing about arriving: it is
+       resolved as the section's iframe starts to load, when the library's
+       onShouldStartLoadWithRequest answers the iframe's about:srcdoc with a
+       display of that, and epub.js resolves the display in flight whenever
+       another is asked for (measured 2026-09-23, #50). */
+    state.awaiting = record.section;
     try {
       /* epub.js's own dialect, and its own resolver (ADR 0011). Under the
          continuous manager this clears every view and rebuilds from the target,
@@ -1515,8 +1534,29 @@ ${constants}
        screen. Two ways in: the reading ran ahead of the document and follow()
        displayed the section, or the manager destroyed this section's view and
        rebuilt it while the same Utterance was being spoken. Both want centring
-       now that there is something to measure. */
-    centreOnce(built);
+       now that there is something to measure — and the first wants it a frame
+       from now.
+
+       **A section follow() asked for arrives before its display has finished**
+       (#50). This runs in epub.js's content hook, and the same display goes on,
+       in the same task, to its own moveTo(): a scroll to the top of the Block the
+       CFI names, added to whatever this scrolled. Measured on the owner's book at
+       19:28 on 2026-09-23, Play with the page scrolled away from Block 6.13: the
+       centring scrolled 725 px, the moveTo 958 px more, and the sentence — painted
+       — ended 724 px above the top of the screen. So the Utterance is painted now
+       and centred on the next frame, after that moveTo and after the views are
+       shown, through settle(), which also follows the page while fill() lays the
+       neighbouring sections out around it. A section that arrives any other way
+       has no scroll of epub.js's behind it, and is centred at once. */
+    if (state.awaiting === contents.sectionIndex) {
+      state.awaiting = null;
+      var mine = state;
+      window.requestAnimationFrame(function () {
+        if (state === mine) settle(SETTLE_FRAMES, null, 0);
+      });
+    } else {
+      centreOnce(built);
+    }
     start();
   }
 
@@ -1731,7 +1771,10 @@ ${constants}
         reported: false,
         follow: message.reveal,
         /* The documents this Utterance has already been centred in; see centreOnce. */
-        centred: new WeakSet()
+        centred: new WeakSet(),
+        /* The section follow() asked epub.js to display for this Utterance, until
+           it arrives; see attach. */
+        awaiting: null
       };
       var wrong = mismatch(message.utteranceRanges);
       if (wrong) {
@@ -1745,7 +1788,7 @@ ${constants}
          either way — a Block whose section epub.js has not rendered still has its
          CFI here, and that is exactly the case where the reading has crossed into
          text the reader cannot see. */
-      var shown = showUtterance(message.reveal);
+      var shown = showUtterance();
       if (message.reveal) follow(shown);
       /* **What is on the page has been reported**, checked once per Utterance —
          and then the section after it asked for if it is missing. Neither depends
