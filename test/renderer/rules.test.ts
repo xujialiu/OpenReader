@@ -1081,7 +1081,8 @@ describe('a section the page has not reached is not a highlight that failed', ()
     // sections are taller than their text, and follow() answers it by displaying the
     // section — so calling it a highlight that could not be drawn would leave that
     // sentence standing while the highlight was, in fact, drawn a moment later.
-    pin(fn(program, 'awaited'), 'return !!(state && state.follow && offPage(ranges));', 'highlighter.ts, function awaited');
+    // And while the owner is browsing (#52), whose return brings it back.
+    pin(fn(program, 'awaited'), 'return !!(state && (state.follow || browsing) && offPage(ranges));', 'highlighter.ts, function awaited');
     pin(
       fn(program, 'showUtterance'),
       'if (!awaited(state.utteranceRanges)) report(why(state.utteranceRanges));',
@@ -1180,5 +1181,75 @@ describe('a section follow() asked for is centred after epub.js has placed it (#
       'the bundled epub.js, Rendition.display',
     );
     expect(fn(program, 'follow')).not.toContain('.then(');
+  });
+});
+
+describe('browsing leaves the page where the owner put it (#52)', () => {
+  /**
+   * Measured on the owner's book on 2026-09-23 at 23:30, with a probe on every
+   * scroll: the reading paused in section 14, a display of section 16 — the call a
+   * Contents row makes — rendered 16, 15 and then 14, and attach() centred the
+   * paused sentence as 14 arrived (`scrollBy -7424`, from
+   * `centre<centreOnce<attach<sweep`). epub.js then trimmed 16 away, and the page
+   * was back on the reading. Structural, like the rest of this file;
+   * `test/manual-test/browse-probe.cjs` is the run on the device.
+   */
+  const program = highlighterSource();
+  const dispatch = fn(program, 'dispatch');
+  const branch = (kind: string, next: string) => dispatch.slice(dispatch.indexOf("message.kind === '" + kind + "'"), dispatch.indexOf("message.kind === '" + next + "'"));
+
+  it('starts browsing on the message a Contents row sends, and ends it only with a revealed highlight', () => {
+    pin(branch('browse', 'speak'), 'browsing = true;', "highlighter.ts, the 'browse' branch");
+    const speak = branch('speak', 'correct');
+    pin(speak, 'if (message.reveal) browsing = false;', "highlighter.ts, the 'speak' branch");
+    // Before the state is replaced, so that the new one is built knowing it.
+    expect(speak.indexOf('if (message.reveal) browsing = false;')).toBeLessThan(speak.indexOf('state = {'));
+    // The declaration, and the one place it is cleared.
+    pin(program, 'var browsing = false;', 'highlighter.ts, the declaration');
+    expect(program.match(/browsing = false;/g)).toHaveLength(2);
+  });
+
+  it('centres nothing by itself while browsing: not a section of the reading arriving, not an Appearance change', () => {
+    pin(fn(program, 'centreOnce'), 'if (!state || !state.follow || browsing) return;', 'highlighter.ts, function centreOnce');
+    pin(fn(program, 'settle'), 'if (!state || !state.follow || browsing) return;', 'highlighter.ts, function settle');
+    // attach() and the Appearance branch reach the page only through those two.
+    const attach = fn(program, 'attach');
+    expect(attach).not.toContain('centre(');
+    expect(attach).not.toContain('scrollBy');
+    expect(branch('appearance', 'measured')).not.toMatch(/\bcentre(Once)?\(/);
+  });
+
+  it('lets a repaint keep whether the page follows, and only a revealed highlight scroll to it', () => {
+    const speak = branch('speak', 'correct');
+    pin(speak, 'var following = message.reveal || !!(state && state.follow);', "highlighter.ts, the 'speak' branch");
+    pin(speak, 'follow: following,', "highlighter.ts, the 'speak' branch");
+    pin(speak, 'if (message.reveal) follow(shown);', "highlighter.ts, the 'speak' branch");
+  });
+
+  it('counts a finger dragging the page as browsing, and a tap as nothing of the kind', () => {
+    const dragged = fn(program, 'dragged');
+    // A new finger is a new identifier, measured from where it first moved.
+    pin(dragged, 'if (touch.identifier !== touchId) {', 'highlighter.ts, function dragged');
+    pin(dragged, 'if (Math.abs(touch.clientY - touchY) > DRAG_PX) browsing = true;', 'highlighter.ts, function dragged');
+    pin(fn(program, 'adopt'), "contents.document.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, function adopt');
+    // The margins between the section documents, heard once on the container.
+    pin(program, "if (stage) stage.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, the install');
+    expect(program.match(/addEventListener\('touchmove'/g)).toHaveLength(2);
+    // A tap is still a click, and a click is not heard as a drag. The long press
+    // stays the platform's: 'tapping a word reads from there' keeps touchstart,
+    // touchend and the rest out of this program.
+    expect(fn(program, 'tapped')).not.toContain('browsing');
+  });
+
+  it('sends the browse message before the display that moves the page', () => {
+    const bridge = code('reader-bridge.ts');
+    const browse = bridge.slice(bridge.indexOf('const browse = useCallback('), bridge.indexOf('const onWebViewMessage = useCallback('));
+    pin(browse, "send({ kind: 'browse' });", 'reader-bridge.ts, browse');
+    expect(browse.indexOf("send({ kind: 'browse' });")).toBeLessThan(browse.indexOf('goToLocation(String(index));'));
+  });
+
+  it('reveals a cue or a shown sentence unless the caller says not to', () => {
+    const bridge = code('reader-bridge.ts');
+    expect(bridge.match(/reveal: latest\.current\.follow !== false && options\?\.reveal !== false/g)).toHaveLength(2);
   });
 });

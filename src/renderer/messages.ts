@@ -270,6 +270,11 @@ export interface SpeakMessage {
    * message per word is what ADR 0005 exists to keep off the bridge. The
    * measurement is the WebView's, because the only thing that knows where a
    * sentence is on the screen is the document it is in.
+   *
+   * True is also the one thing that ends Browsing (#52): it is the voice, or the
+   * owner pointing at a sentence, asking for the reading. False repaints the
+   * sentence wherever the page is and leaves the page there — a cue while
+   * paused, or a new Voice repainting the sentence it will read.
    */
   reveal: boolean;
 }
@@ -310,6 +315,26 @@ export interface HoldMessage {
 /** Nothing is being read. Both highlights go. */
 export interface ClearMessage {
   kind: 'clear';
+}
+
+/**
+ * The page is about to be moved to a part of the document the owner only wants to
+ * look at: **Browsing** (CONTEXT.md, #52), which a Contents row is while the
+ * reading is paused.
+ *
+ * Sent just before the display that moves the page, so that the sections that
+ * display renders — the reading's own among them, when it is next door — arrive
+ * to a page that has stopped following the reading. Measured on 2026-09-23 at
+ * 23:30 without it: a display of the section after the reading's re-rendered the
+ * reading's section, and the highlighter centred the paused sentence as it
+ * arrived, a scroll of −7,424 px that took the page straight back.
+ *
+ * Nothing in it but the kind: the WebView stays browsing until a highlight is
+ * revealed (`SpeakMessage.reveal`), which is Play, a tapped sentence, a skip or a
+ * place from another device.
+ */
+export interface BrowseMessage {
+  kind: 'browse';
 }
 
 /**
@@ -402,6 +427,7 @@ export type HighlightMessage =
   | CorrectMessage
   | HoldMessage
   | ClearMessage
+  | BrowseMessage
   | InsetMessage
   | AppearanceMessage
   | MeasuredMessage

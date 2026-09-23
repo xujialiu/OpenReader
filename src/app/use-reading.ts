@@ -211,18 +211,26 @@ export interface Reading {
    * engine's own `seek` is `restart(); pump()` with deliberately no `resume()`, so
    * navigating while paused moves the highlight and leaves the silence alone —
    * which is Zotero's behaviour, verified in its source (ADR 0020).
+   *
+   * This is a tapped word: the owner pointing the reading at a sentence, which
+   * makes that sentence the Reading Position even before anything is spoken
+   * (CONTEXT.md, #52).
    */
   seekTo(utterance: number): void;
   /** One of the four skips, computed by `playback/navigation.ts` from where the reading is. */
   skip(target: SkipTarget): void;
   /**
-   * A contents row: move the page to a spine item, and read from its first
-   * Utterance.
+   * A contents row: move the page to a spine item, and — while playing, or in a
+   * book with no Reading Position yet — read from its first Utterance.
    *
-   * **Two steps** (ADR 0020). `goToSection` moves the page only; the Utterance to
-   * read from does not exist until that section has rendered and reported its
-   * Blocks, so the second step waits for them — unless the section has already
-   * rendered, in which case it happens now.
+   * **Paused, it is Browsing** (CONTEXT.md, #52): the page goes to the chapter,
+   * and the reading, its highlight and the stored place stay on the sentence the
+   * reading is on, which is where Play continues.
+   *
+   * Otherwise **two steps** (ADR 0020). The page moves; the Utterance to read
+   * from does not exist until that section has rendered and reported its Blocks,
+   * so the second step waits for them — unless the section has already rendered,
+   * in which case it happens now.
    */
   goToSection(section: number): void;
   /**
@@ -397,6 +405,20 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    */
   const resumedAtRef = useRef<number | null>(null);
   /**
+   * Nothing in this Document is a Reading Position yet: it opened with no stored
+   * place, no place has arrived from another device, and nothing has been
+   * played, tapped or skipped to.
+   *
+   * While that holds, a Contents row still chooses where the first Play starts —
+   * the most recent choice winning — and the choice is not a Reading Position, so
+   * nothing is written for it (#52). A Contents row cannot end this: only the
+   * reading being played or pointed at does, and after that a row while paused
+   * is Browsing. Without the exception, Play in a book opened for the first time
+   * and taken to chapter 5 would read the book's first line and pull the page
+   * back there, which is the failure #46 fixed.
+   */
+  const unreadRef = useRef(resume === null);
+  /**
    * A place taken from another device is pending and may name a section that
    * has not rendered. The place a book *opens* with is displayed by
    * `<Reader initialLocation>`; an adopted one arrives after that and nothing
@@ -476,7 +498,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const clock = useMemo<ReaderClock>(
     () => ({
       onClip(cue) {
-        bridgeRef.current?.clock.onClip(cue);
+        // The page goes to a cue only while the owner is listening. A cue while
+        // paused is a paused seek's Clip arriving, or a speed change re-cueing the
+        // Clip it re-scales, and the owner may be browsing by then (#52).
+        bridgeRef.current?.clock.onClip(cue, { reveal: playIntent.current });
         if (!playIntent.current) bridgeRef.current?.hold();
         atRef.current = cue.utterance;
         // Speech has moved on from the resumed sentence; the next place is new.
@@ -702,6 +727,22 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [sectionOf, abandonResume]);
 
   /**
+   * A tapped word or a skip: the owner pointing the reading at a sentence.
+   *
+   * `seekTo`, and the sentence is the Reading Position from now on, spoken or not
+   * (CONTEXT.md, #52): it is written, and a Contents row after it only browses. A
+   * Contents row's own seek, in a book with no place yet, and a stored place
+   * landing go through `seekTo` alone.
+   */
+  const pointAt = useCallback(
+    (utterance: number) => {
+      unreadRef.current = false;
+      seekTo(utterance);
+    },
+    [seekTo],
+  );
+
+  /**
    * One of the four skips.
    *
    * The arithmetic is `playback/navigation.ts`'s and none of it is repeated here —
@@ -718,16 +759,17 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       const list = loadedRef.current;
       if (list.length === 0) return;
       const from = pendingSeekRef.current ?? atRef.current ?? 0;
-      if (target === 'previous-sentence') seekTo(previousSentence(list, from));
-      else if (target === 'next-sentence') seekTo(nextSentence(list, from));
-      else if (target === 'previous-paragraph') seekTo(previousParagraph(list, from));
-      else seekTo(nextParagraph(list, from));
+      if (target === 'previous-sentence') pointAt(previousSentence(list, from));
+      else if (target === 'next-sentence') pointAt(nextSentence(list, from));
+      else if (target === 'previous-paragraph') pointAt(previousParagraph(list, from));
+      else pointAt(nextParagraph(list, from));
     },
-    [seekTo],
+    [pointAt],
   );
 
   /**
-   * A contents row, which is **two steps** (ADR 0020).
+   * A contents row: **Browsing** while paused (#52), and otherwise **two steps**
+   * (ADR 0020).
    *
    * The page moves first and always, because that is what a contents tap most
    * obviously means and it works for a row whose spine item has no text on it at
@@ -741,6 +783,27 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    */
   const goToSection = useCallback(
     (section: number) => {
+      /**
+       * Browsing (#52): paused, with the reading on a sentence that is its Reading
+       * Position, the row moves the page and nothing else. No seek, so the
+       * highlight stays and nothing is synthesized for a chapter the owner only
+       * looked at; no status, so the marked Contents row is still the reading's;
+       * no stored place given up; and nothing written. Measured on the owner's
+       * book on 2026-09-23 at 23:19 before this: a row to section 14 moved a
+       * reading paused on Utterance 176 to 423, that chapter's heading, and wrote
+       * the heading over the stored place.
+       *
+       * Not while playing, where the page follows the voice and could not stay on
+       * a chapter the voice is not in. Not in a book with no place yet, where the
+       * row chooses where to start. And not while a stored place is still waiting
+       * for its section, with no highlighted sentence to keep: there the row gives
+       * the place up, as it did before (#51).
+       */
+      if (!playIntent.current && atRef.current !== null && !unreadRef.current) {
+        pendingSectionRef.current = null;
+        bridgeRef.current?.browse(section);
+        return;
+      }
       bridgeRef.current?.goToSection(section);
       const already = firstUtteranceOfSection(loadedRef.current, blocksRef.current, section);
       if (already !== null) {
@@ -834,6 +897,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       resumeRef.current = place;
       resumeLostRef.current = null;
       adoptedPendingRef.current = true;
+      // A place the owner reached on another device is a Reading Position here too.
+      unreadRef.current = false;
       setStatus((was) => ({ ...was, resume: null, resumeNeedsAttention: false }));
       if (loadedRef.current.length > 0 && tryResume(loadedRef.current, blocksRef.current)) return true;
       // Pending, the way the place a book opens with is — and, unlike that one,
@@ -958,7 +1023,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // A tap on a word is a seek and nothing else. The bridge has already turned the
     // tapped place into an Utterance (`cursor.ts`'s `utteranceAt`) and calls this
     // only when there was one, so a tap on blank space arrives as no call at all.
-    onTap: seekTo,
+    onTap: pointAt,
     onProblem: handleProblem,
   });
 
@@ -1069,6 +1134,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // Play is the owner saying "read from here", and here is wherever the reading
     // is now. A bookmark that has not resolved by this point has lost its claim.
     abandonResume();
+    // And here is the Reading Position from now on, a Contents row's choice in a
+    // book with no place yet included (#52).
+    unreadRef.current = false;
     playIntent.current = true;
     setStatus((was) => ({ ...was, playing: true, buffering: true, note: null }));
     /**
@@ -1291,10 +1359,14 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        * *previous* Voice was cued with, which is the one thing here that would have
        * been a lie left on the page. `clear` is right only where there is no
        * cursor: a document nothing has pointed at has no sentence to leave lit.
+       *
+       * Repainted where the page is, not revealed: the reading has not moved, and
+       * a Voice chosen while paused may be chosen while the owner is looking at
+       * another chapter (#52).
        */
       const at = atRef.current;
       if (at === null) bridgeRef.current?.clear();
-      else bridgeRef.current?.show(at);
+      else bridgeRef.current?.show(at, { reveal: false });
       setStatus((was) => ({
         ...was,
         playing: false,
@@ -1347,6 +1419,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // Still on the sentence a resume landed on: the stored position is already
     // this place, with its true Stamp, and nothing is written (`resumedAtRef`).
     if (at === resumedAtRef.current) return null;
+    // A Contents row's choice in a book with no place yet is where the first Play
+    // starts, not a place to keep (#52).
+    if (unreadRef.current) return null;
     const utterance = loadedRef.current[at];
     const span = utterance?.spans[0];
     if (!span) return null;
@@ -1358,5 +1433,5 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     return readingPlaceAt(createLocator('epub', canonicalCfi(block.cfi)), block.text, span.start, span.end);
   }, []);
 
-  return { bridge, status, opened, play, pause, chooseVoice, seekTo, skip, goToSection, readingPosition, resumeAt };
+  return { bridge, status, opened, play, pause, chooseVoice, seekTo: pointAt, skip, goToSection, readingPosition, resumeAt };
 }

@@ -44,7 +44,7 @@ own scroll container. Paginated layout, which is the library's default and what
 the highlighter was first built against, is rejected: a page turn replaces the
 whole screen and throws the eye back to the top, every minute or two, for hours.
 
-Five properties of the centring, and each is a rule rather than an accident.
+Six properties of the centring, and each is a rule rather than an accident.
 
 - **It is centred, not merely on screen.** The middle of the Utterance goes to
   the middle of the viewport, measured from the `Range`s that were just painted
@@ -89,6 +89,16 @@ Five properties of the centring, and each is a rule rather than an accident.
   through `settle()`, which then keeps the sentence centred while epub.js lays the
   neighbouring sections out. Any other section that arrives, such as a view the
   manager rebuilt, is centred at once, as before.
+- **Nothing centres while the owner is browsing** (#52, ADR 0043). A Contents
+  row while paused sends a `browse` message, then displays its section, and a
+  finger dragging the page sets the same `browsing` flag. Until a highlight is
+  revealed — Play's cue, a tapped sentence, a skip, a place from another
+  device — `centreOnce()` and `settle()` do nothing, so neither the reading's
+  section arriving nor an Appearance reflow takes the page back. It has to be
+  the WebView's flag: displaying the section after next re-rendered the
+  reading's own section as a neighbour, and `attach()` centred the paused
+  sentence as it arrived (−7,424 px, measured 2026-09-23 23:30). A cue while
+  paused, and the repaint after an engine rebuild, are sent unrevealed.
 
 **Every section epub.js displays is adopted as it is displayed** (ADR 0036). The
 program's `sweep` — the stylesheet, the Blocks, the tap listener — is registered

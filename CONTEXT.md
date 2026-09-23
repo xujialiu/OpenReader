@@ -120,27 +120,33 @@ documents the owner does not have, and removing an entry leaves the file alone.
 _Avoid_: shelf, catalogue, collection, bookshelf, recents
 
 **Reading Position**:
-Where speech stopped in a document. One per document, overwritten as the
-owner reads, and not something the owner creates or sees in a list. It is a
-locator and a text anchor together.
+Where the reading is in a document: the sentence speech stopped on, or the one
+the owner has since pointed it at. One per document, overwritten as the owner
+reads, and not something the owner creates or sees in a list. It is a locator
+and a text anchor together.
 _Avoid_: bookmark, progress, location, savedPosition
+
+**Browsing**:
+Moving the page to another part of a document while the reading position stays
+where it is.
+_Avoid_: previewing, peeking, jumping, navigating
 
 **Locator**:
 Where a reading position points, in the document's own format: for an EPUB,
-the paragraph the reading stopped in. A paragraph, never a sentence.
+the paragraph its sentence is in. A paragraph, never a sentence.
 _Avoid_: CFI (as a type name), path, selector, pointer
 
 **Text Anchor**:
-The quotation half of a reading position: the sentence speech stopped on,
-with a little of the text either side of it, by which the place is found
-again and a locator is checked.
+The quotation half of a reading position: its sentence, with a little of the
+text either side of it, by which the place is found again and a locator is
+checked.
 _Avoid_: quote, snippet, excerpt, context
 
 **Stamp**:
 The wall-clock time something was last written, together with the device
 name of whoever wrote it, used to decide which of two copies wins. A library
 entry carries one that moves whenever the owner touches the document; a
-reading position carries its own, which moves only when speech stops
+reading position carries its own, which moves only when the reading moves
 somewhere new.
 _Avoid_: timestamp, ts, version, clock
 

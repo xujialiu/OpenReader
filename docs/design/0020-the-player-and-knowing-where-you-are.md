@@ -222,6 +222,11 @@ of things that will work.
 
 ## Tapping a chapter you have not been to takes a moment
 
+_Revised in [decision 0043](0043-looking-at-another-chapter-keeps-your-place.md):
+while the reading is paused, choosing a chapter only takes the page there. Your
+place stays, and play carries on from it. What follows is what happens while
+playing, and in a book you have not read yet._
+
 The page goes there straight away. The reading follows a second or two later, once
 the app has laid that chapter out and can tell where its first sentence is — there
 is nothing to start reading from until then.

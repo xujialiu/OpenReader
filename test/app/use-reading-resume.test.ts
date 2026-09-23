@@ -21,13 +21,17 @@ import { useReading, type Reading } from '../../src/app/use-reading';
  *
  * The same harness carries the reading across a renumbering (#46), and for that
  * it also records the engine a press of Play builds: where it is loaded and
- * sought, and whether anything pauses it.
+ * sought, and whether anything pauses it. And it keeps a Contents row that is
+ * only browsing apart from one that moves the reading (#52), so it records what
+ * the page was asked to browse to and whether each highlight was revealed.
  */
 
 const bridge = vi.hoisted(() => ({
   goTo: vi.fn<(cfi: string) => void>(),
   goToSection: vi.fn<(index: number) => void>(),
-  show: vi.fn<(utterance: number) => void>(),
+  browse: vi.fn<(index: number) => void>(),
+  show: vi.fn<(utterance: number, options?: { reveal?: boolean }) => void>(),
+  onClip: vi.fn<(cue: { utterance: number }, options?: { reveal?: boolean }) => void>(),
   clear: vi.fn<() => void>(),
   options: null as null | { onBlocks?(blocks: readonly ReportedBlock[], section: { index: number; href: string; spine: number }): void },
 }));
@@ -76,8 +80,9 @@ vi.mock('../../src/renderer', async () => {
       return {
         goTo: bridge.goTo,
         goToSection: bridge.goToSection,
+        browse: bridge.browse,
         show: bridge.show,
-        clock: { onClip() {}, onPosition() {} },
+        clock: { onClip: bridge.onClip, onPosition() {} },
         setUtterances() {},
         setInset() {},
         setAppearance() {},
@@ -124,10 +129,13 @@ const CHAPTER_THREE = blocks(2, ['Chapter three, at last.', 'The sentence the de
 const desktopPlace: ReadingPlace = readingPlaceAt(createLocator('epub', 'epubcfi(/6/6!/4/4)'), CHAPTER_THREE[1].text, 0, 'The sentence the desktop stopped on.'.length);
 
 function mount(options: { settings?: AppSettings; resume?: ReadingPlace | null; spine?: number } = {}) {
-  const { settings = DEFAULT_SETTINGS, resume = null, spine = SPINE } = options;
+  const { resume = null, spine = SPINE } = options;
+  let settings = options.settings ?? DEFAULT_SETTINGS;
   bridge.goTo.mockClear();
   bridge.goToSection.mockClear();
+  bridge.browse.mockClear();
   bridge.show.mockClear();
+  bridge.onClip.mockClear();
   bridge.clear.mockClear();
   engines.built.length = 0;
   let reading: Reading | undefined;
@@ -139,6 +147,11 @@ function mount(options: { settings?: AppSettings; resume?: ReadingPlace | null; 
   return {
     async up() { await act(async () => { tree = create(createElement(Probe)); }); },
     async down() { await act(async () => { tree.unmount(); }); },
+    /** The owner's settings change under the open book, as choosing a Voice while paused changes them. */
+    async settings(next: AppSettings) {
+      settings = next;
+      await act(async () => { tree.update(createElement(Probe)); });
+    },
     async report(reported: readonly ReportedBlock[], section: number) {
       await act(async () => { bridge.options!.onBlocks!(reported, { index: section, href: `s${section}.xhtml`, spine }); });
     },
@@ -519,6 +532,216 @@ describe('a section reported above the reading (#46)', () => {
     expect(engine.loads.at(-1)).toEqual({ length: 6, from: 0, quiet: true });
     expect(m.reading.status.utterance).toBeNull();
     expect(m.reading.status.note ?? '').toMatch(RENUMBERED);
+    await m.down();
+  });
+});
+
+/**
+ * A Contents row while paused is Browsing (#52, CONTEXT.md): the page goes to the
+ * chapter, and the reading, its highlight and the stored place stay on the
+ * sentence the reading is on. Measured on the owner's book on 2026-09-23 at 23:19,
+ * before this: a book reopened on Utterance 176 in section 10, paused, and a
+ * Contents row to section 14 moved the reading to 423, that chapter's heading,
+ * highlighted it and wrote it over the stored place.
+ *
+ * Two cases keep the old two steps, because there is no sentence to keep: while
+ * playing, where the page follows the voice and could not stay on a chapter the
+ * voice is not in; and in a book with no Reading Position yet, where the row
+ * chooses where the first Play starts.
+ */
+describe('a Contents row while paused only moves the page (#52)', () => {
+  const ONE = blocks(1, ['Chapter One.', 'The ferry left before dawn. Nobody waved.']);
+  const TWO = blocks(2, ['Chapter Two.', 'Snow had covered the pass. The mules refused to climb.']);
+  const THREE = blocks(3, ['Chapter Three.', 'The archive burned for a week. Its keeper wept.']);
+  const ALL = [...ONE, ...TWO, ...THREE];
+  /** Where a sentence is once all three chapters have reported. */
+  const at = (text: string) => segmentDocument(ALL, 'en').findIndex((utterance) => utterance.text === text);
+  const FERRY = 'The ferry left before dawn.';
+  /** A Provider that is enabled and needs nothing, so Play builds an engine. */
+  const READY: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
+  const SPINE_OF_FIVE = 5;
+  const cue = (utterance: number) => ({ utterance, words: null, duration: 1, rate: 1 });
+
+  it('moves only the page when paused on a sentence the owner pointed at', async () => {
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report([...ONE, ...TWO], 2);
+    // A tapped sentence: the owner has pointed the reading, so it is a place.
+    await m.press((reading) => reading.seekTo(at(FERRY)));
+    const place = m.reading.readingPosition();
+    expect(place).not.toBeNull();
+    bridge.show.mockClear();
+    bridge.goToSection.mockClear();
+
+    await m.press((reading) => reading.goToSection(3));
+    expect(bridge.browse).toHaveBeenCalledWith(3);
+    expect(bridge.goToSection).not.toHaveBeenCalled();
+    expect(bridge.show).not.toHaveBeenCalled();
+    expect(m.reading.status.utterance).toBe(at(FERRY));
+    expect(m.reading.status.section).toBe(1);
+
+    // The chapter arriving is the page arriving, not the reading.
+    await m.report(ALL, 3);
+    expect(bridge.show).not.toHaveBeenCalled();
+    expect(m.reading.status.utterance).toBe(at(FERRY));
+    expect(m.reading.readingPosition()).toEqual(place);
+
+    // And Play reads from where the reading was paused.
+    await m.press((reading) => reading.play());
+    expect(engines.built[0].loads).toEqual([{ length: 9, from: at(FERRY), quiet: false }]);
+    await m.down();
+  });
+
+  it('seeks no engine, so nothing is synthesized for a chapter the owner only looked at', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+      await m.up();
+      await m.report(ALL, 3);
+      await m.press((reading) => reading.play());
+      const engine = engines.built[0];
+      await m.press(() => engine.deps.clock.onClip(cue(at(FERRY))));
+      await m.press((reading) => reading.pause());
+
+      await m.press((reading) => reading.goToSection(3));
+      await act(async () => { vi.advanceTimersByTime(600); });
+      expect(bridge.browse).toHaveBeenCalledWith(3);
+      expect(engine.seeks).toEqual([]);
+      expect(m.reading.status.utterance).toBe(at(FERRY));
+      await m.down();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a resumed place, and writes nothing over it', async () => {
+    const stored = readingPlaceAt(createLocator('epub', 'epubcfi(/6/4!/4/4)'), ONE[1].text, 0, FERRY.length);
+    const m = mount({ settings: READY, resume: stored, spine: SPINE_OF_FIVE });
+    await m.up();
+    // The place waits for its own section, spine item 1, to report (#51).
+    await m.report(ONE, 1);
+    await m.report([...ONE, ...TWO], 2);
+    expect(m.reading.status.resume).toBe('Resumed at the sentence the reading stopped on.');
+    expect(m.reading.status.utterance).toBe(at(FERRY));
+    bridge.show.mockClear();
+
+    await m.press((reading) => reading.goToSection(3));
+    await m.report(ALL, 3);
+    expect(bridge.browse).toHaveBeenCalledWith(3);
+    expect(bridge.show).not.toHaveBeenCalled();
+    expect(m.reading.status.utterance).toBe(at(FERRY));
+    expect(m.reading.status.resume).toBe('Resumed at the sentence the reading stopped on.');
+    // Still the resumed sentence: the stored place already is it.
+    expect(m.reading.readingPosition()).toBeNull();
+    await m.down();
+  });
+
+  it('still takes the reading to the chapter while playing', async () => {
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report(ALL, 3);
+    await m.press((reading) => reading.play());
+    await m.press(() => engines.built[0].deps.clock.onClip(cue(at(FERRY))));
+    bridge.show.mockClear();
+
+    await m.press((reading) => reading.goToSection(2));
+    expect(bridge.browse).not.toHaveBeenCalled();
+    expect(bridge.goToSection).toHaveBeenCalledWith(2);
+    expect(bridge.show).toHaveBeenLastCalledWith(at('Chapter Two.'));
+    expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
+    await m.down();
+  });
+
+  it('in a book with no place yet, still chooses where the first Play starts, the latest choice winning, and writes none', async () => {
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report(ALL, 3);
+
+    await m.press((reading) => reading.goToSection(3));
+    expect(bridge.browse).not.toHaveBeenCalled();
+    expect(m.reading.status.utterance).toBe(at('Chapter Three.'));
+    expect(m.reading.readingPosition()).toBeNull();
+
+    await m.press((reading) => reading.goToSection(2));
+    expect(bridge.browse).not.toHaveBeenCalled();
+    expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
+    expect(m.reading.readingPosition()).toBeNull();
+
+    // Play reads from the latest choice, and from then on it is the book's place …
+    await m.press((reading) => reading.play());
+    expect(engines.built[0].loads).toEqual([{ length: 9, from: at('Chapter Two.'), quiet: false }]);
+    expect(m.reading.readingPosition()).not.toBeNull();
+    // … so a row after a pause only browses.
+    await m.press((reading) => reading.pause());
+    await m.press((reading) => reading.goToSection(1));
+    expect(bridge.browse).toHaveBeenCalledWith(1);
+    expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
+    await m.down();
+  });
+
+  it('in a book with no place yet, a skip points the reading like a tap does, and the next row browses', async () => {
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report(ALL, 3);
+    await m.press((reading) => reading.skip('next-sentence'));
+    expect(m.reading.status.utterance).toBe(1);
+    expect(m.reading.readingPosition()).not.toBeNull();
+
+    await m.press((reading) => reading.goToSection(3));
+    expect(bridge.browse).toHaveBeenCalledWith(3);
+    expect(m.reading.status.utterance).toBe(1);
+    await m.down();
+  });
+
+  it('takes the reading to the chapter when a stored place has not been found yet, having no sentence to keep', async () => {
+    // The place names spine item 4, which has not reported: nothing is highlighted
+    // yet, so the row does what it did before and the place is given up on (#51).
+    const stored = readingPlaceAt(createLocator('epub', 'epubcfi(/6/10!/4/4)'), 'A sentence in chapter four.', 0, 27);
+    const m = mount({ settings: READY, resume: stored, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report([...ONE, ...TWO], 2);
+    expect(m.reading.status.utterance).toBeNull();
+
+    await m.press((reading) => reading.goToSection(2));
+    expect(bridge.browse).not.toHaveBeenCalled();
+    expect(bridge.goToSection).toHaveBeenCalledWith(2);
+    expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
+    expect(m.reading.status.resume).toBe(
+      'The place this book was left at had not rendered yet when the reading was asked to start, so it starts here instead.',
+    );
+    await m.down();
+  });
+
+  it('brings the page to a cue only while playing: a cue while paused repaints where the page is', async () => {
+    // A paused seek's Clip is cued when it arrives, and a speed change re-cues the
+    // Clip it re-scales (`engine.ts`); either can land while the owner is browsing.
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report(ALL, 3);
+    await m.press((reading) => reading.play());
+    const engine = engines.built[0];
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY))));
+    expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) }), { reveal: true });
+
+    await m.press((reading) => reading.pause());
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY))));
+    expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) }), { reveal: false });
+    await m.down();
+  });
+
+  it('repaints the sentence without moving the page when a new Voice replaces the engine while paused', async () => {
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report(ALL, 3);
+    await m.press((reading) => reading.play());
+    await m.press(() => engines.built[0].deps.clock.onClip(cue(at(FERRY))));
+    await m.press((reading) => reading.pause());
+    bridge.show.mockClear();
+
+    await m.settings({ ...READY, voice: 'bf_emma' });
+    expect(bridge.show).toHaveBeenCalledTimes(1);
+    expect(bridge.show).toHaveBeenLastCalledWith(at(FERRY), { reveal: false });
+    expect(m.reading.status.utterance).toBe(at(FERRY));
     await m.down();
   });
 });

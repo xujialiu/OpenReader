@@ -16,10 +16,12 @@
 
 export {
   useReaderBridge,
+  type BridgeClock,
   type ReaderBridge,
   type ReaderBridgeOptions,
   type RenderedSection,
   type ReportedDocument,
+  type RevealOptions,
 } from './reader-bridge';
 
 export {
@@ -45,6 +47,7 @@ export {
   type AppearanceMessage,
   type BlockRange,
   type BlocksMessage,
+  type BrowseMessage,
   type CorrectMessage,
   type DocumentMessage,
   type HighlightMessage,

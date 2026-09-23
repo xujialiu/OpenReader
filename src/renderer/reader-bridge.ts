@@ -186,6 +186,31 @@ export interface ReaderBridgeOptions {
   scheme?: ReadingScheme;
 }
 
+/** Whether a highlight brings the page to itself. Absent means it does, which is what a highlight has always done. */
+export interface RevealOptions {
+  /**
+   * False to repaint the sentence wherever the page is, and leave the page
+   * there: the reading has not moved, and the owner may be looking at another
+   * part of the document (Browsing, #52).
+   */
+  reveal?: boolean;
+}
+
+/**
+ * The clock, with one thing the bridge's own `onClip` takes that the contract
+ * does not: whether the cue brings the page to its sentence.
+ *
+ * Still a `ReaderClock` — the second argument is optional, so this is assignable
+ * wherever the two-method contract is expected, and the engine never passes it.
+ * The screen does, because it knows what the engine does not: whether the owner
+ * is listening. A cue while paused is a paused seek's Clip arriving, or a speed
+ * change re-cueing the Clip it re-scales (`engine.ts`); either can come while
+ * the owner is browsing, and neither is a reason to take the page away.
+ */
+export interface BridgeClock extends ReaderClock {
+  onClip(cue: ClipCue, options?: RevealOptions): void;
+}
+
 export interface ReaderBridge {
   /**
    * What `createPlaybackEngine` is handed as its `clock`.
@@ -194,7 +219,7 @@ export interface ReaderBridge {
    * third. The lock screen (ADR 0016) implements the same interface over the same
    * clock, which is why the elapsed time and the highlight cannot disagree.
    */
-  clock: ReaderClock;
+  clock: BridgeClock;
   /**
    * The Utterances the Blocks were segmented into, and the Blocks they were
    * segmented from.
@@ -217,8 +242,11 @@ export interface ReaderBridge {
    * The WebView's own loop starts only when there are words, so nothing spins and
    * nothing is estimated (ADR 0005): the sentence is lit whole until its Clip
    * arrives and replaces this with the real timings.
+   *
+   * `reveal: false` paints it without moving the page, for a repaint of the
+   * sentence the reading is already on (#52).
    */
-  show(utterance: number): void;
+  show(utterance: number, options?: RevealOptions): void;
   /**
    * How much of the bottom of the page the player is covering, in points.
    *
@@ -282,6 +310,17 @@ export interface ReaderBridge {
    * it.
    */
   goToSection(index: number): void;
+  /**
+   * Move the page to a spine item, and leave the reading where it is:
+   * **Browsing** (CONTEXT.md, #52), which is what a Contents row is while the
+   * reading is paused.
+   *
+   * `goToSection`'s display, preceded by a message that stops the page following
+   * the reading until a highlight is next revealed. Without it the reading's own
+   * section, rendered again as the neighbour of the one displayed, is centred as
+   * it arrives and takes the page back (`BrowseMessage`).
+   */
+  browse(index: number): void;
   /**
    * Spread onto `<Reader>`. `injectedJavascript` installs the highlighter once,
    * from the library's own `onReady`; `onWebViewMessage` receives what the
@@ -393,12 +432,12 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [injectJavascript],
   );
 
-  const clock = useMemo<ReaderClock>(
+  const clock = useMemo<BridgeClock>(
     () => ({
       /** A Clip started: the whole Word Timing array, once, in one message (ADR 0005). */
-      onClip(cue: ClipCue) {
+      onClip(cue: ClipCue, options?: RevealOptions) {
         const message = speakMessage(cue, utterances.current, ids.current, {
-          reveal: latest.current.follow !== false,
+          reveal: latest.current.follow !== false && options?.reveal !== false,
         });
         cued.current = message;
         // Null means the reading and the document are out of step — an Utterance
@@ -421,7 +460,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   }, []);
 
   const show = useCallback(
-    (utterance: number) => {
+    (utterance: number, options?: RevealOptions) => {
       const message = speakMessage(
         // No words and no duration: nothing is known about the Clip yet, and this
         // is the Highlight Level the absence of Word Timings already means (ADR
@@ -429,7 +468,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         { utterance, words: null, duration: 0, rate: 1 },
         utterances.current,
         ids.current,
-        { reveal: latest.current.follow !== false },
+        { reveal: latest.current.follow !== false && options?.reveal !== false },
       );
       if (!message) return;
       // `cued` so that a correction still arriving for the Utterance that *was*
@@ -491,6 +530,16 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       goToLocation(String(index));
     },
     [goToLocation],
+  );
+
+  const browse = useCallback(
+    (index: number) => {
+      // First, so the sections the display renders arrive to a page that has
+      // stopped following the reading: both are injected, and run in this order.
+      send({ kind: 'browse' });
+      goToLocation(String(index));
+    },
+    [send, goToLocation],
   );
 
   const onWebViewMessage = useCallback(
@@ -590,7 +639,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, readerProps }),
-    [clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, readerProps],
+    () => ({ clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
+    [clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
   );
 }

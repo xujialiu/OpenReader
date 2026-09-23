@@ -265,10 +265,11 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
     // `clear()` here is the visible half of the same defect: the page loses the
     // highlight while the player still says where the reading is. `show` paints the
     // Utterance whole, which is also what replaces the words the previous Voice was
-    // cued with.
+    // cued with. Where the page is, without revealing it: the reading has not
+    // moved, and a Voice chosen while paused may be chosen while browsing (#52).
     const cleanup = within(reading, 'const disposeEngine = useCallback(', '}, []);');
     pin(cleanup, 'if (at === null) bridgeRef.current?.clear();', 'use-reading.ts, the identity cleanup');
-    pin(cleanup, 'else bridgeRef.current?.show(at);', 'use-reading.ts, the identity cleanup');
+    pin(cleanup, 'else bridgeRef.current?.show(at, { reveal: false });', 'use-reading.ts, the identity cleanup');
   });
 
   it('marks the furthest section reported, not the last one to report', () => {

@@ -553,6 +553,24 @@ ${constants}
   /* The lowest spine item on the page, from the last sweep. The only thing the
      resize recovery has to aim at; see the resize handler. */
   var onScreen = null;
+  /* The owner has moved the page away from the reading, and it stays where they
+     put it: Browsing (CONTEXT.md, #52). Set by a Contents row while the reading
+     is paused (the 'browse' message) and by a finger dragging the page; cleared
+     only by a highlight that is revealed, which is Play's cue, a tapped sentence,
+     a skip or a place from another device.
+
+     While it is set nothing brings the reading back by itself: not the reading's
+     own section arriving, and not an Appearance change. Measured on 2026-09-23 at
+     23:30 before it existed: a display of the section after the reading's
+     re-rendered the reading's section as its neighbour, attach() centred the
+     paused sentence as it arrived (a scroll of -7,424 px, from centreOnce), and
+     epub.js then trimmed away the section the owner had asked for. */
+  var browsing = false;
+  /* The touch that may be dragging the page, and where it first moved. */
+  var touchId = null;
+  var touchY = null;
+  /* Further than a tap's jitter: a finger that moves this far is not tapping. */
+  var DRAG_PX = 10;
 
   /* ---- the walk: a rendered section as Blocks ---- */
 
@@ -859,6 +877,31 @@ ${constants}
     post({ type: TAP, block: place.block, offset: place.offset });
   }
 
+  /* A finger dragging the page is Browsing too (#52): the page goes where the
+     owner takes it, and the reading stays. Passive, so the scroll is the
+     platform's own and nothing here can slow it down.
+
+     Only touchmove, and no touchstart or touchend: the long press on text is the
+     platform's, and this program listens for nothing near it (see tapped). So a
+     touch is recognised by its identifier, which is new for every finger that
+     comes down, and measured from where it first moved. A tap cannot set it by
+     accident: a finger that moves further than a tap's jitter is not a click,
+     and a tap that does reach tapped() moves the reading, whose highlight is
+     revealed, which clears it again. Heard in each section document, where
+     almost every touch lands, and in the scroll container for the margins
+     between them; a touch stays in the document it came down in, so its
+     coordinates never change hands. */
+  function dragged(event) {
+    var touch = event.touches && event.touches.length ? event.touches[0] : null;
+    if (!touch) return;
+    if (touch.identifier !== touchId) {
+      touchId = touch.identifier;
+      touchY = touch.clientY;
+      return;
+    }
+    if (Math.abs(touch.clientY - touchY) > DRAG_PX) browsing = true;
+  }
+
   /* ---- what a document holds, resolved once per document ---- */
 
   /* Walk a live document, record what survives of each Block and tell the React
@@ -872,6 +915,8 @@ ${constants}
        act on, and this function is already the one place that runs once per
        document. A document epub.js destroys takes its listener with it. */
     contents.document.addEventListener('click', tapped, false);
+    /* And a finger dragging this document's text is Browsing: see dragged. */
+    contents.document.addEventListener('touchmove', dragged, { passive: true });
 
     var index = contents.sectionIndex;
     var section = null;
@@ -1155,7 +1200,7 @@ ${constants}
      straight after its cue, while the section was on its way and the highlight
      was, a moment later, drawn. */
   function awaited(ranges) {
-    return !!(state && state.follow && offPage(ranges));
+    return !!(state && (state.follow || browsing) && offPage(ranges));
   }
 
   /* Returns the built ranges rather than a boolean, so that the caller which has
@@ -1326,7 +1371,7 @@ ${constants}
      WeakSet, so a document epub.js destroys is not held alive by having been
      centred in — the thing the Block records exist not to hold. */
   function centreOnce(built) {
-    if (!state || !state.follow) return;
+    if (!state || !state.follow || browsing) return;
     var doc = built.window.document;
     if (state.centred.has(doc)) return;
     if (centre(built)) state.centred.add(doc);
@@ -1362,7 +1407,7 @@ ${constants}
      the middle, and scrolling a page the owner is reading with their eyes is the
      thing ADR 0020's floating player exists not to do. */
   function settle(left, was, still) {
-    if (!state || !state.follow) return;
+    if (!state || !state.follow || browsing) return;
     var built = build(state.utteranceRanges);
     var box = built ? boxOf(built) : null;
     if (!built || !box) {
@@ -1650,6 +1695,10 @@ ${constants}
      reached by a fast fling, displayed after the last 'relocated', and left
      white on a dark page, at the book's own size, deaf to taps. */
   rendition.hooks.content.register(sweep);
+  /* A drag in the margins between the section documents is heard here; see
+     dragged. The container is built with the manager and lives as long as it. */
+  var stage = scroller();
+  if (stage) stage.addEventListener('touchmove', dragged, { passive: true });
   /* And again whenever the reading position moves, which is what keeps
      \`onScreen\` current after the manager trims a view — a trim displays
      nothing, so the hook does not hear it. Idempotent per document: one lookup
@@ -1758,8 +1807,21 @@ ${constants}
       if (state) state.held = true;
       return;
     }
+    if (message.kind === 'browse') {
+      /* A Contents row while the reading is paused (#52). The display that moves
+         the page comes right after this, so the sections it renders, the
+         reading's own among them, arrive to a page that is not following. */
+      browsing = true;
+      return;
+    }
     if (message.kind === 'speak') {
       stop();
+      /* Revealed is the voice, or the owner pointing at a sentence, asking for
+         the reading: the page goes to it and follows it again. Not revealed is a
+         repaint where the page is (a cue while paused, a new Voice repainting the
+         sentence), which keeps whether the page was following it. */
+      if (message.reveal) browsing = false;
+      var following = message.reveal || !!(state && state.follow);
       state = {
         utterance: message.utterance,
         utteranceRanges: message.utteranceRanges,
@@ -1769,7 +1831,7 @@ ${constants}
         next: 0,
         held: false,
         reported: false,
-        follow: message.reveal,
+        follow: following,
         /* The documents this Utterance has already been centred in; see centreOnce. */
         centred: new WeakSet(),
         /* The section follow() asked epub.js to display for this Utterance, until
