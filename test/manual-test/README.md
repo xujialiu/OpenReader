@@ -207,6 +207,14 @@ fix (AGENTS.md).
 - **A named simulator can disappear during a manual run.** On 2026-09-22 an owner cleanup deleted the recorded iPhone 17 while an Azure XCTest was waiting, and the next `xcodebuild` answered `Unable to find a device matching` that destination. Re-run `xcrun simctl list devices available`, choose a remaining matching runtime, boot it, reinstall the current Debug app, set its simulated volume to zero again, and treat the interrupted artifacts as incomplete.
 - **A cached Debug app can lack a native module required by the current bundle.** On 2026-09-22 installing an old cached app over the replacement iPhone 17e and loading the current Metro bundle showed `[runtime not ready]: Cannot find native module 'ExpoUI'`. Build the Debug app from the current checkout with the simulator guide's `xcodebuild` command, install that product, then repoint its Metro port before relaunching.
 - **Whether a `.app` has a module is not answered by its `Frameworks` or by its main binary.** Looking for `@expo/ui` on 2026-09-23 (#42), `ls OpenReader.app/Frameworks` listed the five Expo frameworks and no `ExpoUI`, and `strings -a OpenReader.app/OpenReader | grep -ci expoui` answered `0` — for a build that has it. Its symbols are in `OpenReader.debug.dylib` beside the binary, 425 of them. Ask that file, or `ios/Podfile.lock`, or compare the build's own time (`stat -f %Sm`) against the commit that added the dependency; the two caches this looked at, `/tmp/openreader-simulator-build` and the newest `DerivedData` product, were both from before 538fa10 13:52 and genuinely too old to reuse.
+- **A newly created device put its own volume back to 60 a couple of minutes
+  after its first boot.** Measured 2026-09-23 on a fresh iPhone 17 (iOS 27.0):
+  `silence.sh set` right after `bootstatus -b` read back 0, and a few minutes
+  later `check` answered 60, with the file's modification time 12:47, about two
+  minutes after the set and before anything had played. The first boot's own
+  setup rewrote it. Set it again once the new device has settled — a `set`
+  followed 20 s later by a `check` that still reads 0 — then relaunch the app,
+  and keep the `check` in front of every play.
 - **`xcrun simctl get_app_container` refuses a shut-down device.** Boot it first.
 - **Another simulator needs the same Debug app.** `xcrun simctl install DEST "$(xcrun simctl get_app_container SOURCE top.xujialiu.openreader app)"` copies it without a build, to any device family the app supports, iPad included.
 - **An iPad behaves differently from an iPhone.** An iPad-sized WKWebView defaults to the desktop content mode, where WebKit ignores `text-size-adjust` (ADR 0030). The reader asks for the mobile mode through `patches/`. Anything that depends on WebKit is worth checking on an iPad simulator too.
@@ -501,6 +509,23 @@ fix (AGENTS.md).
   restoring the final simulator screen. Use the documented
   `-only-testing:testReopenDownloadDrawer` form, then confirm the test log shows
   the method running and not only `Executed 0 tests`.
+
+- **Calling `xcodebuild` directly, not through one of the wrapper scripts,
+  needs the full `TARGET/CLASS/METHOD` path.** The wrapper scripts' own bare
+  method name (above) works only because each one prepends `LockScreenProbe/`
+  itself — `project.rb` always names the generated target `LockScreenProbe`,
+  whatever probe source file is added to it. Passing
+  `-only-testing:PausedTransportProbe/testPlayAfterIdlePause` straight to
+  `xcodebuild` (no wrapper script) failed at once (exit 70): `Tests in the
+  target "PausedTransportProbe" can't be run because "PausedTransportProbe"
+  isn't a member of the specified test plan or scheme.` Measured 2026-09-23.
+  Fix: `-only-testing:LockScreenProbe/PausedTransportProbe/testPlayAfterIdlePause`.
+- **`-resultBundlePath` refuses a path a previous attempt already created,**
+  including a failed one — exit 64, `Existing file at -resultBundlePath …` —
+  the same "use a new artifact directory" rule the wrapper scripts enforce for
+  their own output directories, but it applies to a bare `xcodebuild` call
+  reusing one fixed path across retries too. `rm -rf` the stale
+  `.xcresult` (or pick a new path) before retrying.
 
 - **A Settings-stack screen can be more than one level away, even when it
   looks like one.** Reaching Fish Audio's provider form is Library → Settings
@@ -868,6 +893,44 @@ fix (AGENTS.md).
 - **`app.staticTexts["FOLDER"]` matches twice.** React Native nests a duplicate
   static text inside every `Text`, so an exact-identifier tap raises `Multiple
   matching elements found`. Use `.matching(identifier:).firstMatch`.
+
+### Evaluating in the app through `cdp.cjs`
+
+- **A loop's closures all see its last value.** What `--eval` sends is compiled
+  by Hermes as written, with no Babel pass, and a `for (const x of list)` loop
+  does not give each turn its own `x`. Measured 2026-09-23: three wrappers made
+  in such a loop over `['a', 'b', 'c']` all called the third method, and three
+  arrow functions over `[1, 2, 3]` all returned 3. Four counting wrappers put on
+  the offline repository that way all ran `readClip`, the runtime stored its
+  answer as a document's inventory, and `hasSavedVoice` said false for a book
+  with 72 saved clips until the app was restarted. Loop with `list.forEach(x =>
+  …)`, which gives each item a function of its own, and restart the app after
+  any probe that replaced a method, before measuring anything else.
+- **Each of the harness's `fetch` commands replaces whatever `fetch` was there.**
+  `breakFetch`, `watchFetch` and `unbreakFetch` in `walkthrough-harness.ts` each
+  set `globalThis.fetch` to a new wrapper around the `fetch` captured when the
+  module loaded, never around the one installed now. So `breakfetch` after
+  `watchfetch` drops the request log, and `unbreakfetch` leaves no wrapper at
+  all: neither `watchfetch`'s nor one a probe installed through `--eval`.
+  Measured 2026-09-23, twice, verifying #45: after a `breakfetch`/Play/
+  `unbreakfetch` cycle, the retried Play's requests produced no `HX fetch …`
+  line, and a probe's own request log went empty. Send `watchfetch`, or
+  reinstall the probe's wrapper, straight after `unbreakfetch`.
+- **A request `breakfetch` refuses still counts as contact for #26's warm-up.**
+  `warm-connections.ts` counts any settled request as having reached its
+  origin, a refusal included, because a real refusal did go over the
+  connection. `breakfetch`'s refusals never touch the network, so after
+  `unbreakfetch` the next request within 30 s is sent without a warm-up, over
+  a connection that may have idled for minutes. On 2026-09-23 that retry
+  failed for real, with the production wording `Error: fetch failed: … The
+  network connection was lost …` rather than the harness's `TypeError: …`, and
+  a second Play a minute later, preceded by a warm-up GET, went through. Wait
+  30 s after `unbreakfetch`, or expect that one real failure.
+- **zsh's `echo` turns a `\n` inside a probe into a real newline.** A probe
+  written with `echo '(() => … join("\n") …)()' > probe.js` held a line break
+  inside its string, and `cdp.cjs --eval probe.js` answered `Compiling JS
+  failed: 1:86:non-terminated string`. Write probes with a quoted heredoc
+  (`cat <<'EOF' … EOF`) or in an editor.
 
 ## Lock-screen screenshot and button inspection
 
@@ -2129,3 +2192,53 @@ is measured with the two-`cdp.cjs`-call technique above; a successful,
 audible play with a moving highlight is what stands for the `ArrayBuffer`
 fact, since `azure-ws.ts`'s `parseBinaryFrame` throws on anything else and no
 audio would have played at all.
+
+## Reading across the end of a downloaded chapter, and a place kept across a renumbering (#26, #45, #46)
+
+`boundary-fixture.ts` writes `Boundary Fixture.epub`: two chapters in two spine
+files, a heading and four sentences each, all different, so Utterances 0–4 are
+chapter one and 5–9 chapter two.
+
+```sh
+npx tsx test/manual-test/boundary-fixture.ts OUTPUT_DIRECTORY
+```
+
+Load it like any fixture (**Real books** above). Download chapter one alone,
+without the sheet, through the app's own runtime; it synthesizes that chapter's
+five sentences for real, and nothing plays:
+
+```sh
+node test/manual-test/download-chapter.cjs DOCUMENT_ID "Boundary Fixture" fish VOICE_ID --list
+node test/manual-test/download-chapter.cjs DOCUMENT_ID "Boundary Fixture" fish VOICE_ID nav.0
+```
+
+`VOICE_ID` is the app's own id, locale first (`en/<model id>` for Fish): a bare
+model id is refused as an unknown voice. The same script downloads a chapter of a
+real book, which is how the #46 runs below had Chapter 2003 of `Cultivation
+Online 2001-2044` saved and Chapter 2004 not.
+
+**#26 at the boundary.** The failure needs a connection that has idled for more
+than about 60 s but that iOS has not yet closed: measured 2026-09-23, it failed
+107 s and about 70 s after the last request to `api.fish.audio` and not about
+3 min after (`notes/NOTES_2026-09-23.md`). So restart the app (its launch asks
+Fish for voices, which is the last request), wait 90–100 s with the reader open,
+seek to Utterance 3 and play: chapter one's last two sentences come from disk in
+about 0.1 s each, and the requests for 5 and 6 are what is being tested. Before
+the fix both failed after about 6.4 s and the reading stopped on chapter two's
+heading. Stop as soon as Utterance 6 has started or the reading has stopped.
+
+**#45.** With a reading paused mid-chapter, the harness's `breakfetch` on
+`api.fish.audio` refuses every request from the one named, and `unbreakfetch`
+lifts it (`src/app/walkthrough-harness.ts`). Play until the reading stops on a
+refused sentence with at least two refused, lift the refusal, press Play once:
+the reading must go past all of them.
+
+**#46.** On a real book, choose a chapter in Contents whose predecessor has not
+rendered, or leave a book with its place in a middle chapter and open it again.
+Before the fix the status line became `utterance=null` with "The document
+rendered its sections out of reading order…", and Play read the book's first
+page. The Library's stored place is in `Documents/library.json`, or in the
+harness's `{"do":"shelf"}` answer.
+
+What none of it proves: whether the owner's phone meets #26 at all, which
+depends on its own network path, or anything about real touches.
