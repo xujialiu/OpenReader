@@ -198,6 +198,20 @@ fix (AGENTS.md).
   returned without a process or log, so the port never opened. Run Metro in a
   persistent terminal session and check its cwd, `/status`, and the bundle
   before launching the app.
+- **A Metro started as an agent's background task ends with that agent's
+  session**, and the simulator's app is left pointing at a dead port. Measured
+  2026-09-24: the #52 session had run `npx expo start --port 8088` as its
+  background task, the next session's process started at 01:44:24, and the
+  Metro's log stopped at 01:44 although an open reader logs on a timer. At
+  01:49, 8088 was free and the app still running. Such a Metro is a child of
+  the agent's own process; every Metro that had outlived its session had PPID 1.
+  Fix, for a Debug delivery that must outlast the session: give Metro a session
+  of its own, `nohup python3 -c 'import os; os.setsid(); os.execvp("npx",
+  ["npx", "expo", "start", "--port", "PORT"])' < /dev/null > LOG 2>&1 &`, and
+  check that its `npm exec` answers 1 to `ps -o ppid= -p PID` and `/status`
+  answers `packager-status:running` after the call returns. It outlives the
+  worktree too: stop it by PID when the worktree goes, or it joins the six that
+  were still serving `.orca-worktree-trash` that morning.
 - **`watchfetch` misses the first request the app makes as it starts.** The
   shell asks every enabled Provider for its Voices on mount (#24), and the
   harness's first poll is 250 ms later, so with `watchfetch` already in
@@ -250,13 +264,14 @@ fix (AGENTS.md).
   the dedicated `iPhone 17 bug_2`, set to 0 at 23:00 the evening before, whose
   app had been terminated and relaunched about twenty times in the half hour
   before and had played nothing. The Mac's default output was then "MacBook
-  Pro Speakers". The check in front of the next play caught it. So do not
-  reason that a `set` holds because the headphones have not moved. The check
-  in front of each play is the only guard.
-- **A refused XCTest can leave a recording that reads GREEN.** After that
-  reset, the next `scroll-theme-reader.sh` on `iPhone 17 bug_2` refused it
-  (exit 2) and ran no flings, which `white-flash.sh fling` reported as `XCTest
-  failed`. `set`, relaunch the app, and run again. The reset recurred the same
+  Pro Speakers". The check in front of the next play caught it. It came back at
+  01:52:00, on the same two devices in the same second, during an XCTest run on
+  one of them. So do not reason that a `set` holds because the headphones have
+  not moved. The check in front of each play is the only guard.
+- **A refused XCTest can leave a recording that reads GREEN.** After the
+  00:09:11 reset, the next `scroll-theme-reader.sh` on `iPhone 17 bug_2`
+  refused it (exit 2) and ran no flings, which `white-flash.sh fling` reported
+  as `XCTest failed`. `set`, relaunch the app, and run again. The reset recurred the same
   night, 01:06, independently verifying #27 on the same device: three
   `white-flash.sh fling` runs all refused (exit 2) and printed `GREEN: no white
   frame` anyway, because a refused run records nothing and analyses whatever
