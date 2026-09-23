@@ -32,7 +32,9 @@ When an issue is required:
    comment describing what changed, how it was verified and any remaining
    limitations. Reference the issue in the finishing commit's subject
    (`docs: establish issue workflow (#1)`) and use `Closes #N` in its body
-   when the work is complete.
+   when the work is complete. Close the issue with `gh issue close N` as
+   soon as that commit is made, on any branch, rather than waiting for the
+   merge: `Closes #N` acts only once the commit is pushed to `main`.
 
 Write issues and comments in English. Keep each paragraph on one line;
 separate blocks with blank lines, because GitHub renders single newlines.
