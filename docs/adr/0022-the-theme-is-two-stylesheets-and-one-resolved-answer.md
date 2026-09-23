@@ -120,6 +120,11 @@ body      * { color: #e6e6ea !important; background-color: transparent !importan
 - **What it cannot do:** an image carries its own colours and is untouched, and a
   book that uses colour to mean something loses that meaning. Both are in the
   design file rather than discovered.
+- **It reaches only the sections' own documents.** The page they sit on — the
+  library's template and the WebView itself — was the library's white until
+  #27, and showed wherever no section was drawn: on opening, below a short
+  document, in the gaps of a fast fling. That page is now the reader's own
+  `INK.page`; ADR 0043 says how, and what was measured.
 
 ## Not in `engineIdentity`, and that is a stronger absence than Appearance's
 

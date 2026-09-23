@@ -69,6 +69,23 @@ fix (AGENTS.md).
 - **RNAudioAPI reaches linking but FFmpeg symbols such as `avformat_open_input` are undefined** (same run). The four downloaded FFmpeg xcframeworks existed, but `Pods-OpenReader.release.xcconfig` had no corresponding framework paths. Running `pod install` from `ios/` after the binaries were present registered `libavcodec`, `libavformat`, `libavutil` and `libswresample`. Rebuilding with the isolated module cache returned 0 and `codesign --verify --deep --strict` passed. No app source was changed. Installation succeeded after the owner reconnected the phone; launch encountered the separate Security failure below. See `docs/install-on-iphone.md` for the commands.
 - **Physical-device installation succeeds, but launch returns `CoreDeviceError 10002` / `Security`** (2026-09-22, #43). The error names invalid signing, inadequate entitlements or an untrusted profile as alternatives. Local signature verification passed, the profile was unexpired and included the phone, and application/team identifiers matched. The cause remains unconfirmed: the next step is to check developer trust under Settings → General → VPN & Device Management and retry. No successful trust action or launch was observed; do not report this as a verified fix. Full evidence is in `docs/install-on-iphone.md`.
 
+### Physical iPhone screen
+
+- **`xcrun devicectl device capture screen-record` refused the owner's iPhone
+  16 Pro** (2026-09-23 23:24, Xcode 27): `The capability “Screen Recording” is
+  not supported by this device. (com.apple.dt.CoreDeviceError error 1001)`.
+  `devicectl device capture screenshot` worked on the same phone, 1206×2622,
+  but a screenshot is far too slow to catch a flash of 35–60 ms. The route
+  QuickTime takes was started and not finished: a Swift program that sets
+  CoreMediaIO's `kCMIOHardwarePropertyAllowScreenCaptureDevices` found the phone
+  as an `AVCaptureDevice` (`.external`, `.muxed`, "Xujia’s iPhone"), and an
+  `AVCaptureMovieFileOutput` started at once failed with `-11805 Cannot
+  Record`. The owner stopped the device test there. Next step, if it is
+  needed: wait for the session to deliver frames before recording, or write
+  sample buffers with `AVAssetWriter`. `AVCaptureDevice.authorizationStatus(for:
+  .muxed)` throws `The passed media type 'muxx' is not supported` — ask
+  `.video`.
+
 ### Metro and the bundle
 
 - **The app runs code you have already changed.**
@@ -227,12 +244,28 @@ fix (AGENTS.md).
   it and restart the app, which takes the value when it activates its audio
   session. In `check && terminate; launch`, the launch still runs after a failed
   check.
-  It is not only the AirPods. On 2026-09-24 at 00:09:11, a device that had
-  read 0 at 00:06:55 was rewritten to `sim_volume` 60 with
-  `sim_output_device_uid` `BuiltInSpeakerDevice`, and the Mac's default output
-  was then "MacBook Pro Speakers". The check in front of the next play caught
-  it. So do not reason that a `set` holds because the headphones have not
-  moved. The check in front of each play is the only guard.
+  It is not only the AirPods. On 2026-09-24 at 00:09:11, two devices were
+  rewritten in the same second to `sim_volume` 60 with `sim_output_device_uid`
+  `BuiltInSpeakerDevice`: `iPhone 17 bug`, which had read 0 at 00:06:55, and
+  the dedicated `iPhone 17 bug_2`, set to 0 at 23:00 the evening before, whose
+  app had been terminated and relaunched about twenty times in the half hour
+  before and had played nothing. The Mac's default output was then "MacBook
+  Pro Speakers". The check in front of the next play caught it. So do not
+  reason that a `set` holds because the headphones have not moved. The check
+  in front of each play is the only guard.
+- **A refused XCTest can leave a recording that reads GREEN.** After that
+  reset, the next `scroll-theme-reader.sh` on `iPhone 17 bug_2` refused it
+  (exit 2) and ran no flings, which `white-flash.sh fling` reported as `XCTest
+  failed`. `set`, relaunch the app, and run again. The reset recurred the same
+  night, 01:06, independently verifying #27 on the same device: three
+  `white-flash.sh fling` runs all refused (exit 2) and printed `GREEN: no white
+  frame` anyway, because a refused run records nothing and analyses whatever
+  static frame that leaves — a silent false GREEN, not a real result. `set` and
+  relaunch fixed it, and the same three runs then genuinely flung (67–77 s of
+  `Executed` time each, 3,600–3,900 frames). `white-flash.sh` now reads no
+  recording whose XCTest failed: it prints `XCTest failed, recording not read`
+  for that run and exits 2. Any script that records around a refusable XCTest
+  needs the same rule.
 - **A newly created device put its own volume back to 60 a couple of minutes
   after its first boot.** Measured 2026-09-23 on a fresh iPhone 17 (iOS 27.0):
   `silence.sh set` right after `bootstatus -b` read back 0, and a few minutes
@@ -358,6 +391,28 @@ fix (AGENTS.md).
   Pillow`, then rerun the detector or the complete `leading-strip.sh` command;
   the app-side probe itself does not need to be repeated when its screenshot is
   already present.
+
+- **`simctl io recordVideo` writes a frame only when the screen changes.** A
+  still page for two seconds is one frame, so frame numbers are not time and a
+  count of frames is not a duration: read the timestamps (`CAP_PROP_POS_MSEC`),
+  as `white-flash.py` does. A 60 s fling recording held 3,600–3,900 frames, a
+  7 s open 37–90.
+- **A Debug app's launch is a white screen that reads as a white page.** Right
+  after `simctl launch`, the Debug build shows Metro's "Downloading 100%…" over
+  a white screen until the bundle has loaded; a frame reader started 3 s after
+  the launch counted it (2026-09-23 23:51). Wait for the app's own JavaScript to
+  answer (`{"do":"shelf"}` → `HX shelf loading=false`) before recording, as
+  `white-flash.sh relaunch` does.
+- **The first open after a launch is not like the others.** `ReaderProvider`
+  sits above the navigator and keeps its state across readers, so a change to
+  what it holds shows on the first open after a launch and never again until the
+  next launch. Measured on #27 (2026-09-23 23:45 to 24 00:08), with the theme
+  only passed as a prop: four opens after the first were green, and the first
+  open after a relaunch was white for 0.4–1.8 s. How often depended on when it
+  was opened: 0 of 2 at a fixed 6 s after the launch, 4 of 6 at 3 s, and 6 of 6
+  opened as soon as the app's JavaScript answered. Test a change to the
+  reader's first frames with a relaunch in front of each open, timed from the
+  app's answer rather than from the launch.
 
 ### The walkthrough harness (`Documents/harness.json`)
 
@@ -646,6 +701,21 @@ fix (AGENTS.md).
   assertions had already passed. Update the probe's explicit version assertion
   whenever `app-version.ts` receives the next beta; a simulator XCTest must not
   read the host checkout at runtime to infer it.
+- **Several of `ScrollThemeReaderProbe`'s own methods are pinned to a book
+  named `Scroll Fixture`, which is not always on the shelf.** It was #34's
+  fixture and is not one of #27's two Documents (the owner's real book and
+  `Stat Line Fixture`); `testVersionAndThemeLiveOnPage`, `testFastFlingBothDirections`,
+  `testTapWordAfterFling`'s sibling methods that reopen it, and others all tap
+  `app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Scroll Fixture'"))`
+  and would fail "Scroll Fixture is not on the shelf" against a Library that never
+  held it — a staleness question about the session, not the app, the same shape
+  as `GeneralFontsProbe`/`READING_FONTS` above. `testLongFlingForRecording` and
+  `testTapWordAfterFling` need no book by name (they act on whatever reader is
+  already open) and are safe either way; `testRealTapOpenForRecording` and
+  `testVersionAndLightThemeOnRealDocuments` (independent #27 verification,
+  2026-09-24) were added rather than edited, so a future run against a Library
+  that does hold Scroll Fixture can still use the originals. Check what the
+  session's own Library holds before choosing which method to run.
 - **The provider-order probe can inherit an enabled provider from app data.** On
   2026-09-22 the replacement run read `Fish Audio, enabled` after a previous
   session had configured Fish, while the probe expected every provider to be
@@ -820,6 +890,16 @@ fix (AGENTS.md).
   two of settle time after reopening a reader (not needed for
   Appearance/Font Size changes to an already-visible WebView, which repaint
   promptly) before trusting a screenshot of it.
+
+- **A scroll made from JavaScript does not show what a finger's fling shows.**
+  60 frames of `scrollTop += 300` on the manager's container, the same
+  distance as a long fling, gave 0 white frames in 52 (2026-09-23 23:04), while
+  real XCTest flings gave white frames in 3 of 3 runs (#27). Setting
+  `scrollTop` moves the page on the frame the script runs and epub.js keeps up;
+  WebKit's own touch scrolling moves it ahead of the page's JavaScript, and the
+  gap between sections shows. `scroll-theme.cjs` (#34) is still right for what
+  it asks, whether a section was styled; use real touches
+  (`white-flash.sh fling`) for what is seen during the scroll.
 
 ### Typing, environment and silence
 
@@ -2398,6 +2478,74 @@ previous one left the reading, and none of them `.terminate()`s or
 `ScrollThemeReaderProbe.swift` is in `test/manual-test/ios/project.rb`'s
 allow-list.
 
+## A white page behind the dark reader: on opening, and in a long fling (#27)
+
+`white-flash.sh` records the screen through one trigger and `white-flash.py`
+reads every frame of the recording: a frame is white when more than 30 % of the
+page area (from under the navigation bar to above the player) has luminance
+above 200. A dark page of text reads 4–6 %, a white one 91–98 %. Set the theme
+to dark first (`{"do":"settings","patch":{"theme":"dark"}}`), add a real book
+(**Real books** above), then:
+
+```sh
+bash test/manual-test/white-flash.sh open     SIMULATOR_UDID DOC_ID /tmp/openreader-white 5
+bash test/manual-test/white-flash.sh relaunch SIMULATOR_UDID DOC_ID /tmp/openreader-white METRO_LOG PORT 6
+bash test/manual-test/white-flash.sh fling    SIMULATOR_UDID DOC_ID /tmp/openreader-white 3
+```
+
+- `open` opens the Document from the Library once per run.
+- `relaunch` restarts the app first and opens as soon as its JavaScript answers
+  the harness. Keep it: the first open after a launch fails differently from
+  every later one (Pitfalls, **Screenshots of the reading page**).
+- `fling` makes 15 real fast swipes each way (`FLINGS` changes it) through
+  `ScrollThemeReaderProbe.testLongFlingForRecording`, about a minute a run.
+  With `PAINT=1` it paints the WebView's page magenta and epub.js's scroll
+  container green before the flings, and the reader counts those colours too:
+  that is how the flash was found to be the scroll container.
+
+Each run prints `RED`/`GREEN`; `VERBOSE=1` lists every frame. Measured
+2026-09-23/24 on a dedicated iPhone 17 simulator (iOS 27.0), with "My Vampire
+System 1-250": before #27's change, `open` was red 5 of 5 (white for 1.6–3.4 s),
+`relaunch` 6 of 6 and `fling` 3 of 3 (49 and 71 white frames); after it, 0 of 5,
+0 of 6 and 0 of 3. A fixed run still has 13–55 frames in which the page is
+empty and dark: epub.js still outruns itself, and the gap is now the reader's
+own page colour.
+
+What it cannot show: the physical iPhone, which is where the owner saw it (see
+**Physical iPhone screen** in Pitfalls), or the light theme, in which every
+frame of a page reads white by this measure — check the light theme with a
+screenshot instead. It never plays.
+
+### A real finger tap on the Library row (independent #27 verification)
+
+`open` and `relaunch` above open through the harness (`do:"open"`); the owner's
+own trigger was a tap on a book in the Library. `TAP=1` makes the same two
+modes tap the row instead, through
+`ScrollThemeReaderProbe.testRealTapOpenForRecording` (`BOOK_TITLE` names the
+row, default `My Vampire System`; `DOC_ID` is then unused):
+
+```sh
+TAP=1 bash test/manual-test/white-flash.sh open     SIMULATOR_UDID - OUT_DIR 3
+TAP=1 bash test/manual-test/white-flash.sh relaunch SIMULATOR_UDID - OUT_DIR METRO_LOG PORT 3
+```
+
+Measured 2026-09-24 by ios-tester on the dedicated iPhone 17 simulator, the
+real book, through the script it first wrote for this (since folded in here):
+3 plain taps and 3 as the first open after a relaunch, all GREEN (52–81 frames
+a run, 36–46 empty and dark). Frames read individually, not only the automated
+verdict, confirm it: the slide from the Library, "Laying the document out…"
+and the first section's text are on the dark page throughout, including the
+first open after a relaunch.
+
+`ScrollThemeReaderProbe.testVersionAndLightThemeOnRealDocuments` covers the
+version line and the light theme against a Library that holds the owner's
+book and `Stat Line Fixture` rather than `Scroll Fixture` (Pitfalls, XCTest):
+Settings' version line; General → Theme → Light; the real book (white page,
+black text) and the fixture (white below its six lines); Dark restored with a
+reopen, no relaunch needed, going dark without one. Four screenshots, one per
+step. Measured 2026-09-24, all as expected; the same run also confirmed
+`Version 0.0.2-beta14`.
+
 ## Azure Speech: configuration, the voice sheet, and word-level highlighting (#39)
 
 `azure-provider.sh` runs `ios/AzureProviderProbe.swift`, the same disposable-project
@@ -2599,7 +2747,7 @@ precondition or a harness that did not answer.
 
 Choose SECTION two after the reading's. Its display re-renders the reading's
 own section as a neighbour, which is how the WebView used to take the page
-back: 23:30 in `notes/NOTES_2026-09-23.md`, and ADR 0043. A far section tests the
+back: 23:30 in `notes/NOTES_2026-09-23.md`, and ADR 0044. A far section tests the
 React Native half alone. With a Provider:
 
 - Run it after a Play and a pause, so that an engine is paused. With

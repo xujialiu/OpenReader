@@ -1,7 +1,7 @@
 # Looking at another chapter keeps your place
 
 _The engineering half of this decision is
-[ADR 0043](../adr/0043-a-paused-contents-row-browses.md)._
+[ADR 0044](../adr/0044-a-paused-contents-row-browses.md)._
 
 While the reading is paused, choosing a chapter in the contents takes the page
 there and does nothing else. The sentence you stopped on keeps its highlight,

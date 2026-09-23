@@ -5,7 +5,7 @@ status: accepted
 # A paused Contents row browses, and the page stops following the reading until it is revealed
 
 _The product argument is
-[design 0043](../design/0043-looking-at-another-chapter-keeps-your-place.md)._
+[design 0044](../design/0044-looking-at-another-chapter-keeps-your-place.md)._
 
 While the reading is paused, a Contents row is **Browsing** (CONTEXT.md). The
 page goes to the spine item. The cursor, its highlight, the stored Reading

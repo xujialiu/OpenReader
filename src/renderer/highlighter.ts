@@ -360,6 +360,38 @@ export function themeCss(scheme: ReadingScheme): string {
 }
 
 /**
+ * The theme `<Reader>` is handed: `@epubjs-react-native/core`'s own default, rule
+ * for rule, with the page transparent instead of `#fff` (#27, ADR 0043).
+ *
+ * **The library colours the WebView itself with `body.background`**, and
+ * react-native-webview makes a WKWebView whose colour is not opaque draw no
+ * background of its own. So wherever no section is drawn — the page before the
+ * first one is displayed, below a short document, the gap a fast fling outruns —
+ * what shows is the reader's own view behind the WebView, `INK.page`, which is the
+ * dark page under the dark theme and `#ffffff` under the light one, and follows a
+ * live change of theme. With the library's `#fff` it was a white flash on every
+ * open and in every long fling, measured on the owner's own book.
+ *
+ * The library also registers this theme into every section, and it does so before
+ * the program is installed — it injects the program only once the first section
+ * has been displayed. So the first section's page is transparent too until
+ * `themeCss` reaches it, rather than white.
+ *
+ * **Every other rule is the library's, unchanged**, including its black text: the
+ * light theme looks exactly as it did, since the page behind is the same white.
+ * `test/renderer/rules.test.ts` compares this against the installed package.
+ */
+export const READER_THEME: Record<string, Record<string, string>> = {
+  body: { background: 'transparent' },
+  span: { color: '#000 !important' },
+  p: { color: '#000 !important' },
+  li: { color: '#000 !important' },
+  h1: { color: '#000 !important' },
+  a: { color: '#000 !important', 'pointer-events': 'auto', cursor: 'pointer' },
+  '::selection': { background: 'lightskyblue' },
+};
+
+/**
  * **`user-select: none` stops `::highlight()` painting, silently.** Measured on a
  * device, 2026-09-19, and written down nowhere else.
  *

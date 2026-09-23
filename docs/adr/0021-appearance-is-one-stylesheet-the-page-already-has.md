@@ -48,7 +48,12 @@ judged.
 
 `highlighterSource` takes the current Appearance as well, so a book **opened**
 with an override already chosen is laid out that way on its first paint rather
-than reflowing when the first message lands. The bridge keeps both — what was
+than reflowing when the first message lands. _Corrected 2026-09-24 (#27, ADR
+0043): not the first section's first paint. The library injects the program only
+once `rendition.display()` has resolved, so the first section is drawn once under
+the library's own styles before the program reaches it; every section after it
+is laid out as described. Measured for colour, as two frames of a white page; the
+size in those frames was not measured._ The bridge keeps both — what was
 baked in and what has been chosen since — and re-sends on the document message
 only when they differ, which is the same trap the inset already had
 (a message sent before the program exists is a no-op that nothing reports) without

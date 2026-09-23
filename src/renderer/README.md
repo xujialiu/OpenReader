@@ -89,7 +89,7 @@ Six properties of the centring, and each is a rule rather than an accident.
   through `settle()`, which then keeps the sentence centred while epub.js lays the
   neighbouring sections out. Any other section that arrives, such as a view the
   manager rebuilt, is centred at once, as before.
-- **Nothing centres while the owner is browsing** (#52, ADR 0043). A Contents
+- **Nothing centres while the owner is browsing** (#52, ADR 0044). A Contents
   row while paused sends a `browse` message, then displays its section, and a
   finger dragging the page sets the same `browsing` flag. Until a highlight is
   revealed — Play's cue, a tapped sentence, a skip, a place from another
@@ -112,6 +112,18 @@ each Clip cue, and a chapter a fast fling brought in after the last `relocated`
 stayed white on a dark page, at the book's own size and deaf to taps (#34). The
 `relocated` and Clip-cue sweeps stay as second looks; a sweep is idempotent per
 document.
+
+**The page the sections sit on is the reader's own** (ADR 0043). The program's
+stylesheet reaches only the sections' documents; the library's template and the
+WebView around them take their colour from the library's theme, whose page is
+`#fff`, and showed white wherever no section was drawn — on opening, below a
+short document, in the gaps of a long fling (#27). `readerProps.defaultTheme` is
+the library's theme with that page transparent, so what shows there is the
+reader's `INK.page`, and the bridge puts it in the library's provider before the
+first WebView is created, because the WebView takes its colour from the
+provider, not from the prop. The program is still installed only after the first
+section has been displayed, so that section's first frame is under the
+library's theme, its page now transparent.
 
 **Several sections are alive at once**, which is what continuous scrolling costs
 and what paginated layout did not. The Block records are keyed by spine index and

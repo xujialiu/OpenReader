@@ -7,7 +7,7 @@ status: accepted
 The provider configuration UI, player eligibility and new-document voice default
 are revised by [ADR 0026](0026-a-coherent-reading-interface.md). The contents
 list's place among the six seeks below is revised by
-[ADR 0043](0043-a-paused-contents-row-browses.md): while the reading is paused, a
+[ADR 0044](0044-a-paused-contents-row-browses.md): while the reading is paused, a
 row is Browsing and names no Utterance. Historical measurements below are
 retained unchanged.
 
@@ -136,7 +136,7 @@ is lit whole until its Clip arrives and replaces it with the real timings.
 ### A contents tap is two steps, and the second one has a case the first misses
 
 While playing, and in a Document with no Reading Position yet. Paused, it is one
-step, the page's, since ADR 0043.
+step, the page's, since ADR 0044.
 
 The page moves first and always; the reading follows when the section reports its
 Blocks. Measured: a tap 496 chapters ahead put the page on spine item 500 and the
