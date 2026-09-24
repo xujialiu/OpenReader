@@ -75,9 +75,10 @@ resumes.
 paused book and, if the desktop has read further since, the highlight and the
 page have moved to the desktop's sentence — quietly, because the moved highlight
 is the message. Press play and the phone checks once more first, for at most two
-seconds, then reads from the newest place. While the book is playing nothing
-moves it; a place that arrives late is simply outranked by the one the phone is
-writing as it reads.
+seconds, then reads from the newest place. When the desktop's place is in a part
+of the book the phone has not laid out yet, play waits for that part rather than
+starting anywhere else. While the book is playing nothing moves it; a place that
+arrives late is simply outranked by the one the phone is writing as it reads.
 
 **What was turned down.** The earlier rule, that once the owner had pressed play
 the book's place was theirs until they closed it, was kept for playing and
@@ -85,6 +86,13 @@ dropped for pausing. Under it the owner's own case — pause the phone, read on 
 the desktop, come back to the phone and press play — would have resumed at the
 stale place. A line offering "continue from the desktop?" was considered and set
 aside for now: it costs a tap and a sentence, and the highlight already says it.
+
+Starting at once from the phone's own place, when the desktop's is in a part of
+the book the phone has not laid out yet, is what play did until September 2026,
+and it was turned down. The owner heard the old sentence instead of the
+desktop's, and reading on from it wrote the old place over the desktop's newer
+one, on both devices, so the place reached at the desktop had to be found again
+by hand. A few seconds of waiting for the page is the price.
 
 **The phone speaks up more often than the desktop.** It tells the folder when it
 opens, when it comes to the front, when a book is opened or added, the moment a
@@ -129,7 +137,11 @@ that a person reading the file can tell which device wrote a line.
 - The sentence the owner stopped on is written to their own server, where before
   only a bare location was.
 - A paused book can move under the owner's eye. Deliberate, and quiet.
-- Pressing play on a paused book can wait up to two seconds.
+- Pressing play on a paused book can wait up to two seconds for the check, and
+  then for the phone to lay out the part of the book the other device reached.
+  In the owner's longest novel, with the desktop's place four hundred to five
+  hundred chapters from the phone's, the reading started two to four seconds
+  after the press.
 - Sometimes the app will say it could not find the place the other device sent.
   That is the rule working.
 - Papers stay on the desktop. Places in PDFs and saved web pages do not travel to

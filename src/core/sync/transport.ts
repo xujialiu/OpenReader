@@ -13,7 +13,9 @@
  * Event-driven and single-flight: a poke never blocks, a burst of pokes is one
  * run plus one trailing run (`core/single-flight.ts`), and `flush` is the
  * awaited form for the two moments that wait on the answer — opening a book
- * and pressing Play — which the caller bounds with its own timeout.
+ * and pressing Play — which the caller bounds with its own timeout. Its answer
+ * is its own run's outcome, handed back by the run itself: a poke that queues a
+ * run meanwhile starts that run before the caller resumes (#54).
  *
  * Failures follow the plugin's pattern: the outcome is recorded, reported once
  * per retry window, and nothing is retried inside that window unless forced.
@@ -80,7 +82,10 @@ export interface SyncOutcome {
 export interface PositionsTransport {
   /** Schedule a run; never blocks. A burst coalesces into the running one plus one trailing run. */
   poke(trigger: string): void;
-  /** One awaited run, forced past the retry window. Resolves with the outcome, or null when sync is off. */
+  /**
+   * One awaited run, forced past the retry window. Resolves with that run's
+   * outcome — never the outcome of a run started after it — or null when sync is off.
+   */
   flush(trigger: string): Promise<SyncOutcome | null>;
   last(): SyncOutcome | null;
   running(): boolean;
@@ -90,7 +95,6 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
   let last: SyncOutcome | null = null;
   let lastFailureAt = Number.NEGATIVE_INFINITY;
   let lastReportAt = Number.NEGATIVE_INFINITY;
-  let settledWith: SyncOutcome | null = null;
 
   function reportGated(problem: string): void {
     const at = deps.now();
@@ -103,21 +107,20 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
     }
   }
 
-  function finish(outcome: SyncOutcome): void {
+  function finish(outcome: SyncOutcome): SyncOutcome {
     last = outcome;
-    settledWith = outcome;
     try {
       deps.onSynced?.(outcome);
     } catch {
       // The listener's failure is its own.
     }
+    return outcome;
   }
 
-  /** Never rejects. */
-  async function run(trigger: string, force: boolean): Promise<void> {
-    settledWith = null;
-    if (!deps.enabled()) return;
-    if (!force && deps.now() - lastFailureAt < SYNC_RETRY_MS) return;
+  /** Never rejects. Null is a run that did not happen: sync is off, or an unforced one inside the retry window. */
+  async function run(trigger: string, force: boolean): Promise<SyncOutcome | null> {
+    if (!deps.enabled()) return null;
+    if (!force && deps.now() - lastFailureAt < SYNC_RETRY_MS) return null;
     const at = deps.now();
     try {
       const client = await deps.client();
@@ -136,8 +139,7 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
         } else if (parsed.reason === 'newer') {
           const error = `The positions file on the server is version ${parsed.version}, which this version of the app does not read. It was left alone; update the app to sync again.`;
           reportGated(error);
-          finish({ at, trigger, result: 'frozen', error, remote: 0, adopted: [], uploaded: false });
-          return;
+          return finish({ at, trigger, result: 'frozen', error, remote: 0, adopted: [], uploaded: false });
         } else {
           // Treated as absent and healed by the upload below; said once.
           reportGated(`The positions file on the server could not be read (${parsed.why}) and will be replaced.`);
@@ -153,12 +155,12 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
         uploaded = true;
       }
       lastFailureAt = Number.NEGATIVE_INFINITY;
-      finish({ at, trigger, result: 'ok', error: null, remote: remote.length, adopted, uploaded });
+      return finish({ at, trigger, result: 'ok', error: null, remote: remote.length, adopted, uploaded });
     } catch (problem) {
       const error = problem instanceof Error ? problem.message : String(problem);
       lastFailureAt = deps.now();
       reportGated(error);
-      finish({ at, trigger, result: 'error', error, remote: 0, adopted: [], uploaded: false });
+      return finish({ at, trigger, result: 'error', error, remote: 0, adopted: [], uploaded: false });
     }
   }
 
@@ -166,10 +168,7 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
 
   return {
     poke: flight.poke,
-    flush: async (trigger) => {
-      await flight.flush(trigger);
-      return settledWith;
-    },
+    flush: flight.flush,
     last: () => last,
     running: flight.running,
   };

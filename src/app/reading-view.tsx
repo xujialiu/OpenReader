@@ -325,7 +325,8 @@ export function ReadingView({
   /**
    * A place from another device, while this book is open (issue #20). Keyed on
    * when it arrived, so each arrival is offered once; `resumeAt` declines while
-   * playing, which is the whole of the rule.
+   * playing, which is the whole of the rule. An arrival Play has already passed
+   * on from its own sync is held by then, and is taken once (#54).
    */
   const takePlace = reading.resumeAt;
   useEffect(() => {
@@ -379,8 +380,10 @@ export function ReadingView({
    * Play, after one look at the folder (issue #20): a place from another device
    * that is newer than this one wins while the book is paused, so the run is
    * waited for — up to `WAIT_MS` — and the reading starts from wherever is
-   * newest. Past the bound, or with the server down, it starts from here and
-   * does not move afterwards.
+   * newest. The outcome is that run's own, so a sync queued meanwhile cannot
+   * hide what it adopted; and a place whose section has not rendered yet is
+   * waited for by `reading.play()` rather than given up (#54). Past the bound,
+   * or with the server down, it starts from here and does not move afterwards.
    */
   const play = useCallback(() => {
     void sync.wait('play').then((outcome) => {

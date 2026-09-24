@@ -151,7 +151,7 @@ offset into that place's text, and `utteranceAt` turns an offset in a Block into
 an Utterance index, which is the same function a tapped word already goes
 through. `resolveResume` in `src/renderer/cursor.ts` is the whole of it.
 
-Four things about it that are decisions rather than plumbing:
+Six things about it that are decisions rather than plumbing:
 
 - **The Blocks are the document it resolves against.** A `ReportedBlock` already
   carries the two halves of a `Place` — its element CFI and its verbatim text — so
@@ -185,20 +185,58 @@ Four things about it that are decisions rather than plumbing:
   scrolls the Block back to the top of the screen, under the centring the resume's
   own `show` has just done. An adopted place still asks on each report
   (`revealPendingPlace`), because nothing else would.
-- **Anything else deciding where to read ends the bookmark's claim.** A press of
-  Play, a tapped word, a skip, a contents row. Without that, a position resolving
-  late would take the reading away from wherever the owner had just put it — which
-  is ADR 0008's "silent landing three paragraphs away" arriving by the back door,
-  late instead of wrong. The sentence it would have said is kept and shown at the
-  moment it is given up on, rather than shown on the first failed attempt: a book
-  that has rendered its cover and nothing else has not failed yet, and saying so
-  would be false for a second and then replaced.
+- **Anything else deciding where to read ends the bookmark's claim.** A tapped
+  word, a skip, a contents row. Without that, a position resolving late would take
+  the reading away from wherever the owner had just put it — which is ADR 0008's
+  "silent landing three paragraphs away" arriving by the back door, late instead of
+  wrong. The sentence it would have said is kept and shown at the moment it is
+  given up on, rather than shown on the first failed attempt: a book that has
+  rendered its cover and nothing else has not failed yet, and saying so would be
+  false for a second and then replaced.
+- **A press of Play waits for a place still on its way** (#54, 2026-09-24). Play
+  was on the list above until then, and it did not belong there: it points nowhere,
+  so giving the place up started the engine at the cursor — nothing at all under
+  the place a book opens with, which read the first sections to report (on a web
+  novel, the contents page), and this device's own older sentence under a place
+  taken from another device (ADR 0031). Either was stamped above the stored place
+  at the next Clip boundary and carried to every device. Now, while the section the
+  place names has not reported (`awaitedSection`, the rule `resolveResume` waits
+  on, which also counts a place as on its way before anything has reported),
+  `play()` records the wait (`awaitingPlaceRef`), shows the player as starting and
+  builds nothing, and the check comes before the cover-page walk, which would take
+  the page away from the section being displayed. An effect starts the reading when
+  the wait ends: the place lands; its section reports without it, and it is given
+  up with the sentence that says why and read from this device's own place; or a
+  tapped word or a skip ends its claim. Pause ends the wait and leaves the place
+  pending. The wait is its own ref rather than `playIntent`, which the engine's
+  state reports set, and `onState` keeps the player starting while it lasts. When
+  Play starts the engine, a seek still inside its 600 ms debounce goes out at once:
+  left to the timer, a paused engine played the queue it paused on first — the
+  older sentence — and a newly built one, loaded at the cursor that seek had
+  moved, was sought to the same sentence 600 ms later and started it again. While
+  a place is pending, `readingPosition()` answers null, as it does on the sentence
+  a resume landed on. There is no time bound: the owner decided that Play does not
+  give the place up, and Pause is the way out. The wait is the section's layout
+  time. That was 6.21 s for chapter 100 of the 2,077-section novel, timed from
+  the navigate (`notes/NOTES_2026-09-20.md`, 08:41). On the simulator it was
+  8.8–9.6 s from a Play pressed right after reopening at section 104, and
+  1.7–4 s for a place taken from another device 400–500 sections from the
+  phone's (`notes/NOTES_2026-09-24.md`, 02:49 and 06:25, where the red and green
+  unit runs are too). Not established: whether a section that has not laid out
+  yet lays out while the app is in the background, as a lock-screen Play of a
+  pocketed phone needs. The simulator's reading went on in the background once
+  laid out (07:51), but it has no lock, and its Now Playing button could not be
+  reached reliably.
 - **There is no fourth outcome.** `resolveResume` answers with an Utterance or
   with why there is none, and the "why" carries no number at all — so no caller can
-  read a best guess off it. Starting at the first Utterance of what has rendered is
-  then a decision the screen makes openly, and says: `ReadingStatus.resume` is one
-  sentence, its own field rather than a second meaning for `note`, changing at most
-  twice in a Document's life.
+  read a best guess off it. Where the reading starts instead is then a decision the
+  screen makes openly — this device's own place, or the first Utterance of what has
+  rendered when it has none — and the sentence says why the place was lost:
+  `ReadingStatus.resume` is one sentence, its own field rather than a second meaning
+  for `note`, changing at most twice in a Document's life. Until #54 that sentence
+  also said the reading started "at the top of this section", which no path did;
+  the claim was dropped rather than reworded, because the reading's own highlight
+  shows where it went.
 
 **What it cost, measured** (notes/NOTES_2026-09-20.md, 03:01–03:04). The fixture
 came back on Utterance 4 of 18 with the stored sentence painted and the voice

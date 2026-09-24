@@ -7,6 +7,7 @@ import { splitWithSentencex } from '../../src/core/segmenter/sentencex';
 import type { ClipCue, PositionCorrection } from '../../src/playback/reader-clock';
 import type { ReportedBlock, SpeakMessage } from '../../src/renderer/messages';
 import {
+  awaitedSection,
   anchoredRangesOf,
   canonicalCfi,
   clampElapsed,
@@ -600,7 +601,8 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
     const lost = resumeSentence({ outcome: 'lost', because: 'locator-did-not-resolve', why: 'not-found' });
     expect(plain).toBe('Resumed at the sentence the reading stopped on.');
     expect(moved).toContain('found by its own text');
-    expect(lost).toContain('starts at the top of this section');
+    // Why, and nothing about where the reading goes instead, which the caller decides (#54).
+    expect(lost).toBe('The sentence this book was left on is not in the text that has rendered.');
     expect(new Set([plain, moved, lost]).size).toBe(3);
   });
 
@@ -678,6 +680,18 @@ describe('a stored Reading Position becoming an Utterance to read from (ADR 0008
 
     it('waits for nothing while the length of the spine is not known', () => {
       expect(resolveResume(stored, segment(contents), contents, { spine: 0, reported: new Set([2]) })).toMatchObject({ outcome: 'resumed' });
+    });
+
+    it('counts a place as on its way before anything has reported, which is when Play may ask (#54)', () => {
+      // Nothing reported yet: the spine's length is not known, and the first report says it.
+      expect(awaitedSection(stored, { spine: 0, reported: new Set() })).toBe(20);
+      // From then on the rule `resolveResume` waits on: in the spine and not reported.
+      expect(awaitedSection(stored, rendered(1, 2))).toBe(20);
+      expect(awaitedSection(stored, rendered(1, 20))).toBeNull();
+      expect(awaitedSection(stored, { spine: 12, reported: new Set([1]) })).toBeNull();
+      // No spine step names nothing to wait for, reported or not.
+      const bare = readingPlaceAt(createLocator('epub', 'epubcfi(/4/2)'), HEADING, 0, HEADING.length);
+      expect(awaitedSection(bare, { spine: 0, reported: new Set() })).toBeNull();
     });
   });
 });

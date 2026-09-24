@@ -79,11 +79,21 @@ There is one more, and it is a race rather than a refusal. A very long book take
 time to lay out the part the place is in — six seconds, measured on the owner's own
 novel opened at a place a hundred chapters in, where this was once guessed at
 twenty — and until it has, there is nothing to match the saved words against.
-If the owner presses play, taps a word or picks a chapter before that, the app
-reads from there and says that the saved place had not arrived yet. It does not
-wait, and it does not quietly move the reading once the place turns up: being
-dragged somewhere else a few seconds after you asked to start is worse than
-starting where you asked.
+If the owner presses play before that, the app waits for that part of the book
+and then reads from the saved sentence, so play can take those few seconds to
+start: about nine, measured from a press of play right after the same novel was
+reopened. If they tap a word or pick a chapter instead, the app reads from there and
+says that the saved place had not arrived yet. It does not quietly move the
+reading once the place turns up: being dragged somewhere else a few seconds after
+you asked to start is worse than starting where you asked.
+
+**What was turned down.** Until September 2026, pressing play did not wait
+either. It read from whatever had been laid out by then — the first pages of the
+book, which for a web novel is its list of chapters — and said the saved place had
+not arrived. But play asks the app to read, not to read from anywhere in
+particular, so what it read was never what the owner meant; and as the reading
+went on, it replaced the saved place, on the phone and then on the desktop. The
+owner chose a few seconds of waiting over that.
 
 The saved words are looked for in the chapter the place is in, and nowhere else
 until that chapter has been laid out. Web novels usually open with a contents
