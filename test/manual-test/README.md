@@ -163,6 +163,30 @@ fix (AGENTS.md).
   `launch UDID BUNDLE -RCT_jsLocation localhost:PORT` **from the host**, not
   from inside a test — and prefer a probe method that only `.activate()`s an
   already-connected process when running against a device like this one.
+- **The launch-argument fix above does not survive a probe's own internal
+  relaunch, because the argument was never durable to begin with.** Passing
+  `-RCT_jsLocation` to `simctl launch` only ever sets it for that one
+  process; `DownloadRingProbe.testDownloadRingLifecycle`'s own
+  `app.terminate(); app.launch()` at its start drops it exactly as the
+  bullet above describes, every time, not only on a device that already had
+  a stale container plist value. Measured 2026-09-24 on a **freshly
+  created** worktree simulator whose container plist had no
+  `RCT_jsLocation` key at all yet (`plutil -p` printed nothing for it): the
+  probe still red-boxed with `ConfigError: The expected package.json path
+  …/fix/package.json does not exist` — a different worktree's path baked
+  into this particular copied Debug build's own compiled-in default (see
+  "An Expo Debug build writes its own port back…" below), reached the
+  moment nothing else overrode it. A launch argument cannot fix this
+  durably, because the very next in-test relaunch drops it again. Make the
+  **container plist itself** correct instead:
+  `plutil -replace RCT_jsLocation -string localhost:PORT` on
+  `<device>/data/Containers/Data/Application/<uuid>/Library/Preferences/<bundle>.plist`,
+  then `xcrun simctl shutdown` and `boot` so `cfprefsd` reads it (as the
+  bullet after next already documents for a different cause) — after that, a
+  bare in-test relaunch keeps landing on the right Metro, proven across five
+  further `app.terminate(); app.launch()` cycles the same day. Re-silence
+  and re-set the launch argument after the boot too (a boot resets
+  `sim_volume` to 60 regardless).
 - **Reusing another worktree's installed Debug app is safe only while the native
   side matches.** Compare `git diff --name-only main` against `package.json`,
   `app.json`, `plugins/` and `patches/`; a change to `patches/` or to a
@@ -759,6 +783,111 @@ fix (AGENTS.md).
   `request()`, which wraps every fetch in `withTimeout` at `WEBDAV_TIMEOUT_MS`,
   15 s. Read the Address back, from a screenshot or `settings.json`, before
   believing a Sync refusal.
+
+- **A screenshot taken from a background queue while the main thread is
+  blocked in `Fingers.play`'s `wait(for:)` crashes the *next* test, not the
+  one that took it.** Verifying #57's long-stretch auto-scroll,
+  `testDrawerLongStretchSmoothness` scheduled three `capture()` calls on
+  `DispatchQueue.global().asyncAfter` to sample an 8 s hold in progress. It
+  reported "passed", but the very next test,
+  `testDrawerOneFingerNeverChooses`, crashed at start with `Activity cannot
+  be used after its scope has completed. (NSInternalInconsistencyException)`
+  and a `LockScreenProbe-Runner` crash log (2026-09-24); `xcodebuild`
+  silently restarted the suite and ran the remaining tests as a fresh `Test
+  Suite` block, so the crash is easy to miss unless the log is read past the
+  first "passed" line. The three scheduled captures also did not do what was
+  intended: their manifest timestamps landed within under a second of the
+  method's own final, synchronous capture — all three fired in a burst once
+  `wait(for:)` returned, not spread through the hold, because the background
+  queue made no progress while the main thread was blocked inside it. Fix:
+  do not call `add(_:)`/`capture()` from a background queue while a
+  synthesized gesture is in flight. For an intermediate visual record during
+  a hold, wrap the `xcodebuild` invocation in a host-side `xcrun simctl io
+  UDID recordVideo`, started and `kill -INT`'d from the calling shell, and
+  extract frames with `ffmpeg -vf fps=N` afterward.
+- **A two-finger hold longer than about 3 s can be silently ignored.**
+  `testDrawerLongStretchSmoothness`'s first version held for 8 s (`held()`
+  emits a trembling point every 0.1 s, so ~80 points a finger). The
+  synthesizer's completion handler reported success (no `TWO-FINGER
+  SYNTHESIS FAILED` print), but the drawer chose nothing and never scrolled
+  — `chosen=0`, `before == after` (test.log, 2026-09-24). No method in this
+  codebase holds longer than 3.0 s (`testFilesEdgeTime`, `testDrawerSweeps`'s
+  own edge test); rerun at 3.0 s and the same gesture scrolled 81 rows
+  cleanly in a video (`f205`→`f217`, roughly one second apart, showing
+  `Download selected` climbing 5 → 28 → 50 → 74). Prefer several separate
+  sweeps (each ≤ 3 s) over one long hold, or confirm at 3 s first if a
+  longer one seems needed; do not assume a long hold's silent `chosen=0` is
+  a product defect without first trying a proven-shorter duration.
+- **`.isSelected` does not read a drawer row's checked state.** A checkbox
+  row is a plain `Pressable` with `accessibilityState.checked`, which iOS
+  exposes through the element's `value` (`"checkbox, checked"`, matching
+  `drawerRows`' own `value == 'checkbox'` predicate), not through
+  `UIAccessibilityTraitSelected`. Asserting
+  `row.isSelected == true` after tapping an unselected row failed
+  (`testDrawerOneFingerTapToggles`, 2026-09-24) although the very next
+  screenshot showed the row correctly checked — this file's own passing
+  sweep tests only ever *print* `.isSelected` for the report, never assert
+  on it, for the same reason. Read `chosenCount()` (the "Download selected
+  (N)"/"Delete selected (N)" button's own number) instead.
+- **The "Download selected (N)"/"Delete selected (N)" button always
+  exists, N included when it is 0**, because it renders unconditionally and
+  is merely `disabled` at zero (`download-sheet.tsx`). `XCTAssertFalse(...
+  .exists, "a sweep must select nothing")` therefore always fails, sweep or
+  no sweep — met twice the same day in two different probe files
+  (`TwoFingerProbe.testDrawerCheckedRowsUnaffectedBySweep`,
+  `PauseOrderProbe`'s ring-sweep check). Compare `chosenCount()` before and
+  after instead of asserting the button's absence.
+- **React Native's "Open debugger to view warnings." LogBox banner overlays
+  the drawer's own footer almost exactly**, not only the floating player's
+  Play button the README already documents. Measured 2026-09-24: the
+  banner's frame was `{{10.0, 787.7}, {382.0, 48.0}}` and "Download selected
+  (0)"'s was `{{20.0, 792.7}, {362.0, 49.3}}` — nearly the same rectangle. A
+  `.tap()` on the accessibility-matched button dispatched to that screen
+  point anyway, and landed on the banner: the tap "succeeded" (no XCTest
+  error), but `enqueue()` never ran, `selected` was never cleared, and the
+  next sweep's count came out doubled from the stale selection underneath.
+  The banner is global app state and, once raised, persists until a
+  restart; what raises it here was not isolated (unlike the two triggers
+  the README already names). Fix, the same as for the Play button: restart
+  to clear it, and check for `label BEGINSWITH '!, Open debugger'` before a
+  footer tap in any probe that configures a provider or chooses a voice
+  first, since either can apparently raise it.
+- **Retrying a failed download test against the same fixture inherits its
+  partial progress**, because saved audio and task state are persisted
+  (SQLite) and reloaded on the next launch, not reset by
+  `app.terminate()`/`app.launch()`. A `PauseOrderProbe` rerun after an
+  earlier attempt had already completed three of its five chapters found
+  those three rendered as checkmarks, not checkboxes — `label ==
+  "Order Chapter One"` no longer matched anything, and the next selection's
+  `Download selected (N)` count came out higher than expected because the
+  still-selected rows from the *previous* attempt's stalled tap were never
+  cleared either. Give the fixture a fresh identity between attempts that
+  must start from zero: regenerating an EPUB with identical readable text
+  but a bumped `dcterms:modified`/comment changes its content hash, so
+  `identifyDocument` treats it as a new, never-downloaded Library entry
+  without touching a single sentence (`pause-order-fixture.ts`). Remove the
+  stale entry from `library.json` first (matched by title) or the Library
+  shows two rows with the same name.
+- **`/tmp/openreader-fish-key.txt` can be gone by the time a later probe in
+  the same session reads it**, even though nothing in the session deleted
+  it — macOS's own periodic housekeeping clears old files under `/tmp`.
+  Measured 2026-09-24: staged once near the start of a multi-hour session,
+  gone (`No such file or directory`) roughly ninety minutes later with nothing
+  else having touched it. Re-stage it (`cp
+  ~/.secrets/openreader/fish_audio_apikey_2.txt
+  /tmp/openreader-fish-key.txt && chmod 600 ...`) immediately before a probe
+  that needs it if any real time has passed, rather than trusting an earlier
+  staging in the same session.
+- **A freshly created worktree simulator does not have `A Short Test of
+  Reading Aloud` (or any of the other shared fixtures) in its Library**,
+  only whatever the task handoff explicitly says was loaded. The README's
+  "Issues #13/#14" section describes seeding it once through
+  `identifyDocument`/`serializeLibrary` directly, as a one-time step on the
+  original device; a later, different device needs it seeded again.
+  `test/manual-test/short-test-fixture.ts` generates the same two chapters
+  and 17 utterances, for loading through the walkthrough harness's `add`
+  command instead (README, "Real books") — an equally direct, non-picker
+  path, proven working 2026-09-24.
 
 ### Measuring inside the reader's WebView
 
@@ -1439,6 +1568,44 @@ download, so checking Dark without a second real download needs either a
 fresh, unfinished task or visual inspection of the saved light-mode
 screenshots' contrast against the app's dark palette).
 
+The two-chapter fixture cannot show order independent of tap order, pausing
+the chapter being written leaving the *next* chapter to finish while the
+paused one stays put, the ring in Manage downloads, or adding a chapter while
+another stays paused — `PauseOrderProbe.swift` (`pause-order.sh`) drives
+these on a disposable five-chapter fixture instead
+(`test/manual-test/pause-order-fixture.ts`, seeded through the harness like
+any fixture, never checked into the Library by the generator itself):
+
+```sh
+bash test/manual-test/pause-order.sh SIMULATOR_UDID /tmp/openreader-pause-order-01 \
+  -only-testing:PauseOrderProbe/testOrderMixedAddAndRingSweep
+# host-level restart between the two methods — never an in-test app.terminate()/launch()
+xcrun simctl terminate SIMULATOR_UDID top.xujialiu.openreader
+xcrun simctl launch SIMULATOR_UDID top.xujialiu.openreader -RCT_jsLocation localhost:PORT
+bash test/manual-test/pause-order.sh SIMULATOR_UDID /tmp/openreader-pause-order-02 \
+  -only-testing:PauseOrderProbe/testOrderAfterRestart
+```
+
+Chapters one and two are tapped in reverse order and left untouched, so which
+finishes first is the order proof — a ring's own accessibility label carries
+no fraction, only halted or not, so it cannot show which in-task chapter is
+actually being written this instant (measured 2026-09-24: chapter one, tapped
+second, finished first every time). Chapters four and three (tapped four
+first) drive the rest: three carries extra sentences so there is a window to
+pause it before it finishes on its own, pausing it lets four proceed to
+completion while three stays paused throughout — the mixed-state label and
+the ring inside Manage downloads are read in between, tolerant of chapter
+four finishing first on a fast connection exactly as `DownloadRingProbe`
+already tolerates for its own two chapters (measured 2026-09-24: the Manage
+ring case raced away in 2 of 4 runs, in which case only the code
+(`marker()`'s manage branch, `src/app/download-rows.ts`) stands behind that
+one sub-claim). Chapter five is added last, while three is still paused, and
+the method ends with three paused and five mid-flight or queued for the
+host-level restart; `testOrderAfterRestart` reopens the drawer, requires
+three still paused and five finished without a tap, resumes three and
+finishes the download. Real spend: 19 short utterances across five chapters,
+a fraction of `DownloadRingProbe`'s per-run cost.
+
 ### Two fingers: Files' own selection, and the download drawer's copy (#57)
 
 `TwoFingerProbe.swift` makes two-finger drags (see **Pitfalls › XCTest**) and
@@ -1473,13 +1640,35 @@ for the first row to the fourth, 2 after a sweep that begins on a selected row
 goes to the fourth and back to the second, 4 when one finger carries on alone,
 26 after a hold past the list's bottom edge for 1 s (Chapters 16–20 then in
 view), and unchanged after a one-finger drag. `testDrawerOneFingerNeverChooses`
-compares `swipeUp()` with a synthesized drag (**Pitfalls › XCTest**).
+compares `swipeUp()` with a synthesized drag (**Pitfalls › XCTest**): measured
+again 2026-09-24 verifying #56/#57 together, 4 of 6 `swipeUp()`/`swipeDown()`
+changed the count and 0 of 6 synthesized drags did.
+
+Added 2026-09-24, same file: `testDrawerTopEdge` scrolls down first with a
+synthesized one-finger drag, then holds at the *top* edge and requires the
+shown rows to change (measured: Chapter 25–29 back up to Chapter 2–6, 29
+chosen). `testDrawerLongStretchSmoothness` holds at the bottom edge for 3 s —
+not longer; see **Pitfalls › XCTest** for why — and requires the shown rows to
+differ from before the hold (measured: Part 1 to Chapter 72–76, 81 chosen,
+`chosen` climbing 5 → 28 → 50 → 74 across a `recordVideo` capture's frames a
+second apart, no stall or drop). `testDrawerOneFingerTapToggles` confirms a
+plain one-finger tap still selects, then deselects, a row (via `chosenCount()`,
+not `.isSelected` — **Pitfalls › XCTest**). `testDrawerCheckedRowsUnaffectedBySweep`
+and `testDrawerManageSweepSelectsForDelete` need the short fixture already
+downloaded (run right after `download-ring.sh`'s `testDownloadRingLifecycle`,
+while its reader is still the active one `openDrawer` reuses): a sweep across
+downloaded rows chooses nothing, and a sweep across saved rows in Manage
+downloads chooses them for `Delete selected (N)`, which the method then
+actually taps through — fine for this fixture, never the owner's.
 
 What it cannot establish: that a real hand does the same — a real finger
 trembles, flicks and lands 20–40 pt apart, where these are two exact paths 36 pt
 apart; Files' top edge band (a hold over its search field could not be read
-back); and how smoothly the drawer keeps up on a device while it scrolls itself
-through hundreds of rows.
+back); how the drawer behaves past a 3 s hold, given the synthesis limit above;
+and a collapsed volume's sweep behaviour on a device, since no book in
+`~/Works/epub_books` has a nested contents list to sweep (checked 2026-09-24:
+every part's `toc.ncx` is one flat level) — `range-selection.test.ts` is the
+only coverage of that rule.
 
 ### Paused sentence seeking after background receipt
 

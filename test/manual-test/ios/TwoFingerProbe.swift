@@ -285,6 +285,13 @@ final class TwoFingerProbe: XCTestCase {
       _ = until(5) { !app.buttons["Close Download"].exists }
       Thread.sleep(forTimeInterval: 0.5)
     }
+    if !app.buttons["More actions"].waitForExistence(timeout: 3) {
+      // Landed on the Library rather than a reader (a fresh launch, or state
+      // restoration pointed elsewhere): open Shadow Slave, the book these
+      // methods are measured against.
+      let shadowSlaveRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Shadow Slave'")).firstMatch
+      if shadowSlaveRow.waitForExistence(timeout: 5) { shadowSlaveRow.tap() }
+    }
     XCTAssertTrue(app.buttons["More actions"].waitForExistence(timeout: 10))
     app.buttons["More actions"].tap()
     XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 3))
@@ -424,5 +431,141 @@ final class TwoFingerProbe: XCTestCase {
     Thread.sleep(forTimeInterval: 1)
     capture("files-after-smoke", files)
     print("SELECTED AFTER SMOKE: \(selected(files))")
+  }
+
+  /// A one-finger drag scrolled up, three times, so the list is not at its
+  /// own top before an edge test holds near it — `swipeUp()`/`swipeDown()`
+  /// choose the row they begin on even before #57 (README, Pitfalls, XCTest),
+  /// so this scrolls with a synthesized one-finger drag instead.
+  func drawerScrollDown(_ app: XCUIApplication, times: Int = 3) {
+    let x = shownRows(app).first?.frame.midX ?? 200
+    for _ in 0..<times {
+      Fingers.play([Fingers.finger(Fingers.line(CGPoint(x: x, y: 650), CGPoint(x: x, y: 320), start: 0, seconds: 0.4), lift: 0.45)], name: "scroll-down", in: self)
+      Thread.sleep(forTimeInterval: 1.0)
+    }
+  }
+
+  /// #57-4, the top edge: scroll down first so there is somewhere to scroll
+  /// back to, then hold two fingers near the top of the visible rows.
+  /// `EDGE_BAND` is 24 pt from either edge of the list (ADR 0045); landing 10 pt
+  /// inside the first shown row's top keeps the hold within that band without
+  /// leaving the `FlatList`'s own bounds, which is what the `GestureDetector`
+  /// wraps.
+  func testDrawerTopEdge() throws {
+    let app = openDrawer()
+    drawerScrollDown(app, times: 4)
+    let before = shownRows(app)
+    XCTAssertGreaterThanOrEqual(before.count, 2, "Too few rows to find the top edge")
+    print("DRAWER top-edge before: \(before.map { $0.label })")
+    let start = mid(before[before.count - 1])
+    let end = CGPoint(x: start.x, y: before[0].frame.minY + 10)
+    sweep(start, end, seconds: 0.6, hold: 1.0, name: "top-edge")
+    let after = shownRows(app)
+    print("DRAWER top-edge-after: chosen=\(chosenCount(app)) shown=\(after.map { $0.label })")
+    capture("drawer-top-edge", app)
+    XCTAssertNotEqual(before.map { $0.label }, after.map { $0.label }, "Holding at the top edge should have scrolled the list back up")
+  }
+
+  /// #57-5: smoothness and no lost selection while auto-scroll runs through a
+  /// long stretch of the 250-chapter book. `EDGE_FASTEST` is 1,500 pt/s (ADR
+  /// 0045); an 8 s hold covers on the order of 150+ rows, a long stretch
+  /// without walking all 250. Screenshots at 2, 4, 6 and 8 s, taken from a
+  /// background queue while the main thread blocks inside the held gesture's
+  /// `wait(for:)`, sample the scroll's progression for a smoothness read; the
+  /// final chosen count and row range show whether any row was skipped or the
+  /// selection was lost.
+  func testDrawerLongStretchSmoothness() throws {
+    let app = openDrawer()
+    let rows = shownRows(app)
+    XCTAssertGreaterThanOrEqual(rows.count, 2, "Too few rows to sweep")
+    let before = rows.map { $0.label }
+    let anchor = mid(rows[0])
+    let bottomEdge = CGPoint(x: rows[0].frame.midX, y: rows[rows.count - 1].frame.maxY + 20)
+    // A first attempt captured intermediate frames from a background queue
+    // while this thread blocked in `Fingers.play`'s `wait(for:)`; the closures
+    // did not run until the wait returned, and the resulting `add(_:)` calls
+    // from a background thread once the method had moved on crashed the
+    // *next* test with "Activity cannot be used after its scope has
+    // completed" (test.log, 2026-09-24). Smoothness is read from a
+    // host-driven `simctl io recordVideo` wrapped around this one test
+    // instead (the caller does this, not this method).
+    //
+    // A second attempt held for 8 s (~80 trembling points): the synthesizer
+    // reported success, but the drawer chose nothing at all and never
+    // scrolled (test.log, 2026-09-24) — no method in this codebase holds
+    // longer than 3.0 s (`testFilesEdgeTime`), and this is evidence that
+    // longer synthesized holds can silently fail rather than a product
+    // defect (Pitfalls, XCTest). 3 s stays inside proven territory while
+    // still well past the 1 s edge test in `testDrawerSweeps`.
+    sweep(anchor, bottomEdge, seconds: 0.6, hold: 3.0, name: "long-stretch")
+    let after = shownRows(app)
+    print("DRAWER long-stretch final: before=\(before) after=\(after.map { $0.label }) chosen=\(chosenCount(app))")
+    capture("drawer-long-stretch-final", app)
+    XCTAssertFalse(after.isEmpty, "The list should still show rows after the hold")
+    XCTAssertNotEqual(before, after.map { $0.label }, "A 3 s hold at the bottom edge should have scrolled the list well past where it began")
+  }
+
+  /// #57-6, the second half: a one-finger tap still toggles a row (a
+  /// one-finger scroll choosing nothing is `testDrawerOneFingerNeverChooses`).
+  func testDrawerOneFingerTapToggles() throws {
+    let app = openDrawer()
+    let rows = shownRows(app)
+    XCTAssertGreaterThanOrEqual(rows.count, 1, "No row to tap")
+    // `.isSelected` is not a reliable read of these rows' checked state — this
+    // file's own passing sweep tests only print it for the report, never
+    // assert on it, and rely on `chosenCount()` (the "Download selected (N)"
+    // button label) for real evidence instead. Do the same here.
+    let before = chosenCount(app)
+    rows[0].tap()
+    XCTAssertTrue(until(3) { self.chosenCount(app) == before + 1 }, "A one-finger tap did not select the row")
+    capture("drawer-one-finger-tap-1", app)
+    shownRows(app)[0].tap()
+    XCTAssertTrue(until(3) { self.chosenCount(app) == before }, "A second one-finger tap did not deselect the row back")
+    capture("drawer-one-finger-tap-2", app)
+  }
+
+  /// #57-8, the check case: once `DownloadRingProbe.testDownloadRingLifecycle`
+  /// has completed the short fixture's two chapters, both rows carry a check
+  /// rather than a selection circle, and a sweep across them must choose
+  /// neither. Must run in its own invocation right after that probe, before
+  /// anything else relaunches the app onto a different reader — `openDrawer`
+  /// reopens whichever reader is already active (`app.activate()`, not
+  /// `launch()`), which is the short fixture at that point.
+  func testDrawerCheckedRowsUnaffectedBySweep() throws {
+    let app = openDrawer()
+    let rows = shownRows(app)
+    XCTAssertGreaterThanOrEqual(rows.count, 2, "Expected the short fixture's two downloaded chapters — run this right after DownloadRingProbe.testDownloadRingLifecycle")
+    print("CHECKED ROWS: \(rows.map { $0.label })")
+    // The "Download selected (N)" button always exists once the drawer is
+    // open, N included when N is 0 — `chosenCount()` reads that number
+    // rather than mere existence, matching the pattern this file already
+    // uses elsewhere (`testDrawerOneFingerTapToggles`).
+    let before = chosenCount(app)
+    sweep(mid(rows[0]), mid(rows[rows.count - 1]), name: "checked-sweep")
+    XCTAssertEqual(chosenCount(app), before, "A sweep across downloaded (checked) rows must select nothing")
+    capture("drawer-checked-rows-unaffected", app)
+  }
+
+  /// #57-9: in Manage downloads, a sweep across saved chapters chooses them
+  /// for Delete selected, and actually deletes them — the short fixture's own
+  /// saved audio, which is fine to delete (the Document and reading position
+  /// are kept). Depends on the same prior state as the method above, and on
+  /// running after it (deleting first would leave nothing checked to sweep).
+  func testDrawerManageSweepSelectsForDelete() throws {
+    let app = openDrawer()
+    XCTAssertTrue(app.buttons["Manage downloads"].waitForExistence(timeout: 5))
+    app.buttons["Manage downloads"].tap()
+    let rows = shownRows(app)
+    XCTAssertGreaterThanOrEqual(rows.count, 2, "Expected the short fixture's two saved chapters in Manage downloads")
+    sweep(mid(rows[0]), mid(rows[rows.count - 1]), name: "manage-sweep")
+    let deleteButton = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Delete selected ('")).firstMatch
+    XCTAssertEqual(deleteButton.label, "Delete selected (\(rows.count))")
+    capture("drawer-manage-sweep-selected", app)
+    deleteButton.tap()
+    let alert = app.alerts["Delete downloaded audio?"]
+    XCTAssertTrue(alert.waitForExistence(timeout: 5))
+    alert.buttons["Delete"].tap()
+    XCTAssertTrue(until(10) { self.shownRows(app).isEmpty }, "The deleted rows should leave nothing for Manage downloads to list")
+    capture("drawer-manage-sweep-deleted", app)
   }
 }
