@@ -28,7 +28,7 @@ import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react
 
 import { MAX_STEPPER_RATE, MIN_STEPPER_RATE, snapRate, stepRate } from '../playback';
 
-import { INK } from './controls';
+import { INK, useBorders } from './controls';
 import { Icon, type IconName } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { SkipTarget } from './use-reading';
@@ -156,6 +156,7 @@ export function Player({
     onPlay();
   }, [playing, onPause, onPlay]);
 
+  const borders = useBorders();
   const measure = useCallback(
     (event: LayoutChangeEvent) => {
       onHeight(event.nativeEvent.layout.height);
@@ -175,7 +176,7 @@ export function Player({
   }
 
   return (
-    <View style={styles.player} onLayout={measure}>
+    <View style={[styles.player, { borderColor: borders.line }]} onLayout={measure}>
       {notes.map((note) => (
         <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>{note.said}</Text>
       ))}
@@ -391,7 +392,6 @@ const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
     backgroundColor: INK.panel,
-    borderColor: INK.line,
     borderRadius: 22,
     height: 48,
     justifyContent: 'center',
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   // A circle, as tall as the player already was. It was 56 wide by 52 tall, a
   // capsule that read as an oval (#48); a larger circle would make the player
   // taller, and every point of it is a point of the page it covers.
-  buttonPrimary: { backgroundColor: INK.text, borderColor: INK.text, width: 52, minWidth: 52, height: 52, borderRadius: 26 },
+  buttonPrimary: { backgroundColor: INK.text, width: 52, minWidth: 52, height: 52, borderRadius: 26 },
   chevronTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   collapsed: { alignItems: 'flex-end', bottom: 28, position: 'absolute', right: 16 },
   disabled: { opacity: 0.35 },
@@ -411,7 +411,6 @@ const styles = StyleSheet.create({
   noteAttention: { color: INK.attention },
   player: {
     backgroundColor: INK.panel,
-    borderColor: INK.line,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
@@ -425,22 +424,6 @@ const styles = StyleSheet.create({
     right: 0,
   },
   pressed: { opacity: 0.65 },
-  behind: { flex: 1 },
-  done: { alignItems: 'center', backgroundColor: INK.text, borderRadius: 10, paddingVertical: 12 },
-  doneLabel: { color: INK.page, fontSize: 15, fontWeight: '600' },
-  grip: { alignSelf: 'center', backgroundColor: INK.line, borderRadius: 3, height: 5, width: 40 },
-  sheet: {
-    backgroundColor: INK.panel,
-    borderTopColor: INK.line,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 20,
-    paddingBottom: 36,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  sheetTitle: { color: INK.text, fontSize: 18, fontWeight: '700' },
   rateHost: { height: 44, width: 58 },
   rateTap: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   // A step above the voice's 14 beside it; at 13 it was the smallest thing on

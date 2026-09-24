@@ -33,7 +33,7 @@ import { FlatList, Pressable, StyleSheet, Text } from 'react-native';
 
 import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
 
-import { INK } from './controls';
+import { INK, useBorders } from './controls';
 import { Sheet, SheetNote } from './sheet';
 
 /** One line per row, and the same height for every one of them: what makes the list open where it should. */
@@ -139,13 +139,14 @@ function precisionLine(precision: 'shared' | 'before'): string {
 
 function Row({ row, current, onPress }: { row: ContentsRow; current: boolean; onPress(): void }) {
   const unreachable = row.target === null;
+  const borders = useBorders();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: current, disabled: unreachable }}
       onPress={onPress}
       disabled={unreachable}
-      style={({ pressed }) => [styles.row, current && styles.rowCurrent, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.row, { borderBottomColor: borders.line }, current && styles.rowCurrent, pressed && styles.pressed]}
     >
       <Text
         style={[
@@ -166,12 +167,9 @@ function Row({ row, current, onPress }: { row: ContentsRow; current: boolean; on
 }
 
 const styles = StyleSheet.create({
-  behind: { flex: 1 },
-  grip: { alignSelf: 'center', backgroundColor: INK.line, borderRadius: 3, height: 5, marginBottom: 6, width: 40 },
   list: { flexGrow: 0, height: ROW_HEIGHT * 9 },
   pressed: { opacity: 0.65 },
   row: {
-    borderBottomColor: INK.line,
     borderBottomWidth: StyleSheet.hairlineWidth,
     height: ROW_HEIGHT,
     justifyContent: 'center',
@@ -181,15 +179,4 @@ const styles = StyleSheet.create({
   rowLabel: { color: INK.text, fontSize: 15, paddingHorizontal: 16 },
   rowLabelCurrent: { color: INK.reading, fontWeight: '700' },
   rowUnreachable: { color: INK.quiet },
-  sheet: {
-    backgroundColor: INK.panel,
-    borderTopColor: INK.line,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 10,
-    paddingBottom: 32,
-    paddingTop: 10,
-  },
-  title: { color: INK.text, fontSize: 18, fontWeight: '700', paddingHorizontal: 16 },
 });

@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View }
 import { GestureDetector } from 'react-native-gesture-handler';
 import { chapterTextCount, descendants, fullyPrepared, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
-import { INK } from './controls';
+import { INK, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
 import { listedInManage, marker, type Marker } from './download-rows';
 import { Icon } from './icon';
@@ -24,6 +24,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
   document: string; title: string; voice: OfflineVoice; onVoice?(voice: OfflineVoice): void; onStart?(): void;
 }) {
   downloads.useDownloads();
+  const borders = useBorders();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [manage, setManage] = useState(false);
@@ -131,7 +132,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
         const failed = !!task?.failed.includes(item.id);
         const mark = children ? null : markers.get(item.id);
         const name = <Text style={[styles.title, children && { fontWeight: '600' }]} numberOfLines={2}>{item.title || 'Untitled chapter'}</Text>;
-        return <View style={[styles.row, { paddingLeft: 4 + Math.min(item.depth, 4) * 15 }]}>
+        return <View style={[styles.row, { borderBottomColor: borders.line, paddingLeft: 4 + Math.min(item.depth, 4) * 15 }]}>
           {children ? <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed.has(item.id) ? 'Expand' : 'Collapse'} ${item.title}`}
             onPress={() => setCollapsed((was) => { const next = new Set(was); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} style={styles.collapse}>
             <Icon name={collapsed.has(item.id) ? 'next' : 'down'} color={INK.quiet} size={18} />
@@ -144,7 +145,7 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
             <View style={{ flex: 1 }}>{name}
               {!done && (count || failed) ? <Text style={styles.secondary}>{failed ? 'Failed · ' : ''}{count} / {chapterTextCount(item)}</Text> : null}</View>
             {done && !manage ? <Icon name="check" color={INK.reading} size={22} /> :
-              ids.length || !children ? <View style={[styles.circle, picked && styles.checked]}>{picked ? <Icon name="check" color={INK.page} size={17} /> : null}</View> : null}
+              ids.length || !children ? <View style={[styles.circle, { borderColor: picked ? borders.reading : borders.quiet }, picked && styles.checked]}>{picked ? <Icon name="check" color={INK.page} size={17} /> : null}</View> : null}
           </Pressable>}
         </View>;
       }} /></GestureDetector>
@@ -174,9 +175,9 @@ const styles = StyleSheet.create({
   voice: { color: INK.text, fontSize: 15, flex: 1 }, link: { color: INK.reading, fontSize: 14, paddingVertical: 8 },
   secondary: { color: INK.quiet, fontSize: 13 }, error: { color: INK.text, fontSize: 13 },
   preparing: { padding: 20, gap: 14, alignItems: 'center' }, list: { height: 330, flexGrow: 0, flexShrink: 1 },
-  row: { minHeight: 62, flexDirection: 'row', borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth },
+  row: { minHeight: 62, flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
   chapter: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12, paddingVertical: 12 }, title: { color: INK.text, fontSize: 16 },
-  collapse: { width: 30, alignItems: 'center', justifyContent: 'center' }, circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: INK.quiet, alignItems: 'center', justifyContent: 'center' },
-  checked: { backgroundColor: INK.reading, borderColor: INK.reading },
+  collapse: { width: 30, alignItems: 'center', justifyContent: 'center' }, circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  checked: { backgroundColor: INK.reading },
   footer: { gap: 6 }, button: { backgroundColor: INK.text, borderRadius: 24, alignItems: 'center', paddingVertical: 15 }, buttonText: { color: INK.page, fontWeight: '600', fontSize: 16 }, other: { gap: 4 },
 });

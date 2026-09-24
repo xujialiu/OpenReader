@@ -39,7 +39,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { ProviderId } from '../core/providers/types';
 
-import { INK } from './controls';
+import { INK, useBorders } from './controls';
 import { Icon } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { VoiceLists } from './use-voices';
@@ -73,6 +73,7 @@ export function VoiceSheet({ visible, onClose, ...props }: VoiceSheetProps) {
 }
 
 function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSheetProps, 'visible' | 'onClose'>) {
+  const borders = useBorders();
   /** Which Provider's Voices are being looked at. The one in use, until another is tapped. */
   const [looking, setLooking] = useState<ProviderId>(lists.enabled?.includes(settings.provider) ? settings.provider : lists.enabled?.[0] ?? settings.provider);
   /** Which locale is open. Null means none has been chosen yet, and the Voice in use decides. */
@@ -199,7 +200,7 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
                       onPress={() => {
                         onChoose(looking, voice.id);
                       }}
-                      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                      style={({ pressed }) => [styles.row, { borderBottomColor: borders.line }, pressed && styles.pressed]}
                     >
                       <Text style={[styles.rowLabel, chosen && styles.rowLabelChosen]} numberOfLines={1}>
                         {voice.label}
@@ -231,13 +232,14 @@ function Chip({
   /** Where this chip starts, once it has been laid out. Only the chosen one is asked. */
   onMeasured?(x: number): void;
 }) {
+  const borders = useBorders();
   return (
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ selected: chosen }}
       onPress={onPress}
       onLayout={onMeasured ? (event) => onMeasured(event.nativeEvent.layout.x) : undefined}
-      style={({ pressed }) => [styles.chip, chosen && styles.chipChosen, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.chip, { borderColor: chosen ? borders.text : borders.line }, chosen && styles.chipChosen, pressed && styles.pressed]}
     >
       <Text style={[styles.chipLabel, chosen && styles.chipLabelChosen]}>{label}</Text>
     </Pressable>
@@ -245,38 +247,22 @@ function Chip({
 }
 
 const styles = StyleSheet.create({
-  behind: { flex: 1 },
   chip: {
     backgroundColor: INK.page,
-    borderColor: INK.line,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  chipChosen: { backgroundColor: INK.text, borderColor: INK.text },
+  chipChosen: { backgroundColor: INK.text },
   chipLabel: { color: INK.text, fontSize: 14 },
   chipLabelChosen: { color: INK.page, fontWeight: '600' },
-  done: { alignItems: 'center', backgroundColor: INK.text, borderRadius: 10, marginHorizontal: 16, paddingVertical: 12 },
-  doneLabel: { color: INK.page, fontSize: 15, fontWeight: '600' },
-  grip: { alignSelf: 'center', backgroundColor: INK.line, borderRadius: 3, height: 5, marginBottom: 6, width: 40 },
   locales: { flexGrow: 0 },
   localesBody: { gap: 8, paddingHorizontal: 16 },
   pressed: { opacity: 0.65 },
   providers: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingVertical: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingVertical: 12 },
   rowLabel: { flex: 1, color: INK.text, fontSize: 15, fontWeight: '600' },
   rowLabelChosen: { color: INK.reading },
-  sheet: {
-    backgroundColor: INK.panel,
-    borderTopColor: INK.line,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 10,
-    paddingBottom: 32,
-    paddingTop: 10,
-  },
-  title: { color: INK.text, fontSize: 18, fontWeight: '700', paddingHorizontal: 16 },
   voices: { height: 260 },
 });

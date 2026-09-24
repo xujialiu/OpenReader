@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { READING_FONTS, stepFontSize, TEXT_ALIGNMENTS, type Appearance, type TextAlignment } from '../renderer/highlighter';
-import { ChoiceMenu, INK, type Choice } from './controls';
+import { ChoiceMenu, INK, useBorders, type Choice } from './controls';
 import { Icon } from './icon';
 import { Sheet } from './sheet';
 
@@ -68,13 +68,14 @@ export function AppearanceControls({ appearance, onChange, onFonts }: {
  */
 export function FontList({ appearance, onChange }: { appearance: Appearance; onChange(next: Appearance): void }) {
   const rows = [null, ...READING_FONTS.map((font) => font.id)] as const;
+  const borders = useBorders();
   return <ScrollView style={styles.fonts}>
     {rows.map((id) => {
       const font = READING_FONTS.find((one) => one.id === id);
       const chosen = appearance.font === id;
       return <Pressable key={id ?? 'document'} accessibilityRole="button" accessibilityState={{ selected: chosen }}
         accessibilityLabel={font?.label ?? ORIGINAL_FONT} onPress={() => onChange({ ...appearance, font: id })}
-        style={({ pressed }) => [styles.fontRow, pressed && { opacity: 0.5 }]}>
+        style={({ pressed }) => [styles.fontRow, { borderBottomColor: borders.line }, pressed && { opacity: 0.5 }]}>
         <Text style={[styles.fontChoice, font?.preview ? { fontFamily: font.preview } : null]} numberOfLines={1}>
           {font?.label ?? ORIGINAL_FONT}
         </Text>
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
   detail: { color: INK.quiet, fontSize: 16, flexShrink: 1 },
   fonts: { flexGrow: 0, maxHeight: 420 },
   fontRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: 12, paddingHorizontal: 20, borderBottomColor: INK.line, borderBottomWidth: StyleSheet.hairlineWidth },
+    gap: 12, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth },
   fontChoice: { color: INK.text, fontSize: 17, flexShrink: 1 },
   stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: INK.line, borderRadius: 30 },
   step: { width: 62, height: 44, alignItems: 'center', justifyContent: 'center' },
