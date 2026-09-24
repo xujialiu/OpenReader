@@ -39,7 +39,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Appearance, AppState, useColorScheme } from 'react-native';
 
 
-import { PALETTE, SETTINGS_SURFACE } from './controls';
+import { PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
 import { GeneralScreen } from './general-screen';
 import { LibraryScreen } from './library-screen';
 import { useHandedOverDocuments, type HandedOverFile } from './opened-document';
@@ -277,53 +277,56 @@ export function OpenReader() {
 
   return (
     <ShellContext.Provider value={shell}>
-      <DownloadIndexer />
-      {/*
-       * `ReaderProvider` is `@epubjs-react-native/core`'s own context and has to
-       * sit above both `<Reader>` and `useReaderBridge`, which reads
-       * `injectJavascript` and `goToLocation` out of it (ADR 0011). It is above
-       * the navigator rather than inside the Reader route because it builds its
-       * value with hooks of its own, and a context created and destroyed per
-       * push is one more thing that can be half-torn-down while a WebView is
-       * still talking to it.
-       */}
-      <ReaderProvider>
-        {/* The clock and the battery, over `PALETTE[scheme].panel`. Stated rather
-            than left to `auto`, which reads the system's scheme and would be the
-            one thing still light when the owner has chosen Dark on a light phone. */}
-        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-        <NavigationContainer ref={navigationRef} theme={navigationTheme}>
-          <Stack.Navigator
-            initialRouteName="Library"
-            screenOptions={{
-              // Plain strings and not `INK`: the navigation library types these as
-              // `string` and will not take a dynamic colour, so this is the one
-              // place the theme is resolved in JavaScript rather than by UIKit.
-              headerStyle: { backgroundColor: PALETTE[scheme].page },
-              headerShadowVisible: false,
-              // The way back is the arrow alone, as on the phone's own Settings,
-              // which no longer names the screen behind it (#48). VoiceOver calls
-              // it `Back` (measured), where the phone's own Settings says the
-              // screen's name; minimal mode offers no label of its own. The
-              // screens keep their `headerBackTitle` for the back button's
-              // long-press menu, which still lists it.
-              headerBackButtonDisplayMode: 'minimal',
-              headerTintColor: PALETTE[scheme].text,
-              headerTitleStyle: { color: PALETTE[scheme].text },
-              contentStyle: { backgroundColor: PALETTE[scheme].page },
-            }}
-          >
-            <Stack.Screen name="Library" component={LibraryScreen} options={{ title: 'Library' }} />
-            <Stack.Screen name="Reader" component={ReaderScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings', ...settingsScreen }} />
-            <Stack.Screen name="General" component={GeneralScreen} options={{ title: 'General', headerBackTitle: 'Settings', ...settingsScreen }} />
-            <Stack.Screen name="Providers" component={ProvidersScreen} options={{ title: 'Providers', headerBackTitle: 'Settings', ...settingsScreen }} />
-            {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
-            <Stack.Screen name="Provider" component={ProviderScreen} options={settingsScreen} />
-            <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings', ...settingsScreen }} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </ReaderProvider>
+      {/* The same answer the header and the status bar take, for the borders (`useBorders`, #29). */}
+      <SchemeContext.Provider value={scheme}>
+        <DownloadIndexer />
+        {/*
+         * `ReaderProvider` is `@epubjs-react-native/core`'s own context and has to
+         * sit above both `<Reader>` and `useReaderBridge`, which reads
+         * `injectJavascript` and `goToLocation` out of it (ADR 0011). It is above
+         * the navigator rather than inside the Reader route because it builds its
+         * value with hooks of its own, and a context created and destroyed per
+         * push is one more thing that can be half-torn-down while a WebView is
+         * still talking to it.
+         */}
+        <ReaderProvider>
+          {/* The clock and the battery, over `PALETTE[scheme].panel`. Stated rather
+              than left to `auto`, which reads the system's scheme and would be the
+              one thing still light when the owner has chosen Dark on a light phone. */}
+          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+            <Stack.Navigator
+              initialRouteName="Library"
+              screenOptions={{
+                // Plain strings and not `INK`: the navigation library types these as
+                // `string` and will not take a dynamic colour, so this is the one
+                // place the theme is resolved in JavaScript rather than by UIKit.
+                headerStyle: { backgroundColor: PALETTE[scheme].page },
+                headerShadowVisible: false,
+                // The way back is the arrow alone, as on the phone's own Settings,
+                // which no longer names the screen behind it (#48). VoiceOver calls
+                // it `Back` (measured), where the phone's own Settings says the
+                // screen's name; minimal mode offers no label of its own. The
+                // screens keep their `headerBackTitle` for the back button's
+                // long-press menu, which still lists it.
+                headerBackButtonDisplayMode: 'minimal',
+                headerTintColor: PALETTE[scheme].text,
+                headerTitleStyle: { color: PALETTE[scheme].text },
+                contentStyle: { backgroundColor: PALETTE[scheme].page },
+              }}
+            >
+              <Stack.Screen name="Library" component={LibraryScreen} options={{ title: 'Library' }} />
+              <Stack.Screen name="Reader" component={ReaderScreen} />
+              <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings', ...settingsScreen }} />
+              <Stack.Screen name="General" component={GeneralScreen} options={{ title: 'General', headerBackTitle: 'Settings', ...settingsScreen }} />
+              <Stack.Screen name="Providers" component={ProvidersScreen} options={{ title: 'Providers', headerBackTitle: 'Settings', ...settingsScreen }} />
+              {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
+              <Stack.Screen name="Provider" component={ProviderScreen} options={settingsScreen} />
+              <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings', ...settingsScreen }} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </ReaderProvider>
+      </SchemeContext.Provider>
     </ShellContext.Provider>
   );
 }

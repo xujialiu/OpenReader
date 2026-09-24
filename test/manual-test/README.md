@@ -689,6 +689,20 @@ fix (AGENTS.md).
   chips have `accessibilityRole="radio"`, and
   `app.descendants(matching: .radioButton)` found none of them on iOS 27.0.
   Find a chip by its label (`label == 'en-US'`), as `ReaderProbe` does.
+- **A download-list row's own `accessibilityRole="checkbox"` is not a
+  `.button` either, the same story one bullet up.**
+  `app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'The First
+  Chapter'"))` found nothing on a row plainly on screen (2026-09-24,
+  `LineColourProbe`, verifying #29): the screenshot taken moments earlier
+  showed the row, but the element search timed out and the probe silently
+  skipped the tap it gated on it. `PauseOrderProbe.checkbox` and
+  `DownloadRingProbe.ring`/`firstRow` already work around this with
+  `app.descendants(matching: .any).matching(NSPredicate(format: "label ==
+  %@", title))` — an exact label match over every descendant, not a
+  `.buttons` query. Reuse that pattern for any new download-row lookup
+  instead of rediscovering it; a silent `waitForExistence(timeout:)` guard
+  around an optional tap can hide exactly this mistake, so check the
+  screenshot it was meant to gate before trusting a GREEN run that has one.
 - **`Back` is not what the back button is called.** It is named after the screen
   behind it: the Sync screen's is `Settings`, the Settings screen's is `Library`.
   Only the reader's is `Back`. A book handed over with `simctl openurl` is pushed
@@ -1136,6 +1150,21 @@ fix (AGENTS.md).
   to clear it, and check for `label BEGINSWITH '!, Open debugger'` before a
   footer tap in any probe that configures a provider or chooses a voice
   first, since either can apparently raise it.
+- **The same banner covers the player's `Contents` button, and a dev client
+  that lost Metro for a moment raises it.** Measured 2026-09-24 13:50
+  (`LineColourProbe`, #29): the Contents drawer never opened, and the next
+  step failed "No drawer to close". `node test/manual-test/cdp.cjs --warnings`
+  read the one warning behind it: `Cannot connect to Expo CLI … URL:
+  localhost:8091 … Error: undefined`, while that Metro answered
+  `packager-status:running` throughout. A terminate and launch cleared it and
+  the same run passed. `LineColourProbe` now fails at once, naming the banner,
+  rather than one step later.
+- **A failed test leaves xcodebuild waiting ten minutes to collect
+  diagnostics.** Measured 2026-09-24: the test ended at 13:21:33 with three
+  assertion failures, and xcodebuild exited at 13:31:34 after
+  `IDETestOperationsObserverDebug: Failure collecting diagnostics from
+  simulator: Timed out after 600.0 seconds`. `-collect-test-diagnostics never`
+  on the `xcodebuild test` line skips it; `line-colour.sh` passes it.
 - **Retrying a failed download test against the same fixture inherits its
   partial progress**, because saved audio and task state are persisted
   (SQLite) and reloaded on the next launch, not reset by
@@ -1322,6 +1351,20 @@ fix (AGENTS.md).
   settings field has the phone's own clear button while it is being edited, and
   `SyncProbe.clearAndType` and `DesignShotsProbe.clearAndType` tap
   `field.buttons["Clear text"]` instead, then assert the field is empty.
+- **`XCUIElement.typeText`'s own activity log can print a secret, even into a
+  masked field.** `OfflineFixProbe.testConfigureFishProvider` types the Fish
+  key into a `SecureTextField` and only ever screenshots it (masked dots, as
+  intended), but `xcodebuild`'s own activity trace records the string handed
+  to `typeText` as `Type '<value>' into "Not set" SecureTextField`, truncated
+  to a preview, in the xcresult's activity log and in whatever file `test.log`
+  is redirected to — a `cat`/`tail`/`grep`-without-`-v` of that file after
+  such a run prints part of the real key. Measured 2026-09-24: the field
+  itself correctly masks (the attached screenshot the probe names
+  `fish-key-entered-masked` is dots, not text), so the leak is textual only,
+  in the log, never in a screenshot. Treat `test.log` from any run that types
+  a secret as sensitive; read it with `grep` for the lines you need (`Test
+  Case`, `Test Suite`, `error:`) rather than printing it whole, and never
+  paste it into a report.
 - **`xcodebuild … test` does not pass the caller's environment to the test
   process.** `PLAY_SECONDS=12 bash sync.sh …` silently uses the probe's default,
   and a run "of twelve seconds" is really five. Pass parameters in a file the
@@ -1850,6 +1893,12 @@ subfolder), none of them the app being wrong.
   read `2` for a page with exactly one such header, not `1` — the same
   per-`Text` duplication, just counted instead of looked up. A regression that
   actually repeats a header would show `4`, not `2`.
+
+### Node probes against providers and books
+
+- **Node's `WebSocket` sends no upgrade headers** (2026-09-24, #61). `createAzureProvider` passes its key as a third constructor argument, `{ headers }`, which React Native honours. Node 22's global `WebSocket` takes only `(url, protocols)`, so the key never reaches Azure. `context-probe.ts` wraps it in `QueryHeaderWebSocket`, which moves each header into the URL's query, where the desktop plugin puts the key for the same reason.
+- **A silence threshold that suits one voice hides another's pauses** (2026-09-24, #61). At −40 dB below the loudest 10 ms window, Fish's "jjk narrator" measured almost no silence between sentences, because its breath and room noise sit near −37 dB. Its whole-paragraph median came out at 0.16 s where its own word timings said 0.32 s. At −30 dB the two agree, but Azure then reads about 70 ms long. Check a threshold against a provider's word timings (Azure's and Fish's leave the pause between words) before trusting it, and quote each provider at the threshold that agreed.
+- **An EPUB's OPF is namespaced, and a cover page may not parse** (2026-09-24, #61). `@xmldom/xmldom`'s `getElementsByTagName('item')` found 0 items in every book in `~/Works/epub_books`; `getElementsByTagNameNS('*', 'item')` finds them. A cover page with an unclosed `<img>` throws `ParseError` even when parsed as `text/html`, so parse each spine item in a `try` and skip the one that fails.
 
 ## Lock-screen screenshot and button inspection
 
@@ -3813,3 +3862,120 @@ What it does not establish: whether the debug-banner precaution
 (`app.terminate(); app.launch()` at the sequence's start) is still needed once
 nothing else in a run logs a warning; a shorter method sequence was not tried.
 `BrowseTouchProbe.swift` is in `test/manual-test/ios/project.rb`'s allow-list.
+
+## A drawer's lines in the other theme's colour (#29, `line-colour.sh`)
+
+With the current Debug app connected to this tree's Metro, `A Short Test of
+Reading Aloud` in the Library and no LogBox banner on the screen:
+
+```sh
+bash test/manual-test/line-colour.sh SIMULATOR_UDID NEW_OUTPUT_DIR dark light    # the app dark on a light phone
+bash test/manual-test/line-colour.sh SIMULATOR_UDID NEW_OUTPUT_DIR light dark    # the reverse
+bash test/manual-test/line-colour.sh SIMULATOR_UDID NEW_OUTPUT_DIR system dark   # following the phone
+```
+
+It sets the theme through the walkthrough harness, goes back to the Library,
+and `LineColourProbe.swift` opens with real taps: the Library's drawer by a
+long press and then by its `...`, the reader (the player), Contents, the voice
+drawer (waiting for any "Asking … for its Voices…" note to clear first), the
+reader's actions drawer, its Download page — tapping "The First Chapter"
+there afterward if it exists and is not already downloaded, never starting a
+download, and photographing the picked state as `reader-download-selected` —
+and its Appearance page. `line-colour.py` then lists, for each screenshot,
+every pixel row at least half the screen wide in `#dcdce2` or `#33333c`, and
+any run of 24 pixels or more in the other theme's one. Plays nothing; puts
+back the theme and the simulator's appearance it found. About 75 s once the
+runner is built.
+
+Exit 1 = RED, some line is in the other theme's colour; 0 = GREEN; 3 = the
+probe failed, so the screenshots are not the drawers. A GREEN also lists the
+rows it found in the right colour: compare them with a RED run's, because a
+line that has gone altogether is GREEN too.
+
+**What this does not score**: the voice chips' borders and the download
+checkbox ring take `borders.text`, `borders.reading` or `borders.quiet`, none
+of which is one of the two hairline greys `line-colour.py` looks for, so a
+chosen chip (border = fill, deliberately no visible seam) or a checked/
+unchecked ring never turns a run RED or GREEN by itself — read those
+screenshots by eye, or sample the exact pixels (below). The voice drawer only
+has rows and chips to look at once a Provider is enabled on the device under
+test (`OfflineFixProbe.testConfigureFishProvider`, with a key dropped once at
+`/tmp/openreader-fish-key.txt`); with none enabled the sheet shows only its
+"Enable a provider in Settings" note, GREEN and empty.
+
+Measured 2026-09-24 (notes, 13:34–13:37 and 13:55–14:00): on the tree before
+#29's fix, dark on light was RED in six of eight screenshots and light on dark
+in six, following the phone GREEN; after it, all four pairings GREEN with the
+same rows present. It cannot see a line in any other colour, a border shorter
+than 24 px, or the voice drawer's rows and chips when no Provider is enabled.
+
+Independently re-verified 2026-09-24 (ios-tester, `0.0.2-beta22`, "iPhone 17
+issue_29"), with Fish Audio enabled so the voice drawer has real rows and
+chips: dark on light and light on dark both GREEN across all nine
+screenshots (the original eight plus `reader-download-selected`), the same
+rows as the notes above. Sampling exact pixels for what `line-colour.py`
+cannot score: in the voice drawer, an unchosen locale chip's 1 px top and
+bottom border read `#33333c` dark / `#dcdce2` light exactly (`BORDER.*.line`),
+with no seam at the chosen Fish Audio/`af` chips, whose border and fill are
+the same `#e6e6ea` dark / `#16161a` light (`BORDER.*.text`) all the way
+across — found by scanning a column through each chip rather than a full row,
+since a rounded chip's flat hairline is only a few pixels wide in any single
+row. In the Download page, tapping "The First Chapter" turned its ring from
+an outline of exactly `#9d9daa` dark / `#5d5d68` light (`BORDER.*.quiet`,
+776–828 exact-match pixels around the ring in each theme) to a filled circle
+of exactly `#f0a828` dark / `#b26a00` light (`BORDER.*.reading`), zero pixels
+of the other theme's version of either colour at the same tolerance. A loose
+tolerance (6 levels per channel) does turn up a handful of pixels that read as
+the wrong theme's grey at the ring's own antialiased edge (24 of them, light
+on dark); tightening to 3 levels or exact finds none, so that is antialiasing
+against the tolerance, not a stray colour — worth re-checking at a tighter
+tolerance before reporting a chip or ring border as wrong from a loose scan.
+`live-theme-drawer.sh` (below) covers the one path this script cannot: a
+theme changed while a drawer is already open.
+
+## A live theme change with a drawer already open (#29, `live-theme-drawer.sh`)
+
+`line-colour.sh` always opens a drawer after the theme is already set, so it
+cannot show whether an *open* drawer's lines follow a theme changed while the
+drawer stays on screen — the one path ADR 0046 made depend on a React
+re-render, where every other colour in `INK` needed none.
+
+```sh
+bash test/manual-test/live-theme-drawer.sh SIMULATOR_UDID NEW_OUTPUT_DIR dark light
+```
+
+Needs `A Short Test of Reading Aloud` in the Library and this tree's Metro.
+`LineColourProbe.testOpenContentsAndLeaveIt` opens Contents by real taps and
+leaves it open; the script then photographs it, pushes a theme patch through
+the harness without touching the simulator's own appearance, photographs the
+same drawer again with no reopen in between, and scores each photograph with
+`line-colour.py` against the theme that should be in force at that point. It
+restores the starting theme and closes the drawer (`{"do":"shut"}`) before
+exiting. Plays nothing. Exit 1 = RED (the drawer did not read as the theme in
+force at that point), 0 = GREEN, 3 = the probe itself failed, so the
+screenshots may not show the drawer.
+
+Measured 2026-09-24 (ios-tester, `0.0.2-beta22`): dark → light with the
+simulator's own appearance kept light throughout — Contents' top edge and
+both separators (y=866/1421/1559) read `#33333c` before the patch and
+`#dcdce2` after it, at the same rows, with no reopen between the two
+screenshots. GREEN.
+
+## Sentence or paragraph requests (#61, `context-probe.ts`)
+
+`context-probe.ts` compares asking a provider for one sentence at a time, as the app does, with asking for a whole paragraph in one request. It runs in Node through the app's own `createProvider`, `segmentBlocks` with `splitWithSentencex`, and `prepareSpeechText`, so both modes send exactly the text the app would. No simulator is involved. It reads credentials from `~/.secrets/openreader/zotero-tts-settings.json`, the desktop plugin's settings export, and `OUT` must be outside the repository, because it receives the owner's book text.
+
+```sh
+OUT=/path/outside/the/repo; B=~/Works/epub_books
+npx tsx test/manual-test/context-probe.ts survey "$OUT" "$B/Shadow Slave/Shadow Slave 1-250.epub" …   # sentences per Block
+npx tsx test/manual-test/context-probe.ts pick   "$OUT" "$B/…epub" …   # candidates.json; write paragraphs.json from it by hand
+npx tsx test/manual-test/context-probe.ts run    "$OUT" azure fish speechify local   # audio/<provider>-<P>-{sentence,paragraph}.wav + .json
+npx tsx test/manual-test/context-probe.ts analyze "$OUT" -40   # analysis-40.{txt,json}; run again at -30
+npx tsx test/manual-test/context-probe.ts page   "$OUT"   # listen.html, a blind A/B page; open it locally
+```
+
+`paragraphs.json` is a list of `{ id, book, section, kind, utterances }`, the shape `pick` writes. Voices are the owner's own where a match exists (`VOICE_MATCH`); otherwise the first English voice is used. Each provider gets one warm-up `Hello.` first. The six paragraphs of 2026-09-24 came to about 2,300 characters per mode per provider.
+
+What it measures: time from `synthesize` to its result (the first sentence against the whole paragraph), total duration, timed words, and the pause at each sentence boundary. The per-sentence pause is the trailing silence of one Clip plus the leading silence of the next. The whole-paragraph pause is the longest silence from the last word's start to the next sentence's first word's end, alongside the gap the timings leave. Results are in `notes/NOTES_2026-09-24.md`.
+
+What it cannot show: latency from the phone's network (it runs from the Mac, through whatever proxy the Mac uses); how iOS's `decodeAudioData` treats Fish's MP3 padding (ffmpeg drops the encoder delay the LAME header declares); the Blocks the renderer would find where a book's stylesheet makes a block element inline; anything about OpenAI or OpenAI-compatible voices, which return no timings and were not configured. The listening page randomises A/B per pair in the browser and keeps the order and answers in that browser's `localStorage`, so clearing it draws new orders.
