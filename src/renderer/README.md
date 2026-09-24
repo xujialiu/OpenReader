@@ -125,6 +125,20 @@ provider, not from the prop. The program is still installed only after the first
 section has been displayed, so that section's first frame is under the
 library's theme, its page now transparent.
 
+**Nothing above the page changes while the page moves** (ADR 0045). epub.js
+keeps the text still, when it adds or removes a section above the viewport, by
+moving the scroll position itself: `trim()` scrolls back by each section it
+erases above, and a prepended section's `counter()` scrolls on by its height.
+iOS drops that scroll while it is moving the page, under the finger or in a
+fling's momentum or bounce, so a fast scroll past the laid-out text jumped by a
+whole section and landed on an empty page (#58). The program's `holdStill`
+parks `trim()`, and the prepend in `check()`, while the page moves, and runs them
+through the manager's own queue once the scroll position has held for 200 ms
+over four frames. Movement is read from the scroll position, never from
+touches: a finger that lands on a moving page seldom reaches the page at all.
+Going forward nothing is held up; a fling back stops at the top of the
+laid-out text until the page is still (design 0045).
+
 **Several sections are alive at once**, which is what continuous scrolling costs
 and what paginated layout did not. The Block records are keyed by spine index and
 survive a section being destroyed and rebuilt, and they must: measured on the

@@ -1300,3 +1300,91 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     expect(bridge.match(/reveal: latest\.current\.follow !== false && options\?\.reveal !== false/g)).toHaveLength(2);
   });
 });
+
+describe('nothing above the page changes while the page moves (#58, ADR 0045)', () => {
+  /**
+   * **Issue #58.** A fast scroll past the text epub.js had laid out jumped the
+   * page by whole chapters and showed it empty. epub.js keeps the text still,
+   * when it changes what lies above the viewport, by moving the scroll position
+   * itself, and iOS drops that move while it is moving the page — under the
+   * finger, in the fling's momentum, in the bounce at either end. Measured on
+   * the owner's book (notes/NOTES_2026-09-24.md): a section of 5,362 px erased
+   * above left the page 5,362 px further on, past the laid-out text and empty
+   * for six frames; four sections prepended during a bounce left it four
+   * sections back and empty for half a second. A relative `Element.scrollBy()`
+   * was dropped the same way, and a scroll set while iOS was not moving the
+   * page was kept every time.
+   *
+   * Structural, like the rest of this file: the fling and the dropped scroll
+   * live in iOS. `test/manual-test/fling-jump.cjs` is the run that shows it.
+   */
+  const epub = library('epubjs.js');
+  const continuous = epub.slice(epub.indexOf('afterScrolledTimeout: 10,'), epub.indexOf('addScrollListeners() {', epub.indexOf('afterScrolledTimeout: 10,')));
+  const program = highlighterSource();
+
+  it('slices the continuous manager, and no more', () => {
+    expect(continuous).toContain('prepend(t) {');
+    expect(continuous).toContain('trim() {');
+    expect(continuous).not.toContain('addScrollListeners() {');
+  });
+
+  it('rests on epub.js scrolling the page itself whenever it changes what is above the viewport', () => {
+    // Forward: update() destroys the view of a section that has left the screen
+    // and trims 250 ms later; trim() erases the views above and scrolls back by
+    // each one's height, which iOS drops mid-fling.
+    pin(continuous, 'this.q.enqueue(this.trim.bind(this));', 'the bundled epub.js, ContinuousViewManager.update');
+    pin(continuous, '? this.scrollTo(0, i - r.height, !0)', 'the bundled epub.js, ContinuousViewManager.erase');
+    // Back: check() prepends when the scroll it last heard is within the offset
+    // of the top, and a prepended view scrolls forward by its own growth once it
+    // has laid out.
+    pin(continuous, 'let h = s ? this.scrollLeft : this.scrollTop,', 'the bundled epub.js, ContinuousViewManager.check');
+    pin(continuous, 'e && !s && (o = e);', 'the bundled epub.js, ContinuousViewManager.check');
+    pin(continuous, 'g < 0 && p();', 'the bundled epub.js, ContinuousViewManager.check');
+    pin(continuous, 'this.counter(t), (e.expanded = !0);', 'the bundled epub.js, ContinuousViewManager.prepend');
+    pin(continuous, '? this.scrollBy(0, t.heightDelta, !0)', 'the bundled epub.js, ContinuousViewManager.counter');
+  });
+
+  it('parks a trim while the page moves', () => {
+    const hold = fn(program, 'holdStill');
+    pin(hold, 'manager.trim = function () {', 'highlighter.ts, function holdStill');
+    pin(hold, 'if (!moving()) return trim.apply(this, arguments);', 'highlighter.ts, function holdStill');
+    pin(hold, 'parked.trim = true;', 'highlighter.ts, function holdStill');
+  });
+
+  it('parks only the prepend of a check, and lets the rest of it go ahead', () => {
+    const hold = fn(program, 'holdStill');
+    pin(hold, 'manager.check = function (left, top) {', 'highlighter.ts, function holdStill');
+    pin(hold, 'if (this.scrollTop - offset >= 0 || !moving()) return check.apply(this, arguments);', 'highlighter.ts, function holdStill');
+    pin(hold, 'parked.check = true;', 'highlighter.ts, function holdStill');
+    // check() reads the manager's own scrollTop, so for the one call it reads a
+    // position that prepends nothing, and gets the real one back after.
+    pin(hold, 'this.scrollTop = offset;', 'highlighter.ts, function holdStill');
+    pin(hold, 'this.scrollTop = real;', 'highlighter.ts, function holdStill');
+    expect(hold.indexOf('this.scrollTop = offset;')).toBeLessThan(hold.indexOf('return check.apply(this, arguments);\n      } finally {'));
+  });
+
+  it('knows the page moves from its scroll position, never from touches', () => {
+    // The WebView's scroll events stop for 100 to 280 ms while a fling goes on,
+    // whenever its main thread lays a section out, and a finger that lands on a
+    // moving page reached the page's touch listeners in 1 to 4 of 10 flicks.
+    const moving = fn(program, 'moving');
+    pin(moving, 'performance.now() - scrolledAt < REST_MS', 'highlighter.ts, function moving');
+    pin(moving, 'stage.scrollTop !== scrolledTop', 'highlighter.ts, function moving');
+    expect(moving).not.toContain('touch');
+    pin(program, "if (stage) stage.addEventListener('scroll', noteScroll, { passive: true });", 'highlighter.ts, the install');
+  });
+
+  it('runs parked work once the position has held for REST_MS over REST_FRAMES frames, through the manager’s own queue', () => {
+    const watch = fn(program, 'watchForRest');
+    pin(watch, 'now - resting.since < REST_MS', 'highlighter.ts, function watchForRest');
+    pin(watch, 'resting.frames < REST_FRAMES', 'highlighter.ts, function watchForRest');
+    pin(watch, 'manager.q.enqueue(manager.trim.bind(manager));', 'highlighter.ts, function watchForRest');
+    pin(watch, 'manager.q.enqueue(manager.check.bind(manager));', 'highlighter.ts, function watchForRest');
+    pin(program, 'var REST_MS = 200;', 'highlighter.ts');
+    pin(program, 'var REST_FRAMES = 4;', 'highlighter.ts');
+  });
+
+  it('holds the manager the page scrolls, once, as the program installs', () => {
+    pin(program, 'holdStill(rendition.manager);', 'highlighter.ts, the install');
+  });
+});

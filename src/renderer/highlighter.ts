@@ -1659,6 +1659,126 @@ ${constants}
     if (lowest !== null) onScreen = lowest;
   }
 
+  /* ---- nothing above the page moves while the page does (#58, ADR 0045) ---- */
+
+  /* epub.js keeps the text still, whenever it changes what lies above the
+     viewport, by scrolling the page itself: trim() erases the sections that have
+     left the top of the screen and scrolls back by their height, and a section
+     prepended above scrolls the page on by its own height once it has laid out
+     (counter()). iOS drops that scroll while it is moving the page itself —
+     under the finger, in a fling's momentum, in the bounce at either end — and
+     the text jumps by the whole section. Measured on the owner's book (#58): a
+     5,362 px section erased above left the page 5,362 px further on, past the
+     laid-out text and empty for six frames; four sections prepended during the
+     bounce at the top left it four sections back, empty for half a second. An
+     \`Element.scrollBy()\` in place of the assignment was dropped the same way,
+     and a scroll set while iOS was not moving the page was kept every time.
+
+     So nothing above the viewport changes while the page moves. A trim, and a
+     check() that would prepend, are parked, and run through the manager's own
+     queue once the page has come to rest. Below the viewport nothing needs
+     adjusting, so appending goes on as before and a fling forward is not held
+     up at all: the sections it leaves behind keep their height, empty, until
+     the first rest. A fling back stops at the top of the text laid out so far,
+     as it does at the top of a document, and the chapter before is laid out
+     once the page is still (docs/design/0045). */
+  var REST_MS = 200;
+  var REST_FRAMES = 4;
+  var parked = { trim: false, check: false };
+  var scrolledAt = -Infinity;
+  var scrolledTop = null;
+  var resting = { top: null, since: 0, frames: 0 };
+  var watching = false;
+
+  function noteScroll() {
+    var stage = scroller();
+    scrolledAt = performance.now();
+    scrolledTop = stage ? stage.scrollTop : null;
+  }
+
+  /* Whether the page may be moving now: a scroll event within REST_MS, or a
+     position that has changed since the last one, which is iOS's newer position
+     arrived ahead of its event. Neither a quiet spell nor touches can say the
+     opposite. The WebView's scroll events stop for 100 to 280 ms at a time while
+     a fling goes on, whenever its main thread is laying a section out, and a
+     finger that lands on a moving page reached the page's touch listeners in 1
+     to 4 of 10 flicks: iOS takes that touch for itself, to stop the scroll. */
+  function moving() {
+    var stage = scroller();
+    if (!stage) return false;
+    return performance.now() - scrolledAt < REST_MS || (scrolledTop !== null && stage.scrollTop !== scrolledTop);
+  }
+
+  /* At rest is the position unchanged for REST_MS, over at least REST_FRAMES
+     successive animation frames. A frame reads the position iOS last sent even
+     straight after a long task, when a timer's reading could still be the one
+     from before it. The loop runs only while something is parked. */
+  function watchForRest(now) {
+    var stage = scroller();
+    var top = stage ? stage.scrollTop : null;
+    if (top !== resting.top) {
+      resting.top = top;
+      resting.since = now;
+      resting.frames = 0;
+    } else {
+      resting.frames += 1;
+    }
+    if (moving() || now - resting.since < REST_MS || resting.frames < REST_FRAMES) {
+      window.requestAnimationFrame(watchForRest);
+      return;
+    }
+    watching = false;
+    var manager = rendition.manager;
+    /* Through the queue, as epub.js schedules its own trim, and through the
+       wrappers below, which look again when the task runs: a fling that starts
+       in between parks it again. */
+    if (parked.trim) {
+      parked.trim = false;
+      manager.q.enqueue(manager.trim.bind(manager));
+    }
+    if (parked.check) {
+      parked.check = false;
+      manager.q.enqueue(manager.check.bind(manager));
+    }
+  }
+
+  function watch() {
+    if (watching) return;
+    watching = true;
+    resting.top = null;
+    window.requestAnimationFrame(watchForRest);
+  }
+
+  function holdStill(manager) {
+    if (!manager || !manager.q) return;
+    var trim = manager.trim;
+    manager.trim = function () {
+      if (!moving()) return trim.apply(this, arguments);
+      parked.trim = true;
+      watch();
+      return Promise.resolve();
+    };
+    var check = manager.check;
+    manager.check = function (left, top) {
+      /* check() prepends when the scroll it last heard, the manager's own
+         \`scrollTop\`, is within its offset of the top of the laid-out text. For
+         this one call it hears the offset instead, which prepends nothing:
+         everything else check() does, appending below and showing and destroying
+         views, goes ahead. */
+      var offset = top || this.settings.offset || 0;
+      if (this.scrollTop - offset >= 0 || !moving()) return check.apply(this, arguments);
+      parked.check = true;
+      watch();
+      var real = this.scrollTop;
+      this.scrollTop = offset;
+      try {
+        return check.apply(this, arguments);
+      } finally {
+        this.scrollTop = real;
+      }
+    };
+  }
+
   /* ---- the blank open (notes/NOTES_2026-09-20.md, 01:51) ---- */
 
   /* A resize destroys every view, and epub.js only puts them back if it has
@@ -1731,6 +1851,10 @@ ${constants}
      dragged. The container is built with the manager and lives as long as it. */
   var stage = scroller();
   if (stage) stage.addEventListener('touchmove', dragged, { passive: true });
+  /* The page's own scroll, which is how the program knows it moves; and the
+     manager whose trims and prepends wait for it to stop (#58). */
+  if (stage) stage.addEventListener('scroll', noteScroll, { passive: true });
+  holdStill(rendition.manager);
   /* And again whenever the reading position moves, which is what keeps
      \`onScreen\` current after the manager trims a view — a trim displays
      nothing, so the hook does not hear it. Idempotent per document: one lookup

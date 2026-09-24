@@ -94,8 +94,11 @@ and the library's injection into one is skipped by its own `book.current?.`.
   section under the dark theme, its text is black on the dark page: a dark
   frame, not a white one. Installing the program before the first display would
   remove that frame too, and needs a patch (below).
-- epub.js still leaves gaps in a long fling: 13–55 frames per run in which the
-  page area is empty. They are now the dark page.
+- A long fling still left 13–55 frames per run in which the page area was
+  empty, now dark. They were put down here to epub.js leaving gaps; they were
+  #58, the page landing past the laid-out text when iOS dropped epub.js's
+  scroll adjustment (ADR 0045), and after that change the same `fling` run had
+  none in 3,854 frames.
 - `READER_THEME` copies the library's rules, so a library upgrade that changes
   its default would leave this copy behind; the rules test evaluates the
   installed default and fails on any difference but the background.
