@@ -410,6 +410,25 @@ final class SyncProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Play"].exists, "The book must still be paused")
   }
 
+  /// #59: one more sync moment after a switch-on upload, so the caller can
+  /// confirm nothing more goes out when nothing has changed. Walks back to
+  /// the Library first — never the Sync screen, so a capture here never
+  /// carries the address or username — then Home and foreground, the same
+  /// `background`/`active` pokes `testForegroundAdoption` exercises, without
+  /// opening a reader, so the phone's own item is not touched again.
+  func testBackgroundForegroundFromLibrary() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.activate()
+    walkToLibrary(app)
+    capture("bg-fg-0-library", app)
+    XCUIDevice.shared.press(.home)
+    Thread.sleep(forTimeInterval: 3)
+    app.activate()
+    Thread.sleep(forTimeInterval: Double(param("SETTLE", "6")) ?? 6)
+    capture("bg-fg-1-after", app)
+    print("BG-FG done at \(Date())")
+  }
+
   /// Reads the Sync screen without touching the switch: what the status line
   /// says now, and whether the fields are frozen. Used after a relaunch to show
   /// that sync came back on without a second check.

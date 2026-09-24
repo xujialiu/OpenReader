@@ -2196,6 +2196,11 @@ The methods, in the order a full run uses them:
   seconds.
 - `testForegroundAdoption` — Home, wait, activate: the `foreground` sync moment,
   photographed before and after.
+- `testBackgroundForegroundFromLibrary` (#59) — walks back to the Library
+  first, so it never captures the Sync screen, then Home, wait, activate with
+  no reader opened: a `background`/`foreground` sync moment for confirming
+  nothing uploads when nothing changed, without touching any book's own
+  position the way opening a reader could.
 - `testReadSyncScreen` — reads the screen without touching the switch; used
   after a relaunch to show that sync came back on, frozen, without a new check.
 - `testOpenBookOnly` — opens `BOOK_TITLE` with a real touch and leaves it paused:

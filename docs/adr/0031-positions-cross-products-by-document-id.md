@@ -71,7 +71,13 @@ items whose format it does not implement. That carry-through rule is the one
 place this file's parser deliberately differs from `parseLibrary`, which drops
 and reports an unknown format because nothing here could act on it — a rule
 that is right for a file only this app writes and would erase the desktop's
-PDF positions on the phone's first upload here.
+PDF positions on the phone's first upload here. A carried item is written in the
+canonical form like any other, with its values as parsed. Its `anchor` and
+`stamp` keep only the keys the spec lists, in its order (#59, Zotero-TTS #139).
+Until then this side kept them as parsed, key order and unknown keys included,
+while the plugin wrote them canonically. So one hand-edited item came out of the
+two products two ways, and the file changed once more after the phone had
+written it.
 
 No title, no voice, no `lib`, no `key`. A title is a display cache the plugin
 has no use for; a Voice belongs to a Provider and a credential that differ

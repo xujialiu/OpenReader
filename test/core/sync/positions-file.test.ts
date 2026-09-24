@@ -72,6 +72,38 @@ describe('the shared fixture', () => {
   });
 });
 
+/**
+ * A file as a third writer or a hand edit might leave it, and what both products
+ * write back (spec 2.3 and 2.5, Zotero-TTS #139, #59). The two fixtures are the
+ * plugin's own, copied byte for byte from Zotero-TTS `e064c7c`, and its suite
+ * asserts the same five things of them.
+ */
+describe('the carried fixture', () => {
+  const CARRIED = readFileSync(new URL('./fixtures/xujialiu-positions.v1.carried.json', import.meta.url), 'utf8');
+  const CANONICAL = readFileSync(new URL('./fixtures/xujialiu-positions.v1.carried.canonical.json', import.meta.url), 'utf8');
+  const id = (digit: string) => 'sha256:' + digit.repeat(64);
+
+  it('is written back in the one form every item takes, usable or carried', () => {
+    const parsed = parsePositionsFile(CARRIED);
+    if (!parsed.ok) throw new Error('fixture did not parse');
+    // An item whose id is a number, and one with no id at all: nothing can key them.
+    expect(parsed.dropped).toBe(2);
+    const merged = mergePositions([], parsed.items);
+    expect(merged.map((one) => one.id)).toEqual(['', id('9'), A, B, C, id('d'), id('e'), id('f')]);
+    expect(usableItems(merged).map((one) => one.id)).toEqual([A, B]);
+    // Item c's anchor and stamp are objects with their keys out of order and a key
+    // the spec does not list: they go out in its order, without the extra key.
+    expect(serializePositionsFile(merged)).toBe(CANONICAL);
+  });
+
+  it('and what it is written back as comes back unchanged', () => {
+    const parsed = parsePositionsFile(CANONICAL);
+    if (!parsed.ok) throw new Error('fixture did not parse');
+    expect(parsed.dropped).toBe(0);
+    expect(serializePositionsFile(mergePositions([], parsed.items))).toBe(CANONICAL);
+  });
+});
+
 describe('serializePositionsFile', () => {
   it('is canonical: compact, keys in the spec order, items sorted by id', () => {
     const text = serializePositionsFile([item({ id: C }), item({ id: A })]);
