@@ -24,10 +24,20 @@
 
 import type { Utterance } from '../core/segmenter';
 
+/**
+ * The **Pause between sentences** and the **Pause between paragraphs**
+ * (CONTEXT.md), which the owner sets in General (#60, ADR 0047).
+ */
 export interface GapSettings {
-  /** Silence after every Utterance, in milliseconds at 1.0×. */
+  /** Silence after an Utterance whose Block goes on, in milliseconds at 1.0×. */
   sentenceMs: number;
-  /** Extra silence where the next Utterance begins a new Block, in milliseconds at 1.0×. */
+  /**
+   * The whole silence where the next Utterance begins a new Block, in
+   * milliseconds at 1.0×. It **replaces** `sentenceMs` there rather than being
+   * added to it, which is where this departs from the plugin (Zotero-TTS#142):
+   * a number that is the pause the owner hears is one they can set without
+   * subtracting the other. Below `sentenceMs` it is still played as set.
+   */
   paragraphMs: number;
 }
 
@@ -35,8 +45,9 @@ export interface GapSettings {
  * Zotero's own numbers, which are the ones a reader is used to: no sentence
  * delay (`sentenceDelay` is 0 for every voice the plugin publishes, and absent
  * on almost all of Zotero's) and 200 ms at a paragraph (`DELAY_PARAGRAPH`).
- * They are a default rather than a constant because the plugin already made
- * both a setting.
+ * With the sentence pause at 0, a paragraph's whole pause and Zotero's extra
+ * are the same 200 ms, so the default reads the way it did before the two were
+ * the owner's to set.
  */
 export const DEFAULT_GAP: GapSettings = { sentenceMs: 0, paragraphMs: 200 };
 
@@ -81,9 +92,7 @@ export function startsNewBlock(current: Utterance, next: Utterance | undefined):
 
 /** The gap after an Utterance, in **content** seconds — the unit a buffer of silence is measured in, before the time-stretch divides it by the rate. */
 export function gapContentSeconds(settings: GapSettings, paragraphAhead: boolean): number {
-  const sentence = Math.max(0, finite(settings.sentenceMs));
-  const paragraph = paragraphAhead ? Math.max(0, finite(settings.paragraphMs)) : 0;
-  return (sentence + paragraph) / 1000;
+  return Math.max(0, finite(paragraphAhead ? settings.paragraphMs : settings.sentenceMs)) / 1000;
 }
 
 /**

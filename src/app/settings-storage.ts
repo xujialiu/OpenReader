@@ -1,7 +1,7 @@
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
 import { FONT_SIZES, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
-import { DEFAULT_SETTINGS, isProviderId, type AppSettings, type DocumentVoice } from './settings';
+import { DEFAULT_SETTINGS, isProviderId, PARAGRAPH_PAUSES_MS, SENTENCE_PAUSES_MS, type AppSettings, type DocumentVoice } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -36,12 +36,17 @@ function readTextAlignment(value: unknown): TextAlignment {
   return TEXT_ALIGNMENTS.find((alignment) => alignment === value) ?? DEFAULT_SETTINGS.appearance.textAlignment;
 }
 
+/** A pause General offers, or the default: nothing else is a value the menu could show as chosen. */
+function readPause(value: unknown, offered: readonly number[], fallback: number): number {
+  return offered.find((ms) => ms === value) ?? fallback;
+}
+
 /** Explicit projection also prevents legacy credential fields from being persisted. */
 export function parseSettings(value: unknown): AppSettings {
   const root = object(value);
   const data = object(root.settings ?? value);
   const openai = object(data.openai), compatible = object(data.compatible), local = object(data.local), azure = object(data.azure);
-  const fish = object(data.fish), appearance = object(data.appearance), sync = object(data.sync);
+  const fish = object(data.fish), appearance = object(data.appearance), sync = object(data.sync), pauses = object(data.pauses);
   const voices: DocumentVoice[] = Array.isArray(data.recentVoices) ? data.recentVoices.flatMap((entry: unknown) => {
     const item = object(entry);
     return typeof item.provider === 'string' && isProviderId(item.provider) && typeof item.voice === 'string' && item.voice.trim()
@@ -69,6 +74,10 @@ export function parseSettings(value: unknown): AppSettings {
     // Nothing guesses from it either — `prepareSpeechText` strips nothing at all
     // when the list is invalid.
     bracketPairs: string(data.bracketPairs, DEFAULT_SETTINGS.bracketPairs),
+    pauses: {
+      sentenceMs: readPause(pauses.sentenceMs, SENTENCE_PAUSES_MS, DEFAULT_SETTINGS.pauses.sentenceMs),
+      paragraphMs: readPause(pauses.paragraphMs, PARAGRAPH_PAUSES_MS, DEFAULT_SETTINGS.pauses.paragraphMs),
+    },
     appearance: {
       font: readFont(appearance.font),
       size: readSize(appearance.size),

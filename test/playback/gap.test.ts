@@ -35,6 +35,10 @@ describe('DEFAULT_GAP', () => {
     // sentenceDelay is 0 for every voice the plugin publishes; DELAY_PARAGRAPH is 200.
     expect(DEFAULT_GAP).toEqual({ sentenceMs: 0, paragraphMs: 200 });
   });
+
+  it('gives a paragraph the 200 ms it had while Zotero’s extra was added on top of a 0 ms sentence pause', () => {
+    expect(gapContentSeconds(DEFAULT_GAP, true)).toBeCloseTo(0.2, 12);
+  });
 });
 
 describe('startsNewBlock', () => {
@@ -70,8 +74,19 @@ describe('gapContentSeconds', () => {
     expect(gapContentSeconds({ sentenceMs: 120, paragraphMs: 200 }, false)).toBeCloseTo(0.12, 12);
   });
 
-  it('adds the paragraph gap on top rather than replacing it', () => {
-    expect(gapContentSeconds({ sentenceMs: 120, paragraphMs: 200 }, true)).toBeCloseTo(0.32, 12);
+  it('is the paragraph pause alone where a Block begins: the whole pause, not an extra (#60)', () => {
+    expect(gapContentSeconds({ sentenceMs: 120, paragraphMs: 200 }, true)).toBeCloseTo(0.2, 12);
+  });
+
+  it('plays a paragraph pause set below the sentence pause as set, rather than raising it', () => {
+    // Raising it would make the paragraph setting silently do nothing below the
+    // sentence pause (ADR 0047).
+    expect(gapContentSeconds({ sentenceMs: 500, paragraphMs: 200 }, true)).toBeCloseTo(0.2, 12);
+    expect(gapContentSeconds({ sentenceMs: 500, paragraphMs: 200 }, false)).toBeCloseTo(0.5, 12);
+  });
+
+  it('is silence at a paragraph when the paragraph pause is 0, whatever the sentence pause', () => {
+    expect(gapContentSeconds({ sentenceMs: 300, paragraphMs: 0 }, true)).toBe(0);
   });
 
   it('is zero with the default sentence gap and no paragraph ahead', () => {
@@ -80,6 +95,7 @@ describe('gapContentSeconds', () => {
 
   it('refuses a negative or broken setting instead of producing a negative duration', () => {
     expect(gapContentSeconds({ sentenceMs: -500, paragraphMs: Number.NaN }, true)).toBe(0);
+    expect(gapContentSeconds({ sentenceMs: -500, paragraphMs: Number.NaN }, false)).toBe(0);
   });
 
   it('is in content seconds, which is what makes the gap follow the speed', () => {

@@ -236,7 +236,7 @@ export function SettingsGroup({ title, footer, children }: {
  * label, what it says now, and the two chevrons iOS puts on a row that opens a
  * menu — which is what it opens (`ChoiceMenu`, #33).
  */
-export function ValueRow<T extends string>({ label, choices, chosen, onChoose }: {
+export function ValueRow<T extends string | number>({ label, choices, chosen, onChoose }: {
   label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
 }) {
   return (
@@ -424,11 +424,16 @@ export function Footnote({ children, attention, accessibilityLabel }: {
   return <Text style={[styles.footnote, attention && styles.noteAttention]} accessibilityLabel={accessibilityLabel}>{children}</Text>;
 }
 
-/** One entry of a `ChoiceMenu`: what it sets, what it is called, and the system symbol drawn beside it. */
-export interface Choice<T extends string> {
+/**
+ * One entry of a `ChoiceMenu`: what it sets, what it is called, and the system
+ * symbol drawn beside it. The symbol is left out where none would mean the
+ * choice: a pause of `300 ms` is its number, and a picture beside it would be a
+ * caption on a word that already says it.
+ */
+export interface Choice<T extends string | number> {
   value: T;
   label: string;
-  icon: NonNullable<ToggleProps['systemImage']>;
+  icon?: NonNullable<ToggleProps['systemImage']>;
 }
 
 /**
@@ -448,7 +453,7 @@ export interface Choice<T extends string> {
  * replaces them starts with no traits at all — measured, XCTest saw it as an
  * `Other` until `isButton` was added back.
  */
-export function ChoiceMenu<T extends string>({ label, choices, chosen, onChoose, height, children }: {
+export function ChoiceMenu<T extends string | number>({ label, choices, chosen, onChoose, height, children }: {
   label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void; height: number; children: ReactNode;
 }) {
   const current = choices.find((choice) => choice.value === chosen)?.label ?? '';

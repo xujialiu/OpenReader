@@ -1172,6 +1172,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       },
       onOutOfText: ranOutOfText,
       rate: settings.rate,
+      // Read once, here: the pauses change only in General, where no reader is
+      // mounted, so every engine is built after the owner's latest choice (#60).
+      gap: settings.pauses,
       brackets: { strip: settings.stripBrackets, pairs: settings.bracketPairs },
     });
     engineRef.current = engine;

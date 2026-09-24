@@ -24,6 +24,9 @@ import { DEFAULT_BRACKET_PAIRS } from '../core/speech-text';
 // the file rather than from the directory's index, which would drag the bridge
 // and React Native into a module whose whole point is that neither is here.
 import { DEFAULT_APPEARANCE, type Appearance, type ReadingScheme } from '../renderer/highlighter';
+// The file rather than `playback/index.ts`, for the same reason: `gap.ts` is
+// frames and seconds, and the index is the audio graph.
+import { DEFAULT_GAP, type GapSettings } from '../playback/gap';
 import { azureRegion, type HeaderWebSocket } from '../core/providers/azure';
 import type { ProviderDeps, ProviderSettings } from '../core/providers/factory';
 import { FISH_API } from '../core/providers/fish';
@@ -242,6 +245,18 @@ export interface AppSettings {
    */
   bracketPairs: string;
   /**
+   * The **Pause between sentences** and the **Pause between paragraphs**
+   * (CONTEXT.md, #60, ADR 0047): silence the playback adds, in milliseconds
+   * at Natural Pace.
+   *
+   * App-wide, as in the desktop plugin, and for the same reason as the
+   * brackets: one pair is true of every Voice, so the same number means the
+   * same pause on the phone and on the desktop. Not in `engineIdentity`: it is
+   * set in General, which is reached only from the Library, so the engine it
+   * would rebuild is already gone and the next one is built with it.
+   */
+  pauses: GapSettings;
+  /**
    * The **Sync Folder** (CONTEXT.md, ADR 0003): where it is and who this device
    * is to it, and whether sync is on. The password is not here — it is a
    * Keychain entry (`src/keys/`) — and the Device Name is not either, being a
@@ -282,6 +297,18 @@ export const THEME_LABELS: Readonly<Record<ThemeSetting, string>> = {
   // was cut off.
   system: 'Match Device',
 };
+
+/**
+ * The pauses General offers, in milliseconds at Natural Pace (#60).
+ *
+ * A menu of these rather than a number field: one tap, and no keyboard over the
+ * screen. Every one is a multiple of 50, the desktop plugin's step, so a value
+ * set there can be set here too; the ranges are where a pause is still a pause
+ * rather than a stop. The paragraph list goes twice as far because it is the
+ * whole pause at a Block, not an addition to the sentence's.
+ */
+export const SENTENCE_PAUSES_MS: readonly number[] = [0, 50, 100, 150, 200, 300, 400, 500, 750, 1000];
+export const PARAGRAPH_PAUSES_MS: readonly number[] = [0, 100, 200, 300, 400, 500, 750, 1000, 1500, 2000];
 
 /**
  * The theme the app actually paints.
@@ -337,6 +364,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // On, and the same list the desktop plugin starts from (ADR 0028).
   stripBrackets: true,
   bracketPairs: DEFAULT_BRACKET_PAIRS,
+  // 0 and 200 ms, which is what a reading sounded like before either was a
+  // setting (`gap.ts`).
+  pauses: DEFAULT_GAP,
   // Off, with nothing filled in: sync starts the moment the owner names a
   // folder and turns it on, and not before (issue #20).
   sync: { url: '', username: '', enabled: false },

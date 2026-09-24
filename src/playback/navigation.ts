@@ -45,7 +45,7 @@
  * > in a Block the reading has not been in yet.
  *
  * That is exactly `gap.ts`'s `startsNewBlock`, and this file calls it rather than
- * restating it: the extra silence the reader *hears* at a paragraph and the
+ * restating it: the pause the reader *hears* at a paragraph and the
  * Utterance the paragraph button *lands on* must be the same boundary, or the
  * two would be two sources of one fact and would drift apart.
  *

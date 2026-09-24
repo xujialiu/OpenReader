@@ -28,6 +28,20 @@ describe('local settings persistence', () => {
     writeSettings(settings);
     expect(disk.get('settings.json')).not.toContain('secret');
   });
+  it('keeps both pauses across a reload, and reads a file without them as 0 and 200 ms (#60)', () => {
+    const settings = { ...DEFAULT_SETTINGS, pauses: { sentenceMs: 300, paragraphMs: 1500 } };
+    writeSettings(settings);
+    expect(readSettings().pauses).toEqual({ sentenceMs: 300, paragraphMs: 1500 });
+    expect(parseSettings({ version: 1, settings: {} }).pauses).toEqual({ sentenceMs: 0, paragraphMs: 200 });
+  });
+  it('reads a pause General does not offer as that pause’s default rather than keeping it', () => {
+    // A value the menu cannot show as chosen would leave the row saying nothing.
+    // 1500 is a paragraph pause and not a sentence one; strings and negatives are not pauses.
+    expect(parseSettings({ version: 1, settings: { pauses: { sentenceMs: 1500, paragraphMs: 250 } } }).pauses)
+      .toEqual({ sentenceMs: 0, paragraphMs: 200 });
+    expect(parseSettings({ version: 1, settings: { pauses: { sentenceMs: '300', paragraphMs: -200 } } }).pauses)
+      .toEqual({ sentenceMs: 0, paragraphMs: 200 });
+  });
   it('keeps a Font Size on the ladder and drops anything else, including the percentages of the build before', () => {
     // The app has not been released, so a percentage saved by the previous build is
     // not converted: it is dropped and the owner starts at 16 (#17).

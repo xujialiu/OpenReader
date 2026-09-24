@@ -117,6 +117,19 @@ synthesized at natural pace; playback speed is applied when the clip is
 played, never when it is requested.
 _Avoid_: rate, default speed, 1x
 
+**Pause between sentences**:
+The silence added after an utterance, on top of whatever silence the voice
+leaves at its own end. It is set at natural pace, so it shortens as playback
+speeds up. Named as the desktop plugin names it.
+_Avoid_: gap, delay, sentence gap, break
+
+**Pause between paragraphs**:
+The whole silence added after an utterance when the next one begins a new
+block (a paragraph, a heading or a list item), or when the document ends. It
+replaces the pause between sentences at that point and is not added to it. Set
+at natural pace, like the pause between sentences.
+_Avoid_: paragraph gap, extra pause, paragraph delay
+
 ### Keeping place and settings
 
 **Library**:
