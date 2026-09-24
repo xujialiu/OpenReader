@@ -60,15 +60,21 @@ describe('a burst of skip presses is one synthesis request (ADR 0020)', () => {
    * **five** seeks in 24 ms — five restarts, five Utterances fetched, four thrown
    * away. That is the owner's money, and nothing on the screen would say so.
    */
-  it('reaches the engine from exactly one place, and that place is the timer', () => {
+  it('reaches the engine from the timer, and otherwise only when Play settles the same pending target', () => {
     const reading = code('use-reading.ts');
     const seekTo = within(reading, 'const seekTo = useCallback(', '}, [sectionOf');
-    // One call into the engine in the whole file, and it is inside this timer.
-    expect(reading.match(/\.seek\(/g)).toHaveLength(1);
+    // Two calls into the engine in the whole file: this timer's, and Play's, which
+    // sends the one target the timer was holding when Play starts the engine (#54)
+    // and takes it, so a burst of presses is still one seek however it ends.
+    expect(reading.match(/\.seek\(/g)).toHaveLength(2);
     expect(seekTo).toContain('setTimeout(');
     expect(seekTo).toContain('}, SKIP_DEBOUNCE_MS);');
     expect(seekTo.indexOf('setTimeout(')).toBeLessThan(seekTo.indexOf('.seek('));
     expect(seekTo).toContain('.seek(');
+    const play = within(reading, 'const play = useCallback(', '}, [settings, build, report, walkForward');
+    expect(play).toContain('if (seekTimerRef.current) clearTimeout(seekTimerRef.current);');
+    expect(play).toContain('const target = pendingSeekRef.current;');
+    expect(play.indexOf('pendingSeekRef.current = null;')).toBeLessThan(play.indexOf('.seek('));
   });
 
   it('keeps both guards, because only one of them was carrying it', () => {
@@ -147,7 +153,7 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     // What has rendered goes with it, so a place waits for its own section rather
     // than being found in whatever reported first — a contents page (#51).
     expect(attempt).toContain('reported: reportedSectionsRef.current');
-    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace],');
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace, stopWaitingIfArrived],');
     // `true`: the resume has pointed the cursor into the new list already, so a
     // renumbering must not carry it across a second time (#46).
     expect(blocks).toContain('tryResume(next, reported, () => adopt(next, reported, true))');
@@ -172,6 +178,17 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     expect(within(reading, 'const seekTo = useCallback(', '}, [sectionOf')).toContain('abandonResume();');
     expect(within(reading, 'const play = useCallback(', '}, [settings, build, report, walkForward')).toContain('abandonResume();');
     expect(within(reading, 'const abandonResume = useCallback(', '}, []);')).toContain('resumeRef.current = null;');
+  });
+
+  it('waits for a place still on its way when Play is pressed, rather than giving it up (#54)', () => {
+    // Giving it up started the engine at this device's older sentence and wrote
+    // that over the newer place on every device. The wait is asked first, before
+    // the claim is ended and before the cover-page walk moves the page elsewhere.
+    const play = within(code('use-reading.ts'), 'const play = useCallback(', '}, [settings, build, report, walkForward');
+    const waits = play.indexOf('awaitedSection(');
+    expect(waits).toBeGreaterThan(-1);
+    expect(waits).toBeLessThan(play.indexOf('abandonResume();'));
+    expect(waits).toBeLessThan(play.indexOf('walkForward('));
   });
 });
 
@@ -276,7 +293,7 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
     // Sections render out of order, so the last to report is routinely behind the
     // furthest — and a document's last spine items are where the sections that
     // render with no text in them live.
-    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace],');
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace, stopWaitingIfArrived],');
     expect(blocks).toContain('furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);');
   });
 });

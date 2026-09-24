@@ -11,11 +11,12 @@
  *   text — compact JSON, keys in a fixed order, items sorted by `id` — so the
  *   transport can compare text to decide whether to upload at all.
  * - **Carry through, never drop.** An item this build cannot use (a `format` it
- *   does not implement, a field it cannot validate) is re-emitted with its six
- *   fields as parsed and is never adopted. A phone that dropped the desktop's
- *   PDF positions on its way through would be erasing them for every machine.
- *   The one item that is dropped is one with no `id` string, which nothing can
- *   key, and that drop is counted rather than silent.
+ *   does not implement, a field it cannot validate) is re-emitted in the
+ *   canonical form, with its values as parsed, and is never adopted. A phone
+ *   that dropped the desktop's PDF positions on its way through would be
+ *   erasing them for every machine. The one item that is dropped is one with
+ *   no `id` string, which nothing can key, and that drop is counted rather than
+ *   silent.
  * - **A newer version is left alone.** Not read, not written. A malformed file
  *   is treated as absent and healed by the next upload, which is safe because
  *   every device holds its own items locally (spec 2.2).
@@ -46,8 +47,9 @@ export interface PositionsItem {
 
 /**
  * An item this build carries through without using: its `id`, and its six
- * fields exactly as parsed. `stamp` is kept separately when it could be read,
- * because a carried item still takes part in the merge by its Stamp.
+ * fields' values exactly as parsed, written back in the canonical form
+ * (`itemJson`). `stamp` is kept separately when it could be read, because a
+ * carried item still takes part in the merge by its Stamp.
  */
 export interface CarriedItem {
   id: string;
@@ -133,10 +135,31 @@ function byId(a: FileItem, b: FileItem): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+const ANCHOR_KEYS = ['exact', 'prefix', 'suffix'] as const;
+const STAMP_KEYS = ['at', 'device'] as const;
+
+/**
+ * An `anchor` or a `stamp` of a carried item, in the one form every writer
+ * uses (spec 2.3, 2.5; Zotero-TTS #139, #59): an object keeps only the keys the
+ * spec lists, in its order, each only when present, with its value as parsed.
+ * Anything that is not an object goes out as it came. Keys kept in the order
+ * they were parsed made this phone and the plugin write one hand-edited item
+ * two ways, and bound every implementation to a parser that keeps key order.
+ */
+function canonicalPart(value: unknown, keys: readonly string[]): unknown {
+  if (!isRecord(value)) return value;
+  const out: Record<string, unknown> = {};
+  for (const key of keys) if (value[key] !== undefined) out[key] = value[key];
+  return out;
+}
+
 function itemJson(item: FileItem): Record<string, unknown> {
   if (isCarried(item)) {
     const out: Record<string, unknown> = {};
+    // A field the item lacks is `undefined` here, which `JSON.stringify` leaves out.
     for (const key of ITEM_KEYS) out[key] = item.fields[key];
+    out.anchor = canonicalPart(item.fields.anchor, ANCHOR_KEYS);
+    out.stamp = canonicalPart(item.fields.stamp, STAMP_KEYS);
     return out;
   }
   return {

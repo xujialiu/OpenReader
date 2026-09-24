@@ -236,6 +236,13 @@ fix (AGENTS.md).
   answers `packager-status:running` after the call returns. It outlives the
   worktree too: stop it by PID when the worktree goes, or it joins the six that
   were still serving `.orca-worktree-trash` that morning.
+- **A PTY wrapper can buffer the Metro log that a probe reads while it runs.**
+  On 2026-09-24 `script -q /tmp/metro.log npx expo start --port 8095` let the
+  app answer its harness commands, but `SyncProbe.settleAt` read no `section=`
+  line until the wrapper stopped, so the probe reported three false failures.
+  Use a flushing wrapper (`script -q -F`) or a durable Metro whose stdout is a
+  regular file, and verify that a newly written `HX` line is visible from a
+  second shell before using that path as `METRO_LOG`.
 - **`watchfetch` misses the first request the app makes as it starts.** The
   shell asks every enabled Provider for its Voices on mount (#24), and the
   harness's first poll is 250 ms later, so with `watchfetch` already in
@@ -318,6 +325,14 @@ fix (AGENTS.md).
   rewritten at 02:04:54, as the device's first XCTest run was starting. Nothing
   had played.
 - **`xcrun simctl get_app_container` refuses a shut-down device.** Boot it first.
+- **Installing a copied Debug `.app` can change its Data container UUID.** On
+  2026-09-24, `simctl install` over the booted sync simulator moved OpenReader
+  from one `Data/Application/<uuid>` directory to another. `SyncProbe` still
+  had the old `CONTAINER` in `/tmp/openreader-sync-params.txt`, so every
+  harness write failed with `NSCocoaErrorDomain Code=4` and the test's later
+  `settleAt` assertion was only a consequence. Refresh `CONTAINER` with
+  `xcrun simctl get_app_container UDID top.xujialiu.openreader data` after
+  every install, before launching a probe.
 - **Another simulator needs the same Debug app.** `xcrun simctl install DEST "$(xcrun simctl get_app_container SOURCE top.xujialiu.openreader app)"` copies it without a build, to any device family the app supports, iPad included.
 - **An iPad behaves differently from an iPhone.** An iPad-sized WKWebView defaults to the desktop content mode, where WebKit ignores `text-size-adjust` (ADR 0030). The reader asks for the mobile mode through `patches/`. Anything that depends on WebKit is worth checking on an iPad simulator too.
 - **The app's console is not in the simulator's log.** `log show` has no `console.log` or `HX` lines; they are only in Metro's output. Note the time with `date` when you take a measurement, because it cannot be recovered afterwards.
@@ -510,6 +525,30 @@ fix (AGENTS.md).
   WebView, and even its `catch` block's `postMessage` call ran before the
   bridge was ready. `rm Documents/harness.json` after a command has answered,
   not only before a relaunch.
+- **A stale `{"do":"section"}` replayed on a fresh mount can race the
+  library's own `initialLocation` bootstrap and swallow the very next real
+  tap.** Measured 2026-09-24 verifying #54/#55 (`SyncProbe.swift`,
+  `testPendingPlacePlayWaitsOnReopen`/`testPendingPlacePauseWhileWaiting`): a
+  method that jumped to a deep section with `{"do":"section"}`, then left the
+  reader and reopened it (a second fresh `ReadingView` mount, whose `seenRef`
+  also starts at -1 — the pitfall above is true of a remount, not only a
+  relaunch), replayed that same stale command right as the reopened book's
+  own stored place was loading via `initialLocation`. Metro logged `Error
+  evaluating injectedJavaScript: … ReferenceError: Can't find variable:
+  rendition`, and that `console.warn`-equivalent raised React Native's "Open
+  debugger to view warnings." banner over the floating player — the exact
+  overlap this file's XCTest section already documents for a Play tap — which
+  then swallowed the *next* method's tap: once a real `Back` tap that never
+  reached the Library (`XCTAssertTrue failed - Back did not reach the
+  Library`, with a harness `{"do":"shut"}` proving the navigation itself was
+  fine seconds later), once a real `Pause` tap whose reading kept playing
+  unpaused for the rest of the run because the tap landed on the banner, not
+  the button underneath it (a screenshot taken mid-run showed the banner
+  sitting over the transport, `Annelie - Female Afrikaans` visible above it).
+  Both symptoms stopped once `Documents/harness.json` was deleted again
+  immediately before the reopen, not only once at the run's own start — a
+  real reopen never carries this file, so a probe reopening one must clear it
+  at exactly the moments a real reopen would find it absent.
 - **`Scroll Fixture`'s Contents rows cannot be followed, although its
   navigation document sits beside its package document.** Opening Contents on
   it showed "None of these rows names a file in this book. The contents live
@@ -526,6 +565,15 @@ fix (AGENTS.md).
   (`reading.goToSection`) jumps to a spine index directly and is unaffected —
   a cleaner substitute than `Player.onSkip` calls for reaching a specific
   chapter's top on a Document whose Contents cannot be followed.
+- **The old `SyncProbe.settleAt` setup no longer moves a paused reading.**
+  Measured 2026-09-24 against the merged #52 behavior: with a saved sentence
+  and playback paused, `{"do":"section","section":104}` moved the page but
+  deliberately left the reading's status at section 500, so
+  `testPendingPlacePlayWaitsOnReopen` reported `settleAt` failures even though
+  the harness was answering. This is the paused Contents contract, not a
+  broken harness. To prepare a stored place for a #54 probe, move it while
+  playing or update the probe setup to use a real Contents browsing step and
+  keep the expected status section unchanged.
 
 ### XCTest
 
@@ -575,6 +623,13 @@ fix (AGENTS.md).
   terminate` + `launch` between runs (not just `app.activate()` inside the
   test) restores the known starting screen; a method that must tolerate
   either starting point should check for a sheet-specific element first.
+- **XCTest runs methods in the class's discovered order, not the order of
+  repeated `-only-testing` arguments.** On 2026-09-24, one BrowseTouchProbe
+  invocation listed its stateful methods in the documented order, but XCTest
+  ran `testDragAway…`, `testDragBack…`, and `testFontSize…` before
+  `testOpenBook…`; the font-size method then could not open the drawer and the
+  later methods inherited the wrong page. Run each stateful method separately
+  in the README's order, or use a test class whose discovery order is known.
 - **The same inheritance can make a blind tap on a screen-position button hit a
   stray row of a sheet the previous run left open**, rather than simply miss.
   Measured 2026-09-24 verifying #52 (`BrowseTouchProbe`): a method failed
@@ -634,6 +689,24 @@ fix (AGENTS.md).
   Library by something the Library has (`label BEGINSWITH 'Actions for '`), tap
   `app.navigationBars.buttons.element(boundBy: 0)` rather than a label, and
   relaunch the app when there is no back button left (`SyncProbe.openBook`).
+- **iOS's own "Save Password?" AutoFill prompt is not in the app's
+  `XCUIApplication` tree at all**, and it blocks whatever a query against that
+  tree tries next. Raised once after `clearAndType` submits a *new* secure
+  field (`testEnterFolderAndSwitchOn`'s Password), it sits over the Library
+  the next time the app is queried and made one run's `statusLines` (`app.
+  staticTexts.allElementsBoundByIndex`) fail with `Failed to get matching
+  snapshot: No matches found for Element at index 2 …` — an accessibility
+  snapshot mismatch, not a missing element, because the system sheet was
+  mutating the tree out from under the query. It belongs to a system process,
+  reached the same way `UIA.MediaControls.NowPlaying.CenterButton` is: a
+  second `XCUIApplication(bundleIdentifier:)` for whichever process owns it —
+  `com.apple.springboard` answered `Not Now` reliably here; try
+  `com.apple.PasswordBreachSheet` and
+  `com.apple.AuthenticationServicesUI.AutoFillPromptUI` too, since which
+  process actually owns the sheet was not pinned down further. Call before any
+  whole-tree query after a first-time password submission; harmless the rest
+  of the time, since it waits at most a couple of seconds per candidate and
+  moves on when none exists.
 - **A probe's expected list can go stale when the app's own list changes.**
   `GeneralFontsProbe.testFontsPageListAndBackButton` still asserted all eleven
   Fonts-page names, four of them CJK (`苹方`, `宋体`, `楷体`, `圆体`), and failed
@@ -1371,6 +1444,17 @@ fix (AGENTS.md).
   - Fix: send a browser `User-Agent` on every host-side request. With that one
     header the same `PROPFIND` answered `207`. The app itself is never affected
     — `fetch` on iOS sends its own agent.
+- **A raw non-ASCII path segment in the URL raises before the request is even
+  sent.** The owner's real Sync Folder has a Chinese path component; a bare
+  `urllib.request.Request(url, …)` built from it fails with
+  `UnicodeEncodeError: 'ascii' codec can't encode characters …` inside
+  `http.client.putrequest`, for every method, before any network call is
+  attempted. `fetch` on iOS encodes this for the app; a host-side script must
+  do it itself: `urllib.parse.quote` the URL's path component (leaving the
+  scheme and host alone) before building the request. Met 2026-09-24 crafting
+  a #54/#55 desktop item into `<test folder>/openreader-54/…json` — the test
+  subfolder segment is plain ASCII, but the owner's own folder segment above
+  it in the same address is not.
 - **`urllib`'s `MKCOL` with no body raises instead of answering.** `Request(url,
   method='MKCOL')` with `data=None` sends no `Content-Length`, and the helper
   reported status `0` (its exception branch) for a folder that was never
@@ -1406,6 +1490,203 @@ fix (AGENTS.md).
   be emptied (`testRemoveEveryBook`), terminate the app, back up
   `library.json`, set those entries' `position` to `null`, and check that the
   file's baseline hash is unchanged after the switch-on sync — it was.
+
+### Crafting a cross-device item for #54/#55
+
+Verifying that Play adopts a place a desktop just wrote needs a real,
+document-matching item on the server, written host-side and timed against a
+real running app — not a stub. Four things went wrong doing that on
+2026-09-24, all against the real WebDAV host (the `openreader-54` test
+subfolder), none of them the app being wrong.
+
+- **A host-side script cannot `Process`/`NSTask` its way out of an
+  XCUITest method.** The obvious way to keep the gap between crafting an item
+  and pressing Play short — call the crafting script from inside the Swift
+  method, right before the tap — fails to compile: `cannot find 'Process' in
+  scope`. This probe target builds for `iphonesimulator` (an iOS binary), and
+  iOS has no process-spawning API at all; this is not a missing import.
+  - Fix: a file both sides poll. The XCTest method writes a JSON request
+    (`{"seq", "doc_id", "template", "device", "delta_ms"}`) to a fixed host
+    path and polls a second path for a matching `seq`; a plain Python script
+    already running on the host (`craft_watcher.py`, started once before the
+    run and left running) polls the request path, runs the craft the moment a
+    new `seq` appears, and writes the answer atomically (`os.replace`, so the
+    Swift side never reads a half-written file). Measured round trip: ~0.2–0.5 s,
+    against 20–40 s for the alternative below.
+- **Crafting from the caller's shell, then launching a new `xcodebuild`, puts
+  20–40 s between the craft and the Play tap — long enough for an unrelated
+  poke to adopt it first, or for the phone to have moved on since.** Four
+  consecutive attempts this way misbehaved in two different directions, both
+  explained once measured:
+  - Sometimes the item was already adopted **before the method's first
+    line ran**: the new test process's own attach/`app.activate()` fires an
+    ordinary `foreground` poke (unbounded, not the 2 s one `play()` waits on),
+    which had 20–40 s of build-and-attach time to download, merge and adopt
+    the already-crafted item in the background. What looked like "Play
+    adopted it" was that poke's landing, observed only because Play happened
+    to be pressed afterward — not evidence about `sync.wait('play')` at all.
+  - Other times the item was **never** adopted, with the sync outcome (see
+    the `synclast` harness command below) showing `remote:1, adopted:[],
+    uploaded:true` — the download succeeded, but the merge kept the phone's
+    own item as newer and re-uploaded it verbatim. Cause: `reading.play()`
+    always runs after the sync's `.then`, adoption or not, so a Play that
+    fails to adopt still plays on locally — and while it does, the periodic
+    position-write effect (`POSITION_INTERVAL_MS`) keeps stamping the phone's
+    *local* entry with the real wall clock. A next craft computed as
+    "phone's last known stamp + a fixed delta" is stale the moment that local
+    play has run past it, which it always had by the next attempt.
+  - Fix: craft from inside the running method (the file handshake above),
+    which keeps the craft-to-tap gap to what the method's own next few lines
+    take, on the far side of the attach window rather than racing it.
+- **A craft finishing under roughly a second before the Play tap can miss
+  adoption even though the upload itself succeeded (`204`) and the merge logic
+  is correct.** Measured 2026-09-24: two runs whose craft finished only ~0.2 s
+  before the tap saw `adopted:[]` on the very next sync; every run whose craft
+  finished 1–2 s before the tap adopted normally. The app's own download is
+  already cache-busted (`whatwg-fetch`'s `?_=` query on every request), so this
+  is not a caching bug in the app. Host-side, 16 PUT-then-GET pairs spaced
+  0–1000 ms apart, with and without a warming read first, all read back the
+  content just written — so it is not a caching bug in front of the host
+  either. The cause was not isolated further; it sits somewhere in the
+  sub-second window between one client's PUT finishing and another client's
+  next GET starting, outside this app's own logic, and it does not matter to a
+  real desktop client (which uploads roughly 10 s after its own pause, not
+  milliseconds before another device's Play). Craft at least 2 s before the tap
+  in any test that depends on adoption succeeding.
+- **A crafted item's stamp must be anchored on the device's own current
+  local stamp, read from its own `library.json`, not the server's copy of the
+  phone's item.** The server lags whenever a local write has not yet been
+  uploaded — normal while paused between sync moments — so "newer than what
+  the server last said the phone had" is not the same question as "newer than
+  what the phone actually holds right now," and the gap silently loses the
+  merge with no error anywhere (see `synclast` above for how that was even
+  visible). Read both the server's answer and the device's `Documents/
+  library.json` directly (the container path from `simctl get_app_container`)
+  and use whichever stamp is largest as the floor, plus the current wall
+  clock, plus a margin.
+  - A temporary harness command was added and removed to see this at all:
+    `shell.tsx`, `{"do":"synclast"}` → `hlog(JSON.stringify(syncLast))`, the
+    transport's own last outcome (`result`, `remote`, `adopted`, `uploaded`).
+    Nothing else distinguishes "the run never happened," "it errored" and "it
+    ran and found nothing new" from outside. Removed before finishing, in
+    keeping with the walkthrough harness being pre-release tooling, but worth
+    knowing it existed if the same question comes up again — it is a four-line
+    addition in the same shape as `saysettings` right above it.
+- **Harvesting a template by visiting the section leaves the device's own
+  local position sitting at that section.** A section jump plus a real
+  Play/Pause (`settleAt`, needed to get a real, document-matching
+  locator/anchor rather than a hand-written CFI) is itself a real navigation:
+  the phone is now *at* the section just harvested. Reusing that same section
+  immediately afterward as another device's "newer, unrendered" target tests
+  nothing — it is already rendered, and a run against it will look like a
+  clean adoption while not exercising the wait at all. Harvest ahead of
+  where the run will actually look, or explicitly move the device back to a
+  different, already-rendered section (another `settleAt`) before crafting
+  the target.
+  - **The scope this actually holds at is the `ReadingView` mount, not the
+    method call, and not the app process either** — `reportedSectionsRef`
+    (`use-reading.ts`) is a plain `useRef` created inside `useReading`, so it
+    resets on a fresh mount (a relaunch, or leaving and reopening the same
+    book) but is shared by *every* harness/XCTest call that reuses the
+    already-open reader (`app.activate()`, never `app.terminate()`) in
+    between. Measured 2026-09-24 verifying #54 scenario A/B/C the first time:
+    `testHarvestOneTemplate` (which itself does a section jump, to harvest
+    that section's real locator/anchor) and the scenario method that then
+    crafted and played *that same section* both ran via `app.activate()`
+    against one continuous mount that had never been torn down since the
+    reader was first opened. The craft-to-play gap was genuinely short (the
+    file-handshake fix above), but the target had already been displayed
+    minutes earlier by its own harvest, in the same mount — so the "adopted
+    and landed" observed was an ordinary already-known-Blocks resume, not the
+    pending-place wait #54 adds. One run's timing (0.98 s tap-to-word-level
+    audio while still backgrounded) was the tell in hindsight: real cross-
+    device layout+synthesis measured elsewhere took several seconds. The safe
+    protocol: harvest in one process, `app.terminate()`/`app.launch()` so the
+    process under test starts with a genuinely empty `reportedSectionsRef`,
+    open at a place far from the target and let it settle, *then* craft the
+    target and test. `testHarvestOneTemplate` and the scenario methods now
+    always relaunch for this reason, at the cost of the relaunch's own time.
+- **A `goToSection` jump jump across a large gap (~1000+ spine indices) can
+  silently fail to move the cursor, even in a freshly relaunched process.**
+  Measured 2026-09-24: jumping 500 → 1600 (harvesting a template) left
+  `status.section` at `500` indefinitely — confirmed by polling a harness
+  `"say"` for over 100 s with nothing else sent in between — while
+  `status.rendered.index` reached `1601` (the render-ahead-of-target pattern
+  every other jump also shows), meaning the section *did* report, just
+  without the cursor ever moving to it. Not fully root-caused (a `handleBlocks`
+  report for an intermediate section somehow consuming or missing the
+  `pendingSectionRef` match is suspected, not proven), and not reproduced at
+  every large gap — several ~500–700-index jumps elsewhere in the same session
+  worked normally. Avoid gaps close to or above 1000 when choosing a harvest
+  or craft target relative to wherever the device currently is; every gap
+  used successfully in the end was 700 or under. `settleAt` now confirms the
+  jump via a harness `"say"` read back from Metro's own log (`library.json`'s
+  write is throttled and can lag a jump that did work, so it is not what to
+  check) and retries up to three times rather than trusting a fixed sleep —
+  which caught this failure instead of silently harvesting the wrong section
+  under the requested one's name.
+- **The Notification Centre swipe measured flaky, independent of the mount
+  issue above.** Three separate, freshly-relaunched runs in one session found
+  no `UIA.MediaControls.NowPlaying.CenterButton` after the documented
+  top-left-edge swipe, including with three retries and a longer settle each
+  time (nine total attempts, zero successes, after the one run earlier the
+  same day that *had* worked with a single attempt). The accessibility tree
+  captured on failure showed only an empty `Application` root for
+  `com.apple.springboard`, which did not explain why. No alternative surfaced:
+  there is no `simctl` command to simulate a hardware remote-command press,
+  and this environment had no native desktop Computer Use tool to fall back to
+  (only a browser-scoped one, which cannot reach the Simulator window) — the
+  AGENTS.md-sanctioned fallback for when `xcrun`/XCTest cannot perform an
+  action. A run that needs the actual remote surface should budget for this
+  being unreliable and check for it early, since discovering it only after
+  crafting a target item leaves that item adopted through the ordinary
+  foreground-while-paused path instead (harmless, but not what was being
+  measured, and it consumes the target section).
+- **`XCUIApplication.state` is not trustworthy evidence of backgrounding by
+  itself.** Measured 2026-09-24: right after `XCUIDevice.shared.press(.home)`,
+  and again a full 7 s later, `app.state.rawValue` read `4` (`.runningForeground`)
+  — on a run where a whole-screen `XCUIScreen.main.screenshot()` taken at both
+  moments showed the Home Screen, wallpaper and app icons, not the app. Only a
+  third check, at 15 s, read `3` (`.runningBackground`). The screenshots are the
+  ground truth; `app.state` lagged by at least 7 s on this iOS 27 simulator
+  runtime and should be logged, not asserted on, until that lag is understood.
+  A background check that only reads `.state` right after `press(.home)` and
+  asserts on it can fail a genuinely-backgrounded run, or pass a run that never
+  backgrounded at all — take a screenshot instead, or alongside.
+- **Backgrounding right after a real screen tap stands in for a remote Play,
+  but only with the craft at least 2 s before the tap, and it did not reach
+  the layout question.** A remote Play and the screen's own end in the same
+  `play()`, so `testScreenPlayThenHomeImmediately` avoids the unreliable
+  Notification Centre swipe. It opens at a local place, plays briefly and
+  pauses, so the engine, audio session and Now Playing registration exist as
+  they would before a real lock-screen Play. It then crafts a target never
+  displayed in this process, taps the screen's Play, and presses Home about
+  half a second later.
+  - Symptom: two runs adopted nothing and played the local place, and it
+    looked like backgrounding's doing. Cause: the craft-to-tap gap in the
+    pitfall above. Both crafts finished about 0.2 s before the tap, and a
+    foreground control with the same gap failed the same way.
+  - Measured 2026-09-24 with a 2 s gap, host-stamped `hlog` lines (added for
+    the run and removed after). The Play sync adopted the item, and the
+    target section reported with the place landed 0.45 s after the tap. That
+    was before the app went inactive at 0.56 s, so the layout happened in the
+    foreground. Clips then started at 1.9, 5.9 and 13.4 s, inside the 15 s
+    background window: the JS thread and the audio go on in the background.
+  - Not established: whether a section that has **not** laid out yet lays
+    out while the app is in the background, which is what a lock-screen Play
+    of a phone in a pocket needs. To reach it, Home has to land before the
+    layout does, or the section has to take longer to lay out. A physical
+    iPhone's suspension policy may differ from the simulator's anyway.
+- **There is no `simctl` command to lock the simulator's screen** — checked
+  (`xcrun simctl help`, `xcrun simctl` with no arguments): no such
+  subcommand exists. A background-and-remote-Play check can go as far as a
+  real Home press plus Notification Centre's swipe (the same
+  `UIA.MediaControls.NowPlaying.CenterButton` surface `LockScreenProbe`/
+  `lock-screen.sh` read), reached from the Home Screen the same way
+  `testLockScreen` reaches it from inside the app. That establishes
+  backgrounded behaviour; it does not establish behaviour under an actually
+  locked screen, and a report that turns on this distinction should say which
+  one was tested.
 
 ### The shell
 
@@ -2513,6 +2794,11 @@ The methods, in the order a full run uses them:
   seconds.
 - `testForegroundAdoption` — Home, wait, activate: the `foreground` sync moment,
   photographed before and after.
+- `testBackgroundForegroundFromLibrary` (#59) — walks back to the Library
+  first, so it never captures the Sync screen, then Home, wait, activate with
+  no reader opened: a `background`/`foreground` sync moment for confirming
+  nothing uploads when nothing changed, without touching any book's own
+  position the way opening a reader could.
 - `testReadSyncScreen` — reads the screen without touching the switch; used
   after a relaunch to show that sync came back on, frozen, without a new check.
 - `testOpenBookOnly` — opens `BOOK_TITLE` with a real touch and leaves it paused:

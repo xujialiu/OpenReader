@@ -71,7 +71,13 @@ items whose format it does not implement. That carry-through rule is the one
 place this file's parser deliberately differs from `parseLibrary`, which drops
 and reports an unknown format because nothing here could act on it — a rule
 that is right for a file only this app writes and would erase the desktop's
-PDF positions on the phone's first upload here.
+PDF positions on the phone's first upload here. A carried item is written in the
+canonical form like any other, with its values as parsed. Its `anchor` and
+`stamp` keep only the keys the spec lists, in its order (#59, Zotero-TTS #139).
+Until then this side kept them as parsed, key order and unknown keys included,
+while the plugin wrote them canonically. So one hand-edited item came out of the
+two products two ways, and the file changed once more after the phone had
+written it.
 
 No title, no voice, no `lib`, no `key`. A title is a display cache the plugin
 has no use for; a Voice belongs to a Provider and a credential that differ
@@ -202,6 +208,28 @@ plays from the local place and is not applied later, because ten seconds into
 the reading the phone's own stamp is the newest anyway. While playing nothing
 moves. Before the owner has acted, an arriving place still takes over the
 resume, as ADR 0019 allows.
+
+Pressing Play did not do that until #54 (2026-09-24), for two reasons measured
+at the unit seams (`notes/NOTES_2026-09-24.md`, 01:43), either enough alone.
+The adopted place usually names a section the phone has not rendered, because
+reading forward on the desktop goes past what the phone has laid out, and
+`play()` opened with ADR 0019's claim rule, which gave up a place still pending:
+the engine loaded at the phone's own sentence, under a note that blamed "the
+place this book was left at". Play now waits for that section (ADR 0019, the
+Play bullet). And `flush` resolved with a variable the transport shared between
+runs, while `createSingleFlight` starts a queued run inside the finished run's
+own cleanup, before the awaiting caller resumes; that run's first line cleared
+the variable. So whenever a poke had queued a run meanwhile — the app coming to
+the front as Control Centre closes, or as the phone is unlocked after a
+lock-screen Play — `flush('play')` answered null, which Play reads as "sync is
+off", and the place its own run had just adopted was skipped. `flush` now
+resolves with the outcome its own run returns, carried on that run's promise.
+Both ended the same way: the next Clip boundary wrote the phone's older sentence
+stamped `max(now, adopted.at + 1)`, the next pause uploaded it, and the
+desktop's next resume took it, so the place reached on the desktop was lost on
+both devices. The same could happen without Play, so while a place is pending
+`readingPosition()` answers null: no pause, renumbering or exit writes the older
+sentence over it.
 
 ## The switch, and where the password lives
 

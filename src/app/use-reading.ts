@@ -53,6 +53,7 @@ import {
   type ReaderClock,
 } from '../playback';
 import {
+  awaitedSection,
   canonicalCfi,
   resolveResume,
   resumeSentence,
@@ -82,6 +83,7 @@ import {
   resolveTheme,
   type AppSettings,
 } from './settings';
+import { samePlace } from './sync-items';
 
 /** How much text is marked as it is spoken (CONTEXT.md). Which one is in use is the Provider's answer, never a preference. */
 export type HighlightLevel = 'word' | 'utterance';
@@ -235,7 +237,8 @@ export interface Reading {
   goToSection(section: number): void;
   /**
    * Where speech has got to, as a **Reading Position** (ADR 0008), or null
-   * before a Clip has played.
+   * before a Clip has played — and while a stored place is still pending, which
+   * the stored position already is (#54).
    *
    * A function and not a field, and that is the whole of its design. A Reading
    * Position changes once per Utterance, which is often enough that putting it
@@ -255,7 +258,9 @@ export interface Reading {
    * newer than anything that could arrive, and being dragged somewhere else
    * mid-sentence is the failure design 0020 keeps out of the player. Returns
    * whether the place was taken; a place whose section has not rendered yet
-   * is held and tried on every report, like the one the book opened with.
+   * is held and tried on every report, like the one the book opened with, and a
+   * Play pressed meanwhile waits for it (#54). The place already held is taken
+   * once, however many times it is passed.
    */
   resumeAt(place: ReadingPlace): boolean;
 }
@@ -430,6 +435,24 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    */
   const adoptedPendingRef = useRef(false);
   /**
+   * Play was pressed while the stored place is still on its way (#54): its
+   * section has not reported, so there is no Utterance to start from yet.
+   *
+   * The place is waited for rather than given up. Giving it up — ADR 0019's
+   * claim rule, as it stood — started the engine at the cursor, which for a place
+   * taken from another device is this device's own older sentence: the owner
+   * heard that, and the next Clip boundary stamped it above the newer place and
+   * sent it back to the desktop. For the place the book opened with it was the
+   * book's first line. Nothing is built or started meanwhile, and the player
+   * shows the press as starting. The wait ends when the place lands, when its
+   * section reports without it, or when the owner pauses or points the reading
+   * somewhere else; the effect after `play` then starts the reading.
+   *
+   * Not `playIntent`: the engine's own state reports set that, and a paused
+   * engine saying it is paused is not the owner taking the press back.
+   */
+  const awaitingPlaceRef = useRef(false);
+  /**
    * The sentence to show if the resume is given up on, from the last attempt
    * that failed.
    *
@@ -449,11 +472,16 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * Something else has decided where to read, so the stored Reading Position
    * stops competing for it.
    *
-   * A press of Play, a tapped word, a skip, a contents row. Without this, a
-   * position that resolved late — the section it names rendering thirty seconds
-   * into a 2,077-section book — would take the reading away from wherever the
-   * owner had just put it, which is the "silent landing three paragraphs away"
-   * ADR 0008 exists to prevent, arriving by the back door.
+   * A tapped word, a skip, a contents row — and a press of Play once the place's
+   * own section has reported without it. Without this, a position that resolved
+   * late — the section it names rendering thirty seconds into a 2,077-section
+   * book — would take the reading away from wherever the owner had just put it,
+   * which is the "silent landing three paragraphs away" ADR 0008 exists to
+   * prevent, arriving by the back door.
+   *
+   * Play no longer gives up a place that is still on its way: it waits for it
+   * (`awaitingPlaceRef`, #54). So the sentence for a place that had not rendered
+   * yet is about the reading being moved, which is what still gives one up.
    */
   const abandonResume = useCallback(() => {
     if (!resumeRef.current) return;
@@ -465,7 +493,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       resumeNeedsAttention: true,
       resume:
         lost ??
-        'The place this book was left at had not rendered yet when the reading was asked to start, so it starts here instead.',
+        'The place this book was left at had not rendered yet when the reading was moved, so it starts there instead.',
     }));
   }, []);
 
@@ -891,9 +919,32 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     return true;
   }, []);
 
+  /**
+   * A Play waiting for a place (#54), after something that did not land it.
+   *
+   * Once the place's own section has reported, the place is not on its way any
+   * more, and waiting on would be waiting for ever: it is given up with the
+   * sentence the last attempt kept, which says why, and the reading starts from
+   * this device's own place — design 0031's rule for a place the phone cannot
+   * find — through the effect after `play`.
+   */
+  const stopWaitingIfArrived = useCallback(() => {
+    const pending = resumeRef.current;
+    if (!awaitingPlaceRef.current || !pending) return;
+    if (awaitedSection(pending, { spine: renderedRef.current?.spine ?? 0, reported: reportedSectionsRef.current }) !== null) return;
+    abandonResume();
+  }, [abandonResume]);
+
   const resumeAt = useCallback(
     (place: ReadingPlace): boolean => {
       if (playIntent.current) return false;
+      // Already held: one arrival is passed twice — Play passes on what its own
+      // sync adopted, and the adopted-place effect passes the same arrival on the
+      // next render (#54). Its section has been asked for already, or is being
+      // displayed for the place the book opened with (#55), and a second display
+      // of a section still loading starts it over.
+      const held = resumeRef.current;
+      if (held && samePlace(held, place, 'epub')) return true;
       resumeRef.current = place;
       resumeLostRef.current = null;
       adoptedPendingRef.current = true;
@@ -904,9 +955,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       // Pending, the way the place a book opens with is — and, unlike that one,
       // with its section asked for, since nothing else will ask.
       revealPendingPlace(place);
+      // Arriving while Play waits, in a section that has already reported without it.
+      stopWaitingIfArrived();
       return true;
     },
-    [tryResume, revealPendingPlace],
+    [tryResume, revealPendingPlace, stopWaitingIfArrived],
   );
 
   /** The Blocks of every section rendered so far, as Utterances — for the renderer, which draws them, and for the engine, which speaks them. */
@@ -933,6 +986,12 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       if (next.length === 0) {
         if (seekingRef.current) walkForward(section);
         if (pendingSectionRef.current === section.index) pendingSectionRef.current = null;
+        // Play is waiting for a place, and this may be its section, holding nothing
+        // to read: the attempt keeps the sentence that says so, and the wait ends.
+        if (awaitingPlaceRef.current && resumeRef.current) {
+          tryResume(next, reported);
+          stopWaitingIfArrived();
+        }
         return;
       }
 
@@ -958,6 +1017,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       // may be one nobody has asked for yet, or the ask went out before the page
       // could hear it. Asked once per report, never for a section that reported.
       if (resumeRef.current && adoptedPendingRef.current) revealPendingPlace(resumeRef.current);
+      // Play is waiting for the place, and its section may just have reported without it.
+      stopWaitingIfArrived();
 
       /**
        * The second step of a contents tap: the section the owner asked for has
@@ -977,7 +1038,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
 
       adopt(next, reported);
     },
-    [adopt, walkForward, tryResume, seekTo, revealPendingPlace],
+    [adopt, walkForward, tryResume, seekTo, revealPendingPlace, stopWaitingIfArrived],
   );
 
   const handleProblem = useCallback((problem: ProblemMessage) => {
@@ -1104,7 +1165,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       onState: (state) => {
         if (generation !== engineGeneration.current) return;
         if (!buildingRef.current) playIntent.current = state.playing;
-        setStatus((was) => ({ ...was, ...(buildingRef.current && playIntent.current && !state.playing
+        // Building for a press of Play, or waiting for its place (#54): a paused
+        // engine saying it is paused — after a quiet reload — is not the press undone.
+        setStatus((was) => ({ ...was, ...((awaitingPlaceRef.current || (buildingRef.current && playIntent.current)) && !state.playing
           ? { playing: true, buffering: true } : state) }));
       },
       onOutOfText: ranOutOfText,
@@ -1131,8 +1194,24 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       setStatus((was) => ({ ...was, playing: false, note: readinessSentence(settings.provider, ['enabling']) }));
       return;
     }
+    /**
+     * A place still on its way is waited for (#54). Its section has not reported,
+     * so it names no Utterance yet, and the cursor names an older one: this
+     * device's own sentence under a place taken from another device, nothing at
+     * all under the place the book opened with. Starting there read that aloud
+     * and then wrote it over the newer place, on every device. So nothing starts
+     * yet: the player shows the press as starting, and an effect below starts the
+     * reading when the wait ends. Asked before the cover-page walk, which would
+     * take the page away from the section being displayed for the place.
+     */
+    const pending = resumeRef.current;
+    if (pending && awaitedSection(pending, { spine: renderedRef.current?.spine ?? 0, reported: reportedSectionsRef.current }) !== null) {
+      awaitingPlaceRef.current = true;
+      setStatus((was) => ({ ...was, playing: true, buffering: true, note: null }));
+      return;
+    }
     // Play is the owner saying "read from here", and here is wherever the reading
-    // is now. A bookmark that has not resolved by this point has lost its claim.
+    // is now. A bookmark whose own section has reported without it has lost its claim.
     abandonResume();
     // And here is the Reading Position from now on, a Contents row's choice in a
     // book with no place yet included (#52).
@@ -1159,6 +1238,22 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       if (rendered) walkForward(rendered);
       return;
     }
+
+    /**
+     * A seek still waiting out its debounce goes now, and only its target: the
+     * engine is about to speak, and it speaks the sentence the highlight is on.
+     * Left to the timer, an engine that already exists would first play the queue
+     * it paused on — this device's older sentence, when the reading has just
+     * landed on a place from another device (#54) — and one built below, loaded
+     * at the cursor that seek has already moved, would be sought to the same
+     * sentence 600 ms later and start it again. The one pending target is taken
+     * once, so a burst of presses is still one seek.
+     */
+    if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
+    seekTimerRef.current = null;
+    const target = pendingSeekRef.current;
+    pendingSeekRef.current = null;
+    if (target !== null) engineRef.current?.seek(target);
 
     if (engineRef.current) {
       engineRef.current.play();
@@ -1204,9 +1299,28 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     play();
   }, [status.known, play]);
 
+  /**
+   * The place Play was waiting for has landed, or its section reported without
+   * it, or the owner pointed the reading somewhere else (#54): the reading starts
+   * from wherever the cursor now is.
+   *
+   * From an effect for the reason the one above gives: a place lands inside the
+   * renderer's own message handler. On every change of status, because each way
+   * the wait ends changes it — a landing, a place given up, a tapped word — and
+   * the check is two refs.
+   */
+  useEffect(() => {
+    if (!awaitingPlaceRef.current || resumeRef.current) return;
+    awaitingPlaceRef.current = false;
+    play();
+  }, [status, play]);
+
   const pause = useCallback(() => {
     playIntent.current = false;
     seekingRef.current = false;
+    // A wait for a place ends here and the place stays pending, so it lands on
+    // the paused book when its section reports, as any place taken while paused does.
+    awaitingPlaceRef.current = false;
     engineRef.current?.pause();
     // Not a third clock message: a pause stops the position stream, and a WebView
     // still interpolating against `requestAnimationFrame` would run the highlight
@@ -1345,6 +1459,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       engineRef.current = null;
       buildingRef.current = null;
       seekingRef.current = false;
+      awaitingPlaceRef.current = false;
       // A skip's 600 ms could otherwise fire into an engine that has been disposed,
       // or into the next one built around a different Provider.
       if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
@@ -1414,6 +1529,12 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * screen that would have to be told.
    */
   const readingPosition = useCallback((): ReadingPlace | null => {
+    // A place still pending (#54): the stored position already is that place,
+    // with its true Stamp, and the cursor is what it is on its way to replace —
+    // this device's older sentence, under a place from another device. Written
+    // now, that would be stamped above the newer place and carried to every
+    // device, by a pause, a Clip boundary after a renumbering, or leaving.
+    if (resumeRef.current) return null;
     const at = atRef.current;
     if (at === null) return null;
     // Still on the sentence a resume landed on: the stored position is already

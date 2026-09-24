@@ -382,10 +382,37 @@ export function spineIndexOf(cfi: string): number | null {
  * contributed no Block, and a place must not wait for ever on one of those.
  */
 export interface RenderedSections {
-  /** How many spine items the Document has. Zero while that is not known, which makes nothing wait. */
+  /**
+   * How many spine items the Document has. Zero while that is not known, which
+   * makes nothing wait once anything has reported (`awaitedSection`).
+   */
   spine: number;
   /** The spine items that have reported, whether or not they held a Block. */
   reported: ReadonlySet<number>;
+}
+
+/**
+ * The spine item a stored place is still waiting for, or null when it waits for
+ * nothing: the section its locator names has not reported, so its Blocks are not
+ * here to look the locator up in (#51).
+ *
+ * Before any section has reported, a locator with a spine step is on its way:
+ * nothing has been compared with anything, the spine's length is not known yet,
+ * and the first report says how long it is. After that, a locator past the end
+ * of the spine names nothing that will ever report, and neither does a spine
+ * still of unknown length; neither is waited for.
+ *
+ * The one rule two questions share: `resolveResume` asks it before comparing
+ * anything, and Play asks it before it starts — a place on its way is waited
+ * for, not given up, because giving it up reads the older place aloud and then
+ * writes that over it (#54).
+ */
+export function awaitedSection(position: ReadingPlace, rendered: RenderedSections): number | null {
+  const named = readLocator(position.locator, 'epub');
+  const section = named === null ? null : spineIndexOf(named);
+  if (section === null || rendered.reported.has(section)) return null;
+  if (rendered.reported.size === 0) return section;
+  return section < rendered.spine ? section : null;
 }
 
 /** Why a stored Reading Position did not name an Utterance. */
@@ -468,11 +495,8 @@ export function resolveResume(
   blocks: readonly ReportedBlock[],
   rendered: RenderedSections,
 ): Resume {
-  const named = readLocator(position.locator, 'epub');
-  const section = named === null ? null : spineIndexOf(named);
-  if (section !== null && section < rendered.spine && !rendered.reported.has(section)) {
-    return { outcome: 'waiting', section };
-  }
+  const section = awaitedSection(position, rendered);
+  if (section !== null) return { outcome: 'waiting', section };
 
   const resolution = resolveReadingPosition(position, reportedPlaces(blocks));
   if (resolution.outcome === 'unresolved') {
@@ -503,6 +527,12 @@ export function resolveResume(
  *
  * Not for `waiting`, which has nothing to say yet: the place is still on its
  * way, and the screen says so only if the owner asks for something else first.
+ *
+ * A lost place says why and nothing about where the reading goes instead. It
+ * used to add that the reading starts at the top of this section, which no path
+ * does: Play reads from this device's own place, or from the first sentence
+ * laid out when there is none, and a tapped word, a skip or a contents row from
+ * where they point (#54).
  */
 export function resumeSentence(resume: Exclude<Resume, { outcome: 'waiting' }>): string {
   if (resume.outcome === 'resumed') {
@@ -517,7 +547,7 @@ export function resumeSentence(resume: Exclude<Resume, { outcome: 'waiting' }>):
     }
     return 'Resumed at the sentence the reading stopped on.';
   }
-  return `${LOST_BECAUSE[resume.why]} The reading starts at the top of this section rather than at a guess.`;
+  return LOST_BECAUSE[resume.why];
 }
 
 const LOST_BECAUSE: Readonly<Record<ResumeFailure, string>> = {

@@ -71,4 +71,26 @@ describe('createSingleFlight', () => {
     runs[0].done();
     await flush;
   });
+
+  it('resolves each flush with what the run it waited for returned, whatever runs after it (#54)', async () => {
+    // The trailing run starts inside the finished run's own cleanup, before the
+    // first flush's caller resumes; an answer read from anything shared would
+    // then be the trailing run's, which has not answered yet.
+    const runs: { trigger: string; done: (said: string) => void }[] = [];
+    const flight = createSingleFlight(
+      (trigger) =>
+        new Promise<string>((done) => {
+          runs.push({ trigger, done });
+        }),
+    );
+    const play = flight.flush('play');
+    flight.poke('foreground');
+    const open = flight.flush('open');
+    runs[0].done('what play found');
+    expect(await play).toBe('what play found');
+    expect(runs.map((r) => r.trigger)).toEqual(['play', 'open']);
+    // The flush that joined the trailing run is answered by that run.
+    runs[1].done('what the trailing run found');
+    expect(await open).toBe('what the trailing run found');
+  });
 });

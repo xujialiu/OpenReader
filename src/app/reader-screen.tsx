@@ -52,8 +52,12 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
    * `use-reading.ts` resolves its anchor against the first Blocks to arrive. A
    * value that kept changing would either do nothing or move the reading under
    * the owner.
+   *
+   * `adoptedAt` is the last adoption that position already carries, read in the
+   * same render: an adoption from before the open is the place the book opens
+   * with, not news for `adopted` below (#55).
    */
-  const [opened, setOpened] = useState<{ document: OpenDocument; position: ReadingPosition | null } | null>(null);
+  const [opened, setOpened] = useState<{ document: OpenDocument; position: ReadingPosition | null; adoptedAt: number | null } | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [appearance, setAppearance] = useState(false);
   const [actions, setActions] = useState(false);
@@ -84,11 +88,12 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
     // newer place that arrives before the owner acts takes over the resume
     // through `adopted` below.
     sync.poke('open');
+    const adoptedAt = library.adoptedAt[entry.id] ?? null;
     // A `LibraryEntry` *is* a `DocumentIdentity` plus what the Library
     // remembers, so there is nothing to pick out of it.
     openDocument(entry, entry.title)
       .then((document) => {
-        if (alive) setOpened({ document, position: entry.position });
+        if (alive) setOpened({ document, position: entry.position, adoptedAt });
       })
       .catch((problem: unknown) => {
         if (alive) setNote(problem instanceof Error ? problem.message : String(problem));
@@ -157,15 +162,26 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
    * adoption and the position is read live from the entry, so the effect in
    * `<ReadingView>` runs once per arrival and never for this screen's own
    * `reached` writes — those do not move `adoptedAt`.
+   *
+   * **Only an adoption since the open** (#55). `adoptedAt` lasts the session,
+   * and one from before the open is the very place the book opens with, which
+   * `<Reader initialLocation>` is already displaying; handed over again, it asked
+   * the renderer for that section a second time, and a second display of a
+   * section still loading starts it over. Keyed on the open as well as on the
+   * adoption: two Documents adopted by one sync share one `adoptedAt`, and a
+   * hand-over from one to the other must not keep the first one's place.
    */
   const adoptedAt = openedId ? library.adoptedAt[openedId] ?? null : null;
   const adoptedPosition = openedEntry?.position ?? null;
   const adopted = useMemo(
-    () => (adoptedAt !== null && adoptedPosition ? { at: adoptedAt, position: adoptedPosition } : null),
+    () =>
+      opened && adoptedAt !== null && adoptedAt !== opened.adoptedAt && adoptedPosition
+        ? { at: adoptedAt, position: adoptedPosition }
+        : null,
     // The position object is rebuilt on every Library write; `adoptedAt` is the
     // event, and the position that goes with it is whatever the entry holds then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [adoptedAt],
+    [adoptedAt, opened],
   );
   const documentVoice = useMemo(
     () => (voiceId ? { provider: voiceProvider, voice: voiceId } : null),

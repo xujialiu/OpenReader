@@ -7,32 +7,52 @@
  * strongest `force` asked for meanwhile. So a burst of documents opening costs
  * one round trip plus one, never one per document, and nothing ever blocks the
  * caller: `poke` returns at once, `flush` resolves when its run has ended.
+ *
+ * **`flush` resolves with what its own run returned**, carried on that run's
+ * promise and never read from anything shared (#54). The trailing run starts
+ * inside the finished run's cleanup, before the awaiting caller resumes, so an
+ * answer kept beside the runs has already been replaced by the time it is read:
+ * Play waiting on a sync was told "sync is off" by a trailing run that had only
+ * just started, and skipped the place its own run had adopted (measured
+ * 2026-09-24). A flush that joins the trailing run is answered by that run.
  */
 
-export interface SingleFlight {
+export interface SingleFlight<T> {
   /** Schedule a run; never blocks, a burst coalesces into the running one plus one trailing run. */
   poke(trigger: string): void;
-  /** One awaited, forced run — the shutdown's final push; it runs even inside a failure window. */
-  flush(trigger: string): Promise<void>;
+  /**
+   * One awaited, forced run — the shutdown's final push; it runs even inside a
+   * failure window. Resolves with what that run returned: its own, or the
+   * trailing run's when one was already in flight.
+   */
+  flush(trigger: string): Promise<T>;
   running(): boolean;
 }
 
 /** `run` must never reject; what it reports is its own business (the stats and the gated error report). */
-export function createSingleFlight(run: (trigger: string, force: boolean) => Promise<void>): SingleFlight {
-  let inFlight: Promise<void> | null = null;
-  let trailing: { trigger: string; force: boolean; promise: Promise<void>; resolve: () => void } | null = null;
+export function createSingleFlight<T>(run: (trigger: string, force: boolean) => Promise<T>): SingleFlight<T> {
+  let inFlight: Promise<T> | null = null;
+  let trailing: {
+    trigger: string;
+    force: boolean;
+    promise: Promise<T>;
+    resolve: (answer: T) => void;
+    reject: (problem: unknown) => void;
+  } | null = null;
 
-  function request(trigger: string, force: boolean): Promise<void> {
+  function request(trigger: string, force: boolean): Promise<T> {
     if (inFlight) {
       if (trailing) {
         trailing.trigger = trigger;
         trailing.force = trailing.force || force;
       } else {
-        let resolve!: () => void;
-        const promise = new Promise<void>((r) => {
-          resolve = r;
+        let resolve!: (answer: T) => void;
+        let reject!: (problem: unknown) => void;
+        const promise = new Promise<T>((yes, no) => {
+          resolve = yes;
+          reject = no;
         });
-        trailing = { trigger, force, promise, resolve };
+        trailing = { trigger, force, promise, resolve, reject };
       }
       return trailing.promise;
     }
@@ -41,7 +61,7 @@ export function createSingleFlight(run: (trigger: string, force: boolean) => Pro
       if (trailing) {
         const next = trailing;
         trailing = null;
-        void request(next.trigger, next.force).finally(next.resolve);
+        void request(next.trigger, next.force).then(next.resolve, next.reject);
       }
     });
     return inFlight;

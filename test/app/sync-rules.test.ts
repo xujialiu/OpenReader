@@ -78,6 +78,13 @@ describe('a place a resume landed on is never written again (observation b, ADR 
     pin(fn, 'if (at === resumedAtRef.current) return null;', 'use-reading.ts, readingPosition');
   });
 
+  it('answers no place while a place is still pending, whose Stamp the stored position already carries (#54)', () => {
+    // Without it a pause, a renumbering or leaving the screen wrote this device's
+    // older sentence above a place just taken from the desktop, and carried it back.
+    const fn = within(reading, 'const readingPosition = useCallback(', '}, []);');
+    pin(fn, 'if (resumeRef.current) return null;', 'use-reading.ts, readingPosition');
+  });
+
   it('remembers the landing after the seek that made it, and forgets it when the cursor moves for any other reason', () => {
     const attempt = within(reading, 'const tryResume = useCallback(', '[seekTo],');
     expect(attempt.indexOf('seekTo(found.utterance);')).toBeLessThan(attempt.indexOf('resumedAtRef.current = found.utterance;'));
@@ -113,9 +120,9 @@ describe('an adopted place asks for its section (defect 3)', () => {
     // "Has that section reported" is the one set a stored place also waits on (#51),
     // which counts a section that reported no Block as reported.
     pin(reveal, 'reportedSectionsRef.current.has(section)', 'use-reading.ts, revealPendingPlace');
-    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace],');
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace, stopWaitingIfArrived],');
     pin(blocks, 'if (resumeRef.current && adoptedPendingRef.current) revealPendingPlace(resumeRef.current);', 'use-reading.ts, handleBlocks');
-    const resume = within(reading, 'const resumeAt = useCallback(', '[tryResume, revealPendingPlace],');
+    const resume = within(reading, 'const resumeAt = useCallback(', '[tryResume, revealPendingPlace, stopWaitingIfArrived],');
     pin(resume, 'revealPendingPlace(place);', 'use-reading.ts, resumeAt');
   });
 });

@@ -65,6 +65,7 @@ export { blockIds, EMPTY_BLOCKS, withSection, type BlockIndex } from './blocks';
 
 export {
   anchoredRangesOf,
+  awaitedSection,
   canonicalCfi,
   clampElapsed,
   correctMessage,

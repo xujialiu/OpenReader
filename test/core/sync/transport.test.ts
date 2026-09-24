@@ -191,4 +191,49 @@ describe('single flight', () => {
     expect(spy).toHaveBeenCalledTimes(2);
     expect(transport.last()?.trigger).toBe('c');
   });
+
+  it("answers a flush with what its own run adopted, though a poke queued another run meanwhile (#54)", async () => {
+    // Play waits on `flush('play')`, and the app coming to the front pokes
+    // `'foreground'` while it runs — Control Centre closing, the phone unlocked
+    // after a lock-screen Play. Measured on 2026-09-24: the flush answered null,
+    // which Play reads as "sync is off", although its run had adopted the
+    // desktop's newer place.
+    const gates: (() => void)[] = [];
+    const client: SyncClient = {
+      // Each download waits for its own gate, so the queued run is still on the network when the first answers.
+      async download() {
+        await new Promise<void>((resolve) => gates.push(resolve));
+        return serializePositionsFile([item(A, 9, 'desk')]);
+      },
+      async upload() {},
+    };
+    let held = item(A, 5);
+    const transport = createPositionsTransport({
+      enabled: () => true,
+      client: async () => client,
+      local: () => [held],
+      // The Library's rule: take what is strictly newer, and say which.
+      adopt: (items) => items.filter((one) => one.id === A && one.stamp.at > held.stamp.at).map((one) => {
+        held = one;
+        return one.id;
+      }),
+      now: () => 0,
+      report: () => {},
+    });
+    const until = async (done: () => boolean) => {
+      for (let i = 0; i < 50 && !done(); i++) await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(done()).toBe(true);
+    };
+
+    const flushed = transport.flush('play');
+    transport.poke('foreground');
+    await until(() => gates.length === 1);
+    gates.shift()!();
+    expect(await flushed).toMatchObject({ trigger: 'play', result: 'ok', adopted: [A] });
+    // The queued run started meanwhile, found nothing newer, and answers for itself.
+    await until(() => gates.length === 1);
+    gates.shift()!();
+    await until(() => !transport.running());
+    expect(transport.last()).toMatchObject({ trigger: 'foreground', adopted: [] });
+  });
 });

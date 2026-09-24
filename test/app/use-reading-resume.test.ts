@@ -48,18 +48,20 @@ const engines = vi.hoisted(() => {
     onState?(state: { playing: boolean; buffering: boolean }): void;
   }
   interface Load { length: number; from: number; quiet: boolean }
-  const built: { deps: Deps; loads: Load[]; seeks: number[]; pauses: number }[] = [];
+  /** `calls` is every load, extend, seek, play and pause in the order they came, for a test about which came first. */
+  const built: { deps: Deps; loads: Load[]; seeks: number[]; pauses: number; calls: string[] }[] = [];
   function create(deps: Deps) {
-    const engine = { deps, loads: [] as Load[], seeks: [] as number[], pauses: 0 };
+    const engine = { deps, loads: [] as Load[], seeks: [] as number[], pauses: 0, calls: [] as string[] };
     built.push(engine);
     return {
       load(list: readonly unknown[], from = 0, options: { quiet?: boolean } = {}) {
         engine.loads.push({ length: list.length, from, quiet: options.quiet === true });
+        engine.calls.push(`load:${from}`);
       },
-      extend() {},
-      play() {},
-      pause() { engine.pauses++; },
-      seek(utterance: number) { engine.seeks.push(utterance); },
+      extend() { engine.calls.push('extend'); },
+      play() { engine.calls.push('play'); },
+      pause() { engine.pauses++; engine.calls.push('pause'); },
+      seek(utterance: number) { engine.seeks.push(utterance); engine.calls.push(`seek:${utterance}`); },
       setRate() {},
       switchVoice() {},
       cancelVoiceSwitch() {},
@@ -161,6 +163,10 @@ function mount(options: { settings?: AppSettings; resume?: ReadingPlace | null; 
         action(reading!);
         await new Promise((resolve) => setImmediate(resolve));
       });
+    },
+    /** Whatever the last report set off — an engine a waiting Play builds — settled before the next line. */
+    async settle() {
+      await act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
     },
     get reading() { return reading!; },
   };
@@ -278,20 +284,43 @@ describe('a place on a chapter heading, with a contents page that lists it (#51)
     await m.down();
   });
 
-  it('gives the place up when Play comes first, and says it had not rendered yet', async () => {
+  it('waits for the chapter when Play comes first, and reads the heading once it reports (#54)', async () => {
+    // Play used to give the place up here: the engine was loaded at the contents
+    // page's first line, and the next place written was that page, on every device.
     const m = mount({ settings: READY, resume: heading, spine: 8 });
     await m.up();
     await m.report(CONTENTS, 1);
     await m.press((reading) => reading.play());
-    expect(m.reading.status.resume).toBe(
-      'The place this book was left at had not rendered yet when the reading was asked to start, so it starts here instead.',
-    );
-    expect(m.reading.status.resumeNeedsAttention).toBe(true);
-    expect(engines.built[0].loads).toEqual([{ length: 4, from: 0, quiet: false }]);
-    // The chapter arriving afterwards does not take the reading away from where Play started it.
-    bridge.show.mockClear();
-    await m.report([...CONTENTS, ...CHAPTER_FOUR], 4);
-    expect(bridge.show).not.toHaveBeenCalled();
+    // Starting, with nothing built and nothing given up.
+    expect(m.reading.status.playing).toBe(true);
+    expect(m.reading.status.buffering).toBe(true);
+    expect(m.reading.status.resume).toBeNull();
+    expect(engines.built).toHaveLength(0);
+
+    const both = [...CONTENTS, ...CHAPTER_FOUR];
+    await m.report(both, 4);
+    await m.settle();
+    expect(m.reading.status.utterance).toBe(4);
+    expect(m.reading.status.resume).toBe('Resumed at the sentence the reading stopped on.');
+    expect(engines.built[0].loads).toEqual([{ length: segmentDocument(both, 'en').length, from: 4, quiet: false }]);
+    await m.down();
+  });
+
+  it('waits rather than walking past a cover when Play comes before anything has reported (#54)', async () => {
+    const m = mount({ settings: READY, resume: heading, spine: 8 });
+    await m.up();
+    await m.press((reading) => reading.play());
+    // The cover reports and holds nothing to read. The page is on its way to the
+    // chapter, and a walk to the next section would take it somewhere else.
+    await m.report([], 0);
+    await m.report(CONTENTS, 1);
+    expect(bridge.goToSection).not.toHaveBeenCalled();
+    expect(engines.built).toHaveLength(0);
+
+    const both = [...CONTENTS, ...CHAPTER_FOUR];
+    await m.report(both, 4);
+    await m.settle();
+    expect(engines.built[0].loads).toEqual([{ length: segmentDocument(both, 'en').length, from: 4, quiet: false }]);
     await m.down();
   });
 });
@@ -360,9 +389,10 @@ describe('a section reported above the reading (#46)', () => {
       await m.press((reading) => reading.play());
       expect(engines.built).toHaveLength(1);
       expect(engines.built[0].loads).toEqual([{ length: 18, from: opening, quiet: false }]);
-      // … and the tap's own seek, when it goes out, names the same sentence.
+      // … and the tap's own seek, which named the same sentence, is settled by
+      // the press rather than sent 600 ms later to start that sentence again (#54).
       await act(async () => { vi.advanceTimersByTime(600); });
-      expect(engines.built[0].seeks).toEqual([opening]);
+      expect(engines.built[0].seeks).toEqual([]);
       await m.down();
     } finally {
       vi.useRealTimers();
@@ -398,8 +428,9 @@ describe('a section reported above the reading (#46)', () => {
 
       await m.press((reading) => reading.play());
       expect(engines.built[0].loads).toEqual([{ length: 18, from: place, quiet: false }]);
+      // Loaded at the place, so the resume's own seek is settled by the press, not sent after it (#54).
       await act(async () => { vi.advanceTimersByTime(600); });
-      expect(engines.built[0].seeks).toEqual([place]);
+      expect(engines.built[0].seeks).toEqual([]);
       expect(m.reading.readingPosition()).toBeNull();
       await m.down();
     } finally {
@@ -707,7 +738,7 @@ describe('a Contents row while paused only moves the page (#52)', () => {
     expect(bridge.goToSection).toHaveBeenCalledWith(2);
     expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
     expect(m.reading.status.resume).toBe(
-      'The place this book was left at had not rendered yet when the reading was asked to start, so it starts here instead.',
+      'The place this book was left at had not rendered yet when the reading was moved, so it starts there instead.',
     );
     await m.down();
   });
@@ -742,6 +773,270 @@ describe('a Contents row while paused only moves the page (#52)', () => {
     expect(bridge.show).toHaveBeenCalledTimes(1);
     expect(bridge.show).toHaveBeenLastCalledWith(at(FERRY), { reveal: false });
     expect(m.reading.status.utterance).toBe(at(FERRY));
+    await m.down();
+  });
+});
+
+/**
+ * Play after the desktop has read further (#54). The phone resumed in chapter
+ * one and paused; the desktop's newer place, in section 3, is taken from the
+ * Positions File by the sync Play waits for, or by one a moment before, and the
+ * phone has not rendered section 3. Measured on 2026-09-24 against this harness:
+ * Play gave the place up, the engine was loaded at the phone's own sentence, and
+ * the section reporting a moment later moved nothing — so the phone read its old
+ * place and then wrote it over the desktop's.
+ */
+describe('Play with a newer place still on its way (#54)', () => {
+  const READY: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
+  /** The phone's own place: the second Block of chapter one, where the owner paused before going to the desktop. */
+  const phonePlace = readingPlaceAt(createLocator('epub', 'epubcfi(/6/2!/4/4)'), CHAPTER_ONE[1].text, 0, CHAPTER_ONE[1].text.length);
+  const BOTH = [...CHAPTER_ONE, ...CHAPTER_THREE];
+  const LENGTH = segmentDocument(BOTH, 'en').length;
+  /** The desktop's sentence, once chapters one and three have reported. */
+  const DESKTOP_AT = segmentDocument(BOTH, 'en').findIndex((utterance) => utterance.text === 'The sentence the desktop stopped on.');
+
+  /** Mounted on the phone's own place, resumed in chapter one and paused there. */
+  async function resumedOnThePhone() {
+    const m = mount({ settings: READY, resume: phonePlace });
+    await m.up();
+    await m.report(CHAPTER_ONE, 0);
+    expect(m.reading.status.utterance).toBe(1);
+    return m;
+  }
+
+  it('waits for the section when Play comes in the same moment as the place, and reads from the place', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const m = await resumedOnThePhone();
+      // What `reading-view.tsx`'s `play` does once its sync has adopted the desktop's place.
+      let taken = false;
+      await m.press((reading) => {
+        taken = reading.resumeAt(desktopPlace);
+        reading.play();
+      });
+      expect(taken).toBe(true);
+      expect(bridge.goTo).toHaveBeenCalledTimes(1);
+      expect(bridge.goTo).toHaveBeenCalledWith('epubcfi(/6/6!/4/4)');
+      // Starting, with nothing built and nothing given up.
+      expect(m.reading.status.playing).toBe(true);
+      expect(m.reading.status.buffering).toBe(true);
+      expect(m.reading.status.resume).toBeNull();
+      expect(engines.built).toHaveLength(0);
+
+      await m.report(BOTH, 2);
+      await m.settle();
+      expect(DESKTOP_AT).toBe(3);
+      expect(m.reading.status.utterance).toBe(DESKTOP_AT);
+      expect(engines.built).toHaveLength(1);
+      expect(engines.built[0].loads).toEqual([{ length: LENGTH, from: DESKTOP_AT, quiet: false }]);
+      // Loaded at the place, so the landing's own seek is not sent after it.
+      await act(async () => { vi.advanceTimersByTime(600); });
+      expect(engines.built[0].seeks).toEqual([]);
+      await m.down();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('waits the same way for a place taken a moment before Play, while its section was loading', async () => {
+    const m = await resumedOnThePhone();
+    // The adopted-place effect, after a foreground sync.
+    await act(async () => { m.reading.resumeAt(desktopPlace); });
+    await m.press((reading) => reading.play());
+    expect(engines.built).toHaveLength(0);
+    await m.report(BOTH, 2);
+    await m.settle();
+    expect(engines.built[0].loads).toEqual([{ length: LENGTH, from: DESKTOP_AT, quiet: false }]);
+    await m.down();
+  });
+
+  it('reads from the place at once when its section has already reported (control)', async () => {
+    const m = await resumedOnThePhone();
+    await m.report(BOTH, 2);
+    await m.press((reading) => {
+      reading.resumeAt(desktopPlace);
+      reading.play();
+    });
+    expect(engines.built[0].loads).toEqual([{ length: LENGTH, from: DESKTOP_AT, quiet: false }]);
+    await m.down();
+  });
+
+  it('seeks an engine that already exists to the place before it plays, so the old sentence is never spoken', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const m = await resumedOnThePhone();
+      // The phone reads from its own place and is paused, before the owner goes to the desktop.
+      await m.press((reading) => reading.play());
+      const engine = engines.built[0];
+      expect(engine.loads).toEqual([{ length: 2, from: 1, quiet: false }]);
+      await m.press(() => engine.deps.clock.onClip({ utterance: 1, words: null, duration: 1, rate: 1 }));
+      await m.press((reading) => reading.pause());
+      await act(async () => { vi.advanceTimersByTime(600); });
+      engine.calls.length = 0;
+
+      await m.press((reading) => {
+        reading.resumeAt(desktopPlace);
+        reading.play();
+      });
+      // Waiting: the paused engine is not asked to play the queue it holds, which is the old sentence.
+      expect(engine.calls).toEqual([]);
+      expect(m.reading.status.playing).toBe(true);
+
+      await m.report(BOTH, 2);
+      await m.settle();
+      expect(engine.calls).toEqual(['extend', `seek:${DESKTOP_AT}`, 'play']);
+      // The landing's own seek has gone out already, and is not sent a second time.
+      await act(async () => { vi.advanceTimersByTime(600); });
+      expect(engine.calls).toEqual(['extend', `seek:${DESKTOP_AT}`, 'play']);
+      await m.down();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the player starting while it waits, whatever the paused engine publishes', async () => {
+    const m = await resumedOnThePhone();
+    await m.press((reading) => reading.play());
+    const engine = engines.built[0];
+    await m.press((reading) => reading.pause());
+    await m.press((reading) => {
+      reading.resumeAt(desktopPlace);
+      reading.play();
+    });
+    // A paused engine says it is paused — after a quiet reload, say — and the player must not believe it.
+    await m.press(() => engine.deps.onState!({ playing: false, buffering: false }));
+    expect(m.reading.status.playing).toBe(true);
+    expect(m.reading.status.buffering).toBe(true);
+    await m.down();
+  });
+
+  it('gives the place up, saying why, when its own section reports without it, and reads from the phone\'s place', async () => {
+    const m = await resumedOnThePhone();
+    await m.press((reading) => {
+      reading.resumeAt(desktopPlace);
+      reading.play();
+    });
+    // Section 3 reports with other words in it: nothing the desktop quoted is there.
+    const rewritten = [...CHAPTER_ONE, ...blocks(2, ['Chapter three, rewritten.', 'None of the old words remain here.'])];
+    await m.report(rewritten, 2);
+    await m.settle();
+    expect(m.reading.status.resume).toMatch(/^The sentence this book was left on is not in the text that has rendered\./);
+    expect(m.reading.status.resumeNeedsAttention).toBe(true);
+    expect(engines.built[0].loads).toEqual([{ length: segmentDocument(rewritten, 'en').length, from: 1, quiet: false }]);
+    await m.down();
+  });
+
+  it('lets Pause end the wait and keep the place, which then lands on the paused book', async () => {
+    const m = await resumedOnThePhone();
+    await m.press((reading) => {
+      reading.resumeAt(desktopPlace);
+      reading.play();
+    });
+    await m.press((reading) => reading.pause());
+    expect(m.reading.status.playing).toBe(false);
+    expect(m.reading.status.resume).toBeNull();
+
+    await m.report(BOTH, 2);
+    await m.settle();
+    expect(m.reading.status.utterance).toBe(DESKTOP_AT);
+    expect(m.reading.status.playing).toBe(false);
+    expect(engines.built).toHaveLength(0);
+    // Landed: the stored position already is that sentence, with the desktop's Stamp.
+    expect(m.reading.readingPosition()).toBeNull();
+    await m.down();
+  });
+
+  it('lets a tapped word end the claim while Play waits, and reads from the word', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const m = await resumedOnThePhone();
+      await m.press((reading) => {
+        reading.resumeAt(desktopPlace);
+        reading.play();
+      });
+      await m.press((reading) => reading.seekTo(0));
+      expect(m.reading.status.resume).toBe(
+        'The place this book was left at had not rendered yet when the reading was moved, so it starts there instead.',
+      );
+      expect(m.reading.status.resumeNeedsAttention).toBe(true);
+      expect(engines.built[0].loads).toEqual([{ length: 2, from: 0, quiet: false }]);
+
+      // The section arriving afterwards takes nothing back.
+      await m.report(BOTH, 2);
+      expect(m.reading.status.utterance).toBe(0);
+      await act(async () => { vi.advanceTimersByTime(600); });
+      expect(engines.built[0].seeks).toEqual([]);
+      await m.down();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('writes no place while one is on its way, because the stored position already is that place', async () => {
+    const m = mount({ settings: READY });
+    await m.up();
+    await m.report(CHAPTER_ONE, 0);
+    // A sentence the owner pointed at is a place to write …
+    await act(async () => { m.reading.seekTo(1); });
+    expect(m.reading.readingPosition()).not.toBeNull();
+    // … until a newer one is taken from another device and is on its way.
+    await act(async () => { m.reading.resumeAt(desktopPlace); });
+    expect(m.reading.readingPosition()).toBeNull();
+    // Landed, the cursor is on the sentence the stored position names: still nothing to write.
+    await m.report(BOTH, 2);
+    expect(m.reading.readingPosition()).toBeNull();
+    // Moved by the owner, it is theirs again.
+    await act(async () => { m.reading.seekTo(0); });
+    expect(m.reading.readingPosition()).not.toBeNull();
+    await m.down();
+  });
+
+  it('takes one arrival once when Play passes it first and the arrival effect passes it again', async () => {
+    const m = await resumedOnThePhone();
+    await m.press((reading) => {
+      reading.resumeAt(desktopPlace);
+      reading.play();
+    });
+    // The next render hands the same adoption to the adopted-place effect.
+    await act(async () => { m.reading.resumeAt(desktopPlace); });
+    expect(bridge.goTo).toHaveBeenCalledTimes(1);
+    await m.report(BOTH, 2);
+    await m.settle();
+    expect(engines.built[0].loads).toEqual([{ length: LENGTH, from: DESKTOP_AT, quiet: false }]);
+    await m.down();
+  });
+
+  it('takes one arrival once when the arrival effect passes it first and Play passes it again', async () => {
+    const m = await resumedOnThePhone();
+    await act(async () => { m.reading.resumeAt(desktopPlace); });
+    await m.press((reading) => {
+      reading.resumeAt(desktopPlace);
+      reading.play();
+    });
+    expect(bridge.goTo).toHaveBeenCalledTimes(1);
+    await m.report(BOTH, 2);
+    await m.settle();
+    expect(engines.built[0].loads).toEqual([{ length: LENGTH, from: DESKTOP_AT, quiet: false }]);
+    await m.down();
+  });
+});
+
+/**
+ * Reopening a book whose place was taken from another device earlier in the
+ * session (#55). `reader-screen.tsx` used to hand that adoption over again at
+ * mount, and `resumeAt` with the very place the book opens with asked the
+ * renderer for its section as well — a second display of a section
+ * `initialLocation` is already displaying. Measured on 2026-09-24: `goTo` twice.
+ */
+describe('the place a book opens with, passed to resumeAt again (#55)', () => {
+  it('asks the renderer for nothing: initialLocation is already displaying its section', async () => {
+    const CONTENTS = blocks(0, ['Contents', 'Chapter three, at last.']);
+    const m = mount({ resume: desktopPlace });
+    await m.up();
+    await act(async () => { m.reading.resumeAt(desktopPlace); });
+    // The start of the book reports first (#51); the place's own section is still loading.
+    await m.report(CONTENTS, 0);
+    expect(bridge.goTo).not.toHaveBeenCalled();
     await m.down();
   });
 });
