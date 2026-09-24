@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { INK, Note } from './controls';
+import { INK, Note, useBorders } from './controls';
 import { Icon } from './icon';
 
 /**
@@ -20,6 +20,7 @@ export function Sheet({ visible, title, onClose, onBack, children, style }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const borders = useBorders();
   const [y] = useState(() => new Animated.Value(0));
   useEffect(() => { if (visible) y.setValue(0); }, [visible, y]);
   const gesture = useMemo(() => PanResponder.create({
@@ -36,7 +37,7 @@ export function Sheet({ visible, title, onClose, onBack, children, style }: {
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView style={styles.behind} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable style={styles.behind} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Close ${title}`} />
-      <Animated.View style={[styles.sheet, style, { transform: [{ translateY: y }] }]} onAccessibilityEscape={onClose}>
+      <Animated.View style={[styles.sheet, { borderTopColor: borders.line }, style, { transform: [{ translateY: y }] }]} onAccessibilityEscape={onClose}>
         <View {...gesture.panHandlers} style={styles.header} accessibilityLabel={`${title}, drag down to close`}>
           <View style={styles.grip} />
           {onBack ? <View style={styles.headerRow}>
@@ -69,7 +70,7 @@ export function SheetNote({ children, attention }: { children: ReactNode; attent
 
 const styles = StyleSheet.create({
   behind: { flex: 1 },
-  sheet: { backgroundColor: INK.panel, borderTopColor: INK.line, borderTopWidth: StyleSheet.hairlineWidth,
+  sheet: { backgroundColor: INK.panel, borderTopWidth: StyleSheet.hairlineWidth,
     borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 32, gap: 10, maxHeight: '90%' },
   header: { paddingTop: 10, paddingBottom: 4, gap: 16, minHeight: 62 },
   grip: { alignSelf: 'center', backgroundColor: INK.line, borderRadius: 3, height: 5, width: 40 },

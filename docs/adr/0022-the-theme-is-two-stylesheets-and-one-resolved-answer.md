@@ -40,6 +40,11 @@ them. The alternative was a palette in a React context and every
 rewritten to change a colour, and a re-render of the whole app on every theme
 change instead of a repaint.
 
+**Except a border** (#29, ADR 0046). React Native's Fabric view resolves a
+dynamic colour against the view's traits for its background but not for its
+border, which then follows the phone rather than the forced theme. Every
+`border*Color` takes a plain string from `useBorders()` instead.
+
 Forcing a theme is therefore forcing the **window's**
 `overrideUserInterfaceStyle`, which is what `Appearance.setColorScheme` does.
 Read out of the installed React Native 0.86: `RCTAppearance.mm`'s

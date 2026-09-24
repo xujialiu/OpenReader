@@ -208,3 +208,11 @@ The one file in the sync folder, `xujialiu-positions.json`, that holds every
 device's reading positions by document id, written by the phones and by the
 desktop plugin alike.
 _Avoid_: sync file, remote library, catalogue, documents file
+
+### On the screen
+
+**Drawer**:
+A surface that rises from the bottom of the screen over what the owner was
+looking at, holding the choices or the list that belong to it, and that goes
+away when dragged down or when the owner taps outside it.
+_Avoid_: sheet, bottom sheet, modal, popup, panel

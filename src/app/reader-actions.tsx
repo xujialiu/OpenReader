@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { DocumentId } from '../core/document';
 import { AppearanceControls, FontList } from './appearance-sheet';
-import { INK } from './controls';
+import { INK, useBorders } from './controls';
 import { DownloadContent } from './download-sheet';
 import { Icon } from './icon';
 import { useShell } from './routes';
@@ -27,6 +27,7 @@ import { knownVoice } from './voice-catalog';
  */
 export function ReaderActions({ document, onClose, onDelete, appearance = false }: { document: DocumentId; onClose(): void; onDelete?(): void; appearance?: boolean }) {
   const { library, settings, setSettings } = useShell();
+  const borders = useBorders();
   const entry = library.entries.find((e) => e.id === document);
   const [page, setPage] = useState<'menu' | 'appearance' | 'rename' | 'download' | 'fonts'>('menu');
   const [name, setName] = useState(entry?.title ?? '');
@@ -41,7 +42,7 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false 
   return <Sheet visible title={titles[page]} onClose={onClose} onBack={page === 'fonts' ? () => setPage('appearance') : undefined}>
     {page === 'menu' ? <View style={styles.menu}>
       {rows.map((action) => <Pressable key={action} accessibilityRole="button" accessibilityLabel={titles[action]}
-        onPress={() => setPage(action)} style={({ pressed }) => [styles.row, pressed && { opacity: 0.5 }]}>
+        onPress={() => setPage(action)} style={({ pressed }) => [styles.row, { borderBottomColor: borders.line }, pressed && { opacity: 0.5 }]}>
         <Icon name={action} color={INK.text} size={26} />
         <Text style={styles.label}>{titles[action]}</Text>
       </Pressable>)}
@@ -67,7 +68,7 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false 
   </Sheet>;
 }
 const styles = StyleSheet.create({
-  menu: { paddingHorizontal: 24 }, row: { flexDirection: 'row', alignItems: 'center', gap: 18, minHeight: 58, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: INK.line },
+  menu: { paddingHorizontal: 24 }, row: { flexDirection: 'row', alignItems: 'center', gap: 18, minHeight: 58, borderBottomWidth: StyleSheet.hairlineWidth },
   last: { borderBottomWidth: 0 }, label: { color: INK.text, fontSize: 16 }, rename: { padding: 20, gap: 24 },
   input: { color: INK.text, backgroundColor: INK.page, borderRadius: 12, padding: 14, fontSize: 16 }, buttons: { flexDirection: 'row', justifyContent: 'space-between', padding: 8 },
 });

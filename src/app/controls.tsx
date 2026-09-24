@@ -36,7 +36,8 @@ import { Icon, type IconName } from './icon';
  *
  * It also means a theme change repaints with no React render at all: iOS
  * re-resolves the colours when the window's `overrideUserInterfaceStyle` changes,
- * which is what `shell.tsx` sets.
+ * which is what `shell.tsx` sets. **Not for a border**, which React Native
+ * resolves against the phone rather than the view (#29): borders take `BORDER`.
  *
  * **It throws off iOS**, in the house style and for the same reason as
  * `src/now-playing/`: `DynamicColorIOS` has no Android counterpart, and the
@@ -104,13 +105,50 @@ export const SETTINGS_SURFACE = {
   dark: { page: PALETTE.dark.page, card: PALETTE.dark.panel },
 } as const;
 
+/** The quiet grey, in both themes; a table of its own because a border takes it too (`BORDER`). */
+const QUIET = { light: '#5d5d68', dark: '#9d9daa' } as const;
+
+/**
+ * The colours a border is drawn in, as plain strings for each theme (#29, ADR 0046).
+ *
+ * **A border never takes an `INK` colour.** React Native's view resolves a
+ * dynamic colour against the view's own traits for its background and not for
+ * its border: the border answers for whatever the process's traits are when it
+ * is repainted, and those follow the phone rather than the theme the owner
+ * chose. So a drawer's edge laid out again on a light phone came out in the
+ * light theme's grey on a dark drawer, and the same drawer could come out
+ * either way. `test/app/border-colours.test.ts` holds every `border*Color` in
+ * `src/app/` to this table, read through `useBorders()`.
+ */
+export const BORDER = {
+  light: { line: PALETTE.light.line, text: PALETTE.light.text, reading: PALETTE.light.reading, quiet: QUIET.light },
+  dark: { line: PALETTE.dark.line, text: PALETTE.dark.text, reading: PALETTE.dark.reading, quiet: QUIET.dark },
+} as const;
+
+/** The theme on screen, resolved once by the shell (`resolveTheme`, ADR 0022) and read by `useBorders()`. */
+export const SchemeContext = createContext<keyof typeof PALETTE | null>(null);
+
+/**
+ * `BORDER` for the theme on screen.
+ *
+ * A theme change re-renders what reads it, which is the price of a plain
+ * string: the rest of `INK` repaints with no render at all. Throws outside the
+ * shell rather than guessing a theme, because a guess is exactly the wrong line
+ * this exists to stop.
+ */
+export function useBorders(): (typeof BORDER)[keyof typeof BORDER] {
+  const scheme = useContext(SchemeContext);
+  if (!scheme) throw new Error('useBorders() was called outside the shell, which is what says whether the theme on screen is light or dark.');
+  return BORDER[scheme];
+}
+
 /** The app's colours, each one both of `PALETTE`'s. */
 export const INK = {
   page: ink(PALETTE.light.page, PALETTE.dark.page),
   panel: ink(PALETTE.light.panel, PALETTE.dark.panel),
   line: ink(PALETTE.light.line, PALETTE.dark.line),
   text: ink(PALETTE.light.text, PALETTE.dark.text),
-  quiet: ink('#5d5d68', '#9d9daa'),
+  quiet: ink(QUIET.light, QUIET.dark),
   /** The reading colour, the same amber the highlighter paints with (`highlighter.ts`). */
   reading: ink(PALETTE.light.reading, PALETTE.dark.reading),
   /** Something the owner has to act on: a missing key, a server that did not answer. Not an alarm. */
