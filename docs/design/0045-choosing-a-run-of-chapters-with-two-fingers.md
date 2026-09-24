@@ -12,7 +12,7 @@ It behaves as the phone's gesture was measured to behave, not as it was remember
 - Lifting one of the two fingers does not stop it; the other carries on.
 - Holding the fingers at the top or bottom edge of the list scrolls it by itself, as fast as the phone does, and the run follows. Dragging past the list onto the button below counts as the bottom edge.
 
-Some rows cannot be chosen by a tap, and a drag passes over them without changing them: a chapter already downloaded, one being downloaded, or a heading with no text of its own. A folded volume counts as every chapter folded inside it, as a tap on it does. An open volume heading counts for nothing of its own, because its chapters are rows of their own, which the fingers cross anyway; counting the heading would choose chapters below where the fingers stopped.
+Some rows cannot be chosen by a tap, and a drag passes over them without changing them: a chapter already downloaded, one being downloaded, or a heading with no text of its own. A folded volume counts as every chapter folded inside it, as a tap on it does. An open volume heading counts only for its own text, when it has any, and never for the chapters under it: they are rows of their own, which the fingers cross anyway, and counting them with the heading would choose chapters below where the fingers stopped.
 
 ## Why
 
