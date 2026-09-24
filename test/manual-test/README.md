@@ -685,11 +685,29 @@ fix (AGENTS.md).
   Online`, four swipes moved the page 22→26, then a later four moved 26→25,
   then 25→24, then 24→23, then 23→6 (a single call), then a forward four only
   6→7 and another only 7→8 — the same gesture, the same book, an order of
-  magnitude apart, because the spine's own sections vary hugely in how much
-  text (and so how many screens) each one holds. Do not compute a target
-  section from a swipe count; re-read the page's own top section after each
-  batch (`browse-touch-state.cjs`, or an in-app read) and stop once it has
+  magnitude apart. It was put down here to the sections' uneven lengths. **It
+  was #58**: a fling that crossed the end of the laid-out text lost epub.js's
+  scroll adjustment for the sections it prepended, and the page landed whole
+  sections back (ADR 0045); 23→6 in one call is that. Do not compute a target
+  section from a swipe count anyway; re-read the page's own top section after
+  each batch (`browse-touch-state.cjs`, or an in-app read) and stop once it has
   crossed the section wanted.
+- **`app.swipeUp(velocity: .fast)` never carried the page past the laid-out
+  text on the owner's book**, so it could not show #58. Measured 2026-09-24
+  02:18: five swipes each way from the first section moved `scrollTop` 600 to
+  700 px a swipe and at most to 3,813 of the 5,209 that sections 0 and 1
+  allowed; nothing was appended or trimmed, and every frame was covered. The
+  owner pointed out that the defect needs a scroll past the end of the scroll
+  bar. `FlingProbe.testFlicks` (`fling-jump.sh`) drags at a chosen velocity
+  instead, 4,000 pt/s by default.
+- **XCTest waits for the app to go idle before and after every synthesized
+  event, so repeated flicks never add up.** Each `swipeUp` took about 2.5 s,
+  and each flick's momentum had died before the next began, which a finger
+  flicking again and again does not allow. `FlingProbe` replaces
+  `XCUIApplicationProcess`'s `waitForQuiescenceIncludingAnimationsIdle:isPreEvent:`
+  (the only spelling Xcode 27's XCTest has; `…AnimationsIdle:` alone is gone)
+  with a block that returns at once, and then ten flicks 0.1 s apart took 6 to
+  7 s and reached 3 to 8 sections on. `NOWAIT=0` keeps the waits.
 
 - **A Settings-stack screen can be more than one level away, even when it
   looks like one.** Reaching Fish Audio's provider form is Library → Settings
@@ -810,6 +828,18 @@ fix (AGENTS.md).
   showed the correct masked dots. Before treating a blank masked field as a
   lost or uncleared value, take a second, plain screenshot outside the XCTest
   capture to rule out this rendering race.
+- **`xcodebuild`'s own event trace writes a prefix of a typed secret into the
+  wrapper script's `test.log`, in plain text, regardless of the field being a
+  `SecureTextField`.** Configuring Fish Audio for independent #58 verification
+  (2026-09-24, `testConfigureFishProviderNoRelaunch`), `test.log` held a line
+  reading `Type 'sk-fish-XXXXXXXXXX...' into "Not set" SecureTextField` —
+  XCTest logs the value it is synthesizing keystrokes for, in its own
+  `t = …` trace, independently of what the field masks on screen or what any
+  probe screenshots. This is a different leak from the masked-field screenshot
+  above: the screenshot precaution does not cover it. Treat every wrapper
+  script's `test.log` (and any `.xcresult` it produced) as holding the secret
+  once a masked-field probe has run, `grep` it out or delete the log after
+  reading the pass/fail line, and never quote the fragment itself in a report.
 
 - **`xcodebuild … test` can stay alive long after its test has finished.**
   Measured 2026-09-23: `design-shots.sh`'s dark run wrote "Executed 1 test, with
@@ -909,12 +939,84 @@ fix (AGENTS.md).
 - **A scroll made from JavaScript does not show what a finger's fling shows.**
   60 frames of `scrollTop += 300` on the manager's container, the same
   distance as a long fling, gave 0 white frames in 52 (2026-09-23 23:04), while
-  real XCTest flings gave white frames in 3 of 3 runs (#27). Setting
-  `scrollTop` moves the page on the frame the script runs and epub.js keeps up;
-  WebKit's own touch scrolling moves it ahead of the page's JavaScript, and the
-  gap between sections shows. `scroll-theme.cjs` (#34) is still right for what
-  it asks, whether a section was styled; use real touches
-  (`white-flash.sh fling`) for what is seen during the scroll.
+  real XCTest flings gave white frames in 3 of 3 runs (#27). The difference is
+  #58's (ADR 0045): while iOS moves the page itself, under a finger or in a
+  fling's momentum, it drops the scroll epub.js sets to keep the text still when
+  it adds or removes a section above, and a script's own scroll is not iOS's.
+  The same boundary crossed from JavaScript kept every adjustment in 4 of 4 runs
+  (2026-09-24 02:35), where one real flick lost it in 3 of 3. `scroll-theme.cjs`
+  (#34) is still right for what it asks, whether a section was styled; use real
+  touches (`fling-jump.cjs`, `white-flash.sh fling`) for what is seen during the
+  scroll.
+- **A probe can post a long log straight to the Mac.** The harness's `js`
+  answer is cut at 500 characters, and a log of every animation frame is
+  hundreds of kilobytes. From the reader's WebView, a `file://` page,
+  `fetch('http://127.0.0.1:PORT/…', { method: 'POST', body })` reached a server
+  on the Mac (2026-09-24 02:15), answered with `Access-Control-Allow-Origin: *`.
+  `fling-jump.cjs` runs one on a free port and hands the probe its number.
+- **A finger that lands on a moving page seldom reaches the page's touch
+  listeners.** Listening on the reader's document and on every section's, a
+  probe heard 1 to 4 `touchstart`/`touchend` pairs from ten flicks, each landing
+  while the page still coasted from the one before (2026-09-24 02:48). iOS takes
+  that touch to stop the scroll. Do not count fingers in the WebView during
+  flings.
+- **The WebView's scroll events stop for up to 280 ms while the page moves**,
+  whenever its main thread is laying a section out, and a drag reaches it in
+  steps about 100 ms apart (2026-09-24 02:57). So a quiet spell is not rest, and
+  a big step between two samples is not a jump on screen when the text moved
+  exactly as far as the scroll position did: `fling-jump.cjs` counts a step as
+  a jump only when it outruns the page's own recent speed and either epub.js
+  had just scrolled the page or the text and the scroll moved differently.
+- **A probe stopped as soon as its XCTest returns can stop before the page
+  rests.** Ten flicks can coast for longer than the XCTest's two seconds of
+  settling, and work the program parks until the page rests (#58) had not run:
+  three runs at 05:23–05:25 on 2026-09-24 were INCONCLUSIVE for that. Wait for a
+  second without scroll events and an idle queue, as `fling-jump.cjs` does.
+- **`fling-jump.cjs` called a JUMP on a real fling that never left the screen
+  full of text**, before its rule was tightened. Independent #58 verification,
+  2026-09-24, on "Cultivation Online" (`down`, real flicks): two runs each read
+  one or two JUMPs, 17–20 ms after an `append()`, never after an
+  `erase`/`counter`/`scrollTo`/`scrollBy`, with coverage 1.000 throughout. The
+  frame pair was a sample repeated at the same `scrollTop` and then a step of
+  639 px in 16 ms, in which the text moved exactly as far as the scroll position
+  did: a new flick's drag reaching the WebView in one batch. The rule then
+  excused such a step only while a touch event showed a drag, and a finger
+  landing on a moving page is seldom heard (above). Confirmed not a jump:
+  `white-flash.py` on that run's recording read 0 empty-dark and 0 white frames
+  in 499, and the frames spanning it show prose advancing smoothly. The rule now
+  needs, besides the step outrunning the page's recent speed, an epub.js scroll
+  in the 150 ms before or text that moved a quarter of a viewport more or less
+  than the scroll; on every saved log it keeps all 23 red runs from before the
+  change red and reads both of these runs green. A JUMP that follows `append()`
+  alone would now be a new finding.
+- **A tap right after a fast-fling burst can silently do nothing**, unrelated to
+  #58. Independent verification, 2026-09-24: `ScrollThemeReaderProbe`'s
+  `testFastFlingBothDirections` + `testFontSizeLiveOnPage` +
+  `testTapWordAfterFling` run together, the last method's own real tap left
+  `utterance`/`section` both `null` and no highlight painted, although the
+  screenshot showed real chapter text under the tap point — and `known` (the
+  Utterance count `{"do":"say"}` reports) had not grown at all since the reader
+  was opened, well before any of the three methods ran. A fresh standalone
+  rerun of just `testTapWordAfterFling` moments later, on the same live app,
+  tapped cleanly: `utterance`/`section` updated and the sentence highlighted
+  (screenshot confirmed), and `known` had grown substantially by then. The tap
+  resolves through `utteranceAt`, which needs the tapped section's Blocks
+  already adopted from epub.js's content hook (`highlighter.ts`'s `adopt`,
+  fired once per section's iframe `load`) — a mechanism the #58 fix never
+  touches (`append()`, which is what puts a new section's iframe up, is not
+  gated at all). A fast, unpaused fling can plausibly outrun that adoption for
+  the section it lands on. Before reading a null tap as a `#34`/`#52`
+  regression, check `known`/`rendered` via `{"do":"say"}` first, and retry the
+  tap once rather than treating one miss as the result.
+- **The harness `open` command pushes onto whatever screen is already on top,
+  the same as `simctl openurl`** (Pitfalls, XCTest, "`Back` is not what the
+  back button is called"). Independent #58 verification, 2026-09-24: opening a
+  Document by id right after an unrelated XCTest run had ended on Settings
+  left the stack `["Library","Settings","Reader"]`, so a later probe's own
+  `if app.buttons["Back"].exists { tap }` (expecting Library behind the reader)
+  landed back on Settings instead, and the next line failed looking for a
+  Library-only control. `{"do":"navstate"}` shows the real stack; back out to a
+  single-entry `["Library"]` before a method that assumes it.
 
 ### Typing, environment and silence
 
@@ -2522,9 +2624,11 @@ Each run prints `RED`/`GREEN`; `VERBOSE=1` lists every frame. Measured
 2026-09-23/24 on a dedicated iPhone 17 simulator (iOS 27.0), with "My Vampire
 System 1-250": before #27's change, `open` was red 5 of 5 (white for 1.6–3.4 s),
 `relaunch` 6 of 6 and `fling` 3 of 3 (49 and 71 white frames); after it, 0 of 5,
-0 of 6 and 0 of 3. A fixed run still has 13–55 frames in which the page is
-empty and dark: epub.js still outruns itself, and the gap is now the reader's
-own page colour.
+0 of 6 and 0 of 3. A fixed run still had 13–55 frames in which the page was
+empty and dark. That was not epub.js outrunning itself, as this said: it was
+#58, a fling landing past the laid-out text when iOS dropped epub.js's scroll
+adjustment (ADR 0045). With #58's change, `fling` had 0 empty frames in 3,854
+(2026-09-24 05:48).
 
 What it cannot show: the physical iPhone, which is where the owner saw it (see
 **Physical iPhone screen** in Pitfalls), or the light theme, in which every
@@ -2560,6 +2664,59 @@ black text) and the fixture (white below its six lines); Dark restored with a
 reopen, no relaunch needed, going dark without one. Four screenshots, one per
 step. Measured 2026-09-24, all as expected; the same run also confirmed
 `Version 0.0.2-beta14`.
+
+## A fast scroll that jumps by whole chapters and shows an empty page (#58)
+
+`fling-jump.cjs` flings the open reader with real flicks and reads, on every
+animation frame, which section and which offset within it is at the top of the
+viewport and how much of the viewport displayed sections cover. It also logs
+every call epub.js makes that changes what lies above the viewport, and the
+scroll it adjusts with: `trim`, `erase`, `prepend`, `counter`, `scrollTo`,
+`scrollBy`. Add a real book (**Real books** above) and open it, with this
+worktree's Metro writing to METRO_LOG, then:
+
+```sh
+node test/manual-test/fling-jump.cjs SIMULATOR_UDID METRO_LOG down 3
+node test/manual-test/fling-jump.cjs SIMULATOR_UDID METRO_LOG up 3
+FLINGS=1 FROM_END=1200 node test/manual-test/fling-jump.cjs SIMULATOR_UDID METRO_LOG down 3
+node test/manual-test/fling-jump.cjs --read OUT_DIR/run-….json
+```
+
+- The single flick is the smallest red case, and is `INCONCLUSIVE` whenever
+  only one section lay above the one it left: epub.js keeps the section just
+  above the first it displays, so nothing is erased (2026-09-24 05:54).
+- Each run resets the page to a fixed section (`START`, 20 going `down` and 60
+  going `up`), waits for epub.js's queue to empty, and flicks through
+  `fling-jump.sh`, which builds `ios/FlingProbe.swift` once into `OUT_DIR` and
+  runs `FlingProbe.testFlicks` without rebuilding. `FLINGS` (10), `VELOCITY`
+  (4000 pt/s), `GAP` (0.1 s) and `NOWAIT` pass through; the flicks do not wait
+  for the app to go idle between them (Pitfalls, XCTest).
+- It stops the probe only when the page has rested for a second and the queue
+  is idle, and reads the log the WebView posts to a server the script runs on
+  127.0.0.1 (Pitfalls, **Measuring inside the reader's WebView**).
+- A run is `RED` on any blank frame (sections covering under half the viewport)
+  or jump (the text at the top moving half a viewport further than the page's
+  own recent speed could carry it, just after an epub.js scroll or unlike the
+  scroll position's own step; or landing in no section either frame held);
+  `GREEN` only when the top crossed a section boundary and epub.js changed
+  something above the viewport; `INCONCLUSIVE` otherwise. Each red episode is printed with the call it followed. `VIDEO=1`
+  records each run for `white-flash.py`, whose empty-dark count is the same
+  blank seen on the screen.
+
+Measured 2026-09-24 on a dedicated iPhone 17 simulator (iOS 27.0) with "My
+Vampire System 1-250": before #58's change, `down` red 4 of 4 (7–21 blank
+frames), `up` red 4 of 4 (182–248, reaching 12 to 28 sections back), a single
+flick from 1,200 px before a section's end red 3 of 3; every episode followed an
+`erase` of a section above, or a `counter` for sections prepended in a bounce.
+After it: every run that reached rest green, with the erases above all made at
+rest, and red again in both directions with the program's install line
+`holdStill(rendition.manager);` commented out. Ten flicks back without a pause
+stop at section 59, the top of the laid-out text, by design (design 0045);
+`GAP=0.8` reaches 56. About 30 s a run.
+
+What it cannot show: the physical iPhone, a finger that stops the page and
+holds still (XCTest's press here lasts 0.01 s), or what happens during
+playback, which it never starts.
 
 ## Azure Speech: configuration, the voice sheet, and word-level highlighting (#39)
 
