@@ -63,6 +63,15 @@ What has gone wrong before, and what fixed it. When `xcrun`, Metro, XCTest or a
 manual step goes wrong or misleads you, add it here, with its symptom, cause and
 fix (AGENTS.md).
 
+### Native drift investigation (#63)
+
+- **A normalized waveform correlation exceeds 1 and reports a large isolated lead near silence** (2026-09-25). FFT roundoff divided by the almost-zero variance of a silent source window amplified numerical noise; prefix-sum subtraction also loses precision there. Reject candidate windows with negligible source variance before normalization, independently of the reported position/error. Recompute both baseline and prototype measurements with the same correction. Ordinary repeated-vowel ambiguity remains and must be reported separately.
+
+- **A previously listed simulator suddenly reports `Invalid device`, and an install reports Mach error -308 / server died** (2026-09-25). The owner confirmed accidentally deleting the devices during this run. Re-list devices rather than reusing the captured identifier; create a replacement, wait for `bootstatus`, install and silence it. The deleted container's narration cannot be recovered by merely reusing its old path.
+- **CDP opens and immediately closes with 1006, even for `1+1`** (2026-09-25). Reproduced on the dedicated issue63 simulator with both a copied Debug app and a fresh native build, using dedicated Metro 8092. Cause remains unisolated; a rebuild did not resolve it. The existing `Documents/harness.json` commands still work and were used to import the test Document. Do not count a failed debugger attachment as an app or playback result.
+- **A standalone native audio probe cannot find `jsi/jsi.h`.** The library's `AudioArrayBuffer.hpp` has a supported host-test seam guarded by `RN_AUDIO_API_TEST`. Compile with `-DRN_AUDIO_API_TEST=1` as `native-queue-drift.sh` does; do not substitute fake PCM/DSP code.
+- **Creating an RNAudioAPI patch fails with “Your changes involve creating symlinks”, even with a source-only `--include`.** Observed with the locally installed framework artifacts and patch-package 8.0.1. Generate a unified diff for only the intended C++ source files against the exact `npm pack react-native-audio-api@0.13.5` archive, then validate application against a clean extraction and with patch-package. Do not include framework artifacts or remove live dependency symlinks to make patch generation pass.
+
 ### Physical iPhone Release builds
 
 - **ExpoSQLite Swift compilation cannot find `exsqlite3_open` and other prefixed symbols** (2026-09-22, #43). The generated header existed and contained the declarations, and both the package and Pod lock reported 57.0.3. Rebuilding with a new `CLANG_MODULE_CACHE_PATH` passed this compilation stage. A stale module cache is suspected, not proven; do not replace SQLite sources or assume the phone's signing is at fault. Keep the isolated cache for subsequent builds while diagnosing.
@@ -3979,3 +3988,110 @@ npx tsx test/manual-test/context-probe.ts page   "$OUT"   # listen.html, a blind
 What it measures: time from `synthesize` to its result (the first sentence against the whole paragraph), total duration, timed words, and the pause at each sentence boundary. The per-sentence pause is the trailing silence of one Clip plus the leading silence of the next. The whole-paragraph pause is the longest silence from the last word's start to the next sentence's first word's end, alongside the gap the timings leave. Results are in `notes/NOTES_2026-09-24.md`.
 
 What it cannot show: latency from the phone's network (it runs from the Mac, through whatever proxy the Mac uses); how iOS's `decodeAudioData` treats Fish's MP3 padding (ffmpeg drops the encoder delay the LAME header declares); the Blocks the renderer would find where a book's stylesheet makes a block element inline; anything about OpenAI or OpenAI-compatible voices, which return no timings and were not configured. The listening page randomises A/B per pair in the browser and keeps the order and answers in that browser's `localStorage`, so clearing it draws new orders.
+
+
+## Native queue position versus actual rendered audio (#63)
+
+On macOS with Xcode command-line tools and installed dependencies:
+
+```sh
+bash test/manual-test/native-queue-drift.sh 1.55 60 download
+bash test/manual-test/native-queue-drift.sh 1.55 10 clear
+bash test/manual-test/native-queue-drift.sh 1.50 60 download
+```
+
+The unpatched 0.13.5 baseline is expected to report RED for the 1.55× and
+clear cases. No production repair has been accepted yet; the owner requested a
+joint decision after diagnosis. The 1.50× run is a control.
+
+These render deterministic alternating tones through the real native queue
+processor and WSOLA, with production processing/position/clear methods extracted
+from the installed library. No speaker, simulator, credentials or provider
+requests are used. `download` asserts that median audio-versus-reported boundary
+lead grows by less than 100 ms between the first and last samples. `clear` asserts
+that seeking discards both input and output retained by the stretcher. Exit 0 is
+GREEN, 1 is RED and 2 is invalid fixture/input. Build artifacts stay in a temporary
+directory; `OPENREADER_NATIVE_PROBE_DIR` can select an external directory for
+reusing its compiled `probe`. Optional positional sample rate defaults to 48000.
+The second argument is **rendered audio duration**, not wall-clock waiting.
+
+This is a native algorithm test, not an iOS audio-route or WebView test. The
+session, graph ownership and callback delivery are test adapters; the signal
+processing is production code. Fixed output latency is not treated as drift.
+The optional `stream` mode inserts queue drains and is exploratory, not a claim
+that real provider response timing was reproduced.
+
+For an entire private chapter, prepare an external directory containing
+`texts.json` (ordered speakable Utterances), numbered `0.mp3` / `0.json` pairs
+(with the provider's `timestamps`), and a separate JSON file of renderer-extracted
+Blocks spanning that chapter. `ffmpeg` decodes; book content stays outside Git:
+
+```sh
+npx tsx test/manual-test/native-chapter-input.ts OUT_DIR BLOCKS_JSON
+bash test/manual-test/native-queue-drift.sh render 1.55 OUT_DIR production155
+uv run --with numpy --with scipy python test/manual-test/native-audio-match.py OUT_DIR production155 1.55
+```
+
+Preparation uses the real segmenter, buffer cuts and default sentence/paragraph
+pauses; the fixture must match that segmentation. The render consumes the entire
+chapter and writes 48 kHz mono float PCM plus source positions. Matching compares
+actual output PCM with source PCM at >=0.90 normalized waveform correlation and
+requires enough matches near the beginning, middle and end. It asserts <100 ms
+change in median lead between the first and last windows. The optional matcher
+source-bias argument is for controlled seek/replay experiments; leave it zero for
+a fresh node. This measures native rendered content independently of its reported
+clock, but cannot establish physical AirPods output latency, the owner's original
+trigger, or what the WebView painted.
+
+## Output-driven audio/position prototype (#63, validation only)
+
+This isolated prototype asks for input only when the real WSOLA output iteration
+needs more samples. Source positions follow the same window/transition weights
+as the audio and travel alongside its output queue. The position is read when
+those samples leave that queue, rather than when input is consumed. It modifies
+only a generated copy in an external build directory; it does **not** patch
+`node_modules`, change the app, or establish a production decision.
+
+Use the same external chapter PCM fixture as the native baseline above:
+
+```sh
+bash test/manual-test/native-pull-prototype.sh OUT_DIR 1.55 pull155
+uv run --with numpy --with scipy python test/manual-test/native-audio-match.py OUT_DIR pull155 1.55
+bash test/manual-test/native-pull-prototype.sh OUT_DIR 1.55 pull155-long 35
+uv run --with numpy --with scipy python test/manual-test/native-long-match.py OUT_DIR pull155-long 1.55
+bash test/manual-test/native-pull-prototype.sh OUT_DIR 1.55 pull155-reset 35 reset
+uv run --with numpy --with scipy python test/manual-test/native-long-match.py OUT_DIR pull155-reset 1.55
+```
+
+`35` repeats the **same complete chapter**, giving about 2 h 3 min of output at
+1.55× for the measured fixture. Rendering runs faster than real time; it is not
+a two-hour device session. Long runs save one 10 ms PCM sample per second and its
+reported source position, instead of gigabytes of continuous output. The long
+matcher independently searches the original PCM, including wraps between
+repetitions, and requires <10 ms median start/end growth and <10 ms absolute
+error at the 95th percentile of accepted acoustic matches.
+
+Without `reset` the stream is uninterrupted. With `reset`, the previous chapter
+is rendered through its end with a 50 ms source-position margin before the
+stretcher is discarded, then another 50 ms of output silence is inserted. The
+combined extra separation at 1.55× was about 0.1 s per boundary. Waiting alone
+would not discard queued audio. `PULL_SAVE_FULL=1` also saves continuous PCM for
+multi-chapter runs, including the explicit silence; leave it unset for long runs.
+`OPENREADER_PULL_PROBE_DIR` selects an external build directory whose `probe` can
+be reused without recompiling. A source hash guards the transformation against
+an unreviewed WSOLA revision.
+
+Source-position metadata describes an overlap of windows, not a unique original
+sample: the same coefficients give a weighted position. The probe also reports
+the widest source-coordinate span contributing to any output frame. At 1.55×
+over 35 repetitions that span was at most 26.44 ms in heard-time units; input
+storage peaked at 6,623 frames and output storage at 448, both independent of
+session length in the measured run. This is distinct from timing the actual
+speaker/headphones or scheduling highlights in a WebView.
+
+Waveform matching has limits. A 10 ms vowel can resemble another nearby vowel;
+a high correlation alone does not make every point unambiguous. Inspect the
+accepted counts and full error distribution, not only medians. Near-silent
+source windows are explicitly excluded: cancellation in the energy calculation
+and FFT roundoff had otherwise produced impossible correlation values >1.
+The corrected calculation leaves the chapter's measured growth unchanged.
