@@ -29,6 +29,11 @@ describe('what a chapter row shows in Downloads', () => {
     for (const state of ['queued', 'preparing', 'downloading', 'waiting'] as const)
       expect(marker(chapter('a'), saved(3), task(state, ['a']), false)).toMatchObject({ kind: 'ring', halted: false });
   });
+  it('holds the triangle on a chapter the owner paused while the rest of the download goes on (#56)', () => {
+    const t = task('downloading', ['a', 'b'], { current: 'b', paused: ['a'] });
+    expect(marker(chapter('a'), saved(3), t, false)).toEqual({ kind: 'ring', fraction: 3 / 17, spinning: false, halted: true });
+    expect(marker(chapter('b'), saved(5), t, false)).toMatchObject({ kind: 'ring', halted: false });
+  });
   it('a failed chapter and a finished download go back to the checkbox', () => {
     expect(marker(chapter('a'), saved(3), task('downloading', ['a', 'b'], { failed: ['a'], current: 'b' }), false)).toEqual({ kind: 'checkbox' });
     expect(marker(chapter('a'), saved(3), task('done', ['a']), false)).toEqual({ kind: 'checkbox' });

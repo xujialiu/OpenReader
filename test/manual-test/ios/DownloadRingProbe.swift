@@ -1,12 +1,14 @@
 import XCTest
 
-/// Real-touch coverage for #37/#38: Manage downloads listing only chapters with
-/// saved audio, and the App Store style ring that replaces the selection circle
-/// on a chapter that belongs to a running download. Configures Fish Audio and
-/// chooses a Voice from an empty settings the same way `OfflineFixProbe` does
-/// (this probe's target container starts with neither), then drives a real
-/// two-chapter download: nothing saved, the ring appearing and filling, pausing
-/// and continuing by tapping the ring itself, Manage downloads while paused, and
+/// Real-touch coverage for #37/#38/#56: Manage downloads listing only chapters
+/// with saved audio, the App Store style ring that replaces the selection circle
+/// on a chapter that belongs to a running download, and pausing one chapter by
+/// its ring or all of them by Pause all. Configures Fish Audio and chooses a
+/// Voice from an empty settings the same way `OfflineFixProbe` does (this
+/// probe's target container starts with neither), then drives a real
+/// two-chapter download: nothing saved, the first ring running, pausing that
+/// chapter alone while the second goes on, Pause all, Manage downloads while
+/// paused, resuming one chapter by its ring and the rest by Resume all, and
 /// completion. `testReopenDownloadDrawer` is a second, independent invocation
 /// used only to leave the Download drawer open after a later, unrelated
 /// `offline.sh management` pass has backed up, mutated and restored the offline
@@ -114,78 +116,121 @@ final class DownloadRingProbe: XCTestCase {
     XCTAssertTrue(secondRow.exists)
     capture("01-nothing-saved", app)
 
-    // #38 step 2: start the download and watch the first ~10s for the ring.
+    // #56: no download, so nothing to pause.
+    XCTAssertFalse(app.buttons["Pause all"].exists)
+
+    // #38/#56 step 2: both chapters. They are written from the top of the list
+    // down, so the first chapter's ring is the one that runs first.
     let select = app.buttons["Select all"]
     XCTAssertTrue(select.waitForExistence(timeout: 5))
     select.tap()
     let start = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected ('")).firstMatch
     XCTAssertTrue(start.isEnabled)
     start.tap()
-
-    var sawRing = false
     var sawPreparingText = false
-    let burstDeadline = Date().addingTimeInterval(10)
-    var frame = 0
-    while Date() < burstDeadline {
-      if app.buttons["Pause download"].firstMatch.exists { sawRing = true }
+    let firstRunning = until(20) {
       if app.staticTexts["Preparing selected chapter…"].exists { sawPreparingText = true }
-      capture("02-burst-\(frame)", app)
-      frame += 1
-      Thread.sleep(forTimeInterval: 0.6)
+      return self.ring(beside: "The First Chapter", app)?.label == "Pause download"
     }
-    XCTAssertTrue(sawRing, "Expected a 'Pause download' ring while the download ran")
-    // Recorded for the report rather than asserted: the fixture is small enough
-    // that the spinning/preparing phase for either chapter can be shorter than
-    // one screenshot interval (test/README.md notes this explicitly).
-    print("SAW PREPARING TEXT DURING BURST: \(sawPreparingText)")
+    XCTAssertTrue(firstRunning, "The first chapter never showed a running ring")
+    XCTAssertTrue(app.buttons["Pause all"].exists, "Pause all belongs opposite Manage downloads while the download runs")
+    capture("02-first-running", app)
+    // Recorded for the report rather than asserted: the fixture's per-chapter
+    // text is counted in well under one poll (README, "The download ring").
+    print("SAW PREPARING TEXT BEFORE THE FIRST RING: \(sawPreparingText)")
 
-    // The old task-line Pause/Continue text link is gone; only the ring toggles.
-    XCTAssertFalse(app.buttons["Continue"].exists)
+    // #56 step 3: the first chapter's own ring pauses that chapter alone, and
+    // the second goes on. The task line never says Paused.
+    try XCTUnwrap(ring(beside: "The First Chapter", app)).tap()
+    XCTAssertTrue(until(5) { self.ring(beside: "The First Chapter", app)?.label == "Resume download" }, "The tapped ring did not turn to Resume download")
+    if let second = ring(beside: "The Second Chapter", app) {
+      XCTAssertEqual(second.label, "Pause download", "Pausing one chapter must not pause the other")
+    }
+    XCTAssertFalse(app.staticTexts["Paused"].exists)
+    for frame in 0..<3 { capture("03-second-running-\(frame)", app); Thread.sleep(forTimeInterval: 0.6) }
 
-    // #38 step 3: pause via the ring itself, a real touch on the glyph, not a text link.
-    let ring = app.buttons["Pause download"].firstMatch
-    XCTAssertTrue(ring.waitForExistence(timeout: 30), "No 'Pause download' ring found before the download would have finished")
-    let runningRingCount = app.buttons.matching(NSPredicate(format: "label == 'Pause download'")).count
-    ring.tap()
-    XCTAssertTrue(app.staticTexts["Paused"].waitForExistence(timeout: 5))
-    capture("03-paused", app)
-    XCTAssertFalse(app.buttons["Pause download"].exists, "Every ring should read Continue download once paused")
-    let haltedRingCount = app.buttons.matching(NSPredicate(format: "label == 'Continue download'")).count
-    XCTAssertEqual(haltedRingCount, runningRingCount, "Every ring of the paused download should now read Continue download")
+    // #56 step 4: Pause all stops the rest; the control then reads Resume all,
+    // and nothing else says Paused. The second chapter may already have
+    // finished on a fast connection, in which case the download is paused by
+    // now and there is nothing left for Pause all.
+    if app.buttons["Pause all"].exists { app.buttons["Pause all"].tap() }
+    XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["Pause download"].exists, "Every ring should read Resume download once all are paused")
+    XCTAssertFalse(app.staticTexts["Paused"].exists, "Resume all already says the download is paused")
+    capture("04-all-paused", app)
 
-    // #37 step 4: Manage downloads while paused lists only chapters with saved audio.
+    // #37: Manage downloads while paused lists only chapters with saved audio.
     XCTAssertTrue(app.buttons["Manage downloads"].waitForExistence(timeout: 3))
     app.buttons["Manage downloads"].tap()
     XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'saved'")).firstMatch.waitForExistence(timeout: 3))
-    capture("04-manage-paused", app)
+    XCTAssertFalse(app.buttons["Resume all"].exists, "Manage downloads keeps Delete all saved audio in that place")
+    capture("05-manage-paused", app)
     app.buttons["Back to downloads"].tap()
 
-    // Continue by tapping the ring again; best-effort sample of Manage while running.
-    let resume = app.buttons["Continue download"].firstMatch
-    XCTAssertTrue(resume.waitForExistence(timeout: 5))
-    resume.tap()
-    if app.buttons["Manage downloads"].waitForExistence(timeout: 2) {
-      app.buttons["Manage downloads"].tap()
-      capture("05-manage-while-running-attempt", app)
-      if app.buttons["Back to downloads"].waitForExistence(timeout: 2) { app.buttons["Back to downloads"].tap() }
+    // #56 step 5: the first chapter's ring resumes it alone.
+    try XCTUnwrap(ring(beside: "The First Chapter", app)).tap()
+    XCTAssertTrue(until(5) { self.ring(beside: "The First Chapter", app)?.label == "Pause download" }, "The first chapter did not resume")
+    if let second = ring(beside: "The Second Chapter", app) {
+      XCTAssertEqual(second.label, "Resume download", "Resuming one chapter must not resume the other")
+    }
+    capture("06-first-resumed", app)
+
+    // #56 step 6: once the first is written only the paused second is left, so
+    // the download is paused and Resume all is what is offered; it finishes the rest.
+    let firstDone = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter, downloaded'")).firstMatch
+    XCTAssertTrue(firstDone.waitForExistence(timeout: 60))
+    if ring(beside: "The Second Chapter", app) != nil {
+      XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 5))
+      XCTAssertFalse(app.staticTexts["Paused"].exists)
+      capture("07-only-paused-left", app)
+      app.buttons["Resume all"].tap()
     }
 
-    // #38 step 5: completion, both chapters checked, no ring or Pause/Continue left.
+    // #38 step 7: completion, both chapters checked, no ring and no Pause all or Resume all.
     let complete = app.staticTexts["2 chapters downloaded"]
     XCTAssertTrue(complete.waitForExistence(timeout: 90))
-    capture("06-complete", app)
+    capture("08-complete", app)
     XCTAssertFalse(app.buttons["Pause download"].exists)
-    XCTAssertFalse(app.buttons["Continue download"].exists)
+    XCTAssertFalse(app.buttons["Resume download"].exists)
+    XCTAssertFalse(app.buttons["Pause all"].exists)
+    XCTAssertFalse(app.buttons["Resume all"].exists)
 
     // #37: Manage downloads after completion lists both chapters as checkboxes.
     app.buttons["Manage downloads"].tap()
     XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter, downloaded'")).firstMatch.waitForExistence(timeout: 3))
     XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter, downloaded'")).firstMatch.exists)
-    capture("07-manage-complete", app)
+    capture("09-manage-complete", app)
     app.buttons["Back to downloads"].tap()
     // Leave the Download drawer open, finished, on the plain (non-Manage) view.
     XCTAssertTrue(app.staticTexts["2 chapters downloaded"].waitForExistence(timeout: 3))
-    capture("08-final-left-open", app)
+    capture("10-final-left-open", app)
+  }
+
+  /// Polls `condition` until it holds or `timeout` passes.
+  func until(_ timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+      if condition() { return true }
+      Thread.sleep(forTimeInterval: 0.25)
+    } while Date() < deadline
+    return false
+  }
+
+  /// The ring on the row titled `title`. A ring's label names what a tap does,
+  /// not the chapter, so it is found beside the title: same height, to its
+  /// right. The title may also be on the page behind the drawer, hence every
+  /// match is tried.
+  func ring(beside title: String, _ app: XCUIApplication) -> XCUIElement? {
+    let names = app.staticTexts.matching(NSPredicate(format: "label == %@", title))
+    let rings = app.buttons.matching(NSPredicate(format: "label == 'Pause download' OR label == 'Resume download'"))
+    for n in 0..<names.count {
+      let name = names.element(boundBy: n).frame
+      for r in 0..<rings.count {
+        let ring = rings.element(boundBy: r)
+        if abs(ring.frame.midY - name.midY) < 22 && ring.frame.minX > name.minX { return ring }
+      }
+    }
+    return nil
   }
 
   /// Reopens the Download drawer on the already-downloaded fixture and leaves it
@@ -244,7 +289,7 @@ final class DownloadRingProbe: XCTestCase {
     app.buttons["Back"].tap()
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
     app.buttons["Settings"].tap()
-    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta17"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta20"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.element(boundBy: 0).tap() // Settings -> Library
     let bookRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", shortTitle + ",")).firstMatch
     XCTAssertTrue(bookRow.waitForExistence(timeout: 10))

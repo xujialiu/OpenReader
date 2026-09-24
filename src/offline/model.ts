@@ -22,6 +22,12 @@ export type TaskState = 'queued' | 'preparing' | 'downloading' | 'paused' | 'wai
 export interface DownloadTask {
   id: string; document: string; voice: OfflineVoice; chapters: string[];
   state: TaskState; error: string | null; failed: string[];
+  /**
+   * The chapters the owner paused, by their ring or all at once, which the
+   * scheduler passes over until they are resumed (#56). A task is `paused` when
+   * every chapter it has left is here. Absent reads as none.
+   */
+  paused?: string[];
   /** The chapter the scheduler is preparing or fetching right now; null between passes. Read only while the task runs (ADR 0027). */
   current?: string | null;
 }

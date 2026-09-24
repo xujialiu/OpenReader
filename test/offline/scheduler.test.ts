@@ -168,3 +168,73 @@ it('forgets a chapter left over from before a restart as soon as the pass starts
   await scheduler.run();
   expect(events).toEqual(['downloading null', 'downloading a', 'downloading b', 'done null']);
 });
+
+describe('the order chapters are written in, and chapters paused one by one (#56)', () => {
+  const voice = { provider: 'fish' as const, voice: 'A', label: 'A' };
+  function book(chapters: string[], extra: Partial<DownloadTask> = {}) {
+    const plan: NarrationPlan = { version: 2, chapters: [
+      { id: 'a', title: 'A', depth: 0, parent: null, texts: ['A1'] },
+      { id: 'b', title: 'B', depth: 0, parent: null, texts: ['B1', 'B2'] },
+      { id: 'c', title: 'C', depth: 0, parent: null, texts: ['C1'] },
+    ] };
+    const task: DownloadTask = { id: 't', document: 'book', voice, chapters, state: 'queued', error: null, failed: [], ...extra };
+    const fetched: string[] = [];
+    const fetch = vi.fn(async (_task: DownloadTask, text: string) => { fetched.push(text); });
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+      exists: (_, text) => fetched.includes(text), fetch, wait: async () => {} });
+    return { task, fetched, fetch, scheduler };
+  }
+  it('writes from the top of the list down, whatever order the chapters were chosen in', async () => {
+    const f = book(['c', 'a', 'b']);
+    await f.scheduler.run();
+    expect(f.fetched).toEqual(['A1', 'B1', 'B2', 'C1']);
+    expect(f.task.state).toBe('done');
+  });
+  it('passes over a paused chapter and leaves the download paused once only paused chapters are left', async () => {
+    const f = book(['a', 'b', 'c'], { paused: ['b'] });
+    await f.scheduler.run();
+    expect(f.fetched).toEqual(['A1', 'C1']);
+    expect(f.task.state).toBe('paused');
+    expect(f.task.current).toBeNull();
+  });
+  it('leaves the chapter being written when it is paused, keeps what it saved, and starts the next', async () => {
+    const f = book(['a', 'b', 'c']);
+    f.fetch.mockImplementation(async (task, text) => { f.fetched.push(text); if (text === 'B1') task.paused = ['b']; });
+    await f.scheduler.run();
+    expect(f.fetched).toEqual(['A1', 'B1', 'C1']);
+    expect(f.task.state).toBe('paused');
+  });
+  it('lets a chapter resumed above the one being written wait for it, then comes next', async () => {
+    const f = book(['a', 'b', 'c'], { paused: ['a'] });
+    f.fetch.mockImplementation(async (task, text) => { f.fetched.push(text); if (text === 'B1') task.paused = []; });
+    await f.scheduler.run();
+    expect(f.fetched).toEqual(['B1', 'B2', 'A1', 'C1']);
+    expect(f.task.state).toBe('done');
+  });
+  it('does not record a failure for a chapter paused while its request was out', async () => {
+    const f = book(['a', 'b']);
+    f.fetch.mockImplementation(async (task, text) => {
+      if (text === 'A1') { task.paused = ['a']; throw new SynthesisError('decode-failed'); }
+      f.fetched.push(text);
+    });
+    await f.scheduler.run();
+    expect(f.task.failed).toEqual([]);
+    expect(f.fetched).toEqual(['B1', 'B2']);
+    expect(f.task.state).toBe('paused');
+  });
+  it('chooses a prepared chapter with no text once, not again and again', async () => {
+    const plan: NarrationPlan = { version: 2, chapters: [
+      { id: 'empty', title: 'Empty', depth: 0, parent: null, texts: [], section: 0, prepared: false },
+      { id: 'b', title: 'B', depth: 0, parent: null, texts: ['B1'] },
+    ] };
+    const task: DownloadTask = { id: 't', document: 'book', voice, chapters: ['empty', 'b'], state: 'queued', error: null, failed: [] };
+    const prepare = vi.fn(async (_: DownloadTask, chapter: NarrationPlan['chapters'][number]) => ({ ...chapter, prepared: true, texts: [] }));
+    const fetch = vi.fn(async (_task: DownloadTask, _text: string) => {});
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+      exists: () => false, prepare, fetch, wait: async () => {} });
+    await scheduler.run();
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls.map((c) => c[1])).toEqual(['B1']);
+    expect(task.state).toBe('done');
+  });
+});
