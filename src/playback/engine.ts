@@ -125,6 +125,8 @@ export interface PlaybackEngineDeps {
    */
   outputLatencySeconds?: number;
   synthesisTimeoutMs?: number;
+  /** Document section containing an utterance; read lazily as more text arrives. */
+  sectionOf?(utterance: number): number | null;
   /**
    * The owner's bracket setting, for both of the engine's clip fetchers: the
    * reading one and a voice switch's (ADR 0028). It used to reach neither —
@@ -266,6 +268,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     deadline: ReturnType<typeof setTimeout> | null;
   };
   let pending: PendingSwitch | null = null;
+  let lastQueued: number | null = null;
+  let chapterPause: { next: number; ready: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
   let lastState = '';
   function publish() {
     const buffering = playing && timeline.pending() === 0;
@@ -342,11 +346,32 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
    * is asynchronous, and two decodes racing would enqueue out of order — which
    * in a buffer queue is not a glitch but a permanently wrong timeline.
    */
+  function sectionReady(next: number): boolean {
+    const fromSection = lastQueued === null ? null : deps.sectionOf?.(lastQueued);
+    const toSection = deps.sectionOf?.(next);
+    if (fromSection == null || toSection == null || fromSection === toSection) return true;
+    // The native final callback follows the complete output tail and resets the
+    // stretcher. Only then does the chapter's additional 100 ms pause begin.
+    if (timeline.pending() > 0) return false;
+    if (!chapterPause || chapterPause.next !== next) {
+      if (chapterPause) clearTimeout(chapterPause.timer);
+      const mine = generation;
+      const timer = setTimeout(() => {
+        if (disposed || mine !== generation || chapterPause?.next !== next) return;
+        chapterPause.ready = true;
+        pump();
+      }, 100);
+      chapterPause = { next, ready: false, timer };
+    }
+    return chapterPause.ready;
+  }
+
   async function drain(): Promise<void> {
     if (draining || disposed) return;
     draining = true;
     try {
       while (!disposed && !pending?.armed && nextToEnqueue < utterances.length && nextToEnqueue <= enqueueCeiling(cursor)) {
+        if (!sectionReady(nextToEnqueue)) break;
         const clip = prepared.get(nextToEnqueue);
         if (!clip) {
           // Never skip missing content. Let already-queued audio finish, then
@@ -391,6 +416,9 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
   function queueAudio(audio: DecodedClip, gapSeconds: number, from = 0, to = audio.duration, voice = voiceGeneration) {
     if (!graph) return;
+    lastQueued = audio.clip.utterance;
+    if (chapterPause) clearTimeout(chapterPause.timer);
+    chapterPause = null;
     for (const enqueued of graph.enqueue(audio, gapSeconds, from, to)) {
       timeline.enqueued({ ...enqueued, utterance: audio.clip.utterance, words: audio.clip.words, voiceGeneration: voice });
       audioByBuffer.set(enqueued.bufferId, audio);
@@ -406,6 +434,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
     const audio = await built.prepare(clip);
     if (disposed || mine !== generation || pending?.armed) return;
+    const wasEmpty = timeline.pending() === 0;
     queueAudio(audio, gapContentSeconds(gap, paragraphAhead));
 
     // Starting the node is what activates the engine, so it happens after there
@@ -413,12 +442,11 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     // playing is a no-op (see `AudioGraph.resume`).
     if (playing) built.resume();
 
-    // The first Clip after a load or a seek has no preceding `onBufferEnded` to
-    // announce it, so its cue goes out here — unless the load was quiet, when it
-    // waits for `play()`, which cues the front itself. Every later cue comes from
-    // the boundary itself.
+    // A load, seek or fully drained chapter has no preceding buffer left to
+    // announce the next Clip. Cue it here; otherwise its first word would wait
+    // for a later position/boundary event. Quiet paused loads still wait for Play.
     const front = timeline.front();
-    if (cued === null && front && !quiet) cue(front);
+    if ((cued === null || wasEmpty) && front && !quiet) cue(front);
     prepareSwitch();
     publish();
   }
@@ -530,6 +558,9 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     announced = false;
     graph?.clear();
     timeline.reset();
+    lastQueued = null;
+    if (chapterPause) clearTimeout(chapterPause.timer);
+    chapterPause = null;
     audioByBuffer.clear();
   }
 
@@ -570,7 +601,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   }
 
   function arm(target: PendingSwitch, audio: DecodedClip, cut: string | null, offset: number) {
-    if (!graph || pending !== target || target.armed) return;
+    if (!graph || pending !== target || target.armed || !sectionReady(audio.clip.utterance)) return;
     const removed = timeline.truncateAfter(cut).map((clip) => ({ clip, audio: audioByBuffer.get(clip.bufferId)! }));
     graph.remove(removed.map(({ clip }) => clip.bufferId));
     for (const { clip } of removed) audioByBuffer.delete(clip.bufferId);
@@ -722,6 +753,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     },
 
     async dispose() {
+      if (chapterPause) clearTimeout(chapterPause.timer);
+      chapterPause = null;
       disposed = true;
       playing = false;
       if (pending?.deadline) clearTimeout(pending.deadline);

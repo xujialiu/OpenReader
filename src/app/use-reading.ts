@@ -1171,6 +1171,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
           ? { playing: true, buffering: true } : state) }));
       },
       onOutOfText: ranOutOfText,
+      sectionOf,
       rate: settings.rate,
       // Read once, here: the pauses change only in General, where no reader is
       // mounted, so every engine is built after the owner's latest choice (#60).
@@ -1188,7 +1189,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     engine.load(loadedRef.current, atRef.current ?? 0);
     setStatus((was) => ({ ...was, reportsWordTimings: provider.capabilities.wordTimestamps, note: null }));
     return engine;
-  }, [settings, hasKey, clock, report, ranOutOfText, document]);
+  }, [settings, hasKey, clock, report, ranOutOfText, document, sectionOf]);
 
   const play = useCallback(() => {
     if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {

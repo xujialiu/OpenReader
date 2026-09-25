@@ -87,3 +87,17 @@ requirement the author has already paid for twice in abandoned subscriptions —
 by a preference.
 
 *The engineering half of this decision is [ADR 0012](../adr/0012-playback-engine-is-an-audio-graph.md).*
+
+
+## A chapter finishes before the next begins
+
+The reading follows the sound being played, including what is still waiting to
+be heard. When the document divides its text into separate parts, the preceding
+part finishes completely before the next starts, with a short pause between them.
+That pause gives each part a clean start without cutting off its last word.
+
+This does not happen after every sentence. Continuous speech stays continuous;
+restarting it sentence by sentence would trade drift for audible joins. Nor is a
+chapter pause the cure for a mark that gets further ahead within a chapter: the
+position must remain aligned throughout. A deliberate jump discards the old
+reading; pausing keeps it so the owner resumes where they stopped.

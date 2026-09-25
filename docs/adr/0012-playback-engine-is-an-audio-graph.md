@@ -74,3 +74,63 @@ TTS service into it — this app's architecture almost exactly — traced to a r
 between the audio thread pool and the JavaScript thread, and fixed in 0.13.0.
 The version adopted here is later than that fix, and the reporter confirmed it
 clean on a physical device.
+
+
+## The output clock replaces the input cursor (#63)
+
+The owner approved the output-driven design after the complete-chapter and
+35-repetition experiment recorded in the 2026-09-25 engineering log. The graph
+remains, but its original claim that the read index was already an audible
+position was false: 0.13.5 supplied `ceil(rate * 128)` frames every render quantum.
+At 1.55× that was 199 frames for 198.4 of demand. Dax chapter 179 led its waveform
+by 94.5 / 379.9 / 657.5 ms near the start / middle / end. The excess accumulated
+inside WSOLA, and `clearBuffers()` did not clear that state. A seek therefore
+retained the growing lead while reconstructing the player removed it.
+
+`patches/react-native-audio-api+0.13.5.patch` gives the queue an output-driven
+stretcher. It requests only missing input, using reusable scratch storage.
+Source coordinates are blended with the same window coefficients as PCM and
+reported when output leaves the stretcher. `onBufferEnded` is delayed to the
+output boundary too: changing only the position callback would still cue the
+next sentence before it was heard. The overlap blends multiple source locations,
+so this is a weighted coordinate, not a claim that every output sample has one
+unique original location. The measured source span and waveform error are in the
+engineering log.
+
+At a real queue drain, zeros supply lookahead without adding content duration.
+Completion waits until buffered output, pending overlap and future search
+windows contain no coordinates preceding the content endpoint. The implementation
+therefore verifies the tail is finished rather than relying on the prototype's
+50 ms source-position margin. The context stays active; a natural drain does not
+call `suspend()` or stop the source. A temporary starvation is the same lifecycle,
+and content arriving during the flush waits for its reset.
+
+The old host-created tail was `(INPUT_LATENCY_MS + OUTPUT_LATENCY_MS) * sampleRate`
+— 30 ms — and entered `playedBuffersDuration_` without the app enqueuing it.
+The old timeline absorbed that excess; the output-driven path no longer queues
+this tail, so padding never advances the content anchor. That absorption was
+removed. A seek creates a new source within the context, rejects retired-source
+callbacks by generation and resets the timeline to zero. Pause keeps the source.
+Native explicit clearing likewise discards stretcher state and pending end events.
+
+Future buffers remain referenced until they reach output. If a voice change
+removes already-read content, the queue reconstructs retained input starting at
+the current output coordinate, resetting only the discarded lookahead. This is
+needed because removing a buffer from the input list alone cannot remove samples
+already inside the stretcher. Native regressions cover both partially and fully
+pre-read removals, pause/resume, starvation, final endpoints and rate changes.
+
+`use-reading` supplies section identity lazily. The engine waits for all output
+from one section, then inserts a 100 ms boundary pause before allowing another.
+This applies to EPUB spine boundaries, including the owner's chapter-per-spine
+books; multiple navigation entries inside one spine item are not separate drain
+points. Recreating a graph at every sentence was rejected because it introduces
+unnecessary speech seams. A fixed highlight delay was rejected because it cannot
+remove a growing backlog. Chapter isolation supplements correct sample accounting;
+it is not a substitute for it.
+
+Verification compiles the actual queue/stretcher C++ with host-only graph,
+scheduling and event adapters. Full real chapter output and the 35-repetition
+native run retain waveform alignment; iOS integration is verified separately.
+Bluetooth output latency and provider alignment accuracy are not established by
+a native host waveform test.

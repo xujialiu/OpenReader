@@ -1,0 +1,468 @@
+diff --git a/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferBaseSourceNode.h b/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferBaseSourceNode.h
+--- a/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferBaseSourceNode.h
++++ b/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferBaseSourceNode.h
+@@ -20,7 +20,7 @@
+       const BaseAudioBufferSourceOptions &options);
+ 
+   /// @note Audio Thread only
+-  void initStretch(
++  virtual void initStretch(
+       size_t channelCount,
+       float sampleRate,
+       const std::shared_ptr<DSPAudioBuffer> &playbackRateBuffer);
+@@ -34,6 +34,10 @@
+   void assignOnPositionChangedCallbackId(uint64_t callbackId);
+ 
+  protected:
++  virtual void processWithPitchCorrection(
++      const std::shared_ptr<DSPAudioBuffer> &processingBuffer, int framesToProcess);
++  void reportOutputPosition(int frames) { positionChanged_.advance(frames, getCurrentPosition()); }
++
+   // internal helper
+   double vReadIndex_;
+ 
+@@ -65,9 +69,6 @@
+ 
+   PositionChangedDispatcher positionChanged_;
+ 
+-  void processWithPitchCorrection(
+-      const std::shared_ptr<DSPAudioBuffer> &processingBuffer,
+-      int framesToProcess);
+ 
+   void processWithoutPitchCorrection(
+       const std::shared_ptr<DSPAudioBuffer> &processingBuffer,
+diff --git a/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferQueueSourceNode.h b/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferQueueSourceNode.h
+--- a/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferQueueSourceNode.h
++++ b/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferQueueSourceNode.h
+@@ -3,11 +3,13 @@
+ #include <audioapi/core/BaseAudioContext.h>
+ #include <audioapi/core/sources/AudioBufferBaseSourceNode.h>
+ #include <audioapi/utils/AudioBuffer.hpp>
++#include <audioapi/dsp/WsolaTimeStretcher.h>
+ 
+ #include <audioapi/core/utils/buffer/QueueBufferProcessor.h>
+ #include <cstddef>
+ #include <list>
+ #include <memory>
++#include <deque>
+ 
+ namespace audioapi {
+ 
+@@ -19,6 +21,9 @@
+   explicit AudioBufferQueueSourceNode(
+       const std::shared_ptr<BaseAudioContext> &context,
+       const BaseAudioBufferSourceOptions &options);
++
++  void initStretch(size_t channels, float sampleRate,
++      const std::shared_ptr<DSPAudioBuffer> &scratch) override;
+ 
+   /// @note Audio Thread only
+   void stop(double when) override;
+@@ -51,6 +56,8 @@
+   void setChannelCount(int channelCount);
+ 
+  protected:
++  void processWithPitchCorrection(const std::shared_ptr<DSPAudioBuffer> &output, int frames) override;
++
+   double getCurrentPosition() const override;
+ 
+   void sendOnBufferEndedEvent(size_t bufferId, bool isLastBufferInQueue);
+@@ -65,6 +72,21 @@
+       bool interpolate) final;
+ 
+  private:
++  const bool outputDriven_;
++  WsolaTimeStretcher outputStretcher_;
++  std::shared_ptr<DSPAudioBuffer> pullInput_;
++  // Retain pre-read buffers until their output ends, so a voice replacement can
++  // rebuild discarded lookahead from the actual output position.
++  std::list<std::pair<size_t, std::shared_ptr<AudioBuffer>>> outputBuffers_;
++  struct OutputEnd { size_t id; double end; bool last; };
++  std::deque<OutputEnd> outputEnds_;
++  double outputPosition_ = 0.0, outputOrigin_ = 0.0, emittedDuration_ = 0.0;
++  bool finishing_ = false, rebuildOutput_ = false, replacedFront_ = false;
++  double finishAt_ = 0.0;
++  void rebuildFromOutput();
++  double inputPosition() const;
++  void dispatchOutputEnds(bool drained);
++
+   // User provided buffers
+   std::list<std::pair<size_t, std::shared_ptr<AudioBuffer>>> buffers_;
+ 
+diff --git a/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferQueueSourceNode.cpp b/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferQueueSourceNode.cpp
+--- a/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferQueueSourceNode.cpp
++++ b/node_modules/react-native-audio-api/common/cpp/audioapi/core/sources/AudioBufferQueueSourceNode.cpp
+@@ -13,6 +13,8 @@
+ #include <algorithm>
+ #include <memory>
+ #include <utility>
++#include <cmath>
++#include <cstring>
+ 
+ namespace audioapi {
+ 
+@@ -20,12 +22,8 @@
+     const std::shared_ptr<BaseAudioContext> &context,
+     const BaseAudioBufferSourceOptions &options)
+     : AudioBufferBaseSourceNode(context, options),
++      outputDriven_(options.pitchCorrection),
+       onBufferEndedEvent_(context->getAudioEventHandlerRegistry()) {
+-  if (options.pitchCorrection) {
+-    // If pitch correction is enabled, add extra frames at the end
+-    // to compensate for processing latency.
+-    addExtraTailFrames_ = true;
+-  }
+ 
+   isInitialized_.store(true, std::memory_order_release);
+ 
+@@ -37,7 +35,13 @@
+                               bool isLastInQueue,
+                               bool fireBufferEndedEvent) {
+     playedBuffersDuration_ += buffer->getDuration();
+-    if (fireBufferEndedEvent) {
++    if (outputDriven_) {
++      outputEnds_.push_back({bufferId, playedBuffersDuration_, isLastInQueue});
++      if (isLastInQueue) {
++        finishing_ = true;
++        finishAt_ = playedBuffersDuration_;
++      }
++    } else if (fireBufferEndedEvent) {
+       sendOnBufferEndedEvent(bufferId, isLastInQueue);
+     }
+     graphManager->addAudioBufferForDestruction(std::move(buffer));
+@@ -60,6 +64,16 @@
+ void AudioBufferQueueSourceNode::start(double when, double offset) {
+   start(when);
+ 
++  if (outputDriven_ && offset >= 0 && !outputBuffers_.empty()) {
++    buffers_ = outputBuffers_;
++    playedBuffersDuration_ = emittedDuration_;
++    offset = std::min(offset, outputBuffers_.front().second->getDuration());
++    vReadIndex_ = getContextSampleRate() * offset;
++    outputOrigin_ = outputPosition_ = emittedDuration_ + offset;
++    outputEnds_.clear(); outputStretcher_.reset();
++    finishing_ = rebuildOutput_ = replacedFront_ = false;
++    return;
++  }
+   if (buffers_.empty() || offset < 0) {
+     return;
+   }
+@@ -78,8 +92,9 @@
+     size_t bufferId,
+     const std::shared_ptr<AudioBuffer> &tailBuffer) {
+   buffers_.emplace_back(bufferId, buffer);
+-
+-  if (tailBuffer != nullptr) {
++  if (outputDriven_) outputBuffers_.emplace_back(bufferId, buffer);
++
++  if (!outputDriven_ && tailBuffer != nullptr) {
+     tailBuffer_ = tailBuffer;
+   }
+ 
+@@ -89,6 +104,23 @@
+ }
+ 
+ void AudioBufferQueueSourceNode::dequeueBuffer(const size_t bufferId) {
++  if (outputDriven_) {
++    auto retained = std::find_if(outputBuffers_.begin(), outputBuffers_.end(),
++        [bufferId](const auto &item) { return item.first == bufferId; });
++    if (retained == outputBuffers_.end()) return;
++    const bool front = retained == outputBuffers_.begin();
++    const bool preRead = std::any_of(outputEnds_.begin(), outputEnds_.end(),
++        [bufferId](const auto &item) { return item.id == bufferId; });
++    const bool inputStarted = !buffers_.empty() && buffers_.front().first == bufferId && vReadIndex_ > 0.0;
++    if (auto context = context_.lock()) context->getGraphManager()->addAudioBufferForDestruction(retained->second);
++    outputBuffers_.erase(retained);
++    if (preRead || inputStarted || (front && outputPosition_ > emittedDuration_)) {
++      rebuildOutput_ = true;
++      replacedFront_ = replacedFront_ || front;
++    }
++    // Any later dequeue/enqueue in this control batch is applied before rebuilding.
++  }
++
+   if (auto context = context_.lock()) {
+     if (buffers_.empty()) {
+       return;
+@@ -123,6 +155,13 @@
+ 
+     buffers_.clear();
+     vReadIndex_ = 0.0;
++    if (outputDriven_) {
++      for (auto &item : outputBuffers_) context->getGraphManager()->addAudioBufferForDestruction(std::move(item.second));
++      outputBuffers_.clear(); outputEnds_.clear(); outputStretcher_.reset();
++      playedBuffersDuration_ = emittedDuration_;
++      outputOrigin_ = outputPosition_ = emittedDuration_;
++      finishing_ = rebuildOutput_ = replacedFront_ = false;
++    }
+   }
+ }
+ 
+@@ -153,8 +192,7 @@
+ }
+ 
+ double AudioBufferQueueSourceNode::getCurrentPosition() const {
+-  return dsp::sampleFrameToTime(static_cast<int>(vReadIndex_), getContextSampleRate()) +
+-      playedBuffersDuration_;
++  return outputDriven_ ? outputPosition_ : inputPosition();
+ }
+ 
+ void AudioBufferQueueSourceNode::sendOnBufferEndedEvent(size_t bufferId, bool isLastBufferInQueue) {
+@@ -167,7 +205,7 @@
+  */
+ 
+ bool AudioBufferQueueSourceNode::isEmpty() const {
+-  return buffers_.empty();
++  return buffers_.empty() && (!outputDriven_ || (!finishing_ && !rebuildOutput_));
+ }
+ 
+ void AudioBufferQueueSourceNode::runBufferProcessor(
+@@ -199,4 +237,84 @@
+   vReadIndex_ = processor_->getPosition();
+ }
+ 
++void AudioBufferQueueSourceNode::initStretch(
++    size_t channels, float sampleRate, const std::shared_ptr<DSPAudioBuffer> &scratch) {
++  if (!outputDriven_) {
++    AudioBufferBaseSourceNode::initStretch(channels, sampleRate, scratch);
++    return;
++  }
++  outputStretcher_.configure(channels, sampleRate);
++  pullInput_ = std::make_shared<DSPAudioBuffer>(4096, channels, sampleRate);
++}
++
++double AudioBufferQueueSourceNode::inputPosition() const {
++  return vReadIndex_ / getContextSampleRate() + playedBuffersDuration_;
++}
++
++void AudioBufferQueueSourceNode::rebuildFromOutput() {
++  const double offset = replacedFront_ ? 0.0 : std::max(0.0, outputPosition_ - emittedDuration_);
++  buffers_ = outputBuffers_;
++  playedBuffersDuration_ = emittedDuration_;
++  vReadIndex_ = offset * getContextSampleRate();
++  outputOrigin_ = outputPosition_ = emittedDuration_ + offset;
++  outputEnds_.clear(); outputStretcher_.reset();
++  finishing_ = rebuildOutput_ = replacedFront_ = false;
++}
++
++void AudioBufferQueueSourceNode::dispatchOutputEnds(bool drained) {
++  while (!outputEnds_.empty()) {
++    const auto event = outputEnds_.front();
++    if (event.end > outputPosition_ + 1e-9 || (event.last && !drained)) break;
++    outputEnds_.pop_front();
++    emittedDuration_ = event.end;
++    if (!outputBuffers_.empty() && outputBuffers_.front().first == event.id) {
++      if (auto context = context_.lock()) context->getGraphManager()->addAudioBufferForDestruction(std::move(outputBuffers_.front().second));
++      outputBuffers_.pop_front();
++    }
++    sendOnBufferEndedEvent(event.id, event.last && outputBuffers_.empty());
++  }
++}
++
++void AudioBufferQueueSourceNode::processWithPitchCorrection(
++    const std::shared_ptr<DSPAudioBuffer> &output, int frames) {
++  auto context = context_.lock();
++  if (!context || !pullInput_) { output->zero(); return; }
++  if (rebuildOutput_) rebuildFromOutput();
++  const double time = context->getCurrentTime();
++  const float rate = std::clamp(getPlaybackRateParam()->processKRateParam(frames, time),
++      0.0f, WsolaTimeStretcher::MAX_PLAYBACK_RATE);
++  size_t start = 0, length = 0;
++  updatePlaybackInfo(output, frames, start, length, context->getSampleRate(), context->getCurrentSampleFrame());
++  if (length == 0 || rate == 0.0f || (!isPlaying() && !isStopScheduled())) { output->zero(); return; }
++  const float pitch = std::pow(2.0f, getDetuneParam()->processKRateParam(frames, time) / 1200.0f);
++  outputStretcher_.pull(*pullInput_, *output, length, rate, pitch, [this](size_t needed) {
++    pullInput_->zero();
++    if (finishing_) return needed; // padding is not part of the content clock
++    if (buffers_.empty()) return size_t(0);
++    const double before = inputPosition();
++    runBufferProcessor(pullInput_, 0, needed, 1.0f, false);
++    return static_cast<size_t>(std::llround((inputPosition() - before) * getContextSampleRate()));
++  });
++  if (start > 0) {
++    for (size_t channel = 0; channel < output->getNumberOfChannels(); ++channel) {
++      auto *samples = output->getChannel(channel)->begin();
++      std::memmove(samples + start, samples, length * sizeof(float));
++      std::fill_n(samples, start, 0.0f);
++    }
++  }
++  const double rendered = outputOrigin_ + outputStretcher_.getOutputSourceFrame() / getContextSampleRate();
++  outputPosition_ = std::max(outputPosition_, std::min(rendered, inputPosition()));
++  // Flush the complete overlap/search history before allowing an end callback
++  // to stop playback or begin a new chapter. Padding never advances the cursor.
++  const bool drained = finishing_ && !outputStretcher_.hasSourceBefore((finishAt_ - outputOrigin_) * getContextSampleRate());
++  if (drained) {
++    outputPosition_ = finishAt_;
++    outputStretcher_.reset();
++    outputOrigin_ = finishAt_;
++    finishing_ = false;
++  }
++  dispatchOutputEnds(drained);
++  if (isPlaying()) reportOutputPosition(frames);
++}
++
+ } // namespace audioapi
+diff --git a/node_modules/react-native-audio-api/common/cpp/audioapi/dsp/WsolaTimeStretcher.h b/node_modules/react-native-audio-api/common/cpp/audioapi/dsp/WsolaTimeStretcher.h
+--- a/node_modules/react-native-audio-api/common/cpp/audioapi/dsp/WsolaTimeStretcher.h
++++ b/node_modules/react-native-audio-api/common/cpp/audioapi/dsp/WsolaTimeStretcher.h
+@@ -4,6 +4,7 @@
+ 
+ #include <cstddef>
+ #include <vector>
++#include <functional>
+ 
+ namespace audioapi {
+ 
+@@ -45,7 +46,20 @@
+   static constexpr float INPUT_LATENCY_MS = 20.0f;
+   static constexpr float OUTPUT_LATENCY_MS = 10.0f;
+ 
++  // Pull only the input required to produce output. input is caller-owned scratch.
++  size_t pull(DSPAudioBuffer &input, DSPAudioBuffer &output, size_t frames,
++      float rate, float pitchFactor, const std::function<size_t(size_t)> &supply);
++  double getOutputSourceFrame() const { return lastOutputPosition_; }
++  // All buffered output, overlap and future search windows are beyond this frame.
++  bool hasSourceBefore(double frame) const;
++
+  private:
++  double inputOrigin_ = 0.0;
++  double lastOutputPosition_ = 0.0;
++  bool haveOverlapPosition_ = false;
++  std::vector<double> positionQueue_, overlapPositions_, blockPositions_;
++  std::vector<double> lowerQueue_, overlapLower_, blockLower_;
++
+   static constexpr float OLA_WINDOW_MS = 20.0f;
+   static constexpr float SEARCH_INTERVAL_MS = 30.0f;
+   static constexpr size_t SEARCH_DECIMATION = 12;
+diff --git a/node_modules/react-native-audio-api/common/cpp/audioapi/dsp/WsolaTimeStretcher.cpp b/node_modules/react-native-audio-api/common/cpp/audioapi/dsp/WsolaTimeStretcher.cpp
+--- a/node_modules/react-native-audio-api/common/cpp/audioapi/dsp/WsolaTimeStretcher.cpp
++++ b/node_modules/react-native-audio-api/common/cpp/audioapi/dsp/WsolaTimeStretcher.cpp
+@@ -53,6 +53,12 @@
+   for (auto &channel : outputQueue_) {
+     channel.reserve(outputQueueCapacity);
+   }
++  positionQueue_.reserve(outputQueueCapacity);
++  lowerQueue_.reserve(outputQueueCapacity);
++  overlapLower_.assign(hopSize_, 0.0);
++  blockLower_.assign(windowSize_, 0.0);
++  overlapPositions_.assign(hopSize_, 0.0);
++  blockPositions_.assign(windowSize_, 0.0);
+   pendingOverlap_.assign(channels_, std::vector<float>(hopSize_, 0.0f));
+   targetBlock_.assign(channels_, std::vector<float>(windowSize_, 0.0f));
+   optimalBlock_.assign(channels_, std::vector<float>(windowSize_, 0.0f));
+@@ -65,6 +71,12 @@
+ }
+ 
+ void WsolaTimeStretcher::reset() {
++  inputOrigin_ = 0.0;
++  lastOutputPosition_ = 0.0;
++  haveOverlapPosition_ = false;
++  positionQueue_.clear();
++  lowerQueue_.clear();
++  std::fill(overlapPositions_.begin(), overlapPositions_.end(), 0.0);
+   outputTime_ = 0.0;
+   synthesisPosition_ = 0.0;
+   targetBlockIndex_ = 0;
+@@ -175,6 +187,7 @@
+     float *destination = output.getChannel(channel)->begin() + outputOffset;
+     std::copy_n(queue.begin() + static_cast<std::ptrdiff_t>(outputReadIndex_), frames, destination);
+   }
++  lastOutputPosition_ = positionQueue_[outputReadIndex_ + frames - 1];
+   outputReadIndex_ += frames;
+   compactOutputQueueIfNeeded();
+ 
+@@ -191,6 +204,8 @@
+     for (auto &queue : outputQueue_) {
+       queue.clear();
+     }
++    positionQueue_.clear();
++    lowerQueue_.clear();
+     outputReadIndex_ = 0;
+     return;
+   }
+@@ -200,6 +215,8 @@
+     return;
+   }
+ 
++  positionQueue_.erase(positionQueue_.begin(), positionQueue_.begin() + outputReadIndex_);
++  lowerQueue_.erase(lowerQueue_.begin(), lowerQueue_.begin() + outputReadIndex_);
+   for (auto &queue : outputQueue_) {
+     queue.erase(queue.begin(), queue.begin() + static_cast<std::ptrdiff_t>(outputReadIndex_));
+   }
+@@ -225,6 +242,32 @@
+       }
+     }
+   }
++
++  // Source coordinates undergo the same blends as PCM. They leave with output,
++  // not when the source cursor reads ahead into the input queue.
++  compactOutputQueueIfNeeded();
++  for (size_t frame = 0; frame < windowSize_; ++frame) {
++    double position = inputOrigin_ + (optimalIndex + static_cast<double>(frame)) * pitchFactor_;
++    blockLower_[frame] = position;
++    if (transitionNeeded) {
++      const double target = inputOrigin_ + (targetBlockIndex_ + static_cast<double>(frame)) * pitchFactor_;
++      const double a = transitionWindow_[frame], b = transitionWindow_[windowSize_ + frame];
++      blockLower_[frame] = a == 0 ? target : b == 0 ? position : std::min(position, target);
++      position = (position * a + target * b) / (a + b);
++    }
++    blockPositions_[frame] = position;
++  }
++  for (size_t frame = 0; frame < hopSize_; ++frame) {
++    const double a = olaWindow_[hopSize_ + frame], b = olaWindow_[frame];
++    positionQueue_.push_back(haveOverlapPosition_
++        ? (overlapPositions_[frame] * a + blockPositions_[frame] * b) / (a + b)
++        : blockPositions_[frame]);
++    lowerQueue_.push_back(!haveOverlapPosition_ || a == 0 ? blockLower_[frame]
++        : b == 0 ? overlapLower_[frame] : std::min(overlapLower_[frame], blockLower_[frame]));
++    overlapLower_[frame] = blockLower_[hopSize_ + frame];
++    overlapPositions_[frame] = blockPositions_[hopSize_ + frame];
++  }
++  haveOverlapPosition_ = true;
+ 
+   for (size_t channel = 0; channel < channels_; ++channel) {
+     auto &output = outputQueue_[channel];
+@@ -447,6 +490,7 @@
+     }
+   }
+ 
++  inputOrigin_ += queueFramesToRemove;
+   const int removedFrames = static_cast<int>(synthesisFramesToRemove);
+   targetBlockIndex_ -= removedFrames;
+   searchBlockIndex_ -= removedFrames;
+@@ -458,4 +502,36 @@
+   }
+ }
+ 
++size_t WsolaTimeStretcher::pull(
++    DSPAudioBuffer &input, DSPAudioBuffer &output, size_t frames,
++    float rate, float pitchFactor, const std::function<size_t(size_t)> &supply) {
++  output.zero();
++  pitchFactor_ = pitchFactor > 0.0f ? pitchFactor : 1.0f;
++  if (channels_ == 0 || frames == 0 || rate <= 0.0f || input.getSize() == 0) return 0;
++  size_t rendered = 0;
++  while (rendered < frames) {
++    rendered += writeOutput(output, rendered, frames - rendered);
++    if (rendered == frames) break;
++    while (!canRunIteration()) {
++      const int searchSize = static_cast<int>(searchIntervalFrames_ + windowSize_ - 1);
++      const int last = std::max(maxSourceIndexForBlock(targetBlockIndex_),
++          maxSourceIndexForBlock(searchBlockIndex_ + searchSize - 1));
++      const size_t needed = static_cast<size_t>(std::max(0, last + 1 - static_cast<int>(inputQueue_[0].size())));
++      const size_t supplied = supply(std::min(needed, input.getSize()));
++      if (supplied == 0) return rendered;
++      appendInput(input, supplied);
++    }
++    if (!runOneIteration(rate)) break;
++  }
++  return rendered;
++}
++
++bool WsolaTimeStretcher::hasSourceBefore(double frame) const {
++  const double next = inputOrigin_ + std::min(targetBlockIndex_, searchBlockIndex_) * static_cast<double>(pitchFactor_);
++  if (next < frame) return true;
++  for (size_t i = outputReadIndex_; i < lowerQueue_.size(); ++i) if (lowerQueue_[i] < frame) return true;
++  if (haveOverlapPosition_) for (double lower : overlapLower_) if (lower < frame) return true;
++  return false;
++}
++
+ } // namespace audioapi

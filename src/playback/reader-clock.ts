@@ -12,7 +12,7 @@
  * subscribers. It is the mechanism, stated small enough that adding a per-word
  * message would mean visibly changing it.
  *
- * Both messages carry the same clock, which is the source node's own content
+ * Both messages carry the same clock, which is the patched source node's output content
  * position (ADR 0012). That is also what ADR 0016 pushes to the lock screen, so
  * the highlight and the elapsed time cannot disagree — there is one clock and
  * two readers of it, not two clocks.
@@ -90,7 +90,7 @@ export interface PositionCorrection {
   utterance: number;
   /** Heard seconds since this Clip's speech began, with the output latency of `rate.ts`'s `atTheEar` already taken off. This is what the highlight is corrected against. */
   clipPosition: number;
-  /** The source node's content position, exactly as it reported it: seconds of synthesized audio the queue has consumed. The elapsed time ADR 0016 pushes to the lock screen. */
+  /** The source node's content position, exactly as it reported it: source seconds corresponding to PCM rendered at the output, excluding flush padding. The elapsed time ADR 0016 pushes to the lock screen. */
   contentPosition: number;
   /** True while the position is inside the gap after the speech (gap.ts). The last word stays highlighted; nothing advances. */
   inGap: boolean;

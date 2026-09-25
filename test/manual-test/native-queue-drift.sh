@@ -5,7 +5,11 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 probe_dir=${OPENREADER_NATIVE_PROBE_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/openreader-native-drift.XXXXXX")}
 mkdir -p "$probe_dir"
-lib=node_modules/react-native-audio-api/common/cpp
+lib=${OPENREADER_AUDIO_SOURCE:-node_modules/react-native-audio-api/common/cpp}
+if rg -q 'outputDriven_' "$lib/audioapi/core/sources/AudioBufferQueueSourceNode.h"; then
+  echo 'Use test/native-audio/run.sh for the patched queue; OPENREADER_AUDIO_SOURCE can select pristine 0.13.5 for this baseline probe.' >&2
+  exit 2
+fi
 python3 - "$lib" "$probe_dir/production.inc" <<'PY'
 from pathlib import Path
 import sys

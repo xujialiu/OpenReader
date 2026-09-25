@@ -159,3 +159,26 @@ WSOLA stretcher's, and both are constant offsets rather than drift, which is
 exactly why one measured number settles them and why ADR 0012's decision does not
 depend on it. And **the interval**, one second, which is ADR 0005's correction
 cadence but has not been watched against a real highlight.
+
+
+## Output-driven queue and chapter boundaries (#63)
+
+The source read index proved to be ahead of what WSOLA had actually emitted.
+The native dependency patch now pulls the input an output iteration needs and
+carries source-coordinate metadata through the same blends as PCM. Both position
+corrections and buffer-ended events follow rendered output. Flush padding is
+excluded from the content timeline. `test/native-audio/run.sh` compiles the real
+patched queue, processor and stretcher for drift/lifecycle regression checks.
+
+A seek creates a fresh queue source inside the existing context and a fresh
+callback generation; the timeline resets to zero. An old source's delayed
+callbacks cannot move the new reading. Pause retains the source and DSP state.
+Removing future buffers for a voice handover rebuilds any already-read lookahead
+from the current output coordinate, retaining the portions still wanted.
+
+The engine does not enqueue a new document section across pending old output.
+After the preceding output tail ends, it waits 100 ms before the next section.
+For the owner's chapter-per-section EPUBs this is the chapter boundary; multiple
+Contents entries within one section do not introduce extra resets. Source
+starvation also drains and resets its stretcher, without suspending the audio
+context. No sentence boundary resets a continuously fed stream.

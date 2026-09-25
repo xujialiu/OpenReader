@@ -1,34 +1,10 @@
 /**
- * The content timeline: what the number from `onPositionChanged` means.
- *
- * This is the file ADR 0012 was written for. The source node reports its
- * **content position** — `AudioBufferQueueSourceNode::getCurrentPosition()` is
- * `sampleFrameToTime(vReadIndex_, contextSampleRate) + playedBuffersDuration_`,
- * which is the ADR's "read index plus the duration of the buffers already
- * consumed", read out of the library's own source. That value advances at the
- * playback rate because the read index does, so there is no rate factor to apply
- * and no wall clock to drift against.
- *
- * What it is *not* is clip-relative. It counts every second of content the queue
- * has ever consumed, so turning it into "0.8 seconds into Utterance 41" needs
- * one thing: the content offset at which each Clip's speech begins. This file
- * keeps that, and keeps it by **summing the durations of the buffers it enqueued
- * itself** — frames divided by the sample rate, the identical arithmetic the
- * native side does — rather than by sampling anything.
- *
- * Nothing here imports the platform. The position arrives as a number.
- *
- * ## The one thing the node adds behind our back
- *
- * With `pitchCorrection: true` the host object builds a tail buffer of
- * `(INPUT_LATENCY_MS + OUTPUT_LATENCY_MS) × sampleRate` frames — 30 ms — on the
- * first `enqueueBuffer`, and `QueueBufferProcessor::handleBoundary` appends it
- * **instead of** ending the last buffer whenever the queue would drain. Its
- * duration goes into `playedBuffersDuration_`; we never enqueued it, so our sum
- * does not know about it. `advanceTo` absorbs the difference the only honest way:
- * by measuring it, when a reported position runs past the end of everything we
- * put in the queue. Thirty milliseconds, once per drain, and a drain is already
- * a stall the reader can hear.
+ * The content timeline of the active output source (ADR 0012, #63).
+ * Positions are source coordinates carried through native time-stretching and
+ * reported when that PCM leaves the output queue. Buffer durations name their
+ * coordinates; padding used only to flush the stretcher never adds content time.
+ * A seek replaces the source, so its timeline begins at zero too. The graph
+ * rejects callbacks from retired sources before they can enter this timeline.
  */
 
 import type { Timestamp } from '../core/providers/types';
@@ -78,7 +54,7 @@ export interface Timeline {
   front(): QueuedClip | null;
   /** Buffers enqueued and not yet ended. */
   pending(): number;
-  /** Forget every buffer, for a seek — which calls `clearBuffers()` — while keeping the content offset the node will report next. */
+  /** A seek creates a new native source: forget buffers and reset its content origin. */
   reset(): void;
   /** The content offset at which the front Clip's speech begins. Exposed because it is the whole of the arithmetic, and a number nothing can see is a number nothing can test. */
   anchor(): number;
@@ -93,50 +69,18 @@ export function createTimeline(): Timeline {
    */
   let queue: QueuedClip[] = [];
 
-  /**
-   * The content offset where `queue[0]`'s speech begins.
-   *
-   * It survives `reset()`, and that is the subtle part. `clearBuffers()` hands
-   * every buffer to the graph manager for destruction **without** adding any of
-   * them to `playedBuffersDuration_`, and sets `vReadIndex_` to 0. So after a
-   * clear the node's next reported position is exactly the sum of the buffers it
-   * had already finished — which is this number, because everything before
-   * `queue[0]` has ended and `queue[0]` itself was cleared uncounted.
-   */
+  /** Source coordinate of the first retained buffer. Padding is never counted. */
   let base = 0;
-
-  /**
-   * Set by `reset()` and cleared by the next `enqueued()`.
-   *
-   * Between those two the queue is empty for a reason that is not a drain, and
-   * the difference matters: a position event dispatched before `clearBuffers()`
-   * and delivered after it reports a point *inside* the buffer that was thrown
-   * away, which is past `base`. Absorbing that as tail slack would move the
-   * anchor forward by however far into the Clip the seek happened — a seek that
-   * silently mis-anchors the highlight by half a sentence.
-   */
-  let cleared = false;
 
   const extentOf = (clip: QueuedClip): number => clip.speech + clip.gap;
 
   return {
     enqueued(clip) {
-      cleared = false;
       queue.push(clip);
     },
 
     advanceTo(position) {
-      if (queue.length === 0) {
-        // Nothing to report. But unless the queue was cleared, the node may have
-        // rendered its latency tail after the last buffer ended, and this is the
-        // only moment that difference is visible: positions stop being reported
-        // while the queue is empty (`processNode` zeroes and returns before
-        // `positionChanged_.advance`), so the last one seen is the end of the
-        // tail to within one interval. Taking the maximum makes a stale event
-        // harmless.
-        if (!cleared && position > base) base = position;
-        return null;
-      }
+      if (queue.length === 0) return null;
 
       let offset = position - base;
       // Behind the front buffer: a position event dispatched before a boundary
@@ -154,14 +98,8 @@ export function createTimeline(): Timeline {
 
       const clip = queue[0]!;
       const extent = extentOf(clip);
-      if (offset > extent) {
-        // Past everything enqueued. The only content the node can have played
-        // that we did not give it is the latency tail, so the excess is measured
-        // and folded into `base` once, rather than re-counted on every position
-        // from here on.
-        base += offset - extent;
-        offset = extent;
-      }
+      // A cursor cannot invent extra content after the last queued frame.
+      offset = Math.min(offset, extent);
 
       const inGap = offset > clip.speech;
       return { clip, inClip: (clip.offset ?? 0) + (inGap ? clip.speech : offset), inGap, position };
@@ -183,8 +121,8 @@ export function createTimeline(): Timeline {
     },
 
     reset() {
+      base = 0;
       queue = [];
-      cleared = true;
     },
 
     anchor() {

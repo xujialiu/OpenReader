@@ -36,9 +36,9 @@ import { bufferParts } from './buffer-parts';
 const KEEP_READ_INDEX = -1;
 
 export interface AudioGraphHandlers {
-  /** The source node's content position, straight from `onPositionChanged`. The only clock this app has. */
+  /** Source coordinates carried with rendered PCM, from `onPositionChanged` (#63). */
   onPosition(position: number): void;
-  /** A buffer has been fully consumed. Fires at the boundary, which is why the Clip cue is sent from here rather than from the position stream. */
+  /** A buffer has reached output; the native patch defers this until its audio is rendered, including the final tail. */
   onBufferEnded(bufferId: string): void;
   /**
    * The output the owner was listening on has gone away —
@@ -154,7 +154,9 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
    * `WsolaTimeStretcher` is native on both platforms and its `MAX_PLAYBACK_RATE`
    * is 4, so the app's range is in bounds (`rate.ts` clamps to the same number).
    */
-  const node: AudioBufferQueueSourceNode = context.createBufferQueueSource({ pitchCorrection: true });
+  let node: AudioBufferQueueSourceNode = context.createBufferQueueSource({ pitchCorrection: true });
+  let sourceGeneration = 0;
+  let playbackRate = 1;
   node.connect(context.destination);
 
   /**
@@ -166,7 +168,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
    * once, rather than at the call site, so that there is one place to look when
    * `react-native-audio-api` is upgraded past the 0.13.5 this was read from.
    */
-  const nativeNode = (node as unknown as { node: { start(when: number, offset: number): void } }).node;
+  const nativeNode = () => (node as unknown as { node: { start(when: number, offset: number): void } }).node;
 
   /**
    * THE CLOCK. The position comes from the **source node**, never from
@@ -179,22 +181,19 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
    * `PositionChangedDispatcher` does the throttling, counting rendered frames,
    * so the interval below is the cadence and there is no JavaScript throttle.
    */
-  node.onPositionChangedInterval = POSITION_INTERVAL_MS;
-  node.onPositionChanged = (event) => {
-    try {
-      handlers.onPosition(event.value);
-    } catch (error) {
-      handlers.onError(error);
-    }
-  };
-
-  node.onBufferEnded = (event) => {
-    try {
-      handlers.onBufferEnded(event.bufferId);
-    } catch (error) {
-      handlers.onError(error);
-    }
-  };
+  function observe(node: AudioBufferQueueSourceNode) {
+    const generation = sourceGeneration;
+    node.onPositionChangedInterval = POSITION_INTERVAL_MS;
+    node.onPositionChanged = (event) => {
+      if (generation !== sourceGeneration) return;
+      try { handlers.onPosition(event.value); } catch (error) { handlers.onError(error); }
+    };
+    node.onBufferEnded = (event) => {
+      if (generation !== sourceGeneration) return;
+      try { handlers.onBufferEnded(event.bufferId); } catch (error) { handlers.onError(error); }
+    };
+  }
+  observe(node);
 
   /** Footgun 2. See `AudioGraphHandlers.onOutputLost`. */
   const routeChange: AudioEventSubscription | undefined = AudioManager.addSystemEventListener('routeChange', (event) => {
@@ -264,6 +263,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
     remove(bufferIds) { for (const id of bufferIds) node.dequeueBuffer(id); },
 
     setRate(rate) {
+      playbackRate = rate;
       node.playbackRate.value = rate;
     },
 
@@ -296,7 +296,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
       // `vReadIndex_ = sampleRate * offset`. The engine calls `resume()` again on
       // every enqueue while playing, so an offset of 0 would restart the Clip
       // being spoken each time a new one arrived. There is no third value.
-      nativeNode.start(0, KEEP_READ_INDEX);
+      nativeNode().start(0, KEEP_READ_INDEX);
     },
 
     pause() {
@@ -309,10 +309,21 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
     },
 
     clear() {
-      node.clearBuffers();
+      // A seek has a new content origin. Scope callbacks as well as DSP state:
+      // events already dispatched by the old source cannot move the new reading.
+      sourceGeneration++;
+      node.onPositionChanged = null;
+      node.onBufferEnded = null;
+      node.stop();
+      node.disconnect(context.destination);
+      node = context.createBufferQueueSource({ pitchCorrection: true });
+      node.playbackRate.value = playbackRate;
+      node.connect(context.destination);
+      observe(node);
     },
 
     async dispose() {
+      sourceGeneration++;
       routeChange?.remove();
       node.onPositionChanged = null;
       node.onBufferEnded = null;

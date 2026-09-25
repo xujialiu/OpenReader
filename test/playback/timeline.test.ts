@@ -134,74 +134,40 @@ describe('createTimeline', () => {
     expect(at.inClip).toBe(0);
   });
 
-  it('absorbs the latency tail the node appends when the queue drains', () => {
-    // With pitchCorrection the host object builds a 30 ms tail buffer on the
-    // first enqueue, and QueueBufferProcessor::handleBoundary appends it instead
-    // of ending the last buffer whenever the queue would drain. Its duration
-    // goes into playedBuffersDuration_ and we never enqueued it, so without this
-    // the anchor would be 30 ms behind for the rest of the session — and 60 ms
-    // after the next drain, and so on.
+  it('never adds flush padding or an excessive position to the content anchor', () => {
     const timeline = createTimeline();
     const a = clip(0, 1);
     timeline.enqueued(a);
-    timeline.advanceTo(1.03);
+    expect(timeline.advanceTo(1.03)!.inClip).toBe(1);
     timeline.ended(a.bufferId);
-    const b = clip(1, 2);
-    timeline.enqueued(b);
-    const at = timeline.advanceTo(1.06)!;
-    expect(at.clip).toBe(b);
-    expect(at.inClip).toBeCloseTo(0.03, 9);
+    expect(timeline.advanceTo(1.06)).toBeNull();
+    expect(timeline.anchor()).toBe(1);
+    const next = clip(1, 2);
+    timeline.enqueued(next);
+    expect(timeline.advanceTo(1.25)!.inClip).toBe(0.25);
   });
 
-  it('absorbs it after the last buffer has ended too, and only once', () => {
+  it('resets the anchor when seeking creates a new source', () => {
     const timeline = createTimeline();
     const a = clip(0, 1);
     timeline.enqueued(a);
     timeline.ended(a.bufferId);
-    expect(timeline.anchor()).toBeCloseTo(1, 12);
-    // The tail plays on with an empty queue.
-    expect(timeline.advanceTo(1.03)).toBeNull();
-    expect(timeline.anchor()).toBeCloseTo(1.03, 9);
-    // A stale event reporting an earlier position must not move it back.
-    expect(timeline.advanceTo(1.01)).toBeNull();
-    expect(timeline.anchor()).toBeCloseTo(1.03, 9);
-  });
-
-  it('keeps the anchor across a seek, because a cleared buffer was never counted', () => {
-    // clearBuffers() destroys every buffer without adding any of them to
-    // playedBuffersDuration_ and sets vReadIndex_ to 0, so the node's next
-    // position is exactly where the cleared buffer began.
-    const timeline = createTimeline();
-    const a = clip(0, 1);
-    const b = clip(1, 2);
-    timeline.enqueued(a);
-    timeline.enqueued(b);
-    timeline.ended(a.bufferId);
-    expect(timeline.anchor()).toBeCloseTo(1, 12);
     timeline.reset();
     expect(timeline.front()).toBeNull();
-    expect(timeline.anchor()).toBeCloseTo(1, 12);
-    const c = clip(41, 3);
-    timeline.enqueued(c);
-    const at = timeline.advanceTo(1.25)!;
-    expect(at.clip).toBe(c);
-    expect(at.inClip).toBeCloseTo(0.25, 12);
+    expect(timeline.anchor()).toBe(0);
+    const next = clip(41, 3);
+    timeline.enqueued(next);
+    expect(timeline.advanceTo(0.25)!.inClip).toBe(0.25);
   });
 
-  it('does not mistake a stale position for a latency tail after a seek', () => {
-    // This is the case the `cleared` flag exists for. A position event dispatched
-    // before clearBuffers() reports a point inside the buffer that was thrown
-    // away — past the anchor — and absorbing it would move the anchor forward by
-    // however far into the Utterance the seek happened, which mis-anchors the
-    // highlight by half a sentence with nothing to show it.
+  it('ignores an unowned position while the new source has no content', () => {
     const timeline = createTimeline();
     timeline.enqueued(clip(0, 4));
     timeline.advanceTo(2);
     timeline.reset();
     expect(timeline.advanceTo(2.5)).toBeNull();
     expect(timeline.anchor()).toBe(0);
-    const next = clip(80, 1);
-    timeline.enqueued(next);
+    timeline.enqueued(clip(80, 1));
     expect(timeline.advanceTo(0.2)!.inClip).toBeCloseTo(0.2, 12);
   });
 
@@ -215,5 +181,19 @@ describe('createTimeline', () => {
     timeline.enqueued(after);
     expect(timeline.advanceTo(0.15)!.clip).toBe(scene);
     expect(timeline.advanceTo(0.35)!.clip).toBe(after);
+  });
+});
+
+
+describe('a replacement native source on seek', () => {
+  it('forgets the previous source offset and ignores its retired buffer ids', () => {
+    const timeline = createTimeline();
+    timeline.enqueued({ bufferId: 'old', utterance: 0, speech: 8, gap: 0, words: null });
+    timeline.ended('old');
+    timeline.reset();
+    timeline.enqueued({ bufferId: 'new', utterance: 10, speech: 2, gap: 0, words: null });
+    timeline.ended('old');
+    expect(timeline.advanceTo(0.25)?.inClip).toBe(0.25);
+    expect(timeline.anchor()).toBe(0);
   });
 });

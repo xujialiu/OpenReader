@@ -317,6 +317,16 @@ fix (AGENTS.md).
   immediately before `check`, with `check` immediately before `onPlay()` and
   nothing else in between — `pause-gap.cjs` now does this itself rather than
   relying on a `set` done once earlier in the session.
+- **The simulator volume can reset immediately before a chapter run even when
+  the preceding check was zero.** Measured 2026-09-25 at 10:42 on `iPhone 17
+  issue63`: the first check before `play` read 60, although the device had
+  read 0 during setup. Set it back to zero, check again in the same command
+  chain, and do not play until that check succeeds; this run then stayed at
+  zero throughout.
+- **A manual-test wrapper may not be executable.** On 2026-09-25,
+  `test/manual-test/library-open.sh` returned shell `permission denied` before
+  creating its XCTest project. Invoke the existing wrapper with `bash
+  test/manual-test/library-open.sh …` when its mode lacks the executable bit.
 - **A refused XCTest can leave a recording that reads GREEN.** After the
   00:09:11 reset, the next `scroll-theme-reader.sh` on `iPhone 17 bug_2`
   refused it (exit 2) and ran no flings, which `white-flash.sh fling` reported
@@ -492,6 +502,10 @@ fix (AGENTS.md).
 
 ### The walkthrough harness (`Documents/harness.json`)
 
+- **A command's `seq` can look new but be the same number to the app.** On 2026-09-25, a probe used a nanosecond timestamp (`Date.now()`-style values around `1.79e18`) as a JSON number; JavaScript rounded successive values past `Number.MAX_SAFE_INTEGER`, so the first `play` was deduplicated and never ran. Use a small integer sequence that increments by one and never exceeds the safe-integer range.
+- **A command can be overwritten before the app polls it.** On 2026-09-25, a probe wrote `play` and immediately replaced the file with `say`; the reader polls every 250 ms and observed only `say`, so playback never started. Leave at least one polling interval between commands; this run used a one-second gap.
+- **The harness can stop accepting files after a long reading run.** On 2026-09-25, after the complete Chapter 179 run and its section-boundary drain, the reader's own status timer kept logging but new `say` and `section` files produced no answer; terminating and relaunching the app did not restore the file channel on that run. The cause was not isolated. Stop relying on the harness for the remaining interaction evidence and use real XCTest touches; do not count an unwitnessed file command.
+- **A malformed `settings` patch can turn a harness mistake into a development render error.** On 2026-09-25, a Node writer read its voice from the wrong `process.argv` slot, omitted `voice`, and the next reader render failed at `recentEnabledVoice` with `Cannot read property 'trim' of undefined`. Write a complete settings patch with a defined voice, remove the harness file, restore `settings.json` if needed, and relaunch before continuing; this was test setup corruption, not an app defect.
 - **A command does nothing.** Each command needs a new `seq`; the same `seq` twice runs once.
 - **An answer read after a fixed wait can be missing, and reads as a state.**
   Symptom (2026-09-24 00:13, #52): a probe that sent `say`, waited 600 ms and
@@ -595,6 +609,7 @@ fix (AGENTS.md).
 
 ### XCTest
 
+- **A failed UI test can leave `xcodebuild` waiting in diagnostic collection for ten minutes.** On 2026-09-25, a follow-up test failed its starting-screen precondition in 52 seconds, then `IDETestOperationsObserverDebug` waited 600 seconds for simulator diagnostics before exiting. Kill that exact `xcodebuild` PID after recording the failure, fix the starting-state guard, and rerun with a fresh result bundle.
 - **XCTest has no public way to move two fingers together.** `XCUICoordinate`
   drags one finger; `pinch` and `rotate` move two apart or around each other.
   `TwoFingerProbe.swift`'s `Fingers` plays one path per finger through
@@ -4095,3 +4110,33 @@ accepted counts and full error distribution, not only medians. Near-silent
 source windows are explicitly excluded: cancellation in the energy calculation
 and FFT roundoff had otherwise produced impossible correlation values >1.
 The corrected calculation leaves the chapter's measured growth unchanged.
+
+## Production output-driven queue (#63)
+
+After dependencies and their patch-package patches are installed:
+
+```sh
+bash test/native-audio/run.sh
+bash test/native-audio/run.sh render 1.55 OUT_DIR queue155
+uv run --with numpy --with scipy python test/manual-test/native-audio-match.py OUT_DIR queue155 1.55
+bash test/native-audio/run.sh long 1.55 OUT_DIR 35 queue155-long
+uv run --with numpy --with scipy python test/manual-test/native-long-match.py OUT_DIR queue155-long 1.55
+```
+
+This compiles the **actual production AudioBufferQueueSourceNode.cpp**, queue
+processor and WSOLA; host adapters replace session/scheduling/event delivery and
+graph ownership only. The default lifecycle check covers pause/resume, seek,
+source endpoints, complete tail output, partially and fully pre-read removals,
+new input arriving during starvation flush, and rate changes. `render` uses the
+private chapter fixture above; `long` repeats it with a bounded 64-buffer feed,
+checks every end callback and exact final content duration, and saves independent
+waveform samples. `OPENREADER_QUEUE_TEST_DIR` selects an external build directory
+for reuse. These checks supplement iOS verification; they do not emulate its
+thread scheduling, Bluetooth latency, UI or background lifecycle.
+
+The earlier `native-queue-drift.sh` and `native-pull-prototype.sh` are historical
+baseline/prototype comparisons. On a patched install, select a pristine 0.13.5
+source tree with `OPENREADER_AUDIO_SOURCE=/external/package/common/cpp`; obtain
+that tree from the exact published npm archive. They must not silently measure
+one implementation while claiming to measure the other. The production regression
+command is `test/native-audio/run.sh`.

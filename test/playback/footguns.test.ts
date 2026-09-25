@@ -118,23 +118,23 @@ describe('footgun 3: a drained queue is safe, so nothing defends against it', ()
     expect(allCode()).not.toMatch(/\.suspend\(/);
   });
 
-  it('stops the node only when the engine is disposed of', () => {
-    // Buffer exhaustion cannot schedule a stop; adding one is what breaks
-    // resumption. The only stop() is in teardown, where the owner has finished.
+  it('stops a source only for an explicit seek or disposal, never starvation', () => {
     const graph = code('audio-graph.ts');
     const stops = [...graph.matchAll(/node\.stop\(/g)];
-    expect(stops).toHaveLength(1);
-    const dispose = graph.indexOf('async dispose()');
-    expect(dispose).toBeGreaterThan(-1);
-    expect(stops[0]!.index!).toBeGreaterThan(dispose);
+    expect(stops).toHaveLength(2);
+    expect(stops[0]!.index!).toBeGreaterThan(graph.indexOf('clear()'));
+    expect(stops[0]!.index!).toBeLessThan(graph.indexOf('async dispose()'));
+    expect(stops[1]!.index!).toBeGreaterThan(graph.indexOf('async dispose()'));
+    // A replaced source cannot deliver an old position into the new timeline.
+    expect(graph).toContain('if (generation !== sourceGeneration) return;');
+    expect(code('engine.ts')).toContain('timeline.reset()');
   });
 
-  it('does not clear or stop on a seek beyond the clearBuffers a seek is', () => {
+  it('leaves source replacement to the graph on an explicit seek', () => {
     const engine = code('engine.ts');
     expect(engine).not.toMatch(/graph\?\.stop\(/);
-    // Resuming after clearBuffers would be the defensive restart footgun 3 warns
-    // about: the node stays in the playing state and an empty queue renders
-    // silence until the next buffer arrives.
+    // A seek resets the source; ordinary input starvation does not. New audio
+    // starts the replacement through enqueue, without suspending the context.
     expect(engine).toMatch(/seek\(utterance\) \{[\s\S]*?pump\(\);\s*\},/);
   });
 });
@@ -163,7 +163,7 @@ describe('footgun 6: pitchCorrection is opt-in per node', () => {
     // Provider or a wrong sample rate. ADR 0009 requires the pitch-preserving
     // stretch and this flag is the whole of it.
     const calls = [...allCode().matchAll(/createBufferQueueSource\(([^)]*)\)/g)];
-    expect(calls).toHaveLength(1);
+    expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) expect(call[1]).toContain('pitchCorrection: true');
   });
 
@@ -377,7 +377,10 @@ describe('a quiet load cues nothing until Play (#46)', () => {
   const slice = (from: string, to: string) => engine.slice(engine.indexOf(from), engine.indexOf(to, engine.indexOf(from)));
 
   it('guards the first cue, sets the flag only on a paused quiet load, and clears it on Play and on every restart', () => {
-    pin(slice('async function enqueue(', 'async function ensureGraph('), 'if (cued === null && front && !quiet) cue(front);', 'engine.ts, enqueue');
+    pin(slice('async function enqueue(', 'async function ensureGraph('), 'if ((cued === null || wasEmpty) && front && !quiet) cue(front);', 'engine.ts, enqueue');
+    const enqueue = slice('async function enqueue(', 'async function ensureGraph(');
+    pin(enqueue, 'const wasEmpty = timeline.pending() === 0;', 'engine.ts, before enqueue');
+    expect(enqueue.indexOf('const wasEmpty = timeline.pending() === 0;')).toBeLessThan(enqueue.indexOf('queueAudio(audio,'));
     pin(slice('load(list, from = 0, options = {}) {', 'extend(list) {'), 'quiet = options.quiet === true && !playing;', 'engine.ts, load');
     pin(slice('function restart(', 'function cancelVoiceSwitch('), 'quiet = false;', 'engine.ts, restart');
     const play = slice('    play() {', 'pause: pauseNow,');
