@@ -1522,6 +1522,66 @@ fix (AGENTS.md).
   `UISceneDelegateClassName`, and give the Swift class `@objc(SceneDelegate)` so
   the name in the plist resolves.
 
+### Real touches on the player's head row, and Azure's own timing (#69, #70)
+
+- **A Keychain "Save Password?" sheet outlives the screen it was typed on.**
+  Symptom: after `AzureProviderProbe`'s `testAzureConnectionWordingsAndEnable`
+  types the real key into the masked "API key" field and finishes, a system
+  sheet ("Securely store your password so it's filled automatically the next
+  time you need it.", "Not Now" / "Save") is still on screen in a later probe
+  run or a plain `simctl io screenshot`, covering whatever is under it. iOS 27
+  offers to save a secure text field's contents as a website password the same
+  as a real login form, and the offer is not tied to the screen that triggered
+  it. Fix: dismiss it before relying on a screenshot or a tap that lands where
+  it sits — try `app.buttons["Not Now"]` (seen hosted in the app's own process)
+  and, if that is not there, `XCUIApplication(bundleIdentifier:
+  "com.apple.springboard").buttons["Not Now"]` (`PlayerTouchProbe.swift`'s
+  `dismissSystemAlerts`). A plain `simctl terminate`/`launch` also clears it
+  (settings and Keychain persist; re-`open` the Document by id afterwards).
+- **A `Pressable`'s own `accessibilityLabel` is what XCTest reads, not its
+  child `Text`.** The player's Voice button carries a fixed
+  `accessibilityLabel="Choose a Voice"` (`player.tsx`) so the row is reachable
+  by a stable name regardless of which Voice is chosen; asserting
+  `voiceBtn.label == "Andrew"` after choosing Andrew fails with `("Choose a
+  Voice") is not equal to ("Andrew")` — the label never changes, only the
+  rendered text does. Read the visible name from `voiceBtn.staticTexts` (may
+  not be exposed as a separate element once the container has its own label)
+  or, better, confirm it independently through the harness's own
+  `{"do":"say"}` (`voiceInUse`) before a method that depends on it.
+- **Azure's first real clip can take longer than a short handler-probe window
+  to arrive.** A `reading.cjs`-style `onPlay()` → wait → screenshot →
+  `onPause()` probe (`play-shots.cjs`) given 4.5 s total showed the transport
+  still spinning (buffering) at both a 2.0 s and a 3.5 s shot, with no
+  highlight painted yet, on this Mac's network path to Azure's `eastasia`
+  endpoint. A second run with 9 s total and shots at 6 s/8 s landed after
+  audio had started. Give a real-provider handler-probe play at least 6–8 s
+  before the first shot rather than assuming a fixed-provider fixture's
+  timing (Fish's own fixtures in `voice-playback.cjs` reply in a couple of
+  hundred milliseconds by design and do not predict this).
+- **A paused Utterance stays marked, which is a cheaper way to catch a
+  highlight than timing a shot mid-play.** Once `{"do":"say"}` shows
+  `playing=false` at a `level=word` position, a plain `simctl io screenshot`
+  taken any time afterwards — no more playback needed — still shows the same
+  word and sentence `::highlight()` boxes, including across a live theme
+  change (`{"do":"settings","patch":{"theme":…}}`) taken while paused there.
+  Useful for comparing the two themes' highlight colours from one play: play
+  once, pause on a word, screenshot, flip the theme, screenshot again.
+- **The Library's own remembered Voice re-asserts itself over a bare
+  `{"do":"settings","patch":{"voice":""}}`.** The harness's `settings` command
+  patches the global `AppSettings`, but an open Document's player reads back
+  through `voiceInList(...) ?? knownVoice(...)`, and the shelf keeps its own
+  `voice=` per entry (visible in `{"do":"shelf"}`); the screen kept showing the
+  previously-chosen Voice's name after the patch, unchanged. Reaching the
+  "choose a Voice" empty state this way was not pursued further; it likely
+  needs the per-document entry cleared too, not only the global setting.
+- **No real Azure voice label is long enough to force the player's own
+  ellipsis.** The longest `DisplayName` across all ~691 voices the account's
+  key listed is `Xiaoshuang Dragon HD Flash Latest` (33 characters,
+  `zh-CN-Xiaoshuang:DragonHDFlashLatestNeural`); centred in the player it
+  still fits on one line (`player-centre.py`, below). Treat the truncation
+  case as code-inspection-only (`numberOfLines={1}` in `player.tsx`) unless a
+  fixture voice is fabricated for it.
+
 ### Fish Audio from the simulator
 
 - **The first Fish request after a minute or so of quiet fails with "The
