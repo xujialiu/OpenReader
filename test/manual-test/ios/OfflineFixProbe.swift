@@ -58,15 +58,25 @@ final class OfflineFixProbe: XCTestCase {
     if !alreadyEnabled {
       let field = app.textFields["API key"].exists ? app.textFields["API key"] : app.secureTextFields["API key"]
       XCTAssertTrue(field.waitForExistence(timeout: 5), "API key field not found")
-      type(key, into: field)
+      // A key left by an earlier run would have this one appended to it.
+      field.tap()
+      if field.buttons["Clear text"].exists { field.buttons["Clear text"].tap() }
+      field.typeText(key)
       capture("fish-key-entered-masked", app)
+      // A tap outside the focused field only puts the software keyboard away:
+      // the page's ScrollView keeps React Native's default
+      // `keyboardShouldPersistTaps`, so the switch would never see it (README).
+      if app.keyboards.firstMatch.exists {
+        app.staticTexts["Voice sources"].firstMatch.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3), "The keyboard stayed up")
+      }
 
       let enableSwitch = app.switches["Enable Fish Audio"]
       XCTAssertTrue(enableSwitch.waitForExistence(timeout: 3))
       enableSwitch.tap()
-      let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == 'Enabled'"), object: app.staticTexts.matching(NSPredicate(format: "label == 'Enabled' OR label == 'Testing…'")).firstMatch)
-      _ = XCTWaiter.wait(for: [enabled], timeout: 20)
-      XCTAssertTrue(app.staticTexts["Enabled"].waitForExistence(timeout: 20), "Fish Audio did not report Enabled after the connection check")
+      // The row is labelled "Enabled" whether or not it is (#48); only an
+      // enabled provider draws this note.
+      XCTAssertTrue(app.staticTexts["Turn off to edit."].waitForExistence(timeout: 20), "Fish Audio did not report Enabled after the connection check")
     }
     capture("fish-provider-enabled", app)
   }

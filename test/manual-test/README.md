@@ -1068,6 +1068,28 @@ fix (AGENTS.md).
   already tested by tapping and checking for a keyboard rather than reading
   its own `.isEnabled` (`GeneralFontsProbe`'s bracket-field check, `isLocked`
   above).
+- **`OfflineFixProbe.testConfigureFishProvider` passed with Fish Audio still
+  disabled.** Measured 2026-09-25 on a new `iPhone 17 download_slow` (iOS
+  27.0): the method passed in 74.9 s, yet its own last capture showed the
+  Enabled switch off and no footer, its element tree read `Switch …
+  label: 'Enable Fish Audio', value: 0`, the app's container had no
+  `settings.json`, and the first download stopped with "Fish Audio is
+  disabled. Choose an enabled provider." Two causes together. The tap on the
+  switch only put the software keyboard away: the provider page's ScrollView
+  keeps React Native's default `keyboardShouldPersistTaps`, so the first tap
+  outside the focused key field dismisses the keyboard and reaches nothing. A
+  simulator that shows no software keyboard never meets this, which is why the
+  method worked on older devices. And the last assertion waited for
+  `staticTexts["Enabled"]`, which since #48 is the row's own title and exists
+  whether or not the provider is enabled. Fix, now in the method: clear the
+  field before typing (a key left by an earlier run would have the new one
+  appended), put the keyboard away with a tap on the `Voice sources` header
+  (`.firstMatch`, since a React Native `Text` is listed twice), tap the switch,
+  and wait for `Turn off to edit.`, which only an enabled provider draws. The
+  rerun passed in 32.7 s and `settings.json` then held `"enabledProviders":
+  ["fish"]`. `ScrollThemeReaderProbe.testConfigureFishProviderNoRelaunch`
+  already waits for that note, so on such a device it fails rather than
+  passing; it still taps the switch with the keyboard up.
 - **`XCTNSPredicateExpectation` created right after `.tap()` can already match
   the state from *before* the tap.** The general form of the pitfall above
   "`.exists` right after a navigation tap can read `false` on a state that is
@@ -4004,6 +4026,30 @@ What it measures: time from `synthesize` to its result (the first sentence again
 
 What it cannot show: latency from the phone's network (it runs from the Mac, through whatever proxy the Mac uses); how iOS's `decodeAudioData` treats Fish's MP3 padding (ffmpeg drops the encoder delay the LAME header declares); the Blocks the renderer would find where a book's stylesheet makes a block element inline; anything about OpenAI or OpenAI-compatible voices, which return no timings and were not configured. The listening page randomises A/B per pair in the browser and keeps the order and answers in that browser's `localStorage`, so clearing it draws new orders.
 
+
+## Several sentences at once (#64, `download-concurrency.ts`)
+
+`download-concurrency.ts` measures how fast a provider answers with one, two or more requests out at once. It goes through the app's own `createProvider`, `segmentBlocks` with `splitWithSentencex`, and `downloadSpeech`, so each request is exactly what a download sends. No simulator is involved. It reads the key from the settings export as `context-probe.ts` does (the two share `node-kit.ts`), and `OUT` must be outside the repository, because it receives the owner's book text.
+
+```sh
+OUT=/path/outside/the/repo; B=~/Works/epub_books
+npx tsx test/manual-test/download-concurrency.ts "$OUT" "$B/My Vampire System/My Vampire System 1-250.epub" 1,4,2,8,5,6,10,3,1 40 20   # run.json, report.txt
+npx tsx test/manual-test/download-concurrency.ts report "$OUT"   # the table again, from run.json
+```
+
+The arguments after the book are the levels in the order they run, the sentences per level, the first long section to take sentences from, and the provider (`fish` when left out). Running 1 first and last shows whether the service slowed down during the run. Every level sends different sentences. `fetch` is wrapped to record every exchange, a retried `429` included, with the `ratelimit-*` headers, and the clips are decoded with ffmpeg only after the timed part. Results of 2026-09-25 are in `notes/NOTES_2026-09-25.md`.
+
+What it cannot show: the phone's own network, since it runs from the Mac through its proxy; the time the app spends saving each clip; how a provider other than Fish counts its limits, such as Azure's requests per minute (#40); whether Fish will enforce the limit it states.
+
+### Timing a chapter download on the simulator
+
+`download-chapter.cjs` prints `enqueued <ISO time>` as it hands the chapters to the runtime. Each saved clip is a file in `Documents/offline-narration-v2/<document>/<voice>/`, and the file's birth time is when the scheduler saved it, so the birth times time the download to the millisecond:
+
+```sh
+python3 -c 'import os,sys; d=sys.argv[1]; b=sorted(os.stat(os.path.join(d,f)).st_birthtime for f in os.listdir(d) if f.endswith((".audio",".m4a"))); print(len(b), b[0], b[-1])' VOICE_DIRECTORY
+```
+
+To compare with one request at a time: delete the chapters' audio through the runtime (`deleteDownloaded`, through `cdp.cjs`, then check that `occupied` reads 0), set Fish's entry in `AT_ONCE` in `src/offline/scheduler.ts` to 1, relaunch the app so it loads the new bundle, confirm that `requestsAtOnce('fish')` answers 1 through `cdp.cjs`, and download the same chapters again. Put the edit back afterwards. Run the download with five at once first, so that anything the service remembers could only speed up the slower run. Configure Fish in the app first with `offline-fix.sh … -only-testing:testConfigureFishProvider` (Pitfalls: before 2026-09-25 that method could pass with Fish still disabled).
 
 ## Native queue position versus actual rendered audio (#63)
 

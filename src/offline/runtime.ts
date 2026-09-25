@@ -41,7 +41,7 @@ import {
   type NarrationPlan,
   type OfflineVoice,
 } from "./model";
-import { createScheduler } from "./scheduler";
+import { createScheduler, requestsAtOnce } from "./scheduler";
 import * as pausing from "./pausing";
 import { offlineRepository } from "./database";
 import { audioKey, voiceKey } from "./catalog-keys";
@@ -449,6 +449,8 @@ const scheduler = createScheduler({
     if (!loaded) throw new Error("Selected chapter metadata is missing.");
     return loaded;
   },
+  // The download's own voice decides, not the one reading now: a task keeps the voice it started with.
+  concurrency: (task) => requestsAtOnce(task.voice.provider),
   // One join per run, so resuming a long task does not re-check every saved text.
   completed: async (task) =>
     new Set(

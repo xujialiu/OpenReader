@@ -48,6 +48,8 @@ const args = JSON.stringify({ documentId, title, provider, voice, chapters });
   }
   await evaluate(`(() => { const a = ${args}; ${runtime}.enqueue(a.documentId, { provider: a.provider, voice: a.voice, label: a.voice }, a.chapters); return true; })()`);
   const started = Date.now();
+  // To the millisecond, for comparing with the saved clips' file times.
+  console.log(`enqueued ${new Date(started).toISOString()}`);
   for (;;) {
     await delay(3000);
     const state = JSON.parse(await evaluate(`(() => { const a = ${args}; const r = ${runtime}; const t = r.downloadTasks(a.documentId).find(t => t.voice.provider === a.provider && t.voice.voice === a.voice); return JSON.stringify({ state: t && t.state, error: t && t.error, failed: t && t.failed, bytes: r.occupied(a.documentId), store: r.downloadError() }); })()`));

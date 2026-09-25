@@ -56,6 +56,10 @@ Within a document, chapters are written from the top of the list down, whatever 
 
 Documents are prepared in the order their downloads were added, one document at a time. Pausing every chapter of one lets the next proceed. The drawer distinguishes downloading from queued work: the chapter being written has a growing arc, and the rest of the download has empty rings. Each download keeps the voice it started with even if the owner subsequently changes the playback voice.
 
+While a chapter is being written, several of its sentences are asked for at once, as many as the speech service says it takes at a time: five for Fish Audio. The service works on them side by side, so a chapter is ready about five times sooner than when every sentence waited for the one before it. Two chapters of a long web novel took just under two minutes, against more than nine one sentence at a time. Nothing else about a download changes. Chapters are still written one at a time from the top of the list. Pausing a chapter, a failure or a lost connection stops the chapter as before, and sentences already on their way are kept when they arrive.
+
+Asking Fish Audio for more at once was turned down. It did answer eight and ten, but that is more than it says it takes, and if it began refusing the extra requests, a reading started during a download would wait behind the refusals. Writing several chapters at once was turned down too: the drawer would show more than one chapter being written, only to save the short wait at the end of each chapter. Other speech services are still asked for one sentence at a time. Azure's free tier counts how many requests arrive each minute, and the others have not been measured.
+
 The desired experience is continued preparation while the screen is locked or another app is open. The extent of that support still needs verification. If the system interrupts preparation, progress is retained and the owner can continue after reopening the app. The app does not promise continued preparation after a force quit, and must not describe interrupted work as actively downloading.
 
 ## Network and failures

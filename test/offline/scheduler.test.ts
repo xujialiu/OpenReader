@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createScheduler } from '../../src/offline/scheduler';
+import { createScheduler, requestsAtOnce } from '../../src/offline/scheduler';
 import { navigationPlan, withPreparedSection, type DownloadTask, type NarrationPlan } from '../../src/offline/model';
 import { SynthesisError } from '../../src/core/providers/errors';
 
@@ -237,4 +237,126 @@ describe('the order chapters are written in, and chapters paused one by one (#56
     expect(fetch.mock.calls.map((c) => c[1])).toEqual(['B1']);
     expect(task.state).toBe('done');
   });
+});
+
+describe('several of a chapter\'s sentences at once (#64)', () => {
+  const voice = { provider: 'fish' as const, voice: 'A', label: 'A' };
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  /** A request that takes `delay` ticks, then does `effect`, which may throw; every start and end is logged in order. */
+  function requests(delay: (text: string) => number, effect?: (task: DownloadTask, text: string) => void) {
+    const events: string[] = [];
+    let out = 0;
+    let most = 0;
+    const request = async (task: DownloadTask, text: string) => {
+      events.push(`start ${text}`); most = Math.max(most, ++out);
+      try { for (let i = 0; i < delay(text); i++) await tick(); effect?.(task, text); }
+      finally { out--; events.push(`end ${text}`); }
+    };
+    return { events, request, most: () => most, starts: () => events.filter((e) => e.startsWith('start')) };
+  }
+  /** Chapter a holds A1…A`size`, chapter b holds B1; up to `at` requests out at once. */
+  function book(size: number, at: number, request: (task: DownloadTask, text: string) => Promise<void>,
+    { env = { online: true, allowed: true }, texts, exists }: { env?: { online: boolean; allowed: boolean }; texts?: string[]; exists?: (text: string) => void } = {}) {
+    const plan: NarrationPlan = { version: 2, chapters: [
+      { id: 'a', title: 'A', depth: 0, parent: null, texts: texts ?? Array.from({ length: size }, (_, i) => `A${i + 1}`) },
+      { id: 'b', title: 'B', depth: 0, parent: null, texts: ['B1'] },
+    ] };
+    const task: DownloadTask = { id: 't', document: 'book', voice, chapters: ['a', 'b'], state: 'queued', error: null, failed: [] };
+    const saved = new Set<string>();
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => env.online, allowed: () => env.allowed,
+      exists: (_, text) => { exists?.(text); return saved.has(text); }, fetch: async (t, text) => { await request(t, text); saved.add(text); },
+      concurrency: () => at, wait: async () => {} });
+    return { task, saved, scheduler };
+  }
+
+  it('keeps as many of the chapter\'s requests out as it may, and never more', async () => {
+    const r = requests((text) => (Number(text.slice(1)) % 3) + 1);
+    const f = book(7, 3, r.request);
+    await f.scheduler.run();
+    expect(r.most()).toBe(3);
+    expect([...f.saved].sort()).toEqual(['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'B1']);
+    expect(f.task.state).toBe('done');
+  });
+  it('sends the next chapter\'s first request only once the last of this chapter\'s has settled', async () => {
+    const r = requests((text) => (text === 'A1' ? 5 : 1));
+    const f = book(4, 3, r.request);
+    await f.scheduler.run();
+    expect(r.events.indexOf('start B1')).toBeGreaterThan(r.events.indexOf('end A1'));
+    expect(f.task.state).toBe('done');
+  });
+  it('starts none of a paused chapter\'s texts, keeps what its requests out bring, and goes on to the next', async () => {
+    const r = requests(() => 1, (task, text) => { if (text === 'A2') { task.paused = ['a']; r.events.push('paused'); } });
+    const f = book(6, 3, r.request);
+    await f.scheduler.run();
+    const started = r.starts().filter((e) => e.startsWith('start A'));
+    expect(r.events.slice(r.events.indexOf('paused')).filter((e) => e.startsWith('start A'))).toEqual([]);
+    expect([...f.saved].filter((text) => text.startsWith('A'))).toHaveLength(started.length);
+    expect(f.saved.has('B1')).toBe(true);
+    expect(f.task.state).toBe('paused');
+    expect(f.task.failed).toEqual([]);
+  });
+  it('meets the first failure once, starts nothing after it, and lets the requests out settle', async () => {
+    const r = requests((text) => (text === 'A2' ? 1 : 3), (_, text) => { if (text === 'A2') throw new SynthesisError('auth', 'Refused.'); });
+    const f = book(6, 3, r.request);
+    await f.scheduler.run();
+    expect(r.starts()).toEqual(['start A1', 'start A2', 'start A3']);
+    expect(r.events.filter((e) => e.startsWith('end'))).toHaveLength(3);
+    expect(f.task.state).toBe('blocked');
+    expect(f.task.error).toBe('Refused.');
+  });
+  it('fails the chapter once its retries are spent, and starts the next after its other requests settle', async () => {
+    const r = requests((text) => (text === 'A3' ? 4 : 1), (_, text) => { if (text === 'A1') throw new SynthesisError('network'); });
+    const f = book(4, 3, r.request);
+    await f.scheduler.run();
+    expect(r.starts().filter((e) => e === 'start A1')).toHaveLength(3);
+    expect(f.task.failed).toEqual(['a']);
+    expect(r.events.indexOf('start B1')).toBeGreaterThan(r.events.indexOf('end A3'));
+    expect(f.saved.has('B1')).toBe(true);
+  });
+  it('waits for the network when it goes with several requests out, and records no failure', async () => {
+    const env = { online: true, allowed: true };
+    const r = requests((text) => (text === 'A1' ? 1 : 2), (_, text) => { if (text === 'A1') { env.online = false; throw new SynthesisError('network'); } });
+    const f = book(6, 3, r.request, { env });
+    await f.scheduler.run();
+    expect(r.starts()).toEqual(['start A1', 'start A2', 'start A3']);
+    expect(f.task.state).toBe('waiting');
+    expect(f.task.failed).toEqual([]);
+  });
+  it('yields to playback with several requests out, and keeps what they bring', async () => {
+    const env = { online: true, allowed: true };
+    const r = requests(() => 1, (_, text) => { if (text === 'A1') env.allowed = false; });
+    const f = book(6, 3, r.request, { env });
+    await f.scheduler.run();
+    expect(r.starts()).toEqual(['start A1', 'start A2', 'start A3']);
+    expect([...f.saved].sort()).toEqual(['A1', 'A2', 'A3']);
+    expect(f.task.state).toBe('interrupted');
+  });
+  it('leaves the chapter only after its requests out have settled when the store fails', async () => {
+    const r = requests(() => 3);
+    const f = book(5, 3, r.request, { exists: (text) => { if (text === 'A4') throw new Error('The catalogue is gone.'); } });
+    await f.scheduler.run();
+    expect(r.starts()).toEqual(['start A1', 'start A2', 'start A3']);
+    expect(r.events.filter((e) => e.startsWith('end'))).toEqual(['end A1', 'end A2', 'end A3']);
+    expect(f.task.state).toBe('blocked');
+    expect(f.task.error).toBe('The catalogue is gone.');
+  });
+  it('sends nothing for a text whose check was out when its chapter was paused', async () => {
+    const r = requests(() => 1);
+    const pause: { task?: DownloadTask } = {};
+    const f = book(3, 1, r.request, { exists: (text) => { if (text === 'A2') pause.task!.paused = ['a']; } });
+    pause.task = f.task;
+    await f.scheduler.run();
+    expect(r.starts()).toEqual(['start A1', 'start B1']);
+  });
+  it('asks for a text the chapter holds twice once', async () => {
+    const r = requests(() => 1);
+    const f = book(0, 3, r.request, { texts: ['Same.', 'Other.', 'Same.'] });
+    await f.scheduler.run();
+    expect(r.starts().sort()).toEqual(['start B1', 'start Other.', 'start Same.']);
+  });
+});
+
+it('asks Fish Audio for five sentences at once and every other provider for one', () => {
+  expect(requestsAtOnce('fish')).toBe(5);
+  for (const provider of ['azure', 'speechify', 'openai-official', 'compatible', 'local'] as const) expect(requestsAtOnce(provider)).toBe(1);
 });

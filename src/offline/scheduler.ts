@@ -1,5 +1,19 @@
 import { SynthesisError } from '../core/providers/errors';
+import type { ProviderId } from '../core/providers/types';
 import type { Chapter, DownloadTask, NarrationPlan } from './model';
+
+/**
+ * How many of a chapter's sentences a download asks one provider for at once
+ * (#64). Fish Audio's replies carry `ratelimit-limit-concurrency: 5`, the limit
+ * its documentation gives an account that has spent under $100, and five at
+ * once came back 5.3 times as fast as one, each as quickly as when alone
+ * (notes/NOTES_2026-09-25.md, 13:27). Every other provider is asked one at a
+ * time, as before: Azure's free tier counts requests per minute (#40),
+ * Speechify's provider sends its own requests one after another, and the rest
+ * were not measured.
+ */
+const AT_ONCE: Partial<Record<ProviderId, number>> = { fish: 5 };
+export const requestsAtOnce = (provider: ProviderId): number => AT_ONCE[provider] ?? 1;
 
 export interface SchedulerDeps {
   tasks(): DownloadTask[];
@@ -13,11 +27,17 @@ export interface SchedulerDeps {
   prepare?(task: DownloadTask, chapter: Chapter): Promise<Chapter>;
   /** Chapters whose every text is already saved for the task's voice, asked once per run so resuming skips them without loading their text. */
   completed?(task: DownloadTask): Promise<ReadonlySet<string>>;
+  /** How many of a chapter's texts may be requested at once; one when absent. */
+  concurrency?(task: DownloadTask): number;
   wait(ms: number): Promise<void>;
 }
 
-/** One worker, with durable progress owned by stored clips. Every await is a
- * cancellation boundary; removing a task never resurrects it on completion.
+/** One pass at a time, with durable progress owned by stored clips. Every
+ * await is a cancellation boundary; removing a task never resurrects it on
+ * completion.
+ *
+ * Chapters are written one at a time; inside the one being written, up to
+ * `concurrency` of its texts are requested at once (#64).
  *
  * A document's chapters are written in the order of its list, which is the
  * plan's, whatever order they were chosen in, and the next one is chosen afresh
@@ -28,6 +48,53 @@ export interface SchedulerDeps {
 export function createScheduler(deps: SchedulerDeps) {
   let running = false;
   const active = (task: DownloadTask) => deps.tasks().includes(task) && ['downloading', 'preparing'].includes(task.state);
+  /**
+   * One chapter's texts, with up to `concurrency` requests out at once (#64);
+   * a text the chapter holds twice is asked for once. Before each text every
+   * worker checks what the single loop checked: still the chapter's turn, the
+   * scheduler allowed, the device online. The first worker to stop or fail
+   * stops the others taking more, and this settles only when every request
+   * out has settled, so the next chapter never overlaps this one and a failure
+   * is met once. Whether every text went through; rejects with the first
+   * failure.
+   */
+  async function write(task: DownloadTask, chapter: string, texts: readonly string[], here: () => boolean): Promise<boolean> {
+    const queue = [...new Set(texts)];
+    let taken = 0;
+    let whole = true;
+    /** Failures in the order they came; the first is the chapter's. */
+    const failures: unknown[] = [];
+    /** Still this chapter's turn, and no worker has stopped. */
+    const going = () => {
+      if (!here() || !deps.allowed()) whole = false;
+      return whole && !failures.length;
+    };
+    // A worker never rejects: what it throws is recorded, so every worker has
+    // returned before the chapter's failure is handled.
+    const worker = async () => {
+      try {
+        while (taken < queue.length && going()) {
+          if (!deps.connected()) { task.state = 'waiting'; task.error = 'No network connection, waiting to reconnect'; whole = false; return; }
+          const text = queue[taken++];
+          if (await deps.exists(task, text)) continue;
+          if (!going()) return;
+          for (let attempt = 0; ; attempt++) {
+            try { await deps.fetch(task, text, chapter); break; }
+            catch (error) {
+              if (!active(task) || !deps.connected() || !(error instanceof SynthesisError) || !error.retriable || attempt >= 2) throw error;
+              await deps.wait(1000 * (attempt + 1));
+              if (!going()) return;
+            }
+          }
+          await deps.changed();
+        }
+      } catch (error) { failures.push(error); }
+    };
+    const width = Math.max(1, Math.min(queue.length, Math.floor(deps.concurrency?.(task) ?? 1) || 1));
+    await Promise.all(Array.from({ length: width }, worker));
+    if (failures.length) throw failures[0];
+    return whole;
+  }
   async function run() {
     if (running || !deps.allowed()) return;
     running = true;
@@ -66,7 +133,6 @@ export function createScheduler(deps: SchedulerDeps) {
           /** Still this chapter's turn: the task runs, and the chapter is in it and not paused. */
           const here = () => active(task) && task.chapters.includes(chapterId) && !task.paused?.includes(chapterId);
           task.current = chapterId;
-          let whole = true;
           try {
             if (chapter.prepared === false) {
               if (!deps.prepare) throw new Error('Chapter text is not prepared.');
@@ -78,22 +144,7 @@ export function createScheduler(deps: SchedulerDeps) {
             }
             if (deps.load) chapter = await deps.load(task, chapter);
             if (!here()) continue;
-            texts: for (const text of chapter.texts) {
-              if (!here() || !deps.allowed()) { whole = false; break; }
-              if (!deps.connected()) { task.state = 'waiting'; task.error = 'No network connection, waiting to reconnect'; whole = false; break; }
-              if (await deps.exists(task, text)) continue;
-              if (!here() || !deps.allowed()) { whole = false; break; }
-              for (let attempt = 0; ; attempt++) {
-                try { await deps.fetch(task, text, chapterId); break; }
-                catch (error) {
-                  if (!active(task) || !deps.connected() || !(error instanceof SynthesisError) || !error.retriable || attempt >= 2) throw error;
-                  await deps.wait(1000 * (attempt + 1));
-                  if (!here() || !deps.allowed()) { whole = false; break texts; }
-                }
-              }
-              await deps.changed();
-            }
-            if (whole) finished.add(chapterId);
+            if (await write(task, chapterId, chapter.texts, here)) finished.add(chapterId);
           } catch (error) {
             if (!active(task)) break;
             // Paused or removed while its request was out: that failure is no longer this chapter's to record.
