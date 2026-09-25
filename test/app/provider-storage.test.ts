@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, selectVoice } from '../../src/app/settings';
+import { DEFAULT_SETTINGS, SENTENCES_AT_ONCE, selectVoice } from '../../src/app/settings';
 import { parseSettings, readSettings, writeSettings } from '../../src/app/settings-storage';
 import { saveProviderEdit, flushProviderEdits } from '../../src/app/provider-edits';
 const disk = vi.hoisted(() => new Map<string, string>());
@@ -41,6 +41,19 @@ describe('local settings persistence', () => {
       .toEqual({ sentenceMs: 0, paragraphMs: 200 });
     expect(parseSettings({ version: 1, settings: { pauses: { sentenceMs: '300', paragraphMs: -200 } } }).pauses)
       .toEqual({ sentenceMs: 0, paragraphMs: 200 });
+  });
+  it('starts Fish Audio at five sentences at once and every other Provider at one, and keeps a choice across a reload (#64)', () => {
+    expect(parseSettings({ version: 1, settings: {} }).sentencesAtOnce)
+      .toEqual({ 'openai-official': 1, compatible: 1, azure: 1, speechify: 1, fish: 5, local: 1 });
+    const settings = { ...DEFAULT_SETTINGS, sentencesAtOnce: { ...DEFAULT_SETTINGS.sentencesAtOnce, fish: 8, azure: 2 } };
+    writeSettings(settings);
+    expect(readSettings().sentencesAtOnce).toEqual(settings.sentencesAtOnce);
+  });
+  it('reads a number of sentences the menu does not offer as that Provider’s default', () => {
+    // Zero would stop every download; eleven and a string are not on the menu, and a Provider this build lacks is dropped.
+    const read = parseSettings({ version: 1, settings: { sentencesAtOnce: { fish: 0, azure: 11, local: '3', compatible: 2.5, retired: 4 } } }).sentencesAtOnce;
+    expect(read).toEqual({ 'openai-official': 1, compatible: 1, azure: 1, speechify: 1, fish: 5, local: 1 });
+    expect(SENTENCES_AT_ONCE).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
   it('keeps a Font Size on the ladder and drops anything else, including the percentages of the build before', () => {
     // The app has not been released, so a percentage saved by the previous build is

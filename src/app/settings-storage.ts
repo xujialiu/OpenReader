@@ -1,7 +1,7 @@
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
 import { FONT_SIZES, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
-import { DEFAULT_SETTINGS, isProviderId, PARAGRAPH_PAUSES_MS, SENTENCE_PAUSES_MS, type AppSettings, type DocumentVoice } from './settings';
+import { DEFAULT_SETTINGS, isProviderId, PARAGRAPH_PAUSES_MS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type DocumentVoice } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -41,6 +41,13 @@ function readPause(value: unknown, offered: readonly number[], fallback: number)
   return offered.find((ms) => ms === value) ?? fallback;
 }
 
+/** Each Provider's number of sentences at once if the menu offers it, else that Provider's default (#64). */
+function readSentencesAtOnce(value: unknown): AppSettings['sentencesAtOnce'] {
+  const saved = object(value);
+  return Object.fromEntries(Object.entries(DEFAULT_SETTINGS.sentencesAtOnce).map(([id, fallback]) =>
+    [id, SENTENCES_AT_ONCE.find((n) => n === saved[id]) ?? fallback])) as AppSettings['sentencesAtOnce'];
+}
+
 /** Explicit projection also prevents legacy credential fields from being persisted. */
 export function parseSettings(value: unknown): AppSettings {
   const root = object(value);
@@ -78,6 +85,7 @@ export function parseSettings(value: unknown): AppSettings {
       sentenceMs: readPause(pauses.sentenceMs, SENTENCE_PAUSES_MS, DEFAULT_SETTINGS.pauses.sentenceMs),
       paragraphMs: readPause(pauses.paragraphMs, PARAGRAPH_PAUSES_MS, DEFAULT_SETTINGS.pauses.paragraphMs),
     },
+    sentencesAtOnce: readSentencesAtOnce(data.sentencesAtOnce),
     appearance: {
       font: readFont(appearance.font),
       size: readSize(appearance.size),

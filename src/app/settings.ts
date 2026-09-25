@@ -257,6 +257,16 @@ export interface AppSettings {
    */
   pauses: GapSettings;
   /**
+   * How many of a chapter's sentences a download asks each Provider for at
+   * once (#64): the provider's own page, **Sentences at once**. Per Provider
+   * because the limit is the service's — Fish Audio states five for an account
+   * that has spent under $100, Azure's free tier counts requests per minute —
+   * and one number for all would raise the ones that refuse along with the one
+   * that does not. Read by a download as each chapter starts, never by
+   * playback, so not in `engineIdentity`.
+   */
+  sentencesAtOnce: Readonly<Record<ProviderId, number>>;
+  /**
    * The **Sync Folder** (CONTEXT.md, ADR 0003): where it is and who this device
    * is to it, and whether sync is on. The password is not here — it is a
    * Keychain entry (`src/keys/`) — and the Device Name is not either, being a
@@ -309,6 +319,26 @@ export const THEME_LABELS: Readonly<Record<ThemeSetting, string>> = {
  */
 export const SENTENCE_PAUSES_MS: readonly number[] = [0, 50, 100, 150, 200, 300, 400, 500, 750, 1000];
 export const PARAGRAPH_PAUSES_MS: readonly number[] = [0, 100, 200, 300, 400, 500, 750, 1000, 1500, 2000];
+
+/**
+ * What **Sentences at once** offers (#64): one to ten, where ten is the most
+ * measured — Fish Audio refused none of 40 at ten, and eight was no slower
+ * (notes/NOTES_2026-09-25.md, 13:27).
+ */
+export const SENTENCES_AT_ONCE: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+/**
+ * Where each Provider starts. Fish Audio's replies carry
+ * `ratelimit-limit-concurrency: 5`, the limit its documentation gives an
+ * account that has spent under $100, and five at once came back 5.3 times as
+ * fast as one, each as quickly as when alone (notes/NOTES_2026-09-25.md,
+ * 13:27). Every other Provider starts at one: Azure's free tier counts
+ * requests per minute (#40), Speechify's provider sends its own requests one
+ * after another, and the rest were not measured.
+ */
+export const DEFAULT_SENTENCES_AT_ONCE: Readonly<Record<ProviderId, number>> = {
+  'openai-official': 1, compatible: 1, azure: 1, speechify: 1, fish: 5, local: 1,
+};
 
 /**
  * The theme the app actually paints.
@@ -367,6 +397,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 0 and 200 ms, which is what a reading sounded like before either was a
   // setting (`gap.ts`).
   pauses: DEFAULT_GAP,
+  sentencesAtOnce: DEFAULT_SENTENCES_AT_ONCE,
   // Off, with nothing filled in: sync starts the moment the owner names a
   // folder and turns it on, and not before (issue #20).
   sync: { url: '', username: '', enabled: false },

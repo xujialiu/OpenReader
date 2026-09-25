@@ -5,18 +5,22 @@
  * first, its label fixed at `Enabled` with what is happening now on the line
  * under it, `Test connection` beside it in the same card, and the outcome of
  * either under that card. Enabling and testing end in the same result, so the
- * result sits directly beneath both. The fields follow as rows of their own card.
+ * result sits directly beneath both. The fields follow as rows of their own card,
+ * and then Downloads (#64), which the switch does not freeze.
  */
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import type { ProviderId } from '../core/providers/types';
-import { ActionRow, FieldRow, Footnote, HeaderButton, SettingsGroup, SettingsPage, SwitchRow, TextRow } from './controls';
+import { ActionRow, FieldRow, Footnote, HeaderButton, SettingsGroup, SettingsPage, SwitchRow, TextRow, ValueRow, type Choice } from './controls';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
-import { headersAreOffered, keyIsOffered, PROVIDER_LABELS } from './settings';
+import { headersAreOffered, keyIsOffered, PROVIDER_LABELS, SENTENCES_AT_ONCE } from './settings';
 import { useProviderKey, useGatewayHeaders, type ProviderSecret } from './use-provider-secrets';
 import { useSecretInput } from './use-secret-input';
 import { useProviderConnection } from './use-provider-connection';
+
+/** The Sentences at once menu (#64): the bare number, as the pause menus show theirs. */
+const AT_ONCE_CHOICES: readonly Choice<number>[] = SENTENCES_AT_ONCE.map((value) => ({ value, label: String(value) }));
 
 /**
  * A credential as a field row. Its error, if saving or reading it failed, is
@@ -74,6 +78,12 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
           ? { ...previous, openai: { model: next } } : { ...previous, compatible: { ...previous.compatible, model: next } })} /> : null}
       {headersAreOffered(id) ? <SecretField key={`${id}:headers`} id={id} label="Extra headers" secret={headers} locked={locked}
         placeholder="Name: value; Name: value" onError={reportSecretError} /> : null}
+    </SettingsGroup>
+    {/* Never frozen: it changes how fast a download goes and nothing about the
+        connection the switch above checked. */}
+    <SettingsGroup title="Downloads">
+      <ValueRow label="Sentences at once" choices={AT_ONCE_CHOICES} chosen={settings.sentencesAtOnce[id]}
+        onChoose={(count) => setSettings((previous) => ({ ...previous, sentencesAtOnce: { ...previous.sentencesAtOnce, [id]: count } }))} />
     </SettingsGroup>
     {id === 'fish' ? <SettingsGroup title="Voice sources">
       {([['includeOfficial', 'Official voices'], ['includeOwn', 'Your voices'], ['includeManual', 'Manual voices']] as const).map(([source, label]) =>

@@ -1,19 +1,5 @@
 import { SynthesisError } from '../core/providers/errors';
-import type { ProviderId } from '../core/providers/types';
 import type { Chapter, DownloadTask, NarrationPlan } from './model';
-
-/**
- * How many of a chapter's sentences a download asks one provider for at once
- * (#64). Fish Audio's replies carry `ratelimit-limit-concurrency: 5`, the limit
- * its documentation gives an account that has spent under $100, and five at
- * once came back 5.3 times as fast as one, each as quickly as when alone
- * (notes/NOTES_2026-09-25.md, 13:27). Every other provider is asked one at a
- * time, as before: Azure's free tier counts requests per minute (#40),
- * Speechify's provider sends its own requests one after another, and the rest
- * were not measured.
- */
-const AT_ONCE: Partial<Record<ProviderId, number>> = { fish: 5 };
-export const requestsAtOnce = (provider: ProviderId): number => AT_ONCE[provider] ?? 1;
 
 export interface SchedulerDeps {
   tasks(): DownloadTask[];
@@ -27,7 +13,7 @@ export interface SchedulerDeps {
   prepare?(task: DownloadTask, chapter: Chapter): Promise<Chapter>;
   /** Chapters whose every text is already saved for the task's voice, asked once per run so resuming skips them without loading their text. */
   completed?(task: DownloadTask): Promise<ReadonlySet<string>>;
-  /** How many of a chapter's texts may be requested at once; one when absent. */
+  /** How many of a chapter's texts may be requested at once; one when absent. Read as each chapter starts. */
   concurrency?(task: DownloadTask): number;
   wait(ms: number): Promise<void>;
 }

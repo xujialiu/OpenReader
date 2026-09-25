@@ -126,6 +126,8 @@ export const VOICE_MATCH: Record<string, (id: string, label: string, locale: str
   fish: (id) => id.includes('179b5cc736974d96913c7849d0bb68c5'),
   speechify: (_, label, locale) => locale.startsWith('en-US') && /^george\b/i.test(label),
   local: (id) => id.includes('af_bella'),
+  // Chatterbox lists every voice as `mul`, so none is found by locale.
+  compatible: (id) => id === 'Emily.wav',
 };
 
 export type Pcm = { samples: Int16Array; rate: number };

@@ -42,10 +42,12 @@ type Run = { provider: string; voice: string; book: string; levels: number[]; pe
 
 const HEADERS = { limit: 'ratelimit-limit-concurrency', current: 'ratelimit-current-concurrency', datacenter: 'x-fishaudio-datacenter' };
 
-/** The text a request body carried, where the provider sent JSON with a `text`; Fish's has one. */
+/** The text a request body carried, where the provider sent JSON with a `text` (Fish) or an `input` (Speechify, OpenAI and the servers that copy it). Azure speaks over a WebSocket, so its exchanges are not seen. */
 function bodyText(init: RequestInit | undefined): string {
   try {
-    return typeof init?.body === 'string' ? String((JSON.parse(init.body) as { text?: unknown }).text ?? '') : '';
+    if (typeof init?.body !== 'string') return '';
+    const body = JSON.parse(init.body) as { text?: unknown; input?: unknown };
+    return String(body.text ?? body.input ?? '');
   } catch {
     return '';
   }

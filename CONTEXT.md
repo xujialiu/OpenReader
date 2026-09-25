@@ -99,6 +99,11 @@ chapters the owner chose, worked through one chapter at a time. Each chapter in
 it is waiting its turn, being written, paused, failed or saved.
 _Avoid_: task, job, queue
 
+**Sentences at once**:
+How many of a chapter's sentences a Download asks one Provider for at the
+same time. Chosen per Provider.
+_Avoid_: concurrency, parallelism, threads, batch size
+
 **Word Timing**:
 Where one spoken word falls inside a clip, and which characters of the
 utterance it corresponds to. A clip either comes with them or does not; they

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createScheduler, requestsAtOnce } from '../../src/offline/scheduler';
+import { createScheduler } from '../../src/offline/scheduler';
 import { navigationPlan, withPreparedSection, type DownloadTask, type NarrationPlan } from '../../src/offline/model';
 import { SynthesisError } from '../../src/core/providers/errors';
 
@@ -254,8 +254,8 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     };
     return { events, request, most: () => most, starts: () => events.filter((e) => e.startsWith('start')) };
   }
-  /** Chapter a holds A1…A`size`, chapter b holds B1; up to `at` requests out at once. */
-  function book(size: number, at: number, request: (task: DownloadTask, text: string) => Promise<void>,
+  /** Chapter a holds A1…A`size`, chapter b holds B1; up to `at` requests out at once, asked as each chapter starts. */
+  function book(size: number, at: number | (() => number), request: (task: DownloadTask, text: string) => Promise<void>,
     { env = { online: true, allowed: true }, texts, exists }: { env?: { online: boolean; allowed: boolean }; texts?: string[]; exists?: (text: string) => void } = {}) {
     const plan: NarrationPlan = { version: 2, chapters: [
       { id: 'a', title: 'A', depth: 0, parent: null, texts: texts ?? Array.from({ length: size }, (_, i) => `A${i + 1}`) },
@@ -265,7 +265,7 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     const saved = new Set<string>();
     const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => env.online, allowed: () => env.allowed,
       exists: (_, text) => { exists?.(text); return saved.has(text); }, fetch: async (t, text) => { await request(t, text); saved.add(text); },
-      concurrency: () => at, wait: async () => {} });
+      concurrency: () => (typeof at === 'number' ? at : at()), wait: async () => {} });
     return { task, saved, scheduler };
   }
 
@@ -348,15 +348,20 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     await f.scheduler.run();
     expect(r.starts()).toEqual(['start A1', 'start B1']);
   });
+  it('asks how many at once as each chapter starts, so a change made during one applies from the next (#64)', async () => {
+    let width = 1;
+    const asked: number[] = [];
+    const r = requests(() => 1, (_, text) => { if (text === 'A2') width = 3; });
+    const f = book(6, () => { asked.push(width); return width; }, r.request);
+    await f.scheduler.run();
+    expect(r.most()).toBe(1);
+    expect(asked).toEqual([1, 3]);
+    expect(f.task.state).toBe('done');
+  });
   it('asks for a text the chapter holds twice once', async () => {
     const r = requests(() => 1);
     const f = book(0, 3, r.request, { texts: ['Same.', 'Other.', 'Same.'] });
     await f.scheduler.run();
     expect(r.starts().sort()).toEqual(['start B1', 'start Other.', 'start Same.']);
   });
-});
-
-it('asks Fish Audio for five sentences at once and every other provider for one', () => {
-  expect(requestsAtOnce('fish')).toBe(5);
-  for (const provider of ['azure', 'speechify', 'openai-official', 'compatible', 'local'] as const) expect(requestsAtOnce(provider)).toBe(1);
 });
