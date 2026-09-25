@@ -6,7 +6,8 @@
  * under it, `Test connection` beside it in the same card, and the outcome of
  * either under that card. Enabling and testing end in the same result, so the
  * result sits directly beneath both. The fields follow as rows of their own card,
- * and then Downloads (#64), which the switch does not freeze.
+ * then Fish Audio's voice sources, and Downloads (#64) last on every page, which
+ * the switch does not freeze.
  */
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
@@ -23,7 +24,9 @@ import { useProviderConnection } from './use-provider-connection';
 const AT_ONCE_CHOICES: readonly Choice<number>[] = SENTENCES_AT_ONCE.map((value) => ({ value, label: String(value) }));
 
 /**
- * A credential as a field row. Its error, if saving or reading it failed, is
+ * A credential as a field row, masked until its eye is tapped — the API key
+ * and the Extra headers alike, since headers carry a gateway's credential and
+ * are as hard to check by eye once typed. Its error, if saving or reading it failed, is
  * handed up rather than drawn here: it is said under the fields' card, named
  * after the field it is about (design 0041).
  */
@@ -37,8 +40,8 @@ function SecretField({ id, label, secret, locked, placeholder, onError }: {
   useEffect(() => { onError(label, input.error); }, [label, input.error, onError]);
   return <FieldRow label={label} value={input.value} onChangeText={input.change} secure={!revealed} editable={input.editable}
     placeholder={placeholder}
-    accessory={label === 'API key' ? <HeaderButton label={revealed ? 'Hide API key' : 'Show API key'}
-      icon={revealed ? 'eyeOff' : 'eye'} onPress={() => setRevealed((previous) => !previous)} /> : undefined} />;
+    accessory={<HeaderButton label={`${revealed ? 'Hide' : 'Show'} ${label}`}
+      icon={revealed ? 'eyeOff' : 'eye'} onPress={() => setRevealed((previous) => !previous)} />} />;
 }
 
 export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
@@ -79,12 +82,6 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
       {headersAreOffered(id) ? <SecretField key={`${id}:headers`} id={id} label="Extra headers" secret={headers} locked={locked}
         placeholder="Name: value; Name: value" onError={reportSecretError} /> : null}
     </SettingsGroup>
-    {/* Never frozen: it changes how fast a download goes and nothing about the
-        connection the switch above checked. */}
-    <SettingsGroup title="Downloads">
-      <ValueRow label="Sentences at once" choices={AT_ONCE_CHOICES} chosen={settings.sentencesAtOnce[id]}
-        onChoose={(count) => setSettings((previous) => ({ ...previous, sentencesAtOnce: { ...previous.sentencesAtOnce, [id]: count } }))} />
-    </SettingsGroup>
     {id === 'fish' ? <SettingsGroup title="Voice sources">
       {([['includeOfficial', 'Official voices'], ['includeOwn', 'Your voices'], ['includeManual', 'Manual voices']] as const).map(([source, label]) =>
         <SwitchRow key={source} label={label} value={settings.fish[source]} disabled={locked}
@@ -93,5 +90,12 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
         placeholder="IDs or links, separated by spaces or commas"
         onChangeText={(voices) => setSettings((previous) => ({ ...previous, fish: { ...previous.fish, voices } }))} /> : null}
     </SettingsGroup> : null}
+    {/* Last on every page, Fish Audio's included: it is how the provider is
+        used rather than how it is reached. Never frozen: it changes how fast a
+        download goes and nothing about the connection the switch checked. */}
+    <SettingsGroup title="Downloads">
+      <ValueRow label="Sentences at once" choices={AT_ONCE_CHOICES} chosen={settings.sentencesAtOnce[id]}
+        onChoose={(count) => setSettings((previous) => ({ ...previous, sentencesAtOnce: { ...previous.sentencesAtOnce, [id]: count } }))} />
+    </SettingsGroup>
   </SettingsPage>;
 }

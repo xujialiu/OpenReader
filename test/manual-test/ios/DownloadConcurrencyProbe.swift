@@ -121,7 +121,7 @@ final class DownloadConcurrencyProbe: XCTestCase {
 
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 15))
     app.buttons["Settings"].tap()
-    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta27"].waitForExistence(timeout: 5), "Settings did not show the beta26 version line")
+    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta28"].waitForExistence(timeout: 5), "Settings did not show the beta26 version line")
     capture("01-settings-version", app)
 
     openProvider(app, "Fish Audio")
@@ -407,7 +407,7 @@ final class DownloadConcurrencyProbe: XCTestCase {
 
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 15))
     app.buttons["Settings"].tap()
-    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta27"].waitForExistence(timeout: 5), "Settings did not show Version 0.0.2-beta27")
+    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta28"].waitForExistence(timeout: 5), "Settings did not show Version 0.0.2-beta28")
     openProvider(app, "OpenAI Compatible")
     XCTAssertTrue(app.navigationBars["OpenAI Compatible"].waitForExistence(timeout: 5))
 
@@ -733,4 +733,29 @@ final class DownloadConcurrencyProbe: XCTestCase {
     XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Actions for '")).firstMatch.waitForExistence(timeout: 5), "Did not settle back at the Library")
   }
 
+
+  /// beta28: Downloads is the last card on Fish Audio's page too (below Voice
+  /// sources), and Extra headers has the same eye as the API key. Never taps an
+  /// eye, so every capture stays masked; ends on OpenAI Compatible's page.
+  func testDownloadsCardLastAndHeadersEye() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.terminate(); app.launch()
+    XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+    app.buttons["Settings"].tap()
+    openProvider(app, "Fish Audio")
+    let sources = app.staticTexts["Voice sources"].firstMatch
+    XCTAssertTrue(sources.waitForExistence(timeout: 5))
+    app.swipeUp()
+    let downloads = app.staticTexts["Downloads"].firstMatch
+    XCTAssertTrue(downloads.waitForExistence(timeout: 5))
+    XCTAssertGreaterThan(downloads.frame.minY, sources.frame.maxY, "Downloads must sit below Voice sources")
+    capture("fish-downloads-last", app)
+    back(app)
+    let compatible = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'OpenAI Compatible,'")).firstMatch
+    XCTAssertTrue(compatible.waitForExistence(timeout: 5))
+    compatible.tap()
+    XCTAssertTrue(app.buttons["Show Extra headers"].waitForExistence(timeout: 5), "Extra headers has no eye")
+    XCTAssertTrue(app.buttons["Show API key"].exists, "API key lost its eye")
+    capture("compatible-headers-eye", app)
+  }
 }

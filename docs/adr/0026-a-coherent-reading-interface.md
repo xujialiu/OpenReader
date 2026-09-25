@@ -157,6 +157,13 @@ it only changes secureTextEntry, never editability or credential persistence.
 All API-key providers share this behavior. Extra headers retain their existing
 masked field.
 
+Amended 2026-09-25: Extra headers have the same eye, labelled `Show Extra
+headers` / `Hide Extra headers`, at the owner's request. A gateway's headers are
+a credential typed by hand, 151 characters in the owner's own, and with no way
+to see them a typo could only be found by a failed connection check. The
+masked field also drew no dots on the simulator while the accessibility tree
+reported a masked value (test/manual-test/README.md, Pitfalls).
+
 ## A shared draggable header replaces decorative grips
 
 `Sheet` owns the transparent Modal, backdrop, animated vertical offset and

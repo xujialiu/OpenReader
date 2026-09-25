@@ -1342,7 +1342,11 @@ fix (AGENTS.md).
   screenshot's accessibility tree reported the field correctly, `value:
   ••••••••••••••••••..., Disabled`. Content is not visible either way, so
   nothing is leaked, but do not rely on a screenshot alone to confirm masking
-  for this specific field — cross-check the exported tree's `value`.
+  for this specific field — cross-check the exported tree's `value`. Not
+  this field alone: at beta28 (`testDownloadsCardLastAndHeadersEye`) Fish
+  Audio's saved, locked API key drew no dots either, beside its eye. Since
+  beta28 Extra headers has the same eye as the API key, so the owner can
+  check either value on screen.
 
 ### Measuring inside the reader's WebView
 

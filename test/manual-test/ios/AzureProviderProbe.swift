@@ -126,8 +126,8 @@ final class AzureProviderProbe: XCTestCase {
 
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
     app.buttons["Settings"].tap()
-    let versionLine = app.staticTexts.matching(NSPredicate(format: "label == 'Version 0.0.2-beta27'")).firstMatch
-    XCTAssertTrue(versionLine.waitForExistence(timeout: 5), "Settings did not show Version 0.0.2-beta27")
+    let versionLine = app.staticTexts.matching(NSPredicate(format: "label == 'Version 0.0.2-beta28'")).firstMatch
+    XCTAssertTrue(versionLine.waitForExistence(timeout: 5), "Settings did not show Version 0.0.2-beta28")
 
     let providersRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Providers'")).firstMatch
     XCTAssertTrue(providersRow.waitForExistence(timeout: 5))
