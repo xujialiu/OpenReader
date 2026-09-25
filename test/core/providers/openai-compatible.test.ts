@@ -109,9 +109,27 @@ describe('createOpenAICompatibleProvider', () => {
     expect(result).toMatchObject({ audio: 'encoded', note: expect.stringMatching(/does not do PCM/) });
   });
 
+  // FastAPI answers a value outside a Literal with 422, not 400: the owner's
+  // Chatterbox server refused `pcm` this way (#65, notes 2026-09-25 14:54).
+  it('asks again for MP3 when the server refuses PCM with a 422, as FastAPI does (#65)', async () => {
+    const detail = { detail: [{ type: 'literal_error', loc: ['body', 'response_format'], msg: "Input should be 'wav', 'opus' or 'mp3'", input: 'pcm' }] };
+    const fetchImpl = vi.fn(async () => (formatOf(fetchImpl, (fetchImpl as any).mock.calls.length - 1) === PCM_FORMAT ? new Response(JSON.stringify(detail), { status: 422 }) : mp3()));
+    const p = provider(fetchImpl);
+    expect(await p.synthesize('One', opts)).toMatchObject({ audio: 'encoded', note: expect.stringMatching(/refused PCM/) });
+    await p.synthesize('Two', opts);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(formatOf(fetchImpl, 2)).toBe(FALLBACK_FORMAT);
+  });
+  it('reports a 422 with the field and the server\'s message when the MP3 request fails too (#65)', async () => {
+    const detail = { detail: [{ type: 'missing', loc: ['body', 'voice'], msg: 'Field required', input: null }] };
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(detail), { status: 422 }));
+    await expect(provider(fetchImpl).synthesize('Hello', opts)).rejects.toMatchObject({ kind: 'unknown', message: 'OpenAI speech: HTTP 422 — voice: Field required' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   // A refusal that is not a 400 is not a format problem: retrying it would
   // double the cost of every failure and hide the status that explains it
-  it('never asks twice after a status other than 400', async () => {
+  it('never asks twice after a status other than 400 or 422', async () => {
     for (const status of [401, 429, 500]) {
       const fetchImpl = vi.fn(async () => new Response('', { status }));
       await expect(provider(fetchImpl).synthesize('Hi', opts)).rejects.toBeInstanceOf(SynthesisError);
@@ -513,6 +531,14 @@ describe("the server's reason for a refusal", () => {
     const openai = refused(400, { error: { message: "Invalid value: 'nova2'. Supported values are: 'alloy', 'nova'.", type: 'invalid_request_error', param: 'voice', code: null } });
     await expect(provider(openai).synthesize('x', opts)).rejects.toMatchObject({
       message: "OpenAI speech: HTTP 400 — Invalid value: 'nova2'. Supported values are: 'alloy', 'nova'.",
+    });
+  });
+
+  it('reads FastAPI\'s detail, a sentence or a list of fields and messages (#65)', async () => {
+    await expect(provider(refused(404, { detail: 'Voice not found' })).synthesize('x', opts)).rejects.toMatchObject({ message: 'OpenAI speech: HTTP 404 — Voice not found' });
+    const two = { detail: [{ loc: ['body', 'speed'], msg: 'Input should be less than 4' }, { loc: ['query'], msg: 'Extra inputs are not permitted' }] };
+    await expect(provider(refused(422, two)).synthesize('x', opts)).rejects.toMatchObject({
+      message: 'OpenAI speech: HTTP 422 — speed: Input should be less than 4; query: Extra inputs are not permitted',
     });
   });
 

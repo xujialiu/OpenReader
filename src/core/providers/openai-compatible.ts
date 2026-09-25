@@ -54,6 +54,8 @@ export type OpenAICompatibleConfig = {
 /** What the speech route is asked for first, and what it is asked for after a server refuses that (ADR 0013). */
 export const PCM_FORMAT = 'pcm';
 export const FALLBACK_FORMAT = 'mp3';
+/** The statuses a server refuses an unknown `response_format` with: 400, and FastAPI's 422 for a value outside a `Literal` (#65). */
+const FORMAT_REFUSALS: readonly number[] = [400, 422];
 
 /** "alloy, nova" or one per line → ['alloy', 'nova']. */
 export function parseVoiceIds(text: string): string[] {
@@ -108,6 +110,23 @@ export function parseModelList(body: unknown): string[] {
   return out;
 }
 
+/**
+ * FastAPI's `detail`: a sentence, or one entry per refused field whose `loc`
+ * starts with where the field was (`body`, `query`), which is left out when a
+ * field name follows it. `voice: Field required; speed: Input should be…`.
+ */
+function fastApiDetail(detail: unknown): string {
+  if (typeof detail === 'string') return detail.trim();
+  if (!Array.isArray(detail)) return '';
+  return detail.flatMap((entry) => {
+    const { loc, msg } = (entry ?? {}) as { loc?: unknown; msg?: unknown };
+    if (typeof msg !== 'string' || !msg.trim()) return [];
+    const path = Array.isArray(loc) ? loc.map(String) : [];
+    const field = (path.length > 1 && ['body', 'query', 'path', 'header'].includes(path[0]!) ? path.slice(1) : path).join('.');
+    return [field ? `${field}: ${msg.trim()}` : msg.trim()];
+  }).join('; ');
+}
+
 function statusError(status: number, what: string): SynthesisError {
   if (status === 401 || status === 403) return new SynthesisError('auth', `${what}: the server rejected the API key (${status})`);
   if (status === 429) return new SynthesisError('rate-limit', `${what}: rate limited (429)`);
@@ -119,11 +138,16 @@ function statusError(status: number, what: string): SynthesisError {
  * of `error.message` and `error.param`, since OpenAI puts the detail in the
  * message ("Invalid value: 'x'. Supported values are…", param "voice") and
  * other servers in the param ("Unknown voice: x. Available voices: […]",
- * message "Param Incorrect"). Empty for anything else.
+ * message "Param Incorrect") — or in FastAPI's, which self-hosted servers
+ * such as Chatterbox answer with (#65): `detail` as a sentence, or as a list
+ * of fields and what is wrong with each. Empty for anything else.
  */
 export function serverReason(body: string): string {
   try {
-    const error = (JSON.parse(body) as { error?: unknown } | null)?.error;
+    const parsed = JSON.parse(body) as { error?: unknown; detail?: unknown } | null;
+    const detail = fastApiDetail(parsed?.detail);
+    if (detail) return detail.slice(0, 300);
+    const error = parsed?.error;
     if (typeof error === 'string') return error.trim().slice(0, 300);
     const fields = error as { message?: unknown; param?: unknown } | null;
     const texts = [fields?.message, fields?.param].filter((v): v is string => typeof v === 'string' && v.trim() !== '');
@@ -202,11 +226,12 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
    * PCM is asked for first, because that is what the playback engine wants and
    * because it deletes the encoder padding that would otherwise be audible at
    * every sentence boundary (ADR 0013). But this route is spoken by *any*
-   * server, and a self-hosted one may only emit MP3: a 400 — the status a
-   * server uses for a `response_format` it does not know — is asked again as
-   * MP3 and reported as `encoded` bytes for the playback layer to decode. If
-   * that second request fails too, the first refusal is what surfaces, since a
-   * 400 that is not about the format says something more useful.
+   * server, and a self-hosted one may only emit MP3: a 400 or a 422 — the
+   * statuses a server uses for a `response_format` it does not know, 422
+   * being FastAPI's (the owner's Chatterbox, #65) — is asked again as MP3 and
+   * reported as `encoded` bytes for the playback layer to decode. If that
+   * second request fails too, the first refusal is what surfaces, since one
+   * that is not about the format says something more useful.
    */
   async function speakOnSpeechRoute(text: string, voice: string, signal?: AbortSignal): Promise<SynthesisResult> {
     const what = `${cfg.label} speech`;
@@ -217,7 +242,7 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
 
     if (!response.ok && !refusesPcm) {
       const refusal = refusalFrom(response.status, await response.text().catch(() => ''), what);
-      if (response.status !== 400) throw refusal;
+      if (!FORMAT_REFUSALS.includes(response.status)) throw refusal;
       const retry = await ask(FALLBACK_FORMAT);
       if (!retry.ok) throw refusal;
       refusesPcm = true;
