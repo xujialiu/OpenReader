@@ -1247,6 +1247,42 @@ fix (AGENTS.md).
   and 17 utterances, for loading through the walkthrough harness's `add`
   command instead (README, "Real books") — an equally direct, non-picker
   path, proven working 2026-09-24.
+- **A drag between two sibling labels that sit outside the Download drawer's
+  chapter list scrolls nothing, with no error.** Verifying #64
+  (`DownloadConcurrencyProbe`), a first version dragged between the "N
+  chapters downloaded" line and the "Download selected (N)" button — the
+  natural anchors, immediately above and below the list on screen — for 45
+  attempts with zero effect: the same five chapters stayed on screen every
+  time, and the probe's own `XCTAssertTrue` only reported "Could not scroll",
+  no crash or warning. Measured from the tree: the list's own `ScrollView`
+  sits at `{y: 411.7, height: 330}`, but the "downloaded" text ends around
+  `y: 372` and the button starts around `y: 792.7` — both outside the
+  ScrollView's frame, because the footer's own "Manage downloads" row and the
+  layout's `gap`s sit between them and the list. A drag's start point is what
+  gesture arbitration hit-tests; starting outside the ScrollView and merely
+  passing over it on the way to the other anchor never engages its pan
+  recognizer, and nothing here has `minPointers(2)` to explain the miss the
+  way `use-sweep.tsx`'s two-finger sweep gesture might suggest. Fix: query
+  `app.scrollViews.firstMatch` directly and drag between two points inside
+  *its own* frame (`list.frame.maxY - 12` to `list.frame.minY + 12`); the
+  same run then reached a chapter about 100 rows down in under 40 drags.
+- **A document whose saved audio was written by `download-chapter.cjs`
+  (CDP, calling `runtime.enqueue` directly) shows "Choose a voice in the
+  player" and "0 chapters downloaded" the first time it is opened for real,
+  even chapters deep into that same voice's saved clips.** `enqueue` never
+  calls `library.voiced()` — that is a UI-level side effect
+  (`reader-actions.tsx`'s `onStart`/`onVoice`), so the Library entry's own
+  voice stays unset and the drawer computes progress against the settings'
+  default voice instead, which owns nothing. The saved audio is not lost: the
+  drawer's own "Use downloaded voice · `provider/voice`" link is offered
+  (`otherVoices` in `download-sheet.tsx`) and a real tap on it calls
+  `library.voiced()` for real, after which the count and the checkmarks
+  appear. Tap it before selecting any chapter. The same first real open also
+  retitles the Library entry from the EPUB's own metadata (the `add`
+  version of this pitfall, above) even when the entry was seeded directly
+  in `library.json` with a different title, not only when `add` named it
+  after its file — a `BEGINSWITH` match on the seeded title stops working
+  after that first open for the same reason either way.
 
 ### Measuring inside the reader's WebView
 
