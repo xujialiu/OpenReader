@@ -1930,6 +1930,41 @@ subfolder), none of them the app being wrong.
   Before a probe that leaves the reader, go back to the Library, as
   `ReadingButtonProbe.openPaused` does.
 
+- **A tap on the LogBox banner opens React Native DevTools on the Mac.**
+  Measured 2026-09-26 00:05 (#68): Metro logged `INFO Launching DevTools...`
+  65 times during one `ReadingHeldProbe` run. The banner `Open debugger
+  to view warnings.` (raised here by the `Sending onAnimatedValueUpdate with no
+  listeners registered` warning a navigation transition logs) lay over the
+  player and over the Library's Reading Button, and the probe's taps meant for
+  them landed on it. The methods then failed on "Play did not start". Dismiss
+  the banner with its own close button at its right end, never its body
+  (`ReadingHeldProbe.clearLogBox`), before every tap near the bottom of the
+  screen. After a run that hit it, check Metro's log for `Launching DevTools`.
+- **Metro stopped receiving the app's console lines, and harness commands still
+  ran.** On 2026-09-25 at 23:41:54, right after a Reading was ended, the Metro
+  log stopped: no `HX` lines through a 118 s probe run and a `shelf` command,
+  while a harness `add` in the same window did add the fixture back. `/status`
+  answered `running` and `/json/list` listed the device. `simctl terminate` and
+  `launch` brought the lines back (`HX shelf …` within 12 s). Cause not
+  isolated. A probe that needs to observe the reading should read it from the
+  screen (as `ReadingHeldProbe` reads the Library row's quote) rather than
+  from the log. Before reading the log, check that it is still growing.
+- **An edge swipe started while the bar is still sliding away can miss.** In
+  two full `ReadingHeldProbe` runs (2026-09-26 00:05 and 00:12), an edge swipe
+  started immediately after Collapse left the reader on screen ("The edge swipe
+  did not return to the Library"). The same method alone passed, and with
+  0.8 s between Collapse and the swipe it passed in the full run twice. A
+  person does not swipe within a twelfth of a second of pressing collapse, so
+  the probe waits.
+- **A native dependency needs the Debug app rebuilt, and a worktree has no
+  `ios/`.** Adding `react-native-teleport` (#68): `CI=1 npx expo prebuild
+  --platform ios --no-install`, `pod install` in `ios/` (Codegen reported
+  `Found react-native-teleport`), then the `xcodebuild` of
+  `docs/install-on-simulator.md` with `RCT_METRO_PORT=PORT` added. That setting
+  baked `RCTMetroPort` into the product's `Info.plist` (read back with `plutil`),
+  so the build asks this tree's Metro without the re-sign. Prebuild to done
+  took 8.5 minutes. Restart Metro with `--clear` after the `npm install`.
+
 ### Evaluating in the app through `cdp.cjs`
 
 - **A loop's closures all see its last value.** What `--eval` sends is compiled
@@ -2246,6 +2281,50 @@ read from `test.log`'s suite line.
 It does not prove the lock screen's own icon, the bar's animation (a recording
 does, notes 2026-09-25 22:35), or anything about the dark theme beyond reading
 ink against the page's own colour.
+
+## The Reading held in the Library (#68)
+
+With `A Short Test of Reading Aloud` and one other Document in the Library, a
+Voice that can play, and the app running against this tree's Metro:
+
+```sh
+bash test/manual-test/reading-held.sh SIMULATOR_UDID NEW_OUTPUT_DIR [-only-testing:METHOD ...]
+```
+
+Real XCTest touches (`ios/ReadingHeldProbe.swift`), attached to the running app.
+XCTest runs the methods in name order:
+
+- `testBackWhilePlayingKeepsReading`: from the fixture's sixth sentence, Play,
+  then the back arrow. The Library shows `Return to the reading` with the value
+  `Playing`. The fixture's row then quotes a sentence of the second chapter,
+  which proves the voice crossed the chapter change with the Library in front:
+  the place is written at most every ten seconds, so this takes about 12 s.
+  Settings shows no button, and the Library shows it again. The button goes back
+  to the reader, with no "Reading …" or "Laying the document out…" line (a
+  reopen would show one), and the reading still playing. About 26 s of play.
+- `testEdgeSwipeCollapsedAndLockScreenPauseInLibrary`: Play and collapse, then
+  the edge swipe. The Library shows the button. The button goes back into the
+  reader still collapsed, still playing and not reopened. A second edge swipe
+  out, then Pause on Notification Centre's Now Playing card: the button stays
+  and says `Paused`. The button goes back in again, with the player shown
+  (a pause re-opens it) and paused. About 19 s of play.
+- `testLeaveWhilePausedEndsReading`: back while paused shows no button.
+- `testOpenAnotherEndsReading`: Play, back, then the other Document's row. Its
+  reader opens paused, and back from it shows no button. About 3 s of play.
+- `testZDeleteEndsReading`: Play, back, then Delete on the fixture's row. The
+  button and the row go. About 6 s of play. It really deletes the fixture, so
+  it is named to run last, and the script adds the fixture back through the
+  harness afterwards (`Fixture added back`).
+
+The script checks the simulator's volume first, stops an `xcodebuild` that
+outlives its suite by two minutes, and reads the verdict from `test.log`.
+Before any tap near the bottom of the screen, the probe dismisses React
+Native's warning banner with its close button (Pitfalls, "A tap on the LogBox
+banner…").
+
+It does not prove what is heard, memory (notes 2026-09-25 23:41), a section
+laid out while parked (the spike, notes 23:40), or a physical iPhone's
+lock-screen state.
 
 ## Inspect, stop or briefly exercise the reading handler
 

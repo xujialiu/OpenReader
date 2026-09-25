@@ -135,6 +135,13 @@ replaces the pause between sentences at that point and is not added to it. Set
 at natural pace, like the pause between sentences.
 _Avoid_: paragraph gap, extra pause, paragraph delay
 
+**Reading**:
+One document being read aloud; there is at most one at a time. It begins with
+Play, goes on when the owner leaves the reader while it plays, and ends when the
+owner leaves the reader while it is paused, opens another document, or deletes
+this one.
+_Avoid_: session, playback, now playing
+
 ### Keeping place and settings
 
 **Library**:
@@ -236,13 +243,14 @@ away when dragged down or when the owner taps outside it.
 _Avoid_: sheet, bottom sheet, modal, popup, panel
 
 **Player**:
-The reading's controls, floating over the bottom of the page in the reader: the
+The Reading's controls, floating over the bottom of the page in the reader: the
 voice, the transport, the contents and the speed. Collapsed, it is down to the
 Reading Button.
 _Avoid_: control bar, toolbar, mini player, transport bar
 
 **Reading Button**:
-The round button that stands for the reading in progress: in the reader, what
-is left of the Player when it is collapsed. It shows whether the reading is
-playing, and a press brings the controls back; it never plays or pauses.
+The round button that stands for the Reading: in the reader, what is left of
+the Player when it is collapsed, and in the Library, the way back to the
+document being read. It shows whether the Reading is playing, and a press
+brings its controls back; it never plays or pauses.
 _Avoid_: play button, mini player, floating button, now playing

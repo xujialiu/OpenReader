@@ -5,8 +5,12 @@ status: proposed
 # A native stack, and a Library that is a file
 
 The provider configuration UI, player eligibility and new-document voice default
-are revised by [ADR 0026](0026-a-coherent-reading-interface.md). Historical
-measurements below are retained unchanged.
+are revised by [ADR 0026](0026-a-coherent-reading-interface.md). The Reader no
+longer owns the reading: since [ADR 0049](0049-the-reading-is-held-above-the-navigator-and-moved.md)
+(#68) the shell holds it and moves the page into the Reader while the Reader is
+on screen, so going back while it plays keeps it going, and only going back while
+it is paused ends it with the screen. Historical measurements below are retained
+unchanged.
 
 _The product argument — what the owner sees and what it costs — is
 `docs/design/0019-four-screens-and-a-way-back.md`._

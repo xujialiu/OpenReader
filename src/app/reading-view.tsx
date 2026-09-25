@@ -26,6 +26,10 @@
  * or the sentence leaves the owner to guess at exactly the thing this app is for.
  * Those lines live inside the player so that collapsing hides them with the rest.
  *
+ * It is rendered by the shell (`reading-host.tsx`, #68) rather than by the
+ * Reader screen, and moved into the screen's slot while the Reader shows it, so
+ * that it goes on reading when the owner goes back to the Library.
+ *
  * It is mounted per Document, keyed by it, so that opening another one starts with
  * a new bridge, a new engine and none of the previous book's Blocks. The renderer
  * keeps its section index outside React (`blocks.ts`), and a remount is the honest
@@ -68,7 +72,7 @@ import { hasSavedVoice, inventoryReady, inventoryError, requestInventory, playba
  * of kilobytes that often is not expensive, but it is not free either, and the
  * thing being protected is a force-quit: at three seconds a sentence this loses
  * at most the last three or four sentences, which is inside the paragraph the
- * owner was listening to. Leaving the screen writes unconditionally, so the
+ * owner was listening to. The Reading's end writes unconditionally, so the
  * ordinary way out loses nothing at all.
  */
 const POSITION_INTERVAL_MS = 10_000;
@@ -148,6 +152,11 @@ export interface ReadingViewProps {
    * screen and any pause or note that brings the player back brings the bar.
    */
   onChrome(shown: boolean): void;
+  /**
+   * Whether the reading is playing and whether it is waiting for audio (#68):
+   * what the Library's Reading Button shows while this view is held out of sight.
+   */
+  onState(playing: boolean, buffering: boolean): void;
 }
 
 /**
@@ -219,6 +228,7 @@ export function ReadingView({
   onTitle,
   barHeight,
   onChrome,
+  onState,
 }: ReadingViewProps) {
   const fileSystem = useReaderFileSystem;
   const { sync, library } = useShell();
@@ -244,6 +254,7 @@ export function ReadingView({
   useEffect(()=>{void requestInventory(document.identity.id,{provider:settings.provider,voice:settings.voice}).catch(()=>{});},[document.identity.id,settings.provider,settings.voice]);
   const savedVoice = hasSavedVoice(document.identity.id, settings.provider, settings.voice);
   useEffect(() => { playbackActive(reading.status.playing); return () => playbackActive(false); }, [reading.status.playing]);
+  useEffect(() => { onState(reading.status.playing, reading.status.buffering); }, [reading.status.playing, reading.status.buffering, onState]);
   const voices = useVoiceLists(settings);
   const [displayError, setDisplayError] = useState<string | null>(null);
   const [contentsOpen, setContentsOpen] = useState(false);
@@ -269,6 +280,10 @@ export function ReadingView({
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const measure = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
+    // A zero size is never the page's (#68): it is this view between two places,
+    // a slot that has not been laid out yet. Passing it on would resize the
+    // WebView, and a resize destroys every epub.js view.
+    if (width < 1 || height < 1) return;
     setSize((was) => (was && was.width === width && was.height === height ? was : { width, height }));
   }, []);
 
@@ -294,7 +309,7 @@ export function ReadingView({
    * `useReading`'s own cleanup runs first — it is registered first, being a hook
    * of this component — and it clears the Utterance the position would be built
    * from. So the position is taken at each Clip boundary, where everything it
-   * needs is certainly still there, and the ref is what leaving the screen
+   * needs is certainly still there, and the ref is what the Reading's end
    * writes.
    */
   const status = reading.status;
@@ -330,8 +345,10 @@ export function ReadingView({
   }, [sync]);
   useEffect(
     () => () => {
-      // Leaving is a sync moment (issue #20): the place is written first, so the
-      // run that follows carries it.
+      // The Reading ending is a sync moment (issue #20): the place is written
+      // first, so the run that follows carries it. It ends when the Reader goes
+      // while it is paused, when another document is opened, and when this one
+      // is deleted (#68); going back while it plays does not unmount this view.
       if (positionRef.current) onReachedRef.current(positionRef.current);
       syncRef.current.poke('leave');
     },

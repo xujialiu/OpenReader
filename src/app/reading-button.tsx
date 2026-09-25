@@ -3,7 +3,8 @@
  * stands for the reading in progress, and never plays or pauses it.
  *
  * In the reader it is all that is left of the player once it is collapsed, and
- * a press brings the player and the navigation bar back. It used to be the
+ * a press brings the player and the navigation bar back. In the Library it is
+ * the way back to the Reading held there (#68), and a press opens its reader. It used to be the
  * player's own Play/Pause, and pressing it paused (design 0020); the owner asked
  * for the controls back without the voice stopping, so a press now only shows
  * them. A Play or Pause glyph on a button that does neither would be a lie, so
