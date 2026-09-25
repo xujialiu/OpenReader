@@ -2046,6 +2046,145 @@ subfolder), none of them the app being wrong.
 - **A silence threshold that suits one voice hides another's pauses** (2026-09-24, #61). At −40 dB below the loudest 10 ms window, Fish's "jjk narrator" measured almost no silence between sentences, because its breath and room noise sit near −37 dB. Its whole-paragraph median came out at 0.16 s where its own word timings said 0.32 s. At −30 dB the two agree, but Azure then reads about 70 ms long. Check a threshold against a provider's word timings (Azure's and Fish's leave the pause between words) before trusting it, and quote each provider at the threshold that agreed.
 - **An EPUB's OPF is namespaced, and a cover page may not parse** (2026-09-24, #61). `@xmldom/xmldom`'s `getElementsByTagName('item')` found 0 items in every book in `~/Works/epub_books`; `getElementsByTagNameNS('*', 'item')` finds them. A cover page with an unclosed `<img>` throws `ParseError` even when parsed as `text/html`, so parse each spine item in a `try` and skip the one that fails.
 
+### Seeding a real book's place through the harness (#68)
+
+Building `reading-held-book.sh`, which uses the harness's `open`/`say`/`seek`
+to position "Shadow Slave — Chapters 1–250" without hundreds of real taps
+(README, "Real books"):
+
+- **`date +%s%3N` on macOS prints the seconds followed by a literal `N`**, not
+  milliseconds — `%N` is a GNU `date` extension this BSD `date` does not have.
+  A harness command built from it, `{"seq":1790354339N,"do":"say"}`, fails
+  `JSON.parse` with `Unexpected character: N` and every later `harness.json`
+  write with that same broken `seq` template repeats the same throw
+  (`HX harness threw: SyntaxError…`) until a plain incrementing counter
+  replaces it.
+- **Two `harness.json` writes inside the app's own 250ms poll window drop the
+  first one.** The poller only reads the file when it ticks, and a `seek`
+  immediately followed by a `say` (no delay) can overwrite the file before the
+  app ever reads the `seek` — the `say`'s answer then reports the *pre-seek*
+  state, silently. Sleep at least 0.5s between a state-changing command and
+  the next `send`.
+- **A fresh mount of a long book briefly answers `known=0`.** Right after
+  `{"do":"open"}`, the harness `say` can report `known=0, section=null` for a
+  few seconds while the first sections are still laying out — a real value,
+  not a dropped command — so poll for `known > 0` rather than trusting one
+  snapshot a few seconds after `open`.
+- **A real book's Utterance index (`known`, from `say`) is session-relative,
+  not book-absolute.** A fresh mount's initial render window sits around
+  wherever the saved place resolves to, not always from the book's true
+  start, so the same absolute number (`utterance: 619`, say) lands in a
+  different chapter after a different resume anchor — confirmed by seeding
+  the same number twice, once landing near "Chapter 3" and once, after the
+  saved place had moved, near "Chapter 19". Always compute the seek target
+  from *this* session's own fresh `known`, never a number left over from an
+  earlier run.
+- **`field() { echo "$1" | grep -oE … }` with no `|| true`, under `set -e -o
+  pipefail`, silently kills the whole script with no message** the moment the
+  pattern is absent (a blank status line from a `say_status` timeout, in
+  particular) — `pipefail` makes the unmatched `grep`'s exit status the
+  pipeline's own, and with nothing to catch it, `set -e` exits immediately.
+  The failure looks like the script simply stopped after its first line of
+  output. Every pipeline ending in a `grep` that can legitimately find
+  nothing needs its own `|| true` (or an equivalent fallback), not just the
+  call site's.
+- **Leaving a real book's reader while paused, right after a harness `seek`,
+  did not reliably persist the seeked place** to the Library's saved
+  position — `shut` (the same `goBack` the back arrow calls) sometimes left
+  the entry's stamped anchor exactly as it was before the `seek`, even
+  several seconds later. Root cause not isolated. Workaround: do not leave
+  and reopen to seed a position; seek the already-open, live reader and hand
+  it straight to the real-touch suite paused there — the probe's first touch
+  is Play, never a tap that assumes the seeded place was saved.
+- **`silence.sh check … && echo ok` on its own line, followed by unrelated
+  commands on later lines, does not gate those later commands** — only `echo
+  ok` is conditional on the check. A `bash silence.sh check … && echo ok`
+  whose check actually failed (volume had drifted to 60, most likely an
+  output-device change per the rule above) still let a `send '"do":"play"'`
+  a few lines later run and play audibly for a few seconds (2026-09-26,
+  verifying #68's provider-change check). The `&&` has to chain every command
+  that plays anything, in the same statement, not just the first one after
+  the check.
+- **`sim_volume` going back to 60 with no boot correlates with the app being
+  terminated and relaunched.** Seen again 2026-09-26, twice in one session,
+  independently verifying #67: `check` failed right after a plain `simctl
+  terminate`/`launch` cycle between test runs, with no other simulator or app
+  activity in between either time. Consistent with, and narrowing, the
+  2026-09-22 note above ("only the app had been terminated and relaunched in
+  between, several times") — still not root-caused, but `check` (chained to
+  the play, on one line) right after
+  any relaunch, not only after a boot, is confirmed necessary again.
+
+### Independent verification of the collapsed player and its edge swipe (#67)
+
+Beyond the implementer's own `reading-button.sh` run: `ReadingButtonProbe`'s
+`testEdgeSwipeReliabilityMeasurement`, `testReadingButtonDuringBufferingAndWaveform`,
+`testCollapseRestoreAcrossUtteranceChange` and `testContentsRowLandsBelowBar`,
+plus harness sequences for the failure-note and dark-theme checks.
+
+- **`ReadingButtonProbe.openPaused`'s own "Expected the bar shown" can fail
+  for a reason that has nothing to do with the test method it is reported
+  against.** A `-only-testing:testContentsRowLandsBelowBar` run that itself
+  left the fixture's Contents sheet open (its first version tapped an
+  `unreachable` row, below) meant the *next* `-only-testing` invocation's
+  first `openPaused` inherited that open sheet; its own back-button recovery
+  loop could not close it, and it failed at its own `barShown` assertion.
+  XCTest reports the failure against the calling test's name but the source
+  line is the helper's own (`openPaused`, not the caller) — read the line
+  number, not just the test name, before concluding the *caller's* logic is
+  what broke. Fix here matches "The harness's `open` pushes the Reader over
+  whatever the stack holds" above: relaunch the app (a clean `.activate()`
+  onto a stuck sheet does not clear it) before the next run, every time a run
+  might have left the screen somewhere unexpected.
+- **The fixture's own Contents rows are all `unreachable`.** `A Short Test of
+  Reading Aloud`'s `nav.xhtml` (`short-test-fixture.ts`) does not match
+  `contentsOf`'s own comparison against the spine hrefs the document message
+  reports — `contents-sheet.tsx` shows its dedicated note, "None of these
+  rows names a file in this book… so the list can be read but not followed",
+  and a tap on a row does nothing (measured: the sheet stayed open on the row
+  tapped, 2026-09-26). Pre-existing, unrelated to #67. Use a real book (Shadow
+  Slave — Chapters 1–250, or another `~/Works/epub_books` part) for anything
+  that taps a Contents row to navigate; the fixture is fine for everything
+  that only opens the sheet and reads it.
+- **A long, tight loop of taps needs the LogBox-banner guard on every tap, not
+  only ones "near the bottom of the screen."** `testEdgeSwipeReliabilityMeasurement`
+  (40 trials, several minutes, repeatedly pressing Play/Collapse/the Reading
+  Button/"Return to the reading") lost the rest of a run to `Failed to tap
+  "Return to the reading" Button: No matches found`, immediately after an
+  `.exists` check on that same element had just returned true — a stale
+  reference from a navigation transition still in flight, not the banner
+  this time, but the fix is the same shape: clear the banner and tolerate one
+  stale element with a short settle-and-retry before tapping
+  (`ReadingButtonProbe.safeTap`), rather than a bare `.tap()`, anywhere a
+  probe taps the same handful of controls dozens of times in a row.
+- **Comparing ink against a baseline taken before the page has settled reports
+  "the text moved" for a move the test caused, not the app.** Measured
+  2026-09-26: skipping forward from wherever the fixture was left (not the
+  first sentence, deliberately, to give the voice's own centring something to
+  scroll) and capturing ink 0.6 s after Play, then again right after
+  Collapse, read `rows-differing=394 of 580` and the first line 14 points
+  higher — Play's own centring (ADR 0011) was still settling into the new
+  Utterance when the "before" sample was taken, and the difference measured
+  was that settling, not the collapse. Replacing the fixed 0.6 s wait with
+  `settledInk` (already in `ReadingButtonProbe`, built for exactly this) before
+  the instant-of-collapse comparison read `rows-differing=0 of 580` both ways.
+  Any before/after ink comparison taken less than a few seconds after a Play,
+  a skip, or a seek needs `settledInk`, not a fixed sleep, for the "before".
+- **A duplicate note in the player, and a React "two children with the same
+  key" warning to go with it, is reachable by disabling the only enabled
+  Provider while the reading is actively trying to speak.** Not an XCTest or
+  simulator pitfall — an application observation, kept here because it was
+  found via the harness technique "Disabling the active Provider while a
+  Reading is held (#68)" above, extended to an actively-playing reading
+  rather than one parked in the Library: `status.note` and the separate
+  `sayWhatIsMissing`/`readinessSentence` check both independently produced
+  the sentence "Fish Audio is disabled. Choose an enabled provider.", and
+  `player.tsx` keys its notes list on the note's own text
+  (`key={note.said}`), so the identical string twice is both a visible
+  doubled line and a React key collision. Reported to the implementing agent
+  separately from this verification's PASS/FAIL; #67's own chrome/bar
+  behaviour (bringing both back for the note) was correct throughout.
+
 ## Lock-screen screenshot and button inspection
 
 Prerequisites: macOS, Xcode selected by `xcode-select`, a booted iOS simulator,
@@ -2282,6 +2421,88 @@ It does not prove the lock screen's own icon, the bar's animation (a recording
 does, notes 2026-09-25 22:35), or anything about the dark theme beyond reading
 ink against the page's own colour.
 
+### Independent verification: the edge swipe's reliability, buffering, an Utterance change, and Contents (#67)
+
+Four more `ReadingButtonProbe` methods, added verifying #67 beyond the
+implementer's own run above, run the same way
+(`bash test/manual-test/reading-button.sh SIMULATOR_UDID DIR -only-testing:METHOD`,
+one or more):
+
+- `testEdgeSwipeReliabilityMeasurement`: not a pass/fail assertion but a
+  measurement — 10 left-edge swipes collapsed-paused, 10 collapsed-playing (at
+  delays of 0.1 to 3.0 s after Play, spread across roughly one Utterance's own
+  length), and the same 10+10 with the bar shown instead of collapsed, as the
+  pre-#67 control. Prints one `LINE swipe cond=… trial=… result=hit|miss` per
+  trial and a `LINE swipe-summary` per condition. Measured 2026-09-26: 40 of
+  40 hit, in every condition, after fixing a stale-element tap that had cut
+  the first attempt short (Pitfalls, "A long, tight loop of taps…"). Separately,
+  in the same session, the *existing* `testEdgeSwipeWhileCollapsed` missed once
+  (paused, no auto-scroll possible) inside a six-method combined run — consistent
+  with the already-recorded "test-order/gesture flakiness under a long
+  back-to-back run" (#68 Pitfalls) and "An edge swipe started while the bar is
+  still sliding away can miss" (Pitfalls, "The shell"), not with this
+  measurement's own zero-miss, isolated-run result. Together: no evidence the
+  swipe's reliability is specific to #67's collapsed/floating bar, or to the
+  voice's own auto-centring; the known failure modes predate #67 and reproduce
+  with the bar shown too. About 28 s of play across the 20 playing trials
+  (`sum` of the ten delays, twice), derived from needing to spread across an
+  Utterance's own length, not a round number.
+- `testReadingButtonDuringBufferingAndWaveform`: collapses paused (two
+  screenshots half a second apart, and the button's own cropped pixels
+  compared byte-for-byte — identical), then Play immediately followed by
+  Collapse and a press on the Reading Button, to catch it mid-buffering and
+  confirm the press does not start or stop the reading either way, then the
+  same paused-vs-playing pixel comparison while playing (not identical: the
+  `variableColor` effect is moving). Also prints the button's own
+  accessibility label and value at each state — what VoiceOver would announce.
+  Measured 2026-09-26: `paused frames-identical=true`,
+  `playing frames-identical=false`, label always `"Show the player"`, value
+  `"Paused"` or `"Playing"` and never anything else. About 3-4 s of play.
+- `testCollapseRestoreAcrossUtteranceChange`: unlike
+  `testCollapseWhilePlayingAndRestore`, does not reset to the first sentence,
+  so Play's own centring has something to scroll, and stays collapsed for 5 s
+  — long enough at this fixture's pace to cross an Utterance while hidden.
+  Compares each transition's own instant, not the interval in between (Pitfalls,
+  "Comparing ink against a baseline taken before the page has settled…", which
+  this test's own first version ran into). Measured 2026-09-26, corrected:
+  `rows-differing=0 of 580` both at the instant of collapsing and the instant
+  of restoring, after Utterances had crossed while hidden. About 5.6 s of play.
+- `testContentsRowLandsBelowBar`: not on the fixture (Pitfalls, "The fixture's
+  own Contents rows are all `unreachable`") — opens Shadow Slave — Chapters
+  1–250, taps its own currently-read Contents row (the "already on the page"
+  `offset()` case ADR 0048 calls out), and reads the first visible ink. Also
+  one shot of the fixture's own top (Utterance 0) below the bar, a second,
+  independent look at the case ADR 0048's own recording already measured to
+  the pixel. Measured 2026-09-26: `first-ink=204` (Shadow Slave's own chapter
+  heading, screenshot confirms it fully clear of the bar) and `first-ink=146`
+  (the fixture's own top). No playback (paused throughout).
+
+Two more checks used the harness rather than a real touch — collapsing and
+disabling a Provider are both handler actions here, not touches; say so if
+citing them:
+
+- **A failure note while collapsed.** Play, harness `collapse:true`, then
+  disable the only enabled Provider (`"do":"settings","patch":
+  {"enabledProviders":[]}`, the same technique as "Disabling the active
+  Provider while a Reading is held" below, here against an actively-playing
+  reading instead of one parked in the Library). Measured 2026-09-26: `HX
+  note attention=true "Fish Audio is disabled. Choose an enabled provider."`
+  within about 2 s, and the bar and the full player were back on screen with
+  it (screenshot) — `collapsed` was never explicitly set back to `false`; the
+  screen's own `chrome = !(collapsed && notes.length === 0)` did it, exactly
+  as ADR 0048 describes. Restoring `enabledProviders` afterwards left a stale
+  note on screen until the next Play, which is expected (`status.note` clears
+  on the next `play()`, not on a settings change) rather than a bug. A
+  duplicate-note rendering issue found this way is in Pitfalls above, reported
+  separately.
+- **Dark theme.** Harness `"do":"settings","patch":{"theme":"dark"}`. The
+  floating bar, the page under it, and the collapsed Reading Button (a white
+  circle with a black waveform glyph, the inverse of light mode's dark circle
+  and white glyph — `reading-button.tsx`'s own `PALETTE[scheme].page` colour
+  on an `INK.text` circle, exactly swapping with the theme) all matched the
+  phone's own dark mode. Restored to the original `theme` (confirmed by
+  `saysettings` matching the session's starting settings exactly) afterwards.
+
 ## The Reading held in the Library (#68)
 
 With `A Short Test of Reading Aloud` and one other Document in the Library, a
@@ -2315,6 +2536,28 @@ XCTest runs the methods in name order:
   button and the row go. About 6 s of play. It really deletes the fixture, so
   it is named to run last, and the script adds the fixture back through the
   harness afterwards (`Fixture added back`).
+- `testAccessibilityTreeHasNoReaderControlsWhileParked` (independent
+  verification, 2026-09-26): Play, back, then the accessibility tree is
+  checked for `Pause`, `Play`, `Collapse the player`, `Contents`,
+  `More actions`, `Next sentence`, `Previous sentence`, `Next paragraph` and
+  `Previous paragraph` — none exist while the Library is in front, confirming
+  the parked reader's own controls are not exposed, not just visually hidden.
+  About 10 s of play.
+- `testEndOfFixtureStopsPlaybackButtonStays` (independent verification,
+  2026-09-26): from the fixture's second-to-last sentence, Play, back. The
+  reading reaches the document's own end while the Library is in front — the
+  button's value stops ending in `Playing` — and the button stays; it returns
+  to the reader paused at the end, not reloaded. About 8 s of play.
+- `testLockScreenResumeKeepsLibraryInFront` (independent verification,
+  2026-09-26): Play, back, Pause on Notification Centre's Now Playing card
+  (button stays, says `Paused`), then Play on the same card. The reading
+  resumes — the button says `Playing` again — while the Library stays in
+  front the whole time; the button then returns to the reader still playing,
+  not reloaded. About 20 s of play.
+- `testOwnRowReturnsToLiveReading` (independent verification, 2026-09-26):
+  Play, back, then a tap on the fixture's own Library row instead of the
+  Reading Button. It returns to the same live reader, still playing, not
+  reloaded. About 10 s of play.
 
 The script checks the simulator's volume first, stops an `xcodebuild` that
 outlives its suite by two minutes, and reads the verdict from `test.log`.
@@ -2322,9 +2565,79 @@ Before any tap near the bottom of the screen, the probe dismisses React
 Native's warning banner with its close button (Pitfalls, "A tap on the LogBox
 banner…").
 
-It does not prove what is heard, memory (notes 2026-09-25 23:41), a section
-laid out while parked (the spike, notes 23:40), or a physical iPhone's
-lock-screen state.
+It does not prove what is heard, memory (notes 2026-09-25 23:41), or a
+physical iPhone's lock-screen state. A section laid out while parked is
+covered by the spike (notes 23:40) and, on a real book, by
+`reading-held-book.sh` below.
+
+Independent verification, 2026-09-26: running all nine methods together in
+one `xcodebuild` invocation, `testEdgeSwipeCollapsedAndLockScreenPauseInLibrary`
+and `testEndOfFixtureStopsPlaybackButtonStays` failed (`Executed 9 tests, with
+4 failures`) — the edge swipe did not register, which then left the app on a
+screen the next method's `toLibrary` could not recover from, cascading into
+its failure. Re-running just those two methods on a fresh app launch passed
+cleanly (`Executed 2 tests, with 0 failures`), so this was test-order/gesture
+flakiness under a long back-to-back run, not a regression; the other seven
+methods passed in both runs.
+
+## The Reading held on a real, long book (#68)
+
+With "Shadow Slave — Chapters 1–250" (or another part from
+`~/Works/epub_books`, README "Real books") already in the Library:
+
+```sh
+bash test/manual-test/reading-held-book.sh SIMULATOR_UDID NEW_OUTPUT_DIR METRO_LOG [MARGIN]
+```
+
+The small fixture proves the mechanism; this proves it on "hundreds of spine
+items, chapters several screens tall and a real navigation document" — what a
+section boundary actually meets in the owner's own reading. A fresh mount's
+Utterance count (`known`, from the harness `say`) is **session-relative**: the
+same absolute number means a different place after a different resume anchor
+(Pitfalls below), so the number of chapters this run crosses is whatever the
+book's own resume anchor happens to leave MARGIN Utterances short of — not a
+fixed chapter. Measured 2026-09-26: one run crossed from "Chapter 25" to
+"Chapter 30" in about 6 Utterances of play; a session-relative index does not
+mean chapters are evenly sized.
+
+Before the real-touch suite runs (`ios/ReadingHeldBookProbe.swift`, one
+method, `testRealBookCrossesUnrenderedSectionWhileParked`), the script itself
+opens the book and re-derives the seek target from THIS session's own
+`known`, by the harness's `open`/`say`/`seek` commands (a handler action, not
+a touch — reaching a chosen sentence in a 250-chapter book by real taps alone
+is impractical), confirming the seek did not itself trigger the next
+section's render before retrying with a larger margin. It leaves the app
+sitting in that live, paused reader rather than persisting the place and
+reopening it (Pitfalls below), so the probe's own first touch is Play, not a
+tap to reopen. Every touch the probe itself performs — Play, the back arrow,
+the Reading Button, Pause — is real, and it never assumes which chapter the
+edge falls in: it only checks that the Library row's own quote of the
+reading's place changes at all, which at that edge is only possible by
+rendering fresh content. Measured 2026-09-26: `Executed 1 test, with 0
+failures`, about 23 s of play (`Seeded … margin 6` to crossing to Pause).
+
+It does not prove what specific chapter a fresh install would land on (that
+depends entirely on the book's own saved place), or hold-time memory on a
+real book (the spike in notes 2026-09-25 23:40 used one).
+
+## Disabling the active Provider while a Reading is held (#68, handler probe)
+
+Not a real-touch script — a harness sequence run once, 2026-09-26, to answer
+whether something in Settings that stops an in-progress Reading leaves the
+Library's button in place. With the fixture playing and left while playing
+(`{"do":"play"}` then `{"do":"shut"}`, both handler actions — the same
+`goBack` the back arrow itself calls), patching `enabledProviders` to remove
+the Voice's own provider (`{"do":"settings","patch":{"enabledProviders":[]}}`,
+never the Keychain — no credential was read, written or displayed) stopped the
+reading within one tick: `HX status playing=false …` followed by
+`HX note attention=true "Fish Audio is disabled. Choose an enabled
+provider."`. The button stayed (screenshot, partly covered by the LogBox
+banner). Restoring `enabledProviders` to the original list (confirmed by
+`{"do":"saysettings"}` matching the session's starting settings exactly) and
+leaving the reader while the reading was already stopped left a clean Library
+with no button. This is a handler-action result, not a real Settings-UI
+toggle of Fish's own "Use this provider" switch, which the freeze-while-on
+rule (#48, design 0041) may gate differently.
 
 ## Inspect, stop or briefly exercise the reading handler
 

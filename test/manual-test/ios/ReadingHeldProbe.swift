@@ -254,6 +254,120 @@ final class ReadingHeldProbe: XCTestCase {
     capture("31-library-after-other", app)
   }
 
+  /// While the Reading is held and the Library is in front, the parked
+  /// reader's own controls (never destroyed, only moved off-screen per #68's
+  /// native reparent) are not in the accessibility tree.
+  func testAccessibilityTreeHasNoReaderControlsWhileParked() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    toLibrary(app)
+    openFixture(app, at: 1)
+    press(app.buttons["Play"], app)
+    XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 10), "Play did not start")
+    app.buttons["BackButton"].tap()
+    XCTAssertTrue(returnButton(app).waitForExistence(timeout: 5), "No Reading Button after leaving while playing")
+    XCTAssertTrue(inLibrary(app), "Expected the Library in front")
+    for label in ["Pause", "Play", "Collapse the player", "Contents", "More actions",
+                  "Next sentence", "Previous sentence", "Next paragraph", "Previous paragraph"] {
+      XCTAssertFalse(app.buttons[label].exists, "Reader control \"\(label)\" is in the accessibility tree while parked")
+    }
+    capture("50-parked-ax-tree", app)
+    press(returnButton(app), app)
+    XCTAssertTrue(until(5) { self.inReader(app) }, "The Reading Button did not return to the reader")
+    press(app.buttons["Pause"], app)
+    XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Did not pause")
+  }
+
+  /// The fixture's own end while the Library is in front: the reading stops
+  /// itself, and the button stays rather than going with it.
+  func testEndOfFixtureStopsPlaybackButtonStays() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    toLibrary(app)
+    // "second to last": one sentence left before the document's own end.
+    openFixture(app, at: 17)
+    press(app.buttons["Play"], app)
+    XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 10), "Play did not start")
+    app.buttons["BackButton"].tap()
+    XCTAssertTrue(returnButton(app).waitForExistence(timeout: 5), "No Reading Button after leaving while playing")
+    shot("60-library-playing-near-end")
+
+    let stopped = until(20) { (self.returnButton(app).value as? String)?.hasSuffix("Playing") == false }
+    XCTAssertTrue(stopped, "The reading did not stop at the end of the document")
+    XCTAssertTrue(returnButton(app).exists, "The Reading Button went when the document ended")
+    capture("61-library-ended", app)
+
+    press(returnButton(app), app)
+    XCTAssertTrue(until(5) { self.inReader(app) }, "The Reading Button did not return to the reader")
+    XCTAssertFalse(until(1.5) { self.reloading(app) }, "The reader opened the document again instead of taking back the Reading")
+    XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Expected the reader paused at the end")
+    capture("62-back-in-reader-at-end", app)
+  }
+
+  /// A lock-screen Pause keeps the button; a lock-screen Play resumes while
+  /// the Library stays in front, before the button is used to return.
+  func testLockScreenResumeKeepsLibraryInFront() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    toLibrary(app)
+    openFixture(app, at: 1)
+    press(app.buttons["Play"], app)
+    XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 10), "Play did not start")
+    app.buttons["BackButton"].tap()
+    XCTAssertTrue(returnButton(app).waitForExistence(timeout: 5), "No Reading Button after leaving while playing")
+
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.01))
+      .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.7)))
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let center = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    guard center.waitForExistence(timeout: 5), center.label == "Pause" else {
+      shot("70-no-lock-screen-pause")
+      app.activate()
+      if app.buttons["Pause"].exists { press(app.buttons["Pause"], app) }
+      XCTFail("The lock screen offered no Pause with the Library in front")
+      return
+    }
+    center.tap()
+    let paused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Play"), object: center)
+    XCTAssertEqual(XCTWaiter.wait(for: [paused], timeout: 3), .completed, "The lock screen's Pause did not take")
+
+    // Resume from the same card, without leaving the Library.
+    center.tap()
+    let playing = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Pause"), object: center)
+    XCTAssertEqual(XCTWaiter.wait(for: [playing], timeout: 3), .completed, "The lock screen's Play did not take")
+    app.activate()
+    XCTAssertTrue(app.navigationBars["Library"].exists, "Resuming from the lock screen left the Library")
+    XCTAssertTrue(returnButton(app).waitForExistence(timeout: 5), "The Reading Button went while resuming from the lock screen")
+    XCTAssertTrue(until(3) { (self.returnButton(app).value as? String)?.hasSuffix("Playing") == true }, "The Reading Button does not say the reading resumed")
+    capture("71-library-resumed", app)
+
+    press(returnButton(app), app)
+    XCTAssertTrue(until(5) { self.inReader(app) }, "The Reading Button did not return to the reader")
+    XCTAssertFalse(until(1.5) { self.reloading(app) }, "The reader opened the document again instead of taking back the Reading")
+    XCTAssertTrue(app.buttons["Pause"].exists, "The reading is not playing after the return")
+    capture("72-back-in-reader-playing", app)
+    press(app.buttons["Pause"], app)
+    XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Did not pause")
+  }
+
+  /// The book's own Library row returns to the live Reading exactly as the
+  /// Reading Button does, without reopening the document.
+  func testOwnRowReturnsToLiveReading() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    toLibrary(app)
+    openFixture(app, at: 1)
+    press(app.buttons["Play"], app)
+    XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 10), "Play did not start")
+    app.buttons["BackButton"].tap()
+    XCTAssertTrue(returnButton(app).waitForExistence(timeout: 5), "No Reading Button after leaving while playing")
+    shot("80-library-playing")
+
+    press(row(fixture, app), app)
+    XCTAssertTrue(until(5) { self.inReader(app) }, "The book's own row did not return to the reader")
+    XCTAssertFalse(until(1.5) { self.reloading(app) }, "The row reopened the document instead of taking back the Reading")
+    XCTAssertTrue(app.buttons["Pause"].exists, "The reading is not playing after the return")
+    capture("81-back-in-reader-via-row", app)
+    press(app.buttons["Pause"], app)
+    XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Did not pause")
+  }
+
   /// Deleting the document being read ends the Reading, and the button goes.
   func testZDeleteEndsReading() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
