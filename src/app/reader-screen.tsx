@@ -7,10 +7,12 @@
  * book tomorrow, and a path does not (ADR 0004).
  *
  * The navigation bar is the platform's: a back arrow that is also the edge
- * swipe, the Document's own name, and Appearance on the right. Back goes to the
- * Library; the reading stops when this screen unmounts — `use-reading.ts`'s one
- * cleanup disposes the engine and gives the audio session back — and the place
- * is kept, which is the last thing this screen does before it goes.
+ * swipe, the Document's own name, and More actions on the right. It floats over
+ * the page and goes when the player collapses (#67, ADR 0048); the edge swipe
+ * works either way. Back goes to the Library; the reading stops when this screen
+ * unmounts — `use-reading.ts`'s one cleanup disposes the engine and gives the
+ * audio session back — and the place is kept, which is the last thing this
+ * screen does before it goes.
  *
  * It never shows nothing. A blank screen and a crashed app look identical, which
  * is the reason the screen this replaces existed (ADR 0018's launch crash
@@ -19,8 +21,10 @@
  * file turns out not to be there at all.
  */
 
+import { useHeaderHeight } from '@react-navigation/elements';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { ReadingPlace, ReadingPosition } from '../core/document';
 import type { ProviderId } from '../core/providers/types';
@@ -113,6 +117,35 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
       headerRight: () => <HeaderButton label="More actions" icon="more" onPress={() => setActions(true)} />,
     });
   }, [navigation, title]);
+
+  /**
+   * The navigation bar comes and goes with the player (#67, ADR 0048), and it
+   * **floats over the page** to do it, as the player does.
+   *
+   * An opaque bar takes its height out of the page, so hiding it would give the
+   * page that height back: the WebView would resize, the text would move by the
+   * bar's height, and epub.js destroys every view on a resize (`highlighter.ts`,
+   * "the blank open"). A transparent bar with the page's own colour looks the
+   * same while it is shown, and the page under it is the same size either way.
+   * The page starts below the status bar, which stays: the clock is the owner's,
+   * and the text never runs under it.
+   *
+   * `chrome` is whether the player is shown in full, which `<ReadingView>` says.
+   */
+  const [chrome, setChrome] = useState(true);
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerTransparent: true, headerShown: chrome });
+  }, [navigation, chrome]);
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  /**
+   * How tall the bar is, remembered while it is hidden: the header height is
+   * zero then, and the space the page keeps for the bar must not go with it, or
+   * every hide and show would move the text by that much.
+   */
+  const shownBar = headerHeight - insets.top;
+  const [barHeight, setBarHeight] = useState(shownBar > 0 ? shownBar : 0);
+  if (shownBar > 0 && shownBar !== barHeight) setBarHeight(shownBar);
 
   const setRate = useCallback((rate: number) => setSettings({ ...settings, rate }), [settings, setSettings]);
   /**
@@ -259,7 +292,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   );
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       {opened ? (
         /**
          * Keyed by the Document, so that another one arrives with a new bridge,
@@ -283,6 +316,8 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
           onVoice={setVoice}
           onReached={reached}
           onTitle={titled}
+          barHeight={barHeight}
+          onChrome={setChrome}
         />
       ) : (
         <View style={styles.waiting}>

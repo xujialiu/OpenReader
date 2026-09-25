@@ -234,3 +234,15 @@ A surface that rises from the bottom of the screen over what the owner was
 looking at, holding the choices or the list that belong to it, and that goes
 away when dragged down or when the owner taps outside it.
 _Avoid_: sheet, bottom sheet, modal, popup, panel
+
+**Player**:
+The reading's controls, floating over the bottom of the page in the reader: the
+voice, the transport, the contents and the speed. Collapsed, it is down to the
+Reading Button.
+_Avoid_: control bar, toolbar, mini player, transport bar
+
+**Reading Button**:
+The round button that stands for the reading in progress: in the reader, what
+is left of the Player when it is collapsed. It shows whether the reading is
+playing, and a press brings the controls back; it never plays or pauses.
+_Avoid_: play button, mini player, floating button, now playing

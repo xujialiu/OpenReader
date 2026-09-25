@@ -121,7 +121,7 @@ final class DownloadConcurrencyProbe: XCTestCase {
 
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 15))
     app.buttons["Settings"].tap()
-    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta28"].waitForExistence(timeout: 5), "Settings did not show the beta26 version line")
+    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta30"].waitForExistence(timeout: 5), "Settings did not show the version line")
     capture("01-settings-version", app)
 
     openProvider(app, "Fish Audio")
@@ -407,7 +407,7 @@ final class DownloadConcurrencyProbe: XCTestCase {
 
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 15))
     app.buttons["Settings"].tap()
-    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta28"].waitForExistence(timeout: 5), "Settings did not show Version 0.0.2-beta28")
+    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta30"].waitForExistence(timeout: 5), "Settings did not show Version 0.0.2-beta30")
     openProvider(app, "OpenAI Compatible")
     XCTAssertTrue(app.navigationBars["OpenAI Compatible"].waitForExistence(timeout: 5))
 

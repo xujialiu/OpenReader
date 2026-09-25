@@ -49,6 +49,10 @@ vi.mock('../../src/app/reader-actions', () => ({ ReaderActions: () => null }));
 vi.mock('../../src/app/controls', () => ({ HeaderButton: () => null, Note: () => null, INK: { page: '#fff', quiet: '#888' } }));
 vi.mock('../../src/app/use-provider-secrets', () => ({ useProviderKey: () => ({ presence: { state: 'held' } }) }));
 vi.mock('../../src/app/walkthrough-harness', () => ({ useHarnessCommands: () => {} }));
+// The bar's height (#67), as native-stack reports it on an iPhone 17: a 62-point
+// status bar and a 54-point bar.
+vi.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 116 }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 62, bottom: 34, left: 0, right: 0 }) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const A = ('sha256:' + 'a'.repeat(64)) as DocumentId;

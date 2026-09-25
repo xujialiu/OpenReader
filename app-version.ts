@@ -14,4 +14,4 @@
  * A release drops the suffix here and moves app.config.ts and `package.json` to
  * the same number.
  */
-export const APP_VERSION = '0.0.2-beta29';
+export const APP_VERSION = '0.0.2-beta30';

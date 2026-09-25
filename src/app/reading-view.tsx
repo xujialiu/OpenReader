@@ -7,16 +7,18 @@
  * **The player floats.** The document fills the screen and the player is
  * positioned over the bottom of it, so the text does not reflow when the player
  * appears, goes, collapses or expands (ADR 0020). Nothing about `<Reader>`'s size
- * mentions the player, which is what makes that true rather than nearly true.
+ * mentions the player, which is what makes that true rather than nearly true. The
+ * navigation bar floats over the top the same way and comes and goes with the
+ * player (#67, ADR 0048), so `<Reader>`'s size does not mention it either.
  *
  * **Which means the centring has to be told.** ADR 0011 centres the spoken
  * Utterance against the scroll container's own height, and the player now covers
  * the bottom of that container — so the middle of the *visible* text is not the
  * middle of the container, and the difference changes when the player collapses.
  * The player measures itself and the height goes straight to the renderer
- * (`bridge.setInset`). It is a live coupling, not a constant: the centring runs
- * once per Utterance on the Clip cue, so an offset that went stale is not
- * corrected by anything.
+ * (`bridge.setInset`), and the bar's goes with it (`bridge.setBar`). It is a live
+ * coupling, not a constant: the centring runs once per Utterance on the Clip cue,
+ * so an offset that went stale is not corrected by anything.
  *
  * **It says what it is doing.** Which Utterance is being read, at which Highlight
  * Level, and what the last thing to refuse said. `docs/PHILOSOPHY.md` rule 1 is
@@ -134,6 +136,18 @@ export interface ReadingViewProps {
   onReached(place: ReadingPlace): void;
   /** What the EPUB calls itself, once epub.js has its metadata. */
   onTitle(title: string): void;
+  /**
+   * How tall the navigation bar over the top of the page is, in points, whether
+   * or not it is shown (#67). The screen measures it; the page keeps that much
+   * space above the document, and the centring leaves it out while it is shown.
+   */
+  barHeight: number;
+  /**
+   * Whether the player is shown in full, which is when the navigation bar is
+   * too (#67): they come and go together, so that one state says what is on the
+   * screen and any pause or note that brings the player back brings the bar.
+   */
+  onChrome(shown: boolean): void;
 }
 
 /**
@@ -203,6 +217,8 @@ export function ReadingView({
   onVoice,
   onReached,
   onTitle,
+  barHeight,
+  onChrome,
 }: ReadingViewProps) {
   const fileSystem = useReaderFileSystem;
   const { sync, library } = useShell();
@@ -234,7 +250,7 @@ export function ReadingView({
   const [voicesOpen, setVoicesOpen] = useState(false);
   const closeContents = useCallback(() => setContentsOpen(false), []);
   const closeVoices = useCallback(() => setVoicesOpen(false), []);
-  /** Down to one button, or the whole strip. Here rather than in the player because pausing re-opens it, and the pause is this screen's. */
+  /** Down to the Reading Button, or the whole strip and the navigation bar with it (#67). Here rather than in the player because pausing re-opens both, and the pause is this screen's. */
   const [collapsed, setCollapsed] = useState(false);
   /**
    * The size to give `<Reader>`, in points, measured rather than inherited.
@@ -351,7 +367,7 @@ export function ReadingView({
   /**
    * Pause, and the one path there is.
    *
-   * **Pausing re-opens the player** — the assumption is that the owner is about to
+   * **Pausing re-opens the player**, and the navigation bar with it (#67) — the assumption is that the owner is about to
    * do something else, go back a sentence or change the Voice, so the controls
    * arriving at that moment is convenient. That line used to live in `player.tsx`,
    * next to the button. It is here now because the lock screen has a pause too
@@ -450,6 +466,20 @@ export function ReadingView({
     if (status.voiceError && !voicesOpen) said.push({ said: status.voiceError, attention: true });
     return said;
   }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status, voicesOpen, savedVoice, inventoryProblem]);
+
+  /**
+   * Whether the player is shown in full, and with it the navigation bar (#67).
+   *
+   * The player's own rule, `collapsed && notes.length === 0`, made the screen's:
+   * a note is a thing the owner has not been told, so it opens the player, and
+   * the bar comes with it. The bar floats, so what it covers goes to the
+   * centring while it is shown and nothing when it is not; the space the page
+   * keeps for it stays either way, so the text does not move.
+   */
+  const chrome = !(collapsed && notes.length === 0);
+  useEffect(() => { onChrome(chrome); }, [chrome, onChrome]);
+  const setBar = reading.bridge.setBar;
+  useEffect(() => { setBar(chrome ? barHeight : 0, barHeight); }, [chrome, barHeight, setBar]);
 
   /**
    * The Voice in use as its own Provider describes it — the name it publishes and

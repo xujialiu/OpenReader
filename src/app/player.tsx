@@ -13,11 +13,13 @@
  *   owner's novel — one file, two thousand chapters — a bar would answer "how far
  *   through am I" with a number too small to read and destroy the reading position
  *   if it were dragged. Tapping a sentence and the contents list replace it.
- * - **Collapsing leaves one play button and nothing else** — no arrow to restore
- *   the player. Pressing it pauses, and pausing re-opens the player. One behaviour
- *   doing two jobs, chosen so that someone reaching out to stop the reading always
- *   has a button to press: with the controls hidden and no button, they would tap
- *   the page, and tapping the page moves the reading position.
+ * - **Collapsing leaves the Reading Button and nothing else**, and takes the
+ *   navigation bar with it (#67, ADR 0048). Pressing the button brings the player
+ *   and the bar back and never plays or pauses; a pause from anywhere else still
+ *   re-opens both. It was the player's own Play/Pause until #67, chosen so that
+ *   someone reaching out to stop the reading always had a button to press; the
+ *   button is still always there, so that is kept, and stopping from collapsed
+ *   now takes two presses instead of one (`reading-button.tsx`).
  *
  * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
@@ -33,6 +35,7 @@ import { Icon, type IconName } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { SkipTarget } from './use-reading';
 import { LoadingSpinner } from './loading-spinner';
+import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 
 /**
  * How a held stepper button repeats, and why it is not simply "fast".
@@ -170,7 +173,7 @@ export function Player({
       // beside it: with the controls hidden, tapping the page is the reading
       // position moving, and a band of dead page would be a puzzle.
       <View style={styles.collapsed} pointerEvents="box-none" onLayout={measure}>
-        <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
+        <ReadingButton playing={playing} buffering={buffering} label="Show the player" onPress={() => onCollapsed(false)} />
       </View>
     );
   }
@@ -403,7 +406,7 @@ const styles = StyleSheet.create({
   // taller, and every point of it is a point of the page it covers.
   buttonPrimary: { backgroundColor: INK.text, width: 52, minWidth: 52, height: 52, borderRadius: 26 },
   chevronTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  collapsed: { alignItems: 'flex-end', bottom: 28, position: 'absolute', right: 16 },
+  collapsed: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   disabled: { opacity: 0.35 },
   footTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },

@@ -380,3 +380,37 @@ describe('routine status is quiet, but lost positions still need attention (desi
     pin(code('player.tsx'), 'if (collapsed && notes.length === 0)', 'player.tsx');
   });
 });
+
+describe('the navigation bar comes and goes with the player, and floats (#67, ADR 0048)', () => {
+  it('is shown exactly when the player is shown in full, notes included', () => {
+    // One state for what is on the screen: a note opens the player, and a bar
+    // left hidden over an open player would be a second state nothing asked for.
+    const view = code('reading-view.tsx');
+    pin(view, 'const chrome = !(collapsed && notes.length === 0);', 'reading-view.tsx');
+    pin(view, 'useEffect(() => { onChrome(chrome); }, [chrome, onChrome]);', 'reading-view.tsx');
+    // What the bar covers goes to the centring only while it is shown; the room
+    // the page keeps for it stays, so the text does not move.
+    pin(view, 'setBar(chrome ? barHeight : 0, barHeight);', 'reading-view.tsx');
+  });
+
+  it('floats over the page, so hiding it does not resize the WebView', () => {
+    // An opaque bar gives its height back to the page when it hides, the WebView
+    // resizes, and epub.js destroys every view on a resize (the blank open).
+    const screen = code('reader-screen.tsx');
+    pin(screen, 'navigation.setOptions({ headerTransparent: true, headerShown: chrome });', 'reader-screen.tsx');
+    pin(screen, '{ paddingTop: insets.top }', 'reader-screen.tsx');
+  });
+
+  it('remembers the bar’s height while it is hidden', () => {
+    // The header height is zero while the bar is hidden; the room kept for it
+    // must not follow, or every hide and show would move the text by that much.
+    pin(code('reader-screen.tsx'), 'if (shownBar > 0 && shownBar !== barHeight) setBarHeight(shownBar);', 'reader-screen.tsx');
+  });
+
+  it('leaves a Reading Button that shows the player and never plays or pauses', () => {
+    const button = code('reading-button.tsx');
+    expect(button).not.toMatch(/onPlay|onPause|toggle/);
+    pin(button, 'onPress={onPress}', 'reading-button.tsx');
+    pin(code('player.tsx'), 'onPress={() => onCollapsed(false)}', 'player.tsx');
+  });
+});

@@ -265,6 +265,14 @@ export interface ReaderBridge {
    */
   setInset(bottomPx: number): void;
   /**
+   * The navigation bar over the top of the page, in points (#67): what it covers
+   * now, zero while hidden, and its height whether or not it is shown. The first
+   * is the centring's, as `setInset`'s is; the second is the space the page keeps
+   * above the document's first line and at the top of every place it lands on.
+   * See `BarMessage`.
+   */
+  setBar(coveredPx: number, reservedPx: number): void;
+  /**
    * How the document's text is set: the owner's Appearance (ADR 0019).
    *
    * A message and not a remount. The program is installed once, at page load, so
@@ -374,6 +382,11 @@ function asMessage(event: unknown): WebViewMessage | null {
   return event as WebViewMessage;
 }
 
+/** A height in points, or zero for anything that is not a positive number. */
+function pointsOrZero(points: number): number {
+  return Number.isFinite(points) && points > 0 ? points : 0;
+}
+
 export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge {
   const { injectJavascript, goToLocation } = useReader();
 
@@ -431,6 +444,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    * so it is what re-sends this.
    */
   const inset = useRef(0);
+  /** The last bar sent, re-sent for the same reason as `inset` above. */
+  const bar = useRef({ coveredPx: 0, reservedPx: 0 });
   /**
    * What was baked into the program at mount, and what the owner has chosen
    * since.
@@ -523,6 +538,16 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [send],
   );
 
+  const setBar = useCallback(
+    (coveredPx: number, reservedPx: number) => {
+      const next = { coveredPx: pointsOrZero(coveredPx), reservedPx: pointsOrZero(reservedPx) };
+      if (next.coveredPx === bar.current.coveredPx && next.reservedPx === bar.current.reservedPx) return;
+      bar.current = next;
+      send({ kind: 'bar', ...next });
+    },
+    [send],
+  );
+
   const setAppearance = useCallback(
     (next: Appearance) => {
       appearance.current = next;
@@ -587,6 +612,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         spine.current = message.spine;
         // The program has installed, so the two things it may have missed go again.
         if (inset.current > 0) send({ kind: 'inset', bottomPx: inset.current });
+        if (bar.current.reservedPx > 0) send({ kind: 'bar', ...bar.current });
         if (appearance.current !== installed.current || bodyTextSize.current !== installedBodyTextSize.current) {
           send({ kind: 'appearance', css: appearanceCss(appearance.current, bodyTextSize.current) });
         }
@@ -673,7 +699,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
-    [clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
+    () => ({ clock, setUtterances, show, setInset, setBar, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
+    [clock, setUtterances, show, setInset, setBar, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
   );
 }

@@ -453,6 +453,24 @@ fix (AGENTS.md).
 
 ### Screenshots of the reading page
 
+- **The book's text is not in the accessibility tree.** Measured 2026-09-25
+  (#67): `app.debugDescription` of the open reader lists the navigation bar and
+  the player's buttons, and the WebView as one `Other` labelled `Vertical scroll
+  bar, 2 pages, …`, with no `StaticText` from the book. Its sections are
+  iframes. A first version of `ReadingButtonProbe` looked for
+  `app.webViews.staticTexts` and found none, so it reported "no line of text"
+  for a full page. Read the text's position off a screenshot (`inkRows` there),
+  and tap a sentence by where it is drawn.
+- **A reader just opened is still laying out, and its waiting line is ink.**
+  The same probe's first reading, taken a second after the reader appeared,
+  found the first text at 463 points, where "Laying the document out…" sits,
+  and the next one found the book's heading at 146. It reported a 317-point
+  move for no move at all. Two readings that agree are not enough: the waiting
+  line stays put for seconds. Wait until the waiting line has gone, then for
+  three readings half a second apart that agree (`settledInk`).
+- **A Reading Button waiting for audio reads `busy, Playing`, not `Playing`.**
+  `accessibilityValue` and `accessibilityState.busy` arrive in XCTest as one
+  `value`. Match the end of it.
 - **Paint an earlier run left on the screen is still there when the next run
   starts, in the same place.** Stale paint stays until something repaints its
   area, so a probe that ran the same sequence again saw its predecessor's strip
@@ -1009,6 +1027,18 @@ fix (AGENTS.md).
   ["fish"]`. `ScrollThemeReaderProbe.testConfigureFishProviderNoRelaunch`
   already waits for that note, so on such a device it fails rather than
   passing; it still taps the switch with the keyboard up.
+- **On a new `iPhone 17 player` both Fish setup methods failed, and Fish Audio
+  ended enabled anyway.** Measured 2026-09-25 (#67), iOS 27.0, software
+  keyboard shown. `ScrollThemeReaderProbe.testConfigureFishProviderNoRelaunch`
+  failed after 48.8 s waiting for `Turn off to edit.`, as the bullet above
+  predicts. `OfflineFixProbe.testConfigureFishProvider` then failed after 29.2 s
+  at "The keyboard stayed up": the tap on `Voice sources` did not dismiss it
+  within 3 s. An `XCTAssert` does not stop a method, so it went on to the
+  switch. Afterwards the page showed Enabled, `Turn off to edit.` and
+  `Connection successful`, and `settings.json` held `"enabledProviders":
+  ["fish"]`. Read `settings.json`, not the verdict, to know whether a
+  provider is enabled. Each run also left the stack at Fish Audio's page (see
+  "The harness's `open` pushes the Reader…").
 - **`download-concurrency.ts` showed Speechify no faster at two or five than
   at one, which measured the provider's queue, not the service.** Measured
   2026-09-25 14:47: 22.2 s at two against 23.3 s at one, each request's own
@@ -1884,6 +1914,22 @@ subfolder), none of them the app being wrong.
   wrapper's output through another command without checking that command's own
   exit code separately.
 
+- **A stopped `xcodebuild` leaves a result bundle `xcresulttool` cannot read,
+  and under `set -e` that ends the wrapper.** Measured 2026-09-25 (#67): after
+  `reading-button.sh` stopped an `xcodebuild` that was still collecting
+  diagnostics two minutes after a failed suite, `xcresulttool export
+  attachments` failed and the script exited 64 instead of reporting the
+  failure. The export is now allowed to fail, and the screenshots are the raw
+  PNGs in `result.xcresult/Data/data.*` (above). The verdict comes from
+  `test.log`'s `Test Suite 'Selected tests' passed|failed` line, not from the
+  stopped process's exit status.
+- **The harness's `open` pushes the Reader over whatever the stack holds.** On
+  a device where a provider-setup probe had left Settings › Providers › Fish
+  Audio open, `{"do":"open"}` put the Reader on top of it, and an edge swipe out
+  of the reader then showed Fish Audio's page, not the Library (2026-09-25).
+  Before a probe that leaves the reader, go back to the Library, as
+  `ReadingButtonProbe.openPaused` does.
+
 ### Evaluating in the app through `cdp.cjs`
 
 - **A loop's closures all see its last value.** What `--eval` sends is compiled
@@ -2159,6 +2205,47 @@ project the same way and passing
 fresh launch seeked back to the first sentence. It passed twice at 0.69 s
 between the taps on 2026-09-25; one earlier run at 0.82 s failed on a LogBox
 banner (Pitfalls, "A LogBox banner can appear with no `WARN`/`ERROR` line").
+
+## The collapsed player, the navigation bar and the Reading Button (#67)
+
+With `A Short Test of Reading Aloud` in the Library, a Voice that can play, and
+the app running against this tree's Metro:
+
+```sh
+bash test/manual-test/reading-button.sh SIMULATOR_UDID NEW_OUTPUT_DIR [-only-testing:METHOD ...]
+```
+
+Real XCTest touches (`ios/ReadingButtonProbe.swift`), attached to the running
+app, never relaunched. Each method starts from the reader, paused, with the
+player and the bar shown, and leaves it that way:
+
+- `testCollapseWhilePausedAndRestore`: collapse, then the Reading Button. The
+  bar and the player go and come back, the button's value says `Paused`, Play
+  is still offered 1.5 s after the press, and the text does not move either way.
+- `testCollapseWhilePlayingAndRestore`: skips back to the first sentence,
+  Play, collapse, the Reading Button, Pause. The button says `Playing`, the
+  reading is still playing after each press, and the text does not move. It
+  plays about four seconds, all of it spent on the presses. The slow reads (the
+  screen's ink, the element tree) happen before Play and after Pause.
+- `testLockScreenPauseWhileCollapsed`: Play, collapse, then Pause on
+  Notification Centre's Now Playing card. Back in the app, the bar and the
+  player are shown and Play is offered. About eight seconds of play, most of
+  it Notification Centre opening.
+- `testEdgeSwipeWhileCollapsed`: collapse, then a swipe from the left edge. The
+  reader goes and the Library is shown. Then it reopens the book.
+
+"The text does not move" is read off screenshots, because the book's text is
+not in the accessibility tree (Pitfalls, "Screenshots of the reading page"):
+ink per point row from 120 to 700, with the first row of text and the whole
+band compared (`LINE` lines in the output). It is measured at the top of the
+fixture, where Play's centring scrolls nothing, so a difference is the bar's
+and not the voice's. The script checks the simulator's volume first, and stops
+an `xcodebuild` that outlives its suite by two minutes. The verdict is then
+read from `test.log`'s suite line.
+
+It does not prove the lock screen's own icon, the bar's animation (a recording
+does, notes 2026-09-25 22:35), or anything about the dark theme beyond reading
+ink against the page's own colour.
 
 ## Inspect, stop or briefly exercise the reading handler
 
