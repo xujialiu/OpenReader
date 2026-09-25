@@ -339,6 +339,7 @@ async function synthesize(
   voice: OfflineVoice,
   text: string,
   current: AppSettings,
+  atOnce = 1,
 ): Promise<SynthesisResult> {
   const saved = await savedClip(document, voice, text);
   if (saved) {
@@ -374,12 +375,15 @@ async function synthesize(
           "no-key",
           readinessSentence(voice.provider, ready.missing),
         );
+      const configuration = providerSettings(configured, {
+        key: keyResult?.outcome === "found" ? keyResult.secret : "",
+        headers: headers?.outcome === "found" ? headers.secret : "",
+      });
+      // Speechify queues its own requests, so a download's number has to
+      // reach its queue as well as the scheduler (#64); a reading's is one.
       const provider = createProvider(
         voice.provider,
-        providerSettings(configured, {
-          key: keyResult?.outcome === "found" ? keyResult.secret : "",
-          headers: headers?.outcome === "found" ? headers.secret : "",
-        }),
+        { ...configuration, speechify: { ...configuration.speechify, atOnce } },
         providerDeps,
       );
       const controller = new AbortController();
@@ -499,7 +503,7 @@ const scheduler = createScheduler({
     ]);
     const epoch = deletionEpochs.get(key) ?? 0;
     const speech = downloadSpeech(text, settings);
-    const clip = await synthesize(task.document, task.voice, speech, settings);
+    const clip = await synthesize(task.document, task.voice, speech, settings, settings.sentencesAtOnce[task.voice.provider]);
     // A paused task can keep its paid in-flight result; a removed chapter cannot.
     const wanted = () =>
       tasks.includes(task) &&

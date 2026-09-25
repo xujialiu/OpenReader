@@ -5,7 +5,7 @@ import {
   MODEL_OTHER,
   OUTPUT_FORMAT,
   SPEECHIFY_API,
-  SerialQueue,
+  RequestQueue,
   createSpeechifyProvider,
   decodeSpeechifyVoice,
   isSpeakable,
@@ -22,7 +22,7 @@ const cfg: SpeechifyConfig = { apiKey: 'sk_test' };
 /** Every wait is skipped in the tests; `waits` keeps what was asked for. */
 let waits: number[] = [];
 function provider(fetchImpl: unknown, over: Partial<SpeechifyConfig> = {}, deps: Partial<SpeechifyDeps> = {}) {
-  return createSpeechifyProvider({ ...cfg, ...over }, { fetch: fetchImpl as typeof fetch, wait: async (ms) => void waits.push(ms), queue: new SerialQueue(), ...deps });
+  return createSpeechifyProvider({ ...cfg, ...over }, { fetch: fetchImpl as typeof fetch, wait: async (ms) => void waits.push(ms), queue: new RequestQueue(), ...deps });
 }
 
 const controller = new AbortController();
@@ -442,7 +442,7 @@ describe('createSpeechifyProvider', () => {
     });
 
     it('shares the queue between instances, since a provider is built per call', async () => {
-      const queue = new SerialQueue();
+      const queue = new RequestQueue();
       const first = deferred<Response>();
       const fetchImpl = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValueOnce(reply([]));
       const one = provider(fetchImpl, {}, { queue }).synthesize('One', GEORGE);
@@ -452,6 +452,39 @@ describe('createSpeechifyProvider', () => {
       first.resolve(reply([]));
       await Promise.all([one, two]);
       expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it('sends as many at once as a download was allowed, and never more (#64)', async () => {
+      const replies = [deferred<Response>(), deferred<Response>(), deferred<Response>()];
+      const fetchImpl = vi.fn().mockReturnValueOnce(replies[0]!.promise).mockReturnValueOnce(replies[1]!.promise).mockReturnValueOnce(replies[2]!.promise);
+      const p = provider(fetchImpl, { atOnce: 2 });
+      const all = Promise.all(['One', 'Two', 'Three'].map((text) => p.synthesize(text, GEORGE)));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      replies[0]!.resolve(reply([]));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+      replies[1]!.resolve(reply([])); replies[2]!.resolve(reply([]));
+      await all;
+    });
+
+    it('holds a reading\'s request, one at a time, until the download\'s are all back, and the download\'s behind it too (#64)', async () => {
+      const queue = new RequestQueue();
+      const replies = [deferred<Response>(), deferred<Response>()];
+      const fetchImpl = vi.fn().mockReturnValueOnce(replies[0]!.promise).mockReturnValueOnce(replies[1]!.promise).mockImplementation(async () => reply([]));
+      const download = provider(fetchImpl, { atOnce: 3 }, { queue });
+      const reading = provider(fetchImpl, {}, { queue });
+      const first = [download.synthesize('D1', GEORGE), download.synthesize('D2', GEORGE)];
+      const read = reading.synthesize('R', GEORGE);
+      const later = download.synthesize('D3', GEORGE);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      replies[0]!.resolve(reply([]));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      replies[1]!.resolve(reply([]));
+      await Promise.all([...first, read, later]);
+      expect([2, 3].map((at) => call(fetchImpl, at).body.input)).toEqual(['R', 'D3']);
     });
 
     it('drops a request whose signal was aborted while it waited, unsent, and goes on with the next', async () => {

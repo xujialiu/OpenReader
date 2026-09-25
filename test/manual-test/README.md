@@ -1090,6 +1090,19 @@ fix (AGENTS.md).
   ["fish"]`. `ScrollThemeReaderProbe.testConfigureFishProviderNoRelaunch`
   already waits for that note, so on such a device it fails rather than
   passing; it still taps the switch with the keyboard up.
+- **`download-concurrency.ts` showed Speechify no faster at two or five than
+  at one, which measured the provider's queue, not the service.** Measured
+  2026-09-25 14:47: 22.2 s at two against 23.3 s at one, each request's own
+  time doubled. Speechify's provider sends every request through one shared
+  queue, so the probe's workers only lined up behind it. Since #64 the queue
+  takes a width from `speechify.atOnce`, and the probe passes each level's
+  width; a run at two and three then met the plan's real limits as `429`s
+  (notes 15:09). Any provider that queues or paces its own requests needs
+  the same, or a concurrency run measures the queue.
+- **Chatterbox, as the OpenAI-compatible provider, lists every voice with
+  the locale `mul`,** so a probe that looks for an English voice by locale
+  finds none ("compatible: no English voice"). `VOICE_MATCH` in
+  `node-kit.ts` names `Emily.wav` for it.
 - **`XCTNSPredicateExpectation` created right after `.tap()` can already match
   the state from *before* the tap.** The general form of the pitfall above
   "`.exists` right after a navigation tap can read `false` on a state that is

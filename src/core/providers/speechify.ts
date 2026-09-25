@@ -19,7 +19,9 @@ import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type Synth
  *   are aligned by their text (`core/align.ts`), never by the offsets;
  * - the Free plan allows one request at a time and one per second: every
  *   request goes through one queue shared by every instance (a provider is
- *   built per call), and a 429 waits what Retry-After says and asks again;
+ *   built per call), one at a time unless a download was given more by the
+ *   owner (`atOnce`, #64), and a 429 waits what Retry-After says and asks
+ *   again;
  * - the route takes 2,000 characters: a longer utterance is split and the
  *   pieces asked for separately;
  * - `* * *` answered 502 after a minute: text with no letter and no digit
@@ -31,14 +33,21 @@ import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type Synth
  * was audible at every piece boundary.
  */
 
-export type SpeechifyConfig = { apiKey: string };
+export type SpeechifyConfig = {
+  apiKey: string;
+  /**
+   * How many requests may be out with this instance's (#64): the owner's
+   * Sentences at once for a download, one when absent, which is every reading.
+   */
+  atOnce?: number;
+};
 
 export type SpeechifyDeps = {
   fetch: typeof fetch;
   /** The pause before a retry; `setTimeout` when absent, nothing in the tests. */
   wait?: (ms: number) => Promise<void>;
-  /** The queue every request goes through; the module's shared one when absent, so instances built per call still send one at a time. */
-  queue?: SerialQueue;
+  /** The queue every request goes through; the module's shared one when absent, so instances built per call share one limit. */
+  queue?: RequestQueue;
 };
 
 export const SPEECHIFY_API = 'https://api.speechify.ai';
@@ -64,25 +73,38 @@ const RETRY_AFTER_DEFAULT_MS = 1000;
 const RETRY_AFTER_MAX_MS = 5000;
 
 /**
- * One request at a time, first come first served: the Free plan refuses a
- * second simultaneous request with a 429, and the prefetcher sends up to
- * five. A task whose signal was aborted while it waited is rejected unsent.
+ * First come first served, each request with a width: it is sent once fewer
+ * than its width are out, and one waiting at the head holds back everything
+ * behind it. A width of one is one at a time, which the Free plan needs — it
+ * refuses a second simultaneous request with a 429, and the prefetcher sends
+ * up to five. A download the owner allowed more carries more (#64), and a
+ * reading that asks meanwhile still waits for the queue to empty rather than
+ * for a slot. A task whose signal was aborted while it waited is rejected
+ * unsent.
  */
-export class SerialQueue {
-  private tail: Promise<unknown> = Promise.resolve();
+export class RequestQueue {
+  private out = 0;
+  private readonly waiting: { width: number; start(): void }[] = [];
 
-  run<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-    const turn = this.tail.then(() => {
-      if (signal?.aborted) throw new SynthesisError('unknown', 'aborted while waiting for the queue');
-      return task();
+  run<T>(task: () => Promise<T>, signal?: AbortSignal, width = 1): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const start = () => {
+        if (signal?.aborted) { reject(new SynthesisError('unknown', 'aborted while waiting for the queue')); return; }
+        this.out++;
+        (async () => task())().then(resolve, reject).finally(() => { this.out--; this.next(); });
+      };
+      this.waiting.push({ width: Math.max(1, Math.floor(width) || 1), start });
+      this.next();
     });
-    this.tail = turn.catch(() => undefined);
-    return turn;
+  }
+
+  private next(): void {
+    while (this.waiting.length && this.out < this.waiting[0]!.width) this.waiting.shift()!.start();
   }
 }
 
 /** The queue of the running app: one per module, whatever the number of provider instances. */
-export const sharedQueue = new SerialQueue();
+export const sharedQueue = new RequestQueue();
 
 const str = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
@@ -277,7 +299,7 @@ export function createSpeechifyProvider(cfg: SpeechifyConfig, deps: SpeechifyDep
         }
         throw refusal(response.status, body, what);
       }
-    }, signal);
+    }, signal, cfg.atOnce);
   }
 
   async function readReply<T>(response: Response, what: string): Promise<T> {

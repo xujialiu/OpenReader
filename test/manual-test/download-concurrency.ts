@@ -75,7 +75,11 @@ async function run(out: string, book: string, levels: number[], perLevel: number
     exchange.datacenter = response.headers.get(HEADERS.datacenter);
     return response;
   };
-  const provider = createProvider(id, loadSettings(), { fetch: timed, getWebSocket: () => QueryHeaderWebSocket, newRequestId: () => randomUUID().replace(/-/g, '') });
+  const settings = loadSettings();
+  const deps = { fetch: timed, getWebSocket: () => QueryHeaderWebSocket, newRequestId: () => randomUUID().replace(/-/g, '') };
+  // Speechify queues its own requests: each level's width has to reach its queue, as the app's download passes it (#64).
+  const providerAt = (level: number) => createProvider(id, { ...settings, speechify: { ...settings.speechify, atOnce: level } }, deps);
+  const provider = providerAt(1);
   const voices = await provider.listVoices({ signal: AbortSignal.timeout(30_000) });
   const voice = voices.find((v) => VOICE_MATCH[id]?.(v.id, v.label, v.locale)) ?? voices.find((v) => v.locale.startsWith('en'));
   if (!voice) throw new Error(`${id}: no English voice`);
@@ -91,6 +95,7 @@ async function run(out: string, book: string, levels: number[], perLevel: number
     const batch = pool.slice(next, next + perLevel);
     next += perLevel;
     let taken = 0;
+    const wide = providerAt(level);
     const began = performance.now();
     // `level` workers, each taking the next sentence as soon as its last one is back: the shape a pool in the scheduler would have.
     await Promise.all(Array.from({ length: level }, async () => {
@@ -100,7 +105,7 @@ async function run(out: string, book: string, levels: number[], perLevel: number
         const request: Request = { level, round, index, text, started: performance.now(), finished: 0, bytes: 0, seconds: 0, exchanges: [] };
         requests.push(request);
         try {
-          const clip = await provider.synthesize(text, { voice: voice.id, signal: AbortSignal.timeout(120_000) });
+          const clip = await wide.synthesize(text, { voice: voice.id, signal: AbortSignal.timeout(120_000) });
           clips.set(request, clip);
           request.bytes = clip.audio === 'pcm' ? clip.samples.byteLength : clip.bytes.byteLength;
         } catch (error) {
