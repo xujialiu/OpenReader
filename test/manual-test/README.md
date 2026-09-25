@@ -95,6 +95,37 @@ fix (AGENTS.md).
   .muxed)` throws `The passed media type 'muxx' is not supported` — ask
   `.video`.
 
+### Physical iPhone logs and the lock screen's state (#66)
+
+- **The simulator cannot show whether the lock screen says playing.**
+  Symptom: after Pause, the owner's iPhone kept the Now Playing card on the
+  two-bar Pause icon, while the iOS 27.0 simulator's `mediaremoted` logged
+  `isPlaying changed to false` at once. Cause: the device infers the state from
+  whether the app is sending audio out (`setting inferred playback state`); the
+  simulator follows the app's explicit `playbackState` (`setting playback
+  state`), and its inferred state stayed Paused with the engine running. Fix:
+  measure on the device with `lock-screen-state.sh` (below).
+- **`log collect --device-udid` needs root** (`log: Must be root to collect logs
+  from attached device`). `pymobiledevice3 syslog live --udid IPHONE_UDID -pn
+  mediaremoted` reads the same log over USB without it. Install it into a
+  throwaway venv (`python3 -m venv DIR && DIR/bin/pip install pymobiledevice3`),
+  not system-wide. zsh has a `log` builtin, so call `/usr/bin/log`.
+- **The harness reaches a Release build on the phone.** `xcrun devicectl device
+  copy to --device IPHONE_UDID --domain-type appDataContainer
+  --domain-identifier top.xujialiu.openreader --source FILE --destination
+  Documents/harness.json` is picked up by the reader's poll. A Release build
+  prints no `HX` lines anywhere, so read the effect (here `mediaremoted`), not
+  an answer.
+- **`mediaremoted` puts the app after the verb.** Lines read `isPlaying changed
+  to true for 【 … top.xujialiu.openreader (PID) … 】`, so a grep for
+  `openreader.*isPlaying` never matches; the first draft of the script waited
+  15 s for a Play that had happened.
+- **A build with #66 unfixed stays Playing from the first Play on.** Its next
+  run sees no `isPlaying changed to true`, because nothing changed. Relaunch it
+  (`xcrun devicectl device process launch --terminate-existing --device
+  IPHONE_UDID top.xujialiu.openreader`) and `open` the Document again before
+  each run on such a build.
+
 ### Metro and the bundle
 
 - **The app runs code you have already changed.**
@@ -467,148 +498,36 @@ fix (AGENTS.md).
   `open` and `js`. Treat one INVALID right after an `open` as worth a retry
   before treating it as a real failure, and check Metro's log for this WARN when
   it happens — it is also what leaves the LogBox banner above.
-
-- **`leading-strip.sh app` reaches the probe but the detector fails with
-  `ModuleNotFoundError: No module named 'PIL'`.** Symptom (2026-09-22): the
-  Metro log contained `PROBE leading strip probe started` and `app.png` was
-  written, but `leading-strip.py` exited before classifying it. Cause: the
-  active `/usr/bin/python3` is Xcode's Python 3.9 without Pillow installed.
-  Fix: install Pillow into that interpreter with `python3 -m pip install --user
-  Pillow`, then rerun the detector or the complete `leading-strip.sh` command;
-  the app-side probe itself does not need to be repeated when its screenshot is
-  already present.
-
-- **`simctl io recordVideo` writes a frame only when the screen changes.** A
-  still page for two seconds is one frame, so frame numbers are not time and a
-  count of frames is not a duration: read the timestamps (`CAP_PROP_POS_MSEC`),
-  as `white-flash.py` does. A 60 s fling recording held 3,600–3,900 frames, a
-  7 s open 37–90.
-- **A Debug app's launch is a white screen that reads as a white page.** Right
-  after `simctl launch`, the Debug build shows Metro's "Downloading 100%…" over
-  a white screen until the bundle has loaded; a frame reader started 3 s after
-  the launch counted it (2026-09-23 23:51). Wait for the app's own JavaScript to
-  answer (`{"do":"shelf"}` → `HX shelf loading=false`) before recording, as
-  `white-flash.sh relaunch` does.
-- **The first open after a launch is not like the others.** `ReaderProvider`
-  sits above the navigator and keeps its state across readers, so a change to
-  what it holds shows on the first open after a launch and never again until the
-  next launch. Measured on #27 (2026-09-23 23:45 to 24 00:08), with the theme
-  only passed as a prop: four opens after the first were green, and the first
-  open after a relaunch was white for 0.4–1.8 s. How often depended on when it
-  was opened: 0 of 2 at a fixed 6 s after the launch, 4 of 6 at 3 s, and 6 of 6
-  opened as soon as the app's JavaScript answered. Test a change to the
-  reader's first frames with a relaunch in front of each open, timed from the
-  app's answer rather than from the launch.
-
-### The walkthrough harness (`Documents/harness.json`)
-
-- **A command's `seq` can look new but be the same number to the app.** On 2026-09-25, a probe used a nanosecond timestamp (`Date.now()`-style values around `1.79e18`) as a JSON number; JavaScript rounded successive values past `Number.MAX_SAFE_INTEGER`, so the first `play` was deduplicated and never ran. Use a small integer sequence that increments by one and never exceeds the safe-integer range.
-- **A command can be overwritten before the app polls it.** On 2026-09-25, a probe wrote `play` and immediately replaced the file with `say`; the reader polls every 250 ms and observed only `say`, so playback never started. Leave at least one polling interval between commands; this run used a one-second gap.
-- **The harness can stop accepting files after a long reading run.** On 2026-09-25, after the complete Chapter 179 run and its section-boundary drain, the reader's own status timer kept logging but new `say` and `section` files produced no answer; terminating and relaunching the app did not restore the file channel on that run. The cause was not isolated. Stop relying on the harness for the remaining interaction evidence and use real XCTest touches; do not count an unwitnessed file command.
-- **A malformed `settings` patch can turn a harness mistake into a development render error.** On 2026-09-25, a Node writer read its voice from the wrong `process.argv` slot, omitted `voice`, and the next reader render failed at `recentEnabledVoice` with `Cannot read property 'trim' of undefined`. Write a complete settings patch with a defined voice, remove the harness file, restore `settings.json` if needed, and relaunch before continuing; this was test setup corruption, not an app defect.
-- **A command does nothing.** Each command needs a new `seq`; the same `seq` twice runs once.
-- **An answer read after a fixed wait can be missing, and reads as a state.**
-  Symptom (2026-09-24 00:13, #52): a probe that sent `say`, waited 600 ms and
-  took the last `HX status` line found none. It reported `utterance=null` for a
-  reading that the log showed still on Utterance 190. Cause: the harness polls
-  its file every 250 ms, and a reader busy laying out a section answers later.
-  Fix: poll the log for the answer with a deadline, as `browse-probe.cjs`'s
-  `answer()` does. Treat no answer as a harness failure, never as a value.
-- **A play loop bounded by a count of polls is not bounded in time.** On
-  2026-09-24 at 00:13, a shell loop meant to play for at most 8 s (32 × 0.25 s,
-  pausing as soon as `level=word` appeared) played for 22.7 s. Each poll re-read
-  the log, and the first Fish Clip after an app restart took about 20 s. Bound
-  a play by a wall-clock deadline, send `pause` when it passes, and say in the
-  report how long it actually ran.
-- **Waiting for an `HX` line hangs.**
-  - Cause: only an open reader logs on a timer. The Library logs only when a command answers.
-  - Fix: wait for the effect itself, such as a file being written or the answer to `navstate`.
-- **`known` in the status line right after a resume does not say which sections
-  have reported.** #51 was filed with "spine item 20 never rendered", from a
-  status line of 122 Utterances. The same reopen repeated on 2026-09-23 at 19:24
-  showed `known=179` a second later. A Contents jump to item 20 then answered
-  at once, with `utterance=122` and `known` still 179, which means item 20 had
-  reported its 57 Utterances before the jump. To tell whether a section has
-  reported, jump to it with `{"do":"section","section":N}`. A section that has
-  reported answers at once and leaves `known` as it was.
-- **A `js` answer reads as empty or cut off.**
-  - Cause: it arrives in Metro's log as `note="The highlight could not be drawn: PROBE …"`, JSON-escaped and cut at 500 characters.
-  - Fix: parse the quoted string after `note=` as JSON instead of grepping up to the next `"`, and keep answers short.
-- **Two readers answer.** `open` pushes a reader on top of any reader already open, and every mounted reader answers `js`. Send `shut` first.
-- **The Library shows two Documents with one title.** `add` names the entry after its file in `Documents/Inbox/`. Give each copy its own file name, and open by Document Id when titles collide.
-- **An old probe looks like a new error.** A `js` answer stays in the reader's notice as "The highlight could not be drawn: PROBE …" until the reader is opened again.
-- **A screenshot taken right after a GREEN `follow-probe.cjs` run still shows a red "could not be drawn: PROBE …" banner.** Not a stale leftover this time: the script's own `read()` is itself a `js` command, and `reading-view.tsx`'s `js` handler posts *every* answer — success or not — through the same `openreader:problem` channel a real highlight failure uses, prefixed `PROBE `. So the banner in the screenshot is the script's own measurement being echoed back, not a defect; `follow-probe.cjs` already excludes it from its own GREEN/RED verdict (`detail.indexOf('PROBE') !== 0`), and the embedded JSON's own `"problems":[]` says the same. Measured 2026-09-23 verifying #50: a run scored GREEN (no problem posted, Utterance on screen) while the very screenshot taken immediately after read "The highlight could not be drawn: PROBE {...}". Trust the script's verdict (or grep the log for `could not be drawn` lines that do **not** contain `PROBE`) over a screenshot's banner text, and note in a report that the banner is the harness's own artifact when it appears after a passing run.
-- **The title `add` gives an entry lasts only until the book's first open.**
-  `add` names the entry after its file (`fixture-phone-129`), and the reader's
-  first open retitles it from the EPUB's own metadata (`ZTTS Positions
-  2026-09-22 Fixture Phone`, measured 2026-09-22). A probe's `BOOK_TITLE`
-  matches `label BEGINSWITH`, so the file name finds the row for the first
-  open and only the metadata title finds it afterwards.
-- **A stale `harness.json` replays on every reader remount, not only on app
-  launch.** The documented `seenRef` reset (below, "The walkthrough harness
-  re-runs its last command on every launch") also happens on a plain
-  Back-then-reopen: `useHarnessCommands` lives inside the reader screen, so a
-  fresh mount gets a fresh `seenRef` starting at -1 and replays whatever
-  `harness.json` still holds. Measured 2026-09-22: reopening a reader with a
-  three-runs-ago `scroll-theme.cjs` command still on disk logged `WARN Error
-  evaluating injectedJavaScript: … TypeError: undefined is not an object
-  (evaluating 'window.ReactNativeWebView.postMessage')` on each reopen — the
-  injected script's own `window.__scrollTheme` no longer existed in the fresh
-  WebView, and even its `catch` block's `postMessage` call ran before the
-  bridge was ready. `rm Documents/harness.json` after a command has answered,
-  not only before a relaunch.
-- **A stale `{"do":"section"}` replayed on a fresh mount can race the
-  library's own `initialLocation` bootstrap and swallow the very next real
-  tap.** Measured 2026-09-24 verifying #54/#55 (`SyncProbe.swift`,
-  `testPendingPlacePlayWaitsOnReopen`/`testPendingPlacePauseWhileWaiting`): a
-  method that jumped to a deep section with `{"do":"section"}`, then left the
-  reader and reopened it (a second fresh `ReadingView` mount, whose `seenRef`
-  also starts at -1 — the pitfall above is true of a remount, not only a
-  relaunch), replayed that same stale command right as the reopened book's
-  own stored place was loading via `initialLocation`. Metro logged `Error
-  evaluating injectedJavaScript: … ReferenceError: Can't find variable:
-  rendition`, and that `console.warn`-equivalent raised React Native's "Open
-  debugger to view warnings." banner over the floating player — the exact
-  overlap this file's XCTest section already documents for a Play tap — which
-  then swallowed the *next* method's tap: once a real `Back` tap that never
-  reached the Library (`XCTAssertTrue failed - Back did not reach the
-  Library`, with a harness `{"do":"shut"}` proving the navigation itself was
-  fine seconds later), once a real `Pause` tap whose reading kept playing
-  unpaused for the rest of the run because the tap landed on the banner, not
-  the button underneath it (a screenshot taken mid-run showed the banner
-  sitting over the transport, `Annelie - Female Afrikaans` visible above it).
-  Both symptoms stopped once `Documents/harness.json` was deleted again
-  immediately before the reopen, not only once at the run's own start — a
-  real reopen never carries this file, so a probe reopening one must clear it
-  at exactly the moments a real reopen would find it absent.
-- **`Scroll Fixture`'s Contents rows cannot be followed, although its
-  navigation document sits beside its package document.** Opening Contents on
-  it showed "None of these rows names a file in this book. The contents live
-  in a different folder from the pages, which this app matches by name — so
-  the list can be read but not followed," and a real tap on a `Chapter 3:` row
-  found no such button. The folder is not the reason here. Read in the
-  reader's WebView on 2026-09-22, epub.js hands this EPUB 3 navigation
-  document's hrefs over with a leading slash — `book.navigation.toc` gave
-  `/contents.xhtml`, `/ch001.xhtml`, `/ch002.xhtml` — while `book.spine`
-  gave `contents.xhtml`, `ch001.xhtml`, `ch002.xhtml`, so no row matches
-  (`core/document/contents.ts` compares the two as strings). Do not assume a
-  generated fixture's Contents are followable from reading its generator;
-  check the sheet's own banner. `{"do":"section","section":N}`
-  (`reading.goToSection`) jumps to a spine index directly and is unaffected —
-  a cleaner substitute than `Player.onSkip` calls for reaching a specific
-  chapter's top on a Document whose Contents cannot be followed.
-- **The old `SyncProbe.settleAt` setup no longer moves a paused reading.**
-  Measured 2026-09-24 against the merged #52 behavior: with a saved sentence
-  and playback paused, `{"do":"section","section":104}` moved the page but
-  deliberately left the reading's status at section 500, so
-  `testPendingPlacePlayWaitsOnReopen` reported `settleAt` failures even though
-  the harness was answering. This is the paused Contents contract, not a
-  broken harness. To prepare a stored place for a #54 probe, move it while
-  playing or update the probe setup to use a real Contents browsing step and
-  keep the expected status section unchanged.
-
-### XCTest
-
+- **A LogBox banner can appear with no `WARN`/`ERROR` line in Metro's log to
+  explain it.** Measured 2026-09-25 verifying #66: in
+  `PauseSuspendProbe.testQuickToggleTight` on a freshly relaunched app, the
+  banner `!, Open debugger to view warnings.` was absent at the capture before
+  a 0.82 s Pause→Play and present at the one 5 s after it, while the reading
+  ran on to the fixture's last sentence. Metro's log carried no warning in that
+  window (its `HX` lines went on), CDP closed with 1006 before it could read the
+  buffer, and the simulator's unified log held no React line. The next tap aimed
+  at Pause landed on the banner (hit point `{-1, -1}`), so the method failed.
+  Cause not found. It did **not** recur: two more runs of the same method, each
+  on a fresh launch seeked back to the first sentence, passed with 0.69 s
+  gaps, and a play from sentence 15 to the end of the book ended on the
+  ordinary end-of-book note with no banner. Before blaming the change under
+  test, relaunch (`xcrun simctl terminate` then `launch`), seek back to the
+  start of the fixture and run the method again; a probe that has run the
+  short fixture past its end is measuring the end of the book as well.
+- **`waitForExistence(timeout:)` can consume nearly its whole budget before its
+  first check, inflating a measured gap between two taps.** Measured
+  2026-09-25 verifying #66 (`PauseSuspendProbe.swift`): `app.buttons["Pause"].tap()`
+  then `app.buttons["Play"].waitForExistence(timeout: 1)` then `.tap()` printed
+  a gap of 1.74 s between the two taps, with the verbose log showing
+  `Waiting 1.0s for "Play" Button to exist` immediately followed, a full 1.00 s
+  later, by the first `Checking existsNoRetry == 1` — the button had almost
+  certainly already existed long before that first check ran. Removing the
+  `waitForExistence` call and tapping the second button directly (the query
+  re-resolves at tap time) measured 0.82 s for the same two taps on the same
+  device. Prefer two direct `.tap()` calls with no intervening
+  `waitForExistence` when the measurement itself is the point; keep
+  `waitForExistence` for ordinary existence gating, where the extra latency
+  does not matter.
 - **A failed UI test can leave `xcodebuild` waiting in diagnostic collection for ten minutes.** On 2026-09-25, a follow-up test failed its starting-screen precondition in 52 seconds, then `IDETestOperationsObserverDebug` waited 600 seconds for simulator diagnostics before exiting. Kill that exact `xcodebuild` PID after recording the failure, fix the starting-state guard, and rerun with a fresh result bundle.
 - **XCTest has no public way to move two fingers together.** `XCUICoordinate`
   drags one finger; `pinch` and `rotate` move two apart or around each other.
@@ -2137,6 +2056,33 @@ device: a bare `error` event, then `close` with `code: 1006` and
 afterwards (or let the next `app.launch()` in a probe do it) to discard the
 armed global.
 
+## The lock screen's playing state on a physical iPhone
+
+```sh
+PYMOBILEDEVICE3=DIR/bin/pymobiledevice3 bash test/manual-test/lock-screen-state.sh IPHONE_UDID SEQ [SECONDS_AFTER_PAUSE]
+```
+
+Prerequisites: the iPhone connected and unlocked, OpenReader in front with a
+Document open whose Voice is ready (saved offline narration costs nothing), and
+`pymobiledevice3` (see **Physical iPhone logs and the lock screen's state** under
+Pitfalls). `SEQ` is the first of two new harness sequence numbers.
+
+It streams `mediaremoted`, sends Play through the harness, waits for
+`isPlaying changed to true`, lets two seconds play, sends Pause, and waits for
+`isPlaying changed to false`. Exit 0 is GREEN, 1 RED (still playing after the
+pause), 2 when Play was never seen. About 15 s, two of them audible on the
+phone. It prints the state, rate and `inferred playback state` lines, which are
+what the lock screen's centre button follows on the device.
+
+Measured 2026-09-25 (#66), iPhone 16 Pro, iOS 27.0: the `0.0.1` build went RED
+on every run (the state stayed Playing at least 50 s after a pause); `0.0.2-beta29`
+went GREEN four times in a row, the last three on one engine without a relaunch.
+It establishes what the system believes, not the drawn icon, and it does not
+press the lock screen. Whether the lock screen's own Play resumes a paused app
+iOS has since suspended needs a person, or an XCUITest run on the device: on
+beta29 the owner paused, locked the phone, waited over a minute and pressed the
+lock screen's Play, and the reading went on (2026-09-25).
+
 ## Inspect the simulator's playback icon resource
 
 ```sh
@@ -2180,6 +2126,39 @@ component exceeds `195/255`. It failed with **zero** on the original screenshot.
 This is deliberately a narrow dark-card regression signal, not an icon detector:
 a light wallpaper can cause a false positive. Use the attachment manifest to pair
 the screenshot and geometry, and visually confirm any pass.
+
+### The in-app Play/Pause button through a suspend and resume (#66)
+
+With the fixture Document open and a Provider configured, silenced:
+
+```sh
+bash test/manual-test/pause-suspend.sh SIMULATOR_UDID /tmp/openreader-pause-suspend-01
+```
+
+Real XCTest touches only, on the reader's own transport, never the lock
+screen's. Checks the Settings version line first (so a JavaScript-only change
+is proven current, the same reasoning as `settings-version.sh`), then: Play,
+Pause, Play, Pause (each Play must resume and keep playing, not just flip the
+button); a Pause immediately followed by Play, measured (`driving`'s ordering
+queue, ADR 0012); two taps of Next sentence while paused followed by Play
+(plays from the skipped-to sentence, not the old one). After every phase it
+checks the player's own notes and the LogBox banner for anything naming
+`suspend`, `resume` or `audio context`. It never touches the lock screen —
+pair it with `lock-screen.sh`'s `tap` mode above for the remote-transport half
+of #66. Measured 2026-09-25: a full run (four Play/Pause cycles, a measured
+quick toggle, and a skip) passed with 0 failures in 49.9 s, and Metro's own
+`HX` log independently corroborated continuous `utterance` progress —
+including across a chapter boundary — through every pause and resume, never a
+reset. It does not prove the lock screen's own icon or inferred state, which
+only a physical device can (`lock-screen-state.sh`).
+
+The script runs `testPauseResumeOrderingAndSkip` only. `testQuickToggleTight`
+taps Pause and then Play with no wait between them; run it by building the
+project the same way and passing
+`-only-testing:LockScreenProbe/PauseSuspendProbe/testQuickToggleTight`, on a
+fresh launch seeked back to the first sentence. It passed twice at 0.69 s
+between the taps on 2026-09-25; one earlier run at 0.82 s failed on a LogBox
+banner (Pitfalls, "A LogBox banner can appear with no `WARN`/`ERROR` line").
 
 ## Inspect, stop or briefly exercise the reading handler
 
