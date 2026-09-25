@@ -1296,6 +1296,53 @@ fix (AGENTS.md).
   in `library.json` with a different title, not only when `add` named it
   after its file — a `BEGINSWITH` match on the seeded title stops working
   after that first open for the same reason either way.
+- **A single `typeText` call on a `keyboard="url"` `TextInput` silently drops
+  characters mid-string.** Verifying #65 (`DownloadConcurrencyProbe`,
+  OpenAI Compatible's Address field), one unchunked `field.typeText(baseURL)`
+  produced `h//<host>…` on screen and in the accessibility tree —
+  five characters ("ttps:") gone from the middle of "https://…" — even though
+  the same call worked for the plain-keyboard Model field right below it.
+  `AzureProviderProbe.clearAndType`'s existing fix (type in chunks of ten,
+  README's "typeText with a long value kills a settings screen") also fixes
+  this; a `url` keyboard specifically needs it even for a fairly short value.
+- **Tapping a switch while a field is still focused can spend the tap on
+  dismissing the keyboard instead of toggling the switch, and no single
+  sibling tap reliably dismisses the keyboard first.** Measured 2026-09-25
+  configuring OpenAI Compatible and Speechify from empty settings
+  (`DownloadConcurrencyProbe`): `OfflineFixProbe`'s own fix for this
+  (tap a plain Text inside the ScrollView, then wait for
+  `app.keyboards.firstMatch` to go away) failed here even after switching the
+  dismiss target to the navigation bar, itself outside the ScrollView
+  entirely — the keyboard was still reported present 5 s later either way.
+  Stop trying to guarantee keyboard dismissal before the real tap; instead
+  read the switch's own `.value` before tapping it, tap it, and tap it again
+  only if the value did not change — self-verifying regardless of why the
+  first tap did not register.
+- **A voice a probe hardcodes can quietly disappear from a live provider's
+  own catalog.** `VoiceListProbe.swift` names a specific real Speechify
+  voice, "Dax — Casual US male (EN)" under en-US, as of when it was written.
+  Verifying #64's Speechify `RequestQueue` change on 2026-09-25, that same
+  chip/locale path opened fine (both chips read Selected in the accessibility
+  tree) but no button named "Dax — Casual US male (EN)" existed anywhere in
+  the sheet after a 10 s wait — `waitForExistence` just polls and times out,
+  printing no hint of what changed. Speechify's en-US list is alphabetical
+  now, in a different label shape ("Alfonso (male)", "Alicia (female)", …
+  "Emily (female)", "Erin (female)", …), with no "Dax" among them; nothing
+  about the request failed. Read the sheet's own tree (or a screenshot) before
+  assuming a network problem, and for a mechanics check that does not care
+  which voice, prefer `app.scrollViews.buttons.firstMatch` (the voice list's
+  own ScrollView has no other Button-typed children; the locale chips above it
+  are `Other`, not `Button`) over a name that can go stale.
+- **A masked field's dots can be invisible on screen while the accessibility
+  tree still reports them.** Verifying #65's "Extra headers is a secret field,
+  so it is masked too" requirement, a screenshot of a filled, focused
+  `SecureTextField` labelled "Extra headers" showed nothing at all in the
+  value area — no bullets, no placeholder, nothing — both while focused
+  (`Keyboard Focused` in the tree) and after locking on Enable. The same
+  screenshot's accessibility tree reported the field correctly, `value:
+  ••••••••••••••••••..., Disabled`. Content is not visible either way, so
+  nothing is leaked, but do not rely on a screenshot alone to confirm masking
+  for this specific field — cross-check the exported tree's `value`.
 
 ### Measuring inside the reader's WebView
 
@@ -4099,6 +4146,43 @@ python3 -c 'import os,sys; d=sys.argv[1]; b=sorted(os.stat(os.path.join(d,f)).st
 ```
 
 To compare with one request at a time: delete the chapters' audio through the runtime (`deleteDownloaded`, through `cdp.cjs`, then check that `occupied` reads 0), choose 1 in Settings › Providers › Fish Audio › Sentences at once (before beta26 this was `AT_ONCE` in `src/offline/scheduler.ts`), confirm that `settings.json` in the app container's `Documents` holds `"fish":1` under `sentencesAtOnce`, and download the same chapters again. Put it back to 5 afterwards. The number is read as each chapter starts, so change it only between downloads. Run the download with five at once first, so that anything the service remembers could only speed up the slower run. Configure Fish in the app first with `offline-fix.sh … -only-testing:testConfigureFishProvider` (Pitfalls: before 2026-09-25 that method could pass with Fish still disabled).
+
+### OpenAI Compatible's 422→MP3 fallback (#65) and Speechify's own queue, on the short fixture
+
+`DownloadConcurrencyProbe.swift` also covers #65 (a PCM refusal falling back to
+MP3) and confirms #64's Speechify `RequestQueue` change did not break plain
+playback/download, both against the short two-chapter fixture rather than the
+real book — a fresh voice directory each time, no pre-seeded state to manage:
+
+```sh
+bash test/manual-test/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureCompatibleProviderRealTouches
+bash test/manual-test/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseEmilyVoiceAndPlayShortFixture
+bash test/manual-test/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testCompatibleSentencesAtOnceFiveAndDownloadShortFixture
+bash test/manual-test/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureSpeechifyRealTouches
+bash test/manual-test/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseSpeechifyVoiceRealTouches
+bash test/manual-test/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testSpeechifyDownloadAndPlayShortFixture
+bash test/manual-test/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testResetCompatibleSentencesAtOnceToDefault
+```
+
+Each method is its own invocation, run in the order above, the same discipline
+as `AzureProviderProbe` and `OfflineFixProbe`: later methods depend on state
+earlier ones leave (OpenAI Compatible configured and enabled, the short
+fixture's voice chosen, Sentences at once at a particular value). The short
+fixture needs adding first if it is not already in the Library (README, "Real
+books"; the fixture is generated by `short-test-fixture.ts` and added through
+the walkthrough harness's `add` command, which works for this one-shot use even
+on a day the harness is otherwise unreliable for reading interactions).
+OpenAI Compatible's Address/Model/Extra headers are read from
+`/tmp/openreader-compat-{baseurl,model,headers}.txt` and Speechify's key from
+`/tmp/openreader-speechify-key.txt`, the same host-only-file discipline as
+`OfflineFixProbe.testConfigureFishProvider`. The last method resets OpenAI
+Compatible's Sentences at once to its own default (1); Speechify's is never
+changed from 1, and Fish's own default (5) is untouched by any of this.
+
+What it cannot show: the app's MP3 decode path is only exercised end-to-end
+through actual playback (item 2), not inspected directly; the OpenAI
+Compatible connection check's own request shape is covered by this and by the
+unit tests, not by inspecting wire bytes from the simulator.
 
 ## Native queue position versus actual rendered audio (#63)
 
