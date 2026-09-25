@@ -64,8 +64,25 @@ to be an afterthought of the theme. Its colour on a light page is tuned to be
 visible against black text on white; the same colour against light text on a
 near-black page is muddy, and the word being spoken — which is the smaller and
 more important of the two marks — comes out close to unreadable. So dark gets
-its own pair: the sentence a little softer, the word a good deal more solid, with
-the word's letters set back to the page's own colour so they stand out of it.
+its own pair, and **on a dark page the mark is blue rather than amber**: the
+sentence a muted blue-grey, the word a vivid blue, and the word's letters the
+same light colour as every other letter on the page.
+
+The first answer here kept the amber and made the word's mark solid, with its
+letters set to the page's near-black so they could be read against it. It
+worked, but it made the one word the owner was following the only dark word on a
+light-lettered page, so it looked like a word that had changed colour rather than
+the same text marked. The owner asked for the letters back. Amber cannot give
+them: it is a bright colour, and light letters on it are nearly unreadable; an
+amber dark enough to carry them is brown. Blue is seen as dark while it stays
+vivid, which is how the reading app the owner compared this with marks its words
+on a dark page, and the light letters read clearly on it.
+
+The cost is that the mark is no longer the app's own colour in the dark. The
+light page keeps its amber, and so do the checks and actions around the book in
+both themes — the owner chose to change the mark and nothing else — so under dark
+the page says "this is being read" in blue and the app around it says "this is
+chosen" in amber.
 
 ## Neither black nor white, in either direction
 
