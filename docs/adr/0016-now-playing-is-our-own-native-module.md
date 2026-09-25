@@ -83,6 +83,19 @@ seven, writes both rate keys and sets `playbackState` from the caller's own
 value. Its JavaScript surface is three calls and one event: `show(reading)`,
 `setPosition(seconds)`, `hide()`, and `remoteCommand`.
 
+**On a real iPhone, whether the lock screen shows the reading as playing is not
+what this module writes.** Measured 2026-09-25 on an iPhone 16 Pro, iOS 27.0
+(#66): `mediaremoted` logged the state as **inferred** — `setting inferred
+playback state from <Paused> to <Playing>` when the audio engine started — and no
+`setting playback state` line, the one the explicit `playbackState` write
+produces on the simulator, appeared at all. A pause that published a rate of 0
+while the engine went on rendering silence left the state Playing for as long as
+the reading stayed paused, so the card offered Pause for a paused reading. The
+simulator follows the explicit value instead, which is why it never showed this.
+What the device follows is whether the app is sending audio out, so the owner's
+pause now suspends the `AudioContext` and Play resumes it (ADR 0012); the rate
+and `playbackState` are still written, and the simulator and macOS read them.
+
 **`MPMediaItemPropertyPlaybackDuration` is never written.** A book is synthesized
 a sentence at a time and only the sections the renderer has reported are even
 known, so any total would be an estimate — which is the one thing this project

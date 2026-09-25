@@ -171,6 +171,37 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
   const nativeNode = () => (node as unknown as { node: { start(when: number, offset: number): void } }).node;
 
   /**
+   * Whether the engine should be running, and the one queue its changes go
+   * through (#66).
+   *
+   * A real iPhone decides whether the lock screen shows the reading as playing
+   * from whether the app is still sending audio out, not from what the Now
+   * Playing module writes: with the engine left running after a pause, it went
+   * on rendering silence and iOS 27.0 kept the card on Pause for as long as
+   * the reading stayed paused, with a playback rate of 0 already published. So
+   * the owner's pause stops the engine and Play starts it again.
+   *
+   * Queued because the library runs each `suspend()` and `resume()` on its own
+   * thread pool (`PromiseVendor::createAsyncPromise`), so a pause and a Play
+   * pressed back to back could land in either order and leave a playing reading
+   * with a stopped engine. `closed` keeps a queued change from reaching a
+   * context `dispose` has already closed, which would refuse it as an error.
+   */
+  let running = true;
+  let driving: Promise<void> = Promise.resolve();
+  let closed = false;
+  function drive(next: boolean): void {
+    if (running === next) return;
+    running = next;
+    driving = driving
+      .then(() => {
+        if (closed) return;
+        return next ? context.resume() : context.suspend();
+      })
+      .catch(handlers.onError);
+  }
+
+  /**
    * THE CLOCK. The position comes from the **source node**, never from
    * `AudioContext.currentTime` — which counts rendered frames over the sample
    * rate, making it a wall clock that is *not* scaled by the playback rate, so
@@ -296,6 +327,11 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
       // `vReadIndex_ = sampleRate * offset`. The engine calls `resume()` again on
       // every enqueue while playing, so an offset of 0 would restart the Clip
       // being spoken each time a new one arrived. There is no third value.
+      //
+      // The engine first, if a pause stopped it: once the driver has started,
+      // the node's `start` no longer starts it (`AudioContext::start` returns
+      // early), so without this Play after a pause would be silent.
+      drive(true);
       nativeNode().start(0, KEEP_READ_INDEX);
     },
 
@@ -306,6 +342,12 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
       // stays in the playing state and resumes on the next buffer, and adding a
       // defensive stop is what breaks that resumption.
       node.pause();
+      // And the engine, because the owner asking is also the one time footgun 3's
+      // other half does not apply: a stopped engine lets iOS suspend the app,
+      // which is the risk while a reading waits for its next Clip and the point
+      // once the owner has stopped it. The lock screen goes to Play only when
+      // the audio does (#66).
+      drive(false);
     },
 
     clear() {
@@ -324,6 +366,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
 
     async dispose() {
       sourceGeneration++;
+      closed = true;
       routeChange?.remove();
       node.onPositionChanged = null;
       node.onBufferEnded = null;
@@ -334,11 +377,12 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
       } catch (error) {
         handlers.onError(error);
       }
-      // `context.suspend()` is never called — not here and not on going to the
-      // background. A stopped engine under an active playback session is what
-      // puts the app at risk of being suspended by iOS (footgun 3). Teardown
-      // closes the context and hands the session back, which is a different
-      // thing: it happens when the owner has stopped reading.
+      // `context.suspend()` is called by `pause()` alone — not here, not on going
+      // to the background and not when the queue drains. A stopped engine under
+      // an active playback session is what puts the app at risk of being
+      // suspended by iOS (footgun 3). Teardown closes the context and hands the
+      // session back, which is a different thing: it happens when the owner has
+      // stopped reading.
       try {
         await AudioManager.setAudioSessionActivity(false);
       } catch (error) {

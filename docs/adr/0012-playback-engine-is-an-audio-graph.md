@@ -113,6 +113,16 @@ removed. A seek creates a new source within the context, rejects retired-source
 callbacks by generation and resets the timeline to zero. Pause keeps the source.
 Native explicit clearing likewise discards stretcher state and pending end events.
 
+The owner's pause is the one place the context is suspended, and Play resumes
+it (#66). A real iPhone infers the lock screen's playing state from whether the
+app is sending audio out, so a context left rendering silence kept a paused
+reading on Pause there. `suspend()` stops the `AVAudioEngine` and leaves the
+audio session active; after it, a source's `start` no longer starts the driver
+(`AudioContext::start` returns early once initialised), so `resume()` is called
+explicitly. The library runs both on a thread pool, unordered, so
+`audio-graph.ts` queues them. A drain, a seek and a starvation still never
+suspend, for the reason above.
+
 Future buffers remain referenced until they reach output. If a voice change
 removes already-read content, the queue reconstructs retained input starting at
 the current output coordinate, resetting only the discarded lookahead. This is

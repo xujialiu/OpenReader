@@ -71,9 +71,14 @@ From notes/NOTES.md. Each fails in a way that looks like something else.
    that event.
 3. **A drained buffer queue is safe** — it renders silence, stays in the playing
    state and resumes on the next buffer, as long as `stop()` and `pause()` are
-   never called. But do **not** call `suspend()` while backgrounded: a stopped
-   engine under an active playback session is what puts the app at risk of being
-   suspended. **And because it is safe, it is silent**: running out of text and
+   never called. But do **not** call `suspend()` while a reading is meant to
+   continue: a stopped engine under an active playback session is what puts the
+   app at risk of being suspended. The owner's pause is the one exception, and
+   it must suspend: a real iPhone decides whether the lock screen shows the
+   reading as playing from whether the app is still sending audio out, so an
+   engine left rendering silence kept the lock screen on Pause for a paused
+   reading (#66). `audio-graph.ts` suspends in `pause()` and resumes in
+   `resume()`, queued in order, and nowhere else. **And because it is safe, it is silent**: running out of text and
    waiting for a Provider look identical from in here, one of them ends by itself
    and the other never does, and the second was six minutes of silence with the
    app still reporting `playing` (ADR 0023). `onOutOfText` says which it is, on

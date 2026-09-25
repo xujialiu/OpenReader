@@ -33,7 +33,9 @@ the one place the reasoning lives. Read it first.
      reader at 1.5–3× needs for iOS to render the rate correctly;
    - sets `MPNowPlayingInfoCenter.default().playbackState` honestly, which is the
      exact thing the library pins to `.paused` and cannot be told otherwise from
-     JavaScript;
+     JavaScript. The simulator follows it; **a real iPhone does not** — it infers
+     the state from whether the app is sending audio out, which is why a pause
+     suspends the audio context (#66, ADR 0016);
    - takes elapsed time as a pushed value, not a derived one — the source node's
      content position (ADR 0012), at about once a second;
    - publishes **no** `MPMediaItemPropertyPlaybackDuration`, because a book

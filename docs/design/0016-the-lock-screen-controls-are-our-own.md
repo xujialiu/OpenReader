@@ -52,6 +52,25 @@ iPhone and iPad the free version is not merely ignored, it is never started at
 all, and the division is exact: it keeps the sound, this project keeps the screen
 and the buttons.
 
+## What the phone itself decides
+
+A real iPhone does not take the app's word for whether the book is playing. It
+listens: while sound is going out, the lock screen says playing, whatever the app
+tells it. That was learned the hard way. The app used to keep its sound running,
+silent, through a pause, so after the listener paused, the lock screen went on
+saying the book was playing and its button offered Pause for a book that had
+already stopped. Pressing it did nothing visible, and resuming from the lock
+screen took two presses.
+
+So a pause now really stops the sound, and Play starts it again. The cost is
+that a paused phone is free to put the app to sleep, which the listener never
+sees: the lock screen's Play wakes it.
+
+It also means the first of the three faults above was judged by the app's words,
+which is what the simulator and a Mac go by. Whether the free version would have
+shown "paused" over a speaking voice on a real phone was never tried there. The
+other two faults do not depend on it.
+
 ## What it costs
 
 Work of our own is ours to keep working. When the rules of the phone change,

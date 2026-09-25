@@ -67,7 +67,10 @@ fails in a way that looks like something else.
    state, then resumes on the next buffer, as long as `stop()` and `pause()` are
    never called — buffer exhaustion cannot schedule a stop. But do not call
    `suspend()` while backgrounded: a stopped engine under an active playback
-   session is what puts the app at risk of being suspended.
+   session is what puts the app at risk of being suspended. (Scoped on
+   2026-09-25, #66: the owner's pause does suspend, because on a real iPhone an
+   engine rendering silence keeps the lock screen showing the reading as
+   playing. See that day's log.)
 4. **Elapsed time on the lock screen is never derived from the graph** — it is
    pushed by the caller on every change, and the reference cadence in the
    library's own example is once a second.

@@ -112,10 +112,24 @@ describe('footgun 2: pause on OldDeviceUnavailable, or the book reads itself alo
 });
 
 describe('footgun 3: a drained queue is safe, so nothing defends against it', () => {
-  it('never calls suspend', () => {
+  it('suspends the context in one place, for the owner\'s pause, and resumes it for Play', () => {
     // A stopped engine under an active playback session is what puts the app at
-    // risk of being suspended while backgrounded.
-    expect(allCode()).not.toMatch(/\.suspend\(/);
+    // risk of being suspended while backgrounded — which a reading waiting for
+    // its next Clip must never do, and which is the point once the owner has
+    // paused. A real iPhone keeps the lock screen on Pause while the engine
+    // renders silence (#66), so the owner's pause stops it and nothing else does.
+    const all = allCode();
+    expect([...all.matchAll(/\.suspend\(/g)]).toHaveLength(1);
+    expect([...all.matchAll(/\.resume\(\)/g).filter((m) => all.slice(m.index! - 7, m.index) === 'context')]).toHaveLength(1);
+    const graph = code('audio-graph.ts');
+    pin(graph, 'next ? context.resume() : context.suspend()', 'src/playback/audio-graph.ts');
+    const pause = graph.slice(graph.indexOf('    pause() {'), graph.indexOf('    clear() {'));
+    pin(pause, 'drive(false);', 'src/playback/audio-graph.ts pause()');
+    const resume = graph.slice(graph.indexOf('    resume() {'), graph.indexOf('    pause() {'));
+    pin(resume, 'drive(true);', 'src/playback/audio-graph.ts resume()');
+    // The engine's own starvation path — the drained queue footgun 3 is about —
+    // reaches neither.
+    expect(code('engine.ts')).not.toMatch(/\.suspend\(|context\./);
   });
 
   it('stops a source only for an explicit seek or disposal, never starvation', () => {
