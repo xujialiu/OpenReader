@@ -257,9 +257,11 @@ sends `words: null`: while playing it would drop the word highlight for the rest
 of the sentence.
 
 **The collapsed player: `FollowOnlyMessage` (`{ kind: 'followOnly', on }`).**
-`reading-view.tsx` sends `collapsed && notes.length === 0`, the exact condition
-`player.tsx` draws the one-button player on, and the bridge re-sends `on` when the
-program installs. On:
+Since the merge with #67, `reading-view.tsx` sends `!chrome`, true exactly while
+the Reading Button stands in for the player (below), and the bridge re-sends `on`
+when the program installs. It does not look at whether the reading is playing:
+the owner confirmed on 2026-09-26 that a player put away while paused also brings
+a browsing page back and locks it, one rule for the put-away player. On:
 - `dragged()` returns before anything else, so a finger neither halts a glide nor
   starts Browsing.
 - A page that was browsing is sent back first (`dispatch({ kind: 'return' })`):
@@ -467,3 +469,72 @@ and the existing `line-follow.cjs`/`fling-jump.cjs`, on "Cultivation Online."
    **Not separately isolated**: the lead's own instant drop at the moment
    the setting changes, at the frame level — no `arm`/`analyse` bookended
    this specific transition.
+
+## Review fixes (after batches 3 and 4)
+
+A review of the merged branch against #71 and the owner's decisions, and the
+device run above, left five things to change. Each was measured on "iPhone 17
+feat_scroll" (iOS 27.0), Cultivation Online 2001-2044, Fish "Laura" at 1.00×,
+with `test/manual-test/follow-fixes.cjs`; raw lines in
+`notes/NOTES_2026-09-26.md` from 15:57.
+
+- **Pause stops the page on its frame.** `HoldMessage` gains `stop`, sent by
+  `pause()` and by the reading ending on a failure (`hold({ stop: true })`); the
+  renderer's `'hold'` calls `halt()` for it, which ends a glide where it is and
+  rests the drift. Not on every hold: the hold `use-reading.ts` sends after a
+  Clip cued while paused comes in the same task as that cue, and a tap or skip
+  while paused has usually just started a glide, which it would cut short. The
+  owner chose the stop at once for Continuous on 2026-09-26; By line's glide
+  stops with it, since a pause is the same act in either. Measured in
+  Continuous: steps of 1 px up to 16558 ms, the `hold` with `stop` at 16608, and
+  no movement in the 1.5 s after it.
+- **`recover` means a new Utterance.** `engine.setRate` cues `last.clip` again
+  (`src/playback/engine.ts`, `setRate`), and a Voice switch re-cues too, so a cue
+  with `recover` can be the sentence already being spoken. The renderer now
+  reads `begins = recover && state.utterance !== message.utterance`, before it
+  replaces `state`, and nothing downstream reads `recover` itself: a re-cue
+  neither ends Browsing nor sends a following page to the Utterance's first line
+  (the correction that follows the cue moves it by the word). Measured: M at
+  4679 ms in Utterance 120, the speed change's re-cue of 120 at 6341, and in the
+  3282 ms until Utterance 121 began, no scroll and no A; at 121, whose first line
+  was on the screen, A at 9624 and a 56 px glide in 284 ms.
+- **Continuous glides across a Block.** `steer` compared the move with the
+  line's rect height, so a Document with small paragraph margins drifted across
+  its gaps. `build()` now keeps each Range's Block (`built.blocks`), `lineOf()`
+  records it (`line.block`), and `steer` glides when the line is in another
+  Block than the one followed before (`crossed`), as well as for any move over a
+  line. Measured with the book's own margins: crossings of 22 and 56 px glided
+  in 207 and 284 ms. With paragraph margins forced to 0 in the live section
+  documents (a test-only stylesheet, removed after): one crossing needed less
+  than a pixel, since the lead had carried the page there, and two moved 4 px on
+  four consecutive frames in 134 ms, a glide's shape, where the drift steps a
+  pixel about every 100 ms.
+- **A drag is measured on the screen.** `dragged()` compared `clientY` with the
+  first move's. In a section document `clientY` is the document's, and once iOS
+  takes the finger for a scroll the document moves with it. A touch tracer on
+  ten of `FollowingProbe`'s drags (175 pt at 250 pt/s): in six, `clientY` ended
+  8 to 11 px from its first move while `scrollTop` rose 160 to 163 px, and M came
+  from a transient excursion just past `DRAG_PX`. `dragged()` now records
+  `touchTop`, the container's `scrollTop` at the first move, and in a section
+  document subtracts the page's scroll since: `clientY − touchY − (scrollTop −
+  touchTop)`, 56 to 171 px for the same drags. In the scroll container (the
+  margins) `clientY` is the top document's and nothing is subtracted.
+  `FollowingProbe.testReopenAndShotAThenM`, which the device run above failed 5
+  times in 7, passed 10 of 10, each on its first drag. (Gentler drags, 70 pt at
+  120 pt/s, and fast ones, 600 pt/s, reached M 10/10 and 9/10 with either
+  comparison, so the margin, not a count, is what the old one lacked.)
+- **The rest gate forgets the program's position.** `ownTop` was kept until the
+  next program scroll, so a scroll event or a frame at exactly that position
+  counted as the program's however much else had moved the page since — a fling
+  coming back to, or bouncing against, where the page was last put opened the
+  gate mid-fling. `noteScroll()` now clears `ownTop` on the first event anywhere
+  else, and `watchForRest()` on the first frame anywhere else. The executed rule
+  "forgets the program's own position" fails without this (the trim ran at
+  1266.7 ms, mid-bounce, where it must wait past 1466.7) and passes with it.
+  `fling-jump.cjs down 8`, which never plays: Continuous 8 of 8 GREEN, By line 8
+  of 8 GREEN, every change above the viewport made at rest. Whether this path
+  was the one RED of 7 above is not known: that run's log was not kept apart.
+
+Collapsing the player while paused was confirmed by the owner as it is (the
+batch 3 section above).
+

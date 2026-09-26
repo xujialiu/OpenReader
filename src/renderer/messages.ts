@@ -343,6 +343,13 @@ export interface CorrectMessage {
  */
 export interface HoldMessage {
   kind: 'hold';
+  /**
+   * The owner paused, so the page stops too, on this frame (#71): a glide under
+   * way ends where it is, and Continuous's drift rests. Left out for the hold
+   * that follows a Clip cued while paused, which must not cut short the glide a
+   * tapped sentence or a skip has just started.
+   */
+  stop?: boolean;
 }
 
 /** Nothing is being read. Both highlights go. */

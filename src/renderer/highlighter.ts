@@ -88,6 +88,13 @@
  * once per document, not once per word, and neither changes any text — an
  * Appearance change rewrites the element's contents and renumbers nothing, so
  * no Block's text, offset, span or CFI moves.
+ *
+ * One more is not its own but epub.js's, asked for: while the player is
+ * collapsed the page only follows (#71), and `lockPage` has epub.js's Stage set
+ * the scroll container's inline `overflow` to `hidden`, then put back the value
+ * it had. That stops a finger scrolling the page and leaves script scrolling it.
+ * It happens when the player collapses or opens, never per word, and touches no
+ * section document.
  */
 
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
@@ -684,9 +691,11 @@ ${constants}
   var driftFrame = 0;
   /* One frame at 60 Hz, which is what a glide's first frame counts as. */
   var FRAME_MS = 1000 / 60;
-  /* The touch that may be dragging the page, and where it first moved. */
+  /* The touch that may be dragging the page, where it first moved, and where
+     the page was scrolled to then. */
   var touchId = null;
   var touchY = null;
+  var touchTop = null;
   /* Further than a tap's jitter: a finger that moves this far is not tapping. */
   var DRAG_PX = 10;
 
@@ -1026,12 +1035,25 @@ ${constants}
     var touch = event.touches && event.touches.length ? event.touches[0] : null;
     if (!touch) return;
     halt();
+    var stage = scroller();
+    var top = stage ? stage.scrollTop : 0;
     if (touch.identifier !== touchId) {
       touchId = touch.identifier;
       touchY = touch.clientY;
+      touchTop = top;
       return;
     }
-    if (Math.abs(touch.clientY - touchY) > DRAG_PX) setBrowsing(true);
+    /* How far the finger has travelled on the screen. In a section document
+       \`clientY\` is the document's own, and the document scrolls with the finger:
+       once the phone takes the drag for a scroll, the finger and the text under
+       it move together and \`clientY\` stands still. Measured on 2026-09-26,
+       ten real drags of 175 pt: in six, \`clientY\` ended 8 to 11 px from where
+       it first moved while the page scrolled 160 to 163 px under it, so whether
+       a drag was Browsing turned on a pixel of the phone's scroll slop (#71).
+       The page's own scroll is added back. In the scroll container, the margins, \`clientY\` is the
+       screen's and has none in it. */
+    var scrolled = event.currentTarget === stage ? 0 : top - touchTop;
+    if (Math.abs(touch.clientY - touchY - scrolled) > DRAG_PX) setBrowsing(true);
   }
 
   /* Browsing starts or ends, and the player's A or M is told — once, when it
@@ -1293,6 +1315,7 @@ ${constants}
 
   function build(ranges) {
     var built = [];
+    var blocks = [];
     var doc = null;
     for (var i = 0; i < ranges.length; i++) {
       var dom = domRange(ranges[i]);
@@ -1303,9 +1326,10 @@ ${constants}
       if (doc && owner !== doc) return null;
       doc = owner;
       built.push(dom);
+      blocks.push(ranges[i].block);
     }
     if (!built.length || !doc || !doc.defaultView) return null;
-    return { ranges: built, window: doc.defaultView };
+    return { ranges: built, blocks: blocks, window: doc.defaultView };
   }
 
   /* ADR 0008: text is the arbiter of whether a locator is correct. The text
@@ -1522,7 +1546,7 @@ ${constants}
       var rects = built.ranges[i].getClientRects();
       for (var j = 0; j < rects.length; j++) {
         if (rects[j].height && rects[j].width) {
-          return { doc: built.window.document, frame: frame, range: built.ranges[i], index: i, top: rects[j].top, height: rects[j].height, left: rects[j].left };
+          return { doc: built.window.document, frame: frame, range: built.ranges[i], index: i, block: built.blocks[i], top: rects[j].top, height: rects[j].height, left: rects[j].left };
         }
       }
     }
@@ -1827,21 +1851,28 @@ ${constants}
   /* The page drifting towards what the words say, for the word just drawn or
      the Utterance just cued: a line carried \`lead\` px past the line position.
 
-     A move of more than a line is not a drift. The next paragraph's first line
-     past its gap, a heading, a sentence somewhere else: those are moved as every
-     other move is, by bring() — a glide within the visible page, a jump beyond
-     it — and the drift takes over from where that leaves the page. A move of
-     less is the words going on along a line, or onto the next one, which the
-     lead has already carried the page nearly all the way to: that is the drift. */
+     Crossing into another Block is not a drift: the next paragraph's first line
+     past its gap, a heading. Nor is a move of more than a line: a sentence
+     somewhere else. Those are moved as every other move is, by bring() — a glide
+     within the visible page, a jump beyond it — and the drift takes over from
+     where that leaves the page. The Block and not the size of the move, because
+     a Document whose paragraphs have little or no margin between them puts the
+     next paragraph's first line barely further than the next line, and the gap
+     it does have would drift across instead of taking the 250 ms every other
+     paragraph takes (#71). Anything else is the words going on along a line, or
+     onto the next one in the same Block, which the lead has already carried the
+     page nearly all the way to: that is the drift. */
   function steer(aimed) {
     if (!aimed) return false;
     if (!aimed.line) return bring(aimed, false);
     var move = moveFor(aimed);
     if (move === null) return false;
+    var was = followed;
     followed = aimed.line;
     if (drifting) drifting.aimed = aimed;
     else drifting = { aimed: aimed, speed: 0, owed: 0, last: null };
-    if (Math.abs(move) > aimed.line.height) {
+    var crossed = !!was && was.block !== aimed.line.block;
+    if (crossed || Math.abs(move) > aimed.line.height) {
       rest();
       return bring(aimed, false);
     }
@@ -1971,7 +2002,7 @@ ${constants}
     return bring(aim(), true);
   }
 
-  /* Once per document per Utterance, and \`centred\` is what makes it once: a
+  /* Once per document per Utterance, and \`placed\` is what makes it once: a
      placing that causes epub.js to render a section would otherwise be answered
      by attach(), which would place again, which would render again. It is a
      WeakSet, so a document epub.js destroys is not held alive by having been
@@ -1979,8 +2010,8 @@ ${constants}
   function placeOnce(built) {
     if (!state || !state.follow || browsing) return;
     var doc = built.window.document;
-    if (state.centred.has(doc)) return;
-    if (place()) state.centred.add(doc);
+    if (state.placed.has(doc)) return;
+    if (place()) state.placed.add(doc);
   }
 
   /* The text has reflowed under an Appearance change, so the line being spoken
@@ -2043,7 +2074,7 @@ ${constants}
     if (!state) return;
     if (built) {
       if (!state.follow || browsing) return;
-      if (approach(aim())) state.centred.add(built.window.document);
+      if (approach(aim())) state.placed.add(built.window.document);
       return;
     }
     var record = blocks.get(state.utteranceRanges[0].block);
@@ -2283,6 +2314,12 @@ ${constants}
   var resting = { top: null, since: 0, frames: 0 };
   var watching = false;
 
+  /* The program's own position is the program's only until something else
+     moves the page: from the first scroll event anywhere else, it is forgotten
+     (\`ownTop = null\`), and a finger or a fling that later passes through it or
+     comes to rest against it counts as moving like any other position. Kept, it
+     would open the gate in the middle of a fling that bounced against the place
+     the program last left the page — #58's jump, which the gate exists for. */
   function noteScroll() {
     var stage = scroller();
     var top = stage ? stage.scrollTop : null;
@@ -2290,6 +2327,7 @@ ${constants}
       scrolledTop = top;
       return;
     }
+    ownTop = null;
     scrolledAt = performance.now();
     scrolledTop = top;
   }
@@ -2316,6 +2354,8 @@ ${constants}
     var stage = scroller();
     var top = stage ? stage.scrollTop : null;
     if (top !== resting.top && !(resting.top !== null && top !== null && top === ownTop)) {
+      /* Somewhere the program did not put it: forgotten here too (noteScroll). */
+      if (top !== ownTop) ownTop = null;
       resting.top = top;
       resting.since = now;
       resting.frames = 0;
@@ -2644,6 +2684,12 @@ ${constants}
     if (message.kind === 'hold') {
       stop();
       if (state) state.held = true;
+      /* The owner paused (#71): the page stops with the voice, on this frame —
+         a glide ends where it is, and Continuous's drift rests rather than
+         easing on for the second its follower would take. Not the hold after a
+         Clip cued while paused, which would cut short the glide a tapped
+         sentence or a skip has just begun. */
+      if (message.stop) halt();
       return;
     }
     if (message.kind === 'browse') {
@@ -2693,7 +2739,13 @@ ${constants}
          where the page is (a cue while paused, a new Voice repainting the
          sentence), which keeps whether the page was following it. */
       if (message.reveal) setBrowsing(false);
-      var following = message.reveal || !!message.recover || !!(state && state.follow);
+      /* \`recover\` means a sentence beginning, and only a new Utterance is one.
+         The engine cues the Utterance it is speaking again when the speed
+         changes or a Voice is switched mid-sentence (#71): nothing began, so a
+         page the owner took away stays away, and a page that follows is left
+         for the words to move — the correction that follows the cue does. */
+      var begins = !!message.recover && !(state && state.utterance === message.utterance);
+      var following = message.reveal || begins || !!(state && state.follow);
       state = {
         utterance: message.utterance,
         utteranceRanges: message.utteranceRanges,
@@ -2705,7 +2757,7 @@ ${constants}
         reported: false,
         follow: following,
         /* The documents this Utterance has already been placed in; see placeOnce. */
-        centred: new WeakSet(),
+        placed: new WeakSet(),
         /* The section follow() asked epub.js to display for this Utterance, until
            it arrives; see attach. */
         awaiting: null
@@ -2728,8 +2780,8 @@ ${constants}
          see beginning. One they cannot see leaves it where they put it — and in
          particular displays nothing, which is what follow() would do for a
          sentence whose section is not on the page. */
-      if (!message.reveal && message.recover && browsing && onVisiblePage(shown)) setBrowsing(false);
-      if (message.reveal || (message.recover && !browsing)) follow(shown);
+      if (!message.reveal && begins && browsing && onVisiblePage(shown)) setBrowsing(false);
+      if (message.reveal || (begins && !browsing)) follow(shown);
       /* **What is on the page has been reported**, checked once per Utterance —
          and then the section after it asked for if it is missing. Neither depends
          on where the page is or on whether this Utterance could be painted.

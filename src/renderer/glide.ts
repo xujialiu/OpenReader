@@ -1,7 +1,7 @@
 /**
  * How the page moves when it follows the line being spoken (ADR 0050).
  *
- * **Source, not functions.** What is exported is the text of three small
+ * **Source, not functions.** What is exported is the text of five small
  * functions in the WebView program's own dialect — `var`, no arrow functions, no
  * template literals — which `highlighter.ts` splices into that program as it is.
  * The tests evaluate the same text with `node:vm`, so the curve they check is the

@@ -335,8 +335,12 @@ export interface ReaderBridge {
    * Not a third clock message: a pause stops the position stream, and a WebView
    * still interpolating against `requestAnimationFrame` would run the highlight
    * ahead of silence. The next correction unfreezes it.
+   *
+   * `stop` is the owner pausing: the page stops moving on the same frame (#71).
+   * Without it, a glide already under way — a tapped sentence's, a skip's —
+   * finishes.
    */
-  hold(): void;
+  hold(options?: { stop?: boolean }): void;
   /** Nothing is being read. Both highlights go. */
   clear(): void;
   /**
@@ -652,8 +656,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [send],
   );
 
-  const hold = useCallback(() => {
-    send({ kind: 'hold' });
+  const hold = useCallback((options?: { stop?: boolean }) => {
+    send(options?.stop ? { kind: 'hold', stop: true } : { kind: 'hold' });
   }, [send]);
 
   const clear = useCallback(() => {

@@ -43,6 +43,10 @@ import type { SkipTarget } from './use-reading';
 import { LoadingSpinner } from './loading-spinner';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 
+/** The open player's padding above and below its rows: part of the height the Line Position is measured above (`onOpenHeight`). */
+const PLAYER_PADDING_TOP = 4;
+const PLAYER_PADDING_BOTTOM = 28;
+
 /**
  * How a held stepper button repeats, and why it is not simply "fast".
  *
@@ -58,10 +62,6 @@ import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
  * the range: 0.50 to 4.00 is seventy steps, which is `8 + (70 - 8) / 3` repeats,
  * about three seconds.
  */
-/** The open player's padding above and below its rows: part of the height the Line Position is measured above (`onOpenHeight`). */
-const PLAYER_PADDING_TOP = 4;
-const PLAYER_PADDING_BOTTOM = 28;
-
 const HOLD_DELAY_MS = 350;
 const HOLD_INTERVAL_MS = 120;
 const HOLD_FINE_REPEATS = 8;

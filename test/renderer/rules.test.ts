@@ -201,8 +201,15 @@ describe('the page follows the line being spoken (ADR 0011, ADR 0050)', () => {
     expect(follow.indexOf("SCROLLING === 'continuous'")).toBeLessThan(follow.indexOf('sameLine(followed, line)'));
     const steer = fn(program, 'steer');
     expect(steer).not.toMatch(/nudge\(|scrollBy/);
-    // More than a line is a move of its own, made as every other move is.
-    pin(steer, 'if (Math.abs(move) > aimed.line.height) {\n      rest();\n      return bring(aimed, false);', 'highlighter.ts, function steer');
+    // Another Block, or more than a line, is a move of its own, made as every
+    // other move is: a paragraph gap glides however small the Document's margin.
+    pin(steer, 'var crossed = !!was && was.block !== aimed.line.block;', 'highlighter.ts, function steer');
+    pin(steer, 'if (crossed || Math.abs(move) > aimed.line.height) {\n      rest();\n      return bring(aimed, false);', 'highlighter.ts, function steer');
+    // `was` is the line followed before this one, read before it is replaced.
+    expect(steer.indexOf('var was = followed;')).toBeLessThan(steer.indexOf('followed = aimed.line;'));
+    // Every line knows its Block: build() keeps them beside the Ranges.
+    pin(fn(program, 'build'), 'blocks.push(ranges[i].block);', 'highlighter.ts, function build');
+    pin(fn(program, 'lineOf'), 'block: built.blocks[i]', 'highlighter.ts, function lineOf');
     pin(steer, 'if (!glide) kick();', 'highlighter.ts, function steer');
     // A glide hands over to the drift when it ends.
     pin(fn(program, 'glideStep'), 'kick();', 'highlighter.ts, function glideStep');
@@ -287,8 +294,8 @@ describe('the page follows the line being spoken (ADR 0011, ADR 0050)', () => {
     // what ends that, and it is weak because the alternative is the renderer
     // holding a document epub.js means to destroy.
     const program = code('highlighter.ts');
-    expect(program).toContain('centred: new WeakSet()');
-    expect(fn(program, 'placeOnce')).toContain('if (state.centred.has(doc)) return;');
+    expect(program).toContain('placed: new WeakSet()');
+    expect(fn(program, 'placeOnce')).toContain('if (state.placed.has(doc)) return;');
   });
 });
 
@@ -1387,7 +1394,7 @@ describe('a section the page has not reached is not a highlight that failed', ()
     );
     const speak = program.slice(program.indexOf("message.kind === 'speak'"), program.indexOf("message.kind === 'correct'"));
     expect(speak).toContain('var shown = showUtterance();');
-    expect(speak).toContain('if (message.reveal || (message.recover && !browsing)) follow(shown);');
+    expect(speak).toContain('if (message.reveal || (begins && !browsing)) follow(shown);');
   });
 
   it('is silent for the word by the same rule, since the correction arrives before the section does (#50)', () => {
@@ -1506,7 +1513,7 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     // Zotero-TTS's rule (ADR 0050): the reading moving on takes the page back
     // only at a sentence whose first line the owner can see, measured on the
     // sentence just painted and before anything follows it.
-    const recover = 'if (!message.reveal && message.recover && browsing && onVisiblePage(shown)) setBrowsing(false);';
+    const recover = 'if (!message.reveal && begins && browsing && onVisiblePage(shown)) setBrowsing(false);';
     pin(speak, recover, "highlighter.ts, the 'speak' branch");
     expect(speak.indexOf('var shown = showUtterance();')).toBeLessThan(speak.indexOf(recover));
     expect(speak.indexOf(recover)).toBeLessThan(speak.indexOf('follow(shown);'));
@@ -1545,18 +1552,44 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
 
   it('lets a repaint keep whether the page follows, and only a revealed highlight or a followed cue scroll to it', () => {
     const speak = branch('speak', 'correct');
-    pin(speak, 'var following = message.reveal || !!message.recover || !!(state && state.follow);', "highlighter.ts, the 'speak' branch");
+    pin(speak, 'var following = message.reveal || begins || !!(state && state.follow);', "highlighter.ts, the 'speak' branch");
     pin(speak, 'follow: following,', "highlighter.ts, the 'speak' branch");
     // A cue the reading moved on to follows only a page that is following: one
     // the owner took away displays nothing, even for a section not on the page.
-    pin(speak, 'if (message.reveal || (message.recover && !browsing)) follow(shown);', "highlighter.ts, the 'speak' branch");
+    pin(speak, 'if (message.reveal || (begins && !browsing)) follow(shown);', "highlighter.ts, the 'speak' branch");
+  });
+
+  it('counts only a new Utterance as a sentence beginning, so a re-cue ends no Browsing and moves no page (#71)', () => {
+    // A speed change or a Voice switched mid-sentence cues the Utterance being
+    // spoken again, with `recover`. Nothing began: a page the owner took away
+    // stays away, and a following page is left for the correction's word.
+    const speak = branch('speak', 'correct');
+    const begins = 'var begins = !!message.recover && !(state && state.utterance === message.utterance);';
+    pin(speak, begins, "highlighter.ts, the 'speak' branch");
+    // Read off the old state, before it is replaced.
+    expect(speak.indexOf(begins)).toBeLessThan(speak.indexOf('state = {'));
+    // And nothing downstream reads `recover` itself.
+    expect(speak.slice(speak.indexOf(begins) + begins.length)).not.toContain('message.recover');
+  });
+
+  it('stops the page on the frame the owner pauses, and not on the hold after a Clip cued while paused (#71)', () => {
+    pin(branch('hold', 'browse'), 'if (message.stop) halt();', "highlighter.ts, the 'hold' branch");
+    const reading = readFileSync(new URL('../../src/app/use-reading.ts', import.meta.url).pathname, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    // pause(), and the reading ending on a failure: both the owner's stop.
+    expect(reading.match(/bridgeRef\.current\?\.hold\(\{ stop: true \}\);/g)).toHaveLength(2);
+    // The paused cue's hold stops the tick loop only.
+    pin(reading, 'if (!playIntent.current) bridgeRef.current?.hold();', 'use-reading.ts, the clock');
   });
 
   it('counts a finger dragging the page as browsing, and a tap as nothing of the kind', () => {
     const dragged = fn(program, 'dragged');
     // A new finger is a new identifier, measured from where it first moved.
     pin(dragged, 'if (touch.identifier !== touchId) {', 'highlighter.ts, function dragged');
-    pin(dragged, 'if (Math.abs(touch.clientY - touchY) > DRAG_PX) setBrowsing(true);', 'highlighter.ts, function dragged');
+    // Measured on the screen: in a section document the page's own scroll under
+    // the finger is added back, or a drag the phone scrolls reads as standing still.
+    pin(dragged, 'touchTop = top;', 'highlighter.ts, function dragged');
+    pin(dragged, 'var scrolled = event.currentTarget === stage ? 0 : top - touchTop;', 'highlighter.ts, function dragged');
+    pin(dragged, 'if (Math.abs(touch.clientY - touchY - scrolled) > DRAG_PX) setBrowsing(true);', 'highlighter.ts, function dragged');
     // A page that only follows (the player collapsed, #71) is neither stopped
     // nor browsed by a finger: the first thing it asks.
     pin(dragged, 'if (followOnly) return;', 'highlighter.ts, function dragged');
@@ -1825,6 +1858,31 @@ describe('nothing above the page changes while the page moves (#58, ADR 0045)', 
       expect(g.moving()).toBe(true);
       g.clock.now = 1201;
       expect(g.moving()).toBe(false);
+    });
+
+    it('forgets the program\u2019s own position once anything else moves the page, so a fling back to it still holds a trim (#58)', () => {
+      // The program leaves the page at 1003; a fling goes away and comes back to
+      // rest against exactly 1003, bouncing there for a while (iOS's positions
+      // and events). Remembered, 1003 would read as the program's and open the
+      // gate mid-bounce.
+      const g = gate();
+      g.clock.now = 1000;
+      g.nudge(3);
+      g.noteScroll();
+      g.parked.trim = true;
+      g.watch();
+      const path = [1100, 1300, 1200, 1050, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003];
+      let step = 0;
+      run(g, 1000 / 60, 4000, () => {
+        if (step < path.length) {
+          g.stage.scrollTop = path[step];
+          g.noteScroll();
+          step += 1;
+        }
+      });
+      expect(g.enqueued).toEqual(['trim']);
+      // Not before REST_MS after the last of the fling's events at 1003.
+      expect(g.clock.now).toBeGreaterThan(1000 + (path.length * 1000) / 60 + 200);
     });
 
     it('does not let a program scroll during a fling paper over it', () => {

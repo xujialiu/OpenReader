@@ -67,10 +67,10 @@ Two things were deliberately not copied:
   of the next sentence is on the screen when the voice begins it, the page goes
   back to following by itself, as on the desktop; otherwise it stays where the
   owner put it (below, "Looking away while listening").
-- **When the player is put away, the page only follows.** A page the owner had
-  moved comes back to the reading as the player goes, it cannot be dragged, and a
-  tap on a sentence still reads from there. To look elsewhere, the owner brings
-  the player back first.
+- **When the player is put away, the page only follows**, whether the reading is
+  playing or paused. A page the owner had moved comes back to the reading as the
+  player goes, it cannot be dragged, and a tap on a sentence still reads from
+  there. To look elsewhere, the owner brings the player back first.
 
 ## What was turned down
 
@@ -130,12 +130,17 @@ page comes back in one of three ways:
   has come back into the reading's reach. If it is not on the screen, the page
   stays away, sentence after sentence. This is the desktop plugin's rule, so the
   two behave the same, and like the desktop it has no setting. Pausing changes
-  neither way.
+  neither way. Only a sentence the voice actually begins counts: changing the
+  speed or the voice in the middle of a sentence restarts nothing the owner can
+  hear, and leaves the page where they put it.
 - **The player is put away.** With the player down to its one button there is no
   **M** to tap, so a page left away from the reading would be a page nothing on
   the screen could bring back. Putting the player away therefore brings the page
   back to the reading first, and from then on the page only follows: a finger
-  cannot drag it, and a tap on a sentence still reads from there.
+  cannot drag it, and a tap on a sentence still reads from there. This holds
+  while paused too, which the owner confirmed: one rule for the put-away player,
+  rather than a page that is locked or not depending on whether the voice happens
+  to be speaking.
 
 **A** is only a mark. Tapping it does nothing: the page is already following,
 and there is nothing to ask for.
@@ -183,7 +188,10 @@ moves along a line, the page rises with it, so that by the time the voice reache
 the end of the line the next line has arrived where this one was. The eye can
 stay at one height and the text passes through it, the way credits roll, except
 that it rolls only as fast as the voice reads and stops when the voice stops:
-between sentences, at a pause, when the owner presses Pause.
+between sentences, at a pause, and when the owner presses Pause — then at once,
+on the same instant as the sound, rather than easing on for the second the
+rolling would otherwise take to settle. The owner chose that: a page that keeps
+moving after the voice has stopped looks like a page that has not heard.
 
 It is driven only by the words that have actually been spoken. Each word says how
 far along its line the voice has got, and the page eases towards that, a word
@@ -194,8 +202,10 @@ to meet each line: that would have had to guess, at the end of every sentence,
 when the next one would start.
 
 Two moves are still the quarter-second glide of By line, because rolling through
-them would be slow and pointless: the gap before a new paragraph or a heading, and
-anything else more than a line away, such as a sentence tapped elsewhere. Anything
+them would be slow and pointless: crossing into a new paragraph or a heading, and
+anything else more than a line away, such as a sentence tapped elsewhere. A new
+paragraph glides however little space a book leaves between its paragraphs, so
+that every paragraph starts the same way. Anything
 further than the visible page still jumps, as it does By line.
 
 A finger stops the rolling as it stops a glide, and moving the page by hand is
@@ -226,3 +236,14 @@ owner paused. Now the app tells its own movement of the page from the owner's: i
 clears while the page is moving by itself, which is safe, and still waits
 whenever the page is moving under the owner's finger or coasting after it. By
 line benefits the same way, and nothing the owner does by hand has changed.
+
+### Telling a drag from a tap
+
+Moving the page by hand is how browsing begins, and the app used to decide it
+had been moved by how far the finger travelled across the words under it. But
+once the phone takes a finger's movement for a scroll, the words travel with the
+finger, and the finger hardly moves across them at all. So whether a drag
+counted turned on a hair's breadth of how soon the phone started its scroll, and
+a drag the owner plainly made could leave the page following, to be pulled back
+at the next line. The app now measures how far the finger travelled on the
+screen, which is the same whether or not the words went with it.

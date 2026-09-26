@@ -1168,7 +1168,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       pendingChoice.current = null;
       engineRef.current?.cancelVoiceSwitch();
       engineRef.current?.pause();
-      bridgeRef.current?.hold();
+      bridgeRef.current?.hold({ stop: true });
     }
     setStatus((was) => ({ ...was, playing: ended ? false : was.playing,
       buffering: ended ? false : was.buffering, pendingVoice: ended ? null : was.pendingVoice, note: sentence }));
@@ -1371,8 +1371,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     engineRef.current?.pause();
     // Not a third clock message: a pause stops the position stream, and a WebView
     // still interpolating against `requestAnimationFrame` would run the highlight
-    // ahead of silence (`reader-bridge.ts`).
-    bridgeRef.current?.hold();
+    // ahead of silence (`reader-bridge.ts`). And the page stops with the voice (#71).
+    bridgeRef.current?.hold({ stop: true });
     setStatus((was) => ({ ...was, playing: false, buffering: false, seeking: false }));
   }, []);
 
