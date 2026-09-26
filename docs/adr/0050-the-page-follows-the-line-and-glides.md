@@ -187,12 +187,99 @@ arithmetic matches the player's own layout.
   order with the current value checked. Choosing 30% showed `Line position, 30%`,
   and choosing back restored the row.
 
+## What was done (batch 3: A/M, the way back, and the collapsed lock)
+
+**The fact that forced the change.** Before this batch every Clip cue while
+playing went to the renderer revealed: `use-reading.ts`'s clock passed
+`{ reveal: playIntent.current }`, and the `'speak'` branch cleared `browsing` on
+any revealed message. So a drag while the reading played lasted until the next
+sentence's cue, and then `follow()` took the page back from wherever it was — a
+glide within the visible page, otherwise a jump or a `display()` of the reading's
+section. The owner's rule is Zotero-TTS's instead (its `manual-follow.ts`, #100
+there, `keepFollowingWhileVisible` defaulting to true): M stays M across
+sentences and comes back by itself only at a sentence that can be seen.
+
+**Three kinds of cue, where there were two.**
+- `use-reading.ts` keeps `revealCue`, set with `playIntent` by `play()` and
+  cleared by `pause()`. The first cue after Play is sent `{ reveal: true }`: the
+  owner asking for the reading, which ends Browsing as before. Every later cue
+  while playing — the next Clip, a rate change's re-cue (`engine.setRate` cues
+  `last.clip` again), a Voice switch's — is `{ reveal: false, recover: true }`.
+  A cue while paused stays `{ reveal: false }`. `engine.play()` cues the queue's
+  front synchronously (`engine.ts`), so the flag set before it is consumed by
+  that cue; with nothing queued, by the first Clip to arrive.
+- `SpeakMessage.recover` (optional, absent means false) carries it. In the
+  `'speak'` branch the Utterance is painted first, then
+  `if (!message.reveal && message.recover && browsing && onVisiblePage(shown)) setBrowsing(false);`,
+  then `follow(shown)` only for `reveal || (recover && !browsing)` — so a
+  recovering cue to a section that is not on the page displays nothing while the
+  owner browses. `following` is `reveal || recover || state.follow`; `browsing`
+  gates everything that moves the page, as before.
+- `onVisiblePage(built)` measures the Utterance's first line (`lineOf`, the
+  first rect with a width and a height) and asks whether its middle lies between
+  the container's top and `top + visibleOf(view)`: what can be seen **now**, with
+  the current `covered`, not `lineAt()`'s open-player reference, because it is
+  about what the owner sees. It answers false while `moving()` — a fling still
+  coasting after the finger lifts, which a glide would fight; the next sentence
+  asks again.
+
+**A or M reaches the player once per change.** A new WebView→RN message,
+`FOLLOWING_STATE_MESSAGE` (`'openreader:following'`, `{ following }`), posted by
+`setBrowsing()`, the only writer of `browsing`, and only when the value it
+announces differs from `announced`. The bridge calls `onFollowing(true)` when the
+program installs (the document message), which is where a new program starts;
+`use-reading.ts` keeps it as `ReadingStatus.following`. Nothing on the frame or
+word path posts (`tick`, `showWord`, `followWord`, `glideStep`; a structural rule).
+
+**M: `ReturnMessage` (`{ kind: 'return' }`).** `bridge.returnToReading(atRef)`
+sends it when `cued.current` is already that Utterance, and otherwise a revealed
+`show(utterance)`. The renderer halts any glide, clears Browsing, sets
+`state.follow` and calls `follow(build(state.utteranceRanges))`: `bring(aim())` —
+the spoken word's line while playing, the first line while paused — or a
+`display()` of the Block's CFI when the section is not on the page. It never
+replaces `state`, so a playing Clip keeps its Word Timings, and nothing on the RN
+side touches the engine. `show()` is the fallback and not the rule because it
+sends `words: null`: while playing it would drop the word highlight for the rest
+of the sentence.
+
+**The collapsed player: `FollowOnlyMessage` (`{ kind: 'followOnly', on }`).**
+`reading-view.tsx` sends `collapsed && notes.length === 0`, the exact condition
+`player.tsx` draws the one-button player on, and the bridge re-sends `on` when the
+program installs. On:
+- `dragged()` returns before anything else, so a finger neither halts a glide nor
+  starts Browsing.
+- A page that was browsing is sent back first (`dispatch({ kind: 'return' })`):
+  the one-button player shows no M.
+- `lockPage(true)` calls epub.js's own `rendition.manager.stage.overflow('hidden')`,
+  having kept `stage.settings.overflow`; off, `stage.overflow(<kept>)`.
+
+Why the Stage's switch, read out of the bundled epub.js: `Stage.create` sets the
+container's inline `overflow-y: scroll` / `overflow-x: hidden` for a vertical
+scrolled Stage, and `Stage.overflow(t)` rewrites the same inline style and stores
+`t` in `settings.overflow`. Its only other caller is `DefaultViewManager.updateFlow`
+(the continuous manager's override passes `"scroll"`), reached from
+`rendition.flow()`, which epub.js runs once in `Rendition.start()` — before this
+program installs — and which the library otherwise runs only from its
+`changeFlow`, which this app never calls. A container whose overflow is `hidden` cannot be
+scrolled by touch and can be by script — `scrollBy`/`scrollTop` still move it and
+fire `scroll`, which is what the continuous manager appends and trims on, so
+glides, displays and `renderAhead` go on. Rejected: a non-passive `touchmove` with
+`preventDefault` (every scroll of the phone would wait on this program, and every
+listener here is passive), and a class or a `<style>` of the program's own (the
+DOM rule of ADR 0005 and ADR 0034 allows the highlight stylesheet and the
+alignment mark only; `rules.test.ts` holds it).
+
+**Not measured on a device yet** — batch 3 was built without a simulator, while
+two others ran on a 16 GB machine. To verify there: the page cannot be dragged
+while collapsed and a tap on a sentence still reads from it; epub.js's `resize`
+does not fire when the overflow flips (no box change is expected, iOS scroll bars
+being overlays); a fling cut off by collapsing leaves the page still; a drag while
+playing stays M across a sentence that begins off screen and recovers at one that
+begins on screen; M while paused moves the page and not the reading (#53); M
+while playing keeps the word highlight.
+
 ## Decided, not yet built
 
-- **A/M** in the player's empty 44 pt slot, automatic recovery when a sentence
-  begins while playing with its line still on the screen, **M** returning the page
-  without playing (#53), and no dragging while the player is collapsed and the
-  reading plays (batch 3).
 - **Continuous**: the target advanced by the spoken word's horizontal position in
   its line times the line's height, smoothed, and stopped while nothing is spoken.
   Every frame would then scroll, so `holdStill`'s `moving()` would never see

@@ -98,18 +98,30 @@ Six properties of the following, and each is a rule rather than an accident.
   at once and not by a glide, which then keeps the line in place while epub.js
   lays the neighbouring sections out. Any other section that arrives, such as a
   view the manager rebuilt, is placed at once, as before.
-- **Nothing centres while the owner is browsing** (#52, ADR 0044). A Contents
-  row while paused sends a `browse` message, then displays its section, and a
-  finger dragging the page sets the same `browsing` flag. Until a highlight is
-  revealed — Play's cue, a tapped sentence, a skip, a place from another
-  device — `placeOnce()`, `settle()` and `followWord()` do nothing and a glide
-  under way stops, so neither the reading's section arriving, nor an Appearance
-  reflow, nor the next line takes the page back. Any move of a finger on the page
-  also stops a glide where it is, from the same `touchmove` listener. It has to be
+- **Nothing centres while the owner is browsing** (#52, ADR 0044), and the
+  player shows it as **M** (#71, ADR 0050). A Contents row while paused sends a
+  `browse` message, then displays its section, and a finger dragging the page
+  sets the same `browsing` flag. Until it is cleared, `placeOnce()`, `settle()`
+  and `followWord()` do nothing and a glide under way stops, so neither the
+  reading's section arriving, nor an Appearance reflow, nor the next line, nor
+  the next sentence takes the page back. Any move of a finger on the page also
+  stops a glide where it is, from the same `touchmove` listener. It has to be
   the WebView's flag: displaying the section after next re-rendered the
   reading's own section as a neighbour, and `attach()` centred the paused
-  sentence as it arrived (−7,424 px, measured 2026-09-23 23:30). A cue while
-  paused, and the repaint after an engine rebuild, are sent unrevealed.
+  sentence as it arrived (−7,424 px, measured 2026-09-23 23:30).
+- **What clears it** (#71, Zotero-TTS's rule). A revealed highlight — the first
+  cue after Play, a tapped sentence, a skip, a place from another device; M
+  (`return`); the player collapsing (`followOnly`); and, by itself, a cue the
+  reading moved on to while playing (`recover`) whose sentence begins with its
+  first line on the visible page and the page at rest. A recovering cue whose
+  sentence cannot be seen leaves the page where it is and displays nothing. A
+  cue while paused, and the repaint after an engine rebuild, are sent
+  unrevealed and clear nothing. `setBrowsing()` is the one writer, and it posts
+  `openreader:following` to the app only when A or M changes.
+- **Collapsed, the page only follows** (#71). `followOnly` makes `dragged()`
+  ignore the finger and flips epub.js's own `stage.overflow()` to `hidden`, so a
+  finger cannot scroll the container and the program still can; opened, the
+  Stage's own value is given back.
 
 **Every section epub.js displays is adopted as it is displayed** (ADR 0036). The
 program's `sweep` — the stylesheet, the Blocks, the tap listener — is registered
