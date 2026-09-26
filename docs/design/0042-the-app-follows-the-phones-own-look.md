@@ -54,7 +54,11 @@ listed below.
   app's colours.
 - **The amber.** Where the phone would colour an action or a check in its own
   blue, the app uses the amber its highlight is painted in, so the one colour
-  that means "this is live" is the same everywhere.
+  that means "this is live" is the same everywhere. The one exception is the
+  mark on a dark page, which is blue: amber cannot carry the page's light
+  letters, and the owner chose to change the mark rather than the app's colour
+  (decision 0022). So in the dark the page's mark and the app's checks are two
+  colours.
 - **The reading page and the player.** They are what the app is for, and the
   phone has no convention for a page whose words light up as they are spoken.
   Decision 0026's references for a quiet reading page, the two reading apps the

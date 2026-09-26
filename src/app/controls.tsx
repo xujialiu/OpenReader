@@ -58,6 +58,9 @@ import { Icon, type IconName } from './icon';
  * is what makes a long reading tiring — `#111114` and `#e6e6ea` are the same pair
  * `themeCss` paints the document with, so the page and the app around it are one
  * surface. The amber is lightened for dark, where the light one reads as brown.
+ * It is the highlighter's colour only on a light page: a dark page marks the
+ * spoken words in blue, because amber cannot carry light letters (`themeCss`,
+ * #69), and the accent here stayed amber (design 0042).
  */
 export const PALETTE = {
   light: {
@@ -149,7 +152,7 @@ export const INK = {
   line: ink(PALETTE.light.line, PALETTE.dark.line),
   text: ink(PALETTE.light.text, PALETTE.dark.text),
   quiet: ink(QUIET.light, QUIET.dark),
-  /** The reading colour, the same amber the highlighter paints with (`highlighter.ts`). */
+  /** The reading colour, the same amber the highlighter paints with on a light page (`highlighter.ts`); a dark page's highlight is blue (#69). */
   reading: ink(PALETTE.light.reading, PALETTE.dark.reading),
   /** Something the owner has to act on: a missing key, a server that did not answer. Not an alarm. */
   attention: ink('#8a2f18', '#f08c6e'),

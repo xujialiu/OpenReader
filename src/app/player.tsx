@@ -184,10 +184,18 @@ export function Player({
         <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>{note.said}</Text>
       ))}
       <View style={styles.head}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
-          style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
-          <Text style={styles.voiceLabel} numberOfLines={1}>{voiceLine(settings, voiceInUse)}</Text>
-        </Pressable>
+        {/* As wide as the collapse arrow, so the name is centred on the whole
+            player rather than on what the arrow leaves (#70). Empty, and kept
+            free for a control of its own. */}
+        <View style={styles.headEnd} />
+        {/* Only the name opens the Voices: its button hugs the text, and a tap
+            beside it lands on this plain box and does nothing. */}
+        <View style={styles.voiceSlot}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
+            style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
+            <Text style={styles.voiceLabel} numberOfLines={1}>{voiceLine(settings, voiceInUse)}</Text>
+          </Pressable>
+        </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Collapse the player"
           onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, pressed && styles.pressed]}>
           <Icon name="down" color={INK.quiet} size={20} />
@@ -410,6 +418,7 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.35 },
   footTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
+  headEnd: { width: 44 },
   note: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
   noteAttention: { color: INK.attention },
   player: {
@@ -439,6 +448,7 @@ const styles = StyleSheet.create({
   // `hitSlop` making up the 44-point target.
   step: { alignItems: 'center', backgroundColor: INK.line, borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
   transport: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  voice: { flex: 1, minHeight: 44, justifyContent: 'center', paddingLeft: 8 },
+  voice: { alignItems: 'center', justifyContent: 'center', maxWidth: '100%', minHeight: 44, minWidth: 44 },
   voiceLabel: { color: INK.text, fontSize: 14, fontWeight: '500' },
+  voiceSlot: { alignItems: 'center', flex: 1 },
 });

@@ -316,6 +316,9 @@ export type ReadingScheme = 'light' | 'dark';
 /** The page under a dark theme. Near-black rather than black, and a text that is not pure white: an unrelieved #000/#fff pair is what makes a long reading tiring. */
 const DARK_PAGE = '#111114';
 const DARK_TEXT = '#e6e6ea';
+/** The sentence and the word being spoken, on a dark page: blue, so the word keeps `DARK_TEXT` and stays readable (`themeCss`, #69). */
+const DARK_UTTERANCE = '#434665';
+const DARK_WORD = '#4456de';
 
 /**
  * The theme as CSS for the document, or the empty string under a light theme.
@@ -345,17 +348,28 @@ const DARK_TEXT = '#e6e6ea';
  * every colour it set becomes one colour. Both are in `docs/design/0022`.
  *
  * The two `::highlight()` rules come last so they beat the ones baked into
- * `highlightCss`, which are tuned for a light page: the word's amber at 0.62 under
- * light text is close to unreadable, so under dark the word is painted more
- * opaque and its text is set back to the page colour.
+ * `highlightCss`, which are tuned for a light page. **Under dark they are blue,
+ * not amber, and the word's letters keep the page's own `DARK_TEXT`** (#69): no
+ * `color` is declared, so the spoken word is the same light text as every other
+ * word, marked rather than recoloured. Amber cannot carry light letters: it is a
+ * bright colour, so `#e6e6ea` on the old word amber (0.85 over the sentence tint)
+ * measured 1.85:1 and pure white 2.31:1, which is why the letters used to be set
+ * to the page colour — and an amber dark enough to reach 4.5:1 is brown. Blue is
+ * seen as dark while it stays vivid: `DARK_WORD` measures 4.65:1 against
+ * `DARK_TEXT`, about what Speechify's dark page gets from white on its own blue,
+ * 4.63:1 (sampled from the owner's screenshot, notes 2026-09-25);
+ * `DARK_UTTERANCE` is Speechify's own sentence colour, 7.33:1.
+ * Both are opaque because the page under them is one colour, so a tint would buy
+ * nothing and would make the measured contrast depend on what it is laid over.
+ * The light theme keeps its amber, and so does the app's accent (design 0042).
  */
 export function themeCss(scheme: ReadingScheme): string {
   if (scheme !== 'dark') return '';
   return (
     'html, body { background-color: ' + DARK_PAGE + ' !important; color: ' + DARK_TEXT + ' !important; }\n' +
     'body * { color: ' + DARK_TEXT + ' !important; background-color: transparent !important; }\n' +
-    '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(255, 196, 0, 0.20); }\n' +
-    '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(255, 176, 0, 0.85); color: ' + DARK_PAGE + '; }\n'
+    '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: ' + DARK_UTTERANCE + '; }\n' +
+    '::highlight(' + WORD_HIGHLIGHT + ') { background-color: ' + DARK_WORD + '; }\n'
   );
 }
 

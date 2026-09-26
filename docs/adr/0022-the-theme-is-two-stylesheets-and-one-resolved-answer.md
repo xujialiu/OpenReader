@@ -101,8 +101,8 @@ line it can emit begins `html, body`, `body *` or `::highlight(`.
 ```css
 html, body { background-color: #111114 !important; color: #e6e6ea !important; }
 body      * { color: #e6e6ea !important; background-color: transparent !important; }
-::highlight(openreader-utterance) { background-color: rgba(255, 196, 0, 0.20); }
-::highlight(openreader-word)      { background-color: rgba(255, 176, 0, 0.85); color: #111114; }
+::highlight(openreader-utterance) { background-color: #434665; }
+::highlight(openreader-word)      { background-color: #4456de; }
 ```
 
 - **`themeCss('light')` is the empty string.** Light does not repaint the
@@ -115,10 +115,27 @@ body      * { color: #e6e6ea !important; background-color: transparent !importan
   `font-family` and the owner's novel's `div { font-family: "zw" }`.
 - **`background-color: transparent` on the descendants**, or a book that sets a
   white background on its own paragraphs shows white blocks on a dark page.
-- **The highlight is re-tuned rather than inherited.** `rgba(255,168,0,0.62)` —
-  the word colour that works under black text on white — is close to unreadable
-  under light text on a near-black page. Under dark the word is painted at 0.85
-  and its own text is set back to the page colour.
+- **The highlight is re-tuned rather than inherited, and under dark it is blue**
+  (#69). `rgba(255,168,0,0.62)` — the word colour that works under black text on
+  white — is close to unreadable under light text on a near-black page. The first
+  dark rule painted the word at `rgba(255,176,0,0.85)` and set its text to
+  `#111114`, because light letters cannot be read on amber: over the 0.20 sentence
+  tint that word composites to `rgb(226,158,2)`, relative luminance 0.405, and
+  `#e6e6ea` on it measures **1.85:1**, pure white **2.31:1** (WCAG contrast,
+  2026-09-25). The owner saw the spoken word as the one dark word on the page
+  and asked for its letters back. An amber that carries `#e6e6ea` at 4.5:1 is
+  about `rgb(140,95,0)`, which reads as brown — the same thing `PALETTE`'s comment
+  records about a dark amber. Blue has a low luminance while it stays saturated:
+  Speechify's dark page, sampled from the owner's screenshot, marks the word in
+  `rgb(84,102,240)` (luminance 0.177) and the sentence in `rgb(67,70,101)`, with
+  pure white letters at 4.63:1. Here the word is `#4456de`, **4.65:1** against
+  `#e6e6ea`, and the sentence is Speechify's `#434665`, **7.33:1**. **Neither rule
+  declares `color`**, so the letters are `#e6e6ea` like the rest of the page;
+  `test/renderer/rules.test.ts` pins both lines. Both are opaque because the
+  page beneath is the single colour `#111114` — `body *` is transparent — so a
+  tint buys nothing and would make the measured contrast depend on what it is
+  laid over. The light theme's amber and the app's amber accent (`INK.reading`)
+  are unchanged; design 0042 states the exception.
 - **Neither end is pure.** `#111114` and `#e6e6ea`, not `#000`/`#fff`, and the
   app's own palette uses the same pair so the page and its surroundings are one
   surface.

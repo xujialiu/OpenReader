@@ -774,6 +774,20 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     expect(themeCss('dark')).toContain('background-color: transparent !important');
   });
 
+  it('marks the spoken word in blue under dark and leaves its letters the page text (#69)', () => {
+    // Amber cannot carry the page's light letters: `#e6e6ea` on the old word amber
+    // measured 1.85:1, so the letters were set to the page colour and the spoken
+    // word was the one dark word on the page. Blue carries them at 4.65:1, so the
+    // highlight rules must declare no `color` at all — any value there recolours
+    // the word the owner is following.
+    const highlights = themeCss('dark').split('\n').filter((line) => line.startsWith('::highlight('));
+    expect(highlights).toEqual([
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: #434665; }',
+      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: #4456de; }',
+    ]);
+    for (const line of highlights) expect(line).not.toMatch(/(^|[\s;{])color:/);
+  });
+
   it('bakes the theme into the program too, so a book opens dark rather than flashing white', () => {
     expect(highlighterSource(undefined, undefined, 'dark')).toContain('var THEME = ' + JSON.stringify(themeCss('dark')));
     expect(highlighterSource()).toContain('var THEME = "";');

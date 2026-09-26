@@ -289,7 +289,7 @@ final class DownloadRingProbe: XCTestCase {
     app.buttons["Back"].tap()
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
     app.buttons["Settings"].tap()
-    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta31"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Version 0.0.2-beta32"].waitForExistence(timeout: 5))
     app.navigationBars.buttons.element(boundBy: 0).tap() // Settings -> Library
     let bookRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", shortTitle + ",")).firstMatch
     XCTAssertTrue(bookRow.waitForExistence(timeout: 10))
