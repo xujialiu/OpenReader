@@ -1479,6 +1479,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     bridgeRef.current?.setLinePosition(settings.following.linePosition);
   }, [settings.following.linePosition]);
 
+  /** And how the page moves to it, the same way (#71): re-sent at install when it is not By line. */
+  useEffect(() => {
+    bridgeRef.current?.setScrolling(settings.following.scrolling);
+  }, [settings.following.scrolling]);
+
   /**
    * A different Provider, Voice or address is a different engine — and so is the
    * same one with a credential that has since been written.

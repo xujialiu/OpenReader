@@ -170,3 +170,57 @@ Turned down with it:
   paused is first placed by its first line, which is right for the voices that do
   give timing. With a voice that does not, pressing Play moves the page once more,
   by half the sentence.
+
+## Continuous, the other way to follow
+
+General's **Scrolling** row offers two ways: **By line**, everything above, and
+the default; and **Continuous**.
+
+In Continuous the page is never still while a sentence is read. As the voice
+moves along a line, the page rises with it, so that by the time the voice reaches
+the end of the line the next line has arrived where this one was. The eye can
+stay at one height and the text passes through it, the way credits roll, except
+that it rolls only as fast as the voice reads and stops when the voice stops:
+between sentences, at a pause, when the owner presses Pause.
+
+It is driven only by the words that have actually been spoken. Each word says how
+far along its line the voice has got, and the page eases towards that, a word
+behind at most, so that the separate words run together into one movement instead
+of a nudge per word. Nothing is predicted about when the next word or the next
+line will come, which is why this was chosen over rolling at a steady speed timed
+to meet each line: that would have had to guess, at the end of every sentence,
+when the next one would start.
+
+Two moves are still the quarter-second glide of By line, because rolling through
+them would be slow and pointless: the gap before a new paragraph or a heading, and
+anything else more than a line away, such as a sentence tapped elsewhere. Anything
+further than the visible page still jumps, as it does By line.
+
+A finger stops the rolling as it stops a glide, and moving the page by hand is
+browsing, in either way.
+
+### What Continuous costs
+
+- **It moves in the smallest steps the page allows.** The page can only be
+  placed on whole points, and a reading moves it only five to ten of them a
+  second, so the rolling is a step of one point — three of the screen's own
+  pixels — five to ten times a second. Whether that reads as smooth rolling or
+  as a fine tremble is the first thing to look at on the phone.
+- **Its speed follows the words.** A long word or a short one, a quick phrase or
+  a slow one, changes how fast the page rises, a little. The easing keeps that
+  gentle, and it is the price of following the voice rather than a clock.
+- **It trails the voice slightly.** The line being spoken sits a few points below
+  the chosen height while the page rolls, and settles onto it when the voice
+  stops. A few points, against a line of twenty or more.
+
+### What changed for both ways
+
+The app clears away chapters the reading has left behind, so that a long book
+does not fill the phone's memory. It used to wait for the page to be completely
+still before doing so, because clearing while the owner's finger is flinging the
+page made the text jump by a whole chapter (#58). Continuous is never still while
+a sentence is read, so under that rule nothing would ever be cleared until the
+owner paused. Now the app tells its own movement of the page from the owner's: it
+clears while the page is moving by itself, which is safe, and still waits
+whenever the page is moving under the owner's finger or coasting after it. By
+line benefits the same way, and nothing the owner does by hand has changed.

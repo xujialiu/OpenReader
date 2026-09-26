@@ -90,6 +90,7 @@ vi.mock('../../src/renderer', async () => {
         setInset() {},
         setOpenPlayer() {},
         setLinePosition() {},
+        setScrolling() {},
         setAppearance() {},
         setTheme() {},
         hold() {},

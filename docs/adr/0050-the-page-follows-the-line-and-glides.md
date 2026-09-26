@@ -103,6 +103,8 @@ iPhone 17 simulator, iOS 27.0, `Cultivation Online 2001-2044.epub`, Fish Audio a
   move: the shown sentence was 10.8 px below the target before and after (01:42).
   The glides' scroll events keep `holdStill`'s `moving()` true for 200 ms after
   each frame, and the rests between lines (≥ 1 s) are where parked trims run.
+  (Batch 4 changed this: the program's own scroll no longer closes the gate.
+  See below.)
 - A tap while paused, 188 px away: 316 ms (01:32). A Clip without Word Timings,
   replayed on a three-line sentence: 20 px in 199 ms, its middle 0.8 px from the
   target (01:44).
@@ -278,12 +280,141 @@ playing stays M across a sentence that begins off screen and recovers at one tha
 begins on screen; M while paused moves the page and not the reading (#53); M
 while playing keeps the word highlight.
 
-## Decided, not yet built
+## What was done (batch 4: Continuous)
 
-- **Continuous**: the target advanced by the spoken word's horizontal position in
-  its line times the line's height, smoothed, and stopped while nothing is spoken.
-  Every frame would then scroll, so `holdStill`'s `moving()` would never see
-  200 ms of rest while reading, and trims would wait for a pause. It has to tell the
-  program's own scroll from a finger's fling before that mode ships. The
-  measurement on 2026-09-24 (a `scrollTop +=` on 40 successive frames with an erase
-  above, the text did not move) says a program scroll can let a trim through (batch 4).
+Built and unit-tested without a device: the machine had no memory for a third
+simulator, so everything under "To be measured" below is unmeasured.
+
+- **The setting.** `AppSettings.following.scrolling`, `'line'` (the default) or
+  `'continuous'` (`SCROLLINGS`), shown as `By line` and `Continuous`
+  (`SCROLLING_LABELS`). `settings-storage.ts` reads anything else, including a
+  file written before it existed, as `'line'`. General shows `Scrolling` as the
+  first row of batch 2's card, above `Line position`.
+- **The message.** `FollowingMessage` gains `scrolling`, and both fields travel
+  every time: `setLinePosition` and `setScrolling` each send the pair, so the
+  program never holds half of an old choice. The program is built with
+  `var SCROLLING = "line"` (`BAKED_SCROLLING`), and the document message re-sends
+  the pair when either field differs from its baked value. On arrival, leaving
+  Continuous calls `halt()` and forgets `drifting`, and a following page is then
+  sent to the new target through `approach(aim())`.
+- **The target carries a `lead`.** In Continuous, `aim()` and `followWord` aim at
+  `{ line, lead }`, and `moveFor` returns `middle − at + lead`: the line being
+  spoken is held `lead` px above the line position. `leadOf(ranges, line)` is
+  `lineLead(line.left, from, to, pitch)` (`glide.ts`): the word's share of the
+  way along its line, clamped to [0, 1], times the distance to the next line. At
+  the start of a line the lead is 0, the same place By line holds it. At the end
+  it is nearly a whole pitch, so the next line is nearly at the line position when
+  the voice reaches it. The step left at a line change is the last word's width
+  over the line's, about an eighth of a pitch, or 2–5 px, and the follower
+  absorbs it.
+  - `from` and `to` are the leftmost and rightmost client rects that overlap the
+    word's line by more than half the smaller height. They are the text drawn on
+    the line, not the Block's content box. The last line of a paragraph stops
+    short, and a Document's own centred line starts late. Against the box, the
+    lead of either would never reach a whole pitch, and every such line change
+    would owe the rest as a jump.
+  - `pitch` is the next line's top minus this line's top. On a Block's last line
+    it is this top minus the previous line's, and on a one-line Block the line's
+    own height. It is clamped to that height when it is not positive or is over
+    three times it. The gap to the next Block is not part of the lead: it is a
+    glide (below).
+  - The rects are measured over a Range of ±`NEAR` (400) code units around the
+    word, not the whole Block. A Document that is one `<div>` with `<br>`s makes a
+    Block a chapter long, and its `getClientRects()` on every word would be a
+    chapter's worth. `nearby()` snaps the window's ends to the text nodes the walk
+    found, as `domRange` resolves offsets.
+- **The follower.** `driftVelocity(e, v, dt) = v + (e/τ² − 2v/τ)·dt`, a critically
+  damped second-order follower, stepped once per drawn frame (semi-implicit
+  Euler). `τ = DRIFT_TAU_MS = 200` ms, and `dt = min(now − last, 2 × FRAME_MS)`,
+  with the first frame counting as one, as a glide is timed. Simulated in
+  `glide.test.ts`:
+  - A 20 px step never passes 20 (19.98 at most), and is at 96 % after 1 s.
+  - A 9 px/s ramp is followed 3.45 px behind; `2τr` predicts 3.6.
+  - A staircase of 3 px every 330 ms, the words of a line, moves at 7.1–10.4 px/s
+    and never stops between words.
+  - Why τ = 200 ms: long enough that the page is still moving when the next word
+    lands, so the steps join, and short enough that the lag stays a few pixels.
+- **Whole pixels.** WebKit's `scrollTop` is integral in CSS px (01:33). The
+  drift keeps an `owed` fraction, pays it a pixel at a time through `nudge`, and
+  steers by `move − owed`. Steered by `move` alone, the pixel not yet paid reads
+  as still to go, and the follower pushes past and back, dithering ±1 px. It
+  rests when `|move − owed| < 0.5` and `|v| < DRIFT_RESTS` (0.002 px/ms, 2 px/s),
+  and the next word `kick()`s it again. At 5–10 px/s that is one 1 px scroll
+  every 100–200 ms: one point, three device pixels on the owner's 3× screen.
+- **Drift or glide, `steer(aimed)`.** A move of more than the line's height calls
+  `rest()` and then `bring(aimed, false)`: a glide within the visible page, a jump
+  beyond it. Anything less is a drift.
+  - Within a Block, a line change is about an eighth of a pitch plus the lag
+    (about 4 px), so it drifts.
+  - A paragraph break (its margin plus an eighth of a pitch) and a heading glide,
+    and so does a sentence elsewhere.
+  - A glide under way owns the page. `drift()` does nothing while `glide` is set,
+    and `glideStep` calls `kick()` when the glide ends.
+  - The Clip cue's `follow()` and the `following` message go through
+    `approach()`: `steer` in Continuous, `bring` By line. `place()` and
+    `settle()` stay instant, and aim with the lead.
+- **Stopping.** `halt()` also `rest()`s and cancels the drift frame. That covers
+  the first `touchmove`, `clear`, `browse` and every instant move. `drift()` rests
+  when `!state.follow`, when browsing, or in By line. A pause stops the words, so
+  the drift finishes its last approach, within about a second, and rests.
+- **The rest gate and the program's own scroll (#58, ADR 0045).** The gate exists
+  because iOS drops epub.js's correction scroll while *iOS* is moving the page:
+  under a finger, in momentum, in a bounce.
+  - This program's scroll is `container.scrollTop += y`, in `manager.scrollBy`
+    read out of the bundle. It is synchronous, and a correction between two of
+    them is kept. Measured: `scrollTop +=` on successive frames with an erase above
+    did not move the text (notes/NOTES_2026-09-24.md, 02:35), and neither did a
+    trim 324 ms after a glide (notes/NOTES_2026-09-26.md, 01:42).
+  - Continuous scrolls every few frames for a whole sentence. Counted as moving,
+    it would park every trim until the owner paused, and sections would pile up
+    for as long as they listened.
+  - So `nudge` records `ownTop`, the `scrollTop` it leaves. It also advances
+    `scrolledTop` to it, but only if `scrolledTop` equalled the pre-scroll
+    position. Otherwise something else moved the page since the last event, and
+    that position is left to say the page is moving.
+  - `noteScroll` ignores an event at `ownTop`: it takes the position, not the
+    time. `watchForRest` counts a frame at `ownTop` as still.
+  - Every other position still closes the gate, exactly as before: a finger, a
+    fling, a bounce, and epub.js's own erase and counter corrections.
+  - By line benefits too. Glides no longer close the gate, so a trim may land
+    mid-glide, and the glide's per-frame re-measure absorbs it.
+  - `rules.test.ts`, "the rest gate, run", evaluates the five functions, `nudge`,
+    `noteScroll`, `moving`, `watchForRest` and `watch`, against a fake stage and
+    clock:
+    - A drift of 1 px every three frames lets a parked trim run within 217 ms.
+    - A decelerating fling holds it until 200 ms after its last frame.
+    - A program scroll made mid-fling does not clear `moving()`.
+- **epub.js's own `check()` while drifting.** Read out of the bundle:
+  `this._scrolled = f()(this.scrolled.bind(this), 30)`, where `f` is lodash's
+  `debounce` with no `maxWait`. So `scrolled()`, which enqueues `check()` (the
+  appender), runs only after 30 ms without a scroll event.
+  - A drift below about 30 px/s nudges at least 33 ms apart, and `check()` runs
+    between nudges.
+  - Faster, as with a large Font Size at 2×, it runs when the drift rests at the
+    end of a sentence.
+  - `renderAhead()` asks for the reading's next section on every Clip cue
+    regardless.
+
+### To be measured on the device
+
+1. The rolling itself: per-frame `scrollTop` over several lines at 1.0× and 2.0×.
+   - That the line's middle passes the line position with a lead that grows
+     along the line and resets across line changes without a step.
+   - The lag while rolling, which should be a few px.
+   - The size and spacing of the 1 px steps.
+   - How it looks on the owner's phone: rolling or trembling.
+2. Paragraph breaks and headings glide, 250 ms, and the drift resumes after
+   them with no jump.
+3. A sentence beginning on the current line: no glide, the drift continues.
+4. Pauses between sentences: the drift comes to rest (`drifting.speed` 0, no
+   frames asked for) within about 1 s, and resumes with the next word.
+5. Trims during a long Continuous run (minutes, across several sections).
+   - `views` counts stay bounded, and each trim lands without moving the text.
+   - A real fling still parks them until rest: repeat `test/manual-test/`'s
+     #58 fling runs with the gate change in.
+6. Appends ahead while rolling fast (Font Size 24 at 2×): the next section
+   arrives before the reading reaches it.
+7. A finger's first `touchmove` stops the drift; a drag is browsing; Play or a
+   tapped sentence resumes it.
+8. Switching Scrolling while a reading is open (through the harness): By line
+   forgets the lead at once, and Continuous starts from the words.

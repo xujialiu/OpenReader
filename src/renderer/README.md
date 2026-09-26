@@ -57,13 +57,20 @@ Six properties of the following, and each is a rule rather than an accident.
   made at once. A Clip without Word Timings is held by its whole Utterance, and
   an Utterance taller than the screen then has its *start* at the top.
   `glide.ts` holds the curve as source text, so `glide.test.ts` runs what Safari
-  runs.
+  runs. That is **By line**, the default. In **Continuous** (`SCROLLING`, the
+  owner's `Scrolling` row, #71) every word carries the line past the Line
+  Position by its share of the way along the line times the distance to the next
+  (`leadOf`), and the page drifts there on frames of its own (`drift`): a
+  critically damped follower (`driftVelocity`, τ 200 ms) paid out in whole pixels.
+  A move of more than a line — a paragraph break, a heading, a sentence elsewhere —
+  is still a glide or a jump (`steer`).
 - **It adds nothing to the bridge.** The page moves on the Clip cue that already
   arrives once per Utterance (`follow` below) and on the words the loop already
   draws, inside the WebView. There is no new message in either direction and
-  nothing crosses the bridge per word; ADR 0005 exists to keep that off it. A word
-  moves the page only when it is on another line, so the loop scrolls at most once
-  a line.
+  nothing crosses the bridge per word; ADR 0005 exists to keep that off it. By
+  line, a word moves the page only when it is on another line, so the loop scrolls
+  at most once a line; in Continuous a word only sets where the drift is going,
+  and the loop itself never scrolls.
 - **The scroll is not hidden from epub.js.** It goes through the manager's own
   `scrollBy` with its `ignore` flag *off*, so it reaches the continuous manager
   exactly as a finger scroll does — which is what makes it render the section the
@@ -160,7 +167,14 @@ through the manager's own queue once the scroll position has held for 200 ms
 over four frames. Movement is read from the scroll position, never from
 touches: a finger that lands on a moving page seldom reaches the page at all.
 Going forward nothing is held up; a fling back stops at the top of the
-laid-out text until the page is still (design 0045).
+laid-out text until the page is still (design 0045). **The program's own scroll
+is not movement** (#71, ADR 0050): `nudge` remembers the position it left the
+page at (`ownTop`), and a scroll event or a frame that finds the page there does
+not close the gate. What drops epub.js's correction is iOS moving the page, and
+Continuous scrolls every few frames for as long as a sentence is read, which
+would otherwise park every trim until a pause. Any other position — a finger, a
+fling, a bounce, epub.js's own correction — closes it exactly as before, and
+`rules.test.ts` runs the gate's functions to hold both halves.
 
 **Several sections are alive at once**, which is what continuous scrolling costs
 and what paginated layout did not. The Block records are keyed by spine index and
@@ -211,8 +225,8 @@ already draws from it, and adds no third.
 
 Three other messages cross, and none is on the frame path: how much of the page
 the player is covering, with the open player's own height beside it, which are
-the following's inputs (ADR 0020, ADR 0050); the owner's **Line Position**
-(`following`, ADR 0050); and the owner's **Appearance** — the font, size and text alignment the document is set
+the following's inputs (ADR 0020, ADR 0050); the owner's **Line Position** and
+way of scrolling, together (`following`, ADR 0050); and the owner's **Appearance** — the font, size and text alignment the document is set
 in, as a stylesheet the program installs (ADR 0021, ADR 0034). Appearance is a message and not a
 rebuilt program because `injectedJavascript` is evaluated at page load and the
 program refuses a second installation, so a new source string would change
