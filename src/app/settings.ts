@@ -257,6 +257,18 @@ export interface AppSettings {
    */
   pauses: GapSettings;
   /**
+   * How the page follows the reading (CONTEXT.md **Following**, #71, ADR 0050).
+   *
+   * `linePosition` is the **Line Position**: how far down the visible page the
+   * line being spoken is held, in percent of that page's height, one of
+   * `LINE_POSITIONS`. App-wide, like the theme, because it is about the owner's
+   * eyes and not about a book; and per device, like every setting here, because
+   * a phone and a tablet hold the page at different heights. It reaches an open
+   * document live, as the Appearance does, and is not in `engineIdentity`: no
+   * Clip depends on it.
+   */
+  following: FollowingSettings;
+  /**
    * How many of a chapter's sentences a download asks each Provider for at
    * once (#64): the provider's own page, **Sentences at once**. Per Provider
    * because the limit is the service's — Fish Audio states five for an account
@@ -284,6 +296,20 @@ export interface SyncSettings {
   username: string;
   enabled: boolean;
 }
+
+/** How the page follows the reading; see `AppSettings.following`. */
+export interface FollowingSettings {
+  /** The Line Position, in percent of the visible page's height from its top: one of `LINE_POSITIONS`. */
+  linePosition: number;
+}
+
+/**
+ * The Line Positions General offers (#71), in percent: a fifth of the way down
+ * to four fifths, a tenth at a time. The middle is the default, as the owner
+ * asked; 30 % is where Speechify holds its line (notes/NOTES_2026-09-25.md,
+ * 23:00). Nothing above 80 %: the line would sit on the player's edge.
+ */
+export const LINE_POSITIONS: readonly number[] = [20, 30, 40, 50, 60, 70, 80];
 
 /**
  * What the owner chose in General, which is one more thing than the app can
@@ -397,6 +423,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 0 and 200 ms, which is what a reading sounded like before either was a
   // setting (`gap.ts`).
   pauses: DEFAULT_GAP,
+  // The middle of what can be seen, which is where the page held the sentence
+  // being spoken before this was a setting (#71).
+  following: { linePosition: 50 },
   sentencesAtOnce: DEFAULT_SENTENCES_AT_ONCE,
   // Off, with nothing filled in: sync starts the moment the owner names a
   // folder and turns it on, and not before (issue #20).

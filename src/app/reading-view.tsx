@@ -592,6 +592,7 @@ export function ReadingView({
         onContents={() => setContentsOpen(true)}
         onVoices={() => setVoicesOpen(true)}
         onHeight={reading.bridge.setInset}
+        onOpenHeight={reading.bridge.setOpenPlayer}
       />
 
       <ContentsSheet

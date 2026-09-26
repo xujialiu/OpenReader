@@ -87,6 +87,8 @@ vi.mock('../../src/renderer', async () => {
         clock: { onClip: bridge.onClip, onPosition() {} },
         setUtterances() {},
         setInset() {},
+        setOpenPlayer() {},
+        setLinePosition() {},
         setAppearance() {},
         setTheme() {},
         hold() {},

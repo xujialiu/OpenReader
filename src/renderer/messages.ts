@@ -361,6 +361,37 @@ export interface InsetMessage {
   kind: 'inset';
   /** The covered height at the bottom, in CSS pixels. Zero when nothing covers the text. */
   bottomPx: number;
+  /**
+   * The player's height when it is **open and has nothing to say**: its own
+   * controls, padding and border, without the notes it shows above them. Zero
+   * until the open player has been measured, and then `bottomPx` stands in.
+   *
+   * The Line Position is measured above this and not above `bottomPx` (#71, ADR
+   * 0050). `bottomPx` grows with every note the player shows and shrinks to one
+   * button when it collapses, and a line position measured against it moved the
+   * target with each: measured, a note that came and went while paused left the
+   * line 87 px above the middle until Play. This number changes only when the
+   * controls themselves do, so a note, and collapsing, move nothing — the owner's
+   * choice, the height reckoned as it was before collapsing.
+   */
+  openPx: number;
+}
+
+/**
+ * How the page follows the reading (#71, ADR 0050): the owner's **Line
+ * Position**, as a share of the visible page's height from its top.
+ *
+ * A message of its own, like the theme, rather than a field of `InsetMessage`:
+ * that one is the player's geometry, sent by the player as it lays out, and this
+ * is a setting, sent when the owner changes it. It changes nothing per word and
+ * crosses the bridge only when it changes, and again when the program installs.
+ * A page following the reading when it arrives is brought to the new position at
+ * once, by a glide within the visible page and a jump beyond it.
+ */
+export interface FollowingMessage {
+  kind: 'following';
+  /** 0.2 to 0.8: the Line Position's percent over a hundred. */
+  linePosition: number;
 }
 
 /**
@@ -429,6 +460,7 @@ export type HighlightMessage =
   | ClearMessage
   | BrowseMessage
   | InsetMessage
+  | FollowingMessage
   | AppearanceMessage
   | MeasuredMessage
   | ThemeMessage;

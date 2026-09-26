@@ -48,9 +48,10 @@ for hours.
 Six properties of the following, and each is a rule rather than an accident.
 
 - **It holds the line, and glides to it** (ADR 0050). The line the spoken word
-  begins on goes to the Line Position — `LINE_POSITION` of what can be seen, the
-  middle — measured from the `Range`s that were just painted and the container's
-  own box. When the word moves onto another line the page glides there in
+  begins on goes to the Line Position — the owner's share of the page above the
+  **open** player, without its notes (`lineAt`, #71), the middle by default —
+  measured from the `Range`s that were just painted and the container's own box.
+  A note on the player and the player collapsing move nothing. When the word moves onto another line the page glides there in
   `GLIDE_MS` (250 ms), easing out, timed in drawn frames so that a stalled frame
   pauses a glide instead of jumping it; a move further than the visible page is
   made at once. A Clip without Word Timings is held by its whole Utterance, and
@@ -196,9 +197,10 @@ One message per second, not one per word. The scroll that keeps the line being
 spoken in place rides on the first of those two and on the words the WebView
 already draws from it, and adds no third.
 
-Two other messages cross, and neither is on the frame path: how much of the page
-the player is covering, which is the following's own input (ADR 0020), and the
-owner's **Appearance** — the font, size and text alignment the document is set
+Three other messages cross, and none is on the frame path: how much of the page
+the player is covering, with the open player's own height beside it, which are
+the following's inputs (ADR 0020, ADR 0050); the owner's **Line Position**
+(`following`, ADR 0050); and the owner's **Appearance** — the font, size and text alignment the document is set
 in, as a stylesheet the program installs (ADR 0021, ADR 0034). Appearance is a message and not a
 rebuilt program because `injectedJavascript` is evaluated at page load and the
 program refuses a second installation, so a new source string would change

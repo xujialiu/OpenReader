@@ -49,6 +49,10 @@ import { LoadingSpinner } from './loading-spinner';
  * the range: 0.50 to 4.00 is seventy steps, which is `8 + (70 - 8) / 3` repeats,
  * about three seconds.
  */
+/** The open player's padding above and below its rows: part of the height the Line Position is measured above (`onOpenHeight`). */
+const PLAYER_PADDING_TOP = 4;
+const PLAYER_PADDING_BOTTOM = 28;
+
 const HOLD_DELAY_MS = 350;
 const HOLD_INTERVAL_MS = 120;
 const HOLD_FINE_REPEATS = 8;
@@ -110,6 +114,17 @@ export interface PlayerProps {
    * direction that keeps the spoken sentence visible.
    */
   onHeight(height: number): void;
+  /**
+   * How tall the player is when it is **open and has nothing to say**, in points:
+   * its controls, padding and border, without the notes above them (#71).
+   *
+   * The Line Position is measured above this rather than above `onHeight`'s
+   * band, which grows with every note and shrinks to one button when collapsed
+   * (ADR 0050). Measured from the controls themselves, so it is reported only
+   * when they change — not when a note comes or goes, and not while collapsed,
+   * when they are not drawn and the last height stands.
+   */
+  onOpenHeight(height: number): void;
 }
 
 /** A known name survives leaving the reader; internal ids are never a caption. */
@@ -136,6 +151,7 @@ export function Player({
   onContents,
   onVoices,
   onHeight,
+  onOpenHeight,
 }: PlayerProps) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const closeSpeed = useCallback(() => setSpeedOpen(false), []);
@@ -163,6 +179,14 @@ export function Player({
     },
     [onHeight],
   );
+  // The controls plus what the player puts around them, which is the whole open
+  // player whenever no note is showing: its padding and its hairline border.
+  const measureControls = useCallback(
+    (event: LayoutChangeEvent) => {
+      onOpenHeight(event.nativeEvent.layout.height + PLAYER_PADDING_TOP + PLAYER_PADDING_BOTTOM + 2 * StyleSheet.hairlineWidth);
+    },
+    [onOpenHeight],
+  );
 
   if (collapsed && notes.length === 0) {
     return (
@@ -180,36 +204,41 @@ export function Player({
       {notes.map((note) => (
         <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>{note.said}</Text>
       ))}
-      <View style={styles.head}>
-        {/* As wide as the collapse arrow, so the name is centred on the whole
-            player rather than on what the arrow leaves (#70). Empty, and kept
-            free for a control of its own. */}
-        <View style={styles.headEnd} />
-        {/* Only the name opens the Voices: its button hugs the text, and a tap
-            beside it lands on this plain box and does nothing. */}
-        <View style={styles.voiceSlot}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
-            style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
-            <Text style={styles.voiceLabel} numberOfLines={1}>{voiceLine(settings, voiceInUse)}</Text>
+      {/* The controls in a box of their own, so they can be measured without the
+          notes above them (onOpenHeight, #71). The box carries the gap the
+          player puts between its rows. */}
+      <View style={styles.controls} onLayout={measureControls}>
+        <View style={styles.head}>
+          {/* As wide as the collapse arrow, so the name is centred on the whole
+              player rather than on what the arrow leaves (#70). Empty, and kept
+              free for a control of its own. */}
+          <View style={styles.headEnd} />
+          {/* Only the name opens the Voices: its button hugs the text, and a tap
+              beside it lands on this plain box and does nothing. */}
+          <View style={styles.voiceSlot}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
+              style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
+              <Text style={styles.voiceLabel} numberOfLines={1}>{voiceLine(settings, voiceInUse)}</Text>
+            </Pressable>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Collapse the player"
+            onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, pressed && styles.pressed]}>
+            <Icon name="down" color={INK.quiet} size={20} />
           </Pressable>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Collapse the player"
-          onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, pressed && styles.pressed]}>
-          <Icon name="down" color={INK.quiet} size={20} />
-        </Pressable>
-      </View>
 
-      <View style={styles.transport}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
-          style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}>
-          <Icon name="contents" color={INK.text} />
-        </Pressable>
-        <Transport icon="previousParagraph" label="Previous paragraph" onPress={() => onSkip('previous-paragraph')} disabled={!enabled} />
-        <Transport icon="previous" label="Previous sentence" onPress={() => onSkip('previous-sentence')} disabled={!enabled} />
-        <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
-        <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
-        <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
-        <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen} />
+        <View style={styles.transport}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
+            style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}>
+            <Icon name="contents" color={INK.text} />
+          </Pressable>
+          <Transport icon="previousParagraph" label="Previous paragraph" onPress={() => onSkip('previous-paragraph')} disabled={!enabled} />
+          <Transport icon="previous" label="Previous sentence" onPress={() => onSkip('previous-sentence')} disabled={!enabled} />
+          <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
+          <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
+          <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
+          <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen} />
+        </View>
       </View>
       {/* A tap outside the phone's bubble closes it, and without this it also
           pressed whatever React Native button it landed on: measured, a tap on
@@ -412,6 +441,9 @@ const styles = StyleSheet.create({
   buttonPrimary: { backgroundColor: INK.text, width: 52, minWidth: 52, height: 52, borderRadius: 26 },
   chevronTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   collapsed: { alignItems: 'flex-end', bottom: 28, position: 'absolute', right: 16 },
+  // The player's own gap between its rows, carried by the box the rows are
+  // measured in (onOpenHeight).
+  controls: { gap: 6 },
   disabled: { opacity: 0.35 },
   footTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
@@ -426,9 +458,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     gap: 6,
     left: 0,
-    paddingBottom: 28,
+    paddingBottom: PLAYER_PADDING_BOTTOM,
     paddingHorizontal: 12,
-    paddingTop: 4,
+    paddingTop: PLAYER_PADDING_TOP,
     position: 'absolute',
     right: 0,
   },

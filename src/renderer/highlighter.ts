@@ -80,7 +80,7 @@
  */
 
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
-import { GLIDE_SOURCE } from './glide';
+import { BAKED_LINE_POSITION, GLIDE_SOURCE } from './glide';
 import type { HighlightMessage } from './messages';
 import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from './messages';
 
@@ -525,8 +525,8 @@ export function highlighterSource(
     'var SETTLE_FRAMES = 60;\n' +
     /* Where the line being spoken is held while the page follows, as a share of
        the visible page's height from its top: the Line Position (CONTEXT.md,
-       ADR 0050). The middle. */
-    'var LINE_POSITION = 0.5;\n' +
+       ADR 0050). The middle until the 'following' message says otherwise. */
+    'var LINE_POSITION = ' + BAKED_LINE_POSITION + ';\n' +
     /* How the page moves to it: glideLeft, sameLine and glides, from glide.ts,
        where the tests run the same text. */
     GLIDE_SOURCE +
@@ -608,6 +608,11 @@ ${constants}
      pixels, from the 'inset' message. Zero until it says otherwise, which is the
      geometry that was true before ADR 0020's player existed. See visibleOf(). */
   var covered = 0;
+  /* The open player's own height, without the notes it shows (the 'inset'
+     message's openPx, #71): what the line position is measured above, so that a
+     note and the player collapsing move nothing. Zero until the open player has
+     been measured, and \`covered\` stands in. See lineAt(). */
+  var openPlayer = 0;
   /* The lowest spine item on the page, from the last sweep. The only thing the
      resize recovery has to aim at; see the resize handler. */
   var onScreen = null;
@@ -1486,6 +1491,22 @@ ${constants}
     return visible < 0 ? 0 : visible;
   }
 
+  /* Where the line position is, in the top document's coordinates: that share
+     of the visible page with the player **open and without notes** (#71). Not
+     visibleOf(), which is what can be seen now: a note on the player makes it
+     taller, and the player collapses to one button, and a line position
+     measured against either moved the target with it — measured, a note that
+     came and went while paused left the line 87 px above the middle until Play.
+     The owner's choice is the height as it was before collapsing, so that
+     collapsing leaves the line where it is. Before the open player has been
+     measured, what can be seen now stands in. */
+  function lineAt(view, bounds) {
+    var under = openPlayer > 0 ? openPlayer : covered;
+    var visible = view.clientHeight - under;
+    if (visible < 0) visible = 0;
+    return bounds.top + visible * LINE_POSITION;
+  }
+
   /* How far the page has to move for what is aimed at to sit at the line
      position, or null when it cannot be measured. The line position is a share
      of what can be **seen**, not of the container: against \`clientHeight\` it
@@ -1495,7 +1516,7 @@ ${constants}
     var view = scroller();
     if (!view) return null;
     var bounds = view.getBoundingClientRect();
-    var at = bounds.top + visibleOf(view) * LINE_POSITION;
+    var at = lineAt(view, bounds);
     if (aimed.line) {
       var middle = middleOf(aimed.line);
       return middle === null ? null : middle - at;
@@ -2134,6 +2155,19 @@ ${constants}
          exists to prevent. So the new inset applies from the next line the page
          follows, and the line being spoken stays where it is. */
       covered = typeof message.bottomPx === 'number' && isFinite(message.bottomPx) && message.bottomPx > 0 ? message.bottomPx : 0;
+      openPlayer = typeof message.openPx === 'number' && isFinite(message.openPx) && message.openPx > 0 ? message.openPx : 0;
+      return;
+    }
+    if (message.kind === 'following') {
+      /* The owner's Line Position (#71). Unlike the inset above, this is the
+         owner asking for the line somewhere else, so a page that is following
+         the reading goes there now — a glide within the visible page, a jump
+         beyond it, as every move of the page is made. A page the owner has
+         browsed away stays where they put it. */
+      var share = message.linePosition;
+      if (typeof share !== 'number' || !isFinite(share) || share < 0 || share > 1) return;
+      LINE_POSITION = share;
+      if (state && state.follow && !browsing) bring(aim(), false);
       return;
     }
     if (message.kind === 'appearance') {

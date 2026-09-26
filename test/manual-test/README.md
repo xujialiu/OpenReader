@@ -4118,8 +4118,11 @@ Timings and a Voice chosen (Fish: see "A Fish Voice chosen through the
 harness"), the simulator silenced, and METRO_LOG, the file this tree's Metro
 writes to. The script records `scrollTop` and the word highlight's first line
 box on every animation frame inside the WebView, collapses and expands the
-player once so the bridge sends its inset (the target is `(h - inset) / 2`),
-plays for SECONDS and pauses, and prints one line per change of the word's line:
+player once so the bridge sends its inset, sets the Line Position through the
+harness (`POSITION`, percent, default 50) so the bridge sends that too — the
+target is then the program's own, `(h − open player) × share` (#71, batch 2;
+`inset` stands in until the open player's height is known) — plays for SECONDS
+and pauses, and prints one line per change of the word's line:
 when the page began to move, how far, for how long, the longest frame in it,
 each frame's step, and where the line came to rest against the target.
 
@@ -4140,6 +4143,18 @@ each frame's step, and where the line came to rest against the target.
 - **`--whole`** skips to a sentence at least 50 px tall and hands the program
   that sentence again as a Clip without Word Timings. It proves the page's side
   of that case, not a real Provider's.
+- **`DURING=collapse`** collapses the player a third of the way into the play and
+  expands it at two thirds; **`DURING=note`** puts a note on the player a third of
+  the way in (a `js` answer is one) and leaves it. Both show in the `msg` lines as
+  `inset bottom … open …`: `bottom` moves, `open` must not, and nothing should
+  scroll at those moments (2026-09-26 11:06–11:08).
+- **Notes are always there.** Every `ask` answer stays on the player as a note
+  while paused, so each run starts with the player taller than its open height,
+  and a Play clears it. That was how batch 1's inset-based target was caught
+  (87 px moved at Play). It is also why a paused skip is the way to show that
+  a note moves nothing: the `other move` lines print `its first line rest`, the
+  Utterance's first line against the target, which is what a sentence shown
+  while paused is held by.
 
 GREEN (exit 0): at least three line changes with a move, each beginning at most
 two drawn frames after its word (or up to 300 ms before it, at the cue of a
@@ -4150,6 +4165,20 @@ of the target. Measured 2026-09-26 (notes): one frame's delay, 233–252 ms, res
 What it cannot prove: a finger. It moves nothing by touch, so the glide stopping
 under a finger (any `touchmove`) is not covered, and neither is the feel — look
 at the simulator, or the owner's phone.
+
+## General's Line position row (#71, `line-position.sh`, `LinePositionProbe.swift`)
+
+```sh
+bash test/manual-test/line-position.sh SIMULATOR_UDID NEW_OUTPUT_DIR_OR_EXISTING_PROJECT_DIR
+```
+
+The same disposable-project shape as `pause-menu.sh`. From a fresh launch, with
+real touches: Settings → General, the row `Line position, N%` below the paragraph
+pause and above the brackets' card, its menu 20% to 80% top to bottom with only
+the row's value checked, 30% chosen (the row then reads `Line position, 30%`),
+and the original value chosen back. Never presses Play. It relaunches the app,
+so silence the simulator again before the next play, and reopen the reader with
+`{"do":"open","id":"sha256:…"}`. 0 failures in 29.2 s (2026-09-26 11:12).
 
 ## A real drag during a live glide (#71, `glide-touch.cjs`, `GlideTouchProbe.swift`)
 

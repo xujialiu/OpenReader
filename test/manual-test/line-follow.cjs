@@ -45,8 +45,11 @@
 //   line   one per change of the word's line: when the word reached the new
 //          line, when the page began to move (delay), how far and for how long
 //          it moved, the per-frame steps, and where the line's middle came to
-//          rest against the target (h - inset) / 2
-//   other  page movements with no line change before them (a new Utterance
+//          rest against the target (h - open player) * share, the program's
+//          own lineAt() (#71; the inset stands in before the open player's
+//          height is known)
+//   other  page movements with no line change before them, with where the
+//          word's line, the Utterance's middle and its first line rested (a new Utterance
 //          starting on a new line counts as a line change; a jump, a display,
 //          a tapped sentence while paused, whose Utterance is held whole): where
 //          the word's line and the Utterance's middle came to rest
@@ -76,6 +79,17 @@ if (!device || !metroLog || !(whole || (skips > 0 ? skips <= 60 : seconds > 0 &&
   process.exit(2);
 }
 const tapToo = flag === '--tap';
+// The Line Position the run is made at, in percent (#71): set through the
+// harness before anything is recorded, so the target is the program's own.
+const position = Number(process.env.POSITION || 50);
+if (![20, 30, 40, 50, 60, 70, 80].includes(position)) {
+  console.error('POSITION is one of 20, 30, … 80');
+  process.exit(2);
+}
+// Something done to the player while the reading plays, a third of the way in
+// (#71): DURING=collapse collapses it and expands it again at two thirds;
+// DURING=note has a note shown on it (a `js` answer is one), which stays.
+const during = process.env.DURING || '';
 
 const documents = path.join(execFileSync('xcrun', ['simctl', 'get_app_container', device, 'top.xujialiu.openreader', 'data']).toString().trim(), 'Documents');
 const harnessFile = path.join(documents, 'harness.json');
@@ -128,18 +142,19 @@ async function ask(code, ms = 4000) {
 const arm = `
   var R = window.__lineFollow;
   if (!R) {
-    R = window.__lineFollow = { t0: performance.now(), frames: [], msgs: [], inset: null, on: false };
+    R = window.__lineFollow = { t0: performance.now(), frames: [], msgs: [], inset: null, open: null, share: null, on: false };
     var entry = window.__openReaderHighlighter;
     window.__openReaderHighlighter = function (m) {
-      if (m && m.kind === 'inset') R.inset = m.bottomPx;
+      if (m && m.kind === 'inset') { R.inset = m.bottomPx; R.open = m.openPx; }
+      if (m && m.kind === 'following') R.share = m.linePosition;
       if (m && m.kind === 'speak') R.speak = m;
-      if (R.on && m) R.msgs.push([Math.round(performance.now() - R.t0), m.kind, m.kind === 'speak' ? m.utterance + (m.reveal ? 'r' : '') + (m.words ? '' : ' nowords') : '']);
+      if (R.on && m) R.msgs.push([Math.round(performance.now() - R.t0), m.kind, m.kind === 'speak' ? m.utterance + (m.reveal ? 'r' : '') + (m.words ? '' : ' nowords') : m.kind === 'inset' ? 'bottom ' + m.bottomPx + ' open ' + m.openPx : m.kind === 'following' ? String(m.linePosition) : '']);
       return entry(m);
     };
     var m = rendition.manager;
     var sample = function () {
       if (R.on) {
-        var box = m.container.getBoundingClientRect(), word = null, utt = null;
+        var box = m.container.getBoundingClientRect(), word = null, utt = null, first = null;
         rendition.getContents().forEach(function (c) {
           var w = c.window; if (!w || !w.CSS || !w.frameElement) return;
           var f = w.frameElement.getBoundingClientRect();
@@ -148,6 +163,12 @@ const arm = `
             var b = r.getBoundingClientRect(); if (!b.height) return;
             var top = f.top + b.top - box.top, bottom = f.top + b.bottom - box.top;
             utt = utt ? [Math.min(utt[0], top), Math.max(utt[1], bottom)] : [top, bottom];
+            // The Utterance's first line, as highlighter.ts's lineOf() finds it:
+            // the first rect with a width and a height, in document order.
+            if (first === null) {
+              var rs = r.getClientRects();
+              for (var q = 0; q < rs.length && first === null; q++) if (rs[q].height && rs[q].width) first = f.top + (rs[q].top + rs[q].bottom) / 2 - box.top;
+            }
           });
           var h = w.CSS.highlights.get('openreader-word'); if (word || !h) return;
           h.forEach(function (r) {
@@ -159,7 +180,7 @@ const arm = `
             }
           });
         });
-        R.frames.push([performance.now() - R.t0, m.container.scrollTop, word, m.views.length, utt ? (utt[0] + utt[1]) / 2 : null]);
+        R.frames.push([performance.now() - R.t0, m.container.scrollTop, word, m.views.length, utt ? (utt[0] + utt[1]) / 2 : null, first]);
       }
       requestAnimationFrame(sample);
     };
@@ -167,7 +188,7 @@ const arm = `
   }
   R.start = function () { R.t0 = performance.now(); R.frames = []; R.msgs = []; R.on = true; };
   R.stop = function () { R.on = false; };
-  return 'armed inset=' + R.inset;
+  return 'armed inset=' + R.inset + ' open=' + R.open;
 `;
 
 // Also in the WebView: turn the frames into episodes, small enough for a note.
@@ -177,8 +198,11 @@ const arm = `
 // negative delay) or the first one to begin within 200 ms after it.
 const analyse = `
   var R = window.__lineFollow; R.stop();
-  var F = R.frames, h = rendition.manager.container.clientHeight, inset = R.inset || 0, target = (h - inset) / 2;
-  var out = { n: F.length, h: h, inset: inset, target: target, lines: [], other: [], views: [], msgs: R.msgs.slice(0, 60) };
+  var F = R.frames, h = rendition.manager.container.clientHeight, inset = R.inset || 0;
+  // The program's own arithmetic (highlighter.ts, lineAt): the share of the
+  // page above the open player, or above what is covered while that is unknown.
+  var share = R.share === null ? 0.5 : R.share, under = R.open || R.inset || 0, target = (h - under) * share;
+  var out = { n: F.length, h: h, inset: inset, open: R.open, share: share, target: target, lines: [], other: [], views: [], msgs: R.msgs.slice(0, 60) };
   var same = function (a, b) { return a && b && a[0] === b[0] && Math.abs(a[1] - b[1]) < Math.min(a[2], b[2]) / 2; };
   var moving = function (i) { return i > 0 && Math.abs(F[i][1] - F[i - 1][1]) > 0.01; };
   var episodes = [];
@@ -190,7 +214,7 @@ const analyse = `
     }
     var rest = F[Math.min(last + 1, F.length - 1)], gap = 0;
     for (var g = i; g <= last; g++) gap = Math.max(gap, F[g][0] - F[g - 1][0]);
-    episodes.push({ first: i, last: last, at: Math.round(F[i][0]), ms: Math.round(F[last][0] - F[i - 1][0]), px: Math.round((F[last][1] - F[i - 1][1]) * 10) / 10, rest: rest[2] ? Math.round((rest[2][3] - target) * 10) / 10 : null, whole: rest[4] === null ? null : Math.round((rest[4] - target) * 10) / 10, gap: Math.round(gap), steps: steps.join(','), used: false });
+    episodes.push({ first: i, last: last, at: Math.round(F[i][0]), ms: Math.round(F[last][0] - F[i - 1][0]), px: Math.round((F[last][1] - F[i - 1][1]) * 10) / 10, rest: rest[2] ? Math.round((rest[2][3] - target) * 10) / 10 : null, whole: rest[4] === null ? null : Math.round((rest[4] - target) * 10) / 10, firstLine: rest[5] === null || rest[5] === undefined ? null : Math.round((rest[5] - target) * 10) / 10, gap: Math.round(gap), steps: steps.join(','), used: false });
     i = last;
   }
   var line = null;
@@ -208,7 +232,7 @@ const analyse = `
     if (word) line = word;
     if (F[k][3] !== F[k - 1][3]) out.views.push([Math.round(F[k][0]), F[k - 1][3] + '->' + F[k][3], moving(k) || moving(k - 1) ? 'moving' : 'still']);
   }
-  episodes.forEach(function (ep) { if (!ep.used) out.other.push({ at: ep.at, ms: ep.ms, px: ep.px, rest: ep.rest, whole: ep.whole, gap: ep.gap, steps: ep.steps }); });
+  episodes.forEach(function (ep) { if (!ep.used) out.other.push({ at: ep.at, ms: ep.ms, px: ep.px, rest: ep.rest, whole: ep.whole, firstLine: ep.firstLine, gap: ep.gap, steps: ep.steps }); });
   var end = F[F.length - 1];
   out.endWhole = end && end[4] !== null ? Math.round((end[4] - target) * 10) / 10 : null;
   return JSON.stringify(out);
@@ -216,7 +240,7 @@ const analyse = `
 
 const tap = `
   var m = rendition.manager, box = m.container.getBoundingClientRect(), R = window.__lineFollow;
-  var target = (m.container.clientHeight - (R.inset || 0)) / 2, hit = null;
+  var h = m.container.clientHeight, var share = R.share === null ? 0.5 : R.share, under = R.open || R.inset || 0, target = (h - under) * share; hit = null;
   rendition.getContents().forEach(function (c) {
     if (hit || !c.window || !c.window.frameElement) return;
     var f = c.window.frameElement.getBoundingClientRect(), doc = c.document;
@@ -237,11 +261,11 @@ const tap = `
 `;
 
 function print(page, label) {
-  console.log(label + ': ' + page.n + ' frames, h ' + page.h + ', inset ' + page.inset + ', target ' + page.target);
+  console.log(label + ': ' + page.n + ' frames, h ' + page.h + ', inset ' + page.inset + ', open player ' + page.open + ', line position ' + page.share + ', target ' + page.target);
   for (const m of page.msgs) console.log('  msg ' + m.join(' '));
   console.log('  line changes (at ms, word top from->to in its section, delay ms, move px, ms, rest px from target, longest frame ms, steps):');
   for (const l of page.lines) console.log('    ' + [l.at, 's' + l.s + ' ' + l.from + '->' + l.to, 'delay ' + l.delay + ' ms / ' + l.frames + ' frames', l.px + ' px', l.ms + ' ms', 'rest ' + l.rest, 'frame ' + l.gap, '[' + l.steps + ']'].join('  '));
-  for (const o of page.other) console.log('  other move at ' + o.at + ': ' + o.px + ' px in ' + o.ms + ' ms, word rest ' + o.rest + ', Utterance middle rest ' + o.whole + ', longest frame ' + o.gap + ' ms [' + o.steps + ']');
+  for (const o of page.other) console.log('  other move at ' + o.at + ': ' + o.px + ' px in ' + o.ms + ' ms, word rest ' + o.rest + ', Utterance middle rest ' + o.whole + ', its first line rest ' + o.firstLine + ', longest frame ' + o.gap + ' ms [' + o.steps + ']');
   for (const v of page.views) console.log('  views ' + v.join(' '));
 }
 
@@ -255,6 +279,11 @@ function print(page, label) {
   send({ do: 'collapse', on: true });
   await sleep(800);
   send({ do: 'collapse', on: false });
+  await sleep(800);
+  // And the Line Position, which the bridge sends only when it changes: a run
+  // at the position already set leaves the recorder with the program's baked
+  // middle, which is then what it is.
+  send({ do: 'settings', patch: { following: { linePosition: position } } });
   await sleep(800);
   try {
     execFileSync('bash', [require.resolve('./silence.sh'), 'check', device], { stdio: 'inherit' });
@@ -329,7 +358,19 @@ function print(page, label) {
   let result = null;
   let tapped = null;
   try {
-    await sleep(seconds * 1000);
+    if (during === 'collapse') {
+      await sleep(seconds * 1000 / 3);
+      send({ do: 'collapse', on: true });
+      await sleep(seconds * 1000 / 3);
+      send({ do: 'collapse', on: false });
+      await sleep(seconds * 1000 / 3);
+    } else if (during === 'note') {
+      await sleep(seconds * 1000 / 3);
+      console.log('note: ' + await ask('return "a note on the player";'));
+      await sleep(Math.max(0, seconds * 1000 * 2 / 3 - 1500));
+    } else {
+      await sleep(seconds * 1000);
+    }
     await pause();
     console.log('played ' + ((Date.now() - played) / 1000).toFixed(1) + ' s, then paused');
     result = await ask(analyse, 8000);

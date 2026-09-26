@@ -579,8 +579,13 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     const program = code('highlighter.ts');
     pin(fn(program, 'visibleOf'), 'var visible = view.clientHeight - covered;', 'highlighter.ts, function visibleOf');
     const moveFor = fn(program, 'moveFor');
-    pin(moveFor, 'var at = bounds.top + visibleOf(view) * LINE_POSITION;', 'highlighter.ts, function moveFor');
+    pin(moveFor, 'var at = lineAt(view, bounds);', 'highlighter.ts, function moveFor');
     expect(moveFor).not.toContain('clientHeight');
+    // What the line position is a share of: the page above the open player
+    // (#71), or above what is covered now until the open player is measured.
+    const lineAt = fn(program, 'lineAt');
+    pin(lineAt, 'var visible = view.clientHeight - under;', 'highlighter.ts, function lineAt');
+    pin(lineAt, 'return bounds.top + visible * LINE_POSITION;', 'highlighter.ts, function lineAt');
     // The middle, until the owner's Line Position reaches it.
     pin(highlighterSource(), 'var LINE_POSITION = 0.5;', 'the program');
   });
@@ -611,7 +616,41 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     const bridge = code('reader-bridge.ts');
     const document = bridge.slice(bridge.indexOf('message.type === DOCUMENT_MESSAGE'));
     const branch = document.slice(0, document.indexOf('return;'));
-    expect(branch).toContain("send({ kind: 'inset', bottomPx: inset.current })");
+    expect(branch).toContain("send({ kind: 'inset', bottomPx: inset.current, openPx: openPlayer.current })");
+  });
+
+  it('sends the Line Position again once the program says it has installed, unless it is the one baked in (#71)', () => {
+    // The same trap as the inset: the setting's first message goes before the
+    // program exists. The middle is in the program's source already, so only
+    // another position needs sending.
+    const bridge = code('reader-bridge.ts');
+    const document = bridge.slice(bridge.indexOf('message.type === DOCUMENT_MESSAGE'));
+    const branch = document.slice(0, document.indexOf('return;'));
+    expect(branch).toContain("if (linePosition.current !== BAKED_LINE_POSITION) send({ kind: 'following', linePosition: linePosition.current });");
+    expect(code('highlighter.ts')).toContain("'var LINE_POSITION = ' + BAKED_LINE_POSITION + ';\\n'");
+  });
+
+  it('measures the line position above the open player, not above what it covers now (#71)', () => {
+    // `covered` grows with every note on the player and shrinks to one button when
+    // it collapses. Measured against it, a note that came and went while paused
+    // left the line 87 px above the middle until Play (notes, 2026-09-26). The
+    // open player's own height changes only with its controls.
+    const program = code('highlighter.ts');
+    pin(fn(program, 'lineAt'), 'var under = openPlayer > 0 ? openPlayer : covered;', 'highlighter.ts, function lineAt');
+    const inset = program.slice(program.indexOf("message.kind === 'inset'"));
+    pin(inset.slice(0, inset.indexOf('return;')), 'openPlayer = ', "highlighter.ts, the 'inset' branch");
+    // And the player reports that height from its controls alone, so no note is in it.
+    const player = readFileSync(new URL('../../src/app/player.tsx', import.meta.url).pathname, 'utf8');
+    expect(player).toContain('<View style={styles.controls} onLayout={measureControls}>');
+    expect(player.indexOf('notes.map(')).toBeLessThan(player.indexOf('<View style={styles.controls} onLayout={measureControls}>'));
+  });
+
+  it('brings a following page to a new Line Position, and leaves a browsed one where it is (#71)', () => {
+    const program = code('highlighter.ts');
+    const following = program.slice(program.indexOf("message.kind === 'following'"));
+    const branch = following.slice(0, following.indexOf('return;\n    }\n'));
+    expect(branch).toContain('LINE_POSITION = share;');
+    expect(branch).toContain('if (state && state.follow && !browsing) bring(aim(), false);');
   });
 
   /**
@@ -627,7 +666,7 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
    * message once it is present.
    */
   it('loses a message sent before the program installs, and says nothing about it', () => {
-    const call = highlightCall({ kind: 'inset', bottomPx: 190 });
+    const call = highlightCall({ kind: 'inset', bottomPx: 190, openPx: 0 });
 
     const early: Record<string, unknown> = {};
     expect(() => vm.runInNewContext(call, { window: early })).not.toThrow();
@@ -637,7 +676,7 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     const seen: unknown[] = [];
     const installed: Record<string, unknown> = { [HIGHLIGHTER]: (message: unknown) => seen.push(message) };
     vm.runInNewContext(call, { window: installed });
-    expect(seen).toEqual([{ kind: 'inset', bottomPx: 190 }]);
+    expect(seen).toEqual([{ kind: 'inset', bottomPx: 190, openPx: 0 }]);
   });
 
   it('does not scroll when the inset changes, because that would move the text under the reader', () => {

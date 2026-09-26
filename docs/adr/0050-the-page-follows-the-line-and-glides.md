@@ -112,12 +112,83 @@ iPhone 17 simulator, iOS 27.0, `Cultivation Online 2001-2044.epub`, Fish Audio a
 curve is in `test/renderer/glide.test.ts`, which evaluates `GLIDE_SOURCE`, the
 text the program runs.
 
+## What was done (batch 2: the Line Position)
+
+- **The setting.** `AppSettings.following.linePosition`, in percent, one of
+  `LINE_POSITIONS` (20, 30 … 80), default 50. `settings-storage.ts` reads anything
+  else, including a share such as `0.3`, as 50: the app is unreleased, so nothing
+  is migrated. General shows it as `Line position` with the system menu, in a card
+  of its own directly under the two pauses and inside "Reading aloud".
+- **How it reaches the page.** `bridge.setLinePosition(percent)` sends a
+  `FollowingMessage`, `{ kind: 'following', linePosition: share }`. It is a
+  message of its own, not a field of `InsetMessage`: that one is the player's
+  geometry, sent as the player lays out, while this is a setting, sent when the
+  owner changes it. The program is built with `BAKED_LINE_POSITION` (0.5,
+  `glide.ts`), and the document message re-sends the owner's value only when it
+  differs. A page following the reading when the message arrives is brought to
+  the new position through `bring(aim(), false)`: a glide within the visible page,
+  a jump beyond it. A browsed page stays put. General is reached only from the
+  Library, so in today's app the new value lands on the next open. It glides only
+  where the reader stays mounted.
+- **The reference height** is the batch's real change. `lineAt(view, bounds)`
+  aims at `bounds.top + (clientHeight − openPlayer) × LINE_POSITION`, and falls
+  back to `covered` until `openPlayer` is known. `openPlayer` is the new
+  `InsetMessage.openPx`: the open player's height **without notes**. `player.tsx`
+  wraps the head and transport rows in one `View` (it carries the rows' `gap: 6`,
+  so the layout is unchanged), and reports that box's height plus the player's
+  padding (4 + 28) and its two hairline borders through `onOpenHeight`. The box
+  holds no note, so a note coming or going sends nothing, and while the player is
+  collapsed the box is not drawn, so the last height stands. `visibleOf()` and
+  `covered` are unchanged: they still decide what counts as within the visible
+  page for a glide, and the tall-Utterance rule still uses the container's top.
+  - A note on the player moved the target in batch 1. While paused, the probe's
+    own note made `covered` 174.7, and the page was placed against it. When the
+    note went away at Play, the line sat 87 px above the new middle.
+  - Collapsing now moves nothing, and the line then sits where it sat. That is
+    the owner's choice: the height is reckoned as it was before collapsing.
+- **With #67's floating bar** (the player worktree, `BarMessage`: `coveredPx` now,
+  `reservedPx` whether shown or not), the rule carries over to the top. The band
+  runs from `bounds.top + barReserved` to the open player, so hiding the bar with
+  the player moves nothing either:
+  `lineAt = bounds.top + barReserved + (clientHeight − barReserved − openPlayer) × LINE_POSITION`.
+  `barCovered` stays the input for what can be seen now: `visibleOf()`, and the
+  tall-Utterance rule's top. `lineAt` is the one function the merge changes.
+- **The one limit.** At 70 or 80 %, several notes stacked on the player can cover
+  the line being spoken, because the target no longer rises with them. Nothing
+  clamps it. A note is transient, and the two positions that can meet it are the
+  owner's to choose.
+
+### Measured (notes/NOTES_2026-09-26.md, 11:03–11:12)
+
+Same simulator and book, section 8. The container was 758 px, and the open player
+measured 134.666… px, the same as `covered` with no note (134.667), so the chrome
+arithmetic matches the player's own layout.
+
+- **At 50, 30 and 70 %** the targets were 311.7, 187 and 436.3 px, which is
+  `(758 − 134.67) × share`. At 30 %, 5 line changes each began one frame after the
+  word, took 216–217 ms, and rested 0.4 px from the target. At 70 %, 5 changes
+  took 234–244 ms and rested 0.1 px.
+- **A note while paused.** `covered` was 174.67 against an open player of 134.67.
+  Three skips each put the sentence's first line 0.8 px from 311.67. Measured
+  against `covered`, they would have aimed at 291.67.
+- **A note while playing.** `covered` went from 134.67 to 157.67 at 6,020 ms, and
+  the three line changes after it rested 0.8 px from the unchanged target.
+- **Collapse while playing.** `covered` fell to 52 at 7,595 ms and returned to
+  134.67 at 11,197 ms, with no scroll at either moment. The line change made while
+  collapsed, and the two after expanding, rested 0.8 px from the same target.
+  - One glide in that run, crossing into section 9 while epub.js appended a view,
+    drew a 275 ms frame and took 665 ms. That is the frame-timed curve pausing,
+    as in batch 1.
+- **A live change from 50 to 30 % while paused.** The message arrived at 1,406 ms.
+  One frame later the page glided 125 px, the expected 0.2 × 623.3, in 232 ms and
+  rested 0.4 px from 187.
+- **General.** `LinePositionProbe` (real touches, 0 failures, 29.2 s) found the row
+  below the pauses and above the brackets' card, and the menu listed 20%–80% in
+  order with the current value checked. Choosing 30% showed `Line position, 30%`,
+  and choosing back restored the row.
+
 ## Decided, not yet built
 
-- **Line Position** (CONTEXT.md) becomes a setting, 20–80 % in steps of 10,
-  default 50 %, measured against the visible page with the player **expanded**, so
-  `LINE_POSITION` is replaced by the owner's value and the collapsed player's inset
-  no longer moves the target (batch 2).
 - **A/M** in the player's empty 44 pt slot, automatic recovery when a sentence
   begins while playing with its line still on the screen, **M** returning the page
   without playing (#53), and no dragging while the player is collapsed and the

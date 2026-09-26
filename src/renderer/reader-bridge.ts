@@ -34,6 +34,7 @@ import type { ClipCue, PositionCorrection, ReaderClock } from '../playback/reade
 
 import { blockIds, EMPTY_BLOCKS, withSection, type BlockIndex } from './blocks';
 import { countPage, PLAIN_BODY_TEXT_SIZE } from './body-text';
+import { BAKED_LINE_POSITION } from './glide';
 import { correctMessage, speakMessage, utteranceAt } from './cursor';
 import {
   appearanceCss,
@@ -265,6 +266,19 @@ export interface ReaderBridge {
    */
   setInset(bottomPx: number): void;
   /**
+   * The player's height when it is open and has nothing to say, in points: its
+   * controls, padding and border, without notes (#71). What the Line Position is
+   * measured above, so that a note coming or going and the player collapsing
+   * move nothing. Travels in the same `InsetMessage` as `setInset`'s number.
+   */
+  setOpenPlayer(openPx: number): void;
+  /**
+   * The owner's **Line Position** (#71, ADR 0050), in percent of the visible
+   * page from its top. Live, as the theme is: a page following the reading when
+   * it arrives is brought to the new position. See `FollowingMessage`.
+   */
+  setLinePosition(percent: number): void;
+  /**
    * How the document's text is set: the owner's Appearance (ADR 0019).
    *
    * A message and not a remount. The program is installed once, at page load, so
@@ -431,6 +445,10 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    * so it is what re-sends this.
    */
   const inset = useRef(0);
+  /** The open player's own height, sent beside the inset and re-sent with it; see `setOpenPlayer`. */
+  const openPlayer = useRef(0);
+  /** The Line Position last asked for, as a share, re-sent at install when it is not the one the program was built with. */
+  const linePosition = useRef(BAKED_LINE_POSITION);
   /**
    * What was baked into the program at mount, and what the owner has chosen
    * since.
@@ -518,7 +536,28 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       const covered = Number.isFinite(bottomPx) && bottomPx > 0 ? bottomPx : 0;
       if (covered === inset.current) return;
       inset.current = covered;
-      send({ kind: 'inset', bottomPx: covered });
+      send({ kind: 'inset', bottomPx: covered, openPx: openPlayer.current });
+    },
+    [send],
+  );
+
+  const setOpenPlayer = useCallback(
+    (openPx: number) => {
+      const open = Number.isFinite(openPx) && openPx > 0 ? openPx : 0;
+      if (open === openPlayer.current) return;
+      openPlayer.current = open;
+      send({ kind: 'inset', bottomPx: inset.current, openPx: open });
+    },
+    [send],
+  );
+
+  const setLinePosition = useCallback(
+    (percent: number) => {
+      if (!Number.isFinite(percent)) return;
+      const share = Math.min(Math.max(percent, 0), 100) / 100;
+      if (share === linePosition.current) return;
+      linePosition.current = share;
+      send({ kind: 'following', linePosition: share });
     },
     [send],
   );
@@ -586,7 +625,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       if (message.type === DOCUMENT_MESSAGE) {
         spine.current = message.spine;
         // The program has installed, so the two things it may have missed go again.
-        if (inset.current > 0) send({ kind: 'inset', bottomPx: inset.current });
+        if (inset.current > 0 || openPlayer.current > 0) send({ kind: 'inset', bottomPx: inset.current, openPx: openPlayer.current });
+        if (linePosition.current !== BAKED_LINE_POSITION) send({ kind: 'following', linePosition: linePosition.current });
         if (appearance.current !== installed.current || bodyTextSize.current !== installedBodyTextSize.current) {
           send({ kind: 'appearance', css: appearanceCss(appearance.current, bodyTextSize.current) });
         }
@@ -673,7 +713,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
-    [clock, setUtterances, show, setInset, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
+    () => ({ clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
+    [clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
   );
 }

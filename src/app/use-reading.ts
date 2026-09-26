@@ -1426,6 +1426,17 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [scheme]);
 
   /**
+   * The Line Position, live (#71, ADR 0050): the fourth setting that reaches an
+   * open document without rebuilding anything. A page following the reading is
+   * brought to the new position when it arrives. It fires on mount as well, into
+   * a program that is very likely not installed yet, and `reader-bridge.ts`
+   * re-sends it at install when it is not the middle the program is built with.
+   */
+  useEffect(() => {
+    bridgeRef.current?.setLinePosition(settings.following.linePosition);
+  }, [settings.following.linePosition]);
+
+  /**
    * A different Provider, Voice or address is a different engine — and so is the
    * same one with a credential that has since been written.
    *

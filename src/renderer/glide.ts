@@ -27,6 +27,13 @@
 /** How long one glide lasts, whatever its distance. Speechify measured 220–290 ms, typically 250. */
 export const GLIDE_MS = 250;
 
+/**
+ * The Line Position the program is built with, as a share: the middle. The
+ * owner's own arrives as a `FollowingMessage` (#71), and the bridge sends it
+ * again when the program installs only if it is not this.
+ */
+export const BAKED_LINE_POSITION = 0.5;
+
 export const GLIDE_SOURCE =
   'var GLIDE_MS = ' + GLIDE_MS + ';\n' +
   'function glideLeft(from, elapsed) {\n' +

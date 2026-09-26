@@ -13,7 +13,9 @@
  * for wherever they stand), which is app-wide for the same reason: it is true
  * of every Voice and every Document, so it is not a property of the book being
  * read. So are the two pauses (#60, ADR 0047), which the desktop plugin also
- * keeps as one pair for every voice.
+ * keeps as one pair for every voice, and the **Line Position** (#71, ADR 0050):
+ * how far down the page the line being spoken is held is a matter of the
+ * owner's eyes, the same in every book.
  *
  * What is still not here is the text size. That is in Appearance, over the book,
  * because it is judged by looking at the book while it changes.
@@ -38,7 +40,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import { DEFAULT_BRACKET_PAIRS, validateBracketPairs } from '../core/speech-text';
 import { Footnote, INK, SettingsGroup, SettingsPage, SwitchRow, TextRow, ValueRow, type Choice } from './controls';
 import { useShell } from './routes';
-import { PARAGRAPH_PAUSES_MS, SENTENCE_PAUSES_MS, THEME_LABELS, THEME_SETTINGS, type ThemeSetting } from './settings';
+import { LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SENTENCE_PAUSES_MS, THEME_LABELS, THEME_SETTINGS, type ThemeSetting } from './settings';
 
 /**
  * The Theme menu (#33), in `THEME_SETTINGS`' order, each with the system's own
@@ -56,6 +58,9 @@ const pauseChoices = (offered: readonly number[]): readonly Choice<number>[] =>
   offered.map((value) => ({ value, label: `${value} ms` }));
 const SENTENCE_PAUSE_CHOICES = pauseChoices(SENTENCE_PAUSES_MS);
 const PARAGRAPH_PAUSE_CHOICES = pauseChoices(PARAGRAPH_PAUSES_MS);
+
+/** The Line Position menu (#71): the percentage alone, as the row's value shows it. */
+const LINE_POSITION_CHOICES: readonly Choice<number>[] = LINE_POSITIONS.map((value) => ({ value, label: `${value}%` }));
 
 /**
  * What a refused list of bracket pairs is called, in the owner's words.
@@ -107,6 +112,17 @@ export function GeneralScreen() {
           onChoose={(sentenceMs) => setSettings((was) => ({ ...was, pauses: { ...was.pauses, sentenceMs } }))} />
         <ValueRow label="Pause between paragraphs" choices={PARAGRAPH_PAUSE_CHOICES} chosen={settings.pauses.paragraphMs}
           onChoose={(paragraphMs) => setSettings((was) => ({ ...was, pauses: { ...was.pauses, paragraphMs } }))} />
+      </SettingsGroup>
+
+      {/* How the page follows the reading (#71) has a card of its own, under the
+          pauses and the same header: the page moves only while the reading is
+          heard, so it belongs to reading aloud, but it is about where the eye is
+          and not about the sound, and the brackets' sentence below is not true of
+          it. No header of its own and no footnote: the row's name and its value
+          are the whole of it. */}
+      <SettingsGroup>
+        <ValueRow label="Line position" choices={LINE_POSITION_CHOICES} chosen={settings.following.linePosition}
+          onChoose={(linePosition) => setSettings((was) => ({ ...was, following: { ...was.following, linePosition } }))} />
       </SettingsGroup>
 
       {/* A refused list is said under the card, in place rather than in a box

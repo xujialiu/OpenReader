@@ -47,7 +47,11 @@ Two things were deliberately not copied:
 
 - **The owner chooses the height.** A setting in General, from a fifth to four
   fifths of the way down in steps of a tenth, the middle by default. It is
-  measured with the player open, so putting the player away moves nothing.
+  measured with the player open, so putting the player away moves nothing. It
+  sits under the two pauses because the page only moves while the reading is
+  heard, in a box of its own because it is about where the eye rests and not
+  about the sound. The row's name and its value are the whole of it, so it has
+  no heading and no sentence under it.
 - **The owner chooses how the page moves.** A line at a time, as above, by
   default; or continuously, the page drifting up as the words are read so that it
   is never still and never jumps. Continuous stops while nothing is being said,
@@ -77,6 +81,28 @@ Two things were deliberately not copied:
   sound exists, and that is a guess.
 - **A setting for the speed.** Nobody asked for it, and it would be one more row
   on a screen where every row costs a line of the page.
+
+## Why the height ignores the player's messages and the player being put away
+
+The player sometimes shows a line of text above its buttons: that a voice is
+still being fetched, that something failed. Each one makes the player taller for
+a while. If the height were measured against whatever the player covers at that
+moment, every such message would move the place the line is held, and the next
+line would jump by half the message's height. That happened: a message shown
+while paused made the page place the sentence higher. When the message went away
+at Play, the page moved the sentence down again, by four lines, before a
+single word was read.
+
+So the height is measured against the player as it is when open with nothing to
+say. A message comes and goes and the line stays where it was. Putting the player
+away works the same way, as the owner asked: the line stays at the height it had
+before, rather than moving to the middle of the now taller page. The cost is that
+with the player put away, the line sits a little above the middle of what can
+now be seen. The line does not move under the eye, and that is worth more.
+
+The one place this can show is at 70 or 80 %: several messages stacked on the
+player can reach the line being read, because the line no longer rises out of
+their way. Messages are brief, and those two heights are the owner's choice.
 
 ## What it costs
 
