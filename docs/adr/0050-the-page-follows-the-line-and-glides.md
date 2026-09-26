@@ -283,14 +283,24 @@ listener here is passive), and a class or a `<style>` of the program's own (the
 DOM rule of ADR 0005 and ADR 0034 allows the highlight stylesheet and the
 alignment mark only; `rules.test.ts` holds it).
 
-**Not measured on a device yet** — batch 3 was built without a simulator, while
-two others ran on a 16 GB machine. To verify there: the page cannot be dragged
-while collapsed and a tap on a sentence still reads from it; epub.js's `resize`
-does not fire when the overflow flips (no box change is expected, iOS scroll bars
-being overlays); a fling cut off by collapsing leaves the page still; a drag while
-playing stays M across a sentence that begins off screen and recovers at one that
-begins on screen; M while paused moves the page and not the reading (#53); M
-while playing keeps the word highlight.
+**Measured (notes/NOTES_2026-09-26.md, 12:49–15:25).** `FollowingProbe.swift`,
+real touches, "Cultivation Online" mid-way. The mark reads clearly in both
+themes with the Voice name staying centred; a tap on `A` does nothing and a
+drag past `DRAG_PX` turns it to `M`; `M` reached by a drag or a Contents row
+returns to `A` on a tap without starting playback, paused or on a process
+that has never played at all (#53); `M` while playing returns on a tap with
+playback continuing, by a glide near or a jump far; a far drag holds `M`
+across a 15-22 s wait (several sentence starts at this book's pace) with no
+self-return, and landing the reading's own current chapter back on screen —
+reached through Contents' current-row rather than by reversing the far
+drag, which could not reliably out-run the reading's own continued advance
+meanwhile — reads as `A` again unprompted. Collapsed: neither mark is
+shown; a real drag reaches nothing (`line-follow.cjs`'s frame log shows the
+ordinary glides continuing on schedule through the drag's own timestamp,
+no extra scroll); a real tap on body text still seeks (the same frame log's
+`msgs` show a fresh `speak` cue and a matching move at the tap); reopening a
+playing collapsed pill leaves it playing and following, and browsing then
+collapsing then reopening returns to `A` first, never surfacing `M`.
 
 ## What was done (batch 4: Continuous)
 
@@ -407,26 +417,53 @@ simulator, so everything under "To be measured" below is unmeasured.
   - `renderAhead()` asks for the reading's next section on every Clip cue
     regardless.
 
-### To be measured on the device
+### Measured on the device (notes/NOTES_2026-09-26.md, 12:49–15:25)
 
-1. The rolling itself: per-frame `scrollTop` over several lines at 1.0× and 2.0×.
-   - That the line's middle passes the line position with a lead that grows
-     along the line and resets across line changes without a step.
-   - The lag while rolling, which should be a few px.
-   - The size and spacing of the 1 px steps.
-   - How it looks on the owner's phone: rolling or trembling.
-2. Paragraph breaks and headings glide, 250 ms, and the drift resumes after
-   them with no jump.
-3. A sentence beginning on the current line: no glide, the drift continues.
-4. Pauses between sentences: the drift comes to rest (`drifting.speed` 0, no
-   frames asked for) within about 1 s, and resumes with the next word.
-5. Trims during a long Continuous run (minutes, across several sections).
-   - `views` counts stay bounded, and each trim lands without moving the text.
-   - A real fling still parks them until rest: repeat `test/manual-test/`'s
-     #58 fling runs with the gate change in.
-6. Appends ahead while rolling fast (Font Size 24 at 2×): the next section
-   arrives before the reading reaches it.
-7. A finger's first `touchmove` stops the drift; a drag is browsing; Play or a
-   tapped sentence resumes it.
-8. Switching Scrolling while a reading is open (through the harness): By line
-   forgets the lead at once, and Continuous starts from the words.
+`continuous-follow.cjs` (new; an independent recorder beside `line-follow.cjs`'s
+own) at 1.0× (20 s) and 2.0× (10 s), plus `FollowingProbe.swift` real touches
+and the existing `line-follow.cjs`/`fling-jump.cjs`, on "Cultivation Online."
+
+1. The rolling itself, confirmed at both rates: steps of 1-4 px (median 1),
+   at a median 92-100 ms apart at 1.0× and 50 ms at 2.0× (the cadence halves
+   with the words' own pace; the step size does not, since `scrollTop` only
+   moves in whole CSS px either way). A 6 s recording, frames extracted
+   100 ms apart, showed a smooth few-pixel shift with no doubling — rolling,
+   not trembling, at normal viewing speed. **Not separately isolated**: the
+   lead's own growth-and-reset shape and the rolling lag in px — the frame
+   log recorded `scrollTop` only, not the lead value itself; both are
+   consistent with what was seen (no in-drift step ever exceeded 4 px) but
+   neither was measured directly.
+2. Paragraph/heading glides: 2 at 1.0× (217-302 ms), 3 at 2.0× (217-234 ms),
+   both clusters near the ~250 ms figure and clearly apart from the drift's
+   own much slower rate (0.09-0.12 px/ms vs the drift's own two-orders-lower
+   rate) — and not rate-scaled, a fixed animation length regardless of
+   reading speed. The drift's own stepping resumed after each one in the
+   same recording. **Not separately isolated**: a targeted "no glide, only
+   drift" case for a sentence that begins on the already-current line.
+3. Not isolated (see 2).
+4. Confirmed: 12 rests (183-534 ms) at 1.0×, 3 (350-1130 ms) at 2.0×, each a
+   stretch of at least 12 still frames (~200 ms) with no drift step, ending
+   as soon as the next word's `kick()` arrived.
+5. Confirmed. A genuine continuous-playback window crossing one section
+   boundary recorded zero `views` changes (this book's sections are long: the
+   window was several real minutes); a `--skips 45` follow-up forced one
+   append and one trim in seconds, the trim itself a single 16 ms frame
+   (`-4090 px`) between two skip-glides both resting within a pixel of
+   target — the text did not move. `fling-jump.cjs`'s #58 gate re-run under
+   Continuous: 6 of 7 GREEN, 1 RED matching the pre-#58 signature exactly;
+   a same-day, same-position comparison under By line was 3 of 3 GREEN, and
+   since `FlingProbe` never plays (the drift is inactive throughout either
+   way), this reads as the probe's own already-documented flakiness rather
+   than a Continuous-specific regression — flagged for a larger sample, not
+   treated as a confirmed defect.
+6. Not measured: no Font Size change was made in this session.
+7. Confirmed: a real drag during the drift stopped it at once (`M`,
+   playback continuing); a real tap on `Pause` then `Play`, and separately a
+   real tap on `M`, each resumed both the drift and the page.
+8. Confirmed functionally, by real touch rather than through the harness: a
+   Library round trip while playing, changing Line position to 40% and
+   Scrolling to By line from General and returning by the Reading Button,
+   took both new values live with no reload and playback still going.
+   **Not separately isolated**: the lead's own instant drop at the moment
+   the setting changes, at the frame level — no `arm`/`analyse` bookended
+   this specific transition.

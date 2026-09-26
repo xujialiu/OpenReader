@@ -14,6 +14,11 @@
 // simulator silenced (`silence.sh set`), and METRO_LOG, the file this worktree's
 // Metro writes its output to, because the harness answers there.
 //
+// POSITION (20-80, default 50) and SCROLLING ('line' default, or
+// 'continuous', #71 batch 4) are the Following pair every `arm` run sends
+// together, matching the app's own bridge convention of never sending one
+// without the other.
+//
 // It installs a recorder in the reader's WebView that reads, on every animation
 // frame, the scroll container's `scrollTop` and the first line box of the word
 // highlight (its top in the section document, which scrolling does not change,
@@ -98,6 +103,16 @@ const tapToo = flag === '--tap';
 const position = Number(process.env.POSITION || 50);
 if (![20, 30, 40, 50, 60, 70, 80].includes(position)) {
   console.error('POSITION is one of 20, 30, … 80');
+  process.exit(2);
+}
+// The Scrolling the run is made at (#71 batch 4): 'line' (default) or
+// 'continuous'. Sent alongside Line Position on every patch, never alone —
+// the harness's own settings patch replaces the whole `following` object
+// (a shallow merge, shell.tsx), so a patch naming only one field silently
+// drops the other back to undefined (README Pitfalls).
+const scrolling = process.env.SCROLLING || 'line';
+if (!['line', 'continuous'].includes(scrolling)) {
+  console.error("SCROLLING is 'line' or 'continuous'");
   process.exit(2);
 }
 // Something done to the player while the reading plays, a third of the way in
@@ -314,7 +329,7 @@ function print(page, label) {
   // And the Line Position, which the bridge sends only when it changes: a run
   // at the position already set leaves the recorder with the program's baked
   // middle, which is then what it is.
-  send({ do: 'settings', patch: { following: { linePosition: position } } });
+  send({ do: 'settings', patch: { following: { scrolling, linePosition: position } } });
   await sleep(800);
   try {
     execFileSync('bash', [require.resolve('./silence.sh'), 'check', device], { stdio: 'inherit' });
