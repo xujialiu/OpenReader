@@ -34,7 +34,7 @@ import type { ClipCue, PositionCorrection, ReaderClock } from '../playback/reade
 
 import { blockIds, EMPTY_BLOCKS, withSection, type BlockIndex } from './blocks';
 import { countPage, PLAIN_BODY_TEXT_SIZE } from './body-text';
-import { BAKED_LINE_POSITION } from './glide';
+import { BAKED_LINE_POSITION, BAKED_SCROLLING } from './glide';
 import { correctMessage, speakMessage, utteranceAt } from './cursor';
 import {
   appearanceCss,
@@ -54,6 +54,7 @@ import {
   PROBLEM_MESSAGE,
   TAP_MESSAGE,
   type CharactersBySize,
+  type FollowingMessage,
   type HighlightMessage,
   type ProblemMessage,
   type ReportedBlock,
@@ -279,6 +280,12 @@ export interface ReaderBridge {
    */
   setLinePosition(percent: number): void;
   /**
+   * How the page moves to the Line Position (#71, ADR 0050): a line at a time,
+   * or continuously as the words are spoken. Live, and in the same
+   * `FollowingMessage` as the Line Position, which always carries both.
+   */
+  setScrolling(scrolling: FollowingMessage['scrolling']): void;
+  /**
    * How the document's text is set: the owner's Appearance (ADR 0019).
    *
    * A message and not a remount. The program is installed once, at page load, so
@@ -449,6 +456,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   const openPlayer = useRef(0);
   /** The Line Position last asked for, as a share, re-sent at install when it is not the one the program was built with. */
   const linePosition = useRef(BAKED_LINE_POSITION);
+  /** How the page moves to it, last asked for; sent beside it and re-sent with it. */
+  const scrolling = useRef<FollowingMessage['scrolling']>(BAKED_SCROLLING);
   /**
    * What was baked into the program at mount, and what the owner has chosen
    * since.
@@ -557,7 +566,17 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       const share = Math.min(Math.max(percent, 0), 100) / 100;
       if (share === linePosition.current) return;
       linePosition.current = share;
-      send({ kind: 'following', linePosition: share });
+      send({ kind: 'following', linePosition: share, scrolling: scrolling.current });
+    },
+    [send],
+  );
+
+  const setScrolling = useCallback(
+    (way: FollowingMessage['scrolling']) => {
+      if (way !== 'line' && way !== 'continuous') return;
+      if (way === scrolling.current) return;
+      scrolling.current = way;
+      send({ kind: 'following', linePosition: linePosition.current, scrolling: way });
     },
     [send],
   );
@@ -626,7 +645,9 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         spine.current = message.spine;
         // The program has installed, so the two things it may have missed go again.
         if (inset.current > 0 || openPlayer.current > 0) send({ kind: 'inset', bottomPx: inset.current, openPx: openPlayer.current });
-        if (linePosition.current !== BAKED_LINE_POSITION) send({ kind: 'following', linePosition: linePosition.current });
+        if (linePosition.current !== BAKED_LINE_POSITION || scrolling.current !== BAKED_SCROLLING) {
+          send({ kind: 'following', linePosition: linePosition.current, scrolling: scrolling.current });
+        }
         if (appearance.current !== installed.current || bodyTextSize.current !== installedBodyTextSize.current) {
           send({ kind: 'appearance', css: appearanceCss(appearance.current, bodyTextSize.current) });
         }
@@ -713,7 +734,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
-    [clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
+    () => ({ clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
+    [clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
   );
 }

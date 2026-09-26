@@ -40,7 +40,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import { DEFAULT_BRACKET_PAIRS, validateBracketPairs } from '../core/speech-text';
 import { Footnote, INK, SettingsGroup, SettingsPage, SwitchRow, TextRow, ValueRow, type Choice } from './controls';
 import { useShell } from './routes';
-import { LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SENTENCE_PAUSES_MS, THEME_LABELS, THEME_SETTINGS, type ThemeSetting } from './settings';
+import { LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLING_LABELS, SCROLLINGS, SENTENCE_PAUSES_MS, THEME_LABELS, THEME_SETTINGS, type Scrolling, type ThemeSetting } from './settings';
 
 /**
  * The Theme menu (#33), in `THEME_SETTINGS`' order, each with the system's own
@@ -58,6 +58,9 @@ const pauseChoices = (offered: readonly number[]): readonly Choice<number>[] =>
   offered.map((value) => ({ value, label: `${value} ms` }));
 const SENTENCE_PAUSE_CHOICES = pauseChoices(SENTENCE_PAUSES_MS);
 const PARAGRAPH_PAUSE_CHOICES = pauseChoices(PARAGRAPH_PAUSES_MS);
+
+/** The Scrolling menu (#71): the two ways, by name and with no symbol, like the pauses. */
+const SCROLLING_CHOICES: readonly Choice<Scrolling>[] = SCROLLINGS.map((value) => ({ value, label: SCROLLING_LABELS[value] }));
 
 /** The Line Position menu (#71): the percentage alone, as the row's value shows it. */
 const LINE_POSITION_CHOICES: readonly Choice<number>[] = LINE_POSITIONS.map((value) => ({ value, label: `${value}%` }));
@@ -118,9 +121,12 @@ export function GeneralScreen() {
           pauses and the same header: the page moves only while the reading is
           heard, so it belongs to reading aloud, but it is about where the eye is
           and not about the sound, and the brackets' sentence below is not true of
-          it. No header of its own and no footnote: the row's name and its value
-          are the whole of it. */}
+          it. No header of its own and no footnote: the rows' names and their
+          values are the whole of it. How the page moves comes first, and where
+          it holds the line second. */}
       <SettingsGroup>
+        <ValueRow label="Scrolling" choices={SCROLLING_CHOICES} chosen={settings.following.scrolling}
+          onChoose={(scrolling) => setSettings((was) => ({ ...was, following: { ...was.following, scrolling } }))} />
         <ValueRow label="Line position" choices={LINE_POSITION_CHOICES} chosen={settings.following.linePosition}
           onChoose={(linePosition) => setSettings((was) => ({ ...was, following: { ...was.following, linePosition } }))} />
       </SettingsGroup>

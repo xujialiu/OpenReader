@@ -379,19 +379,23 @@ export interface InsetMessage {
 
 /**
  * How the page follows the reading (#71, ADR 0050): the owner's **Line
- * Position**, as a share of the visible page's height from its top.
+ * Position**, as a share of the visible page's height from its top, and whether
+ * the page moves to it a line at a time or continuously.
  *
  * A message of its own, like the theme, rather than a field of `InsetMessage`:
  * that one is the player's geometry, sent by the player as it lays out, and this
  * is a setting, sent when the owner changes it. It changes nothing per word and
  * crosses the bridge only when it changes, and again when the program installs.
- * A page following the reading when it arrives is brought to the new position at
- * once, by a glide within the visible page and a jump beyond it.
+ * Both settings travel together, every time, so the program never holds half of
+ * an old choice. A page following the reading when it arrives is brought to the
+ * new position at once, by a glide within the visible page and a jump beyond it.
  */
 export interface FollowingMessage {
   kind: 'following';
   /** 0.2 to 0.8: the Line Position's percent over a hundred. */
   linePosition: number;
+  /** A line at a time, or continuously as the words are spoken (`Scrolling` in settings.ts). */
+  scrolling: 'line' | 'continuous';
 }
 
 /**

@@ -1,7 +1,7 @@
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
 import { FONT_SIZES, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
-import { DEFAULT_SETTINGS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type DocumentVoice } from './settings';
+import { DEFAULT_SETTINGS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLINGS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type DocumentVoice, type Scrolling } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -44,6 +44,11 @@ function readPause(value: unknown, offered: readonly number[], fallback: number)
 /** A Line Position General offers, or the middle, for the same reason (#71). Nothing is converted: the app is unreleased. */
 function readLinePosition(value: unknown): number {
   return LINE_POSITIONS.find((percent) => percent === value) ?? DEFAULT_SETTINGS.following.linePosition;
+}
+
+/** A way of scrolling General offers, or By line, the default, for the same reason (#71). */
+function readScrolling(value: unknown): Scrolling {
+  return SCROLLINGS.find((scrolling) => scrolling === value) ?? DEFAULT_SETTINGS.following.scrolling;
 }
 
 /** Each Provider's number of sentences at once if the menu offers it, else that Provider's default (#64). */
@@ -91,7 +96,7 @@ export function parseSettings(value: unknown): AppSettings {
       sentenceMs: readPause(pauses.sentenceMs, SENTENCE_PAUSES_MS, DEFAULT_SETTINGS.pauses.sentenceMs),
       paragraphMs: readPause(pauses.paragraphMs, PARAGRAPH_PAUSES_MS, DEFAULT_SETTINGS.pauses.paragraphMs),
     },
-    following: { linePosition: readLinePosition(following.linePosition) },
+    following: { scrolling: readScrolling(following.scrolling), linePosition: readLinePosition(following.linePosition) },
     sentencesAtOnce: readSentencesAtOnce(data.sentencesAtOnce),
     appearance: {
       font: readFont(appearance.font),
