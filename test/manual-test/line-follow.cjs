@@ -49,9 +49,10 @@
 //   line   one per change of the word's line: when the word reached the new
 //          line, when the page began to move (delay), how far and for how long
 //          it moved, the per-frame steps, and where the line's middle came to
-//          rest against the target (h - open player) * share, the program's
-//          own lineAt() (#71; the inset stands in before the open player's
-//          height is known)
+//          rest against the target bar room + (h - bar room - open player)
+//          * share, the program's own lineAt() (#71, #67; what the bar and
+//          the inset cover now stand in before the room and the open player's
+//          height are known)
 //   other  page movements with no line change before them, with where the
 //          word's line, the Utterance's middle and its first line rested (a new Utterance
 //          starting on a new line counts as a line change; a jump, a display,
@@ -155,13 +156,14 @@ async function ask(code, ms = 4000) {
 const arm = `
   var R = window.__lineFollow;
   if (!R) {
-    R = window.__lineFollow = { t0: performance.now(), frames: [], msgs: [], inset: null, open: null, share: null, on: false };
+    R = window.__lineFollow = { t0: performance.now(), frames: [], msgs: [], inset: null, open: null, share: null, barCovered: 0, barReserved: 0, on: false };
     var entry = window.__openReaderHighlighter;
     window.__openReaderHighlighter = function (m) {
       if (m && m.kind === 'inset') { R.inset = m.bottomPx; R.open = m.openPx; }
       if (m && m.kind === 'following') R.share = m.linePosition;
+      if (m && m.kind === 'bar') { R.barCovered = m.coveredPx || 0; R.barReserved = m.reservedPx || 0; }
       if (m && m.kind === 'speak') R.speak = m;
-      if (R.on && m) R.msgs.push([Math.round(performance.now() - R.t0), m.kind, m.kind === 'speak' ? m.utterance + (m.reveal ? 'r' : '') + (m.words ? '' : ' nowords') : m.kind === 'inset' ? 'bottom ' + m.bottomPx + ' open ' + m.openPx : m.kind === 'following' ? String(m.linePosition) : '']);
+      if (R.on && m) R.msgs.push([Math.round(performance.now() - R.t0), m.kind, m.kind === 'speak' ? m.utterance + (m.reveal ? 'r' : '') + (m.words ? '' : ' nowords') : m.kind === 'inset' ? 'bottom ' + m.bottomPx + ' open ' + m.openPx : m.kind === 'following' ? String(m.linePosition) : m.kind === 'bar' ? 'covered ' + m.coveredPx + ' reserved ' + m.reservedPx : '']);
       return entry(m);
     };
     var m = rendition.manager;
@@ -199,6 +201,10 @@ const arm = `
     };
     requestAnimationFrame(sample);
   }
+  // The room #67 keeps above the page for the bar, as the program wrote it into
+  // the top document (reserve()), for a run whose recorder missed the 'bar'
+  // message: the bridge sends it at install and when the bar comes or goes.
+  window.barRoom = function () { var st = document.getElementById('openreader-bar'); var mm = st && /height: ([0-9.]+)px/.exec(st.textContent); return mm ? Number(mm[1]) : 0; };
   R.start = function () { R.t0 = performance.now(); R.frames = []; R.msgs = []; R.on = true; };
   R.stop = function () { R.on = false; };
   return 'armed inset=' + R.inset + ' open=' + R.open;
@@ -214,8 +220,8 @@ const analyse = `
   var F = R.frames, h = rendition.manager.container.clientHeight, inset = R.inset || 0;
   // The program's own arithmetic (highlighter.ts, lineAt): the share of the
   // page above the open player, or above what is covered while that is unknown.
-  var share = R.share === null ? 0.5 : R.share, under = R.open || R.inset || 0, target = (h - under) * share;
-  var out = { n: F.length, h: h, inset: inset, open: R.open, share: share, target: target, lines: [], other: [], views: [], msgs: R.msgs.slice(0, 60) };
+  var share = R.share === null ? 0.5 : R.share, under = R.open || R.inset || 0, over = R.barReserved || barRoom() || R.barCovered || 0, target = over + (h - over - under) * share;
+  var out = { n: F.length, h: h, inset: inset, open: R.open, bar: over, share: share, target: target, lines: [], other: [], views: [], msgs: R.msgs.slice(0, 60) };
   var same = function (a, b) { return a && b && a[0] === b[0] && Math.abs(a[1] - b[1]) < Math.min(a[2], b[2]) / 2; };
   var moving = function (i) { return i > 0 && Math.abs(F[i][1] - F[i - 1][1]) > 0.01; };
   var episodes = [];
@@ -253,7 +259,7 @@ const analyse = `
 
 const tap = `
   var m = rendition.manager, box = m.container.getBoundingClientRect(), R = window.__lineFollow;
-  var h = m.container.clientHeight, share = R.share === null ? 0.5 : R.share, under = R.open || R.inset || 0, target = (h - under) * share, hit = null;
+  var h = m.container.clientHeight, share = R.share === null ? 0.5 : R.share, under = R.open || R.inset || 0, over = R.barReserved || barRoom() || R.barCovered || 0, target = over + (h - over - under) * share, hit = null;
   rendition.getContents().forEach(function (c) {
     if (hit || !c.window || !c.window.frameElement) return;
     var f = c.window.frameElement.getBoundingClientRect(), doc = c.document;
@@ -274,7 +280,7 @@ const tap = `
 `;
 
 function print(page, label) {
-  console.log(label + ': ' + page.n + ' frames, h ' + page.h + ', inset ' + page.inset + ', open player ' + page.open + ', line position ' + page.share + ', target ' + page.target);
+  console.log(label + ': ' + page.n + ' frames, h ' + page.h + ', inset ' + page.inset + ', open player ' + page.open + ', bar room ' + page.bar + ', line position ' + page.share + ', target ' + page.target);
   for (const m of page.msgs) console.log('  msg ' + m.join(' '));
   console.log('  line changes (at ms, word top from->to in its section, delay ms, move px, ms, rest px from target, longest frame ms, steps):');
   for (const l of page.lines) console.log('    ' + [l.at, 's' + l.s + ' ' + l.from + '->' + l.to, 'delay ' + l.delay + ' ms / ' + l.frames + ' frames', l.px + ' px', l.ms + ' ms', 'rest ' + l.rest, 'frame ' + l.gap, '[' + l.steps + ']'].join('  '));

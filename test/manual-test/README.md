@@ -2163,6 +2163,29 @@ subfolder), none of them the app being wrong.
 - **A silence threshold that suits one voice hides another's pauses** (2026-09-24, #61). At −40 dB below the loudest 10 ms window, Fish's "jjk narrator" measured almost no silence between sentences, because its breath and room noise sit near −37 dB. Its whole-paragraph median came out at 0.16 s where its own word timings said 0.32 s. At −30 dB the two agree, but Azure then reads about 70 ms long. Check a threshold against a provider's word timings (Azure's and Fish's leave the pause between words) before trusting it, and quote each provider at the threshold that agreed.
 - **An EPUB's OPF is namespaced, and a cover page may not parse** (2026-09-24, #61). `@xmldom/xmldom`'s `getElementsByTagName('item')` found 0 items in every book in `~/Works/epub_books`; `getElementsByTagNameNS('*', 'item')` finds them. A cover page with an unclosed `<img>` throws `ParseError` even when parsed as `text/html`, so parse each spine item in a `try` and skip the one that fails.
 
+### Merging main's #67 and #68 into #71 (2026-09-26)
+
+- **Metro kept "Unable to resolve react-native-teleport" after the merge, even
+  once `npm install` had added it.** The merge brought #68's new dependency; the
+  running Metro (started before) rebuilt on the file changes, failed to resolve
+  it, and did not pick up the package when it appeared in `node_modules`. Fix:
+  after a merge that changes `package.json`, run `npm install`, then stop and
+  restart this tree's Metro on the same port (`npx expo start --port PORT <
+  /dev/null`) and relaunch the app. The native side needed nothing here: the
+  installed Debug app already held teleport's `PortalHostView` and
+  `PortalRegistry` (checked with `strings` on the app binary); check that before
+  rebuilding.
+- **`line-follow.cjs`'s collapse did not collapse, so no `bar` message reached
+  its recorder.** Its own `ask` answers stay on the player as a note while
+  paused, a note keeps the player open, and since #67 it keeps the bar too, so
+  the collapse and expand before Play changed nothing and sent nothing. The
+  target then missed #67's 54 px of room, and every line read `rest 27.8`
+  against a line that was 0.8 px from the program's own target. Fix, in the
+  probe: the target is `bar room + (h - bar room - open player) * share`, and the
+  bar room is read from the `openreader-bar` rule in the top document when no
+  `bar` message was heard. `DURING=collapse` still collapses, because Play clears
+  the note first.
+
 ### Verifying #71 batch 2
 
 - **A stray `var` inside a comma-separated declaration list is a `SyntaxError`,
