@@ -452,6 +452,17 @@ export function ReadingView({
   }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status, voicesOpen, savedVoice, inventoryProblem]);
 
   /**
+   * The player down to its one button, which is exactly when it draws no note
+   * (`player.tsx`), and then the page only follows (#71, ADR 0050): the collapsed
+   * player has no M to bring a browsed page back with, so no finger may take it
+   * away, and one already taken comes back as it collapses.
+   */
+  const followOnly = collapsed && notes.length === 0;
+  useEffect(() => {
+    reading.bridge.setFollowOnly(followOnly);
+  }, [reading.bridge, followOnly]);
+
+  /**
    * The Voice in use as its own Provider describes it — the name it publishes and
    * the locale, when there is one — or null until a list holding it has been asked
    * for. See `player.tsx`'s `voiceLine` for why nothing is fetched to fill it.
@@ -591,6 +602,8 @@ export function ReadingView({
         onRate={onRate}
         onContents={() => setContentsOpen(true)}
         onVoices={() => setVoicesOpen(true)}
+        following={status.following}
+        onReturn={reading.returnToReading}
         onHeight={reading.bridge.setInset}
         onOpenHeight={reading.bridge.setOpenPlayer}
       />

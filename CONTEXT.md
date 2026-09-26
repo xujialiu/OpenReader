@@ -158,9 +158,9 @@ _Avoid_: previewing, peeking, jumping, navigating
 **Following**:
 The page moving itself so that the line being spoken stays at the line
 position — a line at a time, or continuously as the words are spoken. Browsing
-interrupts it; it resumes when the owner asks for the reading again, or by
-itself when a sentence begins while the line being spoken is still on the
-screen.
+interrupts it; it resumes when the owner asks for the reading again, when the
+player is put away, or by itself when a sentence begins with its first line on
+the screen.
 _Avoid_: auto-scroll, tracking, centring, automatic mode
 
 **Line Position**:

@@ -51,6 +51,7 @@ import {
 import {
   BLOCKS_MESSAGE,
   DOCUMENT_MESSAGE,
+  FOLLOWING_STATE_MESSAGE,
   PROBLEM_MESSAGE,
   TAP_MESSAGE,
   type CharactersBySize,
@@ -137,6 +138,12 @@ export interface ReaderBridgeOptions {
   /** A highlight the WebView could not draw. Rare, and never a guess: see `ProblemMessage`. */
   onProblem?(problem: ProblemMessage): void;
   /**
+   * Whether the page follows the reading — the player's **A** — or the owner is
+   * browsing, its **M** (#71). Called when it changes, and with `true` whenever
+   * the program installs, which is where it starts.
+   */
+  onFollowing?(following: boolean): void;
+  /**
    * The Document's body text size has just been measured (ADR 0030): keep it, so
    * that the next open passes it back as `bodyTextSize` and is laid out at the
    * owner's size on its first paint. Called at most once per mount, only when
@@ -202,6 +209,12 @@ export interface RevealOptions {
    * part of the document (Browsing, #52).
    */
   reveal?: boolean;
+  /**
+   * A cue the reading moved on to while it plays (#71): the page follows it, but
+   * a page the owner took away stays away unless the sentence begins on the
+   * visible page. Only `onClip` reads it; see `SpeakMessage.recover`.
+   */
+  recover?: boolean;
 }
 
 /**
@@ -312,6 +325,22 @@ export interface ReaderBridge {
   /** Nothing is being read. Both highlights go. */
   clear(): void;
   /**
+   * M (#71, #53): bring the page back to the reading and follow it again,
+   * without starting it.
+   *
+   * `utterance` is where the reading is, or null when it is nowhere yet. When the
+   * WebView is already showing that sentence it is told to go back to it
+   * (`ReturnMessage`), which keeps a playing Clip's Word Timings and goes to the
+   * spoken word's line. Otherwise the sentence is shown and revealed, as a skip
+   * shows one, which brings the page to it.
+   */
+  returnToReading(utterance: number | null): void;
+  /**
+   * The player has collapsed, and the page only follows: no finger moves it and
+   * none starts Browsing (#71). False when it opens again. See `FollowOnlyMessage`.
+   */
+  setFollowOnly(on: boolean): void;
+  /**
    * Move the document to a CFI — epub.js's own dialect, unchanged (ADR 0011), so
    * that a Reading Position stored by this app resolves in Zotero's reader and one
    * stored there resolves here (ADR 0008).
@@ -382,7 +411,7 @@ export interface ReaderBridge {
 function asMessage(event: unknown): WebViewMessage | null {
   if (typeof event !== 'object' || event === null) return null;
   const type = (event as { type?: unknown }).type;
-  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== PROBLEM_MESSAGE && type !== TAP_MESSAGE) {
+  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== FOLLOWING_STATE_MESSAGE && type !== PROBLEM_MESSAGE && type !== TAP_MESSAGE) {
     return null;
   }
   return event as WebViewMessage;
@@ -489,6 +518,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       onClip(cue: ClipCue, options?: RevealOptions) {
         const message = speakMessage(cue, utterances.current, ids.current, {
           reveal: latest.current.follow !== false && options?.reveal !== false,
+          recover: latest.current.follow !== false && options?.recover === true,
         });
         cued.current = message;
         // Null means the reading and the document are out of step — an Utterance
@@ -587,6 +617,28 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     send({ kind: 'clear' });
   }, [send]);
 
+  const returnToReading = useCallback(
+    (utterance: number | null) => {
+      if (utterance === null || cued.current?.utterance === utterance) {
+        send({ kind: 'return' });
+        return;
+      }
+      show(utterance);
+    },
+    [send, show],
+  );
+
+  /** Whether the page only follows, kept so it is sent again when the program installs, as the inset is. */
+  const followOnly = useRef(false);
+  const setFollowOnly = useCallback(
+    (on: boolean) => {
+      if (on === followOnly.current) return;
+      followOnly.current = on;
+      send({ kind: 'followOnly', on });
+    },
+    [send],
+  );
+
   const goTo = useCallback(
     (cfi: string) => {
       goToLocation(cfi);
@@ -633,7 +685,15 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         if (scheme.current !== installedScheme.current) {
           send({ kind: 'theme', css: themeCss(scheme.current) });
         }
+        // A new program follows the reading and lets a finger move the page; the
+        // player is told the first, and the program the collapsed player it missed.
+        latest.current.onFollowing?.(true);
+        if (followOnly.current) send({ kind: 'followOnly', on: true });
         latest.current.onDocument?.({ spine: message.spine, hrefs: message.hrefs });
+        return;
+      }
+      if (message.type === FOLLOWING_STATE_MESSAGE) {
+        latest.current.onFollowing?.(message.following);
         return;
       }
       if (message.type === TAP_MESSAGE) {
@@ -713,7 +773,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
-    [clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
+    () => ({ clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, readerProps }),
+    [clock, setUtterances, show, setInset, setOpenPlayer, setLinePosition, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, readerProps],
   );
 }

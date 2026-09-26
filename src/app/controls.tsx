@@ -154,6 +154,12 @@ export const INK = {
   quiet: ink(QUIET.light, QUIET.dark),
   /** The reading colour, the same amber the highlighter paints with on a light page (`highlighter.ts`); a dark page's highlight is blue (#69). */
   reading: ink(PALETTE.light.reading, PALETTE.dark.reading),
+  /**
+   * The reading colour at a quarter of its strength, the wash under the player's
+   * A (#71): Zotero-TTS draws its A on its accent mixed 24 % into transparent,
+   * and this is the same mix of the accent here.
+   */
+  readingWash: ink('rgba(178,106,0,0.24)', 'rgba(240,168,40,0.24)'),
   /** Something the owner has to act on: a missing key, a server that did not answer. Not an alarm. */
   attention: ink('#8a2f18', '#f08c6e'),
   /** A settings page, behind its cards (`SETTINGS_SURFACE`). */

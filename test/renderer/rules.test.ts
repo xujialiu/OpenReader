@@ -1245,7 +1245,7 @@ describe('a section the page has not reached is not a highlight that failed', ()
     );
     const speak = program.slice(program.indexOf("message.kind === 'speak'"), program.indexOf("message.kind === 'correct'"));
     expect(speak).toContain('var shown = showUtterance();');
-    expect(speak).toContain('if (message.reveal) follow(shown);');
+    expect(speak).toContain('if (message.reveal || (message.recover && !browsing)) follow(shown);');
   });
 
   it('is silent for the word by the same rule, since the correction arrives before the section does (#50)', () => {
@@ -1355,15 +1355,36 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
   const dispatch = fn(program, 'dispatch');
   const branch = (kind: string, next: string) => dispatch.slice(dispatch.indexOf("message.kind === '" + kind + "'"), dispatch.indexOf("message.kind === '" + next + "'"));
 
-  it('starts browsing on the message a Contents row sends, and ends it only with a revealed highlight', () => {
-    pin(branch('browse', 'speak'), 'browsing = true;', "highlighter.ts, the 'browse' branch");
+  it('starts browsing on the message a Contents row sends, and ends it when asked or at a sentence the owner can see (#71)', () => {
+    pin(branch('browse', 'return'), 'setBrowsing(true);', "highlighter.ts, the 'browse' branch");
     const speak = branch('speak', 'correct');
-    pin(speak, 'if (message.reveal) browsing = false;', "highlighter.ts, the 'speak' branch");
+    pin(speak, 'if (message.reveal) setBrowsing(false);', "highlighter.ts, the 'speak' branch");
     // Before the state is replaced, so that the new one is built knowing it.
-    expect(speak.indexOf('if (message.reveal) browsing = false;')).toBeLessThan(speak.indexOf('state = {'));
-    // The declaration, and the one place it is cleared.
+    expect(speak.indexOf('if (message.reveal) setBrowsing(false);')).toBeLessThan(speak.indexOf('state = {'));
+    // Zotero-TTS's rule (ADR 0050): the reading moving on takes the page back
+    // only at a sentence whose first line the owner can see, measured on the
+    // sentence just painted and before anything follows it.
+    const recover = 'if (!message.reveal && message.recover && browsing && onVisiblePage(shown)) setBrowsing(false);';
+    pin(speak, recover, "highlighter.ts, the 'speak' branch");
+    expect(speak.indexOf('var shown = showUtterance();')).toBeLessThan(speak.indexOf(recover));
+    expect(speak.indexOf(recover)).toBeLessThan(speak.indexOf('follow(shown);'));
+    // M, and the player collapsing, which brings a browsed page back as M would.
+    pin(branch('return', 'followOnly'), 'setBrowsing(false);', "highlighter.ts, the 'return' branch");
+    pin(branch('followOnly', 'speak'), "if (only && browsing) dispatch({ kind: 'return' });", "highlighter.ts, the 'followOnly' branch");
+    // The declaration, and the one place it is written.
     pin(program, 'var browsing = false;', 'highlighter.ts, the declaration');
-    expect(program.match(/browsing = false;/g)).toHaveLength(2);
+    expect(program.match(/\bbrowsing = /g)).toHaveLength(2);
+    pin(fn(program, 'setBrowsing'), 'browsing = !!value;', 'highlighter.ts, function setBrowsing');
+  });
+
+  it('asks whether the sentence can be seen as the owner sees it now, and never while the page still moves', () => {
+    const visible = fn(program, 'onVisiblePage');
+    // A fling coasting on is the owner's, and a glide would fight it.
+    pin(visible, 'if (moving()) return false;', 'highlighter.ts, function onVisiblePage');
+    // What can be seen now, above whatever the player covers at this moment —
+    // not lineAt(), the open player the line position is measured against.
+    pin(visible, 'return middle >= top && middle <= top + visibleOf(view);', 'highlighter.ts, function onVisiblePage');
+    expect(visible).not.toContain('lineAt(');
   });
 
   it('moves nothing by itself while browsing: not a section of the reading arriving, not an Appearance change, not a word', () => {
@@ -1372,7 +1393,7 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     pin(fn(program, 'followWord'), 'if (!state || !state.follow || browsing || !state.words) return;', 'highlighter.ts, function followWord');
     // A glide under way stops the frame browsing begins.
     pin(fn(program, 'glideStep'), 'if (!state || !state.follow || browsing) {', 'highlighter.ts, function glideStep');
-    pin(branch('browse', 'speak'), 'halt();', "highlighter.ts, the 'browse' branch");
+    pin(branch('browse', 'return'), 'halt();', "highlighter.ts, the 'browse' branch");
     // attach() and the Appearance branch reach the page only through those.
     const attach = fn(program, 'attach');
     expect(attach).not.toMatch(/\bplace\(|bring\(|nudge\(/);
@@ -1380,18 +1401,24 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     expect(branch('appearance', 'measured')).not.toMatch(/\bplace(Once)?\(|bring\(/);
   });
 
-  it('lets a repaint keep whether the page follows, and only a revealed highlight scroll to it', () => {
+  it('lets a repaint keep whether the page follows, and only a revealed highlight or a followed cue scroll to it', () => {
     const speak = branch('speak', 'correct');
-    pin(speak, 'var following = message.reveal || !!(state && state.follow);', "highlighter.ts, the 'speak' branch");
+    pin(speak, 'var following = message.reveal || !!message.recover || !!(state && state.follow);', "highlighter.ts, the 'speak' branch");
     pin(speak, 'follow: following,', "highlighter.ts, the 'speak' branch");
-    pin(speak, 'if (message.reveal) follow(shown);', "highlighter.ts, the 'speak' branch");
+    // A cue the reading moved on to follows only a page that is following: one
+    // the owner took away displays nothing, even for a section not on the page.
+    pin(speak, 'if (message.reveal || (message.recover && !browsing)) follow(shown);', "highlighter.ts, the 'speak' branch");
   });
 
   it('counts a finger dragging the page as browsing, and a tap as nothing of the kind', () => {
     const dragged = fn(program, 'dragged');
     // A new finger is a new identifier, measured from where it first moved.
     pin(dragged, 'if (touch.identifier !== touchId) {', 'highlighter.ts, function dragged');
-    pin(dragged, 'if (Math.abs(touch.clientY - touchY) > DRAG_PX) browsing = true;', 'highlighter.ts, function dragged');
+    pin(dragged, 'if (Math.abs(touch.clientY - touchY) > DRAG_PX) setBrowsing(true);', 'highlighter.ts, function dragged');
+    // A page that only follows (the player collapsed, #71) is neither stopped
+    // nor browsed by a finger: the first thing it asks.
+    pin(dragged, 'if (followOnly) return;', 'highlighter.ts, function dragged');
+    expect(dragged.indexOf('if (followOnly) return;')).toBeLessThan(dragged.indexOf('halt();'));
     // Any move of a finger stops a glide where the page is (ADR 0050), before it
     // is known to be a drag — and still from touchmove, never touchstart.
     expect(dragged.indexOf('halt();')).toBeGreaterThan(-1);
@@ -1416,6 +1443,89 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
   it('reveals a cue or a shown sentence unless the caller says not to', () => {
     const bridge = code('reader-bridge.ts');
     expect(bridge.match(/reveal: latest\.current\.follow !== false && options\?\.reveal !== false/g)).toHaveLength(2);
+    // And a cue recovers only when asked to: the screen says which cues are the
+    // reading moving on (#71).
+    expect(bridge.match(/recover: latest\.current\.follow !== false && options\?\.recover === true/g)).toHaveLength(1);
+  });
+});
+
+describe('A or M, and M bringing the page back (#71, #53, ADR 0050)', () => {
+  /** An app file's code, without its comments, as `code()` reads this directory's. */
+  const appCode = (name: string): string =>
+    readFileSync(new URL('../../src/app/' + name, import.meta.url).pathname, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+  const program = highlighterSource();
+  const dispatch = fn(program, 'dispatch');
+  const branch = (kind: string, next: string) => dispatch.slice(dispatch.indexOf("message.kind === '" + kind + "'"), dispatch.indexOf("message.kind === '" + next + "'"));
+
+  it('tells the player whether the page follows only when it changes, and never per word', () => {
+    const set = fn(program, 'setBrowsing');
+    pin(set, 'if (following === announced) return;', 'highlighter.ts, function setBrowsing');
+    pin(set, 'post({ type: FOLLOWING, following: following });', 'highlighter.ts, function setBrowsing');
+    expect(program.match(/type: FOLLOWING\b/g)).toHaveLength(1);
+    // Nothing on the frame path or the word path posts anything (ADR 0005).
+    for (const name of ['tick', 'showWord', 'followWord', 'glideStep']) expect(fn(program, name)).not.toMatch(/\bpost\(|setBrowsing\(/);
+  });
+
+  it('goes back to the sentence being shown, keeping its words, and starts nothing', () => {
+    const back = branch('return', 'followOnly');
+    pin(back, 'state.follow = true;', "highlighter.ts, the 'return' branch");
+    pin(back, 'follow(build(state.utteranceRanges));', "highlighter.ts, the 'return' branch");
+    // No new state: the words of a Clip that is playing stay where they were.
+    expect(back).not.toContain('state = {');
+    const bridge = code('reader-bridge.ts');
+    const returning = bridge.slice(bridge.indexOf('const returnToReading = useCallback('), bridge.indexOf('const followOnly = useRef('));
+    pin(returning, 'if (utterance === null || cued.current?.utterance === utterance) {', 'reader-bridge.ts, returnToReading');
+    pin(returning, "send({ kind: 'return' });", 'reader-bridge.ts, returnToReading');
+    pin(returning, 'show(utterance);', 'reader-bridge.ts, returnToReading');
+    const reading = appCode('use-reading.ts');
+    const start = reading.indexOf('const returnToReading = useCallback(');
+    const hook = reading.slice(start, reading.indexOf('}, []);', start));
+    pin(hook, 'bridgeRef.current?.returnToReading(atRef.current);', 'use-reading.ts, returnToReading');
+    // M moves the page and nothing else: no seek, no engine, no Play.
+    expect(hook).not.toMatch(/engineRef|seekTo|pointAt|play\(|playIntent/);
+  });
+
+  it('reveals only the first cue after Play; the reading moving on recovers instead', () => {
+    const reading = appCode('use-reading.ts');
+    pin(reading, 'const asked = playIntent.current && revealCue.current;', 'use-reading.ts, the clock');
+    pin(
+      reading,
+      'bridgeRef.current?.clock.onClip(cue, !playIntent.current ? { reveal: false } : asked ? { reveal: true } : { reveal: false, recover: true });',
+      'use-reading.ts, the clock',
+    );
+    const play = reading.slice(reading.indexOf('const play = useCallback('), reading.indexOf('const pause = useCallback('));
+    pin(play, 'playIntent.current = true;\n    revealCue.current = true;', 'use-reading.ts, play');
+    const start = reading.indexOf('const pause = useCallback(');
+    pin(reading.slice(start, reading.indexOf('}, []);', start)), 'revealCue.current = false;', 'use-reading.ts, pause');
+  });
+
+  it('shows A as a mark with no press, and M as the one button', () => {
+    const player = appCode('player.tsx');
+    const mark = player.slice(player.indexOf('function FollowingMark('), player.indexOf('function Transport('));
+    // From A's branch to the function's own return, which is M's: two spaces in.
+    const a = mark.slice(mark.indexOf('if (following) {'), mark.indexOf('\n  return (', mark.indexOf('if (following) {')));
+    expect(a).toContain('accessibilityLabel="Following the reading"');
+    expect(a).not.toMatch(/onPress|Pressable/);
+    pin(mark, 'accessibilityLabel="Return to the reading" onPress={onReturn}', 'player.tsx, FollowingMark');
+    // In the slot beside the Voice name, and only in the open player.
+    pin(player, '<FollowingMark following={following} onReturn={onReturn} />', 'player.tsx, the head row');
+    const folded = player.indexOf('if (collapsed && notes.length === 0) {');
+    expect(player.slice(folded, player.indexOf('\n  return (', folded))).not.toContain('FollowingMark');
+  });
+
+  it('only follows while the player is collapsed, through epub.js’s own overflow switch', () => {
+    const lock = fn(program, 'lockPage');
+    pin(lock, "stage.overflow('hidden');", 'highlighter.ts, function lockPage');
+    pin(lock, 'stage.overflow(unlockedOverflow);', 'highlighter.ts, function lockPage');
+    expect(lock).not.toMatch(/classList|\.style\b|createElement|preventDefault/);
+    pin(branch('followOnly', 'speak'), 'lockPage(only);', "highlighter.ts, the 'followOnly' branch");
+    // No listener that could stop the phone's own scrolling: every touchmove stays passive.
+    expect(program).not.toContain('passive: false');
+    const view = appCode('reading-view.tsx');
+    pin(view, 'const followOnly = collapsed && notes.length === 0;', 'reading-view.tsx');
+    pin(view, 'reading.bridge.setFollowOnly(followOnly);', 'reading-view.tsx');
   });
 });
 

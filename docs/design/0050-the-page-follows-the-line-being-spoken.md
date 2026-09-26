@@ -61,13 +61,14 @@ Two things were deliberately not copied:
   left of the voice's name, a small **A** while the page follows and **M** once the
   owner has moved it by hand, as the desktop plugin shows them. **A** only says so.
   Tapping **M** brings the page back to the reading and follows again, and while
-  the reading is paused it does that without starting to play. If the owner moved
-  the page only a little and the line being read is still on the screen, the page
-  goes back to following by itself when the next sentence begins, as on the
-  desktop.
-- **When the player is put away and the reading plays, the page only follows.**
-  It cannot be dragged, and a tap on a sentence still reads from there. To look
-  elsewhere, the owner brings the player back first.
+  the reading is paused it does that without starting to play. If the first line
+  of the next sentence is on the screen when the voice begins it, the page goes
+  back to following by itself, as on the desktop; otherwise it stays where the
+  owner put it (below, "Looking away while listening").
+- **When the player is put away, the page only follows.** A page the owner had
+  moved comes back to the reading as the player goes, it cannot be dragged, and a
+  tap on a sentence still reads from there. To look elsewhere, the owner brings
+  the player back first.
 
 ## What was turned down
 
@@ -103,6 +104,51 @@ now be seen. The line does not move under the eye, and that is worth more.
 The one place this can show is at 70 or 80 %: several messages stacked on the
 player can reach the line being read, because the line no longer rises out of
 their way. Messages are brief, and those two heights are the owner's choice.
+
+## Looking away while listening
+
+Before this, moving the page while the reading played lasted only until the next
+sentence. Then the page jumped back to the reading from wherever the owner had
+taken it, whether they had moved it one line to re-read something or ten
+chapters to look something up. Nothing said which of the two the page was doing.
+
+Now the page stays where the owner puts it, and the player says so: **M** in the
+place beside the voice's name, where **A** stood while the page followed. The
+page comes back in one of three ways:
+
+- **The owner asks for it.** Tapping **M**; pressing Play after a pause; tapping
+  a sentence, or skipping, which move the reading and bring the page with it; the
+  reading's place arriving from another device. **M** moves the page and nothing
+  else: a paused reading stays paused, and a playing one goes on with the word it
+  was on. This is also what #53 asked for, a way back to the reading's sentence
+  that does not start playback.
+- **By itself, at a sentence the owner can see begin.** If the first line of the
+  next sentence is on the screen when the voice starts it, the page takes the
+  reading back and follows again — the owner only looked a little way off and
+  has come back into the reading's reach. If it is not on the screen, the page
+  stays away, sentence after sentence. This is the desktop plugin's rule, so the
+  two behave the same, and like the desktop it has no setting. Pausing changes
+  neither way.
+- **The player is put away.** With the player down to its one button there is no
+  **M** to tap, so a page left away from the reading would be a page nothing on
+  the screen could bring back. Putting the player away therefore brings the page
+  back to the reading first, and from then on the page only follows: a finger
+  cannot drag it, and a tap on a sentence still reads from there.
+
+**A** is only a mark. Tapping it does nothing: the page is already following,
+and there is nothing to ask for.
+
+Turned down with it:
+
+- **Tapping A to stop following on purpose,** as the desktop allows. On a phone
+  the finger that drags the page already says it, and a tap that silently locks
+  the page away from the reading is easy to make by accident on a mark that small.
+- **Coming back after a few seconds without a touch.** It would take the page
+  from under the owner while they were still reading the part they went to look
+  at.
+- **Letting the page be dragged with the player put away.** The owner would have
+  moved it and then had no way back but to bring the player out again, with
+  nothing on the screen saying the page had stopped following.
 
 ## What it costs
 

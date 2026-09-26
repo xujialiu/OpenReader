@@ -45,6 +45,14 @@
  *   message of its own, and nothing across the bridge per word (ADR 0005).
  *   What can be *seen*: ADR 0020's player floats over the bottom of that
  *   container and tells this file how much it covers.
+ * - **Whether the page is following, and the way back** (#71, ADR 0050). A
+ *   finger that drags the page, or a Contents row while paused, is Browsing,
+ *   and the page stays where it was put across sentences. It comes back when
+ *   the owner asks — a revealed highlight, or M (the 'return' message) — when
+ *   the player collapses ('followOnly', which also stops a finger scrolling the
+ *   page), or by itself at a sentence that begins, while playing, with its first
+ *   line on the visible page. Whether it is following crosses to the app only
+ *   when it changes, for the player's A or M.
  * - **Where a tap landed.** The only thing here that starts on the page rather
  *   than arriving from the app: a tap hit-tests to a text node, the enclosing
  *   Block's id and the offset within it cross the bridge, and the app turns that
@@ -82,7 +90,7 @@
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
 import { BAKED_LINE_POSITION, GLIDE_SOURCE } from './glide';
 import type { HighlightMessage } from './messages';
-import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from './messages';
+import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from './messages';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
 export const UTTERANCE_HIGHLIGHT = 'openreader-utterance';
@@ -501,6 +509,7 @@ export function highlighterSource(
     'var BLOCKS = ' + JSON.stringify(BLOCKS_MESSAGE) + ';\n' +
     'var DOCUMENT = ' + JSON.stringify(DOCUMENT_MESSAGE) + ';\n' +
     'var TAP = ' + JSON.stringify(TAP_MESSAGE) + ';\n' +
+    'var FOLLOWING = ' + JSON.stringify(FOLLOWING_STATE_MESSAGE) + ';\n' +
     'var PROBLEM = ' + JSON.stringify(PROBLEM_MESSAGE) + ';\n' +
     'var CSS_TEXT = ' + JSON.stringify(highlightCss(styles)) + ';\n' +
     /* The one that changes while the document is open, which is why it is a `var`
@@ -617,18 +626,35 @@ ${constants}
      resize recovery has to aim at; see the resize handler. */
   var onScreen = null;
   /* The owner has moved the page away from the reading, and it stays where they
-     put it: Browsing (CONTEXT.md, #52). Set by a Contents row while the reading
-     is paused (the 'browse' message) and by a finger dragging the page; cleared
-     only by a highlight that is revealed, which is Play's cue, a tapped sentence,
-     a skip or a place from another device.
+     put it: Browsing (CONTEXT.md, #52), the player's M (#71). Set by a Contents
+     row while the reading is paused (the 'browse' message) and by a finger
+     dragging the page. Cleared by a highlight that is revealed — Play's first
+     cue, a tapped sentence, a skip or a place from another device — by M (the
+     'return' message), by the player collapsing ('followOnly'), and by itself
+     at a sentence that begins, while the reading plays, with its first line on
+     the visible page ('speak' with \`recover\`): Zotero-TTS's rule, ADR 0050.
 
-     While it is set nothing brings the reading back by itself: not the reading's
-     own section arriving, and not an Appearance change. Measured on 2026-09-23 at
-     23:30 before it existed: a display of the section after the reading's
-     re-rendered the reading's section as its neighbour, attach() centred the
-     paused sentence as it arrived (a scroll of -7,424 px, from centreOnce), and
-     epub.js then trimmed away the section the owner had asked for. */
+     Otherwise nothing brings the reading back: not the next sentence, not the
+     reading's own section arriving, and not an Appearance change. Measured on
+     2026-09-23 at 23:30 before it existed: a display of the section after the
+     reading's re-rendered the reading's section as its neighbour, attach()
+     centred the paused sentence as it arrived (a scroll of -7,424 px, from
+     centreOnce), and epub.js then trimmed away the section the owner had asked
+     for.
+
+     Written only through setBrowsing(), which tells the player when it changes. */
   var browsing = false;
+  /* Whether the player has last been told the page follows the reading: what
+     setBrowsing() compares against, so that the message crosses only on a
+     change. The program starts following, and so does the player. */
+  var announced = true;
+  /* The player is collapsed and the page only follows (#71): no finger moves it
+     and none starts Browsing. See the 'followOnly' message. */
+  var followOnly = false;
+  /* The scroll container's overflow as epub.js had set it before the page was
+     locked, to be given back when it is unlocked, or null while it is not
+     locked; see lockPage(). */
+  var unlockedOverflow = null;
   /* The line the page last brought to the line position (ADR 0050), as lineOf()
      describes it, or null. A word on another line is what moves the page. */
   var followed = null;
@@ -973,6 +999,10 @@ ${constants}
      perfectly still, under which the rest of one glide — at most 250 ms — still
      plays out. */
   function dragged(event) {
+    /* A page that only follows (the player collapsed, #71) cannot be taken by a
+       finger at all, so a finger moving on it neither stops a glide nor browses:
+       lockPage() has already made its scroll the program's alone. */
+    if (followOnly) return;
     var touch = event.touches && event.touches.length ? event.touches[0] : null;
     if (!touch) return;
     halt();
@@ -981,7 +1011,47 @@ ${constants}
       touchY = touch.clientY;
       return;
     }
-    if (Math.abs(touch.clientY - touchY) > DRAG_PX) browsing = true;
+    if (Math.abs(touch.clientY - touchY) > DRAG_PX) setBrowsing(true);
+  }
+
+  /* Browsing starts or ends, and the player's A or M is told — once, when it
+     changes, never per word (#71). The only place \`browsing\` is written. */
+  function setBrowsing(value) {
+    browsing = !!value;
+    var following = !browsing;
+    if (following === announced) return;
+    announced = following;
+    post({ type: FOLLOWING, following: following });
+  }
+
+  /* Whether the page can be scrolled by a finger: not while it only follows.
+
+     By epub.js's own switch, its Stage's \`overflow()\`, which is how the
+     library itself sets this container's overflow — \`overflow-y: scroll\` when
+     it builds a scrolled Stage, and again whenever its flow changes (read out of
+     the bundled epub.js). \`hidden\` makes the container one a finger cannot
+     scroll and the program still can: \`scrollBy\` and \`scrollTop\` move it and
+     fire its scroll events, which is what epub.js appends and trims on, so the
+     glides, the displays and the sections the reading walks into all go on.
+     Taps are clicks, and a click does not care. The Stage remembers what it was
+     given, so anything of epub.js's that set it again would set it to the same.
+
+     Not a non-passive \`touchmove\` calling preventDefault: that puts this
+     program in the way of every scroll the phone makes, and this file listens
+     passively for exactly that reason. Not a style or a class of this
+     program's own: the only DOM this program writes is the stylesheet a
+     highlight needs and the alignment mark (ADR 0005, ADR 0034). */
+  function lockPage(on) {
+    var stage = rendition.manager ? rendition.manager.stage : null;
+    if (!stage || typeof stage.overflow !== 'function') return;
+    if (on) {
+      if (unlockedOverflow === null) unlockedOverflow = (stage.settings && stage.settings.overflow) || 'scroll';
+      stage.overflow('hidden');
+      return;
+    }
+    if (unlockedOverflow === null) return;
+    stage.overflow(unlockedOverflow);
+    unlockedOverflow = null;
   }
 
   /* ---- what a document holds, resolved once per document ---- */
@@ -1631,6 +1701,28 @@ ${constants}
     bring({ line: line }, false);
   }
 
+  /* Whether a sentence that is beginning can be seen: the middle of the line it
+     begins on lies within the visible page as it is now — below the top of the
+     scroll container and above whatever the player covers at this moment, not
+     the open player the line position is measured against, because what counts
+     is what the owner can see.
+
+     The other half of Zotero-TTS's rule (ADR 0050): a page the owner took away
+     while the reading plays is taken back at a sentence they can see beginning,
+     and left alone at one they cannot. Never while the page is still moving —
+     a fling coasting on after the finger lifts, which a glide would fight; the
+     next sentence asks again. */
+  function onVisiblePage(built) {
+    if (moving()) return false;
+    var view = scroller();
+    var line = built ? lineOf(built) : null;
+    if (!view || !line) return false;
+    var middle = middleOf(line);
+    if (middle === null) return false;
+    var top = view.getBoundingClientRect().top;
+    return middle >= top && middle <= top + visibleOf(view);
+  }
+
   /* At once, for what is being read now: a section that arrived wherever epub.js
      put it, and the text reflowing under an Appearance change. Nothing that was
      gliding should go on by then. */
@@ -2227,18 +2319,50 @@ ${constants}
       /* A Contents row while the reading is paused (#52). The display that moves
          the page comes right after this, so the sections it renders, the
          reading's own among them, arrive to a page that is not following. */
-      browsing = true;
+      setBrowsing(true);
       halt();
+      return;
+    }
+    if (message.kind === 'return') {
+      /* M (#71, #53): the page goes back to the reading and follows it again,
+         and nothing starts. To the sentence being shown, and within it to the
+         line the spoken word is on (aim()), so a reading that is playing keeps
+         its words; by a glide, a jump or a display, as follow() decides. With no
+         sentence shown there is nowhere to go, and the page only stops browsing:
+         the bridge sends a revealed 'speak' instead whenever the reading has a
+         sentence this program is not showing. */
+      halt();
+      setBrowsing(false);
+      if (!state) return;
+      state.follow = true;
+      follow(build(state.utteranceRanges));
+      return;
+    }
+    if (message.kind === 'followOnly') {
+      /* The player collapsed, or opened again (#71). Collapsed, the page only
+         follows: no finger can move it (lockPage) and none can start Browsing
+         (dragged). A page the owner had taken away comes back first, as M
+         would bring it — the collapsed player shows no M, so a page left
+         browsing would be a page nothing on the screen could bring back.
+         Opened, the page can be dragged again, and nothing moves. */
+      var only = !!message.on;
+      if (only === followOnly) return;
+      followOnly = only;
+      lockPage(only);
+      if (only && browsing) dispatch({ kind: 'return' });
       return;
     }
     if (message.kind === 'speak') {
       stop();
-      /* Revealed is the voice, or the owner pointing at a sentence, asking for
-         the reading: the page goes to it and follows it again. Not revealed is a
-         repaint where the page is (a cue while paused, a new Voice repainting the
+      /* Revealed is the owner asking for the reading — Play, a tapped sentence,
+         a skip, a place from another device: the page goes to it and follows it
+         again. \`recover\` is the reading moving on while it plays: followed, as
+         every sentence is, but a page the owner took away stays away, unless
+         this sentence begins where they can see it (below). Neither is a repaint
+         where the page is (a cue while paused, a new Voice repainting the
          sentence), which keeps whether the page was following it. */
-      if (message.reveal) browsing = false;
-      var following = message.reveal || !!(state && state.follow);
+      if (message.reveal) setBrowsing(false);
+      var following = message.reveal || !!message.recover || !!(state && state.follow);
       state = {
         utterance: message.utterance,
         utteranceRanges: message.utteranceRanges,
@@ -2268,7 +2392,13 @@ ${constants}
          CFI here, and that is exactly the case where the reading has crossed into
          text the reader cannot see. */
       var shown = showUtterance();
-      if (message.reveal) follow(shown);
+      /* Zotero-TTS's rule, and no setting (ADR 0050): the owner who took the
+         page away while listening gets it back by itself at a sentence they can
+         see beginning. One they cannot see leaves it where they put it — and in
+         particular displays nothing, which is what follow() would do for a
+         sentence whose section is not on the page. */
+      if (!message.reveal && message.recover && browsing && onVisiblePage(shown)) setBrowsing(false);
+      if (message.reveal || (message.recover && !browsing)) follow(shown);
       /* **What is on the page has been reported**, checked once per Utterance —
          and then the section after it asked for if it is missing. Neither depends
          on where the page is or on whether this Utterance could be painted.

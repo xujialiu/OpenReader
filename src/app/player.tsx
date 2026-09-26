@@ -18,6 +18,11 @@
  *   doing two jobs, chosen so that someone reaching out to stop the reading always
  *   has a button to press: with the controls hidden and no button, they would tap
  *   the page, and tapping the page moves the reading position.
+ * - **A or M says whether the page follows the reading** (#71, ADR 0050), in the
+ *   place left free for it beside the Voice name, drawn as Zotero-TTS draws it.
+ *   **A** is a mark and nothing else: a tap on it does nothing. **M** is the one
+ *   button that brings the page back to the reading without starting it (#53).
+ *   Collapsed, neither is shown, because collapsed the page only follows.
  *
  * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
@@ -104,6 +109,13 @@ export interface PlayerProps {
   onContents(): void;
   onVoices(): void;
   /**
+   * Whether the page follows the reading (**A**) or the owner is browsing (**M**),
+   * as the renderer last said (#71).
+   */
+  following: boolean;
+  /** M: bring the page back to the reading and follow it again, without starting it (#71, #53). */
+  onReturn(): void;
+  /**
    * How tall the player is, in points — the height it is covering at the bottom of
    * the page.
    *
@@ -150,6 +162,8 @@ export function Player({
   onRate,
   onContents,
   onVoices,
+  following,
+  onReturn,
   onHeight,
   onOpenHeight,
 }: PlayerProps) {
@@ -210,9 +224,9 @@ export function Player({
       <View style={styles.controls} onLayout={measureControls}>
         <View style={styles.head}>
           {/* As wide as the collapse arrow, so the name is centred on the whole
-              player rather than on what the arrow leaves (#70). Empty, and kept
-              free for a control of its own. */}
-          <View style={styles.headEnd} />
+              player rather than on what the arrow leaves (#70), and holding A or
+              M (#71). */}
+          <FollowingMark following={following} onReturn={onReturn} />
           {/* Only the name opens the Voices: its button hugs the text, and a tap
               beside it lands on this plain box and does nothing. */}
           <View style={styles.voiceSlot}>
@@ -249,6 +263,38 @@ export function Player({
       {speedOpen ? <Pressable style={StyleSheet.absoluteFill} onPress={closeSpeed}
         accessible={false} importantForAccessibility="no-hide-descendants" /> : null}
     </View>
+  );
+}
+
+/**
+ * A or M (#71, ADR 0050), drawn as Zotero-TTS's player draws it: one letter in a
+ * small rounded block, A on a quarter-strength wash of the reading colour and M
+ * on nothing, in the player's text colour, with no animation.
+ *
+ * **A is a mark, not a button.** It has no press at all, so a tap on it lands on
+ * this plain box and does nothing, and a screen reader reads it as text: the
+ * page is following, and there is nothing to ask for. **M is a button**, the
+ * whole 44-point box, and it brings the page back to the reading without
+ * starting it (#53).
+ */
+function FollowingMark({ following, onReturn }: { following: boolean; onReturn(): void }) {
+  const mark = (
+    <View style={[styles.mark, following && styles.markFollowing]}>
+      <Text style={styles.markLetter}>{following ? 'A' : 'M'}</Text>
+    </View>
+  );
+  if (following) {
+    return (
+      <View style={styles.headEnd} accessible accessibilityRole="text" accessibilityLabel="Following the reading">
+        {mark}
+      </View>
+    );
+  }
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Return to the reading" onPress={onReturn}
+      style={({ pressed }) => [styles.headEnd, pressed && styles.pressed]}>
+      {mark}
+    </Pressable>
   );
 }
 
@@ -447,7 +493,14 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.35 },
   footTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
-  headEnd: { width: 44 },
+  // The box A or M sits in: as wide as the collapse arrow opposite (#70), and as
+  // tall, so M's whole box is its 44-point target.
+  headEnd: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
+  // Zotero-TTS's block, measured out of its player.css: 27 by 26, corners of 4,
+  // the letter at 13 in the system font (#71).
+  mark: { alignItems: 'center', borderRadius: 4, height: 26, justifyContent: 'center', width: 27 },
+  markFollowing: { backgroundColor: INK.readingWash },
+  markLetter: { color: INK.text, fontSize: 13, fontWeight: '500' },
   note: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
   noteAttention: { color: INK.attention },
   player: {
