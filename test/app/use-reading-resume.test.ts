@@ -89,6 +89,7 @@ vi.mock('../../src/renderer', async () => {
         setInset() {},
         setAppearance() {},
         setTheme() {},
+        resumeFollowing() {},
         hold() {},
         clear: bridge.clear,
         readerProps: {},

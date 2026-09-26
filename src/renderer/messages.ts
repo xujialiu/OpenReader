@@ -194,7 +194,7 @@ export interface ProblemMessage {
   detail: string;
 }
 
-export type WebViewMessage = BlocksMessage | DocumentMessage | ProblemMessage | TapMessage;
+export type WebViewMessage = BlocksMessage | DocumentMessage | ProblemMessage | TapMessage | SelectionMessage;
 
 /** A half-open range of one Block's own text, in UTF-16 code units. */
 export interface BlockRange {
@@ -423,6 +423,7 @@ export interface ThemeMessage {
 }
 
 export type HighlightMessage =
+  | LookupControlMessage
   | SpeakMessage
   | CorrectMessage
   | HoldMessage
@@ -432,3 +433,21 @@ export type HighlightMessage =
   | AppearanceMessage
   | MeasuredMessage
   | ThemeMessage;
+
+
+export const SELECTION_MESSAGE = 'openreader:selection';
+/** A native selection, never a Reading Position. Selecting invalidates an in-flight result. */
+export interface SelectionMessage {
+  type: typeof SELECTION_MESSAGE;
+  text: string;
+  expanded: boolean;
+  selecting: boolean;
+}
+export interface LookupControlMessage {
+  kind: 'lookup';
+  enabled?: boolean;
+  close?: boolean;
+  resumeFollow?: boolean;
+  releaseBrowsing?: boolean;
+  selectionReleased?: boolean;
+}

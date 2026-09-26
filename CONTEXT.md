@@ -227,6 +227,25 @@ device's reading positions by document id, written by the phones and by the
 desktop plugin alike.
 _Avoid_: sync file, remote library, catalogue, documents file
 
+### Looking up and translating
+
+**Word Lookup**:
+Finding a dictionary's meanings for a selected word in a document, in the
+language direction the owner chooses.
+_Avoid_: translation (for dictionary definitions), synthesis
+
+**Text Translation**:
+Rendering a selected passage of a document in another language.
+_Avoid_: word lookup, speech text
+
+**Translation Service**:
+A source of text translations, separate from a provider of synthesized speech.
+_Avoid_: provider, voice, dictionary
+
+**Pronunciation**:
+A dictionary's spoken example of a word, separate from the document's narration.
+_Avoid_: clip, voice, offline narration
+
 ### On the screen
 
 **Drawer**:

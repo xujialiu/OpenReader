@@ -44,6 +44,7 @@ export type RootStackParamList = {
   Reader: { id: DocumentId };
   Settings: undefined;
   General: undefined;
+  Translation: undefined;
   Providers: undefined;
   Provider: { id: ProviderId };
   Sync: undefined;

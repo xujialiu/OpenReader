@@ -17,6 +17,7 @@ export function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
     <SettingsPage>
       <SettingsGroup footer={<Footnote accessibilityLabel={`Version ${APP_VERSION}`}>{APP_VERSION}</Footnote>}>
         <NavigationRow label="General" onPress={() => navigation.navigate('General')} />
+        <NavigationRow label="Word Lookup & Translation" onPress={() => navigation.navigate('Translation')} />
         <NavigationRow label="Providers" value={`${settings.enabledProviders.length} enabled`}
           onPress={() => navigation.navigate('Providers')} />
         <NavigationRow label="Sync" value={settings.sync.enabled ? 'On' : 'Off'} onPress={() => navigation.navigate('Sync')} />

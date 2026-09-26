@@ -128,6 +128,11 @@ fix (AGENTS.md).
 
 ### Metro and the bundle
 
+- **CDP reports no OpenReader target during a deliberate XCTest cold launch.** The old process has exited and the new bundle has not connected yet. Wait for the newly launched reader before inspecting it; this is not evidence of a broken Metro connection.
+- **Fast Refresh invalidates native selection coordinates while a lookup drawer can retain its prior React state.** During #73 diagnosis, editing a highlighter comment reloaded the WebView and removed native handles while the prior result remained visible. Keep app source stable throughout a selection measurement; cold-launch and prepare the selection again after any app edit. A passing lookup-result assertion alone does not prove a handle drag: assert that the selected text changed too.
+
+- **`npx expo install` in a fresh worktree fails with `Cannot find module 'tsx/cjs'`.** The local dependencies have not been installed; npx downloaded a temporary CLI, which cannot load this repository's config. Run plain `npm ci` first, then run `npx expo install` from the repository. If a legacy-peer install prunes the peer graph and a later npm install fails with `Cannot read properties of null (reading 'edgesOut')`, preserve the intended package.json changes, restore the pre-install lockfile, regenerate it with `npm install --package-lock-only`, then run plain `npm ci`. Do not delete or regenerate the whole dependency lock without retaining its pinned base.
+
 - **The app runs code you have already changed.**
   - Cause: Metro started with `CI=1` does not watch files. It serves what it read at start, and its log says so once: "Metro is running in CI mode, reloads are disabled".
   - Fix: start it as `npx expo start --port PORT < /dev/null`. It will not prompt, because stdin is not a terminal.
@@ -514,6 +519,12 @@ fix (AGENTS.md).
   test, relaunch (`xcrun simctl terminate` then `launch`), seek back to the
   start of the fixture and run the method again; a probe that has run the
   short fixture past its end is measuring the end of the book as well.
+- **On iOS 27 the LogBox close glyph has no stable accessibility label.**
+  Measured 2026-09-26 in the Fish narration probe: its gray circle is at
+  normalized `(0.918, 0.933)` on the iPhone 17, about `{{360, 802}, {20, 20}}`
+  points. Tap that real coordinate up to five times while the banner remains
+  present before touching the floating player; one tap can be consumed while
+  the warning is being redrawn.
 - **`waitForExistence(timeout:)` can consume nearly its whole budget before its
   first check, inflating a measured gap between two taps.** Measured
   2026-09-25 verifying #66 (`PauseSuspendProbe.swift`): `app.buttons["Pause"].tap()`
@@ -599,6 +610,8 @@ fix (AGENTS.md).
 - **Waiting for "Laying the document out…" never waits.** It is the label of the WebView's scroll view, an `Other`, not a static text. Query `app.descendants(matching: .any)`.
 - **A cold launch straight into 仙逆 takes over 40 seconds to lay out.** A warm open takes 3–6 seconds. Time tests from a warm open.
 - **A coordinate tap on text does nothing.** It landed between two lines, which the reader treats as blank space by design. Take the point from a screenshot of the middle of the line.
+- **The lookup drawer's adjustable header frame stays 24 points tall while the drawer expands.** Measured 2026-09-26 in `TranslationProbe`: its `minY` moved from `525.7` to `207.3` after a real upward drag, while `frame.height` stayed `24.0`. Compare the header's `minY` when proving the drawer height, not its handle height.
+- **A copied lookup result keeps the accessibility label `Copy result` after the visible child changes to `Copied`.** Measured 2026-09-26 in `TranslationProbe`: the real tap changed the device pasteboard (`xcrun simctl pbpaste` returned the dictionary text), but `app.staticTexts["Copied"]` never appeared because the parent button's stable label hides that child. Verify the pasteboard or keep the button tap as the touch evidence.
 - **One tap on `Pause` is not always a pause.** Measured 2026-09-21: a tap three
   seconds after Play left the reading running — no pause handler, no `pause`
   sync run, and the reading went on to the end of the book while the probe sat
@@ -2733,6 +2746,41 @@ had before the run. It never presses Play. Add the probe's filename to
 `ios/project.rb`'s allow-list before first use, the same as any new probe
 source here.
 
+### Long-press lookup and translation (issue #73, `TranslationProbe.swift`)
+
+With the current Debug app connected to Metro and `A Short Test of Reading Aloud` in the Library, build the disposable UI-test project and run `TranslationProbe.testSettingsDefaultsMenusAndPersistence` first, then `TranslationProbe.testLongPressDisabledThenEnabledDrawerAndCopy` and `TranslationProbe.testPronunciationButtonsTouchDictionaryAudio`:
+
+```sh
+ruby test/manual-test/ios/project.rb /tmp/openreader-translation-probe top.xujialiu.openreader NO inspect TranslationProbe.swift
+xcodebuild -project /tmp/openreader-translation-probe/ManualTests.xcodeproj -scheme LockScreenProbe \
+  -destination "id=SIMULATOR_UDID" -derivedDataPath /tmp/openreader-translation-probe/build \
+  -resultBundlePath /tmp/openreader-translation-probe/result.xcresult \
+  -only-testing:LockScreenProbe/TranslationProbe/testLongPressDisabledThenEnabledDrawerAndCopy test
+```
+
+Change the final `-only-testing` method name for the other two methods. The pronunciation method uses `silence.sh`'s zero-volume simulator before the test, taps both dictionary audio buttons, and observes the app's pronunciation-active state; it does not press narration Play or prove narration pause/resume.
+
+The probe uses real settings taps, native selection long presses, drawer drags, copy, and service-menu touches. It proves Youdao dictionary content, UK/US pronunciation controls, a Google refusal with Retry, and an explicit Youdao switch. `testHandleDragOnPreparedReader` also proves that releasing a native handle changes the selected `The` word to Translation and displays Youdao's real `这个` response. Beta35 had a longer native selection that reached `This is a short test` with `Service, Youdao` but stayed on its spinner for more than 100 seconds; beta37's native wrapper release fix was retested with `testSelectionHandleExpansionTranslatesSentence` followed by `testPreparedHandleReleaseFinishesRequest`, and the root-owned green artifacts `/tmp/openreader-translation-fix-prepare2.xcresult` and `/tmp/openreader-translation-fix-release2.xcresult` show real selected sentence text with Youdao Chinese output (`只写第一句话`, then `第一个句子`).
+
+### Fish narration interruption coverage (issue #73, `FishNarrationProbe.swift`)
+
+Use the local Fish credential through `offline-fix.sh` and ask the Fish voice list once before this probe. Open a long book from `~/Works/epub_books` in the Library, leave the reader paused, and run the probe with the simulator silenced:
+
+```sh
+ruby test/manual-test/ios/project.rb /tmp/openreader-fish-narration-probe top.xujialiu.openreader NO inspect FishNarrationProbe.swift
+bash test/manual-test/silence.sh set SIMULATOR_UDID
+xcodebuild -project /tmp/openreader-fish-narration-probe/ManualTests.xcodeproj -scheme LockScreenProbe \
+  -destination "id=SIMULATOR_UDID" -derivedDataPath /tmp/openreader-fish-narration-probe/build \
+  -resultBundlePath /tmp/openreader-fish-narration-probe/result.xcresult \
+  -only-testing:LockScreenProbe/FishNarrationProbe/testRealFishPlayThenPause test
+```
+
+Change `-only-testing` to run `testLookupPausesPreviouslyPlayingFish`, `testPauseOptionOffKeepsFishPlaying`, `testPronunciationInterruptionOnCurrentReader`, or `testPronunciationInterruptionResumeAndCancellation`. The last two use the real Fish audio path and require the pause option off; the second method changes it through Settings, while the current-reader method expects the already-prepared setting. `testPronunciationInterruptionResumeAndCancellation` also exercises close, restart, and changed-selection cancellation.
+
+The real Fish run measured 2.3 seconds to active playback, continued for 5 seconds, and stopped with a real Pause touch. On a long book, the pause option off run kept the transport in Pause after closing lookup. With the player surface cleared through its real LogBox close touch, the interruption methods proved that pronunciation resumes narration that was playing, leaves already-paused narration paused, and cancels when the drawer closes or the selected word changes. Both pronunciation accents completed naturally, with no audio error, and all runs were made at zero simulator volume.
+
+For the iOS handle-release regression, run `testSelectionHandleExpansionTranslatesSentence` to prepare the fixture, followed by `testPreparedHandleReleaseFinishesRequest`. The second method requires that the native selection changes and then reaches a result or bounded error. In beta35 it failed with `selecting=true`, `loading=false` after the DOM lost the handle's release. The native reader release bridge fixes that path. Its coordinates are measured on the dedicated iPhone 17 fixture; do not reuse them after a font/layout change without a screenshot check.
+
 ### Issues #13/#14: a fresh Library, Fish from empty settings, and the two
 ### destructive confirmations the other probes always cancel
 
@@ -2764,6 +2812,8 @@ it, and remove it afterward) into the still-masked field, taps Enable, and
 waits for "Connection successful". `Show API key` is never tapped, so no
 capture here can show it. Skips the enable step if a previous run already
 left the provider enabled.
+
+**A successful Fish connection check can still leave Voice empty on the next cold reader.** Measured 2026-09-26 on the dedicated iPhone 17: the connection row passed, but `testChooseVoiceForShortFixture` found no rows after a relaunch. Sending the walkthrough commands `{"do":"ask","provider":"fish"}` and then `{"do":"voicelist","provider":"fish","n":3}` after the reader was open populated the cached list; the next real Voice touch found `jjk narrator`. Treat an empty Voice sheet after a successful key check as a list-prefetch failure and ask the provider again before testing narration.
 
 `testChooseVoiceForShortFixture` opens the short fixture and taps whichever
 Fish voice sorts first (this is a download/playback mechanics check, not a

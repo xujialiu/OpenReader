@@ -1,3 +1,5 @@
+import { useLookup } from './use-lookup';
+import { LookupDrawer } from './lookup-drawer';
 /**
  * The reader screen: the document, and the player floating over it.
  *
@@ -205,7 +207,7 @@ export function ReadingView({
   onTitle,
 }: ReadingViewProps) {
   const fileSystem = useReaderFileSystem;
-  const { sync, library } = useShell();
+  const { sync, library, setSettings } = useShell();
   /**
    * `toc` as well as `getMeta` now. The library's own template already posts the
    * whole navigation at load and stores it here; nothing in `src/` had read it. It
@@ -224,6 +226,7 @@ export function ReadingView({
     [position, document.identity.format],
   );
   const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id);
+  const lookup = useLookup(settings.lookup, reading);
   useDownloads();
   useEffect(()=>{void requestInventory(document.identity.id,{provider:settings.provider,voice:settings.voice}).catch(()=>{});},[document.identity.id,settings.provider,settings.voice]);
   const savedVoice = hasSavedVoice(document.identity.id, settings.provider, settings.voice);
@@ -362,6 +365,7 @@ export function ReadingView({
   const pause = useCallback(() => {
     reading.pause();
     setCollapsed(false);
+    lookup.stopPronunciation(false);
     // A pause is a sync moment (issue #20), and the moment a locked phone may
     // be suspended, so the place is written now rather than at the ten-second
     // mark and the run starts at once.
@@ -374,7 +378,7 @@ export function ReadingView({
     sync.poke('pause');
     // `reading` is a fresh object every render; its `pause` is the stable callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reading.pause, readingPosition, sync]);
+  }, [reading.pause, readingPosition, sync, lookup.stopPronunciation]);
 
   /**
    * Play, after one look at the folder (issue #20): a place from another device
@@ -386,6 +390,7 @@ export function ReadingView({
    * or with the server down, it starts from here and does not move afterwards.
    */
   const play = useCallback(() => {
+    lookup.stopPronunciation(false);
     void sync.wait('play').then((outcome) => {
       if (outcome && outcome !== 'late' && outcome.adopted.includes(document.identity.id)) {
         const place = library.current(document.identity.id)?.position;
@@ -395,7 +400,7 @@ export function ReadingView({
     });
     // `reading` is a fresh object every render; the two callbacks are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reading.play, reading.resumeAt, sync, library, document.identity.id]);
+  }, [reading.play, reading.resumeAt, sync, library, document.identity.id, lookup.stopPronunciation]);
 
   /**
    * The lock screen, Control Centre and the headphone remote (ADR 0016).
@@ -549,7 +554,7 @@ export function ReadingView({
 
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} onTouchEnd={reading.bridge.releaseSelection} onTouchCancel={reading.bridge.releaseSelection}>
       <View style={styles.document} onLayout={measure}>
         {size ? (
           <Reader
@@ -576,7 +581,7 @@ export function ReadingView({
         )}
       </View>
 
-      <Player
+      {!lookup.selection ? <Player
         settings={settings}
         playing={status.playing}
         buffering={status.buffering}
@@ -592,7 +597,10 @@ export function ReadingView({
         onContents={() => setContentsOpen(true)}
         onVoices={() => setVoicesOpen(true)}
         onHeight={reading.bridge.setInset}
-      />
+      /> : null}
+
+      {lookup.selection && size ? <LookupDrawer lookup={lookup} height={size.height} service={settings.lookup.service}
+        onService={(service) => setSettings((was) => ({ ...was, lookup: { ...was.lookup, service } }))} /> : null}
 
       <ContentsSheet
         visible={contentsOpen}

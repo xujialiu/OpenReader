@@ -1,3 +1,4 @@
+import { TranslationScreen } from './translation-screen';
 /**
  * The screens of ADR 0019, and the one way back from each of them.
  *
@@ -319,6 +320,7 @@ export function OpenReader() {
               <Stack.Screen name="Reader" component={ReaderScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings', ...settingsScreen }} />
               <Stack.Screen name="General" component={GeneralScreen} options={{ title: 'General', headerBackTitle: 'Settings', ...settingsScreen }} />
+              <Stack.Screen name="Translation" component={TranslationScreen} options={{ title: 'Word Lookup & Translation', headerBackTitle: 'Settings', ...settingsScreen }} />
               <Stack.Screen name="Providers" component={ProvidersScreen} options={{ title: 'Providers', headerBackTitle: 'Settings', ...settingsScreen }} />
               {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
               <Stack.Screen name="Provider" component={ProviderScreen} options={settingsScreen} />

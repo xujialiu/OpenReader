@@ -760,17 +760,20 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
 });
 
 describe('tapping a word reads from there, and it is a tap (ADR 0020)', () => {
-  it('listens for a click and for nothing that would take the platform’s long press', () => {
+  it('keeps native selection while observing passive lookup gestures', () => {
     // A long press on text is iOS's selection gesture, and suppressing it means
     // `user-select: none` — which silently stops ::highlight() from painting
     // (notes/NOTES_2026-09-19.md, 20:10, bisected on the device). So the long press
-    // stays the platform's, and none of these is listened for.
+    // stays the platform's; lookup observes selection and passive touch events.
     const program = code('highlighter.ts');
     expect(program).toContain("addEventListener('click', tapped, false)");
-    for (const gesture of ['touchstart', 'touchend', 'contextmenu', 'selectstart', 'longpress', 'mousedown']) {
+    for (const gesture of ['contextmenu', 'selectstart', 'longpress', 'mousedown']) {
       expect({ gesture, listened: program.includes("'" + gesture + "'") }).toEqual({ gesture, listened: false });
     }
     expect(program).not.toContain('user-select: none');
+    expect(program).toContain("addEventListener('touchstart', selectionStarted, { passive: true })");
+    expect(program).toContain("addEventListener('selectionchange', selectionChanged)");
+    expect(fn(program, 'tapped')).toContain('lookupHeld || Date.now() < suppressTapUntil');
   });
 
   it('posts nothing when the tap hit-tests to anything but a text node', () => {
@@ -1262,9 +1265,9 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
   it('starts browsing on the message a Contents row sends, and ends it only with a revealed highlight', () => {
     pin(branch('browse', 'speak'), 'browsing = true;', "highlighter.ts, the 'browse' branch");
     const speak = branch('speak', 'correct');
-    pin(speak, 'if (message.reveal) browsing = false;', "highlighter.ts, the 'speak' branch");
+    pin(speak, 'if (message.reveal && !lookupHeld && !lookupKeepBrowsing) browsing = false;', "highlighter.ts, the 'speak' branch");
     // Before the state is replaced, so that the new one is built knowing it.
-    expect(speak.indexOf('if (message.reveal) browsing = false;')).toBeLessThan(speak.indexOf('state = {'));
+    expect(speak.indexOf('if (message.reveal && !lookupHeld && !lookupKeepBrowsing) browsing = false;')).toBeLessThan(speak.indexOf('state = {'));
     // The declaration, and the one place it is cleared.
     pin(program, 'var browsing = false;', 'highlighter.ts, the declaration');
     expect(program.match(/browsing = false;/g)).toHaveLength(2);
@@ -1297,8 +1300,7 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     pin(program, "if (stage) stage.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, the install');
     expect(program.match(/addEventListener\('touchmove'/g)).toHaveLength(2);
     // A tap is still a click, and a click is not heard as a drag. The long press
-    // stays the platform's: 'tapping a word reads from there' keeps touchstart,
-    // touchend and the rest out of this program.
+    // stays the platform's; lookup only observes its passive events.
     expect(fn(program, 'tapped')).not.toContain('browsing');
   });
 

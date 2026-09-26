@@ -1192,6 +1192,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [settings, hasKey, clock, report, ranOutOfText, document, sectionOf]);
 
   const play = useCallback(() => {
+    bridgeRef.current?.resumeFollowing();
     if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
       playIntent.current = false;
       engineRef.current?.pause();
