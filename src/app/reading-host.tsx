@@ -257,6 +257,7 @@ export function ReadingHost({ children }: { children: ReactNode }) {
           <View style={styles.page} accessibilityElementsHidden={!held.shown}
             importantForAccessibility={held.shown ? 'auto' : 'no-hide-descendants'}>
           <ReadingView
+            shown={held.shown}
             key={opened.document.identity.id}
             document={{ ...opened.document, title: openedEntry?.title ?? opened.document.title }}
             settings={forDocument}

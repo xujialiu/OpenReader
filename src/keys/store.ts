@@ -253,3 +253,12 @@ export async function readSyncPassword(): Promise<SecretLookup> {
 export async function forgetSyncPassword(): Promise<SecretChange> {
   return removeSecret(SYNC_PASSWORD_ENTRY_NAME);
 }
+
+/** Kept separate from Azure speech: configuring one never lends its key to the other. */
+const TRANSLATOR_KEY = 'openreader.translation.microsoft';
+export const readTranslationKey = (): Promise<SecretLookup> => readSecret(TRANSLATOR_KEY);
+export const saveTranslationKey = (key: string): Promise<SecretChange> => {
+  if (!key.trim()) throw new Error('Enter a Microsoft Translator key.');
+  return writeSecret(TRANSLATOR_KEY, key.trim());
+};
+export const forgetTranslationKey = (): Promise<SecretChange> => removeSecret(TRANSLATOR_KEY);

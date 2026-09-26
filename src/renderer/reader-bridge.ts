@@ -52,6 +52,8 @@ import {
   DOCUMENT_MESSAGE,
   PROBLEM_MESSAGE,
   TAP_MESSAGE,
+  SELECTION_MESSAGE,
+  type SelectionMessage,
   type CharactersBySize,
   type HighlightMessage,
   type ProblemMessage,
@@ -219,6 +221,11 @@ export interface BridgeClock extends ReaderClock {
 }
 
 export interface ReaderBridge {
+  setLookupEnabled(enabled: boolean): void;
+  resumeFollowing(): void;
+  releaseSelection(): void;
+  onSelection(callback: (selection: SelectionMessage) => void): () => void;
+  closeLookup(resumeFollow: boolean): void;
   /**
    * What `createPlaybackEngine` is handed as its `clock`.
    *
@@ -376,7 +383,7 @@ export interface ReaderBridge {
 function asMessage(event: unknown): WebViewMessage | null {
   if (typeof event !== 'object' || event === null) return null;
   const type = (event as { type?: unknown }).type;
-  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== PROBLEM_MESSAGE && type !== TAP_MESSAGE) {
+  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== PROBLEM_MESSAGE && type !== TAP_MESSAGE && type !== SELECTION_MESSAGE) {
     return null;
   }
   return event as WebViewMessage;
@@ -444,6 +451,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    * so it is what re-sends this.
    */
   const inset = useRef(0);
+  const lookupEnabled = useRef(false);
+  const selectionCallback = useRef<((selection: SelectionMessage) => void) | null>(null);
   /** The last bar sent, re-sent for the same reason as `inset` above. */
   const bar = useRef({ coveredPx: 0, reservedPx: 0 });
   /**
@@ -479,6 +488,18 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     },
     [injectJavascript],
   );
+
+  const setLookupEnabled = useCallback((enabled: boolean) => {
+    lookupEnabled.current = enabled;
+    send({ kind: 'lookup', enabled });
+  }, [send]);
+  const onSelection = useCallback((callback: (selection: SelectionMessage) => void) => {
+    selectionCallback.current = callback;
+    return () => { if (selectionCallback.current === callback) selectionCallback.current = null; };
+  }, []);
+  const releaseSelection = useCallback(() => send({ kind: 'lookup', selectionReleased: true }), [send]);
+  const resumeFollowing = useCallback(() => send({ kind: 'lookup', releaseBrowsing: true }), [send]);
+  const closeLookup = useCallback((resumeFollow: boolean) => send({ kind: 'lookup', close: true, resumeFollow }), [send]);
 
   const clock = useMemo<BridgeClock>(
     () => ({
@@ -519,6 +540,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         { reveal: latest.current.follow !== false && options?.reveal !== false },
       );
       if (!message) return;
+      if (options?.reveal !== false) send({ kind: 'lookup', releaseBrowsing: true });
       // `cued` so that a correction still arriving for the Utterance that *was*
       // playing is recognised as stale and dropped, rather than repainting the
       // sentence the owner has just skipped away from.
@@ -604,12 +626,19 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     (event: unknown) => {
       const message = asMessage(event);
       if (!message) return;
+      if (message.type === SELECTION_MESSAGE) {
+        if (lookupEnabled.current && typeof message.text === 'string' && typeof message.expanded === 'boolean' && typeof message.selecting === 'boolean') {
+          selectionCallback.current?.({ ...message, text: message.text.slice(0, 5001) });
+        }
+        return;
+      }
       if (message.type === PROBLEM_MESSAGE) {
         latest.current.onProblem?.(message);
         return;
       }
       if (message.type === DOCUMENT_MESSAGE) {
         spine.current = message.spine;
+        send({ kind: 'lookup', enabled: lookupEnabled.current });
         // The program has installed, so the two things it may have missed go again.
         if (inset.current > 0) send({ kind: 'inset', bottomPx: inset.current });
         if (bar.current.reservedPx > 0) send({ kind: 'bar', ...bar.current });
@@ -699,7 +728,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ clock, setUtterances, show, setInset, setBar, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
-    [clock, setUtterances, show, setInset, setBar, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
+    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setBar, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
+    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setBar, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
   );
 }

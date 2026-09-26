@@ -1,3 +1,4 @@
+import { DEFAULT_LOOKUP, type LookupSettings } from '../translation/settings';
 /**
  * What the owner has chosen, and whether it is enough to speak.
  *
@@ -172,6 +173,7 @@ export function headersAreOffered(provider: ProviderId): boolean {
 
 /** Device-local preferences. Credentials live separately in the Keychain. */
 export interface AppSettings {
+  lookup: LookupSettings;
   provider: ProviderId;
   enabledProviders: readonly ProviderId[];
   recentVoices: readonly DocumentVoice[];
@@ -371,6 +373,7 @@ export function resolveTheme(
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  lookup: DEFAULT_LOOKUP,
   // A placeholder until a voice is selected. All providers start disabled.
   provider: 'openai-official',
   enabledProviders: [],

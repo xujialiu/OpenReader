@@ -15,7 +15,7 @@ import { DEFAULT_SETTINGS } from '../../src/app/settings';
  * and pokes sync (`reading-view.tsx`), so "ended" here is "the view unmounted".
  */
 
-const views = vi.hoisted(() => ({ mounted: [] as string[], unmounted: [] as string[], state: null as null | ((playing: boolean, buffering: boolean) => void) }));
+const views = vi.hoisted(() => ({ shown: false, mounted: [] as string[], unmounted: [] as string[], state: null as null | ((playing: boolean, buffering: boolean) => void) }));
 const portal = vi.hoisted(() => ({ hostName: undefined as string | undefined }));
 const shell = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -31,9 +31,10 @@ vi.mock('react-native-teleport', () => ({
 vi.mock('../../src/app/reading-view', async () => {
   const { useEffect } = await vi.importActual<typeof import('react')>('react');
   return {
-    ReadingView: (props: { document: { identity: { id: string } }; onState(playing: boolean, buffering: boolean): void }) => {
+    ReadingView: (props: { shown: boolean; document: { identity: { id: string } }; onState(playing: boolean, buffering: boolean): void }) => {
       const id = props.document.identity.id;
       views.state = props.onState;
+      views.shown = props.shown;
       useEffect(() => {
         views.mounted.push(id);
         return () => { views.unmounted.push(id); };
@@ -90,9 +91,11 @@ describe('the Reading outlives the Reader while it plays (#68)', () => {
     const h = await host();
     await h.run((r) => r.show(A));
     expect(portal.hostName).toBe(readerSlot(A));
+    expect(views.shown).toBe(true);
     await h.run(() => views.state!(true, false));
     await h.run((r) => r.left(A));
     expect(portal.hostName).toBeUndefined();
+    expect(views.shown).toBe(false);
     expect(views.unmounted).toEqual([]);
     expect(h.handle.current!.current).toMatchObject({ id: A, playing: true });
     await h.close();
@@ -108,6 +111,7 @@ describe('the Reading outlives the Reader while it plays (#68)', () => {
     expect(h.handle.current!.current).toMatchObject({ id: A, playing: false });
     await h.run((r) => r.show(A));
     expect(portal.hostName).toBe(readerSlot(A));
+    expect(views.shown).toBe(true);
     expect(views.mounted).toEqual([A]);
     expect(views.unmounted).toEqual([]);
     await h.close();

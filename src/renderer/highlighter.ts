@@ -77,7 +77,7 @@
 
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
 import type { HighlightMessage } from './messages';
-import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from './messages';
+import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE, SELECTION_MESSAGE } from './messages';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
 export const UTTERANCE_HIGHLIGHT = 'openreader-utterance';
@@ -496,6 +496,7 @@ export function highlighterSource(
     'var BLOCKS = ' + JSON.stringify(BLOCKS_MESSAGE) + ';\n' +
     'var DOCUMENT = ' + JSON.stringify(DOCUMENT_MESSAGE) + ';\n' +
     'var TAP = ' + JSON.stringify(TAP_MESSAGE) + ';\n' +
+    'var SELECTION = ' + JSON.stringify(SELECTION_MESSAGE) + ';\n' +
     'var PROBLEM = ' + JSON.stringify(PROBLEM_MESSAGE) + ';\n' +
     'var CSS_TEXT = ' + JSON.stringify(highlightCss(styles)) + ';\n' +
     /* The one that changes while the document is open, which is why it is a `var`
@@ -619,6 +620,74 @@ ${constants}
      paused sentence as it arrived (a scroll of -7,424 px, from centreOnce), and
      epub.js then trimmed away the section the owner had asked for. */
   var browsing = false;
+  var lookupEnabled = false;
+  var lookupHeld = false;
+  var lookupKeepBrowsing = false;
+  var beforeLookupBrowsing = false;
+  var selectionDoc = null;
+  var selectedText = '';
+  var selectionTimer = null;
+  var selectionTouching = false;
+  var suppressTapUntil = 0;
+  var selectionExpanded = false;
+
+  function selected(doc) {
+    var selection = doc && doc.getSelection ? doc.getSelection() : null;
+    return selection && !selection.isCollapsed ? selection.toString().trim() : '';
+  }
+  function holdForLookup() {
+    if (lookupHeld) return;
+    beforeLookupBrowsing = browsing;
+    lookupHeld = true;
+    browsing = true;
+  }
+  function emitSelection(doc, selecting) {
+    if (!lookupEnabled) return;
+    var text = selected(doc);
+    if (!text) return;
+    holdForLookup();
+    selectionDoc = doc;
+    suppressTapUntil = Date.now() + 700;
+    post({ type: SELECTION, text: text.slice(0, 5001), expanded: selectionExpanded, selecting: selecting });
+    if (!selecting) selectedText = text;
+  }
+  function selectionChanged(event) {
+    if (!lookupEnabled) return;
+    var doc = event.currentTarget;
+    var text = selected(doc);
+    if (!text) return;
+    if (selectedText && selectedText !== text) selectionExpanded = true;
+    clearTimeout(selectionTimer);
+    emitSelection(doc, true);
+    if (!selectionTouching) selectionTimer = setTimeout(function () { emitSelection(doc, false); }, 180);
+  }
+  function selectionStarted() {
+    selectionTouching = true;
+    clearTimeout(selectionTimer);
+  }
+  function selectionEnded(event) {
+    selectionTouching = false;
+    if (!lookupEnabled) return;
+    var doc = event.currentTarget;
+    clearTimeout(selectionTimer);
+    if (selected(doc)) selectionTimer = setTimeout(function () { emitSelection(doc, false); }, 180);
+  }
+  function closeLookup(resumeFollow) {
+    clearTimeout(selectionTimer);
+    if (!lookupHeld) return;
+    lookupHeld = false;
+    browsing = beforeLookupBrowsing;
+    lookupKeepBrowsing = beforeLookupBrowsing;
+    if (selectionDoc && selectionDoc.getSelection) selectionDoc.getSelection().removeAllRanges();
+    selectionDoc = null;
+    selectedText = '';
+    selectionExpanded = false;
+    suppressTapUntil = Date.now() + 400;
+    if (resumeFollow && !browsing && state) {
+      state.centred = new WeakSet();
+      follow(showUtterance());
+    }
+  }
   /* The touch that may be dragging the page, and where it first moved. */
   var touchId = null;
   var touchY = null;
@@ -917,6 +986,7 @@ ${constants}
      gesture and taking it would mean \`user-select: none\`, which silently stops
      ::highlight() from painting (see this file's header, and the 20:10 note). */
   function tapped(event) {
+    if (lookupEnabled && (lookupHeld || Date.now() < suppressTapUntil)) return;
     var node = event.target;
     var doc = node && node.ownerDocument ? node.ownerDocument : null;
     if (!doc || !doc.defaultView) return;
@@ -927,6 +997,7 @@ ${constants}
     var place = blockOffsetOf(doc, caret.node, caret.offset);
     if (!place) return;
     if (!inside(place.element, event.clientX, event.clientY)) return;
+    lookupKeepBrowsing = false;
     post({ type: TAP, block: place.block, offset: place.offset });
   }
 
@@ -934,8 +1005,8 @@ ${constants}
      owner takes it, and the reading stays. Passive, so the scroll is the
      platform's own and nothing here can slow it down.
 
-     Only touchmove, and no touchstart or touchend: the long press on text is the
-     platform's, and this program listens for nothing near it (see tapped). So a
+     Browsing listens to touchmove only. Lookup observes passive touch and
+     selection events separately without replacing the platform's long press. A
      touch is recognised by its identifier, which is new for every finger that
      comes down, and measured from where it first moved. A tap cannot set it by
      accident: a finger that moves further than a tap's jitter is not a click,
@@ -945,6 +1016,7 @@ ${constants}
      between them; a touch stays in the document it came down in, so its
      coordinates never change hands. */
   function dragged(event) {
+    if (lookupHeld) return;
     var touch = event.touches && event.touches.length ? event.touches[0] : null;
     if (!touch) return;
     if (touch.identifier !== touchId) {
@@ -968,6 +1040,10 @@ ${constants}
        act on, and this function is already the one place that runs once per
        document. A document epub.js destroys takes its listener with it. */
     contents.document.addEventListener('click', tapped, false);
+    contents.document.addEventListener('selectionchange', selectionChanged);
+    contents.document.addEventListener('touchstart', selectionStarted, { passive: true });
+    contents.document.addEventListener('touchend', selectionEnded, { passive: true });
+    contents.document.addEventListener('touchcancel', selectionEnded, { passive: true });
     /* And a finger dragging this document's text is Browsing: see dragged. */
     contents.document.addEventListener('touchmove', dragged, { passive: true });
 
@@ -1490,7 +1566,7 @@ ${constants}
      the reading has run ahead of the document — and only a display() can get
      there. The centring then happens in attach(), when the section arrives. */
   function follow(built) {
-    if (!state) return;
+    if (!state || lookupHeld || lookupKeepBrowsing) return;
     if (built) {
       centreOnce(built);
       return;
@@ -1972,6 +2048,19 @@ ${constants}
   /* ---- the one entry point ---- */
 
   function dispatch(message) {
+    if (message.kind === 'lookup') {
+      /* UIKit's selection handles can consume the DOM touchend. The enclosing
+         native reader observes the release even when the iframe does not. */
+      if (message.selectionReleased && lookupEnabled) {
+        selectionTouching = false;
+        clearTimeout(selectionTimer);
+        if (selectionDoc) selectionTimer = setTimeout(function () { emitSelection(selectionDoc, false); }, 180);
+      }
+      if (message.releaseBrowsing && !lookupHeld) lookupKeepBrowsing = false;
+      if (typeof message.enabled === 'boolean') lookupEnabled = message.enabled;
+      if (message.close || !lookupEnabled) closeLookup(message.resumeFollow === true);
+      return;
+    }
     if (message.kind === 'inset') {
       /* Geometry, not a highlight. It comes through this entry point because there
          is exactly one, and a second injected function would be a second thing to
@@ -2061,7 +2150,7 @@ ${constants}
          the reading: the page goes to it and follows it again. Not revealed is a
          repaint where the page is (a cue while paused, a new Voice repainting the
          sentence), which keeps whether the page was following it. */
-      if (message.reveal) browsing = false;
+      if (message.reveal && !lookupHeld && !lookupKeepBrowsing) browsing = false;
       var following = message.reveal || !!(state && state.follow);
       state = {
         utterance: message.utterance,

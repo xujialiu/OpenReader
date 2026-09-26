@@ -1,3 +1,4 @@
+import { parseLookupSettings } from '../translation/settings';
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
 import { FONT_SIZES, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
@@ -60,6 +61,7 @@ export function parseSettings(value: unknown): AppSettings {
       ? [{ provider: item.provider, voice: item.voice }] : [];
   }) : [];
   return {
+    lookup: parseLookupSettings(data.lookup),
     provider: typeof data.provider === 'string' && isProviderId(data.provider) ? data.provider : DEFAULT_SETTINGS.provider,
     voice: string(data.voice, ''),
     // Only this version knows explicit enablement. Older configurations migrate disabled.

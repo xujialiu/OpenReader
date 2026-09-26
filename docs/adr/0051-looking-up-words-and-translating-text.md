@@ -1,0 +1,23 @@
+---
+status: accepted
+---
+
+# Lookup is a selection session, separate from the Reading Position
+
+For #73, native document selection crosses the existing renderer bridge as text plus selection state. It never calls the tap-to-seek path. Passive touch listeners and selectionchange keep requests behind the end of a drag; native reader touch-end/cancel also releases selection, because UIKit selection handles can consume the DOM release; the initial selection holds following immediately, and subsequent speech cues cannot recenter the document while the result is open. Closing restores the earlier browsing state. A seek or explicit Play releases that restoration. `user-select: text` remains mandatory: the device measurement recorded in the 2026-09-19 log showed that disabling selection silently disables CSS highlight painting too.
+
+The result Drawer is a nonmodal view over the lower part of the existing reader, with a draggable header and collapsed/expanded sizes. The existing React Native Modal sheets intercept touches above them, which would prevent dragging the document's selection handles after the initial lookup. This is why the new drawer does not reuse that modal wrapper. It keeps the existing palette and uses native menus for the service choice. The WebView is not resized to make room for it, preserving the selection's geometry.
+
+Lookup adapters live in src/translation and take fetch and AbortSignal. They return text and optional pronunciation URLs, never active HTML. Each request reaches exactly one service; changing selection, mode or service cancels the previous request and also invalidates its eventual result. Only selected text is sent; no surrounding document or saved lookup history is added. Microsoft Translator has its own Keychain entry and never borrows the Azure speech key. Lookup preferences are explicitly projected into the device-local settings file and are not added to shared sync settings.
+
+Youdao's Chinese result page for 你好 answered HTTP 200 but its mismatched div/li tags caused the existing XML parser to throw. Use htmlparser2 for inert HTML extraction. Chinese entries use wordGroup/search-js links rather than the English entries' li definitions. Literal <非正式> and <英，旧> in definitions are usage labels and must survive parsing; examples retain their source attribution. These measured differences are in notes/NOTES_2026-09-26.md. Google and Free Dictionary API have adapters and honest HTTP/timeout errors; local smoke requests hit 429/timeouts and 403 respectively, so their deployment availability is not inferred from documentation.
+
+Pronunciation is a separate short-lived audio graph using the already installed audio library and the same spoken-audio session category. A controller owns only the temporary pause it caused: an already-paused reading stays paused, a completed pronunciation restores interrupted reading, and restarting the pronunciation transfers that interruption without briefly resuming the document. Explicit transport, backgrounding, leaving the reader and output loss revoke automatic resume. Dictionary audio does not take over the document's Now Playing metadata. Missing pronunciation is never synthesized by a speech Provider.
+
+
+On iOS 27, a real handle drag produced DOM touchend, touchstart 37 ms later, then selectionchange with no later DOM release. The app remained selecting=true with loading=false: no network request existed for the 15-second request timeout to cancel. Observe onTouchEnd/onTouchCancel on the native ReadingView wrapper and relay a selectionReleased message to the same renderer dispatch, which clears the dragging flag and lets the selection settle for 180 ms. The same real-touch regression failed after 18 seconds before this fix and returned the new selection's Youdao result in the fixed run. A pause-based debounce alone was not used: stopping the finger while still holding a selection should not itself send a request.
+
+
+## Integration with the held Reading
+
+Main's decision 0049 moved ReadingView above NavigationContainer. Lookup therefore takes the host's `held.shown` value instead of reading route focus with useIsFocused: that hook has no navigation context at this location. Hiding the held page closes lookup and cancels its pronunciation without resuming speech; the existing ReadingHost still owns whether the document narration survives leaving. Both bar geometry (0048) and selection controls remain on the renderer bridge. This pair was renumbered from 0048 to 0051 during integration because main had already spent 0048/0049 and the scroll worktree had spent 0050.
