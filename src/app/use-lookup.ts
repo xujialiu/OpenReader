@@ -1,4 +1,3 @@
-import { useIsFocused } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { readTranslationKey } from '../keys/store';
@@ -11,8 +10,7 @@ import type { LookupMode, LookupSettings } from '../translation/settings';
 export interface LookupSelection { text: string; mode: LookupMode; selecting: boolean; attempt: number }
 export function useLookup(settings: LookupSettings, reading: {
   bridge: ReaderBridge; pause(): void; play(): void; status: { playing: boolean };
-}) {
-  const focused = useIsFocused();
+}, focused: boolean) {
   const [selection, setSelection] = useState<LookupSelection | null>(null);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);

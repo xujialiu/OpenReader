@@ -172,7 +172,14 @@ describe('one pause, one path', () => {
     expect(screen).toContain('onPause={pause}');
     // And the coupling itself is in that one handler rather than in the button.
     expect(screen).toMatch(/const pause = useCallback\(\(\) => \{\s*reading\.pause\(\);\s*setCollapsed\(false\);/);
-    expect(code('src/app/player.tsx')).not.toContain('onCollapsed(false)');
+    // The player's own Play/Pause carries no re-open of its own. The one
+    // `onCollapsed(false)` in it is the Reading Button's, which shows the player
+    // and plays or pauses nothing (#67).
+    const player = code('src/app/player.tsx');
+    expect(player.match(/onCollapsed\(false\)/g)).toHaveLength(1);
+    expect(player).toContain('<ReadingButton playing={playing} buffering={buffering} label="Show the player" onPress={() => onCollapsed(false)} />');
+    const toggle = player.slice(player.indexOf('const toggle = useCallback'), player.indexOf('}, [playing, onPause, onPlay]);'));
+    expect(toggle).not.toContain('onCollapsed');
   });
 });
 

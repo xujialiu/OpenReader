@@ -281,14 +281,14 @@ final class TranslationProbe: XCTestCase {
     openBook()
 
     longPressAnUnhighlightedLine()
-    // The visible blue left handle for the fixture's `says` selection is
-    // around (0.47, 0.29) on this iPhone 17.
-    // fixture. Dragging it to the line's left edge is a real native selection
-    // handle touch; the drawer remains nonmodal above the lower content.
+    // On the iPhone 17 fixture at its first sentence, the visible right handle
+    // for the initial `This` selection is around (0.125, 0.205). Dragging it to
+    // the line's right side is a real native selection handle touch; the drawer
+    // remains nonmodal above the lower content.
     let origin = app.coordinate(withNormalizedOffset: .zero)
-    let handle = origin.withOffset(CGVector(dx: app.frame.width * 0.47, dy: app.frame.height * 0.29))
-    let sentenceStart = origin.withOffset(CGVector(dx: app.frame.width * 0.08, dy: app.frame.height * 0.29))
-    handle.press(forDuration: 0.5, thenDragTo: sentenceStart)
+    let handle = origin.withOffset(CGVector(dx: app.frame.width * 0.125, dy: app.frame.height * 0.205))
+    let sentenceEnd = origin.withOffset(CGVector(dx: app.frame.width * 0.36, dy: app.frame.height * 0.23))
+    handle.press(forDuration: 0.5, thenDragTo: sentenceEnd)
     XCTAssertTrue(any(label: "Service, Youdao").waitForExistence(timeout: 5), "Expanded selection did not switch to Translation")
     XCTAssertTrue(app.buttons["Translation"].isSelected, "Translation mode was not selected after handle release")
     XCTAssertTrue(app.buttons["Copy result"].waitForExistence(timeout: 25), "Youdao sentence translation did not return a result")
@@ -303,9 +303,9 @@ final class TranslationProbe: XCTestCase {
     app.activate()
     longPressAnUnhighlightedLine()
     let origin = app.coordinate(withNormalizedOffset: .zero)
-    let handle = origin.withOffset(CGVector(dx: app.frame.width * 0.47, dy: app.frame.height * 0.29))
-    let sentenceStart = origin.withOffset(CGVector(dx: app.frame.width * 0.08, dy: app.frame.height * 0.29))
-    handle.press(forDuration: 0.5, thenDragTo: sentenceStart)
+    let handle = origin.withOffset(CGVector(dx: app.frame.width * 0.125, dy: app.frame.height * 0.205))
+    let sentenceEnd = origin.withOffset(CGVector(dx: app.frame.width * 0.36, dy: app.frame.height * 0.23))
+    handle.press(forDuration: 0.5, thenDragTo: sentenceEnd)
     XCTAssertTrue(any(label: "Service, Youdao").waitForExistence(timeout: 5), "Prepared native handle drag did not switch to Translation")
     XCTAssertTrue(app.buttons["Translation"].isSelected, "Prepared native handle drag did not select Translation")
     XCTAssertTrue(app.buttons["Copy result"].waitForExistence(timeout: 25), "Prepared sentence translation did not return")
@@ -315,11 +315,11 @@ final class TranslationProbe: XCTestCase {
   func testSecondHandleDragExpandsTheWholeSentence() throws {
     app.activate()
     XCTAssertTrue(app.buttons["Close lookup"].waitForExistence(timeout: 5), "Prepared translation drawer is not open")
-    // The prepared fixture's current selection is `The`; its right handle is
-    // about (0.17, 0.34). Drag to the wrapped sentence's end on the next line.
+    // The prepared fixture's current selection is `is a`; its right handle is
+    // about (0.18, 0.205). Drag to the line's right side.
     let origin = app.coordinate(withNormalizedOffset: .zero)
-    let right = origin.withOffset(CGVector(dx: app.frame.width * 0.17, dy: app.frame.height * 0.34))
-    let sentenceEnd = origin.withOffset(CGVector(dx: app.frame.width * 0.23, dy: app.frame.height * 0.37))
+    let right = origin.withOffset(CGVector(dx: app.frame.width * 0.18, dy: app.frame.height * 0.205))
+    let sentenceEnd = origin.withOffset(CGVector(dx: app.frame.width * 0.36, dy: app.frame.height * 0.23))
     right.press(forDuration: 0.5, thenDragTo: sentenceEnd)
     XCTAssertTrue(any(label: "Service, Youdao").waitForExistence(timeout: 5), "Second handle drag lost Translation mode")
     XCTAssertTrue(app.buttons["Copy result"].waitForExistence(timeout: 25), "Whole sentence translation did not return")
@@ -332,13 +332,21 @@ final class TranslationProbe: XCTestCase {
   // Unlike the older probe, assert that the actual selection changed too.
   func testPreparedHandleReleaseFinishesRequest() throws {
     app.activate()
-    XCTAssertTrue(any(label: "The first sentence only").exists, "Prepare the fixture selection first")
-    let origin = app.coordinate(withNormalizedOffset: .zero)
-    let handle = origin.withOffset(CGVector(dx: app.frame.width * 0.473, dy: app.frame.height * 0.319))
-    let end = origin.withOffset(CGVector(dx: app.frame.width * 0.36, dy: app.frame.height * 0.326))
-    handle.press(forDuration: 0.5, thenDragTo: end)
+    XCTAssertTrue(app.buttons["Translation"].isSelected, "Prepare the fixture selection first")
     Thread.sleep(forTimeInterval: 0.5)
-    XCTAssertFalse(any(label: "The first sentence only").exists, "Handle drag did not change selected text")
+    let beforeLabels = Set(app.staticTexts.allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty })
+    let origin = app.coordinate(withNormalizedOffset: .zero)
+    let handle = origin.withOffset(CGVector(dx: app.frame.width * 0.18, dy: app.frame.height * 0.205))
+    let end = origin.withOffset(CGVector(dx: app.frame.width * 0.36, dy: app.frame.height * 0.23))
+    handle.press(forDuration: 0.5, thenDragTo: end)
+    let deadline = Date().addingTimeInterval(5)
+    var changed = false
+    while Date() < deadline {
+      let afterLabels = Set(app.staticTexts.allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty })
+      if afterLabels != beforeLabels { changed = true; break }
+      Thread.sleep(forTimeInterval: 0.2)
+    }
+    XCTAssertTrue(changed, "Handle drag did not change selected text")
     XCTAssertTrue(app.buttons["Copy result"].waitForExistence(timeout: 18) || app.buttons["Retry"].exists,
                   "Released selection never settled into a result or bounded failure")
     capture("translation-handle-release-bounded")

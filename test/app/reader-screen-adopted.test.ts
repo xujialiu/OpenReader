@@ -4,12 +4,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createLocator, readingPlaceAt, stampPlace, type DocumentId, type LibraryEntry, type ReadingPosition } from '../../src/core/document';
 import { ReaderScreen } from '../../src/app/reader-screen';
+import { ReadingHost } from '../../src/app/reading-host';
 import { DEFAULT_SETTINGS } from '../../src/app/settings';
 
 /**
- * Which place taken from another device the Reader hands `<ReadingView>` as
- * `adopted` (#55): the real screen, with its neighbours stubbed and
- * `<ReadingView>` replaced by a probe that records the props of every render.
+ * Which place taken from another device the Reading hands `<ReadingView>` as
+ * `adopted` (#55): the real screen inside the real shell-level host that holds
+ * the Reading since #68, with their neighbours stubbed and `<ReadingView>`
+ * replaced by a probe that records the props of every render.
  *
  * `adopted` means a place that arrived **while this book is open**, and
  * `<ReadingView>` moves the paused reading to it — through `resumeAt`, which asks
@@ -49,6 +51,12 @@ vi.mock('../../src/app/reader-actions', () => ({ ReaderActions: () => null }));
 vi.mock('../../src/app/controls', () => ({ HeaderButton: () => null, Note: () => null, INK: { page: '#fff', quiet: '#888' } }));
 vi.mock('../../src/app/use-provider-secrets', () => ({ useProviderKey: () => ({ presence: { state: 'held' } }) }));
 vi.mock('../../src/app/walkthrough-harness', () => ({ useHarnessCommands: () => {} }));
+// The bar's height (#67), as native-stack reports it on an iPhone 17: a 62-point
+// status bar and a 54-point bar.
+vi.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 116 }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 62, bottom: 34, left: 0, right: 0 }) }));
+// The move itself is native; here the page is simply rendered where the host is.
+vi.mock('react-native-teleport', () => ({ Portal: ({ children }: { children: unknown }) => children, PortalHost: () => null }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const A = ('sha256:' + 'a'.repeat(64)) as DocumentId;
@@ -82,6 +90,7 @@ function library(entries: readonly LibraryEntry[], adoptedAt: Partial<Record<Doc
     library: {
       entries,
       adoptedAt,
+      current: (id: DocumentId) => entries.find((one) => one.id === id) ?? null,
       opened: () => {},
       voiced: () => {},
       reached: () => {},
@@ -93,7 +102,7 @@ function library(entries: readonly LibraryEntry[], adoptedAt: Partial<Record<Doc
 function reader() {
   let tree: ReactTestRenderer;
   const screen = (id: DocumentId) =>
-    createElement(ReaderScreen, { route: { params: { id } }, navigation: { setOptions: () => {} } } as never);
+    createElement(ReadingHost, null, createElement(ReaderScreen, { route: { params: { id } }, navigation: { setOptions: () => {} } } as never));
   return {
     async open(id: DocumentId) {
       await act(async () => {

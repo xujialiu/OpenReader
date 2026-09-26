@@ -53,8 +53,9 @@ describe('nothing that pokes depends on the last outcome (defect 2)', () => {
   });
 
   it('opens a book once per Document Id, however many runs complete meanwhile', () => {
-    const screen = code('reader-screen.tsx');
-    const open = within(screen, "sync.poke('open');", '}, [id]);');
+    // The shell's Reading opens it since #68, once per Reading.
+    const screen = code('reading-host.tsx');
+    const open = within(screen, "sync.poke('open');", '}, [heldId]);');
     expect(open).not.toContain('[sync');
   });
 });

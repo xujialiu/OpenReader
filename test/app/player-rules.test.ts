@@ -347,16 +347,17 @@ describe('each Document is read in the Voice it remembers (ADR 0010)', () => {
    * owner's shelf read an English document in a Mandarin Voice (07:38).
    *
    * What `settingsForDocument` decides is tested in `settings.test.ts`. What cannot
-   * be tested there is the wiring: that the screen hands the reading the Document's
+   * be tested there is the wiring: that the shell's Reading (the Reader screen's
+   * until #68) hands the reading the Document's
    * settings rather than the app's, asks the Keychain about *that* Provider, and
    * writes the choice down. Each is one line, and each fails by reading the book
    * perfectly in the wrong Voice.
    */
-  const screen = code('reader-screen.tsx');
+  const screen = code('reading-host.tsx');
 
   it('hands the reading this Document settings, and asks the Keychain about its Provider', () => {
-    pin(screen, 'settings={forDocument}', 'reader-screen.tsx');
-    pin(screen, 'const key = useProviderKey(forDocument.provider);', 'reader-screen.tsx');
+    pin(screen, 'settings={forDocument}', 'reading-host.tsx');
+    pin(screen, 'const key = useProviderKey(forDocument.provider);', 'reading-host.tsx');
     expect(screen).not.toContain('settings={settings}');
   });
 
@@ -364,9 +365,9 @@ describe('each Document is read in the Voice it remembers (ADR 0010)', () => {
     // The two writes are different: one is the owner choosing, the other is the
     // inheritance design 0010 promises — "and from then on the document keeps it",
     // which is only true if it is written.
-    pin(screen, 'if (openedId) library.voiced(openedId, { provider, voice });', 'reader-screen.tsx, setVoice');
-    pin(screen, 'if (recent) library.voiced(openedId, recent);', 'reader-screen.tsx');
-    pin(screen, 'if (!openedId || voiceId) return;', 'reader-screen.tsx, the inheritance');
+    pin(screen, 'if (openedId) library.voiced(openedId, { provider, voice });', 'reading-host.tsx, setVoice');
+    pin(screen, 'if (recent) library.voiced(openedId, recent);', 'reading-host.tsx');
+    pin(screen, 'if (!openedId || voiceId) return;', 'reading-host.tsx, the inheritance');
   });
 });
 
@@ -378,5 +379,42 @@ describe('routine status is quiet, but lost positions still need attention (desi
   });
   it('shows problems even when the player was collapsed', () => {
     pin(code('player.tsx'), 'if (collapsed && notes.length === 0)', 'player.tsx');
+  });
+});
+
+describe('the navigation bar comes and goes with the player, and floats (#67, ADR 0048)', () => {
+  it('is shown exactly when the player is shown in full, notes included', () => {
+    // One state for what is on the screen: a note opens the player, and a bar
+    // left hidden over an open player would be a second state nothing asked for.
+    const view = code('reading-view.tsx');
+    pin(view, 'const chrome = !(collapsed && notes.length === 0);', 'reading-view.tsx');
+    // The screen takes it from the Reading it shows (#68).
+    pin(code('reader-screen.tsx'), 'const chrome = mine?.chrome ?? true;', 'reader-screen.tsx');
+    pin(view, 'useEffect(() => { onChrome(chrome); }, [chrome, onChrome]);', 'reading-view.tsx');
+    // What the bar covers goes to the centring only while it is shown; the room
+    // the page keeps for it stays, so the text does not move.
+    pin(view, 'setBar(chrome ? barHeight : 0, barHeight);', 'reading-view.tsx');
+  });
+
+  it('floats over the page, so hiding it does not resize the WebView', () => {
+    // An opaque bar gives its height back to the page when it hides, the WebView
+    // resizes, and epub.js destroys every view on a resize (the blank open).
+    const screen = code('reader-screen.tsx');
+    pin(screen, 'navigation.setOptions({ headerTransparent: true, headerShown: chrome });', 'reader-screen.tsx');
+    pin(screen, '{ paddingTop: insets.top }', 'reader-screen.tsx');
+  });
+
+  it('remembers the bar’s height while it is hidden', () => {
+    // The header height is zero while the bar is hidden; the room kept for it
+    // must not follow, or every hide and show would move the text by that much.
+    // Since #68 the Reading holds it, so it also outlives the Reader screen.
+    pin(code('reader-screen.tsx'), 'if (shownBar > 0) setBarHeight(shownBar);', 'reader-screen.tsx');
+  });
+
+  it('leaves a Reading Button that shows the player and never plays or pauses', () => {
+    const button = code('reading-button.tsx');
+    expect(button).not.toMatch(/onPlay|onPause|toggle/);
+    pin(button, 'onPress={onPress}', 'reading-button.tsx');
+    pin(code('player.tsx'), 'onPress={() => onCollapsed(false)}', 'player.tsx');
   });
 });

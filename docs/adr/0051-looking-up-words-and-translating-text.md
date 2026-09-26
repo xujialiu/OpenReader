@@ -16,3 +16,8 @@ Pronunciation is a separate short-lived audio graph using the already installed 
 
 
 On iOS 27, a real handle drag produced DOM touchend, touchstart 37 ms later, then selectionchange with no later DOM release. The app remained selecting=true with loading=false: no network request existed for the 15-second request timeout to cancel. Observe onTouchEnd/onTouchCancel on the native ReadingView wrapper and relay a selectionReleased message to the same renderer dispatch, which clears the dragging flag and lets the selection settle for 180 ms. The same real-touch regression failed after 18 seconds before this fix and returned the new selection's Youdao result in the fixed run. A pause-based debounce alone was not used: stopping the finger while still holding a selection should not itself send a request.
+
+
+## Integration with the held Reading
+
+Main's decision 0049 moved ReadingView above NavigationContainer. Lookup therefore takes the host's `held.shown` value instead of reading route focus with useIsFocused: that hook has no navigation context at this location. Hiding the held page closes lookup and cancels its pronunciation without resuming speech; the existing ReadingHost still owns whether the document narration survives leaving. Both bar geometry (0048) and selection controls remain on the renderer bridge. This pair was renumbered from 0048 to 0051 during integration because main had already spent 0048/0049 and the scroll worktree had spent 0050.

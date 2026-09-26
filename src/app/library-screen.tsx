@@ -39,6 +39,8 @@ import { useShell } from './routes';
 import { PROVIDER_LABELS, readiness, readinessSentence } from './settings';
 import { useProviderKey } from './use-provider-secrets';
 import { ReaderActions } from './reader-actions';
+import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
+import { useHeldReading } from './reading-host';
 import { Icon } from './icon';
 import { formatBytes, occupied, removeDownloads, requestInventory } from '../offline/runtime';
 
@@ -54,6 +56,13 @@ function progressOf(entry: LibraryEntry, present: boolean): string {
 
 export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const { settings, library, sync } = useShell();
+  /**
+   * The Reading, while one is held out of sight (#68): the owner left its book
+   * while it was playing. The Reading Button takes them back to it, and so does
+   * the book's own row, which navigates to the Reader it already has.
+   */
+  const reading = useHeldReading();
+  const held = reading.current;
   const [picking, setPicking] = useState(false);
   const [actions, setActions] = useState<LibraryEntry | null>(null);
   /**
@@ -66,6 +75,9 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const remove = (entry: LibraryEntry) => { void requestInventory(entry.id).then(() => Alert.alert('Delete this book?',
     `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
       { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => {
+        // The Reading of this book ends first, and writes its place as it goes;
+        // its saved audio is what is deleted next (#68).
+        reading.end(entry.id);
         void removeDownloads(entry.id).then(() => { library.remove(entry.id); setActions(null); }, (error) => library.report(String(error)));
       } },
     ]), (error) => library.report(String(error))); };
@@ -148,7 +160,9 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   return (
     <View style={styles.screen}>
       <FlatList
-        contentContainerStyle={{ paddingVertical: 12 }}
+        // Room below the last row for the Reading Button, so the last book can
+        // be scrolled clear of it and its actions reached.
+        contentContainerStyle={{ paddingTop: 12, paddingBottom: held ? READING_BUTTON_ROOM : 12 }}
         data={library.entries}
         keyExtractor={(entry) => entry.id}
         renderItem={({ item }) => (
@@ -181,6 +195,12 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
           )
         }
       />
+      {held ? (
+        <View style={styles.reading} pointerEvents="box-none">
+          <ReadingButton playing={held.playing} buffering={held.buffering} label="Return to the reading"
+            onPress={() => navigation.navigate('Reader', { id: held.id })} />
+        </View>
+      ) : null}
       {actions ? <ReaderActions document={actions.id} onClose={() => setActions(null)} onDelete={() => remove(actions)} /> : null}
     </View>
   );
@@ -191,7 +211,11 @@ function LibraryDocument({ entry, present, onPress, onLongPress }: { entry: Libr
   return <DocumentRow title={entry.title} progress={progressOf(entry, present)} cover={cover} onPress={onPress} onLongPress={onLongPress} />;
 }
 
+/** The Reading Button's own height and its distance from the bottom, and the list's usual 12 above it. */
+const READING_BUTTON_ROOM = READING_BUTTON_PLACE.bottom + 52 + 12;
+
 const styles = StyleSheet.create({
+  reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   actions: { position: 'absolute', right: 12, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 10 },
   banner: { paddingHorizontal: 16, paddingTop: 12 },
   empty: { alignItems: 'flex-start', gap: 12, padding: 24 },

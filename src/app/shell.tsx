@@ -36,6 +36,8 @@ import { ReaderProvider } from '@epubjs-react-native/core';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { PortalProvider } from 'react-native-teleport';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Appearance, AppState, useColorScheme } from 'react-native';
 
@@ -48,6 +50,7 @@ import { ProviderScreen } from './provider-screen';
 import { ProvidersScreen } from './providers-screen';
 import { ReaderScreen } from './reader-screen';
 import { navigationRef, ShellContext, type RootStackParamList, type Shell } from './routes';
+import { ReadingHost } from './reading-host';
 import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
@@ -295,6 +298,16 @@ export function OpenReader() {
               than left to `auto`, which reads the system's scheme and would be the
               one thing still light when the owner has chosen Dark on a light phone. */}
           <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          {/*
+            * The Reading lives here, above the navigator, so that it outlives the
+            * Reader screen (#68, ADR 0049): `ReadingHost` renders the page behind
+            * the navigator and moves it into the Reader's slot while the Reader is
+            * on screen. The portal registry has to hold both ends, and the safe
+            * area is read above the navigator's own provider.
+            */}
+          <SafeAreaProvider>
+          <PortalProvider>
+          <ReadingHost>
           <NavigationContainer ref={navigationRef} theme={navigationTheme}>
             <Stack.Navigator
               initialRouteName="Library"
@@ -327,6 +340,9 @@ export function OpenReader() {
               <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings', ...settingsScreen }} />
             </Stack.Navigator>
           </NavigationContainer>
+          </ReadingHost>
+          </PortalProvider>
+          </SafeAreaProvider>
         </ReaderProvider>
       </SchemeContext.Provider>
     </ShellContext.Provider>
