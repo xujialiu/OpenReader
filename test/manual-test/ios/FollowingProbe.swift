@@ -150,6 +150,34 @@ final class FollowingProbe: XCTestCase {
   /// Button (`library-screen.tsx`) is given the identical label for a person
   /// using it, and the two screens are never shown together.
   func returnMark(_ app: XCUIApplication) -> XCUIElement { app.buttons["Return to the reading"] }
+  /// A plain drag of the page that must leave it Browsing (M).
+  ///
+  /// XCTest often delivers the first synthesized drag of a run as a single
+  /// `touchmove` that never becomes a scroll: measured on 2026-09-26 with a touch
+  /// tracer in the reader, the first drag of 3 runs out of 4, and no later one.
+  /// A page that did not move is rightly not Browsing, so a drag after which the
+  /// screen is exactly as it was is made again, up to `attempts` times. A drag
+  /// that changed the screen and still left A is the app's failure and is not
+  /// retried. While the reading plays the highlight changes the screen anyway,
+  /// so there a swallowed drag is still reported as a failure.
+  func dragToBrowsing(_ app: XCUIApplication, _ from: XCUICoordinate, _ to: XCUICoordinate, attempts: Int = 3) -> Bool {
+    for attempt in 1...attempts {
+      let before = XCUIScreen.main.screenshot().pngRepresentation
+      from.press(forDuration: 0.05, thenDragTo: to, withVelocity: XCUIGestureVelocity(250), thenHoldForDuration: 0.1)
+      Thread.sleep(forTimeInterval: 0.6)
+      if isBrowsingM(app) {
+        print("FOLLOWING drag reached M on attempt \(attempt)")
+        return true
+      }
+      if XCUIScreen.main.screenshot().pngRepresentation != before {
+        print("FOLLOWING drag \(attempt) changed the screen and left A")
+        return false
+      }
+      print("FOLLOWING drag \(attempt) did not reach the page; again")
+    }
+    return false
+  }
+
   func isFollowingA(_ app: XCUIApplication) -> Bool { followingText(app).exists }
   func isBrowsingM(_ app: XCUIApplication) -> Bool { inReader(app) && returnMark(app).exists }
 
@@ -324,9 +352,7 @@ final class FollowingProbe: XCTestCase {
 
     let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
     let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
-    from.press(forDuration: 0.05, thenDragTo: to, withVelocity: XCUIGestureVelocity(250), thenHoldForDuration: 0.1)
-    Thread.sleep(forTimeInterval: 0.6)
-    XCTAssertTrue(isBrowsingM(app), "A real drag did not turn A into M")
+    XCTAssertTrue(dragToBrowsing(app, from, to), "A real drag did not turn A into M")
     capture("fresh-open-dragged-M", app)
 
     press(returnMark(app), app)
@@ -354,9 +380,7 @@ final class FollowingProbe: XCTestCase {
 
     let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
     let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
-    from.press(forDuration: 0.05, thenDragTo: to, withVelocity: XCUIGestureVelocity(250), thenHoldForDuration: 0.1)
-    Thread.sleep(forTimeInterval: 0.6)
-    XCTAssertTrue(isBrowsingM(app), "A real drag did not turn A into M")
+    XCTAssertTrue(dragToBrowsing(app, from, to), "A real drag did not turn A into M")
     capture("drag-return-01-M", app)
 
     press(returnMark(app), app)
@@ -413,9 +437,7 @@ final class FollowingProbe: XCTestCase {
     // Near: a small drag, well within a page.
     var from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
     var to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
-    from.press(forDuration: 0.05, thenDragTo: to, withVelocity: XCUIGestureVelocity(250), thenHoldForDuration: 0.1)
-    Thread.sleep(forTimeInterval: 0.6)
-    XCTAssertTrue(isBrowsingM(app), "The near drag did not turn A into M")
+    XCTAssertTrue(dragToBrowsing(app, from, to), "The near drag did not turn A into M")
     XCTAssertTrue(app.buttons["Pause"].exists, "A drag must not pause playback")
     capture("nearfar-01-near-M", app)
     press(returnMark(app), app)
@@ -494,9 +516,7 @@ final class FollowingProbe: XCTestCase {
 
     // Browse, then collapse again: must return to A first.
     Thread.sleep(forTimeInterval: 0.8)
-    from.press(forDuration: 0.05, thenDragTo: to, withVelocity: XCUIGestureVelocity(250), thenHoldForDuration: 0.1)
-    Thread.sleep(forTimeInterval: 0.6)
-    XCTAssertTrue(isBrowsingM(app), "The drag before re-collapsing did not reach M")
+    XCTAssertTrue(dragToBrowsing(app, from, to), "The drag before re-collapsing did not reach M")
     capture("collapse-04-browsing-before-recollapse", app)
 
     press(app.buttons["Collapse the player"], app)
@@ -510,9 +530,7 @@ final class FollowingProbe: XCTestCase {
 
     // The Reading Button restored the player; dragging must work again.
     Thread.sleep(forTimeInterval: 0.8)
-    from.press(forDuration: 0.05, thenDragTo: to, withVelocity: XCUIGestureVelocity(250), thenHoldForDuration: 0.1)
-    Thread.sleep(forTimeInterval: 0.6)
-    XCTAssertTrue(isBrowsingM(app), "Dragging does not work again after the Reading Button restored the player")
+    XCTAssertTrue(dragToBrowsing(app, from, to), "Dragging does not work again after the Reading Button restored the player")
     capture("collapse-07-dragging-restored", app)
     press(returnMark(app), app)
     Thread.sleep(forTimeInterval: 0.6)
@@ -763,9 +781,7 @@ final class FollowingProbe: XCTestCase {
 
     let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
     let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
-    from.press(forDuration: 0.05, thenDragTo: to, withVelocity: XCUIGestureVelocity(250), thenHoldForDuration: 0.1)
-    Thread.sleep(forTimeInterval: 0.6)
-    XCTAssertTrue(isBrowsingM(app), "A real drag did not turn A into M")
+    XCTAssertTrue(dragToBrowsing(app, from, to), "A real drag did not turn A into M")
     capture("theme-\(tag)-M", app)
   }
 
@@ -833,9 +849,7 @@ final class FollowingProbe: XCTestCase {
 
     let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
     let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
-    from.press(forDuration: 0.05, thenDragTo: to, withVelocity: XCUIGestureVelocity(250), thenHoldForDuration: 0.1)
-    Thread.sleep(forTimeInterval: 0.6)
-    XCTAssertTrue(isBrowsingM(app), "A drag during the Continuous drift did not turn A into M")
+    XCTAssertTrue(dragToBrowsing(app, from, to), "A drag during the Continuous drift did not turn A into M")
     XCTAssertTrue(app.buttons["Pause"].exists, "A drag must not pause playback")
     capture("continuous-drag-01-M-drift-stopped", app)
 
@@ -853,9 +867,7 @@ final class FollowingProbe: XCTestCase {
 
     // Once more, this time recovering with a tap on M instead of Play.
     Thread.sleep(forTimeInterval: 1.0)
-    from.press(forDuration: 0.05, thenDragTo: to, withVelocity: XCUIGestureVelocity(250), thenHoldForDuration: 0.1)
-    Thread.sleep(forTimeInterval: 0.6)
-    XCTAssertTrue(isBrowsingM(app), "The second drag did not turn A into M")
+    XCTAssertTrue(dragToBrowsing(app, from, to), "The second drag did not turn A into M")
     capture("continuous-drag-03-M-again", app)
     press(returnMark(app), app)
     Thread.sleep(forTimeInterval: 1.0)
