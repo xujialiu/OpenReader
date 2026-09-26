@@ -306,8 +306,10 @@ collapsing then reopening returns to `A` first, never surfacing `M`.
 
 ## What was done (batch 4: Continuous)
 
-Built and unit-tested without a device: the machine had no memory for a third
-simulator, so everything under "To be measured" below is unmeasured.
+Built and unit-tested without a device, in a worktree of its own beside batch
+3's, while the machine had no memory for a third simulator. It was measured on
+the device after both were merged ("Measured on the device", below), and the
+review fixes after that changed the rest gate and the paragraph glide again.
 
 - **The setting.** `AppSettings.following.scrolling`, `'line'` (the default) or
   `'continuous'` (`SCROLLINGS`), shown as `By line` and `Continuous`
