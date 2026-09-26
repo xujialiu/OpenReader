@@ -2082,6 +2082,46 @@ subfolder), none of them the app being wrong.
 - **A silence threshold that suits one voice hides another's pauses** (2026-09-24, #61). At −40 dB below the loudest 10 ms window, Fish's "jjk narrator" measured almost no silence between sentences, because its breath and room noise sit near −37 dB. Its whole-paragraph median came out at 0.16 s where its own word timings said 0.32 s. At −30 dB the two agree, but Azure then reads about 70 ms long. Check a threshold against a provider's word timings (Azure's and Fish's leave the pause between words) before trusting it, and quote each provider at the threshold that agreed.
 - **An EPUB's OPF is namespaced, and a cover page may not parse** (2026-09-24, #61). `@xmldom/xmldom`'s `getElementsByTagName('item')` found 0 items in every book in `~/Works/epub_books`; `getElementsByTagNameNS('*', 'item')` finds them. A cover page with an unclosed `<img>` throws `ParseError` even when parsed as `text/html`, so parse each spine item in a `try` and skip the one that fails.
 
+### Verifying #71 batch 2
+
+- **A stray `var` inside a comma-separated declaration list is a `SyntaxError`,
+  silently — until the code path that holds it runs.** `line-follow.cjs`'s
+  `--tap` code read `var h = m.container.clientHeight, var share = R.share
+  === null ? 0.5 : R.share, under = …`, added when `--tap`'s target grew the
+  same `share`/`open` arithmetic the batch 2 `analyse` code already had. Every
+  other run (plain, `--skips`, `--whole`, the new `arm`/`analyse`) never
+  evaluates the `tap` string, so this shipped and passed review unnoticed;
+  only `--tap` itself would have hit `new Function(...)` throwing `Unexpected
+  token 'var'`. Confirmed with `node -e` against the extracted line before
+  fixing it. Fix: one `var`, comma-separated declarations, `hit` included in
+  the same list rather than a bare `hit = null;` after a stray semicolon.
+- **`/tmp/openreader-*` is shared by every worktree on the machine, not just
+  this one, and an existing `ManualTests.xcodeproj` there is reused as-is.**
+  `player-touch.sh` (like `line-position.sh`) only regenerates the project
+  when `ManualTests.xcodeproj` does not already exist at the given path, so it
+  can reuse one across runs for faster incremental builds. `/tmp/openreader-player-touch-02`
+  already held a project from a same-named directory an unrelated `ui`
+  worktree's session had used earlier that day; the build failed with `Build
+  input file cannot be found:
+  '/Users/xujialiu/orca/workspaces/openreader/ui/test/manual-test/ios/PlayerTouchProbe.swift'`
+  — a different worktree's absolute path, baked into that project by
+  `Xcodeproj::Project.new(...).new_target(...).add_file_references([project.main_group.new_file(File.expand_path(source, __dir__))])`
+  at the time it was generated. Give every generated project a path that
+  includes the worktree's own name (`/tmp/openreader-player-touch-feat-scroll-01`,
+  not `-02`) rather than trusting a short numeric suffix to be free.
+- **A `section` command sent while playing can take much longer than a few
+  seconds to turn into an actual seek, if the target section has not rendered
+  yet.** `goToSection` (`use-reading.ts`) calls `bridge.goToSection` at once
+  (the page starts moving) but only seeks once that section has reported its
+  Blocks; until then the seek sits in `pendingSectionRef`. Jumping from
+  section 9 to section 20 (11 sections, several screens each) this way: a
+  `say` 3 s after `play` then `section:20` still read back `section=9`
+  (unresolved); the same check about 15 s later read `section=20
+  utterance=296`. Getting a fresh reading position for a new run needs a wait
+  proportional to how far the jump is and how long the intervening sections
+  are, not a fixed few seconds — poll `say` until `section` changes rather
+  than assuming a short sleep was enough.
+
 ## Lock-screen screenshot and button inspection
 
 Prerequisites: macOS, Xcode selected by `xcode-select`, a booted iOS simulator,
@@ -4166,6 +4206,37 @@ What it cannot prove: a finger. It moves nothing by touch, so the glide stopping
 under a finger (any `touchmove`) is not covered, and neither is the feel — look
 at the simulator, or the owner's phone.
 
+```sh
+node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG arm
+( a real XCTest touch drives the player: player-touch.sh's
+  testCollapseAndReopenDuringPlaybackRealTouch, or a bare harness play/pause
+  with no settings patch in between — see below )
+node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG analyse
+```
+
+`arm`/`analyse` (#71 batch 2), the same split `glide-touch.cjs` uses: `arm` runs
+this script's own calibration (collapse and expand once for the inset, the
+`POSITION` Line Position, the silence check) and starts the recorder, then exits
+without pressing Play; `analyse` only reads `window.__lineFollow` back, with no
+GREEN/RED verdict of its own since what drove the player in between was not this
+script. Needed whenever the thing under test is the **player's own controls**
+(collapsing, reopening) rather than the WebView: a real collapse/reopen tap
+never touches the WebView, so `line-follow.cjs`'s normal single-process run,
+which only ever presses Play itself, cannot see it.
+
+Also proved item 5 of #71 batch 2 (a note on the player must not move the page
+at Play): `arm` at the Line Position already in effect (so the bridge sends no
+`following` message — a real change is its own legitimate move, measured
+separately above) leaves a note (every `ask()` answer is one), then a bare
+harness `play`/`pause` with nothing in between. Measured 2026-09-26: `msg` line
+`note attention=true "The highlight could not be drawn: PROBE started …"`
+present immediately before `play`, and the run's `other` array empty — no
+unmatched move at Play, where batch 1 moved 87 px. The same run's real-touch
+half (below) independently shows the same thing: `arm`'s own note was still
+showing when `testCollapseAndReopenDuringPlaybackRealTouch` pressed Play by
+touch, the `inset` message right after it dropped `bottom` from 174.67 to
+134.67 (the note clearing), and there is still no unmatched move there either.
+
 ## General's Line position row (#71, `line-position.sh`, `LinePositionProbe.swift`)
 
 ```sh
@@ -4179,6 +4250,24 @@ the row's value checked, 30% chosen (the row then reads `Line position, 30%`),
 and the original value chosen back. Never presses Play. It relaunches the app,
 so silence the simulator again before the next play, and reopen the reader with
 `{"do":"open","id":"sha256:…"}`. 0 failures in 29.2 s (2026-09-26 11:12).
+
+```sh
+bash test/manual-test/line-position.sh SIMULATOR_UDID NEW_OUTPUT_DIR_OR_EXISTING_PROJECT_DIR \
+  -only-testing:testLinePositionMenuRealTouches -only-testing:testLinePositionPersistsAcrossRelaunch
+```
+
+`testLinePositionPersistsAcrossRelaunch`, the same convention as
+`PauseMenuProbe.testPauseValuesPersistAcrossRelaunch`: chooses 40% by real
+touch, `app.terminate(); app.launch()`, and requires the row still reads 40%
+after the cold start, then restores 50%. **Remove
+`Documents/harness.json` first** (README Pitfalls, "Two harness commands
+written back to back run only the second" / "The walkthrough harness re-runs
+its last command on every launch") — a leftover `settings` patch from an
+earlier `line-follow.cjs` run would silently rewrite the Line Position right
+after the relaunch, the same trap `pause-menu.sh`'s own persistence method
+documents. Both methods together: `Executed 2 tests, with 0 failures (0
+unexpected) in 72.327 (72.338) seconds` (2026-09-26 11:41), and the device's
+own `settings.json` read `{"linePosition":50}` afterwards.
 
 ## A real drag during a live glide (#71, `glide-touch.cjs`, `GlideTouchProbe.swift`)
 
@@ -4257,6 +4346,40 @@ below — no dedicated script was needed for either.
 What this does not establish, beyond `line-follow.cjs`'s own list: the exact
 frame a live glide's animation is truncated on, since no run actually landed
 mid-curve.
+
+## A real collapse and reopen during live playback (#71, `player-touch.sh`)
+
+```sh
+node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG arm
+bash test/manual-test/player-touch.sh SIMULATOR_UDID NEW_OUTPUT_DIR_OR_EXISTING_PROJECT_DIR \
+  -only-testing:testCollapseAndReopenDuringPlaybackRealTouch
+node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG analyse
+```
+
+Neither `line-follow.cjs`'s own single-process run nor `glide-touch.cjs` touches
+the player's own controls (only the WebView), so a real collapse and a real
+reopen needed a third pair in the same `arm`/`analyse` shape.
+`PlayerTouchProbe.testCollapseAndReopenDuringPlaybackRealTouch` (`.activate()`
+only, the same convention as `testHeadRowTouches`: needs a Document already
+open, paused, on a sentence with Word Timings, the player expanded) taps Play,
+waits 1.5 s into the reading, taps "Collapse the player", waits 7 s collapsed
+(2-3 s per line, this book, so comfortably more than the two line changes
+wanted), then taps the collapsed pill's own button. There is no separate expand
+gesture while playing: the collapsed state offers only the one Play/Pause
+button, and a real Pause is what reopens the player
+(`reading-view.tsx`'s `setCollapsed(false)`) — so reopening here also pauses,
+the current behaviour and not a limitation of the probe. `Executed 1 test, with
+0 failures (0 unexpected) in 21.002 (21.014) seconds` (2026-09-26).
+
+`analyse` read back four line changes, all resting 0.4 px from the 60 %
+target (374 px): one just after the real Play (69604 ms into the still-running
+recording), two more while collapsed (72654, 75513: `msg … inset bottom 52
+open 134.667` at 69843 sits inside the first episode's own window, well before
+either), a fourth still collapsed (78054), then the reopen tap
+(`msg 78680 inset bottom 134.667 open 134.667`, `open` unchanged throughout,
+exactly ADR 0050's point) with the reading already paused (`msg 78440 hold`)
+and nothing further moving. The run's `other` array was empty: no unmatched
+scroll at the collapse message, the reopen message, or in between.
 
 ## A drawer's lines in the other theme's colour (#29, `line-colour.sh`)
 

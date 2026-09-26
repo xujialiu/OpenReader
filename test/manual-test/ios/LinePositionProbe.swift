@@ -74,4 +74,53 @@ final class LinePositionProbe: XCTestCase {
     XCTAssertEqual(row(app).label, before, "Choosing back did not restore the row")
     capture("line-position-restored", app)
   }
+
+  /// #71 batch 2: choosing 40% survives a relaunch — the same convention as
+  /// `PauseMenuProbe.testPauseValuesPersistAcrossRelaunch`. Remove
+  /// `Documents/harness.json` before this method runs (README Pitfalls, "Two
+  /// harness commands written back to back run only the second" /ADR: the
+  /// walkthrough harness re-runs its last command on every launch), or a
+  /// leftover `settings` patch from an earlier `line-follow.cjs` run silently
+  /// rewrites the Line Position right after the relaunch and the check would
+  /// pass or fail for the wrong reason. Leaves the row at 50%, the default.
+  func testLinePositionPersistsAcrossRelaunch() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.terminate(); app.launch()
+    ensureAtLibrary(app)
+    XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+    app.buttons["Settings"].tap()
+    // The version line lives on this same screen (SettingsVersionProbe); a
+    // capture here is incidental evidence for #71's own version bump too.
+    capture("line-position-settings-root-before-persist", app)
+    var general = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'General'")).firstMatch
+    XCTAssertTrue(general.waitForExistence(timeout: 5))
+    general.tap()
+    XCTAssertTrue(row(app).waitForExistence(timeout: 5))
+
+    row(app).tap()
+    XCTAssertTrue(menuItem(app, "40%").waitForExistence(timeout: 3))
+    menuItem(app, "40%").tap()
+    Thread.sleep(forTimeInterval: 0.6)
+    XCTAssertEqual(row(app).label, "Line position, 40%")
+    capture("line-position-40-before-relaunch", app)
+
+    app.terminate()
+    app.launch()
+    ensureAtLibrary(app)
+    XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))
+    app.buttons["Settings"].tap()
+    general = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'General'")).firstMatch
+    XCTAssertTrue(general.waitForExistence(timeout: 5))
+    general.tap()
+    XCTAssertTrue(row(app).waitForExistence(timeout: 5))
+    XCTAssertEqual(row(app).label, "Line position, 40%", "Line position did not survive a relaunch")
+    capture("line-position-40-after-relaunch", app)
+
+    row(app).tap()
+    XCTAssertTrue(menuItem(app, "50%").waitForExistence(timeout: 3))
+    menuItem(app, "50%").tap()
+    Thread.sleep(forTimeInterval: 0.6)
+    XCTAssertEqual(row(app).label, "Line position, 50%", "did not restore the default")
+    capture("line-position-restored-50", app)
+  }
 }

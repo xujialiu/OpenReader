@@ -5,6 +5,10 @@
 //   node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG SECONDS [--tap]
 //   node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG --skips N
 //   node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG --whole
+//   node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG arm
+//   ( a real XCTest touch drives the player: collapse, wait, the collapsed
+//     pill's own Pause-and-reopen tap — see player-touch.sh )
+//   node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG analyse
 //
 // Needs a reader open and paused, a Voice with Word Timings chosen, the
 // simulator silenced (`silence.sh set`), and METRO_LOG, the file this worktree's
@@ -73,9 +77,18 @@ const { Buffer } = require('node:buffer');
 const [device, metroLog, secondsArg, flag] = process.argv.slice(2);
 const skips = secondsArg === '--skips' ? Number(flag) : 0;
 const whole = secondsArg === '--whole';
-const seconds = skips || whole ? 0 : Number(secondsArg);
-if (!device || !metroLog || !(whole || (skips > 0 ? skips <= 60 : seconds > 0 && seconds <= 30))) {
-  console.error('Usage: line-follow.cjs SIMULATOR_UDID METRO_LOG SECONDS [--tap]  (SECONDS at most 30)\n       line-follow.cjs SIMULATOR_UDID METRO_LOG --skips N  (N at most 60)');
+// `arm`/`analyse` (#71 batch 2): the same split `glide-touch.cjs` uses so a
+// real XCTest touch (a collapse, then the collapsed pill's own Pause-and-
+// reopen tap) can happen between them, driving the player's own controls
+// rather than the WebView. `arm` reuses this script's normal calibration
+// (collapse/expand for the inset, the Line Position setting, the silence
+// check) and then only starts the recorder; `analyse` only reads it back —
+// neither presses Play or touches anything itself.
+const armMode = secondsArg === 'arm';
+const analyseMode = secondsArg === 'analyse';
+const seconds = skips || whole || armMode || analyseMode ? 0 : Number(secondsArg);
+if (!device || !metroLog || !(armMode || analyseMode || whole || (skips > 0 ? skips <= 60 : seconds > 0 && seconds <= 30))) {
+  console.error('Usage: line-follow.cjs SIMULATOR_UDID METRO_LOG SECONDS [--tap]  (SECONDS at most 30)\n       line-follow.cjs SIMULATOR_UDID METRO_LOG --skips N  (N at most 60)\n       line-follow.cjs SIMULATOR_UDID METRO_LOG arm|analyse  (a real touch drives the player in between)');
   process.exit(2);
 }
 const tapToo = flag === '--tap';
@@ -240,7 +253,7 @@ const analyse = `
 
 const tap = `
   var m = rendition.manager, box = m.container.getBoundingClientRect(), R = window.__lineFollow;
-  var h = m.container.clientHeight, var share = R.share === null ? 0.5 : R.share, under = R.open || R.inset || 0, target = (h - under) * share; hit = null;
+  var h = m.container.clientHeight, share = R.share === null ? 0.5 : R.share, under = R.open || R.inset || 0, target = (h - under) * share, hit = null;
   rendition.getContents().forEach(function (c) {
     if (hit || !c.window || !c.window.frameElement) return;
     var f = c.window.frameElement.getBoundingClientRect(), doc = c.document;
@@ -270,6 +283,18 @@ function print(page, label) {
 }
 
 (async () => {
+  if (analyseMode) {
+    // `window.__lineFollow` was armed and started by a previous `arm` run in
+    // this same still-running app; a real XCTest touch has driven the player
+    // since. Only read it back — no calibration, no settings, no Play.
+    const result = await ask(analyse, 8000);
+    if (result === null) {
+      console.error('No answer to the analysis. Was `… arm` run first, in the same app process (no relaunch since)?');
+      process.exit(2);
+    }
+    print(JSON.parse(result), 'reading');
+    process.exit(0);
+  }
   const armed = await ask(arm);
   if (!armed || !armed.startsWith('armed')) {
     console.error('The recorder did not install: ' + armed + '. Is a reader open, and is Metro writing to ' + metroLog + '?');
@@ -291,6 +316,10 @@ function print(page, label) {
     process.exit(2);
   }
   await ask('window.__lineFollow.start(); return "started inset=" + window.__lineFollow.inset;');
+  if (armMode) {
+    console.log('armed and recording at Line position ' + position + '%. Drive the player by real touch now, then run … analyse.');
+    process.exit(0);
+  }
   if (whole) {
     // On to a sentence of three lines or more, whose middle is not its first
     // line's: only there do "held whole" and "held by its first line" differ.
