@@ -35,7 +35,7 @@ that can highlight an arbitrary text range and scroll it into view on command.
 Those two requirements, not the reading or the speaking, are what chose the
 playback engine and this renderer.
 
-## The page scrolls, and the line being spoken is held in the middle (ADR 0011, ADR 0050)
+## The page scrolls, and the line being spoken is held at the Line Position (ADR 0011, ADR 0050)
 
 The reader is mounted with `flow: 'scrolled-continuous'` and the `continuous`
 manager — `reader-bridge.ts` puts both in `readerProps`, because the layout and
@@ -45,17 +45,19 @@ and what the highlighter was first built against, is rejected: a page turn
 replaces the whole screen and throws the eye back to the top, every minute or two,
 for hours.
 
-Six properties of the following, and each is a rule rather than an accident.
+Eight properties of the following, and each is a rule rather than an accident.
 
 - **It holds the line, and glides to it** (ADR 0050). The line the spoken word
   begins on goes to the Line Position — the owner's share of the page above the
-  **open** player, without its notes (`lineAt`, #71), the middle by default —
-  measured from the `Range`s that were just painted and the container's own box.
-  A note on the player and the player collapsing move nothing. When the word moves onto another line the page glides there in
-  `GLIDE_MS` (250 ms), easing out, timed in drawn frames so that a stalled frame
-  pauses a glide instead of jumping it; a move further than the visible page is
-  made at once. A Clip without Word Timings is held by its whole Utterance, and
-  an Utterance taller than the screen then has its *start* at the top.
+  **open** player, without its notes (`lineAt`, #71), 20 to 80 % of the way down
+  it and the middle by default — measured from the `Range`s that were just
+  painted and the container's own box. A note on the player and the player
+  collapsing move nothing. When the word moves onto another line the page glides
+  there in `GLIDE_MS` (250 ms), easing out, timed in drawn frames so that a
+  stalled frame pauses a glide instead of jumping it; a move further than the
+  visible page is made at once. A Clip without Word Timings is held by its whole
+  Utterance, and an Utterance taller than the screen then has its *start* at the
+  top.
   `glide.ts` holds the curve as source text, so `glide.test.ts` runs what Safari
   runs. That is **By line**, the default. In **Continuous** (`SCROLLING`, the
   owner's `Scrolling` row, #71) every word carries the line past the Line
@@ -64,13 +66,16 @@ Six properties of the following, and each is a rule rather than an accident.
   critically damped follower (`driftVelocity`, τ 200 ms) paid out in whole pixels.
   A move of more than a line — a paragraph break, a heading, a sentence elsewhere —
   is still a glide or a jump (`steer`).
-- **It adds nothing to the bridge.** The page moves on the Clip cue that already
-  arrives once per Utterance (`follow` below) and on the words the loop already
-  draws, inside the WebView. There is no new message in either direction and
-  nothing crosses the bridge per word; ADR 0005 exists to keep that off it. By
-  line, a word moves the page only when it is on another line, so the loop scrolls
-  at most once a line; in Continuous a word only sets where the drift is going,
-  and the loop itself never scrolls.
+- **Nothing crosses the bridge per word.** The page moves on the Clip cue that
+  already arrives once per Utterance (`follow` below) and on the words the loop
+  already draws, inside the WebView; ADR 0005 exists to keep per-word traffic off
+  the bridge. What #71 added crosses only when something changes: to the
+  WebView, the owner's Line Position and Scrolling (`following`), M (`return`),
+  the player collapsing or opening (`followOnly`) and the open player's own
+  height (`openPx` on `inset`); back to the app, `openreader:following`, when A
+  or M changes. By line, a word moves the page only when it is on another line,
+  so the loop scrolls at most once a line; in Continuous a word only sets where
+  the drift is going, and the loop itself never scrolls.
 - **The scroll is not hidden from epub.js.** It goes through the manager's own
   `scrollBy` with its `ignore` flag *off*, so it reaches the continuous manager
   exactly as a finger scroll does — which is what makes it render the section the
@@ -98,14 +103,15 @@ Six properties of the following, and each is a rule rather than an accident.
 - **A section `follow()` had to display is placed on the frame after it
   arrives** (#50, ADR 0023). The content hook that adopts it runs inside that
   display, before epub.js's own `moveTo` to the Block the display named, and in
-  the same task. Centring there added the two scrolls together: measured at
-  725 px and then 958 px more, with the painted sentence 724 px above the screen.
+  the same task. Moving the page to the line there added the two scrolls
+  together: measured at 725 px and then 958 px more, with the painted sentence
+  724 px above the screen.
   So the highlight is painted at once — its word quietly, so that it starts no
   glide of its own — and the page is placed on the next frame through `settle()`,
   at once and not by a glide, which then keeps the line in place while epub.js
   lays the neighbouring sections out. Any other section that arrives, such as a
   view the manager rebuilt, is placed at once, as before.
-- **Nothing centres while the owner is browsing** (#52, ADR 0044), and the
+- **Nothing follows while the owner is browsing** (#52, ADR 0044), and the
   player shows it as **M** (#71, ADR 0050). A Contents row while paused sends a
   `browse` message, then displays its section, and a finger dragging the page
   sets the same `browsing` flag. Until it is cleared, `placeOnce()`, `settle()`
@@ -114,8 +120,8 @@ Six properties of the following, and each is a rule rather than an accident.
   the next sentence takes the page back. Any move of a finger on the page also
   stops a glide where it is, from the same `touchmove` listener. It has to be
   the WebView's flag: displaying the section after next re-rendered the
-  reading's own section as a neighbour, and `attach()` centred the paused
-  sentence as it arrived (−7,424 px, measured 2026-09-23 23:30).
+  reading's own section as a neighbour, and `attach()` took the page to the
+  paused sentence as it arrived (−7,424 px, measured 2026-09-23 23:30).
 - **What clears it** (#71, Zotero-TTS's rule). A revealed highlight — the first
   cue after Play, a tapped sentence, a skip, a place from another device; M
   (`return`); the player collapsing (`followOnly`); and, by itself, a cue the
@@ -223,14 +229,19 @@ One message per second, not one per word. The scroll that keeps the line being
 spoken in place rides on the first of those two and on the words the WebView
 already draws from it, and adds no third.
 
-Three other messages cross, and none is on the frame path: how much of the page
-the player is covering, with the open player's own height beside it, which are
-the following's inputs (ADR 0020, ADR 0050); the owner's **Line Position** and
-way of scrolling, together (`following`, ADR 0050); and the owner's **Appearance** — the font, size and text alignment the document is set
-in, as a stylesheet the program installs (ADR 0021, ADR 0034). Appearance is a message and not a
-rebuilt program because `injectedJavascript` is evaluated at page load and the
-program refuses a second installation, so a new source string would change
-nothing on a book that is already open.
+Eleven other messages cross to the WebView, and none is on the frame path:
+`hold` and `clear`, which stop the loop and take the highlights away; `browse`,
+M's `return` and the collapsed player's `followOnly`, which say whether the page
+follows the reading; how much of the page the player and the navigation bar are
+covering (`inset`, with the open player's own height as `openPx`, and `bar`),
+which are the following's inputs (ADR 0020, ADR 0048, ADR 0050); the owner's
+**Line Position** and **Scrolling**, together (`following`, ADR 0050);
+`measured`, below; and the owner's **Appearance** — the font, size and text
+alignment the document is set in — and **Theme**, as stylesheets the program
+installs (`appearance`, `theme`, ADR 0021, ADR 0022, ADR 0034). Appearance is a
+message and not a rebuilt program because `injectedJavascript` is evaluated at
+page load and the program refuses a second installation, so a new source string
+would change nothing on a book that is already open.
 
 The size is the owner's in every Document (ADR 0030), so it is measured against
 each Document's own **body text size**. Until that is known, each section's
@@ -272,7 +283,7 @@ The split is where the platform is, and it is the whole of the test strategy.
 | --- | --- |
 | `cursor.ts` | A Word Timing into a place in the document, and which word is current at time *t*. Three coordinate systems and every decision the renderer makes — plus the two walks back along that chain, a tapped point and a stored Reading Position, into the Utterance to read from. |
 | `blocks.ts` | The Blocks the WebView has reported, in reading order — sections arrive out of it and more than once. |
-| `messages.ts` | The protocol between the two halves. Types, and the four message names that must not collide with the library's own. |
+| `messages.ts` | The protocol between the two halves. Types, and the five message names that must not collide with the library's own. |
 | `body-text.ts` | A Document's body text size, from the character counts the WebView reports: the size most of the text is set in, once enough text has been seen. |
 
 | Runs in Safari's JavaScript, not tested here | |
