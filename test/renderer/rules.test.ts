@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 import { BLOCKS_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from '../../src/renderer/messages';
+import { GLIDE_SOURCE } from '../../src/renderer/glide';
 import {
   appearanceCss,
   DEFAULT_APPEARANCE,
@@ -136,7 +137,7 @@ describe('never send a position update per word across the bridge (ADR 0005)', (
   });
 });
 
-describe('the page follows the voice, once per Utterance (ADR 0011)', () => {
+describe('the page follows the line being spoken (ADR 0011, ADR 0050)', () => {
   it('mounts the reader in the layout the highlight was proved under', () => {
     // The highlighter was re-proved on a device under *this* layout, and both
     // findings behind it were re-measured there. Changing either of these two
@@ -156,36 +157,87 @@ describe('the page follows the voice, once per Utterance (ADR 0011)', () => {
     }
   });
 
-  it('scrolls in one place, and it is the Clip cue that reaches it', () => {
-    // ADR 0005 keeps the frame path off the bridge; this keeps it off the page.
-    // A scroll from `tick` would run at `requestAnimationFrame` rate, and each one
-    // costs the continuous manager a pass over its views — it would fail as a
-    // reader that stutters, not as an error.
+  it('scrolls in one place, and only bring() and a glide reach it', () => {
+    // ADR 0005 keeps the frame path off the bridge; this keeps the scroll in one
+    // function, so there is one thing to read to know how the page moves. Each
+    // scroll costs the continuous manager a pass over its views, so a scroll from
+    // the word loop itself would fail as a reader that stutters, not as an error.
     const program = code('highlighter.ts');
     expect(program.match(/scrollBy\(/g)).toHaveLength(1);
-    expect(fn(program, 'centre')).toContain('rendition.manager.scrollBy(0, move, false)');
+    pin(fn(program, 'nudge'), 'rendition.manager.scrollBy(0, by, false);', 'highlighter.ts, function nudge');
+    // One call in bring(), for a move made at once, and one a frame in
+    // glideStep(); the declaration is the third.
+    expect(program.match(/nudge\(/g)).toHaveLength(3);
+    expect(fn(program, 'bring').match(/nudge\(/g)).toHaveLength(1);
+    expect(fn(program, 'glideStep').match(/nudge\(/g)).toHaveLength(1);
     for (const perWord of ['tick', 'showWord', 'showAt', 'start']) {
-      expect({ perWord, scrolls: /centre|scrollBy/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
+      expect({ perWord, scrolls: /nudge|scrollBy|bring\(|settle|place(Once)?\(/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
     }
   });
 
-  it('does not scroll on the once-a-second correction either', () => {
-    // The correction is the second and last thing the bridge sends (ADR 0005). It
-    // moves the highlight inside an Utterance that is already centred; scrolling
-    // from it would drag the page under the reader once a second.
+  it('moves the page for a word only when the word is on another line (ADR 0050)', () => {
+    // The page follows the line, not the word and not the sentence: a word on the
+    // line being read moves nothing, which is what keeps the loop from scrolling
+    // once a word. And a word painted by attach() is quiet — attach() places the
+    // page itself, a frame later when epub.js is still moving it (#50).
     const program = code('highlighter.ts');
-    const correction = program.slice(program.indexOf("message.kind === 'correct'"));
-    expect(correction).not.toMatch(/centre|scrollBy|follow\(/);
+    pin(fn(program, 'showWord'), 'if (!quiet) followWord(built);', 'highlighter.ts, function showWord');
+    const follow = fn(program, 'followWord');
+    pin(follow, 'if (!state || !state.follow || browsing || !state.words) return;', 'highlighter.ts, function followWord');
+    pin(follow, 'if (!line || sameLine(followed, line)) return;', 'highlighter.ts, function followWord');
+    pin(follow, 'bring({ line: line }, false);', 'highlighter.ts, function followWord');
+    expect(follow.indexOf('sameLine(followed, line)')).toBeLessThan(follow.indexOf('bring('));
   });
 
-  it('centres at most once per document per Utterance', () => {
-    // A centring can make the continuous manager render a section, which reaches
-    // `attach`, which would centre again, which would render again. The WeakSet is
+  it('glides a move within the visible page, and makes any other at once (ADR 0050)', () => {
+    const program = code('highlighter.ts');
+    const bring = fn(program, 'bring');
+    pin(bring, 'if (Math.abs(move) < 1) {', 'highlighter.ts, function bring');
+    pin(bring, 'if (instant || !glides(move, visibleOf(scroller()))) {', 'highlighter.ts, function bring');
+    // A glide to the line already being glided to is left alone; any other is
+    // taken over from where the page is.
+    pin(bring, 'if (!instant && glide && aimed.line && glide.aimed.line && sameLine(glide.aimed.line, aimed.line)) return true;', 'highlighter.ts, function bring');
+    pin(bring, 'glide = { aimed: aimed, from: move, elapsed: 0, last: null };', 'highlighter.ts, function bring');
+    // Each frame measures the line again and moves by what the curve still
+    // leaves, so epub.js moving the scroll position under a glide is absorbed.
+    const step = fn(program, 'glideStep');
+    pin(step, 'var move = moveFor(glide.aimed);', 'highlighter.ts, function glideStep');
+    pin(step, 'var left = glideLeft(glide.from, glide.elapsed);', 'highlighter.ts, function glideStep');
+    // Timed in drawn frames, at most two frames' worth each, so a stalled main
+    // thread pauses a glide rather than using the curve up in a jump.
+    pin(step, 'glide.elapsed += glide.last === null ? FRAME_MS : Math.min(now - glide.last, 2 * FRAME_MS);', 'highlighter.ts, function glideStep');
+    pin(step, 'var by = move - left;', 'highlighter.ts, function glideStep');
+    pin(step, 'if (!state || !state.follow || browsing) {', 'highlighter.ts, function glideStep');
+    // The Utterance is the unit only without Word Timings.
+    const aim = fn(program, 'aim');
+    pin(aim, 'if (state.words || !state.durationMs) {', 'highlighter.ts, function aim');
+    pin(aim, 'var built = build((state.words && spokenRanges()) || state.utteranceRanges);', 'highlighter.ts, function aim');
+    pin(aim, 'return whole ? { whole: whole } : null;', 'highlighter.ts, function aim');
+  });
+
+  it('runs the glide source the tests run', () => {
+    // glide.test.ts evaluates GLIDE_SOURCE; this is what makes that the program's.
+    pin(highlighterSource(), GLIDE_SOURCE, 'the program');
+  });
+
+  it('does not scroll on the once-a-second correction itself', () => {
+    // The correction is the second and last thing the bridge sends (ADR 0005). It
+    // moves the highlight to the word the voice is on; the page follows that word
+    // only if it is on another line, through showAt() like any word, and never
+    // from the correction's own branch.
+    const program = code('highlighter.ts');
+    const correction = program.slice(program.indexOf("message.kind === 'correct'"));
+    expect(correction).not.toMatch(/nudge|scrollBy|bring\(|place(Once)?\(|follow\(/);
+  });
+
+  it('places at most once per document per Utterance', () => {
+    // A placing can make the continuous manager render a section, which reaches
+    // `attach`, which would place again, which would render again. The WeakSet is
     // what ends that, and it is weak because the alternative is the renderer
     // holding a document epub.js means to destroy.
     const program = code('highlighter.ts');
     expect(program).toContain('centred: new WeakSet()');
-    expect(fn(program, 'centreOnce')).toContain('if (state.centred.has(doc)) return;');
+    expect(fn(program, 'placeOnce')).toContain('if (state.centred.has(doc)) return;');
   });
 });
 
@@ -519,16 +571,18 @@ describe('a highlight that moves takes all of itself with it (#35, ADR 0038)', (
 });
 
 describe('the player floats over the page, and the centring is told (ADR 0020)', () => {
-  it('centres in what can be seen rather than in the container', () => {
-    // ADR 0011 centres against `clientHeight`; ADR 0020's player covers the bottom
-    // of that container. Centring against the full height aims at a point the player
-    // is standing on, and the sentence being spoken sits behind it — which fails as
+  it('holds the line in what can be seen rather than in the container', () => {
+    // ADR 0011 measured against `clientHeight`; ADR 0020's player covers the bottom
+    // of that container. Aiming against the full height aims at a point the player
+    // is standing on, and the line being spoken sits behind it — which fails as
     // "the highlight is off screen", not as an error.
     const program = code('highlighter.ts');
-    const centre = fn(program, 'centre');
-    expect(centre).toContain('var visible = height - covered;');
-    expect(centre).toContain('visible / 2');
-    expect(centre).not.toContain('height / 2');
+    pin(fn(program, 'visibleOf'), 'var visible = view.clientHeight - covered;', 'highlighter.ts, function visibleOf');
+    const moveFor = fn(program, 'moveFor');
+    pin(moveFor, 'var at = bounds.top + visibleOf(view) * LINE_POSITION;', 'highlighter.ts, function moveFor');
+    expect(moveFor).not.toContain('clientHeight');
+    // The middle, until the owner's Line Position reaches it.
+    pin(highlighterSource(), 'var LINE_POSITION = 0.5;', 'the program');
   });
 
   it('takes the covered height as a message, because it changes when the player collapses', () => {
@@ -674,7 +728,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     const program = code('highlighter.ts');
     const branch = program.slice(program.indexOf("message.kind === 'appearance'"), program.indexOf("message.kind === 'theme'"));
     expect(branch).toContain('restyle();');
-    expect(branch).toContain('settle(SETTLE_FRAMES, null, 0);');
+    expect(branch).toContain('settle(SETTLE_FRAMES, 0);');
     expect(fn(program, 'restyle')).toContain('ensureStyle(list[i].document)');
   });
 
@@ -687,7 +741,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     const branch = program.slice(program.indexOf("message.kind === 'theme'"), program.indexOf("message.kind === 'clear'"));
     expect(branch).toContain('restyle();');
     expect(branch).not.toContain('settle(');
-    expect(branch).not.toContain('centre(');
+    expect(branch).not.toMatch(/place(Once)?\(|bring\(/);
   });
 
   it('cannot declare user-select, in either theme (ADR 0021, ADR 0022)', () => {
@@ -739,13 +793,14 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     // laid out yet is never centred at all, and without the second the window
     // closes after one frame.
     const settle = fn(code('highlighter.ts'), 'settle');
-    pin(settle, 'if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, null, 0); });', 'highlighter.ts, function settle');
-    pin(settle, 'window.requestAnimationFrame(function () {\n      settle(left - 1, box.top, steady);', 'highlighter.ts, function settle');
-    expect(settle).toContain('Math.abs(box.top - was) < 1');
+    pin(settle, 'if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, 0); });', 'highlighter.ts, function settle');
+    pin(settle, 'window.requestAnimationFrame(function () {\n      settle(left - 1, steady);', 'highlighter.ts, function settle');
+    pin(settle, 'var steady = Math.abs(move) < 1 ? still + 1 : 0;', 'highlighter.ts, function settle');
     // Every frame of the window, not once at the end: the first version centred
     // once and left the Utterance 4,285 px out when the text **shrank**, because a
     // page can look settled for a frame while epub.js is still relaying its views.
-    expect(settle.indexOf('centre(built);')).toBeLessThan(settle.indexOf('if (steady >= 3'));
+    // And at once, never a glide: the text has jumped by itself.
+    expect(settle.indexOf('bring(aimed, true);')).toBeLessThan(settle.indexOf('if (steady >= 3'));
     // The library's own observer, read rather than trusted.
     expect(library('epubjs.js')).toContain('new ResizeObserver((t) => {\n            requestAnimationFrame(this.resizeCheck.bind(this));');
   });
@@ -754,7 +809,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     const program = code('highlighter.ts');
     expect(program.match(/scrollBy\(/g)).toHaveLength(1);
     for (const perWord of ['tick', 'showWord', 'showAt', 'start']) {
-      expect({ perWord, scrolls: /centre|scrollBy|settle/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
+      expect({ perWord, scrolls: /nudge|scrollBy|settle|place(Once)?\(/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
     }
   });
 });
@@ -1127,10 +1182,10 @@ describe('the reading is fed by the reading, not by the scroll (notes/NOTES_2026
   });
 
   it('leaves the scroll that makes the manager render, with its ignore flag off', () => {
-    // Whatever else changes, this must not: `centre()` reaches epub.js as a finger
-    // scroll does, which is what makes it append the section the reading is walking
-    // into. A scroll it was told to ignore renders nothing new.
-    expect(fn(program, 'centre')).toContain('rendition.manager.scrollBy(0, move, false)');
+    // Whatever else changes, this must not: the page's one scroll reaches epub.js
+    // as a finger scroll does, which is what makes it append the section the
+    // reading is walking into. A scroll it was told to ignore renders nothing new.
+    expect(fn(program, 'nudge')).toContain('rendition.manager.scrollBy(0, by, false)');
   });
 });
 
@@ -1198,19 +1253,21 @@ describe('a section follow() asked for is centred after epub.js has placed it (#
     pin(speak, 'awaiting: null', "highlighter.ts, the 'speak' branch");
   });
 
-  it('paints that section at once and centres it on the next frame, through settle', () => {
+  it('paints that section at once and places it on the next frame, through settle', () => {
     const attach = fn(program, 'attach');
     pin(attach, 'if (state.awaiting === contents.sectionIndex) {', 'highlighter.ts, function attach');
     pin(
       attach,
-      'window.requestAnimationFrame(function () {\n        if (state === mine) settle(SETTLE_FRAMES, null, 0);',
+      'window.requestAnimationFrame(function () {\n        if (state === mine) settle(SETTLE_FRAMES, 0);',
       'highlighter.ts, function attach',
     );
     // The highlight is not deferred with it: only the scroll waits for epub.js.
+    // And the word is painted quietly, so it does not start a glide of its own
+    // in the middle of epub.js's display.
     expect(attach.indexOf('var built = showUtterance();')).toBeLessThan(attach.indexOf('if (state.awaiting ==='));
-    expect(attach.indexOf('showAt(state.next - 1);')).toBeLessThan(attach.indexOf('if (state.awaiting ==='));
-    // Any other arrival has no scroll of epub.js's behind it and is centred at once.
-    pin(attach, '    } else {\n      centreOnce(built);\n    }', 'highlighter.ts, function attach');
+    expect(attach.indexOf('showAt(state.next - 1, true);')).toBeLessThan(attach.indexOf('if (state.awaiting ==='));
+    // Any other arrival has no scroll of epub.js's behind it and is placed at once.
+    pin(attach, '    } else {\n      placeOnce(built);\n    }', 'highlighter.ts, function attach');
   });
 
   it('because epub.js runs the content hook before the moveTo of the same display', () => {
@@ -1270,14 +1327,18 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     expect(program.match(/browsing = false;/g)).toHaveLength(2);
   });
 
-  it('centres nothing by itself while browsing: not a section of the reading arriving, not an Appearance change', () => {
-    pin(fn(program, 'centreOnce'), 'if (!state || !state.follow || browsing) return;', 'highlighter.ts, function centreOnce');
+  it('moves nothing by itself while browsing: not a section of the reading arriving, not an Appearance change, not a word', () => {
+    pin(fn(program, 'placeOnce'), 'if (!state || !state.follow || browsing) return;', 'highlighter.ts, function placeOnce');
     pin(fn(program, 'settle'), 'if (!state || !state.follow || browsing) return;', 'highlighter.ts, function settle');
-    // attach() and the Appearance branch reach the page only through those two.
+    pin(fn(program, 'followWord'), 'if (!state || !state.follow || browsing || !state.words) return;', 'highlighter.ts, function followWord');
+    // A glide under way stops the frame browsing begins.
+    pin(fn(program, 'glideStep'), 'if (!state || !state.follow || browsing) {', 'highlighter.ts, function glideStep');
+    pin(branch('browse', 'speak'), 'halt();', "highlighter.ts, the 'browse' branch");
+    // attach() and the Appearance branch reach the page only through those.
     const attach = fn(program, 'attach');
-    expect(attach).not.toContain('centre(');
+    expect(attach).not.toMatch(/\bplace\(|bring\(|nudge\(/);
     expect(attach).not.toContain('scrollBy');
-    expect(branch('appearance', 'measured')).not.toMatch(/\bcentre(Once)?\(/);
+    expect(branch('appearance', 'measured')).not.toMatch(/\bplace(Once)?\(|bring\(/);
   });
 
   it('lets a repaint keep whether the page follows, and only a revealed highlight scroll to it', () => {
@@ -1292,6 +1353,10 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     // A new finger is a new identifier, measured from where it first moved.
     pin(dragged, 'if (touch.identifier !== touchId) {', 'highlighter.ts, function dragged');
     pin(dragged, 'if (Math.abs(touch.clientY - touchY) > DRAG_PX) browsing = true;', 'highlighter.ts, function dragged');
+    // Any move of a finger stops a glide where the page is (ADR 0050), before it
+    // is known to be a drag — and still from touchmove, never touchstart.
+    expect(dragged.indexOf('halt();')).toBeGreaterThan(-1);
+    expect(dragged.indexOf('halt();')).toBeLessThan(dragged.indexOf('if (touch.identifier !== touchId) {'));
     pin(fn(program, 'adopt'), "contents.document.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, function adopt');
     // The margins between the section documents, heard once on the container.
     pin(program, "if (stage) stage.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, the install');

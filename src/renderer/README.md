@@ -35,27 +35,34 @@ that can highlight an arbitrary text range and scroll it into view on command.
 Those two requirements, not the reading or the speaking, are what chose the
 playback engine and this renderer.
 
-## The page scrolls, and the Utterance being spoken is held centred (ADR 0011)
+## The page scrolls, and the line being spoken is held in the middle (ADR 0011, ADR 0050)
 
 The reader is mounted with `flow: 'scrolled-continuous'` and the `continuous`
 manager — `reader-bridge.ts` puts both in `readerProps`, because the layout and
-the highlighter are one decision and the centring measures against that manager's
-own scroll container. Paginated layout, which is the library's default and what
-the highlighter was first built against, is rejected: a page turn replaces the
-whole screen and throws the eye back to the top, every minute or two, for hours.
+the highlighter are one decision and the following measures against that
+manager's own scroll container. Paginated layout, which is the library's default
+and what the highlighter was first built against, is rejected: a page turn
+replaces the whole screen and throws the eye back to the top, every minute or two,
+for hours.
 
-Six properties of the centring, and each is a rule rather than an accident.
+Six properties of the following, and each is a rule rather than an accident.
 
-- **It is centred, not merely on screen.** The middle of the Utterance goes to
-  the middle of the viewport, measured from the `Range`s that were just painted
-  and the container's own box. The one exception is an Utterance taller than the
-  screen, whose *start* goes to the top instead — centring its middle would push
-  the words about to be spoken off the top of the screen.
-- **It adds nothing to the bridge.** The scroll is driven by the Clip cue that
-  already arrives once per Utterance (`follow` below). There is no new message in
-  either direction and nothing at the `requestAnimationFrame` rate; ADR 0005
-  exists to keep that off the bridge. The once-a-second position correction does
-  not scroll, and neither does a word.
+- **It holds the line, and glides to it** (ADR 0050). The line the spoken word
+  begins on goes to the Line Position — `LINE_POSITION` of what can be seen, the
+  middle — measured from the `Range`s that were just painted and the container's
+  own box. When the word moves onto another line the page glides there in
+  `GLIDE_MS` (250 ms), easing out, timed in drawn frames so that a stalled frame
+  pauses a glide instead of jumping it; a move further than the visible page is
+  made at once. A Clip without Word Timings is held by its whole Utterance, and
+  an Utterance taller than the screen then has its *start* at the top.
+  `glide.ts` holds the curve as source text, so `glide.test.ts` runs what Safari
+  runs.
+- **It adds nothing to the bridge.** The page moves on the Clip cue that already
+  arrives once per Utterance (`follow` below) and on the words the loop already
+  draws, inside the WebView. There is no new message in either direction and
+  nothing crosses the bridge per word; ADR 0005 exists to keep that off it. A word
+  moves the page only when it is on another line, so the loop scrolls at most once
+  a line.
 - **The scroll is not hidden from epub.js.** It goes through the manager's own
   `scrollBy` with its `ignore` flag *off*, so it reaches the continuous manager
   exactly as a finger scroll does — which is what makes it render the section the
@@ -66,7 +73,7 @@ Six properties of the centring, and each is a rule rather than an accident.
 - **And the scroll alone is not enough, so the reading asks** (ADR 0023). The
   manager appends the next spine item only when the scroll comes within 500 px of
   the bottom of everything it holds, and the only thing that scrolls while a book
-  is read aloud is that centring, which stops at the sentence being spoken. A
+  is read aloud is that following, which stops at the line being spoken. A
   section whose text ends far above its own bottom therefore runs the reading out
   of Utterances with the rest of the book unrendered — measured at 3,072 px of
   section holding one line of text, the scroll at 0 and 758 px of viewport, so
@@ -80,21 +87,24 @@ Six properties of the centring, and each is a rule rather than an accident.
   program also sweeps on every Clip cue, which is what closed the state the
   reading of 04:43 died in — a section epub.js rendered by itself, sitting on the
   page unreported — before the content hook did.
-- **A section `follow()` had to display is centred on the frame after it
+- **A section `follow()` had to display is placed on the frame after it
   arrives** (#50, ADR 0023). The content hook that adopts it runs inside that
   display, before epub.js's own `moveTo` to the Block the display named, and in
   the same task. Centring there added the two scrolls together: measured at
   725 px and then 958 px more, with the painted sentence 724 px above the screen.
-  So the highlight is painted at once, and the centring runs on the next frame
-  through `settle()`, which then keeps the sentence centred while epub.js lays the
-  neighbouring sections out. Any other section that arrives, such as a view the
-  manager rebuilt, is centred at once, as before.
+  So the highlight is painted at once — its word quietly, so that it starts no
+  glide of its own — and the page is placed on the next frame through `settle()`,
+  at once and not by a glide, which then keeps the line in place while epub.js
+  lays the neighbouring sections out. Any other section that arrives, such as a
+  view the manager rebuilt, is placed at once, as before.
 - **Nothing centres while the owner is browsing** (#52, ADR 0044). A Contents
   row while paused sends a `browse` message, then displays its section, and a
   finger dragging the page sets the same `browsing` flag. Until a highlight is
   revealed — Play's cue, a tapped sentence, a skip, a place from another
-  device — `centreOnce()` and `settle()` do nothing, so neither the reading's
-  section arriving nor an Appearance reflow takes the page back. It has to be
+  device — `placeOnce()`, `settle()` and `followWord()` do nothing and a glide
+  under way stops, so neither the reading's section arriving, nor an Appearance
+  reflow, nor the next line takes the page back. Any move of a finger on the page
+  also stops a glide where it is, from the same `touchmove` listener. It has to be
   the WebView's flag: displaying the section after next re-rendered the
   reading's own section as a neighbour, and `attach()` centred the paused
   sentence as it arrived (−7,424 px, measured 2026-09-23 23:30). A cue while
@@ -182,11 +192,12 @@ whole word-timing array is pushed into the WebView in one message.
 `requestAnimationFrame` inside the WebView interpolates against a start time, and
 a position correction is sent about **once a second** for drift.
 
-One message per second, not one per word. The scroll that keeps the Utterance
-centred rides on the first of those two and adds no third.
+One message per second, not one per word. The scroll that keeps the line being
+spoken in place rides on the first of those two and on the words the WebView
+already draws from it, and adds no third.
 
 Two other messages cross, and neither is on the frame path: how much of the page
-the player is covering, which is the centring's own input (ADR 0020), and the
+the player is covering, which is the following's own input (ADR 0020), and the
 owner's **Appearance** — the font, size and text alignment the document is set
 in, as a stylesheet the program installs (ADR 0021, ADR 0034). Appearance is a message and not a
 rebuilt program because `injectedJavascript` is evaluated at page load and the
@@ -308,7 +319,8 @@ that sees it; `test/manual-test/leading-strip.sh` takes one.
 
 The whole of the WebView side. There is no automated coverage of the DOM walk, of
 a `Range` built from a Block offset, of `::highlight()` painting, of the loop, or
-of the scroll that centres an Utterance — `test/README.md` is explicit
+of the scroll that follows the line being spoken — only the glide's curve,
+which `glide.test.ts` evaluates as source — and `test/README.md` is explicit
 that ADR 0011 puts this inside Safari's JavaScript, "which no Node test
 environment simulates", and a DOM mock would prove the mock was called.
 

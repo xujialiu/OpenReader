@@ -34,13 +34,17 @@
  *   a correct `Range` built in a dead document, painting nothing, and every step
  *   looking right from the inside.
  * - **The page following the voice.** The reader is mounted with
- *   `flow: 'scrolled-continuous'` (ADR 0011), and when a Clip starts the document
- *   is scrolled so the Utterance being spoken is **centred**. It is measured from
- *   the `Range`s that were just painted and the scroll container's own box, and it
- *   runs once per Utterance on the Clip cue the bridge already sends — no message
- *   of its own, and nothing at the `requestAnimationFrame` rate (ADR 0005).
- *   Centred in what can be *seen*: ADR 0020's player floats over the bottom of
- *   that container and tells this file how much it covers.
+ *   `flow: 'scrolled-continuous'` (ADR 0011), and the page holds the **line the
+ *   spoken word is on** at the Line Position, the middle of what can be seen
+ *   (ADR 0050). When the word moves onto another line the page glides that line
+ *   there, in 250 ms, easing out; a sentence that begins on the line being read
+ *   moves nothing. A Clip without Word Timings holds its whole Utterance there
+ *   instead, as every Utterance was held before. It is measured from the
+ *   `Range`s that were just painted and the scroll container's own box, and it
+ *   runs in here, on the Clip cue and on the words the loop already draws — no
+ *   message of its own, and nothing across the bridge per word (ADR 0005).
+ *   What can be *seen*: ADR 0020's player floats over the bottom of that
+ *   container and tells this file how much it covers.
  * - **Where a tap landed.** The only thing here that starts on the page rather
  *   than arriving from the app: a tap hit-tests to a text node, the enclosing
  *   Block's id and the offset within it cross the bridge, and the app turns that
@@ -61,7 +65,7 @@
  *   arrives as finished CSS and goes into the same stylesheet as the highlight
  *   rules, because one `<style>` element is enough and a second would be a second
  *   thing to keep installed. A change reflows every line in the book, so the
- *   Utterance being spoken is brought back to the middle afterwards — which is
+ *   line being spoken is brought back to the Line Position afterwards — which is
  *   the opposite of what the `inset` message does, and the difference is that the
  *   player collapsing moves not one character while a font change moves all of
  *   them.
@@ -76,6 +80,7 @@
  */
 
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
+import { GLIDE_SOURCE } from './glide';
 import type { HighlightMessage } from './messages';
 import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from './messages';
 
@@ -518,6 +523,13 @@ export function highlighterSource(
        paint rather than flashing white until the message lands. */
     'var THEME = ' + JSON.stringify(themeCss(scheme)) + ';\n' +
     'var SETTLE_FRAMES = 60;\n' +
+    /* Where the line being spoken is held while the page follows, as a share of
+       the visible page's height from its top: the Line Position (CONTEXT.md,
+       ADR 0050). The middle. */
+    'var LINE_POSITION = 0.5;\n' +
+    /* How the page moves to it: glideLeft, sameLine and glides, from glide.ts,
+       where the tests run the same text. */
+    GLIDE_SOURCE +
     'var STYLE_ID = "openreader-highlight";\n' +
     /* The mark a Document's own centred and right-aligned lines get, and the
        computed values that earn it (ADR 0034). APPEARANCE excludes by the same
@@ -594,7 +606,7 @@ ${constants}
   var frame = 0;
   /* How much of the bottom of the scroll container the player is covering, in CSS
      pixels, from the 'inset' message. Zero until it says otherwise, which is the
-     geometry that was true before ADR 0020's player existed. See centre(). */
+     geometry that was true before ADR 0020's player existed. See visibleOf(). */
   var covered = 0;
   /* The lowest spine item on the page, from the last sweep. The only thing the
      resize recovery has to aim at; see the resize handler. */
@@ -612,6 +624,15 @@ ${constants}
      paused sentence as it arrived (a scroll of -7,424 px, from centreOnce), and
      epub.js then trimmed away the section the owner had asked for. */
   var browsing = false;
+  /* The line the page last brought to the line position (ADR 0050), as lineOf()
+     describes it, or null. A word on another line is what moves the page. */
+  var followed = null;
+  /* The glide under way, or null: what it aims at, how far it had to go and
+     when it began. See bring(). */
+  var glide = null;
+  var glideFrame = 0;
+  /* One frame at 60 Hz, which is what a glide's first frame counts as. */
+  var FRAME_MS = 1000 / 60;
   /* The touch that may be dragging the page, and where it first moved. */
   var touchId = null;
   var touchY = null;
@@ -936,10 +957,20 @@ ${constants}
      revealed, which clears it again. Heard in each section document, where
      almost every touch lands, and in the scroll container for the margins
      between them; a touch stays in the document it came down in, so its
-     coordinates never change hands. */
+     coordinates never change hands.
+
+     **Any** move of a finger on the page also stops a glide where the page is,
+     as a finger stops a scroll on the phone (ADR 0050), whether or not it goes
+     on to be a drag. That alone does not browse: a finger that lifts without
+     dragging leaves the page following, and the next line brings it back to the
+     line position. It is heard here, on the first move, and not on
+     \`touchstart\`, for the rule above; what that costs is a finger held
+     perfectly still, under which the rest of one glide — at most 250 ms — still
+     plays out. */
   function dragged(event) {
     var touch = event.touches && event.touches.length ? event.touches[0] : null;
     if (!touch) return;
+    halt();
     if (touch.identifier !== touchId) {
       touchId = touch.identifier;
       touchY = touch.clientY;
@@ -961,7 +992,8 @@ ${constants}
        act on, and this function is already the one place that runs once per
        document. A document epub.js destroys takes its listener with it. */
     contents.document.addEventListener('click', tapped, false);
-    /* And a finger dragging this document's text is Browsing: see dragged. */
+    /* And a finger dragging this document's text is Browsing, and a finger
+       moving on it at all stops a glide: see dragged. */
     contents.document.addEventListener('touchmove', dragged, { passive: true });
 
     var index = contents.sectionIndex;
@@ -1251,7 +1283,7 @@ ${constants}
 
   /* Returns the built ranges rather than a boolean, so that the caller which has
      just painted them measures *those* rather than building a second set to
-     measure — the centring below needs the very Ranges that are on the page.
+     measure — follow() below needs the very Ranges that are on the page.
      Null where nothing could be drawn. */
   function showUtterance() {
     var built = build(state.utteranceRanges);
@@ -1270,7 +1302,10 @@ ${constants}
     return built;
   }
 
-  function showWord(ranges) {
+  /* \`quiet\` paints the word and leaves the page where it is: attach() repaints
+     a section that has only just arrived, and places the page itself once it has
+     (see there). Everything else lets the page follow the word. */
+  function showWord(ranges, quiet) {
     var built = build(ranges);
     if (!built) {
       if (!awaited(ranges)) report(why(ranges));
@@ -1279,17 +1314,18 @@ ${constants}
     var registry = registryFor(built.window);
     moveTo(registry);
     put(registry.word, built.ranges);
+    if (!quiet) followWord(built);
   }
 
   /* The word the highlight belongs on, walking back over any whose range list is
      empty — a word can fall entirely on the space rejoin.ts inserted between two
      Blocks, which is in the Utterance and in no Block. */
-  function showAt(index) {
+  function showAt(index, quiet) {
     if (!state || !state.words) return;
     var at = index < state.words.length ? index : state.words.length - 1;
     for (; at >= 0; at--) {
       if (state.words[at].ranges.length) {
-        showWord(state.words[at].ranges);
+        showWord(state.words[at].ranges, quiet);
         return;
       }
     }
@@ -1331,7 +1367,7 @@ ${constants}
     if (state.next < words.length) frame = window.requestAnimationFrame(tick);
   }
 
-  /* ---- holding the Utterance in the middle of the screen (ADR 0005, ADR 0011) ---- */
+  /* ---- following the line being spoken (ADR 0005, ADR 0011, ADR 0050) ---- */
 
   /* The one element that scrolls. Read off the manager rather than looked up by
      id, because epub.js builds it itself: it is the \`epub-container\` div the
@@ -1370,103 +1406,271 @@ ${constants}
     return found ? { top: top, bottom: bottom } : null;
   }
 
-  /* Scroll so the Utterance being spoken is **centred** — the whole of ADR 0011's
-     continuous reader, and the reason a page-turning layout was rejected. It is
-     driven by the Clip cue alone: once per Utterance, never per word, and nothing
-     extra crosses the bridge to do it (ADR 0005). */
-  function centre(built) {
-    var view = scroller();
-    if (!view) return false;
-    var box = boxOf(built);
-    if (!box) return false;
-    var bounds = view.getBoundingClientRect();
-    var height = view.clientHeight;
-    /* The middle of what can be **seen**, not the middle of the container.
-       ADR 0020's player floats over the bottom of this container so that the text
-       never reflows when it appears; the price is that centring against
-       \`clientHeight\` would aim at a point the player is standing on and hold the
-       sentence being spoken behind it. \`covered\` is the player's own measured
-       height, and it changes when the player collapses and expands — which is why
-       it is an input here rather than a constant subtracted once.
+  /* The first line a built Range list is drawn on, with what it takes to find
+     that line again: its section document, the iframe that places that document
+     on the page, the Range, and the line's top and height in the document's own
+     coordinates, which scrolling the page does not change. For a word it is the
+     line the word begins on, so a word the line breaks is followed where it
+     starts; for an Utterance, the line it begins on.
 
-       An inset at least as tall as the container leaves nothing to centre in, and
-       then this is the same arithmetic as the tall-Utterance branch below: the
-       Utterance's top goes to the top of the viewport. */
-    var visible = height - covered;
-    if (visible < 0) visible = 0;
-    var move = (box.top + box.bottom) / 2 - bounds.top - visible / 2;
-    /* Unless the Utterance is taller than the screen, where centring its middle
+     A rect with no width is not a line: WebKit gives a Range that starts where
+     a line wraps an empty rect at the end of the line before, and aiming at it
+     would hold the wrong line until the next word moved the page again. */
+  function lineOf(built) {
+    var frame = built.window.frameElement;
+    if (!frame) return null;
+    for (var i = 0; i < built.ranges.length; i++) {
+      var rects = built.ranges[i].getClientRects();
+      for (var j = 0; j < rects.length; j++) {
+        if (rects[j].height && rects[j].width) {
+          return { doc: built.window.document, frame: frame, range: built.ranges[i], top: rects[j].top, height: rects[j].height };
+        }
+      }
+    }
+    return null;
+  }
+
+  /* Where that line's middle is now, in the top document's coordinates, or null
+     once its document has gone. Measured afresh every time and never
+     remembered: epub.js moves the scroll position itself when it adds or trims a
+     section above (ADR 0045), and a remembered position would aim at where the
+     line used to be. */
+  function middleOf(line) {
+    if (!line.doc.defaultView) return null;
+    var rects = line.range.getClientRects();
+    for (var j = 0; j < rects.length; j++) {
+      if (rects[j].height && rects[j].width) return line.frame.getBoundingClientRect().top + (rects[j].top + rects[j].bottom) / 2;
+    }
+    return null;
+  }
+
+  /* The ranges of the word being spoken, walking back over any that are empty as
+     showAt() does, or null before the Clip's first word. */
+  function spokenRanges() {
+    for (var at = Math.min(state.next, state.words.length) - 1; at >= 0; at--) {
+      if (state.words[at].ranges.length) return state.words[at].ranges;
+    }
+    return null;
+  }
+
+  /* What the page holds at the line position now (ADR 0050).
+
+     With Word Timings, the line the word being spoken begins on — and before the
+     Clip's first word, the line the Utterance begins on, so that a sentence
+     beginning on the line being read moves nothing. A Clip that came without
+     them has no word to follow, and none is estimated (ADR 0005): the Utterance
+     is the unit, and the whole of it is held there, as every Utterance was
+     before. A sentence shown with no Clip at all — a tap or a skip while
+     paused, which the bridge sends with no words and a zero duration — is held
+     by its first line, where the first word will be when Play starts it, so that
+     Play does not move the page a second time. */
+  function aim() {
+    if (!state) return null;
+    if (state.words || !state.durationMs) {
+      var built = build((state.words && spokenRanges()) || state.utteranceRanges);
+      var line = built ? lineOf(built) : null;
+      return line ? { line: line } : null;
+    }
+    var whole = build(state.utteranceRanges);
+    return whole ? { whole: whole } : null;
+  }
+
+  /* How much of the scroll container can be seen. ADR 0020's player floats over
+     its bottom so that the text never reflows when it appears, and \`covered\` is
+     the player's own measured height; it changes when the player collapses and
+     expands, which is why it is an input here rather than a constant subtracted
+     once. An inset at least as tall as the container leaves nothing to aim in,
+     and then moveFor() is the tall-Utterance rule: the top goes to the top. */
+  function visibleOf(view) {
+    var visible = view.clientHeight - covered;
+    return visible < 0 ? 0 : visible;
+  }
+
+  /* How far the page has to move for what is aimed at to sit at the line
+     position, or null when it cannot be measured. The line position is a share
+     of what can be **seen**, not of the container: against \`clientHeight\` it
+     would aim at a point the player is standing on and hold the words being
+     spoken behind it. */
+  function moveFor(aimed) {
+    var view = scroller();
+    if (!view) return null;
+    var bounds = view.getBoundingClientRect();
+    var at = bounds.top + visibleOf(view) * LINE_POSITION;
+    if (aimed.line) {
+      var middle = middleOf(aimed.line);
+      return middle === null ? null : middle - at;
+    }
+    var box = boxOf(aimed.whole);
+    if (!box) return null;
+    var move = (box.top + box.bottom) / 2 - at;
+    /* Unless the Utterance is taller than the screen, where holding its middle
        would push its opening words off the top — and those are the words about to
        be spoken. Then its start goes to the top of the screen instead, and the
-       word highlight walks down from there. */
+       highlight walks down from there. */
     if (move > box.top - bounds.top) move = box.top - bounds.top;
-    /* Below a pixel there is nothing to see, and every scroll costs epub.js a
-       pass over its views. */
-    if (Math.abs(move) < 1) return true;
-    /* Through the manager's own scroll, and deliberately **without** its \`ignore\`
-       flag: this has to reach epub.js exactly as a finger scroll does, because
-       that is what makes the continuous manager append the section the reading is
-       about to walk into. A scroll it was told to ignore renders nothing new. */
-    rendition.manager.scrollBy(0, move, false);
+    return move;
+  }
+
+  /* The one place the page is scrolled. Through the manager's own scroll, and
+     deliberately **without** its \`ignore\` flag: this has to reach epub.js exactly
+     as a finger scroll does, because that is what makes the continuous manager
+     append the section the reading is about to walk into. A scroll it was told to
+     ignore renders nothing new. */
+  function nudge(by) {
+    rendition.manager.scrollBy(0, by, false);
+  }
+
+  /* Stop a glide where the page is now: a finger landing on the page, a drag, and
+     anything that puts the page somewhere at once. */
+  function halt() {
+    glide = null;
+    if (glideFrame) {
+      window.cancelAnimationFrame(glideFrame);
+      glideFrame = 0;
+    }
+  }
+
+  /* Move the page so that what is aimed at sits at the line position (ADR 0050).
+     Returns whether there was anything to measure.
+
+     Nothing under a pixel: there is nothing to see, and every scroll costs
+     epub.js a pass over its views. At once when \`instant\`, and when the move is
+     further than the visible page: a glide would only pull a page of text the
+     owner has not read past their eye. Otherwise a glide of GLIDE_MS, easing out,
+     whatever the distance. A glide already on its way to the same line is left
+     to arrive; one on its way anywhere else is taken over from where the page is
+     now. */
+  function bring(aimed, instant) {
+    if (!aimed) return false;
+    var move = moveFor(aimed);
+    if (move === null) return false;
+    if (aimed.line) followed = aimed.line;
+    if (!instant && glide && aimed.line && glide.aimed.line && sameLine(glide.aimed.line, aimed.line)) return true;
+    if (Math.abs(move) < 1) {
+      halt();
+      return true;
+    }
+    if (instant || !glides(move, visibleOf(scroller()))) {
+      halt();
+      nudge(move);
+      return true;
+    }
+    glide = { aimed: aimed, from: move, elapsed: 0, last: null };
+    if (!glideFrame) glideFrame = window.requestAnimationFrame(glideStep);
     return true;
   }
 
+  /* One frame of a glide. What it aims at is measured again every frame, and the
+     page moved by the difference between where that is and where the curve says
+     it should be by now. So a section epub.js trims or adds above mid-glide,
+     which moves the scroll position under it, costs nothing: the next frame aims
+     at where the line actually is. It stops, where the page is, when the page
+     stops following. */
+  function glideStep(now) {
+    glideFrame = 0;
+    if (!glide) return;
+    if (!state || !state.follow || browsing) {
+      glide = null;
+      return;
+    }
+    var move = moveFor(glide.aimed);
+    if (move === null) {
+      glide = null;
+      return;
+    }
+    /* The curve is timed in frames that were drawn, not by the clock: each frame
+       advances it by the time since the last one, but never by more than two
+       frames' worth, and the first frame by one. A glide is asked for in the same
+       task that starts a Clip, lays out a section or answers a tap, and the frames
+       after that work can be held up for most of a second. Timed by the clock,
+       measured on the owner's book, a glide asked for at a tap drew its first
+       frame 800 ms late, past the whole curve, and moved 252 px in two frames. A
+       stall now pauses a glide instead of spending it. */
+    glide.elapsed += glide.last === null ? FRAME_MS : Math.min(now - glide.last, 2 * FRAME_MS);
+    glide.last = now;
+    var left = glideLeft(glide.from, glide.elapsed);
+    var by = move - left;
+    if (Math.abs(by) >= 0.5) nudge(by);
+    if (left === 0) {
+      glide = null;
+      return;
+    }
+    glideFrame = window.requestAnimationFrame(glideStep);
+  }
+
+  /* A word has just been drawn. The page follows only when it has moved onto
+     another line: the words of one line are read with the page still, and the
+     page moves up a line as the voice moves down one. This runs in the WebView,
+     on the word the loop already draws, so nothing is added to the bridge
+     (ADR 0005), and the loop scrolls at most once a line, never once a frame. */
+  function followWord(built) {
+    if (!state || !state.follow || browsing || !state.words) return;
+    var line = lineOf(built);
+    if (!line || sameLine(followed, line)) return;
+    bring({ line: line }, false);
+  }
+
+  /* At once, for what is being read now: a section that arrived wherever epub.js
+     put it, and the text reflowing under an Appearance change. Nothing that was
+     gliding should go on by then. */
+  function place() {
+    return bring(aim(), true);
+  }
+
   /* Once per document per Utterance, and \`centred\` is what makes it once: a
-     centring that causes epub.js to render a section would otherwise be answered
-     by attach(), which would centre again, which would render again. It is a
+     placing that causes epub.js to render a section would otherwise be answered
+     by attach(), which would place again, which would render again. It is a
      WeakSet, so a document epub.js destroys is not held alive by having been
-     centred in — the thing the Block records exist not to hold. */
-  function centreOnce(built) {
+     placed in — the thing the Block records exist not to hold. */
+  function placeOnce(built) {
     if (!state || !state.follow || browsing) return;
     var doc = built.window.document;
     if (state.centred.has(doc)) return;
-    if (centre(built)) state.centred.add(doc);
+    if (place()) state.centred.add(doc);
   }
 
-  /* The text has reflowed under an Appearance change, so the sentence being
-     spoken is no longer where it was centred — a font change moves every line in
-     the book, and the one the owner is listening to with it.
+  /* The text has reflowed under an Appearance change, so the line being spoken
+     is no longer where it was put — a font change moves every line in the book,
+     and the one the owner is listening to with it.
 
      **Not on this frame.** epub.js resizes each section's iframe from the
      section's own ResizeObserver, whose callback is
      \`requestAnimationFrame(this.resizeCheck.bind(this))\` — read out of the
-     bundled epub.js — so the geometry a re-centre needs is a frame or more away,
-     and centring against a box that is about to move aims at where the sentence
-     was. So the box is measured every frame until it stops moving and the
-     centring is the last measurement.
+     bundled epub.js — so the geometry this needs is a frame or more away, and
+     placing against a box that is about to move aims at where the line was. So
+     it is measured every frame until nothing needs moving, and placed each time.
 
      **And on every frame of the window, not once at the end.** The first version
      waited for two frames with the same geometry and then centred once; it held
      the Utterance to 0.758 px when the text grew and left it **4,285 px** out when
      the text shrank, because a page can look settled for a frame while epub.js is
      still resizing iframes and the continuous manager has yet to re-lay the views
-     out. Centring every frame converges on whatever the layout ends up doing
-     instead of guessing when to look, and it is nearly free: centre() scrolls only
+     out. Placing every frame converges on whatever the layout ends up doing
+     instead of guessing when to look, and it is nearly free: bring() scrolls only
      when the move is at least a pixel, so a settled page costs one measurement a
-     frame and no scroll at all.
+     frame and no scroll at all. At once, never a glide: the text has jumped by
+     itself, and a glide would chase it.
 
      \`SETTLE_FRAMES\` is a cap and not a duration: it exists so that a document
      whose layout never settles cannot hold a frame loop open. The loop leaves
-     early — three frames in which nothing moved — so its value is what a
-     pathological document costs and not what an ordinary one does. Nothing is
-     centred at all when nothing is being read: there is no Utterance to hold in
-     the middle, and scrolling a page the owner is reading with their eyes is the
-     thing ADR 0020's floating player exists not to do. */
-  function settle(left, was, still) {
+     early — three frames in which nothing needed moving — so its value is what
+     a pathological document costs and not what an ordinary one does. Nothing is
+     placed at all when nothing is being read: there is no line to hold, and
+     scrolling a page the owner is reading with their eyes is the thing ADR 0020's
+     floating player exists not to do. */
+  function settle(left, still) {
     if (!state || !state.follow || browsing) return;
-    var built = build(state.utteranceRanges);
-    var box = built ? boxOf(built) : null;
-    if (!built || !box) {
-      if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, null, 0); });
+    var aimed = aim();
+    var move = aimed ? moveFor(aimed) : null;
+    if (move === null) {
+      if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, 0); });
       return;
     }
-    /* \`box.top\` is measured in the viewport, so it stops changing exactly when
-       centre() stops scrolling — which is the convergence this waits for. */
-    var steady = was !== null && Math.abs(box.top - was) < 1 ? still + 1 : 0;
-    centre(built);
+    var steady = Math.abs(move) < 1 ? still + 1 : 0;
+    bring(aimed, true);
     if (steady >= 3 || left <= 0) return;
     window.requestAnimationFrame(function () {
-      settle(left - 1, box.top, steady);
+      settle(left - 1, steady);
     });
   }
 
@@ -1474,18 +1678,22 @@ ${constants}
      what showUtterance() just painted, or null.
 
      Two cases, and only the second moves the reading position: the section is on
-     the page, and it is scrolled to the middle; or it is not rendered at all —
-     the reading has run ahead of the document — and only a display() can get
-     there. The centring then happens in attach(), when the section arrives. */
+     the page, and the page brings the Utterance's first line to the line
+     position — a glide when it is within the visible page, which is the next
+     line at every sentence that begins on a new one, a tapped sentence and a
+     skip; or it is not rendered at all — the reading has run ahead of the
+     document — and only a display() can get there. The page is then placed in
+     attach(), when the section arrives. */
   function follow(built) {
     if (!state) return;
     if (built) {
-      centreOnce(built);
+      if (!state.follow || browsing) return;
+      if (bring(aim(), false)) state.centred.add(built.window.document);
       return;
     }
     var record = blocks.get(state.utteranceRanges[0].block);
     if (!record || !record.cfi) return;
-    /* attach() centres this section on the frame after it arrives rather than
+    /* attach() places this section on the frame after it arrives rather than
        at once, because this display is not finished when it arrives: see there.
        Not on the display's promise, which says nothing about arriving: it is
        resolved as the section's iframe starts to load, when the library's
@@ -1523,16 +1731,16 @@ ${constants}
      More text needs epub.js to render the next spine item. The continuous
      manager appends one from its own onScroll, and only when the scroll has come
      within \`settings.offset\` — 500 px — of the bottom of everything it holds.
-     The only thing that scrolls while a book is being read aloud is centre(),
-     and centre() stops at the sentence being spoken. So a section whose text
+     The only thing that scrolls while a book is being read aloud is the page
+     following the voice, and it stops at the line being spoken. So a section whose text
      ends far above its own bottom runs the reading out of Utterances with the
      rest of the book still unrendered, and nothing is left that would make more:
      measured on the fixture at 05:03, one view, scrollTop 0, clientHeight 758,
      scrollHeight 3,072 — 758 + 500 is 1,258, and 1,258 < 3,072 for ever.
 
      The trigger is the Clip cue, which already arrives once per Utterance and
-     already drives the centring, so **nothing is added to the bridge** — the
-     property ADR 0011 states of the centring and the reason it is stated.
+     already starts the page following, so **nothing is added to the bridge** —
+     the property ADR 0011 states of the following and the reason it is stated.
 
      Three guards, and each is what keeps this from becoming a second, slower
      renderer racing the first:
@@ -1620,13 +1828,14 @@ ${constants}
     if (!state || !covers(contents.sectionIndex, state.utteranceRanges)) return;
     var built = showUtterance();
     if (!built) return;
-    showAt(state.next - 1);
-    /* And it arrived wherever epub.js put it, which is not the middle of the
-       screen. Two ways in: the reading ran ahead of the document and follow()
-       displayed the section, or the manager destroyed this section's view and
-       rebuilt it while the same Utterance was being spoken. Both want centring
-       now that there is something to measure — and the first wants it a frame
-       from now.
+    /* Quietly: the word is painted here and the page is placed below, at once,
+       rather than by a glide from a word that has only just been laid out. */
+    showAt(state.next - 1, true);
+    /* And it arrived wherever epub.js put it, which is not the line position.
+       Two ways in: the reading ran ahead of the document and follow() displayed
+       the section, or the manager destroyed this section's view and rebuilt it
+       while the same Utterance was being spoken. Both want placing now that
+       there is something to measure — and the first wants it a frame from now.
 
        **A section follow() asked for arrives before its display has finished**
        (#50). This runs in epub.js's content hook, and the same display goes on,
@@ -1635,18 +1844,18 @@ ${constants}
        19:28 on 2026-09-23, Play with the page scrolled away from Block 6.13: the
        centring scrolled 725 px, the moveTo 958 px more, and the sentence — painted
        — ended 724 px above the top of the screen. So the Utterance is painted now
-       and centred on the next frame, after that moveTo and after the views are
+       and placed on the next frame, after that moveTo and after the views are
        shown, through settle(), which also follows the page while fill() lays the
        neighbouring sections out around it. A section that arrives any other way
-       has no scroll of epub.js's behind it, and is centred at once. */
+       has no scroll of epub.js's behind it, and is placed at once. */
     if (state.awaiting === contents.sectionIndex) {
       state.awaiting = null;
       var mine = state;
       window.requestAnimationFrame(function () {
-        if (state === mine) settle(SETTLE_FRAMES, null, 0);
+        if (state === mine) settle(SETTLE_FRAMES, 0);
       });
     } else {
-      centreOnce(built);
+      placeOnce(built);
     }
     start();
   }
@@ -1919,11 +2128,11 @@ ${constants}
          is exactly one, and a second injected function would be a second thing to
          keep installed and to check for.
 
-         **Nothing is re-centred here**, deliberately. The player collapsing changes
-         where the middle of the visible text is, and scrolling to the new middle
-         would move the text under the reader — which is the one thing ADR 0020's
-         floating player exists to prevent. So the new inset applies to the next
-         Utterance, and the sentence being spoken stays where it is. */
+         **Nothing is moved here**, deliberately. The player collapsing changes
+         where the line position is, and scrolling to the new one would move the
+         text under the reader — which is the one thing ADR 0020's floating player
+         exists to prevent. So the new inset applies from the next line the page
+         follows, and the line being spoken stays where it is. */
       covered = typeof message.bottomPx === 'number' && isFinite(message.bottomPx) && message.bottomPx > 0 ? message.bottomPx : 0;
       return;
     }
@@ -1935,14 +2144,15 @@ ${constants}
          cannot declare \`user-select\`, which would silently stop the highlight
          painting.
 
-         The page is restyled and then re-centred, because a change that reflows
-         the text moves the sentence being spoken away from the middle. That is
+         The page is restyled and then placed again, because a change that
+         reflows the text moves the line being spoken away from the line
+         position. That is
          the opposite of what the 'inset' message does above, and the difference
          is the whole of it: the player collapsing does not move a single
          character, and a font change moves every one of them. */
       APPEARANCE = typeof message.css === 'string' ? message.css : '';
       restyle();
-      settle(SETTLE_FRAMES, null, 0);
+      settle(SETTLE_FRAMES, 0);
       return;
     }
     if (message.kind === 'measured') {
@@ -1968,7 +2178,9 @@ ${constants}
     }
     if (message.kind === 'clear') {
       stop();
+      halt();
       state = null;
+      followed = null;
       clearHighlights();
       return;
     }
@@ -1982,6 +2194,7 @@ ${constants}
          the page comes right after this, so the sections it renders, the
          reading's own among them, arrive to a page that is not following. */
       browsing = true;
+      halt();
       return;
     }
     if (message.kind === 'speak') {
@@ -2002,7 +2215,7 @@ ${constants}
         held: false,
         reported: false,
         follow: following,
-        /* The documents this Utterance has already been centred in; see centreOnce. */
+        /* The documents this Utterance has already been placed in; see placeOnce. */
         centred: new WeakSet(),
         /* The section follow() asked epub.js to display for this Utterance, until
            it arrives; see attach. */

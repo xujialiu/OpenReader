@@ -1367,6 +1367,20 @@ fix (AGENTS.md).
   the section it lands on. Before reading a null tap as a `#34`/`#52`
   regression, check `known`/`rendered` via `{"do":"say"}` first, and retry the
   tap once rather than treating one miss as the result.
+- **A `js` command's answer stays on screen as a visible error banner until
+  something clears it, and a plain skip does not.** Any `{"do":"js",...}`
+  whose return value is read back through the `note`/`PROBE` channel
+  (`line-follow.cjs`, `glide-touch.cjs`) reuses `use-reading.ts`'s "highlight
+  could not be drawn" problem-report path, so the reader keeps showing "The
+  highlight could not be drawn: PROBE {…}" over the player until `status.note`
+  is next set to `null` — which a Play (`onPlay`) does at once, but a paused
+  `{"do":"skip",...}` measured here (2026-09-26, #71) does not, even after a
+  skip back and forward. Before handing a reader back with a probe's answer as
+  the last command sent, send a real `play` (a fraction of a second is enough;
+  `note: null` is set the instant Play starts, before any Clip) and `pause` it
+  again, and confirm with a screenshot that the banner is gone rather than
+  trusting the status line's `note=null` alone — the banner is a UI overlay,
+  not part of `status`, so only a screenshot shows it directly.
 - **The harness `open` command pushes onto whatever screen is already on top,
   the same as `simctl openurl`** (Pitfalls, XCTest, "`Back` is not what the
   back button is called"). Independent #58 verification, 2026-09-24: opening a
@@ -1441,6 +1455,28 @@ fix (AGENTS.md).
   relaunched, and the run that followed measured the wrong thing. `rm
   Documents/harness.json` before every relaunch, and treat a leftover harness
   file as device state.
+- **Two harness commands written back to back run only the second.**
+  - Symptom (2026-09-26 01:25, #71): a probe printed "then paused", and the
+    status line then read `playing=true utterance=204`; the reading went on
+    through the probe's analysis and its next step.
+  - Cause: the harness polls `Documents/harness.json` every 250 ms and runs the
+    command it finds there. `line-follow.cjs` wrote `pause` and, in the same
+    breath, the `js` command that reads the page, so `pause` was overwritten
+    before it was ever read.
+  - Fix: wait at least 300 ms after a command before writing the next —
+    `line-follow.cjs`'s `pause()` waits 700 ms — and read `playing=false` in a
+    `say` answer before trusting a pause.
+- **The simulator's volume can be back at 60 after an app launch, before
+  anything plays.**
+  - Symptom (2026-09-26 01:41, #71): `silence.sh check` read 0, `xcrun simctl
+    launch` ran, and about 2 s later the device's `audiosettings.plist` was
+    rewritten with `sim_volume` 60. The next probe refused to play. Seen three
+    times that night: after a first `install`, and twice across a `terminate`
+    that followed playback. A launch→terminate with nothing played between left
+    it at 0.
+  - Cause: not isolated.
+  - Fix: `silence.sh set` **after** launching as well as before, and let every
+    script `check` immediately before its `play`, as the kit's scripts do.
 - **Muting the Mac is not silencing the simulator, and the Mac's mute comes back
   on its own.** After a `simctl shutdown`/`boot` cycle and a series of XCTest
   runs, `osascript -e 'get volume settings'` reported `output volume:56, output
@@ -1521,6 +1557,20 @@ fix (AGENTS.md).
   on iOS 27.0. Give its `Info.plist` a `UIApplicationSceneManifest` with a
   `UISceneDelegateClassName`, and give the Swift class `@objc(SceneDelegate)` so
   the name in the plist resolves.
+
+- **A bare `tail`/`grep` snapshot of the Metro log cannot prove a state was
+  sustained across a `sleep`.** Symptom (2026-09-26, #71): sending `play`,
+  `sleep 4`, then `pause`, and only then reading the log's last lines, showed
+  a single `playing=true` line sandwiched between many `playing=false` ones —
+  which reads exactly like playback stopping almost at once. Cause: the
+  harness's `HX` status line is written when a command is processed, not on a
+  free-running timer, and nothing else was asked of the app during the 4 s
+  wait, so nothing else logged; the single `true` line was genuine, just the
+  only sample taken. A parallel run that sent `{"do":"say"}` every 500 ms
+  during the same wait read `playing=true` at every one of eight checks across
+  the full 4 s. Fix: poll with an explicit `say` (or other command) at the
+  cadence the evidence needs, the way `line-follow.cjs`'s own `ask()` does; a
+  `sleep` alone proves nothing about what happened during it.
 
 ### Real touches on the player's head row, and Azure's own timing (#69, #70)
 
@@ -1610,6 +1660,13 @@ fix (AGENTS.md).
     result about the change under test. Start a timed play within about 45 s of
     the app's last request to the host (a cold launch makes one: the start-up
     voice listing) if the first attempt must count.
+
+- **A Fish Voice chosen through the harness is `locale/id`, not the model id.**
+  `{"do":"voice","provider":"fish","voice":"<32 hex digits>"}` is accepted, and
+  every Play then stops with "Unknown Fish Audio voice: …" (2026-09-26, #71).
+  Send `{"do":"ask","provider":"fish"}`, then `{"do":"voicelist","provider":"fish"}`,
+  and use the id as a `voice` line prints it, e.g. `en/e3cd384158934cc9a01029cd7d278634`
+  ("Laura").
 
 ### Talking to the owner's WebDAV host from the Mac
 
@@ -4047,6 +4104,130 @@ What it does not establish: whether the debug-banner precaution
 (`app.terminate(); app.launch()` at the sequence's start) is still needed once
 nothing else in a run logs a warning; a shorter method sequence was not tried.
 `BrowseTouchProbe.swift` is in `test/manual-test/ios/project.rb`'s allow-list.
+
+## The page follows the line being spoken (#71, `line-follow.cjs`)
+
+```sh
+node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG SECONDS [--tap]
+node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG --skips N
+node test/manual-test/line-follow.cjs SIMULATOR_UDID METRO_LOG --whole
+```
+
+Prerequisites: a reader open and paused inside a chapter, a Provider with Word
+Timings and a Voice chosen (Fish: see "A Fish Voice chosen through the
+harness"), the simulator silenced, and METRO_LOG, the file this tree's Metro
+writes to. The script records `scrollTop` and the word highlight's first line
+box on every animation frame inside the WebView, collapses and expands the
+player once so the bridge sends its inset (the target is `(h - inset) / 2`),
+plays for SECONDS and pauses, and prints one line per change of the word's line:
+when the page began to move, how far, for how long, the longest frame in it,
+each frame's step, and where the line came to rest against the target.
+
+- **Getting into a chapter.** `{"do":"section","section":5}` moves the page there
+  while paused, and it is Browsing; then point the reading at a sentence on the
+  screen with a synthetic click in the section document (the `tap` code in the
+  script) or a `skip`. `{"do":"seek","utterance":N}` moves the reading and **not
+  the page** — it is not revealed — so the first Play after it glides, or jumps,
+  from wherever the page was.
+- **SECONDS.** Fish took up to 5.6 s to answer the first request of a run, and a
+  line of `Cultivation Online` takes 2–3 s at 1.00×, so 18 s gives three line
+  changes; a run that gets fewer is RED for that reason alone.
+- **`--skips N`** plays nothing: while paused it skips a sentence (or
+  `SKIP_TARGET`, e.g. `next-paragraph`) N times a second apart, and reports the
+  glides and every change in the number of views. A trim needs two hidden
+  sections above: from Utterance 185 of `Cultivation Online 2001-2044`, 35 skips
+  reached one (2026-09-26 01:42).
+- **`--whole`** skips to a sentence at least 50 px tall and hands the program
+  that sentence again as a Clip without Word Timings. It proves the page's side
+  of that case, not a real Provider's.
+
+GREEN (exit 0): at least three line changes with a move, each beginning at most
+two drawn frames after its word (or up to 300 ms before it, at the cue of a
+sentence that begins a paragraph), lasting 150–400 ms, and resting within 1.5 px
+of the target. Measured 2026-09-26 (notes): one frame's delay, 233–252 ms, rests
+0.1–0.5 px.
+
+What it cannot prove: a finger. It moves nothing by touch, so the glide stopping
+under a finger (any `touchmove`) is not covered, and neither is the feel — look
+at the simulator, or the owner's phone.
+
+## A real drag during a live glide (#71, `glide-touch.cjs`, `GlideTouchProbe.swift`)
+
+```sh
+node test/manual-test/glide-touch.cjs SIMULATOR_UDID METRO_LOG arm
+bash test/manual-test/glide-touch.sh SIMULATOR_UDID NEW_OUTPUT_DIR_OR_EXISTING_PROJECT_DIR
+node test/manual-test/glide-touch.cjs SIMULATOR_UDID METRO_LOG analyse
+```
+
+`line-follow.cjs` proves the program's own side of ADR 0050 with a synthetic
+click; it cannot touch the one thing only a real finger can, a `touchmove`
+landing on the page. This pair does. `arm` installs a recorder independent of
+`line-follow.cjs`'s own — its own global, `window.__glideTouch`, safe to run in
+the same session either before or after it — collapses and expands the player
+once for the inset, and starts recording the same per-frame `scrollTop`/word-
+line/Utterance-middle series, plus a capture-phase `touchmove`/`touchend`
+listener added to every section document as it renders (additive only; nothing
+the app itself listens for is touched). `glide-touch.sh` then runs
+`GlideTouchProbe.testDragDuringLiveGlideStopsThenRecovers` (same shape as
+`browse-touch.sh`: a new output directory generates the project, an existing
+one reuses it) — a real tap on Play, a wait for the first Clip's cue (the
+`Pause` button's own `busy` state clearing), a further wait (`DRAG_DELAY_MS`,
+`/tmp/openreader-glide-touch-params.txt`, `KEY=VALUE`, default 2000 —
+`xcodebuild … test` does not pass the caller's environment, Pitfalls below), a
+small real drag (`press(forDuration:thenDragTo:)`, about a tenth of the
+window, comfortably past the WebView's 10 px `DRAG_PX`), a further wait while
+still playing, then Play-pause-Play. `analyse` stops the recording and prints
+every line change matched against the `scrollTop` episode that followed it (or
+`NO EPISODE`), plus every real touch event's own timestamp on the same
+`performance.now()` clock the frames use, so a touch can be lined up against
+exactly the episode it interrupted. The same `arm`/`analyse` pair, driven by
+plain harness commands instead of the probe (a `section` far from the
+reading's own while paused, then `play`; or `play` then a `settings` Font Size
+patch), is what verified the far-jump and live-Font-Size-change behaviour
+below — no dedicated script was needed for either.
+
+- **Timing the drag to land inside a live ~220 ms glide from outside the
+  WebView is hard, and usually misses.** `DRAG_DELAY_MS` is measured from the
+  cue, but the cue-to-first-line-change gap itself varies with the sentence
+  and the network. Across three real runs (2026-09-26) at 1700, 1400 and
+  800 ms the drag twice landed in the ~1–2.3 s gap between glides (once
+  158 ms after the preceding glide ended, once 1137 ms before the next line
+  change) and once landed so that a line change fell **inside** the drag's own
+  native-scroll window with no glide at all — the strongest of the three: a
+  `rest` of `-23.2` where a followed line always reads `0.8`, i.e. the page
+  visibly did not follow that word. Do not tune for a single perfect hit;
+  three runs is enough to see the pattern (a clean glide before, an unmatched
+  native-scroll episode timestamp-bounded by the touch and resting nowhere
+  near the target, one or two `NO EPISODE` line changes after, a clean glide
+  again after Play-pause-Play) and report exactly what each run landed on
+  rather than claim a mid-curve truncation no run actually caught.
+- **An unmatched episode's `rest` is the tell, not just whether it matched.**
+  A finger's own drag-scroll and a halted program glide can both surface as an
+  "other" episode; a program glide always rests within about a pixel of the
+  target (`0.8` throughout this book), and a finger's own scroll rests
+  wherever the finger let go — `-59.2`, `-53.2`, `-23.2` in the three runs. A
+  `steps` list that does not decay the way `glideLeft` does (`[10,10,4,5,5,5,
+  4,4,4,4,3,2]` against a real drag versus `[2,3,2,2,2,2,1,2,1,1,1,1]` for a
+  glide) is the same tell from a different angle.
+- **A jump across several sections can arrive as three or four discrete
+  corrections, not one.** Browsing to a section far from the reading and
+  pressing Play, `analyse`'s episode grouping (frames merged across gaps under
+  three still ones) printed one "line" entry of `2904 px` in `111 ms` for a
+  Font Size change mid-Play (a single quantised frame — genuinely one step,
+  confirmed by asking the WebView for `R.frames` in that window directly), but
+  `-1384 px` in `464 ms` for a far-section return. Reading the raw frames
+  (`R.frames.filter(...)`) showed four discrete jumps 74–305 ms apart
+  (`-3840`, `+2698`, `-262`, `+20`) — `display()` resetting scroll and
+  `settle()` placing every frame until three need no move, exactly as ADR 0050
+  describes, merged by the grouping because none of the gaps reached three
+  still frames. Neither shows the glide's signature (many small decaying
+  steps over a fixed ~220–260 ms); telling "one instant nudge" from "a few
+  settle frames" apart needs the raw per-frame query, not just the printed
+  episode.
+
+What this does not establish, beyond `line-follow.cjs`'s own list: the exact
+frame a live glide's animation is truncated on, since no run actually landed
+mid-curve.
 
 ## A drawer's lines in the other theme's colour (#29, `line-colour.sh`)
 
