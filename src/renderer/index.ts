@@ -45,6 +45,7 @@ export {
   TAP_MESSAGE,
   type AnchoredRange,
   type AppearanceMessage,
+  type BarMessage,
   type BlockRange,
   type BlocksMessage,
   type BrowseMessage,

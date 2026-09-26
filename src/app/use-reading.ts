@@ -1497,8 +1497,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * and cannot clear.
    *
    * The work is all in the cleanup, which is the point: it runs when the identity
-   * changes and when the screen goes away, and it is the only place the audio
-   * session is given back.
+   * changes and when the Reading ends (#68: not when the Reader goes while it
+   * plays, since the view is then held behind the navigator), and it is the only
+   * place the audio session is given back.
    *
    * **`atRef` is not the engine's, so it is not cleared here** (ADR 0025). The
    * cursor is where the *reading* is pointed, and an engine rebuild changes who

@@ -53,6 +53,13 @@ sentence being spoken is held above it rather than in the middle of the glass.
 
 ## Collapsing leaves one button, and pausing brings everything back
 
+_Revised in [decision 0048](0048-collapsing-leaves-the-page-and-one-button.md):
+collapsing now takes the bar at the top of the page away as well, and the one
+button left no longer pauses. Pressing it brings the controls back while the
+reading carries on. Pausing from anywhere else still brings everything back.
+What follows is the original reasoning, and the reason the button is still
+always there._
+
 There is a way to get the controls out of the way, and what remains is a single
 play button — nothing else, no arrow to tap. Pressing it pauses, and pausing
 opens the player again.
@@ -193,7 +200,9 @@ speak at all, is written underneath it in the same place.
 Collapsing the player hides those too. That is deliberate and it is what collapsing
 is for: it is the gesture for "I want the page and nothing else". The single button
 that remains says nothing, because the moment there is something to say the reader
-can press it and get everything back.
+can press it and get everything back. (Since [decision 0048](0048-collapsing-leaves-the-page-and-one-button.md)
+it shows whether the book is being read, and pressing it no longer stops the
+reading.)
 
 ## What the voice line can say, and what it costs to say more
 

@@ -47,7 +47,9 @@ Two things were deliberately not copied:
 
 - **The owner chooses the height.** A setting in General, from a fifth to four
   fifths of the way down in steps of a tenth, the middle by default. It is
-  measured with the player open, so putting the player away moves nothing. It
+  measured with the player and the title bar open, so putting them away moves
+  nothing. A change reaches a reading that is still going on behind the library
+  straight away, so the page is already there on the way back. It
   sits under the two pauses because the page only moves while the reading is
   heard, in a box of its own because it is about where the eye rests and not
   about the sound. The row's name and its value are the whole of it, so it has

@@ -7,22 +7,28 @@
  * **The player floats.** The document fills the screen and the player is
  * positioned over the bottom of it, so the text does not reflow when the player
  * appears, goes, collapses or expands (ADR 0020). Nothing about `<Reader>`'s size
- * mentions the player, which is what makes that true rather than nearly true.
+ * mentions the player, which is what makes that true rather than nearly true. The
+ * navigation bar floats over the top the same way and comes and goes with the
+ * player (#67, ADR 0048), so `<Reader>`'s size does not mention it either.
  *
  * **Which means the centring has to be told.** ADR 0011 centres the spoken
  * Utterance against the scroll container's own height, and the player now covers
  * the bottom of that container — so the middle of the *visible* text is not the
  * middle of the container, and the difference changes when the player collapses.
  * The player measures itself and the height goes straight to the renderer
- * (`bridge.setInset`). It is a live coupling, not a constant: the centring runs
- * once per Utterance on the Clip cue, so an offset that went stale is not
- * corrected by anything.
+ * (`bridge.setInset`), and the bar's goes with it (`bridge.setBar`). It is a live
+ * coupling, not a constant: the centring runs once per Utterance on the Clip cue,
+ * so an offset that went stale is not corrected by anything.
  *
  * **It says what it is doing.** Which Utterance is being read, at which Highlight
  * Level, and what the last thing to refuse said. `docs/PHILOSOPHY.md` rule 1 is
  * honest signals, and a player that cannot say whether it is highlighting the word
  * or the sentence leaves the owner to guess at exactly the thing this app is for.
  * Those lines live inside the player so that collapsing hides them with the rest.
+ *
+ * It is rendered by the shell (`reading-host.tsx`, #68) rather than by the
+ * Reader screen, and moved into the screen's slot while the Reader shows it, so
+ * that it goes on reading when the owner goes back to the Library.
  *
  * It is mounted per Document, keyed by it, so that opening another one starts with
  * a new bridge, a new engine and none of the previous book's Blocks. The renderer
@@ -66,7 +72,7 @@ import { hasSavedVoice, inventoryReady, inventoryError, requestInventory, playba
  * of kilobytes that often is not expensive, but it is not free either, and the
  * thing being protected is a force-quit: at three seconds a sentence this loses
  * at most the last three or four sentences, which is inside the paragraph the
- * owner was listening to. Leaving the screen writes unconditionally, so the
+ * owner was listening to. The Reading's end writes unconditionally, so the
  * ordinary way out loses nothing at all.
  */
 const POSITION_INTERVAL_MS = 10_000;
@@ -134,6 +140,23 @@ export interface ReadingViewProps {
   onReached(place: ReadingPlace): void;
   /** What the EPUB calls itself, once epub.js has its metadata. */
   onTitle(title: string): void;
+  /**
+   * How tall the navigation bar over the top of the page is, in points, whether
+   * or not it is shown (#67). The screen measures it; the page keeps that much
+   * space above the document, and the centring leaves it out while it is shown.
+   */
+  barHeight: number;
+  /**
+   * Whether the player is shown in full, which is when the navigation bar is
+   * too (#67): they come and go together, so that one state says what is on the
+   * screen and any pause or note that brings the player back brings the bar.
+   */
+  onChrome(shown: boolean): void;
+  /**
+   * Whether the reading is playing and whether it is waiting for audio (#68):
+   * what the Library's Reading Button shows while this view is held out of sight.
+   */
+  onState(playing: boolean, buffering: boolean): void;
 }
 
 /**
@@ -203,6 +226,9 @@ export function ReadingView({
   onVoice,
   onReached,
   onTitle,
+  barHeight,
+  onChrome,
+  onState,
 }: ReadingViewProps) {
   const fileSystem = useReaderFileSystem;
   const { sync, library } = useShell();
@@ -228,13 +254,14 @@ export function ReadingView({
   useEffect(()=>{void requestInventory(document.identity.id,{provider:settings.provider,voice:settings.voice}).catch(()=>{});},[document.identity.id,settings.provider,settings.voice]);
   const savedVoice = hasSavedVoice(document.identity.id, settings.provider, settings.voice);
   useEffect(() => { playbackActive(reading.status.playing); return () => playbackActive(false); }, [reading.status.playing]);
+  useEffect(() => { onState(reading.status.playing, reading.status.buffering); }, [reading.status.playing, reading.status.buffering, onState]);
   const voices = useVoiceLists(settings);
   const [displayError, setDisplayError] = useState<string | null>(null);
   const [contentsOpen, setContentsOpen] = useState(false);
   const [voicesOpen, setVoicesOpen] = useState(false);
   const closeContents = useCallback(() => setContentsOpen(false), []);
   const closeVoices = useCallback(() => setVoicesOpen(false), []);
-  /** Down to one button, or the whole strip. Here rather than in the player because pausing re-opens it, and the pause is this screen's. */
+  /** Down to the Reading Button, or the whole strip and the navigation bar with it (#67). Here rather than in the player because pausing re-opens both, and the pause is this screen's. */
   const [collapsed, setCollapsed] = useState(false);
   /**
    * The size to give `<Reader>`, in points, measured rather than inherited.
@@ -253,6 +280,10 @@ export function ReadingView({
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const measure = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
+    // A zero size is never the page's (#68): it is this view between two places,
+    // a slot that has not been laid out yet. Passing it on would resize the
+    // WebView, and a resize destroys every epub.js view.
+    if (width < 1 || height < 1) return;
     setSize((was) => (was && was.width === width && was.height === height ? was : { width, height }));
   }, []);
 
@@ -278,7 +309,7 @@ export function ReadingView({
    * `useReading`'s own cleanup runs first — it is registered first, being a hook
    * of this component — and it clears the Utterance the position would be built
    * from. So the position is taken at each Clip boundary, where everything it
-   * needs is certainly still there, and the ref is what leaving the screen
+   * needs is certainly still there, and the ref is what the Reading's end
    * writes.
    */
   const status = reading.status;
@@ -314,8 +345,10 @@ export function ReadingView({
   }, [sync]);
   useEffect(
     () => () => {
-      // Leaving is a sync moment (issue #20): the place is written first, so the
-      // run that follows carries it.
+      // The Reading ending is a sync moment (issue #20): the place is written
+      // first, so the run that follows carries it. It ends when the Reader goes
+      // while it is paused, when another document is opened, and when this one
+      // is deleted (#68); going back while it plays does not unmount this view.
       if (positionRef.current) onReachedRef.current(positionRef.current);
       syncRef.current.poke('leave');
     },
@@ -351,7 +384,7 @@ export function ReadingView({
   /**
    * Pause, and the one path there is.
    *
-   * **Pausing re-opens the player** — the assumption is that the owner is about to
+   * **Pausing re-opens the player**, and the navigation bar with it (#67) — the assumption is that the owner is about to
    * do something else, go back a sentence or change the Voice, so the controls
    * arriving at that moment is convenient. That line used to live in `player.tsx`,
    * next to the button. It is here now because the lock screen has a pause too
@@ -452,12 +485,27 @@ export function ReadingView({
   }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status, voicesOpen, savedVoice, inventoryProblem]);
 
   /**
-   * The player down to its one button, which is exactly when it draws no note
-   * (`player.tsx`), and then the page only follows (#71, ADR 0050): the collapsed
-   * player has no M to bring a browsed page back with, so no finger may take it
-   * away, and one already taken comes back as it collapses.
+   * Whether the player is shown in full, and with it the navigation bar (#67).
+   *
+   * The player's own rule, `collapsed && notes.length === 0`, made the screen's:
+   * a note is a thing the owner has not been told, so it opens the player, and
+   * the bar comes with it. The bar floats, so what it covers goes to the
+   * centring while it is shown and nothing when it is not; the space the page
+   * keeps for it stays either way, so the text does not move.
    */
-  const followOnly = collapsed && notes.length === 0;
+  const chrome = !(collapsed && notes.length === 0);
+  useEffect(() => { onChrome(chrome); }, [chrome, onChrome]);
+  const setBar = reading.bridge.setBar;
+  useEffect(() => { setBar(chrome ? barHeight : 0, barHeight); }, [chrome, barHeight, setBar]);
+  /**
+   * The player down to the Reading Button (#67), which is exactly when it draws
+   * no note and the bar is hidden (`chrome` above), and then the page only
+   * follows (#71, ADR 0050): the collapsed player has no M to bring a browsed
+   * page back with, so no finger may take it away, and one already taken comes
+   * back as it collapses. The Reading Button only opens the player, which ends
+   * it.
+   */
+  const followOnly = !chrome;
   useEffect(() => {
     reading.bridge.setFollowOnly(followOnly);
   }, [reading.bridge, followOnly]);

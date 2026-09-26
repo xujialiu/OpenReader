@@ -8,8 +8,11 @@ The provider configuration UI, player eligibility and new-document voice default
 are revised by [ADR 0026](0026-a-coherent-reading-interface.md). The contents
 list's place among the six seeks below is revised by
 [ADR 0044](0044-a-paused-contents-row-browses.md): while the reading is paused, a
-row is Browsing and names no Utterance. Historical measurements below are
-retained unchanged.
+row is Browsing and names no Utterance. What collapsing leaves is revised by
+[ADR 0048](0048-the-bar-floats-and-the-page-keeps-room-for-it.md): the
+navigation bar goes with the player, and the one button left, the Reading
+Button, shows the player and never plays or pauses. Historical measurements
+below are retained unchanged.
 
 _The product argument is
 `docs/design/0020-the-player-and-knowing-where-you-are.md`._
@@ -188,6 +191,11 @@ tap is 1.50 → 1.55, and a hold of about 2.5 s is 1.50 → 3.15, with 1.50 → 
 inside the first two seconds.
 
 ### Where the player's own state lives
+
+_Revised by [ADR 0048](0048-the-bar-floats-and-the-page-keeps-room-for-it.md)
+(#67): the collapsed button no longer plays or pauses, so the measurement at
+the end of the first paragraph below describes the old button. Pausing still
+re-opens the player, and now the navigation bar with it._
 
 `collapsed` belongs to the reader screen, beside the two sheets' visibility, and
 not to the player. The reason is decision 4: **pausing re-opens the player**, and

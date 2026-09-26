@@ -130,8 +130,11 @@ text the program runs.
   differs. A page following the reading when the message arrives is brought to
   the new position through `bring(aim(), false)`: a glide within the visible page,
   a jump beyond it. A browsed page stays put. General is reached only from the
-  Library, so in today's app the new value lands on the next open. It glides only
-  where the reader stays mounted.
+  Library, and since #68 (ADR 0049) a Reading that is playing is held there,
+  mounted, behind the navigator. `ReadingHost` reads the settings from the shell,
+  so `use-reading.ts`'s effects send the new value to the held page at once, and
+  the Reader shows it on return. A Reading that ended when the owner left while
+  paused takes it at the next open.
 - **The reference height** is the batch's real change. `lineAt(view, bounds)`
   aims at `bounds.top + (clientHeight − openPlayer) × LINE_POSITION`, and falls
   back to `covered` until `openPlayer` is known. `openPlayer` is the new
@@ -148,13 +151,22 @@ text the program runs.
     note went away at Play, the line sat 87 px above the new middle.
   - Collapsing now moves nothing, and the line then sits where it sat. That is
     the owner's choice: the height is reckoned as it was before collapsing.
-- **With #67's floating bar** (the player worktree, `BarMessage`: `coveredPx` now,
-  `reservedPx` whether shown or not), the rule carries over to the top. The band
-  runs from `bounds.top + barReserved` to the open player, so hiding the bar with
-  the player moves nothing either:
-  `lineAt = bounds.top + barReserved + (clientHeight − barReserved − openPlayer) × LINE_POSITION`.
-  `barCovered` stays the input for what can be seen now: `visibleOf()`, and the
-  tall-Utterance rule's top. `lineAt` is the one function the merge changes.
+- **With #67's floating bar** (ADR 0048, `BarMessage`: `coveredPx`, what the bar
+  covers now, 0 while hidden; `reservedPx`, its height whether shown or not), the
+  rule carries over to the top. Done at the merge of main into this branch:
+  - `lineAt` measures from the room kept for the bar, not from what it covers now:
+    `over = barReserved > 0 ? barReserved : barCovered`, and
+    `lineAt = bounds.top + over + (clientHeight − over − under) × LINE_POSITION`,
+    where `under` is `openPlayer` (or `covered` until it is measured). Collapsing
+    hides the bar and the player together (#67), and neither moves the target.
+  - What can be seen now starts below the bar as it is: `visibleOf()` is
+    `clientHeight − covered − barCovered` (the within-a-page glide check),
+    `onVisiblePage()` (the recovery rule) counts from `top + barCovered`, and the
+    tall-Utterance rule puts its start at `box.top − bounds.top − barCovered`.
+  - The collapsed drag lock keys off #67's `chrome`: `reading-view.tsx` sends
+    `setFollowOnly(!chrome)`, which is true exactly while the Reading Button is
+    shown. The Reading Button's press only opens the player, which sends
+    `followOnly: false` and gives the finger back the page.
 - **The one limit.** At 70 or 80 %, several notes stacked on the player can cover
   the line being spoken, because the target no longer rises with them. Nothing
   clamps it. A note is transient, and the two positions that can meet it are the

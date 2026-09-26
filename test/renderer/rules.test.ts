@@ -343,10 +343,15 @@ describe('never highlight by mutating the DOM, and never check whether you can (
 
   it('mutates the DOM in two ways only: the stylesheet a ::highlight() rule has to live in, and the mark on a Document’s own alignment', () => {
     const program = code('highlighter.ts');
-    expect(program.match(/createElement\(/g)).toHaveLength(1);
-    expect(program).toContain("createElement('style')");
-    expect(program.match(/appendChild\(/g)).toHaveLength(1);
-    expect(program).toContain('appendChild(style)');
+    // Two stylesheets, and the second is not in a Document at all: it is the
+    // page epub.js lays the sections out on, and it holds one rule, the room kept
+    // above the first section for the navigation bar (#67, `reserve`). Nothing of
+    // the book's text is in that page, so no text node, offset or CFI can move.
+    expect(program.match(/createElement\(/g)).toHaveLength(2);
+    expect(program.match(/createElement\('style'\)/g)).toHaveLength(2);
+    expect(program.match(/appendChild\(/g)).toHaveLength(2);
+    expect(program.match(/appendChild\(style\)/g)).toHaveLength(2);
+    expect(fn(program, 'reserve')).toContain("document.createElement('style')");
     // ADR 0034: one attribute, under one name, on the elements a Document centres
     // or sets to the right — an attribute moves no text node, offset or CFI, and
     // nothing else about an element is touched.
@@ -372,6 +377,9 @@ describe('never highlight by mutating the DOM, and never check whether you can (
         // tidiness: the count above is still one `createElement`.
         expect(program).toContain('var wanted = CSS_TEXT + THEME + APPEARANCE;');
         expect(program).toContain('if (style.textContent !== wanted) style.textContent = wanted;');
+        // And the bar's room, built from a number and nothing else.
+        expect(program.match(/textContent = /g)).toHaveLength(2);
+        expect(fn(program, 'reserve')).toContain("style.textContent = barReserved > 0");
         continue;
       }
       expect(program).not.toContain(mutation);
@@ -628,15 +636,19 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     // is standing on, and the line being spoken sits behind it — which fails as
     // "the highlight is off screen", not as an error.
     const program = code('highlighter.ts');
-    pin(fn(program, 'visibleOf'), 'var visible = view.clientHeight - covered;', 'highlighter.ts, function visibleOf');
+    // What can be seen now lies between the bar and the player, both floating
+    // over the container (ADR 0020, #67).
+    pin(fn(program, 'visibleOf'), 'var visible = view.clientHeight - covered - barCovered;', 'highlighter.ts, function visibleOf');
     const moveFor = fn(program, 'moveFor');
     pin(moveFor, 'var at = lineAt(view, bounds);', 'highlighter.ts, function moveFor');
     expect(moveFor).not.toContain('clientHeight');
-    // What the line position is a share of: the page above the open player
-    // (#71), or above what is covered now until the open player is measured.
+    // What the line position is a share of: the page between the room kept for
+    // the bar (#67) and the open player (#71), or what is covered now until each
+    // is measured — so that hiding the bar and collapsing the player move nothing.
     const lineAt = fn(program, 'lineAt');
-    pin(lineAt, 'var visible = view.clientHeight - under;', 'highlighter.ts, function lineAt');
-    pin(lineAt, 'return bounds.top + visible * LINE_POSITION;', 'highlighter.ts, function lineAt');
+    pin(lineAt, 'var over = barReserved > 0 ? barReserved : barCovered;', 'highlighter.ts, function lineAt');
+    pin(lineAt, 'var visible = view.clientHeight - over - under;', 'highlighter.ts, function lineAt');
+    pin(lineAt, 'return bounds.top + over + visible * LINE_POSITION;', 'highlighter.ts, function lineAt');
     // The middle, until the owner's Line Position reaches it.
     pin(highlighterSource(), 'var LINE_POSITION = 0.5;', 'the program');
   });
@@ -755,6 +767,67 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     const inset = program.slice(program.indexOf("message.kind === 'inset'"));
     const branch = inset.slice(0, inset.indexOf('return;'));
     expect(branch).not.toMatch(/centre|scrollBy|follow\(/);
+  });
+});
+
+describe('the navigation bar floats over the page too, and the page keeps room for it (#67, ADR 0048)', () => {
+  it('holds the line below the room for the bar, and puts a tall Utterance just below the bar', () => {
+    // The bar covers the top of the container while it is shown, as the player
+    // covers the bottom; a line position measured from the container's top would
+    // hold the line being spoken a bar's height too high, and a tall Utterance's
+    // opening words would start under the bar. The line position is measured
+    // from the room kept for the bar, which stays when the bar hides with the
+    // player (#71), and what can be seen now from what the bar covers now.
+    const program = code('highlighter.ts');
+    const lineAt = fn(program, 'lineAt');
+    expect(lineAt).toContain('barReserved');
+    expect(lineAt).toContain('return bounds.top + over + visible * LINE_POSITION;');
+    expect(fn(program, 'moveFor')).toContain('move = box.top - bounds.top - barCovered;');
+    expect(fn(program, 'onVisiblePage')).toContain('view.getBoundingClientRect().top + barCovered;');
+  });
+
+  it('takes what the bar covers and the room it needs as a message, and scrolls nothing when they change', () => {
+    // The same rule as the inset: hiding the bar moves no text, and a scroll to
+    // the new middle would.
+    const program = code('highlighter.ts');
+    pin(program, "message.kind === 'bar'", 'highlighter.ts');
+    const bar = program.slice(program.indexOf("message.kind === 'bar'"));
+    const branch = bar.slice(0, bar.indexOf('return;'));
+    pin(branch, 'barCovered = ', "highlighter.ts, the 'bar' branch");
+    pin(branch, 'barReserved = reserved;', "highlighter.ts, the 'bar' branch");
+    expect(branch).not.toMatch(/centre|scrollBy|follow\(/);
+  });
+
+  it('keeps the room above the document with a pseudo-element, never with the container’s padding', () => {
+    // Padding changes the size epub.js's stage measures, and a stage that changes
+    // size destroys every view (the blank open). A ::before takes room in the
+    // scroll without changing the container's box.
+    const reserve = fn(code('highlighter.ts'), 'reserve');
+    expect(reserve).toContain('.epub-container::before');
+    expect(code('highlighter.ts')).not.toMatch(/paddingTop|padding-top/);
+  });
+
+  it('lands a section already on the page below the bar, by the one offset epub.js reads', () => {
+    // A section epub.js has already laid out is displayed by scrolling to its
+    // view's offsetTop, which counts the room above; without this its first line
+    // would go under the bar. Installed with the rest.
+    const program = code('highlighter.ts');
+    const land = fn(program, 'landBelowBar');
+    expect(land).toContain('at.top - barReserved');
+    expect(program).toContain('landBelowBar(rendition.manager);');
+    // epub.js reads a view's offset() in exactly one place, which is why wrapping
+    // it moves nothing else. A second reader would be a second thing moved.
+    const epubjs = readFileSync(new URL('../../node_modules/@epubjs-react-native/core/lib/module/epubjs.js', import.meta.url), 'utf8');
+    expect(epubjs.match(/\.offset\(\)/g)?.length).toBe(1);
+  });
+
+  it('sends the bar again once the program says it has installed', () => {
+    // The screen knows the bar's height before the WebView has loaded its template,
+    // and a message sent then is lost without a word, as the inset's is.
+    const bridge = code('reader-bridge.ts');
+    const document = bridge.slice(bridge.indexOf('message.type === DOCUMENT_MESSAGE'));
+    const branch = document.slice(0, document.indexOf('return;'));
+    expect(branch).toContain("send({ kind: 'bar', ...bar.current })");
   });
 });
 
@@ -1593,7 +1666,9 @@ describe('A or M, and M bringing the page back (#71, #53, ADR 0050)', () => {
     // No listener that could stop the phone's own scrolling: every touchmove stays passive.
     expect(program).not.toContain('passive: false');
     const view = appCode('reading-view.tsx');
-    pin(view, 'const followOnly = collapsed && notes.length === 0;', 'reading-view.tsx');
+    // Exactly while the Reading Button is shown (#67's `chrome` is its negation).
+    pin(view, 'const chrome = !(collapsed && notes.length === 0);', 'reading-view.tsx');
+    pin(view, 'const followOnly = !chrome;', 'reading-view.tsx');
     pin(view, 'reading.bridge.setFollowOnly(followOnly);', 'reading-view.tsx');
   });
 });

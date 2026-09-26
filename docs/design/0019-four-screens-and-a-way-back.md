@@ -23,7 +23,10 @@ one adds a book, one opens the settings.
 
 **The reader is a screen you arrive at and leave.** It carries a back arrow, the
 book's own name, and one more control on the right for how the page looks. Back
-goes to the shelf; the reading stops, and the place is kept.
+goes to the shelf; the reading stops, and the place is kept. _(Revised in
+[decision 0049](0049-the-reading-goes-on-in-the-library.md): going back while
+the book is being read keeps the voice going, and the shelf offers a button back
+to it. Going back while it is paused still stops it.)_
 
 **Settings is a list, not a panel.** It has two entries. _General_ holds what is
 true of the whole app. _Providers_ lists the voices available and opens one at a

@@ -185,7 +185,8 @@ export function useNowPlaying({ title, chapter, playing, rate, live, onIntent }:
   }, [title, chapter, playing, rate, live]);
 
   /**
-   * Leaving the reader gives the lock screen back. Separate from the effect above
+   * The Reading ending gives the lock screen back (#68: going back to the
+   * Library while it plays keeps it, and keeps this item). Separate from the effect above
    * so that a chapter change does not tear the item down and build it again,
    * which on a lock screen is a visible flicker.
    */

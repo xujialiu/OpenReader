@@ -628,6 +628,14 @@ ${constants}
      note and the player collapsing move nothing. Zero until the open player has
      been measured, and \`covered\` stands in. See lineAt(). */
   var openPlayer = 0;
+
+  /* The navigation bar over the top of the scroll container, from the 'bar'
+     message (#67, ADR 0048): what it covers now, zero while it is hidden, and its
+     height whether or not it is shown. The first is the centring's, the way
+     \`covered\` is; the second is the space kept above the document and at the
+     top of every place epub.js lands on. See reserve(). */
+  var barCovered = 0;
+  var barReserved = 0;
   /* The lowest spine item on the page, from the last sweep. The only thing the
      resize recovery has to aim at; see the resize handler. */
   var onScreen = null;
@@ -1640,14 +1648,17 @@ ${constants}
     return whole ? { whole: whole } : null;
   }
 
-  /* How much of the scroll container can be seen. ADR 0020's player floats over
-     its bottom so that the text never reflows when it appears, and \`covered\` is
-     the player's own measured height; it changes when the player collapses and
-     expands, which is why it is an input here rather than a constant subtracted
-     once. An inset at least as tall as the container leaves nothing to aim in,
-     and then moveFor() is the tall-Utterance rule: the top goes to the top. */
+  /* How much of the scroll container can be seen now. ADR 0020's player floats
+     over its bottom so that the text never reflows when it appears, and
+     \`covered\` is the player's own measured height; it changes when the player
+     collapses and expands, which is why it is an input here rather than a
+     constant subtracted once. The navigation bar floats over the top the same
+     way (#67, ADR 0048), so what can be seen starts \`barCovered\` down, and that
+     is zero while the bar is hidden. An inset at least as tall as the container
+     leaves nothing to aim in, and then moveFor() is the tall-Utterance rule: the
+     top goes to the top of what can be seen. */
   function visibleOf(view) {
-    var visible = view.clientHeight - covered;
+    var visible = view.clientHeight - covered - barCovered;
     return visible < 0 ? 0 : visible;
   }
 
@@ -1659,12 +1670,19 @@ ${constants}
      came and went while paused left the line 87 px above the middle until Play.
      The owner's choice is the height as it was before collapsing, so that
      collapsing leaves the line where it is. Before the open player has been
-     measured, what can be seen now stands in. */
+     measured, what can be seen now stands in.
+
+     The top is the room kept for the navigation bar (\`barReserved\`, #67, ADR
+     0048), not what the bar covers now: collapsing the player hides the bar
+     too, and measured from \`barCovered\` the line position would rise by the
+     bar's height at every collapse. Before the room is known, what the bar
+     covers now stands in, as the player's does. */
   function lineAt(view, bounds) {
+    var over = barReserved > 0 ? barReserved : barCovered;
     var under = openPlayer > 0 ? openPlayer : covered;
-    var visible = view.clientHeight - under;
+    var visible = view.clientHeight - over - under;
     if (visible < 0) visible = 0;
-    return bounds.top + visible * LINE_POSITION;
+    return bounds.top + over + visible * LINE_POSITION;
   }
 
   /* How far the page has to move for what is aimed at to sit at the line
@@ -1687,9 +1705,10 @@ ${constants}
     var move = (box.top + box.bottom) / 2 - at;
     /* Unless the Utterance is taller than the screen, where holding its middle
        would push its opening words off the top — and those are the words about to
-       be spoken. Then its start goes to the top of the screen instead, and the
-       highlight walks down from there. */
-    if (move > box.top - bounds.top) move = box.top - bounds.top;
+       be spoken. Then its start goes to the top of what can be seen instead,
+       just below the bar while it is shown (#67), and the highlight walks down
+       from there. */
+    if (move > box.top - bounds.top - barCovered) move = box.top - bounds.top - barCovered;
     return move;
   }
 
@@ -1924,10 +1943,10 @@ ${constants}
   }
 
   /* Whether a sentence that is beginning can be seen: the middle of the line it
-     begins on lies within the visible page as it is now — below the top of the
-     scroll container and above whatever the player covers at this moment, not
-     the open player the line position is measured against, because what counts
-     is what the owner can see.
+     begins on lies within the visible page as it is now — below whatever the
+     navigation bar covers at this moment (#67) and above whatever the player
+     covers, not the room and the open player the line position is measured
+     against, because what counts is what the owner can see.
 
      The other half of Zotero-TTS's rule (ADR 0050): a page the owner took away
      while the reading plays is taken back at a sentence they can see beginning,
@@ -1941,7 +1960,7 @@ ${constants}
     if (!view || !line) return false;
     var middle = middleOf(line);
     if (middle === null) return false;
-    var top = view.getBoundingClientRect().top;
+    var top = view.getBoundingClientRect().top + barCovered;
     return middle >= top && middle <= top + visibleOf(view);
   }
 
@@ -2360,6 +2379,51 @@ ${constants}
     };
   }
 
+  /* ---- the bar over the top (#67, ADR 0048) ---- */
+
+  /* Space as tall as the navigation bar above the document's first line.
+
+     The bar floats over the top of the page so that hiding it moves no text,
+     and the price is the same one the player pays at the bottom: what is under
+     it cannot be read while it is shown. At the bottom that is the last lines of
+     a screen, and the reading scrolls past them; at the top it would be the first
+     line of the book and the first line of every chapter chosen from the
+     contents, which is where epub.js puts what it displays.
+
+     A pseudo-element and not padding, and the difference is the whole choice:
+     padding on the container changes the size the stage measures, and a stage
+     that changes size destroys every view (the blank open, below). A ::before is
+     laid out before the first view and moves nothing else; epub.js prepends its
+     views as children, which never go in front of it. */
+  function reserve() {
+    var style = document.getElementById('openreader-bar');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'openreader-bar';
+      document.head.appendChild(style);
+    }
+    style.textContent = barReserved > 0
+      ? '.epub-container::before { content: ""; display: block; height: ' + barReserved + 'px; }'
+      : '';
+  }
+
+  /* Where epub.js puts a section it already has on the page: at the top of the
+     container, by scrolling to the view's offsetTop — which the space above
+     counts in, so that section's first line would go under the bar. A section it
+     has to lay out first lands below the space on its own, because the scroll
+     starts at zero. offset() is read in exactly one place in the bundled epub.js,
+     that display, so this moves nothing else. */
+  function landBelowBar(manager) {
+    var View = manager && manager.View;
+    if (!View || !View.prototype || View.prototype.openreaderBelowBar) return;
+    var offset = View.prototype.offset;
+    View.prototype.offset = function () {
+      var at = offset.apply(this, arguments);
+      return { top: Math.max(0, at.top - barReserved), left: at.left };
+    };
+    View.prototype.openreaderBelowBar = true;
+  }
+
   /* ---- the blank open (notes/NOTES_2026-09-20.md, 01:51) ---- */
 
   /* A resize destroys every view, and epub.js only puts them back if it has
@@ -2436,6 +2500,7 @@ ${constants}
      manager whose trims and prepends wait for it to stop (#58). */
   if (stage) stage.addEventListener('scroll', noteScroll, { passive: true });
   holdStill(rendition.manager);
+  landBelowBar(rendition.manager);
   /* And again whenever the reading position moves, which is what keeps
      \`onScreen\` current after the manager trims a view — a trim displays
      nothing, so the hook does not hear it. Idempotent per document: one lookup
@@ -2513,6 +2578,19 @@ ${constants}
         drifting = null;
       }
       if (state && state.follow && !browsing) approach(aim());
+      return;
+    }
+    if (message.kind === 'bar') {
+      /* The navigation bar, which comes and goes with the player (#67). Nothing
+         is re-centred, for the reason the 'inset' branch gives: hiding the bar
+         moves no text, and scrolling to the new middle would. The space kept
+         above the document changes only with the bar's own height. */
+      barCovered = typeof message.coveredPx === 'number' && isFinite(message.coveredPx) && message.coveredPx > 0 ? message.coveredPx : 0;
+      var reserved = typeof message.reservedPx === 'number' && isFinite(message.reservedPx) && message.reservedPx > 0 ? message.reservedPx : 0;
+      if (reserved !== barReserved) {
+        barReserved = reserved;
+        reserve();
+      }
       return;
     }
     if (message.kind === 'appearance') {

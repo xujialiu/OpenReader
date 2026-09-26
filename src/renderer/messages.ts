@@ -520,6 +520,29 @@ export interface ThemeMessage {
   css: string;
 }
 
+/**
+ * The navigation bar over the top of the scroll container (#67, ADR 0048).
+ *
+ * The bar floats over the page as the player does, so that hiding it with the
+ * player moves no text: the WebView keeps its frame, and a resize would destroy
+ * every view (`highlighter.ts`, "the blank open"). So the top has the same two
+ * numbers the bottom's `InsetMessage` has one of.
+ *
+ * `coveredPx` is what the bar covers **now**, zero while it is hidden, and it is
+ * the centring's input, exactly as `bottomPx` is: nothing is re-centred when it
+ * changes. `reservedPx` is the bar's height whether or not it is shown. Space that
+ * tall is kept above the document's first line, and every place epub.js puts at
+ * the top of the page lands below it, so a document opened, a chapter chosen or a
+ * page put back is never under the bar. It stays put when the bar hides, and a
+ * change to it moves the text by the difference, which is why it is a separate
+ * number that changes only when the bar's own height does.
+ */
+export interface BarMessage {
+  kind: 'bar';
+  coveredPx: number;
+  reservedPx: number;
+}
+
 export type HighlightMessage =
   | SpeakMessage
   | CorrectMessage
@@ -530,6 +553,7 @@ export type HighlightMessage =
   | FollowOnlyMessage
   | InsetMessage
   | FollowingMessage
+  | BarMessage
   | AppearanceMessage
   | MeasuredMessage
   | ThemeMessage;
