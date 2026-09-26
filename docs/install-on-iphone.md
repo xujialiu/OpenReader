@@ -25,6 +25,8 @@ cannot use Expo Go as a substitute.
   recorded path is not reusable as-is.
 - Later on 2026-09-22, the `0.0.2-beta5` Release build succeeded after the native dependency recovery below, and installation returned `App installed`. Launch then failed with `CoreDeviceError 10002` / `Security`. Local signature and profile checks passed, but device trust and successful launch remain unconfirmed. The earlier successful launch does not establish that this later installation can launch.
 
+- On 2026-09-26, with no cable connected, the paired iPhone was discovered wirelessly. The current checkout's `0.0.2-beta32` Release build returned 0 after dependency recovery; `devicectl` then confirmed installation and launch. Screen behavior, reading and playback were not tested. This establishes wireless installation for this already-paired phone, not first-time wireless pairing.
+
 The device, account, and paths above are specific to this run. Look them up again
 when changing computers or phones. If the user has since trusted the developer
 and launched the app successfully, update the verification results.
@@ -51,7 +53,8 @@ installation.
 ## Subsequent installation: check, build, install, and launch
 
 Run the following commands from the repository root. Keep the phone connected and
-unlocked.
+unlocked. A cable is not required when the previously paired phone is reachable
+wirelessly: check `devicectl` before asking the owner to connect one.
 
 ### 1. Confirm the device and certificate
 
@@ -65,6 +68,14 @@ You should see the physical iPhone and at least one valid Apple Development
 identity. `0 valid identities found` means that signing in to the account alone
 was not enough; create a certificate in Xcode. The device list also includes
 simulators; the physical iPhone's UDID is `IPHONE_UDID` in the commands below.
+
+### Before spending time on a native build
+
+1. Check installed dependencies against the current checkout, for example with `npm ls --depth=0 --omit=dev`, and investigate missing or invalid runtime packages before building. A package's presence in the manifest and lockfile does not establish that it exists in `node_modules`. On 2026-09-26, missing `react-native-teleport` was discovered only at the late JavaScript bundling stage.
+2. If a missing package has native code, restore it and run `pod install` in `ios/` **before** the Release build. Teleport needs this registration. Avoid reinstalling Pods or clearing build products on every routine installation: dependency regeneration can trigger broad recompilation.
+3. Reuse this checkout's successful isolated module cache. The 2026-09-26 build passed with `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20260926-wireless`; include that setting in the build command below while that cache remains available. The default shared cache reproduced the already documented ExpoSQLite failure. Create a new isolated cache only when necessary, and keep using the same one for retries.
+4. Check for other active Xcode builds before starting an expensive rebuild. Another simulator build was running during this installation. Coordinate heavy builds where possible; do not stop someone else's build. Concurrent compilation can compete for resources, but its individual contribution to this run's delay was not measured.
+5. Capture build output outside the repository, wait for the build's final exit code, and keep build, transfer and launch results separate. A quiet log is not evidence of a hang; check whether compiler processes are active before restarting. Do not present a library's link step as completion of the whole app.
 
 ### 2. Build a standalone Release version
 
@@ -153,6 +164,14 @@ Installation through a Personal Team is subject to provisioning profile expiry.
 Release describes the build configuration and does not mean the signature is
 permanent. Re-sign and reinstall after expiry. Do not uninstall the old app for
 this purpose: uninstalling may delete the local library and settings.
+
+### Missing local dependencies during wireless installation (2026-09-26)
+
+The first build failed on the known ExpoSQLite prefixed-symbol error. Retrying with an isolated module cache passed that stage, but bundling then failed with `Unable to resolve module react-native-teleport`. The manifest and lockfile declared 1.2.2; its installed directory was absent. Starting the native build before checking installed dependencies, and initially reusing the failing shared cache despite the recorded recovery, caused avoidable retries.
+
+`npm install --no-save --package-lock=false` was not a useful repair: it attempted to resolve `react-test-renderer@19.3.0`, which requires React `^19.3.0`, against the project's React 19.2.3. Do not disable the lockfile or upgrade React to repair a missing installed package. For this one missing package, `npm pack react-native-teleport@1.2.2 --pack-destination /tmp --json` obtained the exact archive; its reported integrity matched the lockfile. Extracting it into `node_modules/react-native-teleport` and running `pod install` in `ios/` restored its native integration. This targeted recovery is not a replacement for synchronizing a generally incomplete dependency tree.
+
+The subsequent Release build with the same isolated cache returned 0, and wireless installation and launch both returned 0. Most of the wait preceded transfer: native compilation was repeated after dependency repair, while another simulator build was active. Wireless transfer itself was brief. Do the preflight above first next time; do not attribute a long native build to Wi-Fi.
 
 ### Native dependency recovery measured on 2026-09-22 (#43)
 
