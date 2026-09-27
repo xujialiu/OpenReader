@@ -22,7 +22,9 @@ Computer Use only when none of these can perform the action.
 - **`expo`**: the JavaScript side. Its local tools (screenshot, tap by
   `testID`, React Native DevTools) exist only while a Metro started with
   `EXPO_UNSTABLE_MCP_SERVER=1` is running, and only for one Metro at a time;
-  reconnect the server after starting or stopping Metro. It needs `npx expo
+  reconnect the server after starting or stopping Metro. Its automation refuses
+  to run while more than one simulator is booted, which is usual here; then use
+  `mobilebuildmcp`. It needs `npx expo
   login` with the account used for the server's OAuth. Its screenshots pass
   through Expo's servers: do not use it on a screen showing credentials.
 
