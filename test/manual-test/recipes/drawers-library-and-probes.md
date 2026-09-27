@@ -251,9 +251,12 @@ audio: a chapter already complete is skipped and saves nothing. `play` and
 simulator's volume to zero and check it immediately before Play, and pause
 afterwards; the duration is the away time, so derive it from what is measured
 (20 s shows whether clips stop; crossing a chapter boundary while locked needs
-about a minute more than the chapter takes). `PRETEND_NOT_PLAYING=1` calls
-the runtime's `playbackActive(false)` once the Reading has started, which is
-how #75 measured a download beside a Reading before the app allowed one.
+about a minute more than the chapter takes). Until #75 the app held every
+download back while a Reading played; the notes of 2026-09-28 name a
+`PRETEND_NOT_PLAYING=1` that bypassed that hold after Play, by calling the
+runtime's `playbackActive(false)`, to measure a download beside a Reading
+before the app allowed one. The hold and the option went with #75: `play`
+and `playlock` now measure the app as it is.
 
 `lock-device.sh UDID lock|unlock` presses the simulator's own lock button
 through XCTest (`DeviceLockProbe.swift`, `pressLockButton` by selector) and

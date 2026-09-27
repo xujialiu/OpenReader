@@ -13,9 +13,8 @@
 //           volume checked at zero first), then paused and watched 40 s more;
 //   playlock — read aloud as in play, and the device locked while it plays;
 //           unlocked, brought back and paused after AWAY_SECONDS.
-// PRETEND_NOT_PLAYING=1 calls the runtime's playbackActive(false) once the
-// reading has started, so the download is not held back by it: what a download
-// allowed beside a reading would do, without changing the app.
+// Until #75 the app held every download back while a Reading played; the
+// PRETEND_NOT_PLAYING=1 that bypassed that hold for measuring went with it.
 //
 // Each saved clip is a file in Documents/offline-narration-v2/<document>/<voice>/
 // whose birth time is when it was saved, so the timeline is read from the files
@@ -28,6 +27,7 @@ const { execFile, execFileSync } = require('node:child_process');
 const { mkdtempSync, writeFileSync, readdirSync, statSync, existsSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
+/* global __dirname -- a CommonJS script run by node; the lint config does not declare it. */
 
 const [mode, udid, documentId, provider, voice, away, ...chapters] = process.argv.slice(2);
 if (!['home', 'lock', 'play', 'playlock'].includes(mode) || !udid || !documentId || !provider || !voice || !(Number(away) > 0) || !chapters.length) {
@@ -117,7 +117,6 @@ async function watch(seconds, label) {
     harness({ do: 'play' });
     for (let i = 0; i < 20 && !(await playing()); i++) await delay(500);
     if (!(await playing())) throw Error('The reading did not start');
-    if (process.env.PRETEND_NOT_PLAYING === '1') await evaluate(`(() => { ${runtime}.playbackActive(false); return true; })()`);
     if (mode === 'playlock') { sh('bash', join(__dirname, 'lock-device.sh'), udid, 'lock'); mark('away (playing, locked)'); }
     else mark('away (playing)');
   }

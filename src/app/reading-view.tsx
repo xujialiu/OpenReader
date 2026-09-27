@@ -63,7 +63,7 @@ import { useVoiceLists } from './use-voices';
 import { voiceInList } from './voices';
 import { knownVoice } from './voice-catalog';
 import { VoiceSheet } from './voice-sheet';
-import { hasSavedVoice, inventoryReady, inventoryError, requestInventory, playbackActive, useDownloads } from '../offline/runtime';
+import { hasSavedVoice, inventoryReady, inventoryError, requestInventory, useDownloads } from '../offline/runtime';
 
 /**
  * How often a Reading Position is written to the Library while the reading is
@@ -259,7 +259,6 @@ export function ReadingView({
   useDownloads();
   useEffect(()=>{void requestInventory(document.identity.id,{provider:settings.provider,voice:settings.voice}).catch(()=>{});},[document.identity.id,settings.provider,settings.voice]);
   const savedVoice = hasSavedVoice(document.identity.id, settings.provider, settings.voice);
-  useEffect(() => { playbackActive(reading.status.playing); return () => playbackActive(false); }, [reading.status.playing]);
   useEffect(() => { onState(reading.status.playing, reading.status.buffering); }, [reading.status.playing, reading.status.buffering, onState]);
   const voices = useVoiceLists(settings);
   const [displayError, setDisplayError] = useState<string | null>(null);

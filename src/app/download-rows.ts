@@ -31,8 +31,9 @@ export const HALTED: readonly TaskState[] = ['paused', 'blocked', 'interrupted']
 /**
  * States in which the scheduler is writing a chapter and `task.current` names
  * it. Only these read `current`: a task restored after a restart comes back
- * `queued` still naming the chapter it was on, and stays so while playback holds
- * the scheduler back (ADR 0027).
+ * `queued` still naming the chapter it was on, and stays so until a pass on it
+ * begins, behind another document's download or while the scheduler is held
+ * back (ADR 0027).
  */
 export const WRITING: readonly TaskState[] = ['preparing', 'downloading'];
 
