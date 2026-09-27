@@ -224,6 +224,47 @@ three still paused and five finished without a tap, resumes three and
 finishes the download. Real spend: 19 short utterances across five chapters,
 a fraction of `DownloadRingProbe`'s per-run cost.
 
+### A download away from the screen, and beside a Reading (#75, #76, #77)
+
+`download-away.cjs` hands chapters to the runtime's `enqueue`, waits for the
+first ten clips, then takes the app away for `AWAY_SECONDS` and brings it
+back, printing the clip count and the task's state every 5 s and a summary of
+when clips were saved relative to leaving and coming back. The clip times are
+the files' birth times in `Documents/offline-narration-v2/<document>/<voice>/`,
+so the timeline holds while the app's JavaScript cannot answer; the task's
+state is read through `cdp.cjs` whenever it can. At the end every chapter of
+the task is paused through `toggleTask`, so nothing goes on spending.
+
+```sh
+export OPENREADER_METRO=http://127.0.0.1:PORT   # not localhost (Pitfalls, cdp.md)
+node test/manual-test/download-away.cjs home     UDID DOCUMENT_ID fish VOICE 90 nav.2 nav.3 …   # Settings in front
+node test/manual-test/download-away.cjs lock     UDID DOCUMENT_ID fish VOICE 90 nav.19 …        # device locked
+node test/manual-test/download-away.cjs play     UDID DOCUMENT_ID fish VOICE 20 nav.16 …        # a Reading plays
+node test/manual-test/download-away.cjs playlock UDID DOCUMENT_ID fish VOICE 120 nav.23 …       # a Reading plays, locked
+```
+
+Prerequisites: Fish configured (`offline-fix.sh … -only-testing:testConfigureFishProvider`),
+the Document in the Library (`{"do":"add"}` through the harness), and the
+chapter ids from `download-chapter.cjs … --list`. Choose chapters without saved
+audio: a chapter already complete is skipped and saves nothing. `play` and
+`playlock` open the Document, choose the voice through the harness, set the
+simulator's volume to zero and check it immediately before Play, and pause
+afterwards; the duration is the away time, so derive it from what is measured
+(20 s shows whether clips stop; crossing a chapter boundary while locked needs
+about a minute more than the chapter takes). `PRETEND_NOT_PLAYING=1` calls
+the runtime's `playbackActive(false)` once the Reading has started, which is
+how #75 measured a download beside a Reading before the app allowed one.
+
+`lock-device.sh UDID lock|unlock` presses the simulator's own lock button
+through XCTest (`DeviceLockProbe.swift`, `pressLockButton` by selector) and
+opens it again with two Home presses; the first call builds the probe into
+`/tmp/openreader-lock-device` (about 30 s), later calls take about 15 s, and
+the lock happens near the end of that, so `away (locked)` is marked a second
+or two after the actual lock. What neither can show: the phone's own
+background time (the simulator's was longer than the phone's usual half
+minute), and anything about the system's continued processing tasks, which the
+simulator does not run.
+
 ### Two fingers: Files' own selection, and the download drawer's copy (#57)
 
 `TwoFingerProbe.swift` makes two-finger drags (see **Pitfalls › XCTest**) and

@@ -2,6 +2,17 @@
 
 ## Evaluating in the app through `cdp.cjs`
 
+- **`OPENREADER_METRO=http://localhost:PORT` closes with 1006 before any
+  answer, even for `1+1`; `http://127.0.0.1:PORT` answers.** Measured
+  2026-09-28 02:26 (#75–#77) against this tree's own Metro on 8091, one
+  OpenReader target listed in `/json/list`: `localhost` gave `Debugger
+  disconnected before completion: 1006` on every try, and the same probe with
+  `127.0.0.1` returned `{"type":"number","value":2}` at once. `cdp.cjs` takes
+  the WebSocket URL from `/json/list`, whose host follows the one asked, and
+  its origin from that URL, so the whole exchange moves with it. Leave
+  `OPENREADER_METRO` unset (its default is `127.0.0.1:8081`) or give it
+  `127.0.0.1`; the unisolated 1006 of 2026-09-25 in
+  [providers-and-audio.md](providers-and-audio.md) may have been this.
 - **A loop's closures all see its last value.** What `--eval` sends is compiled
   by Hermes as written, with no Babel pass, and a `for (const x of list)` loop
   does not give each turn its own `x`. Measured 2026-09-23: three wrappers made
