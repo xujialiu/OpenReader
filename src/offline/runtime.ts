@@ -43,6 +43,11 @@ import {
 } from "./model";
 import { createScheduler } from "./scheduler";
 import * as pausing from "./pausing";
+import {
+  continuedShown,
+  createContinuedProcessing,
+} from "./continued-processing";
+import { APP_NAME } from "../../app-name";
 import { offlineRepository } from "./database";
 import { audioKey, voiceKey } from "./catalog-keys";
 import { downloadSpeech, speechKeying } from "./speech";
@@ -150,9 +155,11 @@ async function persist() {
     });
     cancelInactivePreparation();
     emit();
+    continued.follow();
     throw error;
   }
   emit();
+  continued.follow();
 }
 export function useDownloads(): number {
   return useSyncExternalStore(
@@ -520,6 +527,66 @@ const scheduler = createScheduler({
   },
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
+/** The names the Library shows, which the Live Activity shows for a download away from the screen. */
+const documentTitles = new Map<string, string>();
+export function nameDocuments(
+  entries: readonly { id: string; title: string }[],
+): void {
+  let renamed = false;
+  for (const { id, title } of entries)
+    if (documentTitles.get(id) !== title) {
+      documentTitles.set(id, title);
+      renamed = true;
+    }
+  if (renamed) continued.follow();
+}
+/** ADR 0052: the continued processing task a download away from the screen runs under. */
+const continued = createContinuedProcessing({
+  native: offlineNative,
+  tasks: () => tasks,
+  shown: async (task) =>
+    continuedShown(
+      task,
+      documentTitles.get(task.document) ?? APP_NAME,
+      await (await offlineRepository()).progress(task.document, task.voice),
+      planOf(task.document),
+    ),
+});
+const runsAway = () =>
+  tasks.some((task) =>
+    ["preparing", "downloading", "queued"].includes(task.state),
+  );
+/** Today's bounded background time, where no continued task keeps the app running. */
+function beginBounded() {
+  if (offlineNative)
+    void offlineNative.beginBackground().then((allowed) => {
+      expired = !allowed;
+      emit();
+    });
+  else {
+    expired = true;
+    emit();
+  }
+}
+/**
+ * The owner started or resumed a download, on the screen: it may go on away
+ * from it. Only here, because Apple asks for the submission to follow a
+ * person's action; a launch or a return to the app never submits.
+ */
+function continueAway() {
+  if (!foreground) return;
+  void continued.start().then((running) => {
+    if (!running && !foreground && runsAway()) beginBounded();
+  });
+}
+/** Away from the screen, the time ran out: what was being written continues on the return. */
+function interruptAway() {
+  expired = true;
+  for (const task of tasks)
+    if (["preparing", "downloading"].includes(task.state))
+      task.state = "interrupted";
+  fire(persist());
+}
 const kick = () => {
   void scheduler
     .run()
@@ -600,13 +667,17 @@ export function startDownloads(): () => void {
       kick();
     },
   );
-  const expiration = offlineNative?.addListener("expired", () => {
-    expired = true;
-    for (const task of tasks)
-      if (["preparing", "downloading"].includes(task.state))
-        task.state = "interrupted";
-    fire(persist());
-  });
+  const expiration = offlineNative?.addListener("expired", interruptAway);
+  // The phone ended the continued task, under pressure or at the owner's stop
+  // in the Live Activity; the two cannot be told apart. On the screen the
+  // download needs no task and goes on.
+  const continuedExpiration = offlineNative?.addListener(
+    "continuedExpired",
+    () => {
+      continued.expired();
+      if (!foreground) interruptAway();
+    },
+  );
   const state = AppState.addEventListener("change", (value) => {
     foreground = value === "active";
     if (foreground) {
@@ -615,21 +686,7 @@ export function startDownloads(): () => void {
       for (const task of tasks)
         if (task.state === "interrupted") task.state = "queued";
       fire(persist().then(kick));
-    } else if (
-      tasks.some((task) =>
-        ["preparing", "downloading", "queued"].includes(task.state),
-      )
-    ) {
-      if (offlineNative)
-        void offlineNative.beginBackground().then((allowed) => {
-          expired = !allowed;
-          emit();
-        });
-      else {
-        expired = true;
-        emit();
-      }
-    }
+    } else if (!continued.holding() && runsAway()) beginBounded();
   });
   // Without a platform connectivity observer, periodically retry only connectivity failures.
   const timer = Platform.OS !== "ios" ? setInterval(kick, 5000) : null;
@@ -637,6 +694,7 @@ export function startDownloads(): () => void {
   return () => {
     network?.remove();
     expiration?.remove();
+    continuedExpiration?.remove();
     state.remove();
     if (timer) clearInterval(timer);
   };
@@ -676,6 +734,7 @@ export function enqueue(
       failed: [],
     });
   registerVoice(voice);
+  continueAway();
   fire(persist().then(kick));
 }
 /**
@@ -695,12 +754,18 @@ export const goesOn = (task: DownloadTask) =>
 /** Pause all while any chapter goes on by itself; otherwise Resume all, which is also Retry failed. */
 export function toggleTask(task: DownloadTask): void {
   if (goesOn(task)) pausing.pauseAll(task);
-  else pausing.resumeAll(task);
+  else {
+    pausing.resumeAll(task);
+    continueAway();
+  }
   fire(persist().then(kick));
 }
-/** A tap on one chapter's ring (#56). */
+/** A tap on one chapter's ring (#56); one that resumes may go on away from the screen. */
 export function toggleChapter(task: DownloadTask, chapter: string): void {
+  const resumes =
+    !pausing.GOES_ON.includes(task.state) || pausing.isPaused(task, chapter);
   pausing.tapChapter(task, chapter, completeIn(task));
+  if (resumes) continueAway();
   fire(persist().then(kick));
 }
 export async function deleteDownloaded(
