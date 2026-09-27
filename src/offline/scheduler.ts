@@ -119,6 +119,10 @@ export function createScheduler(deps: SchedulerDeps) {
    * preparation that does not succeed: an abandoned one is asked for again when
    * the app returns, and a failed one is left to the writer, which asks for it
    * again when it is that chapter's turn and records the failure as before.
+   * Nothing on the screen shows a failure ahead, so it is logged once, by
+   * chapter and message: one on the simulator ended after 0.59 s with the app
+   * in front and left no trace of why (notes/NOTES_2026-09-28.md, 05:01). A
+   * request withdrawn because the task stopped is not a failure to report.
    * Started as each chapter is written and when `run` is called during a pass.
    */
   function prepareAhead() {
@@ -132,7 +136,12 @@ export function createScheduler(deps: SchedulerDeps) {
         const next = following(plan, task, finished).find((c) => c.prepared === false && !prepared.has(c.id) && !failed.has(c.id));
         if (!next) return;
         try { await prepare(task, next); prepared.add(next.id); }
-        catch (error) { if (!(error instanceof PreparationInterrupted)) failed.add(next.id); return; }
+        catch (error) {
+          if (error instanceof PreparationInterrupted || !active(task)) return;
+          failed.add(next.id);
+          console.warn(`Chapter ${next.id} was not prepared ahead: ${error instanceof Error ? error.message : String(error)}`);
+          return;
+        }
       }
     })().catch(() => {}).finally(() => { ahead = null; }); // A plan that cannot be read is the writer's to report.
   }

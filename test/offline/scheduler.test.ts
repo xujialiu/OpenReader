@@ -520,6 +520,7 @@ describe('chapter text prepared ahead in the foreground, and never away from it 
   });
 
   it('keeps writing when a preparation ahead is abandoned, and prepares ahead again when the app returns', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const f = book(3, { hooks: {
@@ -540,6 +541,9 @@ describe('chapter text prepared ahead in the foreground, and never away from it 
     expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading', 'prepare c1 downloading', 'prepare c2 downloading']);
     expect(f.task.state).toBe('done');
     expect(f.events).not.toContain('state interrupted');
+    // Abandoned is not failed: nothing to report.
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('still stops the download when a preparation fails in the foreground', async () => {
@@ -549,11 +553,29 @@ describe('chapter text prepared ahead in the foreground, and never away from it 
   });
 
   it('leaves a chapter whose preparation ahead failed to the writer, which asks for it again when its turn comes', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const f = book(3, { fetchTicks: () => 5, hooks: { prepare: (chapter, call) => { if (chapter === 'c1' && call === 1) throw new Error('Chapter 2 did not render.'); } } });
     await f.scheduler.run();
     expect(f.prepare.mock.calls.map(([, chapter]) => chapter.id)).toEqual(['c0', 'c1', 'c1', 'c2']);
     expect([...f.saved]).toEqual(['c0.', 'c1.', 'c2.']);
     expect(f.task).toMatchObject({ state: 'done', error: null });
+    // The download shows nothing for it, so the log names the chapter and why, once (#76): one such
+    // failure on the simulator left no trace of its cause.
+    expect(warn.mock.calls).toEqual([['Chapter c1 was not prepared ahead: Chapter 2 did not render.']]);
+    warn.mockRestore();
+  });
+
+  it('reports nothing for a preparation ahead withdrawn because the download stopped', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // What the runtime's cancelInactivePreparation does when Pause all is tapped with a preparation out.
+    const f = book(3, { fetchTicks: () => 5, hooks: { prepare: (chapter) => {
+      if (chapter === 'c1') { f.task.state = 'paused'; throw new Error('Chapter preparation was stopped.'); }
+    } } });
+    await f.scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading']);
+    expect(f.task.state).toBe('paused');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it.each(['paused', 'deleted'] as const)('never writes a chapter %s while it is prepared ahead', async (action) => {
