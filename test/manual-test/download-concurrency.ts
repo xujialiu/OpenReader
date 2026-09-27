@@ -77,8 +77,8 @@ async function run(out: string, book: string, levels: number[], perLevel: number
   };
   const settings = loadSettings();
   const deps = { fetch: timed, getWebSocket: () => QueryHeaderWebSocket, newRequestId: () => randomUUID().replace(/-/g, '') };
-  // Speechify queues its own requests: each level's width has to reach its queue, as the app's download passes it (#64).
-  const providerAt = (level: number) => createProvider(id, { ...settings, speechify: { ...settings.speechify, atOnce: level } }, deps);
+  // Speechify queues its own requests: each level's width has to reach its queue, as the app's download passes it (#64, #75).
+  const providerAt = (level: number) => createProvider(id, { ...settings, speechify: { ...settings.speechify, atOnce: level, download: true } }, deps);
   const provider = providerAt(1);
   const voices = await provider.listVoices({ signal: AbortSignal.timeout(30_000) });
   const voice = voices.find((v) => VOICE_MATCH[id]?.(v.id, v.label, v.locale)) ?? voices.find((v) => v.locale.startsWith('en'));

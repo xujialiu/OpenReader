@@ -33,6 +33,7 @@ import { Portal } from 'react-native-teleport';
 
 import type { DocumentId, ReadingPlace, ReadingPosition } from '../core/document';
 import type { ProviderId } from '../core/providers/types';
+import { setReadingPlays } from '../offline/runtime';
 
 import { openDocument, type OpenDocument } from './document';
 import { ReadingView } from './reading-view';
@@ -126,6 +127,13 @@ export function ReadingHost({ children }: { children: ReactNode }) {
   useEffect(() => {
     playingRef.current = mine && live.playing;
   }, [mine, live.playing]);
+  const plays = mine && live.playing;
+  /** Told here, which outlives every screen: a playing Reading's audio keeps the app running away from the screen, and a download with it (#75). */
+  useEffect(() => {
+    if (!plays) return;
+    setReadingPlays(true);
+    return () => setReadingPlays(false);
+  }, [plays]);
 
   /**
    * Read the bytes, once per Reading. Opening a book is a sync moment (issue

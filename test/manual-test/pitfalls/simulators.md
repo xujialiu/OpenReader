@@ -120,3 +120,43 @@
   terminate, `plutil -replace RCT_jsLocation` on the container plist, shut down
   and boot. `run:ios` also opens `top.xujialiu.openreader://expo-development-client/?url=…`;
   this app has no development client, and that URL did nothing visible.
+
+## Away from the screen: the lock and the background time (#75)
+
+- **A simulated lock passes through `active` once on its way to the
+  background, and `download-away.cjs`'s `away (locked)` mark comes after it.**
+  Measured 2026-09-28 (#75 verification, `iPhone 17 download`, iOS 27.0) with
+  an in-app `AppState` listener (`download-sampler.cjs`), six `lock-device.sh
+  lock` calls: `inactive` first, 2.1–3.0 s later `active` for 16–82 ms, then
+  `inactive` and `background`. The script's mark came 0.5–1.4 s after
+  `background` and 2.7–4.5 s after the first `inactive`. The runtime's
+  `AppState` `active` handler therefore runs once in the middle of every
+  simulated lock (it clears `expired`, ends the background task, re-queues an
+  `interrupted` download and kicks the scheduler), and the background time
+  starts at `background`, not at the mark. Fix: time anything after a lock from
+  the app's own `background` event (`download-sampler.cjs read`), not from the
+  script's mark; a device lock by a person may not pass through `active`.
+- **The end of the background time (`expired`) never came in a process whose
+  Reading had played, even after it was paused.** Measured 2026-09-28 with a
+  listener on the offline module's `expired` event beside the runtime's
+  (`download-sampler.cjs`): no `expired` in 140 s locked while a Reading
+  played (twice), none in 75 s and 256 s paused while locked (170 s and 341 s
+  in the background in all; the download went on for all of it, and the app's
+  JavaScript never stopped), and none in a `home` run of 90 s in a process where a Reading
+  had played and been paused before the run. In a process relaunched just
+  before the run, with nothing played, the same `home` run got `expired` 25.5 s
+  after `background` and the download went `interrupted` 0.6 s later. So the
+  app's paused Reading keeps it running away from the screen on this
+  simulator, whether or not a phone does (#77). Fix, for the baseline (a
+  download away from the screen with no Reading): `simctl terminate` and
+  `launch` first and play nothing in that process. For what follows an
+  expiration while a Reading plays, which cannot happen here: the handler
+  probe `EXPIRE_AT` in `download-lock-pause.cjs`, which emits `expired` from
+  JavaScript, and say that it did.
+- **`/tmp/openreader-lock-device` is built once and shared by every worktree,
+  so a probe method added later is not in it.** `lock-device.sh` builds only
+  when `/tmp/openreader-lock-device/build/Build/Products` is missing, so after
+  `DeviceLockProbe.swift` gained `testLockScreenPlay`/`testLockScreenPause`
+  (2026-09-28) the old build would have answered `play` and `pause` with a test
+  that does not exist. Delete the directory once after changing the probe; the
+  next call rebuilds it (about 30 s).

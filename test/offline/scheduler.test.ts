@@ -69,7 +69,7 @@ describe('durable download scheduling', () => {
     const f = fixture(); f.fetch.mockImplementationOnce(async () => { f.tasks.splice(0); });
     await f.scheduler.run(); expect(f.tasks).toEqual([]); expect(f.fetch).toHaveBeenCalledTimes(1);
   });
-  it('yields to playback/background expiration and can resume without repeating saved audio', async () => {
+  it('yields to background expiration and can resume without repeating saved audio', async () => {
     const f = fixture(); f.fetch.mockImplementationOnce(async (_, text) => { f.stored.add(text); f.env.allowed = false; });
     await f.scheduler.run(); expect(f.tasks[0].state).toBe('interrupted');
     f.env.allowed = true; f.tasks[0].state = 'queued'; await f.scheduler.run();
@@ -324,7 +324,7 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     expect(f.task.state).toBe('waiting');
     expect(f.task.failed).toEqual([]);
   });
-  it('yields to playback with several requests out, and keeps what they bring', async () => {
+  it('yields to background expiration with several requests out, and keeps what they bring', async () => {
     const env = { online: true, allowed: true };
     const r = requests(() => 1, (_, text) => { if (text === 'A1') env.allowed = false; });
     const f = book(6, 3, r.request, { env });

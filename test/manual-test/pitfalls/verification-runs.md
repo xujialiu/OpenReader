@@ -397,3 +397,30 @@ plus harness sequences for the failure-note and dark-theme checks.
   playing, the moving highlight changes the screen regardless, so a swallowed
   drag there still fails the test: open the book with a tap first, which the
   bespoke methods do.
+
+## Verifying #75: a download beside a Reading (2026-09-28)
+
+- **Every chapter boundary reached while locked stops a locked measurement in
+  this branch.** The next chapter's text is prepared only when the download
+  reaches it, that preparation does not finish away from the screen, and the
+  task goes `preparing` and then `blocked` after 60 s (#76). With this book's
+  chapters of 56–95 texts at five at once, the first `playlock` run reached the
+  boundary 27.6 s after `background`, inside the 25–40 s the background time
+  was expected to last, so it could not show a download going on past it. It
+  happened in `home` too, not only locked: the boundary 45 s after leaving
+  stayed `preparing` for the remaining 46 s. Fix: prepare the chapters after
+  the first in the foreground beforehand with `download-prepare.cjs` (their
+  text only, no clip), and enqueue a fresh first chapter followed by them;
+  say in the report that it was done.
+- **A longest stay on one Utterance "while playing" of 78.6 s was a pause, not
+  a stall.** The first version of the sampler's summary took every sample
+  that read `playing` and joined the last Utterance before a pause with the
+  first after the Reading played again. `download-sampler.cjs read` breaks a
+  stay at any sample that is not playing.
+- **A drawer probe failed on the test's own scroll.** `testReadDrawer` failed
+  with `No ring reads Pause download` (0 on screen, 72 `Resume download`), after
+  a CDP `scrollToIndex` had thrown (Pitfalls, cdp.md) and left the list at
+  chapters 53–57, far from the chapters being written; its screenshot showed
+  `Downloading…` there. The same method passed after `SCROLL_TO` had put the
+  row in view (4 `Pause download`). Check where a scroll landed before trusting
+  what a probe found on screen.

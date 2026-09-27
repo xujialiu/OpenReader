@@ -44,4 +44,28 @@ final class DeviceLockProbe: XCTestCase {
     shot.name = "unlocked"; shot.lifetime = .keepAlways; add(shot)
     _ = springboard
   }
+  /// The lock screen's own Now Playing centre button, pressed while the device
+  /// stays locked (#75): Play when it reads Play, Pause when it reads Pause.
+  func testLockScreenPlay() throws { try pressCentre(reading: "Play", becomes: "Pause") }
+  func testLockScreenPause() throws { try pressCentre(reading: "Pause", becomes: "Play") }
+  /// A dark screen is woken by one Home press, and only one: on the lock screen
+  /// of a device with no passcode a second would open it.
+  private func pressCentre(reading label: String, becomes next: String) throws {
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let centre = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    if !(centre.exists && centre.isHittable) {
+      XCUIDevice.shared.press(.home)
+      _ = centre.waitForExistence(timeout: 3)
+    }
+    let before = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    before.name = "before-\(label)"; before.lifetime = .keepAlways; add(before)
+    XCTAssertTrue(centre.exists, "No Now Playing centre button on the lock screen")
+    XCTAssertEqual(centre.label, label, "The centre button does not read \(label)")
+    guard centre.label == label else { return }
+    centre.tap()
+    let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", next), object: centre)
+    XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 3), .completed, "The centre button did not turn to \(next)")
+    let after = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    after.name = "after-\(label)"; after.lifetime = .keepAlways; add(after)
+  }
 }

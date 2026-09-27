@@ -20,8 +20,8 @@ import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type Synth
  * - the Free plan allows one request at a time and one per second: every
  *   request goes through one queue shared by every instance (a provider is
  *   built per call), one at a time unless a download was given more by the
- *   owner (`atOnce`, #64), and a 429 waits what Retry-After says and asks
- *   again;
+ *   owner (`atOnce`, #64), a Reading's ahead of a download's still waiting
+ *   (`download`, #75), and a 429 waits what Retry-After says and asks again;
  * - the route takes 2,000 characters: a longer utterance is split and the
  *   pieces asked for separately;
  * - `* * *` answered 502 after a minute: text with no letter and no digit
@@ -40,6 +40,12 @@ export type SpeechifyConfig = {
    * Sentences at once for a download, one when absent, which is every reading.
    */
   atOnce?: number;
+  /**
+   * Whether this instance's requests are a Download's, which wait behind
+   * every other request still waiting (#75). Absent for a Reading, the voice
+   * list and the connection check, which the owner is waiting on now.
+   */
+  download?: boolean;
 };
 
 export type SpeechifyDeps = {
@@ -73,27 +79,36 @@ const RETRY_AFTER_DEFAULT_MS = 1000;
 const RETRY_AFTER_MAX_MS = 5000;
 
 /**
- * First come first served, each request with a width: it is sent once fewer
- * than its width are out, and one waiting at the head holds back everything
- * behind it. A width of one is one at a time, which the Free plan needs — it
- * refuses a second simultaneous request with a 429, and the prefetcher sends
- * up to five. A download the owner allowed more carries more (#64), and a
- * reading that asks meanwhile still waits for the queue to empty rather than
- * for a slot. A task whose signal was aborted while it waited is rejected
- * unsent.
+ * Each request with a width: it is sent once fewer than its width are out,
+ * and one waiting at the head holds back everything behind it. A width of one
+ * is one at a time, which the Free plan needs — it refuses a second
+ * simultaneous request with a 429, and the prefetcher sends up to five. A
+ * download the owner allowed more carries more (#64).
+ *
+ * A Download's request joins the back of the queue. Any other — a Reading's,
+ * the voice list, the connection check — goes in front of every Download's
+ * request still waiting and behind the others like it (#75). None is ever
+ * sent ahead of a request already out, so a Reading, one at a time, waits for
+ * what is out when it asks and for nothing behind it. Which kind a request is
+ * is said by `download`, not read off its width: a Download at one sentence
+ * at a time has a Reading's width. A task whose signal was aborted while it
+ * waited is rejected unsent.
  */
 export class RequestQueue {
   private out = 0;
-  private readonly waiting: { width: number; start(): void }[] = [];
+  private readonly waiting: { width: number; download: boolean; start(): void }[] = [];
 
-  run<T>(task: () => Promise<T>, signal?: AbortSignal, width = 1): Promise<T> {
+  run<T>(task: () => Promise<T>, signal?: AbortSignal, width = 1, download = false): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const start = () => {
         if (signal?.aborted) { reject(new SynthesisError('unknown', 'aborted while waiting for the queue')); return; }
         this.out++;
         (async () => task())().then(resolve, reject).finally(() => { this.out--; this.next(); });
       };
-      this.waiting.push({ width: Math.max(1, Math.floor(width) || 1), start });
+      const entry = { width: Math.max(1, Math.floor(width) || 1), download, start };
+      const firstDownload = download ? -1 : this.waiting.findIndex((waiting) => waiting.download);
+      if (firstDownload < 0) this.waiting.push(entry);
+      else this.waiting.splice(firstDownload, 0, entry);
       this.next();
     });
   }
@@ -299,7 +314,7 @@ export function createSpeechifyProvider(cfg: SpeechifyConfig, deps: SpeechifyDep
         }
         throw refusal(response.status, body, what);
       }
-    }, signal, cfg.atOnce);
+    }, signal, cfg.atOnce, cfg.download === true);
   }
 
   async function readReply<T>(response: Response, what: string): Promise<T> {
