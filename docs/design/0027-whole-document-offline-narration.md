@@ -104,4 +104,6 @@ What is given up: with a provider that takes few requests at once or few a minut
 
 Two alternatives were turned down. Dropping the download to one sentence at a time while a book is read aloud would make a Fish Audio download five times slower whenever the owner listens, and at five the measured reading was not held up. Keeping the download stopped while anything is read aloud is what the owner reported as the problem.
 
-Whether a download gets past the end of a chapter with the phone locked, and how long the phone lets it go on away from the screen, are decided separately.
+With the phone locked, it is the reading that keeps the app running, so the download goes on for as long as the reading plays. Paused there, the download has only what is left of the short time the phone allows any app away from the screen; once that is gone it stops, keeping what it saved, and goes on when the reading is started again or the app is opened.
+
+Whether a download gets past the end of a chapter with the phone locked, and how long the phone lets it go on away from the screen when nothing is being read aloud, are decided separately.

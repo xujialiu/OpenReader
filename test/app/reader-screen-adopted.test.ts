@@ -51,6 +51,7 @@ vi.mock('../../src/app/reader-actions', () => ({ ReaderActions: () => null }));
 vi.mock('../../src/app/controls', () => ({ HeaderButton: () => null, Note: () => null, INK: { page: '#fff', quiet: '#888' } }));
 vi.mock('../../src/app/use-provider-secrets', () => ({ useProviderKey: () => ({ presence: { state: 'held' } }) }));
 vi.mock('../../src/app/walkthrough-harness', () => ({ useHarnessCommands: () => {} }));
+vi.mock('../../src/offline/runtime', () => ({ setReadingPlays: () => {} }));
 // The bar's height (#67), as native-stack reports it on an iPhone 17: a 62-point
 // status bar and a 54-point bar.
 vi.mock('@react-navigation/elements', () => ({ useHeaderHeight: () => 116 }));

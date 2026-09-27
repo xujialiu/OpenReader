@@ -55,6 +55,8 @@ let loaded = false;
 let online = true;
 let foreground = AppState.currentState === "active";
 let expired = false;
+/** A Reading is playing: its audio keeps the app running away from the screen, and a download with it (#75). */
+let readingPlays = false;
 let storeError: string | null = null;
 const plans = new Map<string, NarrationPlan>();
 const listeners = new Set<() => void>();
@@ -443,7 +445,10 @@ const scheduler = createScheduler({
   connected: () => online,
   // Not held back while a Reading plays (#75): a Reading keeps its precedence
   // where requests are queued in the app, which is Speechify's queue alone.
-  allowed: () => loaded && !storeError && (foreground || !expired),
+  // Away from the screen, the end of the background time stops a download
+  // only once no Reading keeps the app running.
+  allowed: () =>
+    loaded && !storeError && (foreground || !expired || readingPlays),
   changed: persist,
   // The texts a chapter holds are the Utterances' own; what is checked, spoken
   // and saved is their Speech Text, as reading asks for it (#25).
@@ -609,10 +614,8 @@ export function startDownloads(): () => void {
   );
   const expiration = offlineNative?.addListener("expired", () => {
     expired = true;
-    for (const task of tasks)
-      if (["preparing", "downloading"].includes(task.state))
-        task.state = "interrupted";
-    fire(persist());
+    // A playing Reading keeps the app running, and its download with it (#75).
+    if (!readingPlays) interruptWriting();
   });
   const state = AppState.addEventListener("change", (value) => {
     foreground = value === "active";
@@ -647,6 +650,32 @@ export function startDownloads(): () => void {
     state.remove();
     if (timer) clearInterval(timer);
   };
+}
+/** What the end of the background time does to the download being written. */
+function interruptWriting() {
+  for (const task of tasks)
+    if (["preparing", "downloading"].includes(task.state))
+      task.state = "interrupted";
+  fire(persist());
+}
+/**
+ * Whether a Reading is playing, told by the one place that holds it
+ * (`reading-host.tsx`, ADR 0049). Away from the screen after the background
+ * time has run out, its audio is what keeps the app running (#75): when it
+ * stops there, the download is interrupted as the end of that time would have
+ * done, and when it starts there, an interrupted download goes on beside it.
+ */
+export function setReadingPlays(plays: boolean): void {
+  if (readingPlays === plays) return;
+  readingPlays = plays;
+  if (foreground || !expired) return;
+  if (!plays) {
+    interruptWriting();
+    return;
+  }
+  for (const task of tasks)
+    if (task.state === "interrupted") task.state = "queued";
+  fire(persist().then(kick));
 }
 export function enqueue(
   document: string,

@@ -18,8 +18,11 @@ import { DEFAULT_SETTINGS } from '../../src/app/settings';
 const views = vi.hoisted(() => ({ shown: false, mounted: [] as string[], unmounted: [] as string[], state: null as null | ((playing: boolean, buffering: boolean) => void) }));
 const portal = vi.hoisted(() => ({ hostName: undefined as string | undefined }));
 const shell = vi.hoisted(() => ({ current: null as unknown }));
+/** What the offline runtime was last told about the Reading playing (#75). */
+const downloads = vi.hoisted(() => ({ readingPlays: false }));
 
 vi.mock('react-native', () => ({ StyleSheet: { create: <T,>(styles: T) => styles }, Text: 'Text', View: 'View' }));
+vi.mock('../../src/offline/runtime', () => ({ setReadingPlays: (plays: boolean) => { downloads.readingPlays = plays; } }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 62, bottom: 34, left: 0, right: 0 }) }));
 vi.mock('react-native-teleport', () => ({
   Portal: ({ hostName, children }: { hostName?: string; children: unknown }) => {
@@ -137,6 +140,31 @@ describe('the Reading outlives the Reader while it plays (#68)', () => {
     expect(views.mounted).toEqual([A, B]);
     // B has said nothing yet: A's playing is not carried over.
     expect(h.handle.current!.current).toMatchObject({ id: B, playing: false });
+    await h.close();
+  });
+
+  // Its audio keeps the app running away from the screen, and a download with it (#75).
+  it('tells the downloads the Reading plays for as long as it plays, in the Reader and in the Library', async () => {
+    const h = await host();
+    await h.run((r) => r.show(A));
+    expect(downloads.readingPlays).toBe(false);
+    await h.run(() => views.state!(true, false));
+    expect(downloads.readingPlays).toBe(true);
+    await h.run((r) => r.left(A));
+    expect(downloads.readingPlays).toBe(true);
+    // The lock screen's Pause and Play, while the Library is on screen.
+    await h.run(() => views.state!(false, false));
+    expect(downloads.readingPlays).toBe(false);
+    await h.run(() => views.state!(true, true));
+    expect(downloads.readingPlays).toBe(true);
+    // Another Document ends it, and says nothing yet.
+    await h.run((r) => r.show(B));
+    expect(downloads.readingPlays).toBe(false);
+    await h.run(() => views.state!(true, false));
+    expect(downloads.readingPlays).toBe(true);
+    // Deleted while it plays.
+    await h.run((r) => r.end(B));
+    expect(downloads.readingPlays).toBe(false);
     await h.close();
   });
 
