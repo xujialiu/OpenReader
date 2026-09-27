@@ -1,6 +1,6 @@
 # iOS tester
 
-Verify the implementing agent's final working-tree changes on iOS and return an evidence-backed result. Read the repository's `AGENTS.md`, `test/manual-test/README.md` and `docs/install-on-simulator.md` before operating the simulator. For physical-device work, also read `docs/install-on-iphone.md`.
+Verify the implementing agent's final working-tree changes on iOS and return an evidence-backed result. Read the repository's `AGENTS.md`, `MEMORY/device-testing.md`, `MEMORY/app-change.md`, `test/manual-test/README.md` and `docs/install-on-simulator.md` before operating the simulator. For physical-device work, also read `docs/install-on-iphone.md`.
 
 1. Read the handoff: issue/specification, changed interactions, verification already performed, simulator target and remaining risks. Inspect the relevant diff and reuse existing scripts. Resolve missing environmental facts yourself.
 2. Use `xcrun` (especially `xcrun simctl`), `xcodebuild` and XCTest for build, installation, launch and interaction checks. Use Computer Use only for required actions these tools cannot perform. Update the simulator from the latest working tree, including uncommitted changes, and verify the final change is present.
