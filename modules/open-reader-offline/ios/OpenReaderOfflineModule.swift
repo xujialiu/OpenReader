@@ -73,53 +73,7 @@ public final class OpenReaderOfflineModule: Module {
         promise.resolve(false)
         return
       }
-      if self.continuedIdentifier != nil {
-        self.showContinued()
-        promise.resolve(true)
-        return
-      }
-      guard let bundle = Bundle.main.bundleIdentifier else {
-        promise.resolve(false)
-        return
-      }
-      // Info.plist permits `<bundle>.download.*` (plugins/with-continued-processing.ts).
-      // A fresh suffix each time, because registering an identifier twice kills the app.
-      let identifier = "\(bundle).download.\(UUID().uuidString)"
-      let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: DispatchQueue.main) { [weak self] task in
-        self?.launchedContinued(task, identifier: identifier)
-      }
-      guard registered else {
-        NSLog("OpenReaderOffline: continued task %@ not registered; is it in BGTaskSchedulerPermittedIdentifiers?", identifier)
-        promise.resolve(false)
-        return
-      }
-      let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: title, subtitle: subtitle)
-      // Run now or not at all: a queued request would start later, beside the
-      // bounded task, for a download that may by then be over.
-      request.strategy = .fail
-      self.continuedIdentifier = identifier
-      let refused = { (error: Error) in
-        NSLog("OpenReaderOffline: continued task refused: %@", String(describing: error))
-        if self.continuedIdentifier == identifier { self.continuedIdentifier = nil }
-        promise.resolve(false)
-      }
-      if #available(iOS 27.0, *) {
-        // The form that reports every refusal; not to be called on the main thread.
-        DispatchQueue.global(qos: .userInitiated).async {
-          BGTaskScheduler.shared.submitTaskRequest(request) { error in
-            DispatchQueue.main.async {
-              if let error { refused(error) } else { promise.resolve(true) }
-            }
-          }
-        }
-      } else {
-        do {
-          try BGTaskScheduler.shared.submit(request)
-          promise.resolve(true)
-        } catch {
-          refused(error)
-        }
-      }
+      self.submitContinued(title: title, subtitle: subtitle) { promise.resolve($0) }
     }.runOnQueue(.main)
     AsyncFunction("updateContinued") { (title: String, subtitle: String, completed: Int, total: Int) in
       self.continuedShown = ContinuedShown(title: title, subtitle: subtitle, completed: Int64(completed), total: Int64(max(total, 1)))
@@ -161,6 +115,58 @@ public final class OpenReaderOfflineModule: Module {
         AVEncoderBitDepthHintKey: 16
       ])
       try file.write(from: buffer)
+    }
+  }
+
+  /// On the main queue. `done` says whether the phone runs the task now.
+  @available(iOS 26.0, *)
+  private func submitContinued(title: String, subtitle: String, done: @escaping (Bool) -> Void) {
+    if continuedIdentifier != nil {
+      showContinued()
+      done(true)
+      return
+    }
+    guard let bundle = Bundle.main.bundleIdentifier else {
+      done(false)
+      return
+    }
+    // Info.plist permits `<bundle>.download.*` (plugins/with-continued-processing.ts).
+    // A fresh suffix each time, because registering an identifier twice kills the app.
+    let identifier = "\(bundle).download.\(UUID().uuidString)"
+    let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: DispatchQueue.main) { [weak self] task in
+      self?.launchedContinued(task, identifier: identifier)
+    }
+    guard registered else {
+      NSLog("OpenReaderOffline: continued task %@ not registered; is it in BGTaskSchedulerPermittedIdentifiers?", identifier)
+      done(false)
+      return
+    }
+    let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: title, subtitle: subtitle)
+    // Run now or not at all: a queued request would start later, beside the
+    // bounded task, for a download that may by then be over.
+    request.strategy = .fail
+    continuedIdentifier = identifier
+    let refused = { (error: Error) in
+      NSLog("OpenReaderOffline: continued task refused: %@", String(describing: error))
+      if self.continuedIdentifier == identifier { self.continuedIdentifier = nil }
+      done(false)
+    }
+    if #available(iOS 27.0, *) {
+      // The form that reports every refusal; not to be called on the main thread.
+      DispatchQueue.global(qos: .userInitiated).async {
+        BGTaskScheduler.shared.submitTaskRequest(request) { error in
+          DispatchQueue.main.async {
+            if let error { refused(error) } else { done(true) }
+          }
+        }
+      }
+    } else {
+      do {
+        try BGTaskScheduler.shared.submit(request)
+        done(true)
+      } catch {
+        refused(error)
+      }
     }
   }
 

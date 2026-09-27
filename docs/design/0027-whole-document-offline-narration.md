@@ -82,7 +82,7 @@ Removing a document from the library also removes its saved audio and stops its 
 
 ## Agreement and remaining validation
 
-The owner approved this interaction design on 2026-09-20. The system may stop preparation after allowing only a limited time in the background; completed work stays saved and preparation resumes when the app is opened again. A long document is not guaranteed to finish while the phone stays locked. The app must describe that interruption honestly.
+The owner approved this interaction design on 2026-09-20. On recent versions of iOS, a download the owner starts goes on after they leave the app or lock the phone, for as long as the phone allows, and the phone shows its progress (decision 0052). On earlier versions the phone stops it within about a minute. Either way, completed work stays saved and preparation resumes when the app is opened again. A long document is not guaranteed to finish while the phone stays locked. The app must describe that interruption honestly.
 
 ## Opening a document does not audit every possible download
 
@@ -91,3 +91,7 @@ The owner approved maintaining saved-audio records as downloads finish and are r
 For this unreleased development change, the owner explicitly chose to discard the existing offline downloads instead of carrying them forward. Documents, reading positions and credentials remain. Those old audio downloads must be prepared again. New downloads are retained across ordinary restarts and updates, and preparation alone does not count as downloaded audio. Completion is recorded only after the audio has been safely stored, and interrupted writes or deletions are reconciled without falsely showing a completed download.
 
 Reading does not depend on those records being readable. If they cannot be opened, for instance after installing an older version of the app over a newer one, reading continues over the network as if nothing had been saved, and the download drawer says what is wrong. Saved audio is used again once the records can be read.
+
+## Amendment (2026-09-28, #77): a download goes on after the owner leaves the app
+
+On recent versions of iOS, a download the owner starts or resumes goes on after they leave the app or lock the phone. The phone shows it on the Lock Screen with the document's name and a count of the chapters saved, and the owner can stop it there. [Decision 0052](0052-a-download-goes-on-when-you-leave-the-app.md) says what the owner sees, what stopping it does and what was turned down. "The system may stop preparation after allowing only a limited time in the background" in the section above is now true only of earlier iOS versions, and it has been corrected there.
