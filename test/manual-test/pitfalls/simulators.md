@@ -1,0 +1,122 @@
+# Simulators, installs and the simulator's volume
+
+## Simulators and installs
+
+- **Several sessions share this Mac's simulators.** Use the one the owner or the task names, and check `xcrun simctl list devices booted` first. Leave alone any simulator another session is booting, driving or reinstalling.
+- **A named simulator can disappear during a manual run.** On 2026-09-22 an owner cleanup deleted the recorded iPhone 17 while an Azure XCTest was waiting, and the next `xcodebuild` answered `Unable to find a device matching` that destination. Re-run `xcrun simctl list devices available`, choose a remaining matching runtime, boot it, reinstall the current Debug app, set its simulated volume to zero again, and treat the interrupted artifacts as incomplete.
+- **A cached Debug app can lack a native module required by the current bundle.** On 2026-09-22 installing an old cached app over the replacement iPhone 17e and loading the current Metro bundle showed `[runtime not ready]: Cannot find native module 'ExpoUI'`. Build the Debug app from the current checkout with the simulator guide's `xcodebuild` command, install that product, then repoint its Metro port before relaunching.
+- **Whether a `.app` has a module is not answered by its `Frameworks` or by its main binary.** Looking for `@expo/ui` on 2026-09-23 (#42), `ls OpenReader.app/Frameworks` listed the five Expo frameworks and no `ExpoUI`, and `strings -a OpenReader.app/OpenReader | grep -ci expoui` answered `0` — for a build that has it. Its symbols are in `OpenReader.debug.dylib` beside the binary, 425 of them. Ask that file, or `ios/Podfile.lock`, or compare the build's own time (`stat -f %Sm`) against the commit that added the dependency; the two caches this looked at, `/tmp/openreader-simulator-build` and the newest `DerivedData` product, were both from before 538fa10 13:52 and genuinely too old to reuse.
+- **A new output device on the Mac puts booted simulators back to volume 60,
+  with nothing booted or launched.** Measured 2026-09-23 at 19:44: the owner's
+  AirPods Pro became the Mac's default output, and within a second the
+  `audiosettings.plist` of both booted simulators that follow the default output
+  read `sim_volume` 60 with the AirPods as `sim_output_device_uid`. One of them
+  had been set to 0 half an hour earlier. A third booted device, whose output
+  was `BuiltInSpeakerDevice`, was not touched. The owner is then listening on
+  the very headphones a test would play into. It happened again: at 20:24:06
+  the AirPods were already the default output, and the same two devices were
+  reset to 60 in the same second. That was two minutes after a test run had
+  ended, and nothing had been launched. Whatever the AirPods do when they
+  reconnect, or switch back to the Mac, is enough. So a `set` holds only until
+  the next such event. The same evening an ios-tester run played 3.7 s at
+  volume 60, because a standalone `check` failed and its script went on to play
+  anyway. Fix: `silence.sh check` immediately before every play, as the kit's
+  scripts do, with the play chained to it by `&&`. After a failed check, `set`
+  it and restart the app, which takes the value when it activates its audio
+  session. In `check && terminate; launch`, the launch still runs after a failed
+  check.
+  It is not only the AirPods. On 2026-09-24 at 00:09:11, two devices were
+  rewritten in the same second to `sim_volume` 60 with `sim_output_device_uid`
+  `BuiltInSpeakerDevice`: `iPhone 17 bug`, which had read 0 at 00:06:55, and
+  the dedicated `iPhone 17 bug_2`, set to 0 at 23:00 the evening before, whose
+  app had been terminated and relaunched about twenty times in the half hour
+  before and had played nothing. The Mac's default output was then "MacBook
+  Pro Speakers". The check in front of the next play caught it. It came back at
+  01:52:00, on the same two devices in the same second, during an XCTest run on
+  one of them. So do not reason that a `set` holds because the headphones have
+  not moved. The check in front of each play is the only guard.
+  It can recur inside a single session faster than a multi-step setup takes to
+  reach its own play: measured 2026-09-25 verifying #60/ADR 0047
+  (`iPhone 17 issue_60`, `sim_output_device_uid` a Bluetooth MAC-style id),
+  a `set` followed by a `pause-gap.cjs` run's own shut/settings-patch/open
+  sequence (about 2 s) still found `sim_volume` 60 at that script's own
+  `check`, twice in a row a few minutes apart. Fix used here: `set` again
+  immediately before `check`, with `check` immediately before `onPlay()` and
+  nothing else in between — `pause-gap.cjs` now does this itself rather than
+  relying on a `set` done once earlier in the session.
+- **The simulator volume can reset immediately before a chapter run even when
+  the preceding check was zero.** Measured 2026-09-25 at 10:42 on `iPhone 17
+  issue63`: the first check before `play` read 60, although the device had
+  read 0 during setup. Set it back to zero, check again in the same command
+  chain, and do not play until that check succeeds; this run then stayed at
+  zero throughout.
+- **A manual-test wrapper may not be executable.** On 2026-09-25,
+  `test/manual-test/library-open.sh` returned shell `permission denied` before
+  creating its XCTest project. Invoke the existing wrapper with `bash
+  test/manual-test/library-open.sh …` when its mode lacks the executable bit.
+- **A refused XCTest can leave a recording that reads GREEN.** After the
+  00:09:11 reset, the next `scroll-theme-reader.sh` on `iPhone 17 bug_2`
+  refused it (exit 2) and ran no flings, which `white-flash.sh fling` reported
+  as `XCTest failed`. `set`, relaunch the app, and run again. The reset recurred the same
+  night, 01:06, independently verifying #27 on the same device: three
+  `white-flash.sh fling` runs all refused (exit 2) and printed `GREEN: no white
+  frame` anyway, because a refused run records nothing and analyses whatever
+  static frame that leaves — a silent false GREEN, not a real result. `set` and
+  relaunch fixed it, and the same three runs then genuinely flung (67–77 s of
+  `Executed` time each, 3,600–3,900 frames). `white-flash.sh` now reads no
+  recording whose XCTest failed: it prints `XCTest failed, recording not read`
+  for that run and exits 2. Any script that records around a refusable XCTest
+  needs the same rule.
+- **A newly created device put its own volume back to 60 a couple of minutes
+  after its first boot.** Measured 2026-09-23 on a fresh iPhone 17 (iOS 27.0):
+  `silence.sh set` right after `bootstatus -b` read back 0, and a few minutes
+  later `check` answered 60, with the file's modification time 12:47, about two
+  minutes after the set and before anything had played. The first boot's own
+  setup rewrote it. Set it again once the new device has settled — a `set`
+  followed 20 s later by a `check` that still reads 0 — then relaunch the app,
+  and keep the `check` in front of every play. It happened later too:
+  on 2026-09-24 a new iPhone 17 booted at 01:56 read 0 at a set about 02:04:00
+  and at a `check` 25 s after it, and read 60 at 02:24; its file had been
+  rewritten at 02:04:54, as the device's first XCTest run was starting. Nothing
+  had played.
+- **`xcrun simctl get_app_container` refuses a shut-down device.** Boot it first.
+- **Installing a copied Debug `.app` can change its Data container UUID.** On
+  2026-09-24, `simctl install` over the booted sync simulator moved OpenReader
+  from one `Data/Application/<uuid>` directory to another. `SyncProbe` still
+  had the old `CONTAINER` in `/tmp/openreader-sync-params.txt`, so every
+  harness write failed with `NSCocoaErrorDomain Code=4` and the test's later
+  `settleAt` assertion was only a consequence. Refresh `CONTAINER` with
+  `xcrun simctl get_app_container UDID top.xujialiu.openreader data` after
+  every install, before launching a probe.
+- **Another simulator needs the same Debug app.** `xcrun simctl install DEST "$(xcrun simctl get_app_container SOURCE top.xujialiu.openreader app)"` copies it without a build, to any device family the app supports, iPad included.
+- **An iPad behaves differently from an iPhone.** An iPad-sized WKWebView defaults to the desktop content mode, where WebKit ignores `text-size-adjust` (ADR 0030). The reader asks for the mobile mode through `patches/`. Anything that depends on WebKit is worth checking on an iPad simulator too.
+- **The app's console is not in the simulator's log.** `log show` has no `console.log` or `HX` lines; they are only in Metro's output. Note the time with `date` when you take a measurement, because it cannot be recovered afterwards.
+- **A screenshot photographs whatever is in front, and a harness command does
+  not bring the app forward.** After a Safari page run, `leading-strip.sh … app`
+  sent its commands to the backgrounded app, where they ran, and photographed
+  Safari, whose page still held a strip of its own: a RED for the wrong reason
+  (2026-09-22). Fix: `xcrun simctl launch UDID top.xujialiu.openreader` first,
+  which brings a running app to the front without restarting it, and check that
+  the run's own answer reached Metro before believing its screenshot.
+  `leading-strip.sh` does both.
+- **Safari's first `simctl openurl` on a device sits on its Start Page for about
+  25 s.** A screenshot 6 s after it was the Start Page, then a blank page, and
+  the page's own requests reached the server 25 s after the openurl. Poll for
+  what the page draws rather than sleeping a fixed time; `leading-strip.sh page`
+  does.
+- **`npx expo run:ios --port N --no-bundler` is refused**, after its CocoaPods
+  step has already run: `CommandError: --port and --no-bundler are mutually
+  exclusive arguments` (2026-09-22). Start this tree's Metro yourself
+  (`npx expo start --port N < /dev/null`), then run `npx expo run:ios --device
+  UDID --port N` without `--no-bundler`: it finds that server ("Waiting on
+  http://localhost:N"), builds, installs over the app and opens it.
+- **A fresh `expo run:ios` install still fetched its bundle from another
+  tree's Metro.** On 2026-09-22, after `run:ios --port 8090` had built with a
+  new native dependency, installed and opened the app, `/json/list` on 8090 stayed
+  empty while the iPhone 17 was listed on 8087, the main checkout's Metro, which
+  was serving JavaScript without that dependency. Installing over an app keeps its container, and the container's
+  `RCT_jsLocation` (`localhost:8087`, left by an earlier session) outranks the
+  port the build was made for. Fix it as in [metro.md](metro.md):
+  terminate, `plutil -replace RCT_jsLocation` on the container plist, shut down
+  and boot. `run:ios` also opens `top.xujialiu.openreader://expo-development-client/?url=…`;
+  this app has no development client, and that URL did nothing visible.
