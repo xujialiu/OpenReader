@@ -8,9 +8,23 @@ When `xcrun`, Metro, XCTest or a manual step goes wrong or misleads you, add it
 to that README's **Pitfalls**, with its symptom, cause and fix, before you
 finish. That includes problems you only worked around.
 
-Prefer `xcrun` (especially `xcrun simctl`), `xcodebuild`, and the existing
-XCTest/manual-test scripts for device and simulator work. Use Computer Use only
-when a required action cannot be performed through those tools.
+For simulator work, reach first for the two MCP servers in `.mcp.json`, then
+`xcrun simctl`, `xcodebuild` and the existing XCTest/manual-test scripts. Use
+Computer Use only when none of these can perform the action.
+
+- **`mobilebuildmcp`** (the renamed XcodeBuildMCP): native builds and installs
+  (`build_run_sim`), screenshots, the accessibility tree with element refs
+  (`snapshot_ui`, `wait_for_ui`), taps, swipes and typing, and LLDB. Its
+  project defaults are in `.mobilebuildmcp/config.yaml`. Several simulators are
+  often booted at once, so pass `simulatorId` on every call, or set it once with
+  `session_set_defaults`; never let it pick a device. The same tools run as a
+  CLI: `npx -y mobilebuildmcp@2.7.1 <workflow> <tool> --help`.
+- **`expo`**: the JavaScript side. Its local tools (screenshot, tap by
+  `testID`, React Native DevTools) exist only while a Metro started with
+  `EXPO_UNSTABLE_MCP_SERVER=1` is running, and only for one Metro at a time;
+  reconnect the server after starting or stopping Metro. It needs `npx expo
+  login` with the account used for the server's OAuth. Its screenshots pass
+  through Expo's servers: do not use it on a screen showing credentials.
 
 ## Local credentials
 

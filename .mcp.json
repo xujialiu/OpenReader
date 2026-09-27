@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mobilebuildmcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "mobilebuildmcp@2.7.1", "mcp"]
+    },
+    "expo": {
+      "type": "http",
+      "url": "https://mcp.expo.dev/mcp"
+    }
+  }
+}
