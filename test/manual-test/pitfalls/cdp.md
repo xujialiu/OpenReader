@@ -85,3 +85,14 @@
   read `2` for a page with exactly one such header, not `1` — the same
   per-`Text` duplication, just counted instead of looked up. A regression that
   actually repeats a header would show `4`, not `2`.
+- **`scrollToIndex` on the Download drawer's list throws `Invariant Violation:
+  scrollToIndex should be used in conjunction with getItemLayout or
+  onScrollToIndexFailed`.** Measured 2026-09-28 (#75) scrolling a 253-row
+  drawer to row 246 through its `FlatList` instance after one `scrollToEnd`:
+  the list had measured only the rows it had rendered, and the one
+  `scrollToEnd` had not reached the end either (the screenshot showed rows
+  53–57). The XCTest that read the drawer next found no `Pause download` ring
+  and failed on the test's own scroll, not the app. Fix: repeat `scrollToEnd`
+  every 0.3 s until `scrollToIndex` stops throwing (5 to 7 tries for that
+  book); `download-drawer.sh` does it with `SCROLL_TO=CHAPTER_ID`, and a
+  screenshot shows where it landed.

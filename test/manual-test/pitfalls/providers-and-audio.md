@@ -97,6 +97,12 @@
     result about the change under test. Start a timed play within about 45 s of
     the app's last request to the host (a cold launch makes one: the start-up
     voice listing) if the first attempt must count.
+  - A download meets it too, as a delay rather than a failure, since the
+    scheduler retries a retriable failure: in a `download-away.cjs home` run
+    of 2026-09-28 (#75) whose download had been `interrupted` for 62 s, the
+    task read `downloading` 0.1 s after coming back and its first clip was saved
+    10.3 s after. A first clip that late after a quiet minute is not a result
+    about the scheduler.
 
 - **A Fish Voice chosen through the harness is `locale/id`, not the model id.**
   `{"do":"voice","provider":"fish","voice":"<32 hex digits>"}` is accepted, and
