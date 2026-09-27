@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname */
 // Locks the device at a chosen moment of a download, rather than whenever
 // lock-device.sh's runner finishes launching, then watches the download while
 // locked and after unlocking (#76). Real synthesis, as download-away.cjs.
