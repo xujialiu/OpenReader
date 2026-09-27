@@ -156,6 +156,19 @@
   answers `packager-status:running` after the call returns. It outlives the
   worktree too: stop it by PID when the worktree goes, or it joins the six that
   were still serving `.orca-worktree-trash` that morning.
+- **The `npm exec` of a Metro started that way may not answer 1 for its PPID,
+  and that does not mean it will die with the session.**
+  - Symptom (2026-09-28 05:59, #77): the tool call ran `cd TREE && nohup
+    python3 … setsid … &` followed by `sleep 20; lsof …`. After it returned,
+    `ps` showed the call's `/bin/bash -c` still alive with PPID 1. `npm exec`
+    had PPID equal to that bash, not 1. The check in the bullet above fails.
+  - Cause: the `bash -c` that ran the call waits for its background job, and
+    it is that shell, not `npm exec`, that is reparented to launchd. The
+    #75 Metro on 8091 (PIDs 54466/54468/54490/54491) had the same shape.
+  - Fix: check that `npm exec` has a session of its own (`ps -o pid,ppid,pgid`
+    shows its PGID equal to its PID, and `STAT` contains `s`) and that its
+    parent chain reaches PID 1. When stopping that Metro, stop the `bash -c`
+    wrapper as well.
 - **A PTY wrapper can buffer the Metro log that a probe reads while it runs.**
   On 2026-09-24 `script -q /tmp/metro.log npx expo start --port 8095` let the
   app answer its harness commands, but `SyncProbe.settleAt` read no `section=`

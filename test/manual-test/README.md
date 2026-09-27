@@ -72,6 +72,7 @@ What has gone wrong before, and what fixed it, one file per area. Before using a
 - [WebDAV and cross-device items](pitfalls/webdav.md): Talking to the owner's WebDAV host from the Mac; Crafting a cross-device item for #54/#55.
 - [The shell](pitfalls/shell.md).
 - [Evaluating in the app through `cdp.cjs`](pitfalls/cdp.md).
+- [A download away from the screen](pitfalls/background-downloads.md): the simulator's bounded background time; the continued processing task's log lines (#75, #76, #77).
 - [Merges, seeding and past verification runs](pitfalls/verification-runs.md): Merging main's #67 and #68 into #71 (2026-09-26); Verifying #71 batch 2; Seeding a real book's place through the harness (#68); Independent verification of the collapsed player and its edge swipe (#67); Verifying #71 batches 3 and 4 (2026-09-26); Verifying #75: a download beside a Reading (2026-09-28).
 
 ## Recipes
