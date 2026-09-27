@@ -64,6 +64,7 @@ What has gone wrong before, and what fixed it, one file per area. Before using a
 - [Physical iPhone](pitfalls/physical-iphone.md): Physical iPhone Release builds; Physical iPhone screen; Physical iPhone logs and the lock screen's state (#66).
 - [Metro and the bundle](pitfalls/metro.md).
 - [Simulators, installs and the simulator's volume](pitfalls/simulators.md).
+- [Locking the device, and the app away from the screen](pitfalls/lock-and-background.md).
 - [Screenshots](pitfalls/screenshots.md): Screenshots of a sheet; Screenshots of the reading page.
 - [Measuring inside the reader's WebView](pitfalls/webview.md).
 - [Typing, environment and silence](pitfalls/typing-environment.md).

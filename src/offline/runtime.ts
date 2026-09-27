@@ -41,7 +41,7 @@ import {
   type NarrationPlan,
   type OfflineVoice,
 } from "./model";
-import { createScheduler } from "./scheduler";
+import { createScheduler, PreparationInterrupted } from "./scheduler";
 import * as pausing from "./pausing";
 import { offlineRepository } from "./database";
 import { audioKey, voiceKey } from "./catalog-keys";
@@ -120,6 +120,20 @@ function cancelInactivePreparation() {
     preparation = null;
     stopped.reject(new Error("Chapter preparation was stopped."));
   }
+}
+/**
+ * The hidden rendering does not complete a preparation while the app is away
+ * from the screen, so one out when the app leaves is withdrawn as interrupted,
+ * not left to time out as a failure; the scheduler asks for it again when the
+ * app returns (#76). Its token no longer matches, so the renderer's timer and
+ * any late answer for it find nothing.
+ */
+function abandonPreparation() {
+  if (!preparation) return;
+  const abandoned = preparation;
+  preparation = null;
+  emit();
+  abandoned.reject(new PreparationInterrupted());
 }
 const keyOf = (document: string, voice: OfflineVoice, text: string) =>
   JSON.stringify([document, clipCacheKey(voice.provider, voice.voice, text)]);
@@ -437,6 +451,8 @@ const scheduler = createScheduler({
   plan: (document) => loadPlan(document),
   connected: () => online,
   allowed: () => loaded && !storeError && !playing && (foreground || !expired),
+  // Where the hidden rendering prepares a chapter's text (#76).
+  foreground: () => AppState.currentState === "active",
   changed: persist,
   // The texts a chapter holds are the Utterances' own; what is checked, spoken
   // and saved is their Speech Text, as reading asks for it (#25).
@@ -631,6 +647,9 @@ export function startDownloads(): () => void {
       }
     }
   });
+  const leaving = AppState.addEventListener("change", (value) => {
+    if (value !== "active") abandonPreparation();
+  });
   // Without a platform connectivity observer, periodically retry only connectivity failures.
   const timer = Platform.OS !== "ios" ? setInterval(kick, 5000) : null;
   kick();
@@ -638,6 +657,7 @@ export function startDownloads(): () => void {
     network?.remove();
     expiration?.remove();
     state.remove();
+    leaving.remove();
     if (timer) clearInterval(timer);
   };
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname */
 // Does a download keep writing while the app is away from the screen, or while
 // a reading plays? Real synthesis: every sentence of the chapters is sent to the
 // Provider once (Fish's s2.1-pro-free costs nothing).

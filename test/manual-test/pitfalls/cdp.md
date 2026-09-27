@@ -13,6 +13,16 @@
   `OPENREADER_METRO` unset (its default is `127.0.0.1:8081`) or give it
   `127.0.0.1`; the unisolated 1006 of 2026-09-25 in
   [providers-and-audio.md](providers-and-audio.md) may have been this.
+- **`scrollToIndex` on the Download drawer's list throws for a row far from
+  the rows it has drawn.** Measured 2026-09-28 (#76): calling the drawer
+  `FlatList`'s `scrollToIndex({index: 128})` from a fiber walk answered
+  `Invariant Violation: scrollToIndex should be used in conjunction with
+  getItemLayout or onScrollToIndexFailed`, and the ring the next probe looked
+  for was not rendered (`row not rendered: nav.131`); index 29 from the top had
+  worked. The list has no `getItemLayout`, so it can scroll only to rows it has
+  measured. `scrollToOffset` gets near (its offsets are estimates: 11,036 pt
+  showed Chapter 136, not 131), and `scrollToIndex` then works for the rows now
+  drawn.
 - **A loop's closures all see its last value.** What `--eval` sends is compiled
   by Hermes as written, with no Babel pass, and a `for (const x of list)` loop
   does not give each turn its own `x`. Measured 2026-09-23: three wrappers made
