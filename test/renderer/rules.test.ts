@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 import { BLOCKS_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE } from '../../src/renderer/messages';
+import { GLIDE_SOURCE } from '../../src/renderer/glide';
 import {
   appearanceCss,
   DEFAULT_APPEARANCE,
@@ -136,7 +137,7 @@ describe('never send a position update per word across the bridge (ADR 0005)', (
   });
 });
 
-describe('the page follows the voice, once per Utterance (ADR 0011)', () => {
+describe('the page follows the line being spoken (ADR 0011, ADR 0050)', () => {
   it('mounts the reader in the layout the highlight was proved under', () => {
     // The highlighter was re-proved on a device under *this* layout, and both
     // findings behind it were re-measured there. Changing either of these two
@@ -156,36 +157,145 @@ describe('the page follows the voice, once per Utterance (ADR 0011)', () => {
     }
   });
 
-  it('scrolls in one place, and it is the Clip cue that reaches it', () => {
-    // ADR 0005 keeps the frame path off the bridge; this keeps it off the page.
-    // A scroll from `tick` would run at `requestAnimationFrame` rate, and each one
-    // costs the continuous manager a pass over its views — it would fail as a
-    // reader that stutters, not as an error.
+  it('scrolls in one place, and only bring() and a glide reach it', () => {
+    // ADR 0005 keeps the frame path off the bridge; this keeps the scroll in one
+    // function, so there is one thing to read to know how the page moves. Each
+    // scroll costs the continuous manager a pass over its views, so a scroll from
+    // the word loop itself would fail as a reader that stutters, not as an error.
     const program = code('highlighter.ts');
     expect(program.match(/scrollBy\(/g)).toHaveLength(1);
-    expect(fn(program, 'centre')).toContain('rendition.manager.scrollBy(0, move, false)');
+    pin(fn(program, 'nudge'), 'rendition.manager.scrollBy(0, by, false);', 'highlighter.ts, function nudge');
+    // One call in bring(), for a move made at once, one a frame in glideStep(),
+    // and one a frame in drift() (Continuous, #71); the declaration is the fourth.
+    expect(program.match(/nudge\(/g)).toHaveLength(4);
+    expect(fn(program, 'bring').match(/nudge\(/g)).toHaveLength(1);
+    expect(fn(program, 'glideStep').match(/nudge\(/g)).toHaveLength(1);
+    expect(fn(program, 'drift').match(/nudge\(/g)).toHaveLength(1);
     for (const perWord of ['tick', 'showWord', 'showAt', 'start']) {
-      expect({ perWord, scrolls: /centre|scrollBy/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
+      expect({ perWord, scrolls: /nudge|scrollBy|bring\(|steer\(|kick\(|settle|place(Once)?\(/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
     }
   });
 
-  it('does not scroll on the once-a-second correction either', () => {
-    // The correction is the second and last thing the bridge sends (ADR 0005). It
-    // moves the highlight inside an Utterance that is already centred; scrolling
-    // from it would drag the page under the reader once a second.
+  it('moves the page for a word only when the word is on another line (ADR 0050)', () => {
+    // The page follows the line, not the word and not the sentence: a word on the
+    // line being read moves nothing, which is what keeps the loop from scrolling
+    // once a word. And a word painted by attach() is quiet — attach() places the
+    // page itself, a frame later when epub.js is still moving it (#50).
     const program = code('highlighter.ts');
-    const correction = program.slice(program.indexOf("message.kind === 'correct'"));
-    expect(correction).not.toMatch(/centre|scrollBy|follow\(/);
+    pin(fn(program, 'showWord'), 'if (!quiet) followWord(built, ranges);', 'highlighter.ts, function showWord');
+    const follow = fn(program, 'followWord');
+    pin(follow, 'if (!state || !state.follow || browsing || !state.words) return;', 'highlighter.ts, function followWord');
+    pin(follow, 'if (sameLine(followed, line)) return;', 'highlighter.ts, function followWord');
+    pin(follow, 'bring({ line: line }, false);', 'highlighter.ts, function followWord');
+    expect(follow.indexOf('sameLine(followed, line)')).toBeLessThan(follow.indexOf('bring('));
   });
 
-  it('centres at most once per document per Utterance', () => {
-    // A centring can make the continuous manager render a section, which reaches
-    // `attach`, which would centre again, which would render again. The WeakSet is
+  it('in Continuous, lets every word move where the page drifts, and only the drift move the page (#71)', () => {
+    // Continuous is decided before the By line test, and hands the word to
+    // steer(), which moves nothing itself for a drift: the drift's own frames do,
+    // a pixel at a time. The word loop still never scrolls (the rule above).
+    const program = code('highlighter.ts');
+    const follow = fn(program, 'followWord');
+    pin(follow, "if (SCROLLING === 'continuous') {", 'highlighter.ts, function followWord');
+    pin(follow, 'steer({ line: line, lead: leadOf(ranges, line) });', 'highlighter.ts, function followWord');
+    expect(follow.indexOf("SCROLLING === 'continuous'")).toBeLessThan(follow.indexOf('sameLine(followed, line)'));
+    const steer = fn(program, 'steer');
+    expect(steer).not.toMatch(/nudge\(|scrollBy/);
+    // Another Block, or more than a line, is a move of its own, made as every
+    // other move is: a paragraph gap glides however small the Document's margin.
+    pin(steer, 'var crossed = !!was && was.block !== aimed.line.block;', 'highlighter.ts, function steer');
+    pin(steer, 'if (crossed || Math.abs(move) > aimed.line.height) {\n      rest();\n      return bring(aimed, false);', 'highlighter.ts, function steer');
+    // `was` is the line followed before this one, read before it is replaced.
+    expect(steer.indexOf('var was = followed;')).toBeLessThan(steer.indexOf('followed = aimed.line;'));
+    // Every line knows its Block: build() keeps them beside the Ranges.
+    pin(fn(program, 'build'), 'blocks.push(ranges[i].block);', 'highlighter.ts, function build');
+    pin(fn(program, 'lineOf'), 'block: built.blocks[i]', 'highlighter.ts, function lineOf');
+    pin(steer, 'if (!glide) kick();', 'highlighter.ts, function steer');
+    // A glide hands over to the drift when it ends.
+    pin(fn(program, 'glideStep'), 'kick();', 'highlighter.ts, function glideStep');
+  });
+
+  it('drifts with the follower the tests run, in whole pixels, steering by what it has not yet paid (#71)', () => {
+    const program = code('highlighter.ts');
+    const drift = fn(program, 'drift');
+    pin(drift, 'var move = moveFor(drifting.aimed);', 'highlighter.ts, function drift');
+    // The owed fraction is taken off the move, or the pixel not yet paid would
+    // read as one still to make and it would push past the line and back.
+    pin(drift, 'var error = move - drifting.owed;', 'highlighter.ts, function drift');
+    pin(drift, 'drifting.speed = driftVelocity(error, drifting.speed, dt);', 'highlighter.ts, function drift');
+    pin(drift, 'var whole = drifting.owed > 0 ? Math.floor(drifting.owed) : Math.ceil(drifting.owed);', 'highlighter.ts, function drift');
+    // Timed in drawn frames, as a glide is, so a stall slows it and does not throw it.
+    pin(drift, 'var dt = drifting.last === null ? FRAME_MS : Math.min(now - drifting.last, 2 * FRAME_MS);', 'highlighter.ts, function drift');
+    pin(drift, "if (!state || !state.follow || browsing || SCROLLING !== 'continuous') {", 'highlighter.ts, function drift');
+    // A finger stops it as it stops a glide.
+    const halt = fn(program, 'halt');
+    pin(halt, 'rest();', 'highlighter.ts, function halt');
+    pin(halt, 'window.cancelAnimationFrame(driftFrame);', 'highlighter.ts, function halt');
+  });
+
+  it('carries the line past the line position by the word’s place along it, measured on the text around it (#71)', () => {
+    const program = code('highlighter.ts');
+    pin(fn(program, 'moveFor'), 'return middle === null ? null : middle - at + (aimed.lead || 0);', 'highlighter.ts, function moveFor');
+    const lead = fn(program, 'leadOf');
+    // The text around the word, not the whole Block: a Block the length of a
+    // chapter must cost what a paragraph does.
+    pin(lead, 'var span = nearby(live, at.start - NEAR, at.start + NEAR);', 'highlighter.ts, function leadOf');
+    pin(lead, 'return lineLead(line.left, from, to, pitch);', 'highlighter.ts, function leadOf');
+    pin(program, 'var NEAR = 400;', 'highlighter.ts');
+    const aim = fn(program, 'aim');
+    pin(aim, "return SCROLLING === 'continuous' ? { line: line, lead: leadOf(ranges, line) } : { line: line };", 'highlighter.ts, function aim');
+  });
+
+  it('glides a move within the visible page, and makes any other at once (ADR 0050)', () => {
+    const program = code('highlighter.ts');
+    const bring = fn(program, 'bring');
+    pin(bring, 'if (Math.abs(move) < 1) {', 'highlighter.ts, function bring');
+    pin(bring, 'if (instant || !glides(move, visibleOf(scroller()))) {', 'highlighter.ts, function bring');
+    // A glide to the line already being glided to is left alone; any other is
+    // taken over from where the page is.
+    pin(bring, 'if (!instant && glide && aimed.line && glide.aimed.line && sameLine(glide.aimed.line, aimed.line)) return true;', 'highlighter.ts, function bring');
+    pin(bring, 'glide = { aimed: aimed, from: move, elapsed: 0, last: null };', 'highlighter.ts, function bring');
+    // Each frame measures the line again and moves by what the curve still
+    // leaves, so epub.js moving the scroll position under a glide is absorbed.
+    const step = fn(program, 'glideStep');
+    pin(step, 'var move = moveFor(glide.aimed);', 'highlighter.ts, function glideStep');
+    pin(step, 'var left = glideLeft(glide.from, glide.elapsed);', 'highlighter.ts, function glideStep');
+    // Timed in drawn frames, at most two frames' worth each, so a stalled main
+    // thread pauses a glide rather than using the curve up in a jump.
+    pin(step, 'glide.elapsed += glide.last === null ? FRAME_MS : Math.min(now - glide.last, 2 * FRAME_MS);', 'highlighter.ts, function glideStep');
+    pin(step, 'var by = move - left;', 'highlighter.ts, function glideStep');
+    pin(step, 'if (!state || !state.follow || browsing) {', 'highlighter.ts, function glideStep');
+    // The Utterance is the unit only without Word Timings.
+    const aim = fn(program, 'aim');
+    pin(aim, 'if (state.words || !state.durationMs) {', 'highlighter.ts, function aim');
+    pin(aim, 'var ranges = (state.words && spokenRanges()) || state.utteranceRanges;', 'highlighter.ts, function aim');
+    pin(aim, 'var built = build(ranges);', 'highlighter.ts, function aim');
+    pin(aim, 'return whole ? { whole: whole } : null;', 'highlighter.ts, function aim');
+  });
+
+  it('runs the glide source the tests run', () => {
+    // glide.test.ts evaluates GLIDE_SOURCE; this is what makes that the program's.
+    pin(highlighterSource(), GLIDE_SOURCE, 'the program');
+  });
+
+  it('does not scroll on the once-a-second correction itself', () => {
+    // The correction is the second and last thing the bridge sends (ADR 0005). It
+    // moves the highlight to the word the voice is on; the page follows that word
+    // only if it is on another line, through showAt() like any word, and never
+    // from the correction's own branch.
+    const program = code('highlighter.ts');
+    const correction = program.slice(program.indexOf("message.kind === 'correct'"));
+    expect(correction).not.toMatch(/nudge|scrollBy|bring\(|place(Once)?\(|follow\(/);
+  });
+
+  it('places at most once per document per Utterance', () => {
+    // A placing can make the continuous manager render a section, which reaches
+    // `attach`, which would place again, which would render again. The WeakSet is
     // what ends that, and it is weak because the alternative is the renderer
     // holding a document epub.js means to destroy.
     const program = code('highlighter.ts');
-    expect(program).toContain('centred: new WeakSet()');
-    expect(fn(program, 'centreOnce')).toContain('if (state.centred.has(doc)) return;');
+    expect(program).toContain('placed: new WeakSet()');
+    expect(fn(program, 'placeOnce')).toContain('if (state.placed.has(doc)) return;');
   });
 });
 
@@ -527,16 +637,27 @@ describe('a highlight that moves takes all of itself with it (#35, ADR 0038)', (
 });
 
 describe('the player floats over the page, and the centring is told (ADR 0020)', () => {
-  it('centres in what can be seen rather than in the container', () => {
-    // ADR 0011 centres against `clientHeight`; ADR 0020's player covers the bottom
-    // of that container. Centring against the full height aims at a point the player
-    // is standing on, and the sentence being spoken sits behind it — which fails as
+  it('holds the line in what can be seen rather than in the container', () => {
+    // ADR 0011 measured against `clientHeight`; ADR 0020's player covers the bottom
+    // of that container. Aiming against the full height aims at a point the player
+    // is standing on, and the line being spoken sits behind it — which fails as
     // "the highlight is off screen", not as an error.
     const program = code('highlighter.ts');
-    const centre = fn(program, 'centre');
-    expect(centre).toContain('var visible = height - covered - barCovered;');
-    expect(centre).toContain('visible / 2');
-    expect(centre).not.toContain('height / 2');
+    // What can be seen now lies between the bar and the player, both floating
+    // over the container (ADR 0020, #67).
+    pin(fn(program, 'visibleOf'), 'var visible = view.clientHeight - covered - barCovered;', 'highlighter.ts, function visibleOf');
+    const moveFor = fn(program, 'moveFor');
+    pin(moveFor, 'var at = lineAt(view, bounds);', 'highlighter.ts, function moveFor');
+    expect(moveFor).not.toContain('clientHeight');
+    // What the line position is a share of: the page between the room kept for
+    // the bar (#67) and the open player (#71), or what is covered now until each
+    // is measured — so that hiding the bar and collapsing the player move nothing.
+    const lineAt = fn(program, 'lineAt');
+    pin(lineAt, 'var over = barReserved > 0 ? barReserved : barCovered;', 'highlighter.ts, function lineAt');
+    pin(lineAt, 'var visible = view.clientHeight - over - under;', 'highlighter.ts, function lineAt');
+    pin(lineAt, 'return bounds.top + over + visible * LINE_POSITION;', 'highlighter.ts, function lineAt');
+    // The middle, until the owner's Line Position reaches it.
+    pin(highlighterSource(), 'var LINE_POSITION = 0.5;', 'the program');
   });
 
   it('takes the covered height as a message, because it changes when the player collapses', () => {
@@ -565,7 +686,59 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     const bridge = code('reader-bridge.ts');
     const document = bridge.slice(bridge.indexOf('message.type === DOCUMENT_MESSAGE'));
     const branch = document.slice(0, document.indexOf('return;'));
-    expect(branch).toContain("send({ kind: 'inset', bottomPx: inset.current })");
+    expect(branch).toContain("send({ kind: 'inset', bottomPx: inset.current, openPx: openPlayer.current })");
+  });
+
+  it('sends the Line Position again once the program says it has installed, unless it is the one baked in (#71)', () => {
+    // The same trap as the inset: the setting's first message goes before the
+    // program exists. The middle is in the program's source already, so only
+    // another position needs sending.
+    const bridge = code('reader-bridge.ts');
+    const document = bridge.slice(bridge.indexOf('message.type === DOCUMENT_MESSAGE'));
+    const branch = document.slice(0, document.indexOf('return;'));
+    expect(branch).toContain('if (linePosition.current !== BAKED_LINE_POSITION || scrolling.current !== BAKED_SCROLLING) {');
+    expect(branch).toContain("send({ kind: 'following', linePosition: linePosition.current, scrolling: scrolling.current });");
+    expect(code('highlighter.ts')).toContain("'var LINE_POSITION = ' + BAKED_LINE_POSITION + ';\\n'");
+    // And the way of scrolling, baked in beside it, By line.
+    expect(code('highlighter.ts')).toContain("'var SCROLLING = ' + JSON.stringify(BAKED_SCROLLING) + ';\\n'");
+  });
+
+  it('sends the Line Position and the way of scrolling together, every time (#71)', () => {
+    // One message with both, so the program never holds half of an old choice.
+    const bridge = code('reader-bridge.ts');
+    expect(bridge.match(/send\(\{ kind: 'following'/g)).toHaveLength(3);
+    for (const sent of bridge.match(/send\(\{ kind: 'following'[^}]*\}/g) ?? []) {
+      expect(sent).toMatch(/linePosition: /);
+      expect(sent).toMatch(/scrolling: /);
+    }
+  });
+
+  it('measures the line position above the open player, not above what it covers now (#71)', () => {
+    // `covered` grows with every note on the player and shrinks to one button when
+    // it collapses. Measured against it, a note that came and went while paused
+    // left the line 87 px above the middle until Play (notes, 2026-09-26). The
+    // open player's own height changes only with its controls.
+    const program = code('highlighter.ts');
+    pin(fn(program, 'lineAt'), 'var under = openPlayer > 0 ? openPlayer : covered;', 'highlighter.ts, function lineAt');
+    const inset = program.slice(program.indexOf("message.kind === 'inset'"));
+    pin(inset.slice(0, inset.indexOf('return;')), 'openPlayer = ', "highlighter.ts, the 'inset' branch");
+    // And the player reports that height from its controls alone, so no note is in it.
+    const player = readFileSync(new URL('../../src/app/player.tsx', import.meta.url).pathname, 'utf8');
+    expect(player).toContain('<View style={styles.controls} onLayout={measureControls}>');
+    expect(player.indexOf('notes.map(')).toBeLessThan(player.indexOf('<View style={styles.controls} onLayout={measureControls}>'));
+  });
+
+  it('brings a following page to a new Line Position, and leaves a browsed one where it is (#71)', () => {
+    const program = code('highlighter.ts');
+    const following = program.slice(program.indexOf("message.kind === 'following'"));
+    const branch = following.slice(0, following.indexOf('return;\n    }\n'));
+    expect(branch).toContain('LINE_POSITION = share;');
+    expect(branch).toContain("if (message.scrolling === 'line' || message.scrolling === 'continuous') SCROLLING = message.scrolling;");
+    // Leaving Continuous forgets where it drifted, so By line starts from the words.
+    expect(branch).toContain('drifting = null;');
+    expect(branch).toContain('if (state && state.follow && !browsing) approach(aim());');
+    // approach() is bring() By line, and steer() in Continuous.
+    pin(fn(program, 'approach'), "return SCROLLING === 'continuous' ? steer(aimed) : bring(aimed, false);", 'highlighter.ts, function approach');
   });
 
   /**
@@ -581,7 +754,7 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
    * message once it is present.
    */
   it('loses a message sent before the program installs, and says nothing about it', () => {
-    const call = highlightCall({ kind: 'inset', bottomPx: 190 });
+    const call = highlightCall({ kind: 'inset', bottomPx: 190, openPx: 0 });
 
     const early: Record<string, unknown> = {};
     expect(() => vm.runInNewContext(call, { window: early })).not.toThrow();
@@ -591,7 +764,7 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
     const seen: unknown[] = [];
     const installed: Record<string, unknown> = { [HIGHLIGHTER]: (message: unknown) => seen.push(message) };
     vm.runInNewContext(call, { window: installed });
-    expect(seen).toEqual([{ kind: 'inset', bottomPx: 190 }]);
+    expect(seen).toEqual([{ kind: 'inset', bottomPx: 190, openPx: 0 }]);
   });
 
   it('does not scroll when the inset changes, because that would move the text under the reader', () => {
@@ -605,14 +778,19 @@ describe('the player floats over the page, and the centring is told (ADR 0020)',
 });
 
 describe('the navigation bar floats over the page too, and the page keeps room for it (#67, ADR 0048)', () => {
-  it('centres between the bar and the player, and puts a tall Utterance just below the bar', () => {
+  it('holds the line below the room for the bar, and puts a tall Utterance just below the bar', () => {
     // The bar covers the top of the container while it is shown, as the player
-    // covers the bottom; a middle measured from the container's top would hold
-    // the sentence being spoken a bar's height too high, and a tall Utterance's
-    // opening words would start under the bar.
-    const centre = fn(code('highlighter.ts'), 'centre');
-    expect(centre).toContain('- bounds.top - barCovered - visible / 2');
-    expect(centre).toContain('move = box.top - bounds.top - barCovered;');
+    // covers the bottom; a line position measured from the container's top would
+    // hold the line being spoken a bar's height too high, and a tall Utterance's
+    // opening words would start under the bar. The line position is measured
+    // from the room kept for the bar, which stays when the bar hides with the
+    // player (#71), and what can be seen now from what the bar covers now.
+    const program = code('highlighter.ts');
+    const lineAt = fn(program, 'lineAt');
+    expect(lineAt).toContain('barReserved');
+    expect(lineAt).toContain('return bounds.top + over + visible * LINE_POSITION;');
+    expect(fn(program, 'moveFor')).toContain('move = box.top - bounds.top - barCovered;');
+    expect(fn(program, 'onVisiblePage')).toContain('view.getBoundingClientRect().top + barCovered;');
   });
 
   it('takes what the bar covers and the room it needs as a message, and scrolls nothing when they change', () => {
@@ -738,7 +916,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     const program = code('highlighter.ts');
     const branch = program.slice(program.indexOf("message.kind === 'appearance'"), program.indexOf("message.kind === 'theme'"));
     expect(branch).toContain('restyle();');
-    expect(branch).toContain('settle(SETTLE_FRAMES, null, 0);');
+    expect(branch).toContain('settle(SETTLE_FRAMES, 0);');
     expect(fn(program, 'restyle')).toContain('ensureStyle(list[i].document)');
   });
 
@@ -751,7 +929,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     const branch = program.slice(program.indexOf("message.kind === 'theme'"), program.indexOf("message.kind === 'clear'"));
     expect(branch).toContain('restyle();');
     expect(branch).not.toContain('settle(');
-    expect(branch).not.toContain('centre(');
+    expect(branch).not.toMatch(/place(Once)?\(|bring\(/);
   });
 
   it('cannot declare user-select, in either theme (ADR 0021, ADR 0022)', () => {
@@ -803,13 +981,14 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     // laid out yet is never centred at all, and without the second the window
     // closes after one frame.
     const settle = fn(code('highlighter.ts'), 'settle');
-    pin(settle, 'if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, null, 0); });', 'highlighter.ts, function settle');
-    pin(settle, 'window.requestAnimationFrame(function () {\n      settle(left - 1, box.top, steady);', 'highlighter.ts, function settle');
-    expect(settle).toContain('Math.abs(box.top - was) < 1');
+    pin(settle, 'if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, 0); });', 'highlighter.ts, function settle');
+    pin(settle, 'window.requestAnimationFrame(function () {\n      settle(left - 1, steady);', 'highlighter.ts, function settle');
+    pin(settle, 'var steady = Math.abs(move) < 1 ? still + 1 : 0;', 'highlighter.ts, function settle');
     // Every frame of the window, not once at the end: the first version centred
     // once and left the Utterance 4,285 px out when the text **shrank**, because a
     // page can look settled for a frame while epub.js is still relaying its views.
-    expect(settle.indexOf('centre(built);')).toBeLessThan(settle.indexOf('if (steady >= 3'));
+    // And at once, never a glide: the text has jumped by itself.
+    expect(settle.indexOf('bring(aimed, true);')).toBeLessThan(settle.indexOf('if (steady >= 3'));
     // The library's own observer, read rather than trusted.
     expect(library('epubjs.js')).toContain('new ResizeObserver((t) => {\n            requestAnimationFrame(this.resizeCheck.bind(this));');
   });
@@ -818,7 +997,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     const program = code('highlighter.ts');
     expect(program.match(/scrollBy\(/g)).toHaveLength(1);
     for (const perWord of ['tick', 'showWord', 'showAt', 'start']) {
-      expect({ perWord, scrolls: /centre|scrollBy|settle/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
+      expect({ perWord, scrolls: /nudge|scrollBy|settle|place(Once)?\(/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
     }
   });
 });
@@ -838,6 +1017,21 @@ describe('tapping a word reads from there, and it is a tap (ADR 0020)', () => {
     expect(program).toContain("addEventListener('touchstart', selectionStarted, { passive: true })");
     expect(program).toContain("addEventListener('selectionchange', selectionChanged)");
     expect(fn(program, 'tapped')).toContain('lookupHeld || Date.now() < suppressTapUntil');
+  });
+
+  it('holds following through lookup and restores the prior browsing state (#71, #73)', () => {
+    const program = highlighterSource();
+    const hold = fn(program, 'holdForLookup');
+    expect(hold.indexOf('beforeLookupBrowsing = browsing;')).toBeLessThan(hold.indexOf('setBrowsing(true);'));
+    expect(hold).toContain('halt();');
+    const close = fn(program, 'closeLookup');
+    expect(close).toContain('setBrowsing(beforeLookupBrowsing);');
+    expect(close).toContain('state.placed = new WeakSet();');
+    expect(close).toContain('if (resumeFollow && !browsing && state)');
+    const dispatch = fn(program, 'dispatch');
+    const returning = dispatch.slice(dispatch.indexOf("message.kind === 'return'"), dispatch.indexOf("message.kind === 'followOnly'"));
+    expect(returning.indexOf('if (lookupHeld) return;')).toBeLessThan(returning.indexOf('setBrowsing(false);'));
+    expect(returning).toContain('lookupKeepBrowsing = false;');
   });
 
   it('posts nothing when the tap hit-tests to anything but a text node', () => {
@@ -1194,10 +1388,10 @@ describe('the reading is fed by the reading, not by the scroll (notes/NOTES_2026
   });
 
   it('leaves the scroll that makes the manager render, with its ignore flag off', () => {
-    // Whatever else changes, this must not: `centre()` reaches epub.js as a finger
-    // scroll does, which is what makes it append the section the reading is walking
-    // into. A scroll it was told to ignore renders nothing new.
-    expect(fn(program, 'centre')).toContain('rendition.manager.scrollBy(0, move, false)');
+    // Whatever else changes, this must not: the page's one scroll reaches epub.js
+    // as a finger scroll does, which is what makes it append the section the
+    // reading is walking into. A scroll it was told to ignore renders nothing new.
+    expect(fn(program, 'nudge')).toContain('rendition.manager.scrollBy(0, by, false)');
   });
 });
 
@@ -1218,7 +1412,7 @@ describe('a section the page has not reached is not a highlight that failed', ()
     );
     const speak = program.slice(program.indexOf("message.kind === 'speak'"), program.indexOf("message.kind === 'correct'"));
     expect(speak).toContain('var shown = showUtterance();');
-    expect(speak).toContain('if (message.reveal) follow(shown);');
+    expect(speak).toContain('if (message.reveal || (begins && !browsing)) follow(shown);');
   });
 
   it('is silent for the word by the same rule, since the correction arrives before the section does (#50)', () => {
@@ -1265,19 +1459,21 @@ describe('a section follow() asked for is centred after epub.js has placed it (#
     pin(speak, 'awaiting: null', "highlighter.ts, the 'speak' branch");
   });
 
-  it('paints that section at once and centres it on the next frame, through settle', () => {
+  it('paints that section at once and places it on the next frame, through settle', () => {
     const attach = fn(program, 'attach');
     pin(attach, 'if (state.awaiting === contents.sectionIndex) {', 'highlighter.ts, function attach');
     pin(
       attach,
-      'window.requestAnimationFrame(function () {\n        if (state === mine) settle(SETTLE_FRAMES, null, 0);',
+      'window.requestAnimationFrame(function () {\n        if (state === mine) settle(SETTLE_FRAMES, 0);',
       'highlighter.ts, function attach',
     );
     // The highlight is not deferred with it: only the scroll waits for epub.js.
+    // And the word is painted quietly, so it does not start a glide of its own
+    // in the middle of epub.js's display.
     expect(attach.indexOf('var built = showUtterance();')).toBeLessThan(attach.indexOf('if (state.awaiting ==='));
-    expect(attach.indexOf('showAt(state.next - 1);')).toBeLessThan(attach.indexOf('if (state.awaiting ==='));
-    // Any other arrival has no scroll of epub.js's behind it and is centred at once.
-    pin(attach, '    } else {\n      centreOnce(built);\n    }', 'highlighter.ts, function attach');
+    expect(attach.indexOf('showAt(state.next - 1, true);')).toBeLessThan(attach.indexOf('if (state.awaiting ==='));
+    // Any other arrival has no scroll of epub.js's behind it and is placed at once.
+    pin(attach, '    } else {\n      placeOnce(built);\n    }', 'highlighter.ts, function attach');
   });
 
   it('because epub.js runs the content hook before the moveTo of the same display', () => {
@@ -1326,39 +1522,100 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
   const dispatch = fn(program, 'dispatch');
   const branch = (kind: string, next: string) => dispatch.slice(dispatch.indexOf("message.kind === '" + kind + "'"), dispatch.indexOf("message.kind === '" + next + "'"));
 
-  it('starts browsing on the message a Contents row sends, and ends it only with a revealed highlight', () => {
-    pin(branch('browse', 'speak'), 'browsing = true;', "highlighter.ts, the 'browse' branch");
+  it('starts browsing on the message a Contents row sends, and ends it when asked or at a sentence the owner can see (#71)', () => {
+    pin(branch('browse', 'return'), 'setBrowsing(true);', "highlighter.ts, the 'browse' branch");
     const speak = branch('speak', 'correct');
-    pin(speak, 'if (message.reveal && !lookupHeld && !lookupKeepBrowsing) browsing = false;', "highlighter.ts, the 'speak' branch");
+    pin(speak, 'if (message.reveal && !lookupHeld && !lookupKeepBrowsing) setBrowsing(false);', "highlighter.ts, the 'speak' branch");
     // Before the state is replaced, so that the new one is built knowing it.
-    expect(speak.indexOf('if (message.reveal && !lookupHeld && !lookupKeepBrowsing) browsing = false;')).toBeLessThan(speak.indexOf('state = {'));
-    // The declaration, and the one place it is cleared.
+    expect(speak.indexOf('if (message.reveal && !lookupHeld && !lookupKeepBrowsing) setBrowsing(false);')).toBeLessThan(speak.indexOf('state = {'));
+    // Zotero-TTS's rule (ADR 0050): the reading moving on takes the page back
+    // only at a sentence whose first line the owner can see, measured on the
+    // sentence just painted and before anything follows it.
+    const recover = 'if (!message.reveal && begins && browsing && !lookupHeld && !lookupKeepBrowsing && onVisiblePage(shown)) setBrowsing(false);';
+    pin(speak, recover, "highlighter.ts, the 'speak' branch");
+    expect(speak.indexOf('var shown = showUtterance();')).toBeLessThan(speak.indexOf(recover));
+    expect(speak.indexOf(recover)).toBeLessThan(speak.indexOf('follow(shown);'));
+    // M, and the player collapsing, which brings a browsed page back as M would.
+    pin(branch('return', 'followOnly'), 'setBrowsing(false);', "highlighter.ts, the 'return' branch");
+    pin(branch('followOnly', 'speak'), "if (only && browsing) dispatch({ kind: 'return' });", "highlighter.ts, the 'followOnly' branch");
+    // The declaration, and the one place it is written.
     pin(program, 'var browsing = false;', 'highlighter.ts, the declaration');
-    expect(program.match(/browsing = false;/g)).toHaveLength(2);
+    expect(program.match(/\bbrowsing = /g)).toHaveLength(2);
+    pin(fn(program, 'setBrowsing'), 'browsing = !!value;', 'highlighter.ts, function setBrowsing');
   });
 
-  it('centres nothing by itself while browsing: not a section of the reading arriving, not an Appearance change', () => {
-    pin(fn(program, 'centreOnce'), 'if (!state || !state.follow || browsing) return;', 'highlighter.ts, function centreOnce');
+  it('asks whether the sentence can be seen as the owner sees it now, and never while the page still moves', () => {
+    const visible = fn(program, 'onVisiblePage');
+    // A fling coasting on is the owner's, and a glide would fight it.
+    pin(visible, 'if (moving()) return false;', 'highlighter.ts, function onVisiblePage');
+    // What can be seen now, above whatever the player covers at this moment —
+    // not lineAt(), the open player the line position is measured against.
+    pin(visible, 'return middle >= top && middle <= top + visibleOf(view);', 'highlighter.ts, function onVisiblePage');
+    expect(visible).not.toContain('lineAt(');
+  });
+
+  it('moves nothing by itself while browsing: not a section of the reading arriving, not an Appearance change, not a word', () => {
+    pin(fn(program, 'placeOnce'), 'if (!state || !state.follow || browsing) return;', 'highlighter.ts, function placeOnce');
     pin(fn(program, 'settle'), 'if (!state || !state.follow || browsing) return;', 'highlighter.ts, function settle');
-    // attach() and the Appearance branch reach the page only through those two.
+    pin(fn(program, 'followWord'), 'if (!state || !state.follow || browsing || !state.words) return;', 'highlighter.ts, function followWord');
+    // A glide under way stops the frame browsing begins.
+    pin(fn(program, 'glideStep'), 'if (!state || !state.follow || browsing) {', 'highlighter.ts, function glideStep');
+    pin(branch('browse', 'return'), 'halt();', "highlighter.ts, the 'browse' branch");
+    // attach() and the Appearance branch reach the page only through those.
     const attach = fn(program, 'attach');
-    expect(attach).not.toContain('centre(');
+    expect(attach).not.toMatch(/\bplace\(|bring\(|nudge\(/);
     expect(attach).not.toContain('scrollBy');
-    expect(branch('appearance', 'measured')).not.toMatch(/\bcentre(Once)?\(/);
+    expect(branch('appearance', 'measured')).not.toMatch(/\bplace(Once)?\(|bring\(/);
   });
 
-  it('lets a repaint keep whether the page follows, and only a revealed highlight scroll to it', () => {
+  it('lets a repaint keep whether the page follows, and only a revealed highlight or a followed cue scroll to it', () => {
     const speak = branch('speak', 'correct');
-    pin(speak, 'var following = message.reveal || !!(state && state.follow);', "highlighter.ts, the 'speak' branch");
+    pin(speak, 'var following = message.reveal || begins || !!(state && state.follow);', "highlighter.ts, the 'speak' branch");
     pin(speak, 'follow: following,', "highlighter.ts, the 'speak' branch");
-    pin(speak, 'if (message.reveal) follow(shown);', "highlighter.ts, the 'speak' branch");
+    // A cue the reading moved on to follows only a page that is following: one
+    // the owner took away displays nothing, even for a section not on the page.
+    pin(speak, 'if (message.reveal || (begins && !browsing)) follow(shown);', "highlighter.ts, the 'speak' branch");
+  });
+
+  it('counts only a new Utterance as a sentence beginning, so a re-cue ends no Browsing and moves no page (#71)', () => {
+    // A speed change or a Voice switched mid-sentence cues the Utterance being
+    // spoken again, with `recover`. Nothing began: a page the owner took away
+    // stays away, and a following page is left for the correction's word.
+    const speak = branch('speak', 'correct');
+    const begins = 'var begins = !!message.recover && !(state && state.utterance === message.utterance);';
+    pin(speak, begins, "highlighter.ts, the 'speak' branch");
+    // Read off the old state, before it is replaced.
+    expect(speak.indexOf(begins)).toBeLessThan(speak.indexOf('state = {'));
+    // And nothing downstream reads `recover` itself.
+    expect(speak.slice(speak.indexOf(begins) + begins.length)).not.toContain('message.recover');
+  });
+
+  it('stops the page on the frame the owner pauses, and not on the hold after a Clip cued while paused (#71)', () => {
+    pin(branch('hold', 'browse'), 'if (message.stop) halt();', "highlighter.ts, the 'hold' branch");
+    const reading = readFileSync(new URL('../../src/app/use-reading.ts', import.meta.url).pathname, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    // pause(), and the reading ending on a failure: both the owner's stop.
+    expect(reading.match(/bridgeRef\.current\?\.hold\(\{ stop: true \}\);/g)).toHaveLength(2);
+    // The paused cue's hold stops the tick loop only.
+    pin(reading, 'if (!playIntent.current) bridgeRef.current?.hold();', 'use-reading.ts, the clock');
   });
 
   it('counts a finger dragging the page as browsing, and a tap as nothing of the kind', () => {
     const dragged = fn(program, 'dragged');
     // A new finger is a new identifier, measured from where it first moved.
     pin(dragged, 'if (touch.identifier !== touchId) {', 'highlighter.ts, function dragged');
-    pin(dragged, 'if (Math.abs(touch.clientY - touchY) > DRAG_PX) browsing = true;', 'highlighter.ts, function dragged');
+    // Measured on the screen: in a section document the page's own scroll under
+    // the finger is added back, or a drag the phone scrolls reads as standing still.
+    pin(dragged, 'touchTop = top;', 'highlighter.ts, function dragged');
+    pin(dragged, 'var scrolled = event.currentTarget === stage ? 0 : top - touchTop;', 'highlighter.ts, function dragged');
+    pin(dragged, 'if (Math.abs(touch.clientY - touchY - scrolled) > DRAG_PX) setBrowsing(true);', 'highlighter.ts, function dragged');
+    // A page that only follows (the player collapsed, #71) is neither stopped
+    // nor browsed by a finger: the first thing it asks.
+    pin(dragged, 'if (followOnly) return;', 'highlighter.ts, function dragged');
+    expect(dragged.indexOf('if (followOnly) return;')).toBeLessThan(dragged.indexOf('halt();'));
+    // Any move of a finger stops a glide where the page is (ADR 0050), before it
+    // is known to be a drag — and still from touchmove, never touchstart.
+    expect(dragged.indexOf('halt();')).toBeGreaterThan(-1);
+    expect(dragged.indexOf('halt();')).toBeLessThan(dragged.indexOf('if (touch.identifier !== touchId) {'));
     pin(fn(program, 'adopt'), "contents.document.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, function adopt');
     // The margins between the section documents, heard once on the container.
     pin(program, "if (stage) stage.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, the install');
@@ -1378,6 +1635,91 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
   it('reveals a cue or a shown sentence unless the caller says not to', () => {
     const bridge = code('reader-bridge.ts');
     expect(bridge.match(/reveal: latest\.current\.follow !== false && options\?\.reveal !== false/g)).toHaveLength(2);
+    // And a cue recovers only when asked to: the screen says which cues are the
+    // reading moving on (#71).
+    expect(bridge.match(/recover: latest\.current\.follow !== false && options\?\.recover === true/g)).toHaveLength(1);
+  });
+});
+
+describe('A or M, and M bringing the page back (#71, #53, ADR 0050)', () => {
+  /** An app file's code, without its comments, as `code()` reads this directory's. */
+  const appCode = (name: string): string =>
+    readFileSync(new URL('../../src/app/' + name, import.meta.url).pathname, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+  const program = highlighterSource();
+  const dispatch = fn(program, 'dispatch');
+  const branch = (kind: string, next: string) => dispatch.slice(dispatch.indexOf("message.kind === '" + kind + "'"), dispatch.indexOf("message.kind === '" + next + "'"));
+
+  it('tells the player whether the page follows only when it changes, and never per word', () => {
+    const set = fn(program, 'setBrowsing');
+    pin(set, 'if (following === announced) return;', 'highlighter.ts, function setBrowsing');
+    pin(set, 'post({ type: FOLLOWING, following: following });', 'highlighter.ts, function setBrowsing');
+    expect(program.match(/type: FOLLOWING\b/g)).toHaveLength(1);
+    // Nothing on the frame path or the word path posts anything (ADR 0005).
+    for (const name of ['tick', 'showWord', 'followWord', 'glideStep']) expect(fn(program, name)).not.toMatch(/\bpost\(|setBrowsing\(/);
+  });
+
+  it('goes back to the sentence being shown, keeping its words, and starts nothing', () => {
+    const back = branch('return', 'followOnly');
+    pin(back, 'state.follow = true;', "highlighter.ts, the 'return' branch");
+    pin(back, 'follow(build(state.utteranceRanges));', "highlighter.ts, the 'return' branch");
+    // No new state: the words of a Clip that is playing stay where they were.
+    expect(back).not.toContain('state = {');
+    const bridge = code('reader-bridge.ts');
+    const returning = bridge.slice(bridge.indexOf('const returnToReading = useCallback('), bridge.indexOf('const followOnly = useRef('));
+    pin(returning, 'if (utterance === null || cued.current?.utterance === utterance) {', 'reader-bridge.ts, returnToReading');
+    pin(returning, "send({ kind: 'return' });", 'reader-bridge.ts, returnToReading');
+    pin(returning, 'show(utterance);', 'reader-bridge.ts, returnToReading');
+    const reading = appCode('use-reading.ts');
+    const start = reading.indexOf('const returnToReading = useCallback(');
+    const hook = reading.slice(start, reading.indexOf('}, []);', start));
+    pin(hook, 'bridgeRef.current?.returnToReading(atRef.current);', 'use-reading.ts, returnToReading');
+    // M moves the page and nothing else: no seek, no engine, no Play.
+    expect(hook).not.toMatch(/engineRef|seekTo|pointAt|play\(|playIntent/);
+  });
+
+  it('reveals only the first cue after Play; the reading moving on recovers instead', () => {
+    const reading = appCode('use-reading.ts');
+    pin(reading, 'const asked = playIntent.current && revealCue.current;', 'use-reading.ts, the clock');
+    pin(
+      reading,
+      'bridgeRef.current?.clock.onClip(cue, !playIntent.current ? { reveal: false } : asked ? { reveal: true } : { reveal: false, recover: true });',
+      'use-reading.ts, the clock',
+    );
+    const play = reading.slice(reading.indexOf('const play = useCallback('), reading.indexOf('const pause = useCallback('));
+    pin(play, 'playIntent.current = true;\n    revealCue.current = true;', 'use-reading.ts, play');
+    const start = reading.indexOf('const pause = useCallback(');
+    pin(reading.slice(start, reading.indexOf('}, []);', start)), 'revealCue.current = false;', 'use-reading.ts, pause');
+  });
+
+  it('shows A as a mark with no press, and M as the one button', () => {
+    const player = appCode('player.tsx');
+    const mark = player.slice(player.indexOf('function FollowingMark('), player.indexOf('function Transport('));
+    // From A's branch to the function's own return, which is M's: two spaces in.
+    const a = mark.slice(mark.indexOf('if (following) {'), mark.indexOf('\n  return (', mark.indexOf('if (following) {')));
+    expect(a).toContain('accessibilityLabel="Following the reading"');
+    expect(a).not.toMatch(/onPress|Pressable/);
+    pin(mark, 'accessibilityLabel="Return to the reading" onPress={onReturn}', 'player.tsx, FollowingMark');
+    // In the slot beside the Voice name, and only in the open player.
+    pin(player, '<FollowingMark following={following} onReturn={onReturn} />', 'player.tsx, the head row');
+    const folded = player.indexOf('if (collapsed && notes.length === 0) {');
+    expect(player.slice(folded, player.indexOf('\n  return (', folded))).not.toContain('FollowingMark');
+  });
+
+  it('only follows while the player is collapsed, through epub.js’s own overflow switch', () => {
+    const lock = fn(program, 'lockPage');
+    pin(lock, "stage.overflow('hidden');", 'highlighter.ts, function lockPage');
+    pin(lock, 'stage.overflow(unlockedOverflow);', 'highlighter.ts, function lockPage');
+    expect(lock).not.toMatch(/classList|\.style\b|createElement|preventDefault/);
+    pin(branch('followOnly', 'speak'), 'lockPage(only);', "highlighter.ts, the 'followOnly' branch");
+    // No listener that could stop the phone's own scrolling: every touchmove stays passive.
+    expect(program).not.toContain('passive: false');
+    const view = appCode('reading-view.tsx');
+    // Exactly while the Reading Button is shown (#67's `chrome` is its negation).
+    pin(view, 'const chrome = !(collapsed && notes.length === 0);', 'reading-view.tsx');
+    pin(view, 'const followOnly = !chrome;', 'reading-view.tsx');
+    pin(view, 'reading.bridge.setFollowOnly(followOnly);', 'reading-view.tsx');
   });
 });
 
@@ -1452,6 +1794,161 @@ describe('nothing above the page changes while the page moves (#58, ADR 0045)', 
     pin(moving, 'stage.scrollTop !== scrolledTop', 'highlighter.ts, function moving');
     expect(moving).not.toContain('touch');
     pin(program, "if (stage) stage.addEventListener('scroll', noteScroll, { passive: true });", 'highlighter.ts, the install');
+  });
+
+  /**
+   * The program's own scroll is not the page moving (#71, ADR 0050), and nothing
+   * else is let off: run, not read. Continuous scrolls the page every few frames
+   * for as long as a sentence is read, and counted as moving it would park every
+   * trim until the reading paused. What the gate is for — iOS moving the page,
+   * which drops epub.js's correction — must still close it.
+   *
+   * The five functions are the program's own text, evaluated against a stage
+   * whose `scrollTop` the test moves, a manager whose `scrollBy` is epub.js's
+   * `container.scrollTop += y` in whole pixels, and a clock the test sets.
+   */
+  describe('the rest gate, run', () => {
+    interface Gate {
+      stage: { scrollTop: number };
+      clock: { now: number };
+      frames: ((now: number) => void)[];
+      enqueued: string[];
+      parked: { trim: boolean; check: boolean };
+      nudge(by: number): void;
+      noteScroll(): void;
+      moving(): boolean;
+      watch(): void;
+    }
+
+    const gate = (): Gate =>
+      vm.runInNewContext(
+        [
+          'var stage = { scrollTop: 1000 };',
+          'var clock = { now: 0 };',
+          'var performance = { now: function () { return clock.now; } };',
+          'var frames = [];',
+          'var enqueued = [];',
+          'var window = { requestAnimationFrame: function (f) { frames.push(f); return frames.length; } };',
+          'var manager = { scrollBy: function (x, y) { stage.scrollTop += Math.round(y); }, trim: function () { return "trim"; }, check: function () { return "check"; },',
+          '  q: { enqueue: function (task) { enqueued.push(task()); } } };',
+          'var rendition = { manager: manager };',
+          'function scroller() { return stage; }',
+          'var REST_MS = 200; var REST_FRAMES = 4;',
+          'var parked = { trim: false, check: false };',
+          'var scrolledAt = -Infinity; var scrolledTop = null; var ownTop = null;',
+          'var resting = { top: null, since: 0, frames: 0 }; var watching = false;',
+          ...['nudge', 'noteScroll', 'moving', 'watchForRest', 'watch'].map((name) => fn(program, name)),
+          '({ stage: stage, clock: clock, frames: frames, enqueued: enqueued, parked: parked, nudge: nudge, noteScroll: noteScroll, moving: moving, watch: watch });',
+        ].join('\n'),
+      ) as Gate;
+
+    /** Run the frames asked for, one at a time, `every` ms apart, until none is asked for or `until`. */
+    const run = (g: Gate, every: number, until: number, between?: () => void): void => {
+      while (g.frames.length && g.clock.now < until) {
+        g.clock.now += every;
+        between?.();
+        const frame = g.frames.shift()!;
+        frame(g.clock.now);
+      }
+    };
+
+    it('does not count the page as moving when it is where the program put it, before or after the scroll event', () => {
+      const g = gate();
+      g.clock.now = 1000;
+      g.nudge(3);
+      expect(g.stage.scrollTop).toBe(1003);
+      expect(g.moving()).toBe(false);
+      g.noteScroll();
+      expect(g.moving()).toBe(false);
+    });
+
+    it('still counts a finger or a fling as moving, for REST_MS after its last scroll event', () => {
+      const g = gate();
+      g.clock.now = 1000;
+      g.nudge(3);
+      g.noteScroll();
+      // iOS moves the page: newer than its event, then the event.
+      g.stage.scrollTop = 1400;
+      expect(g.moving()).toBe(true);
+      g.noteScroll();
+      g.clock.now = 1199;
+      expect(g.moving()).toBe(true);
+      g.clock.now = 1201;
+      expect(g.moving()).toBe(false);
+    });
+
+    it('forgets the program\u2019s own position once anything else moves the page, so a fling back to it still holds a trim (#58)', () => {
+      // The program leaves the page at 1003; a fling goes away and comes back to
+      // rest against exactly 1003, bouncing there for a while (iOS's positions
+      // and events). Remembered, 1003 would read as the program's and open the
+      // gate mid-bounce.
+      const g = gate();
+      g.clock.now = 1000;
+      g.nudge(3);
+      g.noteScroll();
+      g.parked.trim = true;
+      g.watch();
+      const path = [1100, 1300, 1200, 1050, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003, 1003];
+      let step = 0;
+      run(g, 1000 / 60, 4000, () => {
+        if (step < path.length) {
+          g.stage.scrollTop = path[step];
+          g.noteScroll();
+          step += 1;
+        }
+      });
+      expect(g.enqueued).toEqual(['trim']);
+      // Not before REST_MS after the last of the fling's events at 1003.
+      expect(g.clock.now).toBeGreaterThan(1000 + (path.length * 1000) / 60 + 200);
+    });
+
+    it('does not let a program scroll during a fling paper over it', () => {
+      // The page has moved since the last event, so the position that says the
+      // page is moving is left to say it.
+      const g = gate();
+      g.clock.now = 1000;
+      g.noteScroll();
+      g.stage.scrollTop = 1600;
+      g.nudge(2);
+      expect(g.moving()).toBe(true);
+    });
+
+    it('runs a parked trim while the program drifts the page a pixel every few frames (Continuous)', () => {
+      const g = gate();
+      g.clock.now = 1000;
+      g.parked.trim = true;
+      g.watch();
+      let frame = 0;
+      run(g, 1000 / 60, 3000, () => {
+        frame += 1;
+        if (frame % 3 === 0) {
+          g.nudge(1);
+          g.noteScroll();
+        }
+      });
+      expect(g.enqueued).toEqual(['trim']);
+      // Well inside the reading, not at the end of it: REST_MS and REST_FRAMES from the start.
+      expect(g.clock.now).toBeLessThan(1000 + 300);
+    });
+
+    it('keeps a parked trim parked while a fling moves the page, and runs it once the page rests', () => {
+      const g = gate();
+      g.clock.now = 1000;
+      g.parked.trim = true;
+      g.watch();
+      // A fling decelerating over a second: iOS's positions, not the program's.
+      let speed = 40;
+      run(g, 1000 / 60, 2000, () => {
+        if (speed > 0) {
+          g.stage.scrollTop += speed;
+          g.noteScroll();
+          speed -= 1;
+        }
+      });
+      expect(g.enqueued).toEqual(['trim']);
+      // Not before the fling stopped (40 frames) and REST_MS after it.
+      expect(g.clock.now).toBeGreaterThan(1000 + (40 * 1000) / 60 + 200);
+    });
   });
 
   it('runs parked work once the position has held for REST_MS over REST_FRAMES frames, through the manager’s own queue', () => {

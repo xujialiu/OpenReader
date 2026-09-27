@@ -20,6 +20,12 @@
  *   someone reaching out to stop the reading always had a button to press; the
  *   button is still always there, so that is kept, and stopping from collapsed
  *   now takes two presses instead of one (`reading-button.tsx`).
+ * - **A or M says whether the page follows the reading** (#71, ADR 0050), in the
+ *   place left free for it beside the Voice name, drawn as Zotero-TTS draws it.
+ *   **A** is a mark and nothing else: a tap on it does nothing. **M** is the one
+ *   button that brings the page back to the reading without starting it (#53).
+ *   Collapsed to the Reading Button, neither is shown, because collapsed the
+ *   page only follows.
  *
  * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
@@ -36,6 +42,10 @@ import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { SkipTarget } from './use-reading';
 import { LoadingSpinner } from './loading-spinner';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
+
+/** The open player's padding above and below its rows: part of the height the Line Position is measured above (`onOpenHeight`). */
+const PLAYER_PADDING_TOP = 4;
+const PLAYER_PADDING_BOTTOM = 28;
 
 /**
  * How a held stepper button repeats, and why it is not simply "fast".
@@ -103,6 +113,13 @@ export interface PlayerProps {
   onContents(): void;
   onVoices(): void;
   /**
+   * Whether the page follows the reading (**A**) or the owner is browsing (**M**),
+   * as the renderer last said (#71).
+   */
+  following: boolean;
+  /** M: bring the page back to the reading and follow it again, without starting it (#71, #53). */
+  onReturn(): void;
+  /**
    * How tall the player is, in points — the height it is covering at the bottom of
    * the page.
    *
@@ -113,6 +130,17 @@ export interface PlayerProps {
    * direction that keeps the spoken sentence visible.
    */
   onHeight(height: number): void;
+  /**
+   * How tall the player is when it is **open and has nothing to say**, in points:
+   * its controls, padding and border, without the notes above them (#71).
+   *
+   * The Line Position is measured above this rather than above `onHeight`'s
+   * band, which grows with every note and shrinks to one button when collapsed
+   * (ADR 0050). Measured from the controls themselves, so it is reported only
+   * when they change — not when a note comes or goes, and not while collapsed,
+   * when they are not drawn and the last height stands.
+   */
+  onOpenHeight(height: number): void;
 }
 
 /** A known name survives leaving the reader; internal ids are never a caption. */
@@ -138,7 +166,10 @@ export function Player({
   onRate,
   onContents,
   onVoices,
+  following,
+  onReturn,
   onHeight,
+  onOpenHeight,
 }: PlayerProps) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const closeSpeed = useCallback(() => setSpeedOpen(false), []);
@@ -166,6 +197,14 @@ export function Player({
     },
     [onHeight],
   );
+  // The controls plus what the player puts around them, which is the whole open
+  // player whenever no note is showing: its padding and its hairline border.
+  const measureControls = useCallback(
+    (event: LayoutChangeEvent) => {
+      onOpenHeight(event.nativeEvent.layout.height + PLAYER_PADDING_TOP + PLAYER_PADDING_BOTTOM + 2 * StyleSheet.hairlineWidth);
+    },
+    [onOpenHeight],
+  );
 
   if (collapsed && notes.length === 0) {
     return (
@@ -183,36 +222,41 @@ export function Player({
       {notes.map((note) => (
         <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>{note.said}</Text>
       ))}
-      <View style={styles.head}>
-        {/* As wide as the collapse arrow, so the name is centred on the whole
-            player rather than on what the arrow leaves (#70). Empty, and kept
-            free for a control of its own. */}
-        <View style={styles.headEnd} />
-        {/* Only the name opens the Voices: its button hugs the text, and a tap
-            beside it lands on this plain box and does nothing. */}
-        <View style={styles.voiceSlot}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
-            style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
-            <Text style={styles.voiceLabel} numberOfLines={1}>{voiceLine(settings, voiceInUse)}</Text>
+      {/* The controls in a box of their own, so they can be measured without the
+          notes above them (onOpenHeight, #71). The box carries the gap the
+          player puts between its rows. */}
+      <View style={styles.controls} onLayout={measureControls}>
+        <View style={styles.head}>
+          {/* As wide as the collapse arrow, so the name is centred on the whole
+              player rather than on what the arrow leaves (#70), and holding A or
+              M (#71). */}
+          <FollowingMark following={following} onReturn={onReturn} />
+          {/* Only the name opens the Voices: its button hugs the text, and a tap
+              beside it lands on this plain box and does nothing. */}
+          <View style={styles.voiceSlot}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
+              style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
+              <Text style={styles.voiceLabel} numberOfLines={1}>{voiceLine(settings, voiceInUse)}</Text>
+            </Pressable>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Collapse the player"
+            onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, pressed && styles.pressed]}>
+            <Icon name="down" color={INK.quiet} size={20} />
           </Pressable>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Collapse the player"
-          onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, pressed && styles.pressed]}>
-          <Icon name="down" color={INK.quiet} size={20} />
-        </Pressable>
-      </View>
 
-      <View style={styles.transport}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
-          style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}>
-          <Icon name="contents" color={INK.text} />
-        </Pressable>
-        <Transport icon="previousParagraph" label="Previous paragraph" onPress={() => onSkip('previous-paragraph')} disabled={!enabled} />
-        <Transport icon="previous" label="Previous sentence" onPress={() => onSkip('previous-sentence')} disabled={!enabled} />
-        <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
-        <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
-        <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
-        <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen} />
+        <View style={styles.transport}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
+            style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}>
+            <Icon name="contents" color={INK.text} />
+          </Pressable>
+          <Transport icon="previousParagraph" label="Previous paragraph" onPress={() => onSkip('previous-paragraph')} disabled={!enabled} />
+          <Transport icon="previous" label="Previous sentence" onPress={() => onSkip('previous-sentence')} disabled={!enabled} />
+          <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
+          <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
+          <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
+          <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen} />
+        </View>
       </View>
       {/* A tap outside the phone's bubble closes it, and without this it also
           pressed whatever React Native button it landed on: measured, a tap on
@@ -223,6 +267,38 @@ export function Player({
       {speedOpen ? <Pressable style={StyleSheet.absoluteFill} onPress={closeSpeed}
         accessible={false} importantForAccessibility="no-hide-descendants" /> : null}
     </View>
+  );
+}
+
+/**
+ * A or M (#71, ADR 0050), drawn as Zotero-TTS's player draws it: one letter in a
+ * small rounded block, A on a quarter-strength wash of the reading colour and M
+ * on nothing, in the player's text colour, with no animation.
+ *
+ * **A is a mark, not a button.** It has no press at all, so a tap on it lands on
+ * this plain box and does nothing, and a screen reader reads it as text: the
+ * page is following, and there is nothing to ask for. **M is a button**, the
+ * whole 44-point box, and it brings the page back to the reading without
+ * starting it (#53).
+ */
+function FollowingMark({ following, onReturn }: { following: boolean; onReturn(): void }) {
+  const mark = (
+    <View style={[styles.mark, following && styles.markFollowing]}>
+      <Text style={styles.markLetter}>{following ? 'A' : 'M'}</Text>
+    </View>
+  );
+  if (following) {
+    return (
+      <View style={styles.headEnd} accessible accessibilityRole="text" accessibilityLabel="Following the reading">
+        {mark}
+      </View>
+    );
+  }
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Return to the reading" onPress={onReturn}
+      style={({ pressed }) => [styles.headEnd, pressed && styles.pressed]}>
+      {mark}
+    </Pressable>
   );
 }
 
@@ -415,10 +491,20 @@ const styles = StyleSheet.create({
   buttonPrimary: { backgroundColor: INK.text, width: 52, minWidth: 52, height: 52, borderRadius: 26 },
   chevronTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   collapsed: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
+  // The player's own gap between its rows, carried by the box the rows are
+  // measured in (onOpenHeight).
+  controls: { gap: 6 },
   disabled: { opacity: 0.35 },
   footTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
-  headEnd: { width: 44 },
+  // The box A or M sits in: as wide as the collapse arrow opposite (#70), and as
+  // tall, so M's whole box is its 44-point target.
+  headEnd: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
+  // Zotero-TTS's block, measured out of its player.css: 27 by 26, corners of 4,
+  // the letter at 13 in the system font (#71).
+  mark: { alignItems: 'center', borderRadius: 4, height: 26, justifyContent: 'center', width: 27 },
+  markFollowing: { backgroundColor: INK.readingWash },
+  markLetter: { color: INK.text, fontSize: 13, fontWeight: '500' },
   note: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
   noteAttention: { color: INK.attention },
   player: {
@@ -429,9 +515,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     gap: 6,
     left: 0,
-    paddingBottom: 28,
+    paddingBottom: PLAYER_PADDING_BOTTOM,
     paddingHorizontal: 12,
-    paddingTop: 4,
+    paddingTop: PLAYER_PADDING_TOP,
     position: 'absolute',
     right: 0,
   },

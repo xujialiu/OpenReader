@@ -162,6 +162,23 @@ Moving the page to another part of a document while the reading position stays
 where it is.
 _Avoid_: previewing, peeking, jumping, navigating
 
+**Following**:
+The page moving itself so that the line being spoken stays at the line
+position — a line at a time, or continuously as the words are spoken. Browsing
+interrupts it.
+_Avoid_: auto-scroll, tracking, centring, automatic mode
+
+**Line Position**:
+How far down the visible page the line being spoken is held while following, as
+a share of that page's height. It belongs to the owner rather than to a
+document.
+_Avoid_: anchor, focus point, centre, offset
+
+**Scrolling**:
+How following moves the page: by line, a line at a time, or continuously, as
+the words are spoken. It belongs to the owner rather than to a document.
+_Avoid_: scroll mode, follow mode, scroll style
+
 **Locator**:
 Where a reading position points, in the document's own format: for an EPUB,
 the paragraph its sentence is in. A paragraph, never a sentence.

@@ -34,6 +34,7 @@ import type { ClipCue, PositionCorrection, ReaderClock } from '../playback/reade
 
 import { blockIds, EMPTY_BLOCKS, withSection, type BlockIndex } from './blocks';
 import { countPage, PLAIN_BODY_TEXT_SIZE } from './body-text';
+import { BAKED_LINE_POSITION, BAKED_SCROLLING } from './glide';
 import { correctMessage, speakMessage, utteranceAt } from './cursor';
 import {
   appearanceCss,
@@ -50,11 +51,13 @@ import {
 import {
   BLOCKS_MESSAGE,
   DOCUMENT_MESSAGE,
+  FOLLOWING_STATE_MESSAGE,
   PROBLEM_MESSAGE,
   TAP_MESSAGE,
   SELECTION_MESSAGE,
   type SelectionMessage,
   type CharactersBySize,
+  type FollowingMessage,
   type HighlightMessage,
   type ProblemMessage,
   type ReportedBlock,
@@ -138,6 +141,12 @@ export interface ReaderBridgeOptions {
   /** A highlight the WebView could not draw. Rare, and never a guess: see `ProblemMessage`. */
   onProblem?(problem: ProblemMessage): void;
   /**
+   * Whether the page follows the reading — the player's **A** — or the owner is
+   * browsing, its **M** (#71). Called when it changes, and with `true` whenever
+   * the program installs, which is where it starts.
+   */
+  onFollowing?(following: boolean): void;
+  /**
    * The Document's body text size has just been measured (ADR 0030): keep it, so
    * that the next open passes it back as `bodyTextSize` and is laid out at the
    * owner's size on its first paint. Called at most once per mount, only when
@@ -203,6 +212,12 @@ export interface RevealOptions {
    * part of the document (Browsing, #52).
    */
   reveal?: boolean;
+  /**
+   * A cue the reading moved on to while it plays (#71): the page follows it, but
+   * a page the owner took away stays away unless the sentence begins on the
+   * visible page. Only `onClip` reads it; see `SpeakMessage.recover`.
+   */
+  recover?: boolean;
 }
 
 /**
@@ -272,6 +287,25 @@ export interface ReaderBridge {
    */
   setInset(bottomPx: number): void;
   /**
+   * The player's height when it is open and has nothing to say, in points: its
+   * controls, padding and border, without notes (#71). What the Line Position is
+   * measured above, so that a note coming or going and the player collapsing
+   * move nothing. Travels in the same `InsetMessage` as `setInset`'s number.
+   */
+  setOpenPlayer(openPx: number): void;
+  /**
+   * The owner's **Line Position** (#71, ADR 0050), in percent of the visible
+   * page from its top. Live, as the theme is: a page following the reading when
+   * it arrives is brought to the new position. See `FollowingMessage`.
+   */
+  setLinePosition(percent: number): void;
+  /**
+   * How the page moves to the Line Position (#71, ADR 0050): a line at a time,
+   * or continuously as the words are spoken. Live, and in the same
+   * `FollowingMessage` as the Line Position, which always carries both.
+   */
+  setScrolling(scrolling: FollowingMessage['scrolling']): void;
+  /**
    * The navigation bar over the top of the page, in points (#67): what it covers
    * now, zero while hidden, and its height whether or not it is shown. The first
    * is the centring's, as `setInset`'s is; the second is the space the page keeps
@@ -308,10 +342,30 @@ export interface ReaderBridge {
    * Not a third clock message: a pause stops the position stream, and a WebView
    * still interpolating against `requestAnimationFrame` would run the highlight
    * ahead of silence. The next correction unfreezes it.
+   *
+   * `stop` is the owner pausing: the page stops moving on the same frame (#71).
+   * Without it, a glide already under way — a tapped sentence's, a skip's —
+   * finishes.
    */
-  hold(): void;
+  hold(options?: { stop?: boolean }): void;
   /** Nothing is being read. Both highlights go. */
   clear(): void;
+  /**
+   * M (#71, #53): bring the page back to the reading and follow it again,
+   * without starting it.
+   *
+   * `utterance` is where the reading is, or null when it is nowhere yet. When the
+   * WebView is already showing that sentence it is told to go back to it
+   * (`ReturnMessage`), which keeps a playing Clip's Word Timings and goes to the
+   * spoken word's line. Otherwise the sentence is shown and revealed, as a skip
+   * shows one, which brings the page to it.
+   */
+  returnToReading(utterance: number | null): void;
+  /**
+   * The player has collapsed, and the page only follows: no finger moves it and
+   * none starts Browsing (#71). False when it opens again. See `FollowOnlyMessage`.
+   */
+  setFollowOnly(on: boolean): void;
   /**
    * Move the document to a CFI — epub.js's own dialect, unchanged (ADR 0011), so
    * that a Reading Position stored by this app resolves in Zotero's reader and one
@@ -383,7 +437,7 @@ export interface ReaderBridge {
 function asMessage(event: unknown): WebViewMessage | null {
   if (typeof event !== 'object' || event === null) return null;
   const type = (event as { type?: unknown }).type;
-  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== PROBLEM_MESSAGE && type !== TAP_MESSAGE && type !== SELECTION_MESSAGE) {
+  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== FOLLOWING_STATE_MESSAGE && type !== PROBLEM_MESSAGE && type !== TAP_MESSAGE && type !== SELECTION_MESSAGE) {
     return null;
   }
   return event as WebViewMessage;
@@ -453,6 +507,12 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   const inset = useRef(0);
   const lookupEnabled = useRef(false);
   const selectionCallback = useRef<((selection: SelectionMessage) => void) | null>(null);
+  /** The open player's own height, sent beside the inset and re-sent with it; see `setOpenPlayer`. */
+  const openPlayer = useRef(0);
+  /** The Line Position last asked for, as a share, re-sent at install when it is not the one the program was built with. */
+  const linePosition = useRef(BAKED_LINE_POSITION);
+  /** How the page moves to it, last asked for; sent beside it and re-sent with it. */
+  const scrolling = useRef<FollowingMessage['scrolling']>(BAKED_SCROLLING);
   /** The last bar sent, re-sent for the same reason as `inset` above. */
   const bar = useRef({ coveredPx: 0, reservedPx: 0 });
   /**
@@ -507,6 +567,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       onClip(cue: ClipCue, options?: RevealOptions) {
         const message = speakMessage(cue, utterances.current, ids.current, {
           reveal: latest.current.follow !== false && options?.reveal !== false,
+          recover: latest.current.follow !== false && options?.recover === true,
         });
         cued.current = message;
         // Null means the reading and the document are out of step — an Utterance
@@ -555,7 +616,38 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       const covered = Number.isFinite(bottomPx) && bottomPx > 0 ? bottomPx : 0;
       if (covered === inset.current) return;
       inset.current = covered;
-      send({ kind: 'inset', bottomPx: covered });
+      send({ kind: 'inset', bottomPx: covered, openPx: openPlayer.current });
+    },
+    [send],
+  );
+
+  const setOpenPlayer = useCallback(
+    (openPx: number) => {
+      const open = Number.isFinite(openPx) && openPx > 0 ? openPx : 0;
+      if (open === openPlayer.current) return;
+      openPlayer.current = open;
+      send({ kind: 'inset', bottomPx: inset.current, openPx: open });
+    },
+    [send],
+  );
+
+  const setLinePosition = useCallback(
+    (percent: number) => {
+      if (!Number.isFinite(percent)) return;
+      const share = Math.min(Math.max(percent, 0), 100) / 100;
+      if (share === linePosition.current) return;
+      linePosition.current = share;
+      send({ kind: 'following', linePosition: share, scrolling: scrolling.current });
+    },
+    [send],
+  );
+
+  const setScrolling = useCallback(
+    (way: FollowingMessage['scrolling']) => {
+      if (way !== 'line' && way !== 'continuous') return;
+      if (way === scrolling.current) return;
+      scrolling.current = way;
+      send({ kind: 'following', linePosition: linePosition.current, scrolling: way });
     },
     [send],
   );
@@ -586,14 +678,36 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [send],
   );
 
-  const hold = useCallback(() => {
-    send({ kind: 'hold' });
+  const hold = useCallback((options?: { stop?: boolean }) => {
+    send(options?.stop ? { kind: 'hold', stop: true } : { kind: 'hold' });
   }, [send]);
 
   const clear = useCallback(() => {
     cued.current = null;
     send({ kind: 'clear' });
   }, [send]);
+
+  const returnToReading = useCallback(
+    (utterance: number | null) => {
+      if (utterance === null || cued.current?.utterance === utterance) {
+        send({ kind: 'return' });
+        return;
+      }
+      show(utterance);
+    },
+    [send, show],
+  );
+
+  /** Whether the page only follows, kept so it is sent again when the program installs, as the inset is. */
+  const followOnly = useRef(false);
+  const setFollowOnly = useCallback(
+    (on: boolean) => {
+      if (on === followOnly.current) return;
+      followOnly.current = on;
+      send({ kind: 'followOnly', on });
+    },
+    [send],
+  );
 
   const goTo = useCallback(
     (cfi: string) => {
@@ -640,7 +754,10 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         spine.current = message.spine;
         send({ kind: 'lookup', enabled: lookupEnabled.current });
         // The program has installed, so the two things it may have missed go again.
-        if (inset.current > 0) send({ kind: 'inset', bottomPx: inset.current });
+        if (inset.current > 0 || openPlayer.current > 0) send({ kind: 'inset', bottomPx: inset.current, openPx: openPlayer.current });
+        if (linePosition.current !== BAKED_LINE_POSITION || scrolling.current !== BAKED_SCROLLING) {
+          send({ kind: 'following', linePosition: linePosition.current, scrolling: scrolling.current });
+        }
         if (bar.current.reservedPx > 0) send({ kind: 'bar', ...bar.current });
         if (appearance.current !== installed.current || bodyTextSize.current !== installedBodyTextSize.current) {
           send({ kind: 'appearance', css: appearanceCss(appearance.current, bodyTextSize.current) });
@@ -648,7 +765,15 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         if (scheme.current !== installedScheme.current) {
           send({ kind: 'theme', css: themeCss(scheme.current) });
         }
+        // A new program follows the reading and lets a finger move the page; the
+        // player is told the first, and the program the collapsed player it missed.
+        latest.current.onFollowing?.(true);
+        if (followOnly.current) send({ kind: 'followOnly', on: true });
         latest.current.onDocument?.({ spine: message.spine, hrefs: message.hrefs });
+        return;
+      }
+      if (message.type === FOLLOWING_STATE_MESSAGE) {
+        latest.current.onFollowing?.(message.following);
         return;
       }
       if (message.type === TAP_MESSAGE) {
@@ -728,7 +853,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setBar, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps }),
-    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setBar, setAppearance, setTheme, hold, clear, goTo, goToSection, browse, readerProps],
+    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, readerProps }),
+    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, readerProps],
   );
 }

@@ -4,6 +4,11 @@ As the app speaks, the words light up as they are said and the text moves itself
 that the sentence being spoken sits in the middle of the screen. The owner never
 touches the screen to keep up.
 
+_Since [design 0050](0050-the-page-follows-the-line-being-spoken.md) it is the
+**line** being spoken that is held there, and the page moves up a line at a time,
+smoothly, rather than jumping once a sentence. Where this file says the sentence
+is held in the middle, read the line._
+
 The reader scrolls, continuously, the way a long web page scrolls. It does not turn
 pages.
 

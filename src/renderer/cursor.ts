@@ -245,6 +245,8 @@ export function clampElapsed(elapsedMs: number, durationMs: number): number {
 export interface SpeakOptions {
   /** Bring the spoken text into view. */
   reveal: boolean;
+  /** A Clip the reading moved on to while playing: followed, without ending Browsing unless its first line is on the screen (`SpeakMessage.recover`). */
+  recover?: boolean;
 }
 
 /**
@@ -275,6 +277,7 @@ export function speakMessage(
     words: cue.words === null ? null : wordCues(utterance, blockIds, cue.words),
     durationMs: Math.max(0, cue.duration * 1000),
     reveal: options.reveal,
+    ...(options.recover ? { recover: true } : {}),
   };
 }
 

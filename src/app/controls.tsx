@@ -79,6 +79,12 @@ export const PALETTE = {
   },
 } as const;
 
+/** A `PALETTE` colour at `alpha`, so that a wash of it is that colour and not a second copy of it. */
+function wash(hex: string, alpha: number): string {
+  const rgb = parseInt(hex.slice(1), 16);
+  return `rgba(${(rgb >> 16) & 255},${(rgb >> 8) & 255},${rgb & 255},${alpha})`;
+}
+
 function ink(light: string, dark: string): ColorValue {
   if (Platform.OS !== 'ios') {
     throw new Error(
@@ -154,6 +160,12 @@ export const INK = {
   quiet: ink(QUIET.light, QUIET.dark),
   /** The reading colour, the same amber the highlighter paints with on a light page (`highlighter.ts`); a dark page's highlight is blue (#69). */
   reading: ink(PALETTE.light.reading, PALETTE.dark.reading),
+  /**
+   * The reading colour at a quarter of its strength, the wash under the player's
+   * A (#71): Zotero-TTS draws its A on its accent mixed 24 % into transparent,
+   * and this is the same mix of the accent here.
+   */
+  readingWash: ink(wash(PALETTE.light.reading, 0.24), wash(PALETTE.dark.reading, 0.24)),
   /** Something the owner has to act on: a missing key, a server that did not answer. Not an alarm. */
   attention: ink('#8a2f18', '#f08c6e'),
   /** A settings page, behind its cards (`SETTINGS_SURFACE`). */

@@ -31,8 +31,9 @@ const bridge = vi.hoisted(() => ({
   goToSection: vi.fn<(index: number) => void>(),
   browse: vi.fn<(index: number) => void>(),
   show: vi.fn<(utterance: number, options?: { reveal?: boolean }) => void>(),
-  onClip: vi.fn<(cue: { utterance: number }, options?: { reveal?: boolean }) => void>(),
+  onClip: vi.fn<(cue: { utterance: number }, options?: { reveal?: boolean; recover?: boolean }) => void>(),
   clear: vi.fn<() => void>(),
+  returnToReading: vi.fn<(utterance: number | null) => void>(),
   options: null as null | { onBlocks?(blocks: readonly ReportedBlock[], section: { index: number; href: string; spine: number }): void },
 }));
 
@@ -87,12 +88,17 @@ vi.mock('../../src/renderer', async () => {
         clock: { onClip: bridge.onClip, onPosition() {} },
         setUtterances() {},
         setInset() {},
+        setOpenPlayer() {},
+        setLinePosition() {},
+        setScrolling() {},
         setBar() {},
         setAppearance() {},
         setTheme() {},
         resumeFollowing() {},
         hold() {},
         clear: bridge.clear,
+        returnToReading: bridge.returnToReading,
+        setFollowOnly() {},
         readerProps: {},
       };
     },
@@ -759,6 +765,44 @@ describe('a Contents row while paused only moves the page (#52)', () => {
     await m.press((reading) => reading.pause());
     await m.press(() => engine.deps.clock.onClip(cue(at(FERRY))));
     expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) }), { reveal: false });
+    await m.down();
+  });
+
+  it('reveals only the first cue after Play: the reading moving on recovers, and leaves a browsed page where it is (#71)', async () => {
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report(ALL, 3);
+    await m.press((reading) => reading.play());
+    const engine = engines.built[0];
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY))));
+    expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) }), { reveal: true });
+    // The next Clip, the reading moving on while it plays, and a speed change's
+    // re-cue of it: neither is the owner asking for the reading.
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY) + 1)));
+    expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) + 1 }), { reveal: false, recover: true });
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY) + 1)));
+    expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) + 1 }), { reveal: false, recover: true });
+
+    // Play again after a pause is the owner asking again.
+    await m.press((reading) => reading.pause());
+    await m.press((reading) => reading.play());
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY) + 1)));
+    expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) + 1 }), { reveal: true });
+    await m.down();
+  });
+
+  it('brings the page back without starting anything when M is pressed (#71, #53)', async () => {
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report(ALL, 3);
+    await m.press((reading) => reading.play());
+    await m.press(() => engines.built[0].deps.clock.onClip(cue(at(FERRY))));
+    await m.press((reading) => reading.pause());
+    expect(m.reading.status.playing).toBe(false);
+
+    await m.press((reading) => reading.returnToReading());
+    expect(bridge.returnToReading).toHaveBeenLastCalledWith(at(FERRY));
+    expect(m.reading.status.playing).toBe(false);
     await m.down();
   });
 

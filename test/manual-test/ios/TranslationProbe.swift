@@ -352,9 +352,67 @@ final class TranslationProbe: XCTestCase {
     capture("translation-handle-release-bounded")
   }
 
-  func testCloseCurrentLookupDrawer() throws {
+  func closeLookupButton() -> XCUIElement { app.buttons["Close lookup"].firstMatch }
+
+  /// A fresh query on every pass matters here. The old one-shot assertion could
+  /// pass without a tap when the previous test had already closed the drawer,
+  /// and it could read the same accessibility snapshot immediately after the
+  /// tap. Record the elapsed time until a new query says the drawer is gone.
+  func waitForCloseLookupToDisappear(_ timeout: TimeInterval) -> TimeInterval? {
+    let started = Date()
+    while Date().timeIntervalSince(started) < timeout {
+      if !closeLookupButton().exists { return Date().timeIntervalSince(started) }
+      Thread.sleep(forTimeInterval: 0.05)
+    }
+    return nil
+  }
+
+  /// Leave a real selection drawer open before the close measurement. If the
+  /// preceding test left the reader behind it, keep that state; otherwise cold
+  /// open the fixture and let its WebView paint before the long press.
+  func prepareLookupDrawerForCloseMeasurement() throws {
     app.activate()
-    if app.buttons["Close lookup"].exists { app.buttons["Close lookup"].tap() }
-    XCTAssertFalse(app.buttons["Close lookup"].exists)
+    if closeLookupButton().exists { return }
+    if !app.buttons["Choose a Voice"].exists && !app.buttons["Play"].exists && !app.buttons["Pause"].exists {
+      app.terminate(); app.launch()
+      openBook()
+    }
+    let loading = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "label CONTAINS 'Laying the document out'"))
+      .firstMatch
+    let deadline = Date().addingTimeInterval(20)
+    while loading.exists && Date() < deadline { Thread.sleep(forTimeInterval: 0.5) }
+    XCTAssertFalse(loading.exists, "Reader layout did not finish before close measurement")
+    // The placeholder can be gone one frame before WebKit has composited text.
+    // This is deliberately longer than the old close test's zero-time setup.
+    Thread.sleep(forTimeInterval: 3.0)
+    longPressAnUnhighlightedLine()
+    XCTAssertTrue(closeLookupButton().exists, "Close measurement did not open a drawer")
+  }
+
+  /// Three real close/reopen cycles. The precondition makes a no-op impossible;
+  /// the bounded wait records whether close is immediate, delayed, or absent.
+  func testCloseCurrentLookupDrawer() throws {
+    try prepareLookupDrawerForCloseMeasurement()
+    for cycle in 1...3 {
+      let close = closeLookupButton()
+      XCTAssertTrue(close.waitForExistence(timeout: 5), "Close lookup drawer was not open for cycle \(cycle)")
+      print("LOOKUP_CLOSE cycle=\(cycle) before frame=\(close.frame) hittable=\(close.isHittable)")
+      capture("lookup-close-\(cycle)-before")
+
+      let tapStarted = Date()
+      close.tap()
+      let elapsed = waitForCloseLookupToDisappear(3.0)
+      let measured = elapsed.map { String(format: "%.3f", $0) } ?? "timeout"
+      print("LOOKUP_CLOSE cycle=\(cycle) disappearedAfter=\(measured) tapElapsed=\(String(format: "%.3f", Date().timeIntervalSince(tapStarted)))")
+      capture("lookup-close-\(cycle)-after")
+      XCTAssertNotNil(elapsed, "Close lookup remained visible for 3 seconds in cycle \(cycle)")
+
+      if cycle < 3 {
+        Thread.sleep(forTimeInterval: 0.4)
+        longPressAnUnhighlightedLine()
+        XCTAssertTrue(closeLookupButton().waitForExistence(timeout: 5), "Reopen did not produce a drawer for cycle \(cycle + 1)")
+      }
+    }
   }
 }

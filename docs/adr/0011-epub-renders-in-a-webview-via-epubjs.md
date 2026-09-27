@@ -14,6 +14,13 @@ The product argument is in `docs/design/0011-the-page-follows-the-voice.md`.
 
 ## The reader scrolls continuously, centred on the Utterance being spoken
 
+_Superseded in part by [ADR 0050](0050-the-page-follows-the-line-and-glides.md):
+the page now holds the **line** the spoken word begins on, at the Line Position,
+and glides to it in 250 ms whenever the word moves onto another line. Only a Clip
+without Word Timings is still held by its whole Utterance. What follows about the
+layout, the memory and the bridge stands; "once per Utterance" and "centred on
+the Utterance" describe how it was before._
+
 The reader is mounted with `flow: 'scrolled-continuous'`, which selects epub.js's
 `continuous` manager, and the page is scrolled so that the Utterance being spoken
 sits **centred** rather than merely somewhere on screen. Paginated layout — the
@@ -148,7 +155,8 @@ left to read a position off. So the reader lands at the top of the section they 
 in rather than where they were in it. That is the same trade the contents list makes
 (ADR 0020: "you land slightly early rather than somewhere unpredictable") and it is
 strictly better than the blank page it replaces. When a reading is under way it
-self-corrects within one sentence, because the next Clip cue centres the Utterance.
+self-corrects within one sentence, because the next Clip cue places the Utterance
+(since ADR 0050, the next line does).
 
 It is **silent on success**, deliberately. `ProblemMessage` means "a highlight could
 not be drawn" and widening it to also mean "the page was rebuilt" is how a protocol

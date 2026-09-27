@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, SENTENCES_AT_ONCE, selectVoice } from '../../src/app/settings';
+import { DEFAULT_SETTINGS, LINE_POSITIONS, SCROLLING_LABELS, SCROLLINGS, SENTENCES_AT_ONCE, selectVoice } from '../../src/app/settings';
 import { parseSettings, readSettings, writeSettings } from '../../src/app/settings-storage';
 import { saveProviderEdit, flushProviderEdits } from '../../src/app/provider-edits';
 const disk = vi.hoisted(() => new Map<string, string>());
@@ -33,6 +33,39 @@ describe('local settings persistence', () => {
     writeSettings(settings);
     expect(readSettings().pauses).toEqual({ sentenceMs: 300, paragraphMs: 1500 });
     expect(parseSettings({ version: 1, settings: {} }).pauses).toEqual({ sentenceMs: 0, paragraphMs: 200 });
+  });
+  it('offers the Line Position from 20 to 80 % a tenth at a time, and starts in the middle (#71)', () => {
+    expect(LINE_POSITIONS).toEqual([20, 30, 40, 50, 60, 70, 80]);
+    expect(DEFAULT_SETTINGS.following.linePosition).toBe(50);
+  });
+  it('keeps the Line Position across a reload, and reads a file without one as the middle (#71)', () => {
+    writeSettings({ ...DEFAULT_SETTINGS, following: { ...DEFAULT_SETTINGS.following, linePosition: 30 } });
+    expect(readSettings().following.linePosition).toBe(30);
+    expect(parseSettings({ version: 1, settings: {} }).following.linePosition).toBe(50);
+  });
+  it('reads a Line Position General does not offer as the middle rather than keeping it (#71)', () => {
+    // A value the menu cannot show as chosen would leave the row saying nothing;
+    // a share written as 0.3, a string and one past the ends are none of the offered ones.
+    for (const linePosition of [0.3, '30', 10, 90, 55, null]) {
+      expect(parseSettings({ version: 1, settings: { following: { linePosition } } }).following.linePosition).toBe(50);
+    }
+  });
+  it('offers By line and Continuous, in that order, and starts By line (#71)', () => {
+    expect(SCROLLINGS).toEqual(['line', 'continuous']);
+    expect(SCROLLINGS.map((way) => SCROLLING_LABELS[way])).toEqual(['By line', 'Continuous']);
+    expect(DEFAULT_SETTINGS.following).toEqual({ scrolling: 'line', linePosition: 50 });
+  });
+  it('keeps Continuous across a reload beside the Line Position, and reads a file without it as By line (#71)', () => {
+    writeSettings({ ...DEFAULT_SETTINGS, following: { scrolling: 'continuous', linePosition: 40 } });
+    expect(readSettings().following).toEqual({ scrolling: 'continuous', linePosition: 40 });
+    // A file written by batch 2, with a Line Position and no way of scrolling.
+    expect(parseSettings({ version: 1, settings: { following: { linePosition: 30 } } }).following).toEqual({ scrolling: 'line', linePosition: 30 });
+  });
+  it('reads a way of scrolling General does not offer as By line rather than keeping it (#71)', () => {
+    // Nothing is converted, as nothing else here is: the app is unreleased.
+    for (const scrolling of ['Continuous', 'smooth', 'byLine', true, 1, null]) {
+      expect(parseSettings({ version: 1, settings: { following: { scrolling, linePosition: 60 } } }).following).toEqual({ scrolling: 'line', linePosition: 60 });
+    }
   });
   it('reads a pause General does not offer as that pause’s default rather than keeping it', () => {
     // A value the menu cannot show as chosen would leave the row saying nothing.

@@ -505,6 +505,18 @@ export function ReadingView({
   useEffect(() => { onChrome(chrome); }, [chrome, onChrome]);
   const setBar = reading.bridge.setBar;
   useEffect(() => { setBar(chrome ? barHeight : 0, barHeight); }, [chrome, barHeight, setBar]);
+  /**
+   * The player down to the Reading Button (#67), which is exactly when it draws
+   * no note and the bar is hidden (`chrome` above), and then the page only
+   * follows (#71, ADR 0050): the collapsed player has no M to bring a browsed
+   * page back with, so no finger may take it away, and one already taken comes
+   * back as it collapses. The Reading Button only opens the player, which ends
+   * it.
+   */
+  const followOnly = !chrome;
+  useEffect(() => {
+    reading.bridge.setFollowOnly(followOnly);
+  }, [reading.bridge, followOnly]);
 
   /**
    * The Voice in use as its own Provider describes it — the name it publishes and
@@ -646,7 +658,10 @@ export function ReadingView({
         onRate={onRate}
         onContents={() => setContentsOpen(true)}
         onVoices={() => setVoicesOpen(true)}
+        following={status.following}
+        onReturn={reading.returnToReading}
         onHeight={reading.bridge.setInset}
+        onOpenHeight={reading.bridge.setOpenPlayer}
       /> : null}
 
       {lookup.selection && size ? <LookupDrawer lookup={lookup} height={size.height} service={settings.lookup.service}

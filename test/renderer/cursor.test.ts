@@ -268,6 +268,12 @@ describe('speakMessage', () => {
     ]);
   });
 
+  it('says a Clip the reading moved on to only when asked, and otherwise nothing (#71)', () => {
+    expect(speakMessage(cue(), segment(blocks), ids(1), { reveal: false, recover: true })).toMatchObject({ reveal: false, recover: true });
+    expect(speakMessage(cue(), segment(blocks), ids(1), { reveal: true })).not.toHaveProperty('recover');
+    expect(speakMessage(cue(), segment(blocks), ids(1), { reveal: false, recover: false })).not.toHaveProperty('recover');
+  });
+
   it('carries no position, because a Clip that has just started is at zero', () => {
     const message = speakMessage(cue(), segment(blocks), ids(1), { reveal: false });
     // `ClipCue` carries none either, and for the same reason: it is sent from the

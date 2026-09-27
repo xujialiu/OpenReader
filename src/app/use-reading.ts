@@ -171,6 +171,12 @@ export interface ReadingStatus {
   resume: string | null;
   /** A lost or changed resume needs attention even when routine status is hidden. */
   resumeNeedsAttention: boolean;
+  /**
+   * Whether the page follows the reading — the player's **A** — or the owner is
+   * browsing — its **M** (#71). The renderer's answer, reported only when it
+   * changes: a drag, a Contents row while paused, M, a revealed highlight.
+   */
+  following: boolean;
 }
 
 const NOTHING_YET: ReadingStatus = {
@@ -190,6 +196,7 @@ const NOTHING_YET: ReadingStatus = {
   note: null,
   resume: null,
   resumeNeedsAttention: false,
+  following: true,
 };
 
 export interface Reading {
@@ -221,6 +228,12 @@ export interface Reading {
   seekTo(utterance: number): void;
   /** One of the four skips, computed by `playback/navigation.ts` from where the reading is. */
   skip(target: SkipTarget): void;
+  /**
+   * M on the player (#71, #53): the page goes back to the reading's sentence and
+   * follows it again. It moves nothing else and starts nothing — a paused
+   * reading stays paused, a playing one keeps its words.
+   */
+  returnToReading(): void;
   /**
    * A contents row: move the page to a spine item, and — while playing, or in a
    * book with no Reading Position yet — read from its first Utterance.
@@ -305,6 +318,14 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
 
   const engineRef = useRef<PlaybackEngine | null>(null);
   const playIntent = useRef(false);
+  /**
+   * Play has been pressed and its first cue has not yet gone to the renderer
+   * (#71). That cue is the owner asking for the reading, and it is revealed: it
+   * ends Browsing, wherever the page is. Every cue after it while the reading
+   * plays on is the reading moving on, which follows but leaves a page the
+   * owner took away where they put it (`RevealOptions.recover`).
+   */
+  const revealCue = useRef(false);
   const switchRequest = useRef(0);
   const pendingChoice = useRef<{ provider: ProviderId; voice: string } | null>(null);
   const retainedIdentity = useRef<string | null>(null);
@@ -528,8 +549,12 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       onClip(cue) {
         // The page goes to a cue only while the owner is listening. A cue while
         // paused is a paused seek's Clip arriving, or a speed change re-cueing the
-        // Clip it re-scales, and the owner may be browsing by then (#52).
-        bridgeRef.current?.clock.onClip(cue, { reveal: playIntent.current });
+        // Clip it re-scales, and the owner may be browsing by then (#52). Playing,
+        // the first cue after Play is revealed and every later one recovers
+        // (#71): the reading moving on does not take back a page the owner took.
+        const asked = playIntent.current && revealCue.current;
+        if (playIntent.current) revealCue.current = false;
+        bridgeRef.current?.clock.onClip(cue, !playIntent.current ? { reveal: false } : asked ? { reveal: true } : { reveal: false, recover: true });
         if (!playIntent.current) bridgeRef.current?.hold();
         atRef.current = cue.utterance;
         // Speech has moved on from the resumed sentence; the next place is new.
@@ -1045,6 +1070,20 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     setStatus((was) => ({ ...was, note: `The highlight could not be drawn: ${problem.detail}` }));
   }, []);
 
+  /** A or M (#71). Rare — a drag, a Contents row, M — so it can be state. */
+  const handleFollowing = useCallback((following: boolean) => {
+    setStatus((was) => (was.following === following ? was : { ...was, following }));
+  }, []);
+
+  /**
+   * M (#71, #53): the page back to the reading, and nothing else. `atRef` is the
+   * sentence the reading is on — moved at once by a skip or a tap, so a return
+   * straight after one goes where the highlight already is.
+   */
+  const returnToReading = useCallback(() => {
+    bridgeRef.current?.returnToReading(atRef.current);
+  }, []);
+
   /**
    * The shape of the document, once. The hrefs are what the contents list is built
    * from and without them every row of it is unreachable (ADR 0020).
@@ -1086,6 +1125,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // only when there was one, so a tap on blank space arrives as no call at all.
     onTap: pointAt,
     onProblem: handleProblem,
+    // A or M (#71): the renderer's answer, only when it changes.
+    onFollowing: handleFollowing,
   });
 
   useEffect(() => {
@@ -1127,7 +1168,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       pendingChoice.current = null;
       engineRef.current?.cancelVoiceSwitch();
       engineRef.current?.pause();
-      bridgeRef.current?.hold();
+      bridgeRef.current?.hold({ stop: true });
     }
     setStatus((was) => ({ ...was, playing: ended ? false : was.playing,
       buffering: ended ? false : was.buffering, pendingVoice: ended ? null : was.pendingVoice, note: sentence }));
@@ -1222,6 +1263,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // book with no place yet included (#52).
     unreadRef.current = false;
     playIntent.current = true;
+    revealCue.current = true;
     setStatus((was) => ({ ...was, playing: true, buffering: true, note: null }));
     /**
      * Play, pressed with nothing to read.
@@ -1322,6 +1364,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
 
   const pause = useCallback(() => {
     playIntent.current = false;
+    revealCue.current = false;
     seekingRef.current = false;
     // A wait for a place ends here and the place stays pending, so it lands on
     // the paused book when its section reports, as any place taken while paused does.
@@ -1329,8 +1372,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     engineRef.current?.pause();
     // Not a third clock message: a pause stops the position stream, and a WebView
     // still interpolating against `requestAnimationFrame` would run the highlight
-    // ahead of silence (`reader-bridge.ts`).
-    bridgeRef.current?.hold();
+    // ahead of silence (`reader-bridge.ts`). And the page stops with the voice (#71).
+    bridgeRef.current?.hold({ stop: true });
     setStatus((was) => ({ ...was, playing: false, buffering: false, seeking: false }));
   }, []);
 
@@ -1425,6 +1468,22 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   useEffect(() => {
     bridgeRef.current?.setTheme(scheme);
   }, [scheme]);
+
+  /**
+   * The Line Position, live (#71, ADR 0050): the fourth setting that reaches an
+   * open document without rebuilding anything. A page following the reading is
+   * brought to the new position when it arrives. It fires on mount as well, into
+   * a program that is very likely not installed yet, and `reader-bridge.ts`
+   * re-sends it at install when it is not the middle the program is built with.
+   */
+  useEffect(() => {
+    bridgeRef.current?.setLinePosition(settings.following.linePosition);
+  }, [settings.following.linePosition]);
+
+  /** And how the page moves to it, the same way (#71): re-sent at install when it is not By line. */
+  useEffect(() => {
+    bridgeRef.current?.setScrolling(settings.following.scrolling);
+  }, [settings.following.scrolling]);
 
   /**
    * A different Provider, Voice or address is a different engine — and so is the
@@ -1560,5 +1619,5 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     return readingPlaceAt(createLocator('epub', canonicalCfi(block.cfi)), block.text, span.start, span.end);
   }, []);
 
-  return { bridge, status, opened, play, pause, chooseVoice, seekTo: pointAt, skip, goToSection, readingPosition, resumeAt };
+  return { bridge, status, opened, play, pause, chooseVoice, seekTo: pointAt, skip, returnToReading, goToSection, readingPosition, resumeAt };
 }

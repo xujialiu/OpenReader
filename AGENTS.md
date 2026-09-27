@@ -181,9 +181,21 @@ one day — each time because reality moved and the file that described it did
 not. Every one was fixed while the context was still in hand; none was left for
 a later sweep.
 
+# Asking the owner
+
+Put each decision that is the owner's — a choice in a grilling round, a batch's acceptance, a finding that changes the plan — to them as a question they answer by choosing, through the harness's question tool (`AskUserQuestion` in Claude Code), with the recommended option first. The reasoning goes in the reply above the question. A custom answer is the decision it states, and it often differs from every option offered.
+
 # Waiting for delegated agents
 
 Until a delegated agent returns, the main agent must wait patiently for its completion notification or use a long blocking wait. Do not repeatedly check agent status, turn short wait timeouts into a polling loop, or send repeated waiting-only updates. An ordinary timeout is not a reason to inspect status or interrupt the agent; continue waiting for its result. Resume dependent work only after the result arrives or the owner changes the task.
+
+# Running delegated work in parallel
+
+A feature built in batches is accepted by the owner one batch at a time. When the owner asks for speed, run every independent piece at once and have the owner accept them together:
+
+- **Implementers**: each works in a git worktree of its own. Claude Code's `isolation: "worktree"` cuts that worktree from `main`, not from the current branch, so the agent first resets it to the commit it builds on and symlinks the main worktree's `node_modules`. It writes code and unit tests, commits on its branch, and reports the SHA. The main agent merges the branches, runs the checks, and hands the merged tree to one tester.
+- **Simulators**: they bound the parallelism. The Mac has 16 GB, and a booted iOS simulator with the app costs about 4 GB. Read `memory_pressure` before booting another, and use only simulators this session created. An implementer without memory for one leaves device work to the tester.
+- **Work without a simulator**: reviews, and docs on files no one else is editing, run beside the tester. Agents sharing a worktree edit disjoint files and commit only their own paths.
 
 # Testing on the device
 
@@ -207,6 +219,10 @@ the change itself, seen in the running app, proves it is the latest.
 After finishing app-code changes and local checks, the implementing agent must hand the final working tree to `ios-tester`. Its shared workflow is [.agents/ios-tester.md](.agents/ios-tester.md); `.codex/agents/ios-tester.toml` and `.claude/agents/ios-tester.md` reference that one source and define their respective model settings. Use the declared model and maximum effort; report an unavailable model rather than silently substituting another.
 
 Give the tester the issue/specification, changed interactions, verification already performed, simulator target and remaining risks. Keep app code stable during the run and follow the delegated-agent waiting rule above; do not duplicate its simulator work. After a failure, fix the reported defect and hand the updated tree back for verification. Completion requires the tester's result and the latest-app delivery below; the tester itself does not recursively delegate this step.
+
+Accept a tester's verdict only after checking it against its raw logs:
+- Check every XCTest run's `test.log` line `Executed … with N failures`, the retried runs included, and the raw lines behind each timing.
+- A failure the tester puts down to the test's own gesture or timing stays open until a deterministic check shows where it comes from, such as the app's state read through the harness, or repeated runs with the gesture varied. On #71, two failures called flaky were app bugs.
 
 Before running or writing device/manual tests, read
 [`test/manual-test/README.md`](test/manual-test/README.md) and reuse its scripts.

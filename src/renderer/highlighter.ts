@@ -34,13 +34,28 @@
  *   a correct `Range` built in a dead document, painting nothing, and every step
  *   looking right from the inside.
  * - **The page following the voice.** The reader is mounted with
- *   `flow: 'scrolled-continuous'` (ADR 0011), and when a Clip starts the document
- *   is scrolled so the Utterance being spoken is **centred**. It is measured from
- *   the `Range`s that were just painted and the scroll container's own box, and it
- *   runs once per Utterance on the Clip cue the bridge already sends — no message
- *   of its own, and nothing at the `requestAnimationFrame` rate (ADR 0005).
- *   Centred in what can be *seen*: ADR 0020's player floats over the bottom of
- *   that container and tells this file how much it covers.
+ *   `flow: 'scrolled-continuous'` (ADR 0011), and the page holds the **line the
+ *   spoken word is on** at the Line Position, the middle of what can be seen
+ *   (ADR 0050). By line, the default: when the word moves onto another line the
+ *   page glides that line there, in 250 ms, easing out; a sentence that begins
+ *   on the line being read moves nothing. Continuous, the owner's other choice:
+ *   the page moves all the while, carrying the line past the Line Position by how
+ *   far along it the word is, so the next line arrives as the voice does. A Clip
+ *   without Word Timings holds its whole Utterance there instead, in either, as
+ *   every Utterance was held before. It is measured from the
+ *   `Range`s that were just painted and the scroll container's own box, and it
+ *   runs in here, on the Clip cue and on the words the loop already draws — no
+ *   message of its own, and nothing across the bridge per word (ADR 0005).
+ *   What can be *seen*: ADR 0020's player floats over the bottom of that
+ *   container and tells this file how much it covers.
+ * - **Whether the page is following, and the way back** (#71, ADR 0050). A
+ *   finger that drags the page, or a Contents row while paused, is Browsing,
+ *   and the page stays where it was put across sentences. It comes back when
+ *   the owner asks — a revealed highlight, or M (the 'return' message) — when
+ *   the player collapses ('followOnly', which also stops a finger scrolling the
+ *   page), or by itself at a sentence that begins, while playing, with its first
+ *   line on the visible page. Whether it is following crosses to the app only
+ *   when it changes, for the player's A or M.
  * - **Where a tap landed.** The only thing here that starts on the page rather
  *   than arriving from the app: a tap hit-tests to a text node, the enclosing
  *   Block's id and the offset within it cross the bridge, and the app turns that
@@ -61,7 +76,7 @@
  *   arrives as finished CSS and goes into the same stylesheet as the highlight
  *   rules, because one `<style>` element is enough and a second would be a second
  *   thing to keep installed. A change reflows every line in the book, so the
- *   Utterance being spoken is brought back to the middle afterwards — which is
+ *   line being spoken is brought back to the Line Position afterwards — which is
  *   the opposite of what the `inset` message does, and the difference is that the
  *   player collapsing moves not one character while a font change moves all of
  *   them.
@@ -73,11 +88,19 @@
  * once per document, not once per word, and neither changes any text — an
  * Appearance change rewrites the element's contents and renumbers nothing, so
  * no Block's text, offset, span or CFI moves.
+ *
+ * One more is not its own but epub.js's, asked for: while the player is
+ * collapsed the page only follows (#71), and `lockPage` has epub.js's Stage set
+ * the scroll container's inline `overflow` to `hidden`, then put back the value
+ * it had. That stops a finger scrolling the page and leaves script scrolling it.
+ * It happens when the player collapses or opens, never per word, and touches no
+ * section document.
  */
 
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
+import { BAKED_LINE_POSITION, BAKED_SCROLLING, GLIDE_SOURCE } from './glide';
 import type { HighlightMessage } from './messages';
-import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE, SELECTION_MESSAGE } from './messages';
+import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE, SELECTION_MESSAGE } from './messages';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
 export const UTTERANCE_HIGHLIGHT = 'openreader-utterance';
@@ -497,6 +520,7 @@ export function highlighterSource(
     'var DOCUMENT = ' + JSON.stringify(DOCUMENT_MESSAGE) + ';\n' +
     'var TAP = ' + JSON.stringify(TAP_MESSAGE) + ';\n' +
     'var SELECTION = ' + JSON.stringify(SELECTION_MESSAGE) + ';\n' +
+    'var FOLLOWING = ' + JSON.stringify(FOLLOWING_STATE_MESSAGE) + ';\n' +
     'var PROBLEM = ' + JSON.stringify(PROBLEM_MESSAGE) + ';\n' +
     'var CSS_TEXT = ' + JSON.stringify(highlightCss(styles)) + ';\n' +
     /* The one that changes while the document is open, which is why it is a `var`
@@ -519,6 +543,16 @@ export function highlighterSource(
        paint rather than flashing white until the message lands. */
     'var THEME = ' + JSON.stringify(themeCss(scheme)) + ';\n' +
     'var SETTLE_FRAMES = 60;\n' +
+    /* Where the line being spoken is held while the page follows, as a share of
+       the visible page's height from its top: the Line Position (CONTEXT.md,
+       ADR 0050). The middle until the 'following' message says otherwise. */
+    'var LINE_POSITION = ' + BAKED_LINE_POSITION + ';\n' +
+    /* And how the page moves to keep it there: 'line', a line at a time, or
+       'continuous' (#71). By line until the 'following' message says otherwise. */
+    'var SCROLLING = ' + JSON.stringify(BAKED_SCROLLING) + ';\n' +
+    /* How the page moves to it: glideLeft, sameLine, glides, lineLead and
+       driftVelocity, from glide.ts, where the tests run the same text. */
+    GLIDE_SOURCE +
     'var STYLE_ID = "openreader-highlight";\n' +
     /* The mark a Document's own centred and right-aligned lines get, and the
        computed values that earn it (ADR 0034). APPEARANCE excludes by the same
@@ -595,8 +629,14 @@ ${constants}
   var frame = 0;
   /* How much of the bottom of the scroll container the player is covering, in CSS
      pixels, from the 'inset' message. Zero until it says otherwise, which is the
-     geometry that was true before ADR 0020's player existed. See centre(). */
+     geometry that was true before ADR 0020's player existed. See visibleOf(). */
   var covered = 0;
+  /* The open player's own height, without the notes it shows (the 'inset'
+     message's openPx, #71): what the line position is measured above, so that a
+     note and the player collapsing move nothing. Zero until the open player has
+     been measured, and \`covered\` stands in. See lineAt(). */
+  var openPlayer = 0;
+
   /* The navigation bar over the top of the scroll container, from the 'bar'
      message (#67, ADR 0048): what it covers now, zero while it is hidden, and its
      height whether or not it is shown. The first is the centring's, the way
@@ -608,17 +648,23 @@ ${constants}
      resize recovery has to aim at; see the resize handler. */
   var onScreen = null;
   /* The owner has moved the page away from the reading, and it stays where they
-     put it: Browsing (CONTEXT.md, #52). Set by a Contents row while the reading
-     is paused (the 'browse' message) and by a finger dragging the page; cleared
-     only by a highlight that is revealed, which is Play's cue, a tapped sentence,
-     a skip or a place from another device.
+     put it: Browsing (CONTEXT.md, #52), the player's M (#71). Set by a Contents
+     row while the reading is paused (the 'browse' message) and by a finger
+     dragging the page. Cleared by a highlight that is revealed — Play's first
+     cue, a tapped sentence, a skip or a place from another device — by M (the
+     'return' message), by the player collapsing ('followOnly'), and by itself
+     at a sentence that begins, while the reading plays, with its first line on
+     the visible page ('speak' with \`recover\`): Zotero-TTS's rule, ADR 0050.
 
-     While it is set nothing brings the reading back by itself: not the reading's
-     own section arriving, and not an Appearance change. Measured on 2026-09-23 at
-     23:30 before it existed: a display of the section after the reading's
-     re-rendered the reading's section as its neighbour, attach() centred the
-     paused sentence as it arrived (a scroll of -7,424 px, from centreOnce), and
-     epub.js then trimmed away the section the owner had asked for. */
+     Otherwise nothing brings the reading back: not the next sentence, not the
+     reading's own section arriving, and not an Appearance change. Measured on
+     2026-09-23 at 23:30 before it existed: a display of the section after the
+     reading's re-rendered the reading's section as its neighbour, attach()
+     centred the paused sentence as it arrived (a scroll of -7,424 px, from
+     centreOnce), and epub.js then trimmed away the section the owner had asked
+     for.
+
+     Written only through setBrowsing(), which tells the player when it changes. */
   var browsing = false;
   var lookupEnabled = false;
   var lookupHeld = false;
@@ -639,7 +685,8 @@ ${constants}
     if (lookupHeld) return;
     beforeLookupBrowsing = browsing;
     lookupHeld = true;
-    browsing = true;
+    setBrowsing(true);
+    halt();
   }
   function emitSelection(doc, selecting) {
     if (!lookupEnabled) return;
@@ -676,7 +723,7 @@ ${constants}
     clearTimeout(selectionTimer);
     if (!lookupHeld) return;
     lookupHeld = false;
-    browsing = beforeLookupBrowsing;
+    setBrowsing(beforeLookupBrowsing);
     lookupKeepBrowsing = beforeLookupBrowsing;
     if (selectionDoc && selectionDoc.getSelection) selectionDoc.getSelection().removeAllRanges();
     selectionDoc = null;
@@ -684,13 +731,41 @@ ${constants}
     selectionExpanded = false;
     suppressTapUntil = Date.now() + 400;
     if (resumeFollow && !browsing && state) {
-      state.centred = new WeakSet();
+      state.placed = new WeakSet();
       follow(showUtterance());
     }
   }
-  /* The touch that may be dragging the page, and where it first moved. */
+  /* Whether the player has last been told the page follows the reading: what
+     setBrowsing() compares against, so that the message crosses only on a
+     change. The program starts following, and so does the player. */
+  var announced = true;
+  /* The player is collapsed and the page only follows (#71): no finger moves it
+     and none starts Browsing. See the 'followOnly' message. */
+  var followOnly = false;
+  /* The scroll container's overflow as epub.js had set it before the page was
+     locked, to be given back when it is unlocked, or null while it is not
+     locked; see lockPage(). */
+  var unlockedOverflow = null;
+  /* The line the page last brought to the line position (ADR 0050), as lineOf()
+     describes it, or null. A word on another line is what moves the page. */
+  var followed = null;
+  /* The glide under way, or null: what it aims at, how far it had to go and
+     when it began. See bring(). */
+  var glide = null;
+  var glideFrame = 0;
+  /* Continuous (#71): what the page is drifting towards — a line, and how far
+     past the line position the spoken word's place along it carries that line
+     — with the page's speed, the fraction of a pixel it has yet to move, and the
+     last frame. Null in By line, and before the first word. See drift(). */
+  var drifting = null;
+  var driftFrame = 0;
+  /* One frame at 60 Hz, which is what a glide's first frame counts as. */
+  var FRAME_MS = 1000 / 60;
+  /* The touch that may be dragging the page, where it first moved, and where
+     the page was scrolled to then. */
   var touchId = null;
   var touchY = null;
+  var touchTop = null;
   /* Further than a tap's jitter: a finger that moves this far is not tapping. */
   var DRAG_PX = 10;
 
@@ -1014,17 +1089,84 @@ ${constants}
      revealed, which clears it again. Heard in each section document, where
      almost every touch lands, and in the scroll container for the margins
      between them; a touch stays in the document it came down in, so its
-     coordinates never change hands. */
+     coordinates never change hands.
+
+     **Any** move of a finger on the page also stops a glide where the page is,
+     as a finger stops a scroll on the phone (ADR 0050), whether or not it goes
+     on to be a drag. That alone does not browse: a finger that lifts without
+     dragging leaves the page following, and the next line brings it back to the
+     line position. It is heard here, on the first move, and not on
+     \`touchstart\`, for the rule above; what that costs is a finger held
+     perfectly still, under which the rest of one glide — at most 250 ms — still
+     plays out. */
   function dragged(event) {
     if (lookupHeld) return;
+    /* A page that only follows (the player collapsed, #71) cannot be taken by a
+       finger at all, so a finger moving on it neither stops a glide nor browses:
+       lockPage() has already made its scroll the program's alone. */
+    if (followOnly) return;
     var touch = event.touches && event.touches.length ? event.touches[0] : null;
     if (!touch) return;
+    halt();
+    var stage = scroller();
+    var top = stage ? stage.scrollTop : 0;
     if (touch.identifier !== touchId) {
       touchId = touch.identifier;
       touchY = touch.clientY;
+      touchTop = top;
       return;
     }
-    if (Math.abs(touch.clientY - touchY) > DRAG_PX) browsing = true;
+    /* How far the finger has travelled on the screen. In a section document
+       \`clientY\` is the document's own, and the document scrolls with the finger:
+       once the phone takes the drag for a scroll, the finger and the text under
+       it move together and \`clientY\` stands still. Measured on 2026-09-26,
+       ten real drags of 175 pt: in six, \`clientY\` ended 8 to 11 px from where
+       it first moved while the page scrolled 160 to 163 px under it, so whether
+       a drag was Browsing turned on a pixel of the phone's scroll slop (#71).
+       The page's own scroll is added back. In the scroll container, the margins, \`clientY\` is the
+       screen's and has none in it. */
+    var scrolled = event.currentTarget === stage ? 0 : top - touchTop;
+    if (Math.abs(touch.clientY - touchY - scrolled) > DRAG_PX) setBrowsing(true);
+  }
+
+  /* Browsing starts or ends, and the player's A or M is told — once, when it
+     changes, never per word (#71). The only place \`browsing\` is written. */
+  function setBrowsing(value) {
+    browsing = !!value;
+    var following = !browsing;
+    if (following === announced) return;
+    announced = following;
+    post({ type: FOLLOWING, following: following });
+  }
+
+  /* Whether the page can be scrolled by a finger: not while it only follows.
+
+     By epub.js's own switch, its Stage's \`overflow()\`, which is how the
+     library itself sets this container's overflow — \`overflow-y: scroll\` when
+     it builds a scrolled Stage, and again whenever its flow changes (read out of
+     the bundled epub.js). \`hidden\` makes the container one a finger cannot
+     scroll and the program still can: \`scrollBy\` and \`scrollTop\` move it and
+     fire its scroll events, which is what epub.js appends and trims on, so the
+     glides, the displays and the sections the reading walks into all go on.
+     Taps are clicks, and a click does not care. The Stage remembers what it was
+     given, so anything of epub.js's that set it again would set it to the same.
+
+     Not a non-passive \`touchmove\` calling preventDefault: that puts this
+     program in the way of every scroll the phone makes, and this file listens
+     passively for exactly that reason. Not a style or a class of this
+     program's own: the only DOM this program writes is the stylesheet a
+     highlight needs and the alignment mark (ADR 0005, ADR 0034). */
+  function lockPage(on) {
+    var stage = rendition.manager ? rendition.manager.stage : null;
+    if (!stage || typeof stage.overflow !== 'function') return;
+    if (on) {
+      if (unlockedOverflow === null) unlockedOverflow = (stage.settings && stage.settings.overflow) || 'scroll';
+      stage.overflow('hidden');
+      return;
+    }
+    if (unlockedOverflow === null) return;
+    stage.overflow(unlockedOverflow);
+    unlockedOverflow = null;
   }
 
   /* ---- what a document holds, resolved once per document ---- */
@@ -1044,7 +1186,8 @@ ${constants}
     contents.document.addEventListener('touchstart', selectionStarted, { passive: true });
     contents.document.addEventListener('touchend', selectionEnded, { passive: true });
     contents.document.addEventListener('touchcancel', selectionEnded, { passive: true });
-    /* And a finger dragging this document's text is Browsing: see dragged. */
+    /* And a finger dragging this document's text is Browsing, and a finger
+       moving on it at all stops a glide: see dragged. */
     contents.document.addEventListener('touchmove', dragged, { passive: true });
 
     var index = contents.sectionIndex;
@@ -1249,6 +1392,7 @@ ${constants}
 
   function build(ranges) {
     var built = [];
+    var blocks = [];
     var doc = null;
     for (var i = 0; i < ranges.length; i++) {
       var dom = domRange(ranges[i]);
@@ -1259,9 +1403,10 @@ ${constants}
       if (doc && owner !== doc) return null;
       doc = owner;
       built.push(dom);
+      blocks.push(ranges[i].block);
     }
     if (!built.length || !doc || !doc.defaultView) return null;
-    return { ranges: built, window: doc.defaultView };
+    return { ranges: built, blocks: blocks, window: doc.defaultView };
   }
 
   /* ADR 0008: text is the arbiter of whether a locator is correct. The text
@@ -1334,7 +1479,7 @@ ${constants}
 
   /* Returns the built ranges rather than a boolean, so that the caller which has
      just painted them measures *those* rather than building a second set to
-     measure — the centring below needs the very Ranges that are on the page.
+     measure — follow() below needs the very Ranges that are on the page.
      Null where nothing could be drawn. */
   function showUtterance() {
     var built = build(state.utteranceRanges);
@@ -1353,7 +1498,10 @@ ${constants}
     return built;
   }
 
-  function showWord(ranges) {
+  /* \`quiet\` paints the word and leaves the page where it is: attach() repaints
+     a section that has only just arrived, and places the page itself once it has
+     (see there). Everything else lets the page follow the word. */
+  function showWord(ranges, quiet) {
     var built = build(ranges);
     if (!built) {
       if (!awaited(ranges)) report(why(ranges));
@@ -1362,17 +1510,18 @@ ${constants}
     var registry = registryFor(built.window);
     moveTo(registry);
     put(registry.word, built.ranges);
+    if (!quiet) followWord(built, ranges);
   }
 
   /* The word the highlight belongs on, walking back over any whose range list is
      empty — a word can fall entirely on the space rejoin.ts inserted between two
      Blocks, which is in the Utterance and in no Block. */
-  function showAt(index) {
+  function showAt(index, quiet) {
     if (!state || !state.words) return;
     var at = index < state.words.length ? index : state.words.length - 1;
     for (; at >= 0; at--) {
       if (state.words[at].ranges.length) {
-        showWord(state.words[at].ranges);
+        showWord(state.words[at].ranges, quiet);
         return;
       }
     }
@@ -1414,7 +1563,7 @@ ${constants}
     if (state.next < words.length) frame = window.requestAnimationFrame(tick);
   }
 
-  /* ---- holding the Utterance in the middle of the screen (ADR 0005, ADR 0011) ---- */
+  /* ---- following the line being spoken (ADR 0005, ADR 0011, ADR 0050) ---- */
 
   /* The one element that scrolls. Read off the manager rather than looked up by
      id, because epub.js builds it itself: it is the \`epub-container\` div the
@@ -1453,108 +1602,537 @@ ${constants}
     return found ? { top: top, bottom: bottom } : null;
   }
 
-  /* Scroll so the Utterance being spoken is **centred** — the whole of ADR 0011's
-     continuous reader, and the reason a page-turning layout was rejected. It is
-     driven by the Clip cue alone: once per Utterance, never per word, and nothing
-     extra crosses the bridge to do it (ADR 0005). */
-  function centre(built) {
-    var view = scroller();
-    if (!view) return false;
-    var box = boxOf(built);
-    if (!box) return false;
-    var bounds = view.getBoundingClientRect();
-    var height = view.clientHeight;
-    /* The middle of what can be **seen**, not the middle of the container.
-       ADR 0020's player floats over the bottom of this container so that the text
-       never reflows when it appears; the price is that centring against
-       \`clientHeight\` would aim at a point the player is standing on and hold the
-       sentence being spoken behind it. \`covered\` is the player's own measured
-       height, and it changes when the player collapses and expands — which is why
-       it is an input here rather than a constant subtracted once.
+  /* The first line a built Range list is drawn on, with what it takes to find
+     that line again: its section document, the iframe that places that document
+     on the page, the Range, and the line's top and height in the document's own
+     coordinates, which scrolling the page does not change. For a word it is the
+     line the word begins on, so a word the line breaks is followed where it
+     starts; for an Utterance, the line it begins on.
 
-       An inset at least as tall as the container leaves nothing to centre in, and
-       then this is the same arithmetic as the tall-Utterance branch below: the
-       Utterance's top goes to the top of the viewport.
+     A rect with no width is not a line: WebKit gives a Range that starts where
+     a line wraps an empty rect at the end of the line before, and aiming at it
+     would hold the wrong line until the next word moved the page again.
 
-       The navigation bar floats over the top the same way (#67), so what can be
-       seen starts \`barCovered\` down: the middle aimed at is the middle of the
-       band between the bar and the player, and it moves when either of them
-       comes or goes. */
-    var visible = height - covered - barCovered;
+     Also where on that line it begins (\`left\`), and which of the Ranges it is
+     (\`index\`), which is what Continuous measures how far along the line the
+     word is from (leadOf). */
+  function lineOf(built) {
+    var frame = built.window.frameElement;
+    if (!frame) return null;
+    for (var i = 0; i < built.ranges.length; i++) {
+      var rects = built.ranges[i].getClientRects();
+      for (var j = 0; j < rects.length; j++) {
+        if (rects[j].height && rects[j].width) {
+          return { doc: built.window.document, frame: frame, range: built.ranges[i], index: i, block: built.blocks[i], top: rects[j].top, height: rects[j].height, left: rects[j].left };
+        }
+      }
+    }
+    return null;
+  }
+
+  /* Continuous (#71): how far past the line position the line being spoken is
+     carried, in px — the word's share of the way along its line times the
+     distance to the next line (lineLead, glide.ts). \`ranges\` are the Block
+     ranges \`line\` was measured from.
+
+     The line's extent is the text drawn on it, not the Block's box: the last
+     line of a paragraph stops short, and a Document's own centred line starts
+     late, and against the box neither would ever be read to its end, so the page
+     would still owe part of a line when the voice left it. The distance to the
+     next line is the next line's own top; on a paragraph's last line, where
+     there is none, the distance from the line before; on a Block of one line,
+     its own height. The gap to the next paragraph is not in it: that is a move
+     of its own, made by a glide (steer).
+
+     Measured over the text around the word rather than the whole Block, so that
+     a Block the length of a chapter — a Document that is one <div> with <br>s —
+     costs the same as a paragraph: NEAR characters either side is more than a
+     line of the longest line there is. */
+  var NEAR = 400;
+  function leadOf(ranges, line) {
+    var at = ranges[line.index];
+    var live = at ? liveBlock(at.block) : null;
+    if (!live) return 0;
+    var span = nearby(live, at.start - NEAR, at.start + NEAR);
+    if (!span) return 0;
+    var rects = span.getClientRects();
+    var bottom = line.top + line.height;
+    var from = Infinity;
+    var to = -Infinity;
+    var below = Infinity;
+    var above = -Infinity;
+    for (var i = 0; i < rects.length; i++) {
+      var rect = rects[i];
+      if (!rect.height || !rect.width) continue;
+      if (Math.min(rect.bottom, bottom) - Math.max(rect.top, line.top) > Math.min(rect.height, line.height) / 2) {
+        if (rect.left < from) from = rect.left;
+        if (rect.right > to) to = rect.right;
+      } else if (rect.top > line.top) {
+        if (rect.top < below) below = rect.top;
+      } else if (rect.top > above) {
+        above = rect.top;
+      }
+    }
+    var pitch = below < Infinity ? below - line.top : above > -Infinity ? line.top - above : line.height;
+    if (!(pitch > 0) || pitch > 3 * line.height) pitch = line.height;
+    return lineLead(line.left, from, to, pitch);
+  }
+
+  /* A Range over the live Block's text from \`from\` to \`to\`, pulled in to the
+     text nodes that are there: an offset past either end, or on text the walk
+     kept in the Block and no node holds, snaps to the nearest one that does. */
+  function nearby(live, from, to) {
+    var first = null;
+    var last = null;
+    for (var i = 0; i < live.parts.length; i++) {
+      var part = live.parts[i];
+      if (part.at + part.len > from && part.at < to) {
+        if (!first) first = part;
+        last = part;
+      }
+    }
+    if (!first || !last) return null;
+    var dom = live.document.createRange();
+    dom.setStart(first.node, Math.max(0, from - first.at));
+    dom.setEnd(last.node, Math.min(last.len, to - last.at));
+    return dom;
+  }
+
+  /* Where that line's middle is now, in the top document's coordinates, or null
+     once its document has gone. Measured afresh every time and never
+     remembered: epub.js moves the scroll position itself when it adds or trims a
+     section above (ADR 0045), and a remembered position would aim at where the
+     line used to be. */
+  function middleOf(line) {
+    if (!line.doc.defaultView) return null;
+    var rects = line.range.getClientRects();
+    for (var j = 0; j < rects.length; j++) {
+      if (rects[j].height && rects[j].width) return line.frame.getBoundingClientRect().top + (rects[j].top + rects[j].bottom) / 2;
+    }
+    return null;
+  }
+
+  /* The ranges of the word being spoken, walking back over any that are empty as
+     showAt() does, or null before the Clip's first word. */
+  function spokenRanges() {
+    for (var at = Math.min(state.next, state.words.length) - 1; at >= 0; at--) {
+      if (state.words[at].ranges.length) return state.words[at].ranges;
+    }
+    return null;
+  }
+
+  /* What the page holds at the line position now (ADR 0050).
+
+     With Word Timings, the line the word being spoken begins on — and before the
+     Clip's first word, the line the Utterance begins on, so that a sentence
+     beginning on the line being read moves nothing. A Clip that came without
+     them has no word to follow, and none is estimated (ADR 0005): the Utterance
+     is the unit, and the whole of it is held there, as every Utterance was
+     before. A sentence shown with no Clip at all — a tap or a skip while
+     paused, which the bridge sends with no words and a zero duration — is held
+     by its first line, where the first word will be when Play starts it, so that
+     Play does not move the page a second time.
+
+     Continuous carries that line past the line position by the \`lead\` of the
+     word it is measured from (leadOf): before the first word, the Utterance's
+     own start, which is where the sentence before it left off. */
+  function aim() {
+    if (!state) return null;
+    if (state.words || !state.durationMs) {
+      var ranges = (state.words && spokenRanges()) || state.utteranceRanges;
+      var built = build(ranges);
+      var line = built ? lineOf(built) : null;
+      if (!line) return null;
+      return SCROLLING === 'continuous' ? { line: line, lead: leadOf(ranges, line) } : { line: line };
+    }
+    var whole = build(state.utteranceRanges);
+    return whole ? { whole: whole } : null;
+  }
+
+  /* How much of the scroll container can be seen now. ADR 0020's player floats
+     over its bottom so that the text never reflows when it appears, and
+     \`covered\` is the player's own measured height; it changes when the player
+     collapses and expands, which is why it is an input here rather than a
+     constant subtracted once. The navigation bar floats over the top the same
+     way (#67, ADR 0048), so what can be seen starts \`barCovered\` down, and that
+     is zero while the bar is hidden. An inset at least as tall as the container
+     leaves nothing to aim in, and then moveFor() is the tall-Utterance rule: the
+     top goes to the top of what can be seen. */
+  function visibleOf(view) {
+    var visible = view.clientHeight - covered - barCovered;
+    return visible < 0 ? 0 : visible;
+  }
+
+  /* Where the line position is, in the top document's coordinates: that share
+     of the visible page with the player **open and without notes** (#71). Not
+     visibleOf(), which is what can be seen now: a note on the player makes it
+     taller, and the player collapses to one button, and a line position
+     measured against either moved the target with it — measured, a note that
+     came and went while paused left the line 87 px above the middle until Play.
+     The owner's choice is the height as it was before collapsing, so that
+     collapsing leaves the line where it is. Before the open player has been
+     measured, what can be seen now stands in.
+
+     The top is the room kept for the navigation bar (\`barReserved\`, #67, ADR
+     0048), not what the bar covers now: collapsing the player hides the bar
+     too, and measured from \`barCovered\` the line position would rise by the
+     bar's height at every collapse. Before the room is known, what the bar
+     covers now stands in, as the player's does. */
+  function lineAt(view, bounds) {
+    var over = barReserved > 0 ? barReserved : barCovered;
+    var under = openPlayer > 0 ? openPlayer : covered;
+    var visible = view.clientHeight - over - under;
     if (visible < 0) visible = 0;
-    var move = (box.top + box.bottom) / 2 - bounds.top - barCovered - visible / 2;
-    /* Unless the Utterance is taller than the screen, where centring its middle
+    return bounds.top + over + visible * LINE_POSITION;
+  }
+
+  /* How far the page has to move for what is aimed at to sit at the line
+     position, or null when it cannot be measured. The line position is a share
+     of what can be **seen**, not of the container: against \`clientHeight\` it
+     would aim at a point the player is standing on and hold the words being
+     spoken behind it. A \`lead\` (Continuous) carries the line that much further
+     up past it, so the page has that much further to go. */
+  function moveFor(aimed) {
+    var view = scroller();
+    if (!view) return null;
+    var bounds = view.getBoundingClientRect();
+    var at = lineAt(view, bounds);
+    if (aimed.line) {
+      var middle = middleOf(aimed.line);
+      return middle === null ? null : middle - at + (aimed.lead || 0);
+    }
+    var box = boxOf(aimed.whole);
+    if (!box) return null;
+    var move = (box.top + box.bottom) / 2 - at;
+    /* Unless the Utterance is taller than the screen, where holding its middle
        would push its opening words off the top — and those are the words about to
-       be spoken. Then its start goes to the top of the screen instead, just below
-       the bar, and the word highlight walks down from there. */
+       be spoken. Then its start goes to the top of what can be seen instead,
+       just below the bar while it is shown (#67), and the highlight walks down
+       from there. */
     if (move > box.top - bounds.top - barCovered) move = box.top - bounds.top - barCovered;
-    /* Below a pixel there is nothing to see, and every scroll costs epub.js a
-       pass over its views. */
-    if (Math.abs(move) < 1) return true;
-    /* Through the manager's own scroll, and deliberately **without** its \`ignore\`
-       flag: this has to reach epub.js exactly as a finger scroll does, because
-       that is what makes the continuous manager append the section the reading is
-       about to walk into. A scroll it was told to ignore renders nothing new. */
-    rendition.manager.scrollBy(0, move, false);
+    return move;
+  }
+
+  /* The one place the page is scrolled. Through the manager's own scroll, and
+     deliberately **without** its \`ignore\` flag: this has to reach epub.js exactly
+     as a finger scroll does, because that is what makes the continuous manager
+     append the section the reading is about to walk into. A scroll it was told to
+     ignore renders nothing new.
+
+     And the position it leaves the page at is remembered as the program's own
+     (\`ownTop\`), so that the wait for the page to rest before anything above it
+     changes (#58, holdStill) does not count it as the page moving. That wait is
+     for iOS moving the page, which drops epub.js's own corrections; this is a
+     scroll the page has already taken, synchronously, before anything else can
+     run. Only when nothing else has moved the page since the last scroll event:
+     otherwise the page may be under a finger or in a fling, and the position
+     that says so is left to say it. */
+  function nudge(by) {
+    var stage = scroller();
+    var before = stage ? stage.scrollTop : null;
+    rendition.manager.scrollBy(0, by, false);
+    if (!stage) return;
+    ownTop = stage.scrollTop;
+    if (scrolledTop === null || scrolledTop === before) scrolledTop = ownTop;
+  }
+
+  /* Stop the page where it is now: a finger landing on the page, a drag, and
+     anything that puts the page somewhere at once. A glide ends, and a drift
+     keeps what it is drifting towards but stops moving, until the next word. */
+  function halt() {
+    glide = null;
+    if (glideFrame) {
+      window.cancelAnimationFrame(glideFrame);
+      glideFrame = 0;
+    }
+    rest();
+    if (driftFrame) {
+      window.cancelAnimationFrame(driftFrame);
+      driftFrame = 0;
+    }
+  }
+
+  /* Move the page so that what is aimed at sits at the line position (ADR 0050).
+     Returns whether there was anything to measure.
+
+     Nothing under a pixel: there is nothing to see, and every scroll costs
+     epub.js a pass over its views. At once when \`instant\`, and when the move is
+     further than the visible page: a glide would only pull a page of text the
+     owner has not read past their eye. Otherwise a glide of GLIDE_MS, easing out,
+     whatever the distance. A glide already on its way to the same line is left
+     to arrive; one on its way anywhere else is taken over from where the page is
+     now. */
+  function bring(aimed, instant) {
+    if (!aimed) return false;
+    var move = moveFor(aimed);
+    if (move === null) return false;
+    if (aimed.line) followed = aimed.line;
+    if (!instant && glide && aimed.line && glide.aimed.line && sameLine(glide.aimed.line, aimed.line)) return true;
+    if (Math.abs(move) < 1) {
+      halt();
+      return true;
+    }
+    if (instant || !glides(move, visibleOf(scroller()))) {
+      halt();
+      nudge(move);
+      return true;
+    }
+    glide = { aimed: aimed, from: move, elapsed: 0, last: null };
+    if (!glideFrame) glideFrame = window.requestAnimationFrame(glideStep);
     return true;
   }
 
-  /* Once per document per Utterance, and \`centred\` is what makes it once: a
-     centring that causes epub.js to render a section would otherwise be answered
-     by attach(), which would centre again, which would render again. It is a
-     WeakSet, so a document epub.js destroys is not held alive by having been
-     centred in — the thing the Block records exist not to hold. */
-  function centreOnce(built) {
-    if (!state || !state.follow || browsing) return;
-    var doc = built.window.document;
-    if (state.centred.has(doc)) return;
-    if (centre(built)) state.centred.add(doc);
+  /* One frame of a glide. What it aims at is measured again every frame, and the
+     page moved by the difference between where that is and where the curve says
+     it should be by now. So a section epub.js trims or adds above mid-glide,
+     which moves the scroll position under it, costs nothing: the next frame aims
+     at where the line actually is. It stops, where the page is, when the page
+     stops following. */
+  function glideStep(now) {
+    glideFrame = 0;
+    if (!glide) return;
+    if (!state || !state.follow || browsing) {
+      glide = null;
+      return;
+    }
+    var move = moveFor(glide.aimed);
+    if (move === null) {
+      glide = null;
+      return;
+    }
+    /* The curve is timed in frames that were drawn, not by the clock: each frame
+       advances it by the time since the last one, but never by more than two
+       frames' worth, and the first frame by one. A glide is asked for in the same
+       task that starts a Clip, lays out a section or answers a tap, and the frames
+       after that work can be held up for most of a second. Timed by the clock,
+       measured on the owner's book, a glide asked for at a tap drew its first
+       frame 800 ms late, past the whole curve, and moved 252 px in two frames. A
+       stall now pauses a glide instead of spending it. */
+    glide.elapsed += glide.last === null ? FRAME_MS : Math.min(now - glide.last, 2 * FRAME_MS);
+    glide.last = now;
+    var left = glideLeft(glide.from, glide.elapsed);
+    var by = move - left;
+    if (Math.abs(by) >= 0.5) nudge(by);
+    if (left === 0) {
+      glide = null;
+      /* Continuous: the words went on while it glided, and the drift takes the
+         page on from here. */
+      kick();
+      return;
+    }
+    glideFrame = window.requestAnimationFrame(glideStep);
   }
 
-  /* The text has reflowed under an Appearance change, so the sentence being
-     spoken is no longer where it was centred — a font change moves every line in
-     the book, and the one the owner is listening to with it.
+  /* ---- Continuous (#71, ADR 0050) ---- */
+
+  /* The page drifting towards what the words say, for the word just drawn or
+     the Utterance just cued: a line carried \`lead\` px past the line position.
+
+     Crossing into another Block is not a drift: the next paragraph's first line
+     past its gap, a heading. Nor is a move of more than a line: a sentence
+     somewhere else. Those are moved as every other move is, by bring() — a glide
+     within the visible page, a jump beyond it — and the drift takes over from
+     where that leaves the page. The Block and not the size of the move, because
+     a Document whose paragraphs have little or no margin between them puts the
+     next paragraph's first line barely further than the next line, and the gap
+     it does have would drift across instead of taking the 250 ms every other
+     paragraph takes (#71). Anything else is the words going on along a line, or
+     onto the next one in the same Block, which the lead has already carried the
+     page nearly all the way to: that is the drift. */
+  function steer(aimed) {
+    if (!aimed) return false;
+    if (!aimed.line) return bring(aimed, false);
+    var move = moveFor(aimed);
+    if (move === null) return false;
+    var was = followed;
+    followed = aimed.line;
+    if (drifting) drifting.aimed = aimed;
+    else drifting = { aimed: aimed, speed: 0, owed: 0, last: null };
+    var crossed = !!was && was.block !== aimed.line.block;
+    if (crossed || Math.abs(move) > aimed.line.height) {
+      rest();
+      return bring(aimed, false);
+    }
+    /* A glide under way hands over to the drift when it ends. */
+    if (!glide) kick();
+    return true;
+  }
+
+  function kick() {
+    if (SCROLLING !== 'continuous' || !drifting || driftFrame) return;
+    driftFrame = window.requestAnimationFrame(drift);
+  }
+
+  /* Where the page is is where it stays: no speed, nothing owed, and the next
+     frame's clock starts again. What it drifts towards is kept. */
+  function rest() {
+    if (!drifting) return;
+    drifting.speed = 0;
+    drifting.owed = 0;
+    drifting.last = null;
+  }
+
+  /* One frame of a drift: the critically damped follower of glide.ts's
+     driftVelocity, run on the move still to make, measured again every frame
+     like a glide's, so that epub.js moving the scroll position under it is
+     absorbed rather than chased.
+
+     **Whole pixels.** WebKit keeps an element's scroll position in whole CSS
+     pixels (measured, notes/NOTES_2026-09-26.md, 01:33), and a reading moves the
+     page some 5 to 10 px a second, a fraction of a pixel a frame. So the drift
+     owes the page the fractions and pays them a pixel at a time; and it steers
+     by the move less what it owes, or the pixel it has not yet paid would read as
+     one still to make, and it would push on past the line and back. Timed in
+     drawn frames, at most two frames' worth each, as a glide is, so a stall
+     slows it rather than throwing it forward.
+
+     It rests when it is there and has all but stopped, which is soon after the
+     last word of a sentence, and a new word sets it going again (kick). */
+  function drift(now) {
+    driftFrame = 0;
+    if (!drifting || glide) return;
+    if (!state || !state.follow || browsing || SCROLLING !== 'continuous') {
+      rest();
+      return;
+    }
+    var move = moveFor(drifting.aimed);
+    if (move === null) {
+      rest();
+      return;
+    }
+    var dt = drifting.last === null ? FRAME_MS : Math.min(now - drifting.last, 2 * FRAME_MS);
+    drifting.last = now;
+    var error = move - drifting.owed;
+    drifting.speed = driftVelocity(error, drifting.speed, dt);
+    drifting.owed += drifting.speed * dt;
+    var whole = drifting.owed > 0 ? Math.floor(drifting.owed) : Math.ceil(drifting.owed);
+    if (whole) {
+      nudge(whole);
+      drifting.owed -= whole;
+    }
+    if (Math.abs(error) < 0.5 && Math.abs(drifting.speed) < DRIFT_RESTS) {
+      rest();
+      return;
+    }
+    driftFrame = window.requestAnimationFrame(drift);
+  }
+
+  /* Below this speed, in px per ms — 2 px a second — a drift that has arrived
+     has stopped: its last fraction of a pixel is not worth a frame loop. */
+  var DRIFT_RESTS = 0.002;
+
+  /* The one way a page that follows is sent after the reading when the reading
+     moves: by bring() a line at a time, and in Continuous by steer(), which
+     drifts what it can and brings the rest. */
+  function approach(aimed) {
+    return SCROLLING === 'continuous' ? steer(aimed) : bring(aimed, false);
+  }
+
+  /* A word has just been drawn. By line, the page follows only when it has
+     moved onto another line: the words of one line are read with the page
+     still, and the page moves up a line as the voice moves down one. This runs
+     in the WebView, on the word the loop already draws, so nothing is added to
+     the bridge (ADR 0005), and the loop scrolls at most once a line, never once
+     a frame.
+
+     Continuous, every word moves where the page is going — by how far along its
+     line it is (leadOf) — and the drift, not the loop, moves the page there, a
+     pixel at a time on its own frames. */
+  function followWord(built, ranges) {
+    if (!state || !state.follow || browsing || !state.words) return;
+    var line = lineOf(built);
+    if (!line) return;
+    if (SCROLLING === 'continuous') {
+      steer({ line: line, lead: leadOf(ranges, line) });
+      return;
+    }
+    if (sameLine(followed, line)) return;
+    bring({ line: line }, false);
+  }
+
+  /* Whether a sentence that is beginning can be seen: the middle of the line it
+     begins on lies within the visible page as it is now — below whatever the
+     navigation bar covers at this moment (#67) and above whatever the player
+     covers, not the room and the open player the line position is measured
+     against, because what counts is what the owner can see.
+
+     The other half of Zotero-TTS's rule (ADR 0050): a page the owner took away
+     while the reading plays is taken back at a sentence they can see beginning,
+     and left alone at one they cannot. Never while the page is still moving —
+     a fling coasting on after the finger lifts, which a glide would fight; the
+     next sentence asks again. */
+  function onVisiblePage(built) {
+    if (moving()) return false;
+    var view = scroller();
+    var line = built ? lineOf(built) : null;
+    if (!view || !line) return false;
+    var middle = middleOf(line);
+    if (middle === null) return false;
+    var top = view.getBoundingClientRect().top + barCovered;
+    return middle >= top && middle <= top + visibleOf(view);
+  }
+
+  /* At once, for what is being read now: a section that arrived wherever epub.js
+     put it, and the text reflowing under an Appearance change. Nothing that was
+     gliding should go on by then. */
+  function place() {
+    return bring(aim(), true);
+  }
+
+  /* Once per document per Utterance, and \`placed\` is what makes it once: a
+     placing that causes epub.js to render a section would otherwise be answered
+     by attach(), which would place again, which would render again. It is a
+     WeakSet, so a document epub.js destroys is not held alive by having been
+     placed in — the thing the Block records exist not to hold. */
+  function placeOnce(built) {
+    if (!state || !state.follow || browsing) return;
+    var doc = built.window.document;
+    if (state.placed.has(doc)) return;
+    if (place()) state.placed.add(doc);
+  }
+
+  /* The text has reflowed under an Appearance change, so the line being spoken
+     is no longer where it was put — a font change moves every line in the book,
+     and the one the owner is listening to with it.
 
      **Not on this frame.** epub.js resizes each section's iframe from the
      section's own ResizeObserver, whose callback is
      \`requestAnimationFrame(this.resizeCheck.bind(this))\` — read out of the
-     bundled epub.js — so the geometry a re-centre needs is a frame or more away,
-     and centring against a box that is about to move aims at where the sentence
-     was. So the box is measured every frame until it stops moving and the
-     centring is the last measurement.
+     bundled epub.js — so the geometry this needs is a frame or more away, and
+     placing against a box that is about to move aims at where the line was. So
+     it is measured every frame until nothing needs moving, and placed each time.
 
      **And on every frame of the window, not once at the end.** The first version
      waited for two frames with the same geometry and then centred once; it held
      the Utterance to 0.758 px when the text grew and left it **4,285 px** out when
      the text shrank, because a page can look settled for a frame while epub.js is
      still resizing iframes and the continuous manager has yet to re-lay the views
-     out. Centring every frame converges on whatever the layout ends up doing
-     instead of guessing when to look, and it is nearly free: centre() scrolls only
+     out. Placing every frame converges on whatever the layout ends up doing
+     instead of guessing when to look, and it is nearly free: bring() scrolls only
      when the move is at least a pixel, so a settled page costs one measurement a
-     frame and no scroll at all.
+     frame and no scroll at all. At once, never a glide: the text has jumped by
+     itself, and a glide would chase it.
 
      \`SETTLE_FRAMES\` is a cap and not a duration: it exists so that a document
      whose layout never settles cannot hold a frame loop open. The loop leaves
-     early — three frames in which nothing moved — so its value is what a
-     pathological document costs and not what an ordinary one does. Nothing is
-     centred at all when nothing is being read: there is no Utterance to hold in
-     the middle, and scrolling a page the owner is reading with their eyes is the
-     thing ADR 0020's floating player exists not to do. */
-  function settle(left, was, still) {
+     early — three frames in which nothing needed moving — so its value is what
+     a pathological document costs and not what an ordinary one does. Nothing is
+     placed at all when nothing is being read: there is no line to hold, and
+     scrolling a page the owner is reading with their eyes is the thing ADR 0020's
+     floating player exists not to do. */
+  function settle(left, still) {
     if (!state || !state.follow || browsing) return;
-    var built = build(state.utteranceRanges);
-    var box = built ? boxOf(built) : null;
-    if (!built || !box) {
-      if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, null, 0); });
+    var aimed = aim();
+    var move = aimed ? moveFor(aimed) : null;
+    if (move === null) {
+      if (left > 0) window.requestAnimationFrame(function () { settle(left - 1, 0); });
       return;
     }
-    /* \`box.top\` is measured in the viewport, so it stops changing exactly when
-       centre() stops scrolling — which is the convergence this waits for. */
-    var steady = was !== null && Math.abs(box.top - was) < 1 ? still + 1 : 0;
-    centre(built);
+    var steady = Math.abs(move) < 1 ? still + 1 : 0;
+    bring(aimed, true);
     if (steady >= 3 || left <= 0) return;
     window.requestAnimationFrame(function () {
-      settle(left - 1, box.top, steady);
+      settle(left - 1, steady);
     });
   }
 
@@ -1562,18 +2140,23 @@ ${constants}
      what showUtterance() just painted, or null.
 
      Two cases, and only the second moves the reading position: the section is on
-     the page, and it is scrolled to the middle; or it is not rendered at all —
-     the reading has run ahead of the document — and only a display() can get
-     there. The centring then happens in attach(), when the section arrives. */
+     the page, and the page brings the Utterance's first line to the line
+     position — a glide when it is within the visible page, which is the next
+     line at every sentence that begins on a new one, a tapped sentence and a
+     skip; or it is not rendered at all — the reading has run ahead of the
+     document — and only a display() can get there. The page is then placed in
+     attach(), when the section arrives. Continuous drifts to a sentence that
+     goes on from where the last one ended rather than gliding to it (approach). */
   function follow(built) {
     if (!state || lookupHeld || lookupKeepBrowsing) return;
     if (built) {
-      centreOnce(built);
+      if (!state.follow || browsing) return;
+      if (approach(aim())) state.placed.add(built.window.document);
       return;
     }
     var record = blocks.get(state.utteranceRanges[0].block);
     if (!record || !record.cfi) return;
-    /* attach() centres this section on the frame after it arrives rather than
+    /* attach() places this section on the frame after it arrives rather than
        at once, because this display is not finished when it arrives: see there.
        Not on the display's promise, which says nothing about arriving: it is
        resolved as the section's iframe starts to load, when the library's
@@ -1611,16 +2194,16 @@ ${constants}
      More text needs epub.js to render the next spine item. The continuous
      manager appends one from its own onScroll, and only when the scroll has come
      within \`settings.offset\` — 500 px — of the bottom of everything it holds.
-     The only thing that scrolls while a book is being read aloud is centre(),
-     and centre() stops at the sentence being spoken. So a section whose text
+     The only thing that scrolls while a book is being read aloud is the page
+     following the voice, and it stops at the line being spoken. So a section whose text
      ends far above its own bottom runs the reading out of Utterances with the
      rest of the book still unrendered, and nothing is left that would make more:
      measured on the fixture at 05:03, one view, scrollTop 0, clientHeight 758,
      scrollHeight 3,072 — 758 + 500 is 1,258, and 1,258 < 3,072 for ever.
 
      The trigger is the Clip cue, which already arrives once per Utterance and
-     already drives the centring, so **nothing is added to the bridge** — the
-     property ADR 0011 states of the centring and the reason it is stated.
+     already starts the page following, so **nothing is added to the bridge** —
+     the property ADR 0011 states of the following and the reason it is stated.
 
      Three guards, and each is what keeps this from becoming a second, slower
      renderer racing the first:
@@ -1708,13 +2291,14 @@ ${constants}
     if (!state || !covers(contents.sectionIndex, state.utteranceRanges)) return;
     var built = showUtterance();
     if (!built) return;
-    showAt(state.next - 1);
-    /* And it arrived wherever epub.js put it, which is not the middle of the
-       screen. Two ways in: the reading ran ahead of the document and follow()
-       displayed the section, or the manager destroyed this section's view and
-       rebuilt it while the same Utterance was being spoken. Both want centring
-       now that there is something to measure — and the first wants it a frame
-       from now.
+    /* Quietly: the word is painted here and the page is placed below, at once,
+       rather than by a glide from a word that has only just been laid out. */
+    showAt(state.next - 1, true);
+    /* And it arrived wherever epub.js put it, which is not the line position.
+       Two ways in: the reading ran ahead of the document and follow() displayed
+       the section, or the manager destroyed this section's view and rebuilt it
+       while the same Utterance was being spoken. Both want placing now that
+       there is something to measure — and the first wants it a frame from now.
 
        **A section follow() asked for arrives before its display has finished**
        (#50). This runs in epub.js's content hook, and the same display goes on,
@@ -1723,18 +2307,18 @@ ${constants}
        19:28 on 2026-09-23, Play with the page scrolled away from Block 6.13: the
        centring scrolled 725 px, the moveTo 958 px more, and the sentence — painted
        — ended 724 px above the top of the screen. So the Utterance is painted now
-       and centred on the next frame, after that moveTo and after the views are
+       and placed on the next frame, after that moveTo and after the views are
        shown, through settle(), which also follows the page while fill() lays the
        neighbouring sections out around it. A section that arrives any other way
-       has no scroll of epub.js's behind it, and is centred at once. */
+       has no scroll of epub.js's behind it, and is placed at once. */
     if (state.awaiting === contents.sectionIndex) {
       state.awaiting = null;
       var mine = state;
       window.requestAnimationFrame(function () {
-        if (state === mine) settle(SETTLE_FRAMES, null, 0);
+        if (state === mine) settle(SETTLE_FRAMES, 0);
       });
     } else {
-      centreOnce(built);
+      placeOnce(built);
     }
     start();
   }
@@ -1783,19 +2367,46 @@ ${constants}
      up at all: the sections it leaves behind keep their height, empty, until
      the first rest. A fling back stops at the top of the text laid out so far,
      as it does at the top of a document, and the chapter before is laid out
-     once the page is still (docs/design/0045). */
+     once the page is still (docs/design/0045).
+
+     **The program's own scroll is not the page moving** (#71, ADR 0050). What
+     drops epub.js's correction is iOS moving the page; the page following the
+     reading is this program setting the position, synchronously, through the
+     same assignment epub.js's correction makes, and a correction between two of
+     them is kept — measured, an erase above between per-frame program scrolls
+     left the text where it was (notes/NOTES_2026-09-24.md, 02:35;
+     notes/NOTES_2026-09-26.md, 01:42). Continuous moves the page all the while a
+     sentence is read, and counted as moving it would park every trim until the
+     reading paused, and the sections behind it would pile up for as long as the
+     owner listened. So a scroll event that finds the page where the program
+     last put it (\`ownTop\`, set in nudge()) is not movement, and neither is a
+     frame that does. Any other position is, exactly as before: a finger, a
+     fling, a bounce, epub.js's own correction. */
   var REST_MS = 200;
   var REST_FRAMES = 4;
   var parked = { trim: false, check: false };
   var scrolledAt = -Infinity;
   var scrolledTop = null;
+  var ownTop = null;
   var resting = { top: null, since: 0, frames: 0 };
   var watching = false;
 
+  /* The program's own position is the program's only until something else
+     moves the page: from the first scroll event anywhere else, it is forgotten
+     (\`ownTop = null\`), and a finger or a fling that later passes through it or
+     comes to rest against it counts as moving like any other position. Kept, it
+     would open the gate in the middle of a fling that bounced against the place
+     the program last left the page — #58's jump, which the gate exists for. */
   function noteScroll() {
     var stage = scroller();
+    var top = stage ? stage.scrollTop : null;
+    if (top !== null && top === ownTop) {
+      scrolledTop = top;
+      return;
+    }
+    ownTop = null;
     scrolledAt = performance.now();
-    scrolledTop = stage ? stage.scrollTop : null;
+    scrolledTop = top;
   }
 
   /* Whether the page may be moving now: a scroll event within REST_MS, or a
@@ -1814,15 +2425,19 @@ ${constants}
   /* At rest is the position unchanged for REST_MS, over at least REST_FRAMES
      successive animation frames. A frame reads the position iOS last sent even
      straight after a long task, when a timer's reading could still be the one
-     from before it. The loop runs only while something is parked. */
+     from before it. The loop runs only while something is parked. A frame that
+     finds the page where the program put it counts as still (see above). */
   function watchForRest(now) {
     var stage = scroller();
     var top = stage ? stage.scrollTop : null;
-    if (top !== resting.top) {
+    if (top !== resting.top && !(resting.top !== null && top !== null && top === ownTop)) {
+      /* Somewhere the program did not put it: forgotten here too (noteScroll). */
+      if (top !== ownTop) ownTop = null;
       resting.top = top;
       resting.since = now;
       resting.frames = 0;
     } else {
+      resting.top = top;
       resting.frames += 1;
     }
     if (moving() || now - resting.since < REST_MS || resting.frames < REST_FRAMES) {
@@ -2066,12 +2681,33 @@ ${constants}
          is exactly one, and a second injected function would be a second thing to
          keep installed and to check for.
 
-         **Nothing is re-centred here**, deliberately. The player collapsing changes
-         where the middle of the visible text is, and scrolling to the new middle
-         would move the text under the reader — which is the one thing ADR 0020's
-         floating player exists to prevent. So the new inset applies to the next
-         Utterance, and the sentence being spoken stays where it is. */
+         **Nothing is moved here**, deliberately. The player collapsing changes
+         where the line position is, and scrolling to the new one would move the
+         text under the reader — which is the one thing ADR 0020's floating player
+         exists to prevent. So the new inset applies from the next line the page
+         follows, and the line being spoken stays where it is. */
       covered = typeof message.bottomPx === 'number' && isFinite(message.bottomPx) && message.bottomPx > 0 ? message.bottomPx : 0;
+      openPlayer = typeof message.openPx === 'number' && isFinite(message.openPx) && message.openPx > 0 ? message.openPx : 0;
+      return;
+    }
+    if (message.kind === 'following') {
+      /* The owner's Line Position and way of scrolling (#71). Unlike the inset
+         above, this is the owner asking for the line somewhere else, so a page
+         that is following the reading goes there now — a glide within the
+         visible page, a jump beyond it, as every move of the page is made. A
+         page the owner has browsed away stays where they put it.
+
+         Leaving Continuous forgets what it drifted towards, so By line starts
+         from the line the words are on and not from one carried past its place. */
+      var share = message.linePosition;
+      if (typeof share !== 'number' || !isFinite(share) || share < 0 || share > 1) return;
+      LINE_POSITION = share;
+      if (message.scrolling === 'line' || message.scrolling === 'continuous') SCROLLING = message.scrolling;
+      if (SCROLLING !== 'continuous') {
+        halt();
+        drifting = null;
+      }
+      if (state && state.follow && !browsing) approach(aim());
       return;
     }
     if (message.kind === 'bar') {
@@ -2095,14 +2731,15 @@ ${constants}
          cannot declare \`user-select\`, which would silently stop the highlight
          painting.
 
-         The page is restyled and then re-centred, because a change that reflows
-         the text moves the sentence being spoken away from the middle. That is
+         The page is restyled and then placed again, because a change that
+         reflows the text moves the line being spoken away from the line
+         position. That is
          the opposite of what the 'inset' message does above, and the difference
          is the whole of it: the player collapsing does not move a single
          character, and a font change moves every one of them. */
       APPEARANCE = typeof message.css === 'string' ? message.css : '';
       restyle();
-      settle(SETTLE_FRAMES, null, 0);
+      settle(SETTLE_FRAMES, 0);
       return;
     }
     if (message.kind === 'measured') {
@@ -2128,30 +2765,79 @@ ${constants}
     }
     if (message.kind === 'clear') {
       stop();
+      halt();
       state = null;
+      followed = null;
       clearHighlights();
       return;
     }
     if (message.kind === 'hold') {
       stop();
       if (state) state.held = true;
+      /* The owner paused (#71): the page stops with the voice, on this frame —
+         a glide ends where it is, and Continuous's drift rests rather than
+         easing on for the second its follower would take. Not the hold after a
+         Clip cued while paused, which would cut short the glide a tapped
+         sentence or a skip has just begun. */
+      if (message.stop) halt();
       return;
     }
     if (message.kind === 'browse') {
       /* A Contents row while the reading is paused (#52). The display that moves
          the page comes right after this, so the sections it renders, the
          reading's own among them, arrive to a page that is not following. */
-      browsing = true;
+      setBrowsing(true);
+      halt();
+      return;
+    }
+    if (message.kind === 'return') {
+      if (lookupHeld) return;
+      lookupKeepBrowsing = false;
+      /* M (#71, #53): the page goes back to the reading and follows it again,
+         and nothing starts. To the sentence being shown, and within it to the
+         line the spoken word is on (aim()), so a reading that is playing keeps
+         its words; by a glide, a jump or a display, as follow() decides. With no
+         sentence shown there is nowhere to go, and the page only stops browsing:
+         the bridge sends a revealed 'speak' instead whenever the reading has a
+         sentence this program is not showing. */
+      halt();
+      setBrowsing(false);
+      if (!state) return;
+      state.follow = true;
+      follow(build(state.utteranceRanges));
+      return;
+    }
+    if (message.kind === 'followOnly') {
+      /* The player collapsed, or opened again (#71). Collapsed, the page only
+         follows: no finger can move it (lockPage) and none can start Browsing
+         (dragged). A page the owner had taken away comes back first, as M
+         would bring it — the collapsed player shows no M, so a page left
+         browsing would be a page nothing on the screen could bring back.
+         Opened, the page can be dragged again, and nothing moves. */
+      var only = !!message.on;
+      if (only === followOnly) return;
+      followOnly = only;
+      lockPage(only);
+      if (only && browsing) dispatch({ kind: 'return' });
       return;
     }
     if (message.kind === 'speak') {
       stop();
-      /* Revealed is the voice, or the owner pointing at a sentence, asking for
-         the reading: the page goes to it and follows it again. Not revealed is a
-         repaint where the page is (a cue while paused, a new Voice repainting the
+      /* Revealed is the owner asking for the reading — Play, a tapped sentence,
+         a skip, a place from another device: the page goes to it and follows it
+         again. \`recover\` is the reading moving on while it plays: followed, as
+         every sentence is, but a page the owner took away stays away, unless
+         this sentence begins where they can see it (below). Neither is a repaint
+         where the page is (a cue while paused, a new Voice repainting the
          sentence), which keeps whether the page was following it. */
-      if (message.reveal && !lookupHeld && !lookupKeepBrowsing) browsing = false;
-      var following = message.reveal || !!(state && state.follow);
+      if (message.reveal && !lookupHeld && !lookupKeepBrowsing) setBrowsing(false);
+      /* \`recover\` means a sentence beginning, and only a new Utterance is one.
+         The engine cues the Utterance it is speaking again when the speed
+         changes or a Voice is switched mid-sentence (#71): nothing began, so a
+         page the owner took away stays away, and a page that follows is left
+         for the words to move — the correction that follows the cue does. */
+      var begins = !!message.recover && !(state && state.utterance === message.utterance);
+      var following = message.reveal || begins || !!(state && state.follow);
       state = {
         utterance: message.utterance,
         utteranceRanges: message.utteranceRanges,
@@ -2162,8 +2848,8 @@ ${constants}
         held: false,
         reported: false,
         follow: following,
-        /* The documents this Utterance has already been centred in; see centreOnce. */
-        centred: new WeakSet(),
+        /* The documents this Utterance has already been placed in; see placeOnce. */
+        placed: new WeakSet(),
         /* The section follow() asked epub.js to display for this Utterance, until
            it arrives; see attach. */
         awaiting: null
@@ -2181,7 +2867,13 @@ ${constants}
          CFI here, and that is exactly the case where the reading has crossed into
          text the reader cannot see. */
       var shown = showUtterance();
-      if (message.reveal) follow(shown);
+      /* Zotero-TTS's rule, and no setting (ADR 0050): the owner who took the
+         page away while listening gets it back by itself at a sentence they can
+         see beginning. One they cannot see leaves it where they put it — and in
+         particular displays nothing, which is what follow() would do for a
+         sentence whose section is not on the page. */
+      if (!message.reveal && begins && browsing && !lookupHeld && !lookupKeepBrowsing && onVisiblePage(shown)) setBrowsing(false);
+      if (message.reveal || (begins && !browsing)) follow(shown);
       /* **What is on the page has been reported**, checked once per Utterance —
          and then the section after it asked for if it is missing. Neither depends
          on where the page is or on whether this Utterance could be painted.

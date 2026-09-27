@@ -16,9 +16,10 @@
  *   WebView is a script injection and an `eval` per message, and at three to five
  *   words a second that is the wrong mechanism (ADR 0005).
  * - **In** (WebView → React Native, by `postMessage`): the Blocks of a section
- *   as epub.js renders it, and a problem where a highlight could not be drawn.
- *   Both are rare — one per rendered section, and one only when something is
- *   wrong.
+ *   as epub.js renders it, a problem where a highlight could not be drawn, a
+ *   tapped place, and whether the page follows the reading. All are rare — one
+ *   per rendered section, one only when something is wrong, one per tap, one
+ *   when the owner takes the page or it comes back.
  *
  * Every offset here is a **UTF-16 code-unit offset into one Block's own text**.
  * That is the coordinate system `core/segmenter/` already works in, and the
@@ -40,6 +41,9 @@ export const DOCUMENT_MESSAGE = 'openreader:document';
 
 /** The `type` of the tap message. Same constraint. */
 export const TAP_MESSAGE = 'openreader:tap';
+
+/** The `type` of the message saying whether the page follows the reading. Same constraint. */
+export const FOLLOWING_STATE_MESSAGE = 'openreader:following';
 
 /**
  * A **Block** as the WebView found it in the rendered document.
@@ -194,7 +198,23 @@ export interface ProblemMessage {
   detail: string;
 }
 
-export type WebViewMessage = BlocksMessage | DocumentMessage | ProblemMessage | TapMessage | SelectionMessage;
+/**
+ * Whether the page is following the reading (**A**) or the owner is browsing
+ * (**M**), for the player's indicator (#71, ADR 0050).
+ *
+ * Posted only when it changes: a drag, a Contents row while paused, a revealed
+ * highlight, the page taking itself back at a sentence whose first line is on
+ * the screen, M, and the player collapsing. Never per word, never per frame —
+ * the same asymmetry as the rest of this direction. Only the WebView knows,
+ * because only the WebView sees the finger that starts Browsing.
+ */
+export interface FollowingStateMessage {
+  type: typeof FOLLOWING_STATE_MESSAGE;
+  /** True while the page follows the reading. */
+  following: boolean;
+}
+
+export type WebViewMessage = BlocksMessage | DocumentMessage | FollowingStateMessage | ProblemMessage | TapMessage | SelectionMessage;
 
 /** A half-open range of one Block's own text, in UTF-16 code units. */
 export interface BlockRange {
@@ -271,12 +291,25 @@ export interface SpeakMessage {
    * measurement is the WebView's, because the only thing that knows where a
    * sentence is on the screen is the document it is in.
    *
-   * True is also the one thing that ends Browsing (#52): it is the voice, or the
-   * owner pointing at a sentence, asking for the reading. False repaints the
-   * sentence wherever the page is and leaves the page there — a cue while
-   * paused, or a new Voice repainting the sentence it will read.
+   * True also ends Browsing (#52): it is the owner asking for the reading —
+   * Play, a tapped sentence, a skip, a place from another device. False repaints
+   * the sentence wherever the page is and leaves the page there — a cue while
+   * paused, a new Voice repainting the sentence it will read, and every cue
+   * after the first while the reading plays on, which says `recover` instead.
    */
   reveal: boolean;
+  /**
+   * A Clip the reading has simply moved on to while it plays (#71, ADR 0050).
+   * Absent means false.
+   *
+   * The page follows it as it follows every sentence, and it does **not** end
+   * Browsing — the owner who dragged the page away keeps it where they put it
+   * across sentences, Zotero-TTS's rule. With one exception, which is the same
+   * rule's other half: if this sentence's first line is on the visible page
+   * when it begins, the page takes itself back and follows again. Ignored when
+   * `reveal` is true, which follows whatever the case.
+   */
+  recover?: boolean;
 }
 
 /**
@@ -310,6 +343,13 @@ export interface CorrectMessage {
  */
 export interface HoldMessage {
   kind: 'hold';
+  /**
+   * The owner paused, so the page stops too, on this frame (#71): a glide under
+   * way ends where it is, and Continuous's drift rests. Left out for the hold
+   * that follows a Clip cued while paused, which must not cut short the glide a
+   * tapped sentence or a skip has just started.
+   */
+  stop?: boolean;
 }
 
 /** Nothing is being read. Both highlights go. */
@@ -331,10 +371,40 @@ export interface ClearMessage {
  *
  * Nothing in it but the kind: the WebView stays browsing until a highlight is
  * revealed (`SpeakMessage.reveal`), which is Play, a tapped sentence, a skip or a
- * place from another device.
+ * place from another device — or until M asks for the reading (`ReturnMessage`),
+ * or a sentence begins on the visible page while playing (`SpeakMessage.recover`).
  */
 export interface BrowseMessage {
   kind: 'browse';
+}
+
+/**
+ * M, on the player: bring the page back to the reading and follow it again,
+ * **without** starting it (#71, #53).
+ *
+ * To the sentence the WebView is already showing, and within it to the line the
+ * spoken word is on, so a reading that is playing keeps its Word Timings. The
+ * bridge sends a revealed `show` instead when the WebView is showing some other
+ * sentence, or none. A glide within the visible page, a jump beyond it, and a
+ * display when the sentence's section is not on the page — every move the page
+ * makes is one of those three.
+ */
+export interface ReturnMessage {
+  kind: 'return';
+}
+
+/**
+ * The player is collapsed, and the page only follows (#71, ADR 0050), or it is
+ * open again.
+ *
+ * While `on`, a finger cannot move the page — the collapsed player has no M to
+ * bring it back with — and a page the owner had browsed away is brought back to
+ * the reading as it comes on, as M would. A tap on a sentence still moves the
+ * reading there. Off, the page can be dragged again and nothing moves.
+ */
+export interface FollowOnlyMessage {
+  kind: 'followOnly';
+  on: boolean;
 }
 
 /**
@@ -361,6 +431,41 @@ export interface InsetMessage {
   kind: 'inset';
   /** The covered height at the bottom, in CSS pixels. Zero when nothing covers the text. */
   bottomPx: number;
+  /**
+   * The player's height when it is **open and has nothing to say**: its own
+   * controls, padding and border, without the notes it shows above them. Zero
+   * until the open player has been measured, and then `bottomPx` stands in.
+   *
+   * The Line Position is measured above this and not above `bottomPx` (#71, ADR
+   * 0050). `bottomPx` grows with every note the player shows and shrinks to one
+   * button when it collapses, and a line position measured against it moved the
+   * target with each: measured, a note that came and went while paused left the
+   * line 87 px above the middle until Play. This number changes only when the
+   * controls themselves do, so a note, and collapsing, move nothing — the owner's
+   * choice, the height reckoned as it was before collapsing.
+   */
+  openPx: number;
+}
+
+/**
+ * How the page follows the reading (#71, ADR 0050): the owner's **Line
+ * Position**, as a share of the visible page's height from its top, and whether
+ * the page moves to it a line at a time or continuously.
+ *
+ * A message of its own, like the theme, rather than a field of `InsetMessage`:
+ * that one is the player's geometry, sent by the player as it lays out, and this
+ * is a setting, sent when the owner changes it. It changes nothing per word and
+ * crosses the bridge only when it changes, and again when the program installs.
+ * Both settings travel together, every time, so the program never holds half of
+ * an old choice. A page following the reading when it arrives is brought to the
+ * new position at once, by a glide within the visible page and a jump beyond it.
+ */
+export interface FollowingMessage {
+  kind: 'following';
+  /** 0.2 to 0.8: the Line Position's percent over a hundred. */
+  linePosition: number;
+  /** A line at a time, or continuously as the words are spoken (`Scrolling` in settings.ts). */
+  scrolling: 'line' | 'continuous';
 }
 
 /**
@@ -452,7 +557,10 @@ export type HighlightMessage =
   | HoldMessage
   | ClearMessage
   | BrowseMessage
+  | ReturnMessage
+  | FollowOnlyMessage
   | InsetMessage
+  | FollowingMessage
   | BarMessage
   | AppearanceMessage
   | MeasuredMessage

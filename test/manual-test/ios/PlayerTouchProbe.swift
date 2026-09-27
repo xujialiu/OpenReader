@@ -124,4 +124,56 @@ final class PlayerTouchProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Play"].exists || app.buttons["Pause"].exists, "Collapsed player must still offer one transport button")
     capture("collapsed-after-arrow-tap", app)
   }
+
+  /// #71 batch 2 (ADR 0050): a real touch collapsing the player during live
+  /// playback, and reopening it, must not move the page — the Line Position
+  /// is measured above the open player's own height (`onOpenHeight`), not
+  /// above what the player currently covers, precisely so collapsing does not
+  /// move the target. There is no separate expand gesture while playing: the
+  /// collapsed pill has only the one Play/Pause button, and a real Pause is
+  /// what reopens the player (`reading-view.tsx`'s `setCollapsed(false)`), so
+  /// reopening here also pauses — the current behaviour, not a limitation of
+  /// this probe.
+  ///
+  /// Needs a Document already open, paused, on a sentence with Word Timings
+  /// and a chosen Voice, the player expanded — the same harness setup
+  /// `testHeadRowTouches` needs. Run `line-follow.cjs SIMULATOR_UDID
+  /// METRO_LOG arm` immediately before this method (in the same, still-
+  /// running app) and `… analyse` immediately after: this method only touches
+  /// the player's own controls, never the WebView, so the recorder started by
+  /// `arm` is what shows whether the page moved. Leaves the player expanded
+  /// and paused.
+  func testCollapseAndReopenDuringPlaybackRealTouch() throws {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.activate()
+    dismissSystemAlerts(app)
+
+    let playBtn = app.buttons["Play"]
+    XCTAssertTrue(playBtn.waitForExistence(timeout: 15), "Expanded, paused player with Play must already be showing")
+    capture("collapse-touch-before-play", app)
+    playBtn.tap()
+
+    let chevron = app.buttons["Collapse the player"]
+    XCTAssertTrue(chevron.waitForExistence(timeout: 5), "Player did not stay expanded at Play")
+    // Collapse partway into the reading, not at the instant Play was tapped,
+    // so this exercises a collapse of a reading already under way.
+    Thread.sleep(forTimeInterval: 1.5)
+    chevron.tap()
+
+    XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 5), "Collapsing did not leave the one Pause button")
+    XCTAssertFalse(app.buttons["Collapse the player"].exists, "Player did not actually collapse")
+    capture("collapse-touch-collapsed", app)
+
+    // Long enough for at least two line changes at rest (2-3 s per line, this
+    // book — line-follow.cjs's own derivation) while collapsed.
+    Thread.sleep(forTimeInterval: 7.0)
+
+    XCTAssertTrue(app.buttons["Pause"].exists, "Still playing before the reopen tap")
+    app.buttons["Pause"].tap()
+
+    let voiceBtn = app.buttons["Choose a Voice"]
+    XCTAssertTrue(voiceBtn.waitForExistence(timeout: 5), "Tapping the collapsed control did not re-expand the player")
+    XCTAssertTrue(app.buttons["Play"].exists, "Tapping the collapsed control did not pause")
+    capture("collapse-touch-reopened-paused", app)
+  }
 }

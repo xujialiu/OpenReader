@@ -67,9 +67,10 @@ final class PauseMenuProbe: XCTestCase {
   static let paragraphLabels = ["0 ms", "100 ms", "200 ms", "300 ms", "400 ms", "500 ms", "750 ms", "1000 ms", "1500 ms", "2000 ms"]
 
   /// The layout: Theme's card with no header, a "Reading aloud" header over
-  /// exactly the two Pause rows, and the bracket card directly below with no
-  /// header of its own (#60 moved it there) but keeping its downloaded-
-  /// chapters footnote. Both rows read their fresh-install default, and each
+  /// exactly the two Pause rows, and the bracket card below with no header of
+  /// its own (#60 moved it there) but keeping its downloaded-chapters
+  /// footnote. Since #71 the Line position card sits between the two
+  /// (`LinePositionProbe`). Both rows read their fresh-install default, and each
   /// row's own accessibility label is exactly "Pause between sentences, 0 ms"
   /// / "Pause between paragraphs, 200 ms". Captured in whichever theme the
   /// device starts in, then Dark, then restored either way.
