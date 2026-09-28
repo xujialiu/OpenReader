@@ -43,6 +43,21 @@
   move for no move at all. Two readings that agree are not enough: the waiting
   line stays put for seconds. Wait until the waiting line has gone, then for
   three readings half a second apart that agree (`settledInk`).
+- **The waiting line is not in the accessibility tree either, so an XCTest
+  wait for it to go passes at once.** Measured 2026-09-28 (#79): `ZoomProbe`
+  waited for `app.staticTexts` matching `label BEGINSWITH 'Laying the document
+  out'` to stop existing, the wait passed on its first check, and the pinch
+  after it landed on that line, which its screenshot showed at 12 s after the
+  tap and at 29 s in a slower run. The pinch magnified nothing, and three runs
+  read that as the page refusing to zoom. Fix: open the Document through the
+  harness (`{"do":"open","id":…}`) and wait for Metro's log to print an
+  `HX … rendered=N` line after it, as `zoom.sh` does; or wait on ink, as above.
+- **`xcresulttool export attachments` once never returned.** The first
+  `zoom.sh`, 2026-09-28: the second XCTest ended at 09:06:18, the export after
+  it was still running when the 600 s command limit killed the script, and no
+  `attachments` directory had been written. The first run's export had taken
+  a second. Cause not isolated. `zoom.sh` now runs it under `perl -e 'alarm 60;
+  exec @ARGV'`, since this Mac has no `timeout` (pitfalls/shell.md).
 - **A Reading Button waiting for audio reads `busy, Playing`, not `Playing`.**
   `accessibilityValue` and `accessibilityState.busy` arrive in XCTest as one
   `value`. Match the end of it.

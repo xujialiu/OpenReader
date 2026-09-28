@@ -908,6 +908,18 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     pin(library('View.js'), 'contentMode: "mobile",', 'the installed @epubjs-react-native/core View.js');
   });
 
+  it('gives the reading page a viewport that cannot be scaled, so a pinch never magnifies it', () => {
+    // The library's template set `width=device-width, initial-scale=1.0` and no
+    // limit, and a WKWebView honours the page's viewport: a pinch magnified the
+    // reading page 2.6x and ran its text off the screen (#79, design 0052). The
+    // template is one string in the library, so the limit is added by `patches/`.
+    pin(
+      library('template.js'),
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />',
+      'the installed @epubjs-react-native/core template.js',
+    );
+  });
+
   it('restyles every rendered section and then re-centres, because the text has moved', () => {
     // The opposite of the `inset` message, and the difference is the whole of it:
     // the player collapsing moves not one character (01:11), and a font change
@@ -1623,6 +1635,94 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     // A tap is still a click, and a click is not heard as a drag. The long press
     // stays the platform's; lookup only observes its passive events.
     expect(fn(program, 'tapped')).not.toContain('browsing');
+  });
+
+  /**
+   * **Issue #79.** Once the page could no longer be magnified, a pinch still
+   * switched the player's A to M, measured on the simulator: its fingers move
+   * further than a tap's jitter, and `dragged` took that for a drag. The owner's
+   * rule is that a pinch does nothing at all. Run here, `landed` and `dragged` as
+   * the program has them, against touches a test writes; the rest of the program
+   * is replaced by counters.
+   */
+  describe('a pinch, run', () => {
+    interface Page {
+      halts(): number;
+      browsing: boolean[];
+      landed(event: unknown): void;
+      dragged(event: unknown): void;
+    }
+    const page = (): Page =>
+      vm.runInNewContext(
+        [
+          'var stage = { scrollTop: 0 };',
+          'function scroller() { return stage; }',
+          'var lookupHeld = false; var followOnly = false;',
+          'var touchId = null; var touchY = null; var touchTop = null; var pinched = false; var DRAG_PX = 10;',
+          'var halted = 0; function halt() { halted += 1; }',
+          'var browsing = []; function setBrowsing(value) { browsing.push(value); }',
+          fn(program, 'landed'),
+          fn(program, 'dragged'),
+          '({ halts: function () { return halted; }, browsing: browsing, landed: landed, dragged: dragged });',
+        ].join('\n'),
+      ) as Page;
+    /** The fingers down, as `[identifier, clientY]`, in a section document whose page has not scrolled. */
+    const fingers = (...down: [number, number][]) => ({
+      touches: down.map(([identifier, clientY]) => ({ identifier, clientY })),
+      currentTarget: {},
+    });
+
+    it('still takes one finger dragging the page for Browsing, which is what makes the rest mean anything', () => {
+      const p = page();
+      p.landed(fingers([1, 300]));
+      p.dragged(fingers([1, 300]));
+      p.dragged(fingers([1, 340]));
+      expect(p.halts()).toBe(2);
+      expect(p.browsing).toEqual([true]);
+    });
+
+    it('neither browses nor stops a glide when a second finger lands and the two move apart', () => {
+      const p = page();
+      p.landed(fingers([1, 300]));
+      p.landed(fingers([1, 300], [2, 400]));
+      for (let step = 1; step <= 6; step += 1) p.dragged(fingers([1, 300 - step * 20], [2, 400 + step * 20]));
+      expect(p.halts()).toBe(0);
+      expect(p.browsing).toEqual([]);
+    });
+
+    it('ignores the finger left on the page after the other lifts, until a new gesture begins', () => {
+      const p = page();
+      p.landed(fingers([1, 300]));
+      p.landed(fingers([1, 300], [2, 400]));
+      p.dragged(fingers([1, 280], [2, 420]));
+      // The second finger lifts; the first goes on moving, far past a tap.
+      p.dragged(fingers([1, 240]));
+      p.dragged(fingers([1, 120]));
+      expect(p.halts()).toBe(0);
+      expect(p.browsing).toEqual([]);
+      // Every finger lifts, and the next gesture is one finger: a drag again.
+      p.landed(fingers([3, 500]));
+      p.dragged(fingers([3, 500]));
+      p.dragged(fingers([3, 440]));
+      expect(p.browsing).toEqual([true]);
+    });
+
+    it('knows a pinch by its moves alone when the second finger landed where it was not heard', () => {
+      const p = page();
+      p.landed(fingers([1, 300]));
+      p.dragged(fingers([1, 300], [2, 400]));
+      p.dragged(fingers([1, 260], [2, 440]));
+      expect(p.halts()).toBe(0);
+      expect(p.browsing).toEqual([]);
+    });
+
+    it('is heard wherever a finger is, in every section document and in the margins between them', () => {
+      pin(fn(program, 'adopt'), "contents.document.addEventListener('touchstart', landed, { passive: true });", 'highlighter.ts, function adopt');
+      pin(program, "if (stage) stage.addEventListener('touchstart', landed, { passive: true });", 'highlighter.ts, the install');
+      // Only landed writes a gesture's start; dragged may only ever set it.
+      expect(program.match(/pinched = /g)).toHaveLength(3);
+      pin(fn(program, 'landed'), 'pinched = count > 1;', 'highlighter.ts, function landed');
+    });
   });
 
   it('sends the browse message before the display that moves the page', () => {

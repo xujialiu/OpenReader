@@ -10,6 +10,19 @@ index 0de0fef..19de579 100644
      javaScriptEnabled: true,
      originWhitelist: ['*'],
      scrollEnabled: false,
+diff --git a/node_modules/@epubjs-react-native/core/lib/commonjs/template.js b/node_modules/@epubjs-react-native/core/lib/commonjs/template.js
+index e5431d2..5b3d372 100644
+--- a/node_modules/@epubjs-react-native/core/lib/commonjs/template.js
++++ b/node_modules/@epubjs-react-native/core/lib/commonjs/template.js
+@@ -12,7 +12,7 @@ var _default = exports.default = `
+   <html>
+   <head>
+     <meta charset="utf-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+     <title>EPUB.js</title>
+     <script id="jszip"></script>
+     <script id="epubjs"></script>
 diff --git a/node_modules/@epubjs-react-native/core/lib/module/View.js b/node_modules/@epubjs-react-native/core/lib/module/View.js
 index 63f3c24..435d7af 100644
 --- a/node_modules/@epubjs-react-native/core/lib/module/View.js
@@ -22,3 +35,16 @@ index 63f3c24..435d7af 100644
      javaScriptEnabled: true,
      originWhitelist: ['*'],
      scrollEnabled: false,
+diff --git a/node_modules/@epubjs-react-native/core/lib/module/template.js b/node_modules/@epubjs-react-native/core/lib/module/template.js
+index fbb87aa..6b31ff2 100644
+--- a/node_modules/@epubjs-react-native/core/lib/module/template.js
++++ b/node_modules/@epubjs-react-native/core/lib/module/template.js
+@@ -4,7 +4,7 @@ export default `
+   <html>
+   <head>
+     <meta charset="utf-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+     <title>EPUB.js</title>
+     <script id="jszip"></script>
+     <script id="epubjs"></script>

@@ -13,6 +13,29 @@
   - Fix: start it as `npx expo start --port PORT < /dev/null`. It will not prompt, because stdin is not a terminal.
   - To confirm the change is in what Metro serves: `curl -s "http://localhost:PORT/index.bundle?platform=ios&dev=true&minify=false" | grep -c <identifier from your change>`.
   - Ask a few seconds after the write, not in the same breath. Measured 2026-09-23: a bundle fetched straight after a `cp` put a file back still held the code the `cp` had replaced, and one fetched 3 s later did not. One stale answer is Metro's watcher catching up, not CI mode.
+- **`npx patch-package PACKAGE`, making a patch, can run for minutes without
+  writing it.** 2026-09-28 (#79): after `node_modules/@epubjs-react-native/core`'s
+  two `template.js` files were edited, `npx patch-package
+  @epubjs-react-native/core` was still running at the 120 s command limit, and
+  `patches/` was unchanged. It installs a clean copy of the package to diff
+  against, which is the likely wait. Fix: make the hunks with `git diff
+  --no-index` between an original and the edited file, put them in the patch
+  file in path order, then prove the patch the way a clean `npm ci` would:
+  `git apply -R` the whole patch off `node_modules`, run `npx patch-package`
+  (applying, which needs no network, answered `✔` at once), and check the
+  edited lines are back.
+- **The app's console lines can stop reaching Metro's log while the app stays
+  connected.** 2026-09-28 (#79): the last line of Metro 8100's log was written
+  at 09:54, straight after a `ZoomProbe` double tap, and nothing followed:
+  - the app was still listed in `/json/list`;
+  - `cdp.cjs --warnings` closed with 1006;
+  - the "Open debugger to view warnings." banner was up;
+  - the answer to a harness `js` command stood in the player's note and never
+    appeared in the log, so `zoom.sh` gave up on it.
+  Cause not isolated. A relaunch (`simctl terminate`, then `launch` with
+  `-RCT_jsLocation`) brought the log back, and the same double tap then
+  answered in it at once. When a script waits on Metro's log and gets
+  nothing, look at the screen before blaming the app.
 - **The bundle is stale or broken after `npm ci` or a new patch.** `node_modules` was replaced under a running Metro. Restart it with `--clear` and check the bundle as above.
 - **A new worktree has no `node_modules`**, so `npm run typecheck` answers `sh: tsc: command not found` until `npm ci` has run. Plain `npm ci`, with nothing passed to it, is the whole command: 831 packages in 4 s, ending in `patch-package` (`@epubjs-react-native/core@1.4.8 ✔`).
 - **`npm ci` stops with `ERESOLVE could not resolve`, naming `react-dom@19.3.0`.** From 538fa10 on 2026-09-22 until 2026-09-23 this was every new worktree's first wall, and `--legacy-peer-deps` was the way past it. It is now fixed at the root (#42, ADR 0039): `package.json` overrides `react-dom` to `$react`, so the lockfile holds the `react-dom` the pinned `react` peers with, and no command in this repository needs the flag. The symptom returns only on a branch from before that fix, or if the override is dropped — pass `--legacy-peer-deps` once to get moving, then merge `main`, rather than writing the flag into an instruction again. `react-dom` does not reach the iOS bundle either way: the same Hermes bundle hash comes out of both trees (engineering log, 2026-09-22 13:02 and 2026-09-23 02:48).
