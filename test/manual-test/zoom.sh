@@ -48,7 +48,9 @@ if [[ $# -eq 3 && $2 == control ]]; then
 <body style="font:18px serif;margin:20px"><h1 id="s">scale ?</h1><p>This is a short test of reading aloud, written for a machine to speak.</p>
 <script>setInterval(function(){document.getElementById('s').textContent='scale '+visualViewport.scale.toFixed(2)},200)</script></body></html>
 HTML
-  (cd "$page" && python3 -m http.server 8111 > "$output/server.log" 2>&1) &
+  # `exec`, so that $! is the server itself: a trap that killed only the
+  # subshell left it serving 8111 (2026-09-28).
+  (cd "$page" && exec python3 -m http.server 8111 > "$output/server.log" 2>&1) &
   server=$!
   trap 'kill $server 2>/dev/null' EXIT
   sleep 1
