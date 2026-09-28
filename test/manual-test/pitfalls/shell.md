@@ -129,3 +129,6 @@
   baked `RCTMetroPort` into the product's `Info.plist` (read back with `plutil`),
   so the build asks this tree's Metro without the re-sign. Prebuild to done
   took 8.5 minutes. Restart Metro with `--clear` after the `npm install`.
+- **`tail -n +$(wc -l < FILE)` fails on macOS with `illegal offset -- +`.**
+  BSD `wc -l < FILE` pads its number with spaces, so the argument is `+     230`.
+  Strip it: `S=$(wc -l < FILE | tr -d ' ')` (2026-09-28, final run of #75–#77).

@@ -2,8 +2,8 @@
 # Locks or unlocks a simulator, as its side button does, or presses the lock
 # screen's own Now Playing Play or Pause while the device stays locked.
 #
-#   bash test/manual-test/lock-device.sh SIMULATOR_UDID lock|unlock|play|pause
-#   bash test/manual-test/lock-device.sh SIMULATOR_UDID lock-on SIGNAL_FILE
+#   bash test/manual-test/lock-device.sh SIMULATOR_UDID lock|unlock|play|pause|home
+#   bash test/manual-test/lock-device.sh SIMULATOR_UDID lock-on|home-on SIGNAL_FILE
 #
 # The XCTest is built once into /tmp/openreader-lock-device, and again whenever
 # DeviceLockProbe.swift is newer than that build, and then only run
@@ -16,10 +16,13 @@
 # run's log is /tmp/openreader-lock-device/ACTION.log. Unlock expects no
 # passcode, which is how a simulator is made. play and pause wake a dark screen
 # with one Home press and fail unless the centre button reads Play (or Pause)
-# and then turns; play checks the simulator's volume is zero first.
+# and then turns; play checks the simulator's volume is zero first. home and
+# home-on press Home instead of the lock button (XCUIDevice's own press; `axe
+# button home` did nothing on iOS 27.0), home-on waiting for SIGNAL_FILE as
+# lock-on does, with its log in /tmp/openreader-lock-device/home-on.log.
 set -euo pipefail
-[[ ( $# -eq 2 && ( $2 == lock || $2 == unlock || $2 == play || $2 == pause ) ) || ( $# -eq 3 && $2 == lock-on ) ]] \
-  || { echo 'Usage: lock-device.sh SIMULATOR_UDID lock|unlock|play|pause | lock-device.sh SIMULATOR_UDID lock-on SIGNAL_FILE' >&2; exit 2; }
+[[ ( $# -eq 2 && ( $2 == lock || $2 == unlock || $2 == play || $2 == pause || $2 == home ) ) || ( $# -eq 3 && ( $2 == lock-on || $2 == home-on ) ) ]] \
+  || { echo 'Usage: lock-device.sh SIMULATOR_UDID lock|unlock|play|pause|home | lock-device.sh SIMULATOR_UDID lock-on|home-on SIGNAL_FILE' >&2; exit 2; }
 simulator=$1
 action=$2
 source_dir=$(cd "$(dirname "$0")" && pwd)
@@ -37,6 +40,7 @@ case $action in
   lock) method=testLock ;; unlock) method=testUnlock ;;
   play) method=testLockScreenPlay ;; pause) method=testLockScreenPause ;;
   lock-on) method=testLockOnSignal; rm -f "$3" ;;
+  home) method=testHome ;; home-on) method=testHomeOnSignal; rm -f "$3" ;;
 esac
 TEST_RUNNER_LOCK_SIGNAL=${3:-} xcodebuild -project "$work/ManualTests.xcodeproj" -scheme LockScreenProbe \
   -destination "id=$simulator" -derivedDataPath "$work/build" \

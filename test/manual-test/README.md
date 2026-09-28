@@ -64,7 +64,7 @@ What has gone wrong before, and what fixed it, one file per area. Before using a
 - [Physical iPhone](pitfalls/physical-iphone.md): Physical iPhone Release builds; Physical iPhone screen; Physical iPhone logs and the lock screen's state (#66).
 - [Metro and the bundle](pitfalls/metro.md).
 - [Simulators, installs and the simulator's volume](pitfalls/simulators.md): Simulators and installs; Away from the screen: the lock and the background time (#75).
-- [Locking the device, and the app away from the screen](pitfalls/lock-and-background.md).
+- [Locking the device, and the app away from the screen](pitfalls/lock-and-background.md): Home and Control Center through XCTest and `axe`; locking at a moment of a download.
 - [Screenshots](pitfalls/screenshots.md): Screenshots of a sheet; Screenshots of the reading page.
 - [Measuring inside the reader's WebView](pitfalls/webview.md).
 - [Typing, environment and silence](pitfalls/typing-environment.md).
@@ -73,7 +73,7 @@ What has gone wrong before, and what fixed it, one file per area. Before using a
 - [The shell](pitfalls/shell.md).
 - [The simulator MCP servers](pitfalls/mcp.md): mobilebuildmcp's new names, its scheme and device defaults, installing expo-mcp.
 - [Evaluating in the app through `cdp.cjs`](pitfalls/cdp.md).
-- [A download away from the screen](pitfalls/background-downloads.md): the simulator's bounded background time; the continued processing task's log lines (#75, #76, #77).
+- [A download away from the screen](pitfalls/background-downloads.md): the simulator's bounded background time; the continued processing task's log lines (#75, #76, #77); polling every preparation, the lock's flicker and the continued task, a hotspot's `waiting`.
 - [Merges, seeding and past verification runs](pitfalls/verification-runs.md): Merging main's #67 and #68 into #71 (2026-09-26); Verifying #71 batch 2; Seeding a real book's place through the harness (#68); Independent verification of the collapsed player and its edge swipe (#67); Verifying #71 batches 3 and 4 (2026-09-26); Verifying #75: a download beside a Reading (2026-09-28).
 
 ## Recipes

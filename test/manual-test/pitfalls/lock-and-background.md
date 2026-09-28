@@ -48,3 +48,32 @@
   while the download was `interrupted` 27–40 s after the lock (the native
   background task's expiry). That the app still runs does not mean the
   download may.
+- **`axe button home`, and a swipe up from the bottom edge through `axe
+  swipe`, do nothing on iOS 27.0; `lock-device.sh home` does.** Measured
+  2026-09-28 (#75–#77 final run, `iPhone 17 download`): both returned 0 and an
+  in-app `AppState` listener recorded no change. `axe` itself works: `axe
+  swipe --start-x 385 --start-y 3 --end-x 385 --end-y 450` opens Control
+  Center (`inactive`, no `background`). `lock-device.sh UDID home` presses
+  Home through XCTest (`testHome`): `inactive` 1.9 s after the probe's
+  `LOCKPROBE home at` line, `background` 1.7 s later. `home-on FILE` waits
+  like `lock-on`.
+- **A swipe that closes Control Center can fail and leave it open, and the
+  next Home press then closes Control Center instead of going Home.**
+  Measured 2026-09-28 09:49 (final run, check 4 part F): `axe swipe` from
+  (200, 860) to (200, 300), 4 s after opening, left Control Center up for
+  39 s; the next `lock-device.sh home` returned the app to `active` (the bounded
+  task ended, a submission went out) instead of leaving it, so that "Home and
+  back" measured nothing. The same swipe worked in six other tries. Fix: read
+  `AppState.currentState` through `cdp.cjs` after the swipe and retry until it
+  reads `active` (`/tmp/openreader-final-sim/check4b.sh`, `cc()`).
+- **`download-lock-at.cjs … left:5` rarely crosses the boundary with the app
+  away, because the simulated lock takes 4–9.5 s to reach `background`.**
+  Measured 2026-09-28 (final run, four runs): press to `inactive` 1.4–4.3 s, the
+  flicker `active` for 14 ms to 1.0 s, `background` 4.0–9.5 s after the press.
+  With `left:5` on a fast connection the next chapter began 68 ms before
+  `inactive`; with `left:15` it began during the 1.0 s flicker; with `left:5`
+  and a slow provider the chapter's last two texts took 25 s and no boundary was
+  crossed before the background time ran out. `left:30` put the boundary 17.5 s
+  after `background` and before the end of the background time (27 s). Read the
+  crossing from the task's own `current` against the app's `background` event
+  (`download-ahead.cjs` or `download-sampler.cjs`), not from the script's mark.

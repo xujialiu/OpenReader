@@ -69,3 +69,46 @@
   `finishContinued` or `beginBackground` calls while the app was in front. As
   [cdp.md](cdp.md) says, relaunch the app after such a probe and before
   measuring anything else. The relaunch also removes the wrapper.
+- **A poll of `preparationRequest()` every 100 ms misses preparations.**
+  Measured 2026-09-28 (final run, check 1): 9 of 40 tokens were never seen,
+  since a preparation ahead of *My Vampire System* took 10–110 ms. Tokens are
+  consecutive, so a gap is a miss, not a request that bypassed the slot. Poll
+  every 10 ms (`download-ahead.cjs install DOCUMENT_ID 10`); on the 2,077-chapter
+  book that saw all 795 of 795.
+- **In a freshly launched app `planOf(document)` is null until something asks
+  for it.** An `enqueue` built from `planOf(X).chapters` threw `Cannot read
+  property 'chapters' of null` after a relaunch and the 5-minute run measured
+  nothing (2026-09-28, check 2's first try). Call `requestPlan(X, TITLE)` and
+  poll `planOf` first; opening the reader does not load it.
+- **Since #77's 8aa75f6 the simulated lock's `active` flicker submits a continued
+  task, and the app can be in the background with no background task until the
+  refusal is handled.** Measured 2026-09-28 (final run) in five locks: the
+  flicker ended the bounded `Prepare narration` and submitted; the new bounded
+  task started after the refusal, 0 s, 0.96 s, 1.00 s, 1.27 s and 3.88 s after
+  `background`, and in two locks the submission itself reached
+  BGTaskScheduler 0.85–0.96 s after `background`. `holding()` is true while a
+  submission is out, so `background` starts nothing itself. The simulator did
+  not suspend the app in those windows (runningboard `running-active`). Read it
+  in the stream of the entry above: `Ending task with identifier N … Prepare
+  narration`, `submitTaskRequest`, `continued task refused`, `Created background
+  task … Prepare narration`.
+- **The Mac on the owner's iPhone hotspot (gateway 172.20.10.1) loses its route
+  for a few seconds, and the simulator's download goes `waiting`.** Measured
+  2026-09-28 09:55: the Mac's own log said `No network route` at 09:54:58, the
+  app's `NWPathMonitor` answered unsatisfied, and the task read `waiting` (`No
+  network connection, waiting to reconnect`) until paused. A `waiting` download
+  starts no bounded task on leaving (`runsAway()` leaves it out), but is
+  submitted on every return (`GOES_ON` includes it). A run that meets it
+  measures the network, not the change: check the task's state before blaming
+  the app.
+- **`DownloadBesideReadingProbe.testRingThenPauseAllAndResumeAll` spends fresh
+  chapters.** Its Resume all resumes every chapter of the download, and since
+  c7de45e every unprepared one is then prepared ahead, within seconds, before
+  its closing Pause all. On *My Vampire System* (245 chapters) it prepared the
+  remaining fresh ones. Run it after the measurements that need fresh chapters.
+- **A preparation during an XCTest runner's launch takes up to ten times as
+  long.** On the 2,077-chapter book, 7 of the 8 preparations over 1.2 s (up to
+  2.99 s, against a median of 263 ms) came within 20 s of a `fling-jump.sh`
+  call, while its runner was being launched, before any flick. The recording's
+  `flicks began` is when `xcodebuild` started; the flicks come 15–25 s later.
+  Leave the runner's launch out when timing what the app does.

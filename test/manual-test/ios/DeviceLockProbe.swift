@@ -32,6 +32,28 @@ final class DeviceLockProbe: XCTestCase {
     print("LOCKPROBE pressing at \(Date().timeIntervalSince1970)")
     XCUIDevice.shared.perform(selector)
   }
+  /// Home, as a person leaves an app: the app goes to the background and the
+  /// Home Screen is in front. `axe button home` and a swipe up from the bottom
+  /// edge did nothing on iOS 27.0 (Pitfalls, lock-and-background.md).
+  func testHome() throws {
+    print("LOCKPROBE home at \(Date().timeIntervalSince1970)")
+    XCUIDevice.shared.press(.home)
+  }
+  /// Home the moment the file LOCK_SIGNAL names appears, as testLockOnSignal
+  /// locks; prints `LOCKPROBE waiting` once it polls and `LOCKPROBE pressing at`
+  /// (Unix seconds) as it presses.
+  func testHomeOnSignal() throws {
+    let env = ProcessInfo.processInfo.environment
+    let signal = try XCTUnwrap(env["LOCK_SIGNAL"], "LOCK_SIGNAL is not set")
+    let end = Date().addingTimeInterval(Double(env["LOCK_WAIT"] ?? "") ?? 300)
+    print("LOCKPROBE waiting for \(signal)")
+    while !FileManager.default.fileExists(atPath: signal) {
+      guard Date() < end else { XCTFail("No \(signal) in time"); return }
+      Thread.sleep(forTimeInterval: 0.05)
+    }
+    print("LOCKPROBE pressing at \(Date().timeIntervalSince1970)")
+    XCUIDevice.shared.press(.home)
+  }
   /// A locked simulator with no passcode opens on a Home press: the first wakes
   /// the screen, the second leaves the lock screen.
   func testUnlock() throws {

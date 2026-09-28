@@ -309,6 +309,31 @@ download's start added one 242–373 ms hitch 0.3–0.8 s after the enqueue,
 whether or not it prepared anything, and the ten preparations ahead that
 followed added none.
 
+Three tools for every chapter prepared ahead (c7de45e) and the JavaScript
+thread under it, with `OPENREADER_METRO=http://127.0.0.1:PORT`:
+
+```sh
+node test/manual-test/download-ahead.cjs install DOCUMENT_ID 10     # in-app: every request, AppState, lag; until a relaunch
+node test/manual-test/download-ahead.cjs fail SECTION MAX           # handler probe: fail that section's requests MAX times
+node test/manual-test/download-ahead.cjs read [OUT.json]            # requests in order, overlaps, missed tokens, durations, lag
+node test/manual-test/cdp-rtt.cjs SECONDS [INTERVAL_MS]             # the thread's answer time, from outside
+node test/manual-test/cdp-profile.cjs FILE SECONDS OUT.json         # Hermes's sampler around evaluating FILE
+bash test/manual-test/lock-device.sh UDID home | home-on FILE       # a real Home press (axe's does nothing)
+```
+
+Measured 2026-09-28 on `iPhone 17 download` (iOS 27.0), Debug `0.0.2-beta45`
+(8aa75f6), Fish `s2.1-pro-free` at five at once, the Mac on a phone's hotspot;
+artifacts in `/tmp/openreader-final-sim/`:
+
+| Run | What happened |
+| --- | --- |
+| 40 fresh chapters of *My Vampire System*, Home after 11 | writer's first preparation 10.4 s; 18 ahead in 1.9 s, then the one out withdrawn as `PreparationInterrupted` in the same ms as `inactive`; no request for 24.4 s away; again 115 ms after `active`, all 40 prepared 3.1 s later, 32 s before the first chapter was written; list order, no overlap |
+| Every chapter (2,077) of a 34 MB Chinese book, 300 s in front, reader open | 794 prepared, 795 requests seen at 10 ms, no overlap; median 263 ms outside XCTest launches, first and last hundred 275 and 254 ms, slope −0.16 ms per chapter prepared; JS lag worst-per-second median 25 ms (17 with nothing running); CDP round trip median 4 ms, p95 62, max 447; flings at 30, 150, 260 s: frames p95 33 ms and 1–3 gaps over 100 ms, against 37–42 ms and 2–5 with no download |
+| The same book's download resumed in a new process, profiled | one JavaScript stall of 1.7 s (2.5 s in the run above), all in `injectWebViewVariables` of `@epubjs-react-native/core`: the hidden rendering's `Reader` puts the whole EPUB, base64, into its HTML template, and 14 `String.replace` calls scan it (#78) |
+| `fail` 1, 2, 3 times | 1: one warning, retried after the next chapter, never `preparing`; 2: two warnings, the writer read `preparing` and prepared it; 3: `blocked`, `Provoked failure 3` |
+| `download-away.cjs playlock` 120 s, fresh nav.229–232 | three chapter boundaries 2.6, 52.8 and 109.7 s after `background`, all prepared ahead 40 s before the lock; no `expired` in 155.8 s; never `interrupted` |
+| `download-lock-at.cjs … left:30`, nothing played, new process | next chapter 17.5 s after `background`; `expired` 27.0 s after it, `interrupted` 0.12 s later with no error; `downloading` 0.25 s after the return |
+
 ### A Reading paused and played with the phone locked, and the drawer beside a Reading (#75)
 
 Four more tools, all against a running app (none relaunches it), with
