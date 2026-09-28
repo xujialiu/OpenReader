@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createScheduler } from '../../src/offline/scheduler';
-import { navigationPlan, withPreparedSection, type DownloadTask, type NarrationPlan } from '../../src/offline/model';
+import { createScheduler, PreparationInterrupted } from '../../src/offline/scheduler';
+import { navigationPlan, withPreparedSection, type Chapter, type DownloadTask, type NarrationPlan } from '../../src/offline/model';
 import { SynthesisError } from '../../src/core/providers/errors';
 
 function fixture() {
@@ -69,7 +69,7 @@ describe('durable download scheduling', () => {
     const f = fixture(); f.fetch.mockImplementationOnce(async () => { f.tasks.splice(0); });
     await f.scheduler.run(); expect(f.tasks).toEqual([]); expect(f.fetch).toHaveBeenCalledTimes(1);
   });
-  it('yields to playback/background expiration and can resume without repeating saved audio', async () => {
+  it('yields to background expiration and can resume without repeating saved audio', async () => {
     const f = fixture(); f.fetch.mockImplementationOnce(async (_, text) => { f.stored.add(text); f.env.allowed = false; });
     await f.scheduler.run(); expect(f.tasks[0].state).toBe('interrupted');
     f.env.allowed = true; f.tasks[0].state = 'queued'; await f.scheduler.run();
@@ -83,7 +83,7 @@ describe('durable download scheduling', () => {
   });
 });
 
-it('prepares only selected late chapters and synthesizes each before preparing the next', async () => {
+it('prepares only selected late chapters, the next one while the one before it is written (#76)', async () => {
   let plan = navigationPlan({ sections: Array.from({ length: 2200 }, (_, i) => ({ href: `${i}.xhtml`, path: `${i}.xhtml` })),
     chapters: Array.from({ length: 2200 }, (_, i) => ({ id: `c${i}`, title: `Chapter ${i}`, parent: null, depth: 0, section: i, fragment: '' })) });
   const task: DownloadTask = { id: 'one', document: 'book', voice: { provider: 'fish', voice: 'A', label: 'A' },
@@ -92,7 +92,7 @@ it('prepares only selected late chapters and synthesizes each before preparing t
   const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
     exists: () => false, wait: async () => {},
     prepare: async (_, chapter) => {
-      expect(task.state).toBe('preparing'); events.push(`prepare ${chapter.id}`);
+      events.push(`prepare ${chapter.id} ${task.state}`);
       const ready = { ...chapter, prepared: true, texts: [`Audio ${chapter.id}`] };
       plan = withPreparedSection(plan, chapter.section!, [ready]); return ready;
     },
@@ -100,7 +100,9 @@ it('prepares only selected late chapters and synthesizes each before preparing t
   });
   expect(events).toEqual([]);
   await scheduler.run();
-  expect(events).toEqual(['prepare c2099', 'Audio c2099', 'prepare c2100', 'Audio c2100']);
+  // The first is counted while nothing else is going on; the second while the first is written.
+  expect(events.filter((e) => e.startsWith('prepare'))).toEqual(['prepare c2099 preparing', 'prepare c2100 downloading']);
+  expect(events.filter((e) => e.startsWith('Audio'))).toEqual(['Audio c2099', 'Audio c2100']);
   expect(plan.preparedSections).toEqual([2099, 2100]); expect(task.state).toBe('done');
 });
 
@@ -322,7 +324,7 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     expect(f.task.state).toBe('waiting');
     expect(f.task.failed).toEqual([]);
   });
-  it('yields to playback with several requests out, and keeps what they bring', async () => {
+  it('yields to background expiration with several requests out, and keeps what they bring', async () => {
     const env = { online: true, allowed: true };
     const r = requests(() => 1, (_, text) => { if (text === 'A1') env.allowed = false; });
     const f = book(6, 3, r.request, { env });
@@ -363,5 +365,313 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     const f = book(0, 3, r.request, { texts: ['Same.', 'Other.', 'Same.'] });
     await f.scheduler.run();
     expect(r.starts().sort()).toEqual(['start B1', 'start Other.', 'start Same.']);
+  });
+});
+
+describe('chapter text prepared ahead in the foreground, and never away from it (#76)', () => {
+  const voice = { provider: 'fish' as const, voice: 'A', label: 'A' };
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  /** Ticks until `done` holds; fails rather than hanging when it never does. */
+  async function until(done: () => boolean) {
+    for (let i = 0; i < 1000 && !done(); i++) await tick();
+    expect(done()).toBe(true);
+  }
+  /**
+   * A document of `count` chapters c0…, one per section, none prepared unless
+   * listed in `prepared`; chapter ci holds the one text `ci.` once prepared,
+   * and is complete once that is saved, as the runtime's `completed` answers.
+   * `hooks` act inside a preparation or request before it settles and may throw;
+   * every start and end is logged in order, and `most` is the most preparations
+   * out at once.
+   */
+  function book(count: number, { chapters, extra, prepared = [], completed, prepareTicks = () => 1, fetchTicks = () => 1, hooks = {} }: {
+    chapters?: string[]; extra?: Partial<DownloadTask>; prepared?: string[]; completed?: string[];
+    prepareTicks?: (chapter: string) => number; fetchTicks?: (text: string) => number;
+    hooks?: { prepare?: (chapter: string, call: number) => void | Promise<void>; fetch?: (text: string) => void | Promise<void> };
+  } = {}) {
+    const ids = Array.from({ length: count }, (_, i) => `c${i}`);
+    let plan = navigationPlan({ sections: ids.map((id) => ({ href: `${id}.xhtml`, path: `${id}.xhtml` })),
+      chapters: ids.map((id, i) => ({ id, title: id, parent: null, depth: 0, section: i, fragment: '' })) });
+    const ready = (chapter: Chapter): Chapter => ({ ...chapter, prepared: true, texts: [`${chapter.id}.`] });
+    for (const id of prepared) { const chapter = plan.chapters.find((c) => c.id === id)!; plan = withPreparedSection(plan, chapter.section!, [ready(chapter)]); }
+    const task: DownloadTask = { id: 't', document: 'book', voice, chapters: chapters ?? ids, state: 'queued', error: null, failed: [], ...extra };
+    const env = { foreground: true, allowed: true };
+    const events: string[] = [];
+    const calls = new Map<string, number>();
+    let out = 0;
+    let most = 0;
+    const prepare = vi.fn(async (_task: DownloadTask, chapter: Chapter) => {
+      const call = (calls.get(chapter.id) ?? 0) + 1; calls.set(chapter.id, call);
+      events.push(`prepare ${chapter.id} ${task.state}`); most = Math.max(most, ++out);
+      try {
+        for (let i = 0; i < prepareTicks(chapter.id); i++) await tick();
+        await hooks.prepare?.(chapter.id, call);
+        const done = ready(chapter);
+        plan = withPreparedSection(plan, chapter.section!, [done]);
+        return done;
+      } finally { out--; events.push(`prepared ${chapter.id}`); }
+    });
+    const saved = new Set<string>();
+    const fetch = vi.fn(async (_task: DownloadTask, text: string) => {
+      events.push(`fetch ${text}`);
+      for (let i = 0; i < fetchTicks(text); i++) await tick();
+      await hooks.fetch?.(text);
+      saved.add(text); events.push(`fetched ${text}`);
+    });
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => { events.push(`state ${task.state}`); },
+      connected: () => true, allowed: () => env.allowed, foreground: () => env.foreground,
+      completed: async () => new Set([...(completed ?? []), ...ids.filter((id) => saved.has(`${id}.`))]), exists: (_, text) => saved.has(text), prepare, fetch, wait: async () => {} });
+    const prepares = () => events.filter((e) => e.startsWith('prepare '));
+    return { task, env, events, saved, prepare, fetch, scheduler, prepares, most: () => most, plan: () => plan };
+  }
+
+  it('prepares the chapters after the one being written, one after another, while it is written', async () => {
+    const f = book(5, { fetchTicks: () => 20 });
+    await f.scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading', 'prepare c2 downloading', 'prepare c3 downloading', 'prepare c4 downloading']);
+    expect(f.most()).toBe(1);
+    // All four were ready before the first chapter's request came back.
+    expect(f.events.indexOf('prepared c4')).toBeLessThan(f.events.indexOf('fetched c0.'));
+    expect([...f.saved]).toEqual(['c0.', 'c1.', 'c2.', 'c3.', 'c4.']);
+    expect(f.task.state).toBe('done');
+  });
+
+  it('prepares ahead in the list\'s order, passing over chapters finished, failed, paused or already prepared', async () => {
+    const f = book(6, { chapters: ['c5', 'c1', 'c3', 'c0', 'c2', 'c4'], extra: { failed: ['c3'], paused: ['c1'] },
+      completed: ['c2'], prepared: ['c4'], fetchTicks: () => 10 });
+    await f.scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c5 downloading']);
+    expect([...f.saved]).toEqual(['c0.', 'c4.', 'c5.']);
+    expect(f.task.state).toBe('paused');
+  });
+
+  it('prepares every chapter the download will take while the first is written, not only the next ten', async () => {
+    const count = 25;
+    const f = book(count, { fetchTicks: (text) => (text === 'c0.' ? 4 * count : 1) });
+    await f.scheduler.run();
+    // The owner's choice of 2026-09-28: every chapter, where it was the next ten (#76).
+    expect(f.events.indexOf(`prepared c${count - 1}`)).toBeLessThan(f.events.indexOf('fetched c0.'));
+    expect(f.prepares()).toEqual(f.task.chapters.map((id, i) => `prepare ${id} ${i === 0 ? 'preparing' : 'downloading'}`));
+    expect(f.most()).toBe(1);
+    expect(f.task.state).toBe('done');
+  });
+
+  it('goes on down the list from where it was, rather than looking again at every chapter above it for each one', async () => {
+    const count = 200;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const f = book(count, { hooks: { fetch: (text) => (text === 'c0.' ? gate : undefined) } });
+    /** Chapters of the list looked at, by index, from the scheduler's side. */
+    let looked = 0;
+    const counted = (plan: NarrationPlan): NarrationPlan => ({ ...plan, chapters: new Proxy(plan.chapters, {
+      get(target, key, receiver) { if (typeof key === 'string' && /^\d+$/.test(key)) looked++; return Reflect.get(target, key, receiver); },
+    }) });
+    const scheduler = createScheduler({ tasks: () => [f.task], plan: () => counted(f.plan()), changed: () => {}, connected: () => true,
+      allowed: () => true, foreground: () => true, exists: (_, text) => f.saved.has(text), prepare: f.prepare, fetch: f.fetch, wait: async () => {} });
+    const pass = scheduler.run();
+    await until(() => f.events.includes(`prepared c${count - 1}`));
+    // Once each, give or take the chapter the writer is on: a walk from the top for each chapter would be count² / 2.
+    expect(looked).toBeLessThan(3 * count);
+    release();
+    await pass;
+    expect(f.task.state).toBe('done');
+  });
+
+  it('prepares a chapter resumed above the ones being prepared ahead next, once the scheduler is asked again', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const f = book(5, { extra: { paused: ['c1'] }, prepareTicks: (chapter) => (chapter === 'c3' ? 10 : 1), hooks: {
+      fetch: (text) => (text === 'c0.' ? gate : undefined),
+    } });
+    const pass = f.scheduler.run();
+    await until(() => f.events.includes('prepare c3 downloading'));
+    // The ring's resume, which the runtime follows with a run.
+    f.task.paused = [];
+    await f.scheduler.run();
+    await until(() => f.events.includes('prepared c4'));
+    release();
+    await pass;
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c2 downloading', 'prepare c3 downloading', 'prepare c1 downloading', 'prepare c4 downloading']);
+    expect(f.task.state).toBe('done');
+  });
+
+  it('shares one preparation between the chapter being prepared ahead and the writer that needs it, never two at once', async () => {
+    const f = book(2, { prepareTicks: (chapter) => (chapter === 'c1' ? 10 : 1) });
+    await f.scheduler.run();
+    expect(f.prepare.mock.calls.map(([, chapter]) => chapter.id)).toEqual(['c0', 'c1']);
+    expect(f.most()).toBe(1);
+    // The writer waited for it as the chapter being counted.
+    expect(f.events.indexOf('state preparing', f.events.indexOf('fetched c0.'))).toBeLessThan(f.events.indexOf('prepared c1'));
+    expect(f.task.state).toBe('done');
+  });
+
+  it('asks for a chapter the writer needs only once the preparation out for another has settled', async () => {
+    // c1 is paused, so c2 is prepared ahead; c1 is resumed while c2's preparation is out, and the writer needs it next.
+    const f = book(3, { extra: { paused: ['c1'] }, prepareTicks: (chapter) => (chapter === 'c2' ? 10 : 1),
+      hooks: { fetch: (text) => { if (text === 'c0.') f.task.paused = []; } } });
+    await f.scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c2 downloading', 'prepare c1 preparing']);
+    expect(f.events.indexOf('prepare c1 preparing')).toBeGreaterThan(f.events.indexOf('prepared c2'));
+    expect(f.most()).toBe(1);
+    expect([...f.saved]).toEqual(['c0.', 'c1.', 'c2.']);
+    expect(f.task.state).toBe('done');
+  });
+
+  it('writes the chapters prepared ahead while away from the screen, then waits as interrupted, and goes on when the app returns', async () => {
+    // The app leaves once c1 is prepared ahead, while c0 is still being written.
+    const f = book(4, { fetchTicks: () => 5, hooks: { prepare: (chapter) => { if (chapter === 'c1') f.env.foreground = false; } } });
+    await f.scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading']);
+    expect([...f.saved]).toEqual(['c0.', 'c1.']);
+    expect(f.task).toMatchObject({ state: 'interrupted', error: null, failed: [], current: null });
+
+    // Back in the foreground, the runtime queues an interrupted download again.
+    f.env.foreground = true; f.task.state = 'queued';
+    await f.scheduler.run();
+    expect(f.prepares().slice(2)).toEqual(['prepare c2 preparing', 'prepare c3 downloading']);
+    expect([...f.saved]).toEqual(['c0.', 'c1.', 'c2.', 'c3.']);
+    expect(f.task.state).toBe('done');
+  });
+
+  it('asks for nothing away from the screen: a chapter that is not prepared makes the download wait, not fail', async () => {
+    const f = book(3, { prepared: ['c0'] });
+    f.env.foreground = false;
+    await f.scheduler.run();
+    expect(f.prepare).not.toHaveBeenCalled();
+    expect([...f.saved]).toEqual(['c0.']);
+    expect(f.task).toMatchObject({ state: 'interrupted', error: null, failed: [] });
+  });
+
+  it('meets a preparation abandoned as the app left as an interruption, and asks for it again on return', async () => {
+    const f = book(2, { hooks: { prepare: (chapter, call) => { if (chapter === 'c0' && call === 1) { f.env.foreground = false; throw new PreparationInterrupted(); } } } });
+    await f.scheduler.run();
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.task).toMatchObject({ state: 'interrupted', error: null, failed: [] });
+
+    f.env.foreground = true; f.task.state = 'queued';
+    await f.scheduler.run();
+    expect(f.prepare.mock.calls.map(([, chapter]) => chapter.id)).toEqual(['c0', 'c0', 'c1']);
+    expect([...f.saved]).toEqual(['c0.', 'c1.']);
+    expect(f.task.state).toBe('done');
+  });
+
+  it('keeps writing when a preparation ahead is abandoned, and prepares ahead again when the app returns', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const f = book(3, { hooks: {
+      prepare: (chapter, call) => { if (chapter === 'c1' && call === 1) { f.env.foreground = false; throw new PreparationInterrupted(); } },
+      fetch: (text) => (text === 'c0.' ? gate : undefined),
+    } });
+    const pass = f.scheduler.run();
+    await until(() => f.events.includes('prepared c1'));
+    await tick();
+    expect(f.task.state).toBe('downloading');
+    // The runtime runs the scheduler again when the app returns; during a pass that wakes the preparation ahead.
+    f.env.foreground = true;
+    await f.scheduler.run();
+    await until(() => f.events.filter((e) => e === 'prepared c2').length === 1);
+    expect(f.events).not.toContain('fetched c0.');
+    release();
+    await pass;
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading', 'prepare c1 downloading', 'prepare c2 downloading']);
+    expect(f.task.state).toBe('done');
+    expect(f.events).not.toContain('state interrupted');
+    // Abandoned is not failed: nothing to report.
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('still stops the download when a preparation fails in the foreground', async () => {
+    const f = book(2, { hooks: { prepare: () => { throw new Error('Chapter preparation timed out. Continue to try again.'); } } });
+    await f.scheduler.run();
+    expect(f.task).toMatchObject({ state: 'blocked', error: 'Chapter preparation timed out. Continue to try again.' });
+  });
+
+  it('tries a chapter whose preparation ahead failed once more, after the chapter that follows it, before the writer needs it', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const f = book(4, { fetchTicks: () => 20, hooks: { prepare: (chapter, call) => { if (chapter === 'c1' && call === 1) throw new Error('Chapter 2 did not render.'); } } });
+    await f.scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading', 'prepare c2 downloading', 'prepare c1 downloading', 'prepare c3 downloading']);
+    // Ready before the first chapter's request came back, so a download away from the screen would have gone past it.
+    expect(f.events.indexOf('prepared c3')).toBeLessThan(f.events.indexOf('fetched c0.'));
+    expect([...f.saved]).toEqual(['c0.', 'c1.', 'c2.', 'c3.']);
+    expect(f.task).toMatchObject({ state: 'done', error: null });
+    // The download shows nothing for it, so the log names the chapter and why (#76): one such
+    // failure on the simulator left no trace of its cause.
+    expect(warn.mock.calls).toEqual([['Chapter c1 was not prepared ahead: Chapter 2 did not render.']]);
+    warn.mockRestore();
+  });
+
+  it('tries a failed chapter once more at once when no chapter follows it', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const f = book(2, { fetchTicks: () => 10, hooks: { prepare: (chapter, call) => { if (chapter === 'c1' && call === 1) throw new Error('Chapter 2 did not render.'); } } });
+    await f.scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading', 'prepare c1 downloading']);
+    expect(f.task.state).toBe('done');
+    warn.mockRestore();
+  });
+
+  it('leaves a chapter whose preparation ahead failed twice to the writer, which asks for it once more when its turn comes', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const f = book(4, { fetchTicks: () => 20, hooks: { prepare: (chapter, call) => { if (chapter === 'c1' && call <= 2) throw new Error(`Attempt ${call} did not render.`); } } });
+    await f.scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading', 'prepare c2 downloading', 'prepare c1 downloading',
+      'prepare c3 downloading', 'prepare c1 preparing']);
+    expect([...f.saved]).toEqual(['c0.', 'c1.', 'c2.', 'c3.']);
+    expect(f.task).toMatchObject({ state: 'done', error: null, failed: [] });
+    expect(warn.mock.calls).toEqual([
+      ['Chapter c1 was not prepared ahead: Attempt 1 did not render.'],
+      ['Chapter c1 was not prepared ahead: Attempt 2 did not render.'],
+    ]);
+    warn.mockRestore();
+  });
+
+  it('stops the download as before when the writer\'s own try fails too', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const f = book(3, { fetchTicks: () => 20, hooks: { prepare: (chapter) => { if (chapter === 'c1') throw new Error('Chapter 2 did not render.'); } } });
+    await f.scheduler.run();
+    expect(f.prepare.mock.calls.map(([, chapter]) => chapter.id)).toEqual(['c0', 'c1', 'c2', 'c1', 'c1']);
+    expect([...f.saved]).toEqual(['c0.']);
+    expect(f.task).toMatchObject({ state: 'blocked', error: 'Chapter 2 did not render.' });
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it('reports nothing for a preparation ahead withdrawn because the download stopped', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // What the runtime's cancelInactivePreparation does when Pause all is tapped with a preparation out.
+    const f = book(3, { fetchTicks: () => 5, hooks: { prepare: (chapter) => {
+      if (chapter === 'c1') { f.task.state = 'paused'; throw new Error('Chapter preparation was stopped.'); }
+    } } });
+    await f.scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading']);
+    expect(f.task.state).toBe('paused');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it.each(['paused', 'deleted'] as const)('never writes a chapter %s while it is prepared ahead', async (action) => {
+    const f = book(3, { fetchTicks: () => 5, hooks: { prepare: (chapter) => {
+      if (chapter !== 'c1') return;
+      if (action === 'paused') f.task.paused = ['c1']; else f.task.chapters = ['c0', 'c2'];
+    } } });
+    await f.scheduler.run();
+    expect(f.prepares()).toContain('prepare c1 downloading');
+    expect([...f.saved]).toEqual(['c0.', 'c2.']);
+    expect(f.task.failed).toEqual([]);
+    expect(f.task.state).toBe(action === 'paused' ? 'paused' : 'done');
+  });
+
+  it('stops preparing ahead when the download is removed', async () => {
+    const tasks: DownloadTask[] = [];
+    const f = book(4, { fetchTicks: () => 5, hooks: { prepare: (chapter) => { if (chapter === 'c1') tasks.splice(0); } } });
+    tasks.push(f.task);
+    const scheduler = createScheduler({ tasks: () => tasks, plan: () => f.plan(), changed: () => {}, connected: () => true, allowed: () => true,
+      foreground: () => true, exists: () => false, prepare: f.prepare, fetch: f.fetch, wait: async () => {} });
+    await scheduler.run();
+    expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading']);
+    expect(f.fetch.mock.calls.map(([, text]) => text)).toEqual(['c0.']);
+    expect(tasks).toEqual([]);
   });
 });

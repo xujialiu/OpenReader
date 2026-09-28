@@ -44,3 +44,4 @@ yarn-error.*
 # Never committed: PHILOSOPHY rule 3 says a key goes to the provider it belongs
 # to and nowhere else, and a key in git history has gone somewhere else forever.
 /.secrets
+__pycache__/

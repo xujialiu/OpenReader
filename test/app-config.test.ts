@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs';
+import type { ExportedConfig, ExportedConfigWithProps, InfoPlist } from 'expo/config-plugins';
 import { describe, expect, it } from 'vitest';
 
 import config from '../app.config';
 import { APP_VERSION } from '../app-version';
 import manifest from '../package.json';
+import withContinuedProcessing from '../plugins/with-continued-processing';
+import { pin } from './structural';
 
 /**
  * Five ADR decisions live in app.config.ts and package.json rather than in
@@ -181,5 +185,46 @@ describe('ADR 0019: four screens, and a book can arrive from another app', () =>
     const expected = require('expo/bundledNativeModules.json') as Record<string, string>;
     expect(dependencies['react-native-screens']).toBe(expected['react-native-screens']);
     expect(dependencies['react-native-safe-area-context']).toBe(expected['react-native-safe-area-context']);
+  });
+});
+
+describe('ADR 0053: a download goes on away from the screen as a continued processing task', () => {
+  /** The plugin's Info.plist mod, run over a plain generated Info.plist with this app's own config. */
+  async function run(plist: InfoPlist, ios: { bundleIdentifier?: string } = { bundleIdentifier: config.ios?.bundleIdentifier }): Promise<InfoPlist> {
+    const base = { name: config.name, slug: config.slug, ios };
+    const mod = (withContinuedProcessing(base) as ExportedConfig).mods?.ios?.infoPlist;
+    if (!mod) throw new Error('The plugin registered no iOS Info.plist mod at all.');
+    return (await mod({ ...base, modResults: plist } as ExportedConfigWithProps<InfoPlist>)).modResults;
+  }
+
+  it('keeps the plugin in the config', () => {
+    // Without it the task identifier is not permitted, registration returns
+    // false, and every download falls back to the bounded background time:
+    // stopped within a minute of leaving the app, as in #77.
+    expect(plugin('./plugins/with-continued-processing.ts')).toEqual({});
+  });
+
+  it('permits one wildcard identifier under the bundle identifier, as the SDK header asks', async () => {
+    const plist = await run({});
+    expect(plist.BGTaskSchedulerPermittedIdentifiers).toEqual(['top.xujialiu.openreader.download.*']);
+  });
+
+  it('is the prefix the native module submits under', () => {
+    // A different prefix in the Swift is a registration refused on every download.
+    const swift = readFileSync(new URL('../modules/open-reader-offline/ios/OpenReaderOfflineModule.swift', import.meta.url), 'utf8');
+    pin(swift, 'let identifier = "\\(bundle).download.\\(UUID().uuidString)"', 'OpenReaderOfflineModule.swift');
+  });
+
+  it('leaves UIBackgroundModes to the audio plugin', async () => {
+    const plist = await run({ UIBackgroundModes: ['audio'] });
+    expect(plist.UIBackgroundModes).toEqual(['audio']);
+  });
+
+  it('fails the prebuild when something else already writes the key', async () => {
+    await expect(run({ BGTaskSchedulerPermittedIdentifiers: [] })).rejects.toThrow(/already contains\s+BGTaskSchedulerPermittedIdentifiers/);
+  });
+
+  it('fails the prebuild without a bundle identifier to begin the identifier with', async () => {
+    await expect(run({}, {})).rejects.toThrow(/no ios.bundleIdentifier/);
   });
 });

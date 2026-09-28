@@ -68,8 +68,8 @@ export type ProviderSettings = {
   compatible: { baseURL: string; apiKey: string; model: string; voices?: string; headers?: string };
   /** `region` as the owner typed it: `azure.ts` makes it a host name, or refuses it (`azureRegion`). */
   azure: { apiKey: string; region: string };
-  /** `atOnce`: a download's Sentences at once (#64); absent, one at a time. */
-  speechify: { apiKey: string; atOnce?: number };
+  /** `atOnce`: a download's Sentences at once (#64); absent, one at a time. `download`: the request is a Download's, behind a Reading's (#75). */
+  speechify: { apiKey: string; atOnce?: number; download?: boolean };
   /**
    * `freeOnly` is not optional and has no default here on purpose: a missing or
    * unknown `model` header makes Fish fall back to the **paid** model, so the

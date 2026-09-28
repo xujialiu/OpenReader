@@ -58,7 +58,7 @@ import { SyncScreen } from './sync-screen';
 import { useLibrary } from './use-library';
 import { voiceLists } from './use-voices';
 import { useSync } from './use-sync';
-import { configureDownloads, startDownloads } from '../offline/runtime';
+import { configureDownloads, nameDocuments, startDownloads } from '../offline/runtime';
 import { DownloadIndexer } from '../offline/indexer';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -105,6 +105,9 @@ export function OpenReader() {
   }, [sync]);
   useEffect(() => { configureDownloads(settings); }, [settings]);
   useEffect(() => startDownloads(), []);
+  // The Live Activity of a download away from the screen names its Document as the Library does (ADR 0053).
+  const libraryEntries = library.entries;
+  useEffect(() => { nameDocuments(libraryEntries); }, [libraryEntries]);
   /**
    * Every enabled Provider's Voices, asked for in the background as the app
    * starts (#24), so the voice list is already there on the first tap. Once per

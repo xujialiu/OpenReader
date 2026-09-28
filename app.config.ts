@@ -142,6 +142,16 @@ const config: ExpoConfig = {
      */
     './plugins/with-epub-document-types.ts',
 
+    /**
+     * ADR 0053. Permits the continued processing task (iOS 26 and later) that a
+     * download the owner starts runs under, so that it goes on after the owner
+     * leaves the app or locks the phone. One Info.plist key,
+     * BGTaskSchedulerPermittedIdentifiers, derived from `ios.bundleIdentifier`
+     * above; UIBackgroundModes is left to the audio plugin below. No options,
+     * and the prebuild fails if something else writes the key.
+     */
+    './plugins/with-continued-processing.ts',
+
     [
       'react-native-audio-api',
       {

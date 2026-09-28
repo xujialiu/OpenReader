@@ -472,7 +472,7 @@ describe('createSpeechifyProvider', () => {
       const queue = new RequestQueue();
       const replies = [deferred<Response>(), deferred<Response>()];
       const fetchImpl = vi.fn().mockReturnValueOnce(replies[0]!.promise).mockReturnValueOnce(replies[1]!.promise).mockImplementation(async () => reply([]));
-      const download = provider(fetchImpl, { atOnce: 3 }, { queue });
+      const download = provider(fetchImpl, { atOnce: 3, download: true }, { queue });
       const reading = provider(fetchImpl, {}, { queue });
       const first = [download.synthesize('D1', GEORGE), download.synthesize('D2', GEORGE)];
       const read = reading.synthesize('R', GEORGE);
@@ -485,6 +485,22 @@ describe('createSpeechifyProvider', () => {
       replies[1]!.resolve(reply([]));
       await Promise.all([...first, read, later]);
       expect([2, 3].map((at) => call(fetchImpl, at).body.input)).toEqual(['R', 'D3']);
+    });
+
+    // A download at one sentence at a time has a reading's width, so the width cannot say which is which: the download says so.
+    it('sends a reading\'s requests before the download\'s still waiting, in their own order, and never before one already out (#75)', async () => {
+      const queue = new RequestQueue();
+      const out = deferred<Response>();
+      const fetchImpl = vi.fn().mockReturnValueOnce(out.promise).mockImplementation(async () => reply([]));
+      const download = provider(fetchImpl, { atOnce: 1, download: true }, { queue });
+      const reading = provider(fetchImpl, {}, { queue });
+      const downloads = ['D1', 'D2', 'D3'].map((text) => download.synthesize(text, GEORGE));
+      const reads = ['R1', 'R2'].map((text) => reading.synthesize(text, GEORGE));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      out.resolve(reply([]));
+      await Promise.all([...downloads, ...reads]);
+      expect(fetchImpl.mock.calls.map((_, at) => call(fetchImpl, at).body.input)).toEqual(['D1', 'R1', 'R2', 'D2', 'D3']);
     });
 
     it('drops a request whose signal was aborted while it waited, unsent, and goes on with the next', async () => {

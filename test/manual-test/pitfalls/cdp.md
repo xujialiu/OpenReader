@@ -2,6 +2,27 @@
 
 ## Evaluating in the app through `cdp.cjs`
 
+- **`OPENREADER_METRO=http://localhost:PORT` closes with 1006 before any
+  answer, even for `1+1`; `http://127.0.0.1:PORT` answers.** Measured
+  2026-09-28 02:26 (#75–#77) against this tree's own Metro on 8091, one
+  OpenReader target listed in `/json/list`: `localhost` gave `Debugger
+  disconnected before completion: 1006` on every try, and the same probe with
+  `127.0.0.1` returned `{"type":"number","value":2}` at once. `cdp.cjs` takes
+  the WebSocket URL from `/json/list`, whose host follows the one asked, and
+  its origin from that URL, so the whole exchange moves with it. Leave
+  `OPENREADER_METRO` unset (its default is `127.0.0.1:8081`) or give it
+  `127.0.0.1`; the unisolated 1006 of 2026-09-25 in
+  [providers-and-audio.md](providers-and-audio.md) may have been this.
+- **`scrollToIndex` on the Download drawer's list throws for a row far from
+  the rows it has drawn.** Measured 2026-09-28 (#76): calling the drawer
+  `FlatList`'s `scrollToIndex({index: 128})` from a fiber walk answered
+  `Invariant Violation: scrollToIndex should be used in conjunction with
+  getItemLayout or onScrollToIndexFailed`, and the ring the next probe looked
+  for was not rendered (`row not rendered: nav.131`); index 29 from the top had
+  worked. The list has no `getItemLayout`, so it can scroll only to rows it has
+  measured. `scrollToOffset` gets near (its offsets are estimates: 11,036 pt
+  showed Chapter 136, not 131), and `scrollToIndex` then works for the rows now
+  drawn.
 - **A loop's closures all see its last value.** What `--eval` sends is compiled
   by Hermes as written, with no Babel pass, and a `for (const x of list)` loop
   does not give each turn its own `x`. Measured 2026-09-23: three wrappers made
@@ -74,3 +95,14 @@
   read `2` for a page with exactly one such header, not `1` — the same
   per-`Text` duplication, just counted instead of looked up. A regression that
   actually repeats a header would show `4`, not `2`.
+- **`scrollToIndex` on the Download drawer's list throws `Invariant Violation:
+  scrollToIndex should be used in conjunction with getItemLayout or
+  onScrollToIndexFailed`.** Measured 2026-09-28 (#75) scrolling a 253-row
+  drawer to row 246 through its `FlatList` instance after one `scrollToEnd`:
+  the list had measured only the rows it had rendered, and the one
+  `scrollToEnd` had not reached the end either (the screenshot showed rows
+  53–57). The XCTest that read the drawer next found no `Pause download` ring
+  and failed on the test's own scroll, not the app. Fix: repeat `scrollToEnd`
+  every 0.3 s until `scrollToIndex` stops throwing (5 to 7 tries for that
+  book); `download-drawer.sh` does it with `SCROLL_TO=CHAPTER_ID`, and a
+  screenshot shows where it landed.

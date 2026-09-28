@@ -41,8 +41,13 @@ import {
   type NarrationPlan,
   type OfflineVoice,
 } from "./model";
-import { createScheduler } from "./scheduler";
+import { createScheduler, PreparationInterrupted } from "./scheduler";
 import * as pausing from "./pausing";
+import {
+  continuedShown,
+  createContinuedProcessing,
+} from "./continued-processing";
+import { APP_NAME } from "../../app-name";
 import { offlineRepository } from "./database";
 import { audioKey, voiceKey } from "./catalog-keys";
 import { downloadSpeech, speechKeying } from "./speech";
@@ -55,7 +60,8 @@ let loaded = false;
 let online = true;
 let foreground = AppState.currentState === "active";
 let expired = false;
-let playing = false;
+/** A Reading is playing: its audio keeps the app running away from the screen, and a download with it (#75). */
+let readingPlays = false;
 let storeError: string | null = null;
 const plans = new Map<string, NarrationPlan>();
 const listeners = new Set<() => void>();
@@ -121,6 +127,20 @@ function cancelInactivePreparation() {
     stopped.reject(new Error("Chapter preparation was stopped."));
   }
 }
+/**
+ * The hidden rendering does not complete a preparation while the app is away
+ * from the screen, so one out when the app leaves is withdrawn as interrupted,
+ * not left to time out as a failure; the scheduler asks for it again when the
+ * app returns (#76). Its token no longer matches, so the renderer's timer and
+ * any late answer for it find nothing.
+ */
+function abandonPreparation() {
+  if (!preparation) return;
+  const abandoned = preparation;
+  preparation = null;
+  emit();
+  abandoned.reject(new PreparationInterrupted());
+}
 const keyOf = (document: string, voice: OfflineVoice, text: string) =>
   JSON.stringify([document, clipCacheKey(voice.provider, voice.voice, text)]);
 const emit = () => {
@@ -150,9 +170,11 @@ async function persist() {
     });
     cancelInactivePreparation();
     emit();
+    continued.follow();
     throw error;
   }
   emit();
+  continued.follow();
 }
 export function useDownloads(): number {
   return useSyncExternalStore(
@@ -339,7 +361,8 @@ async function synthesize(
   voice: OfflineVoice,
   text: string,
   current: AppSettings,
-  atOnce = 1,
+  /** A Download's own Sentences at once; absent for a Reading. */
+  download?: { atOnce: number },
 ): Promise<SynthesisResult> {
   const saved = await savedClip(document, voice, text);
   if (saved) {
@@ -380,10 +403,15 @@ async function synthesize(
         headers: headers?.outcome === "found" ? headers.secret : "",
       });
       // Speechify queues its own requests, so a download's number has to
-      // reach its queue as well as the scheduler (#64); a reading's is one.
+      // reach its queue as well as the scheduler (#64), and so does whose
+      // request it is: a Reading's goes ahead of a download's still waiting
+      // (#75). A Reading's is one at a time.
+      const speechify = download
+        ? { ...configuration.speechify, atOnce: download.atOnce, download: true }
+        : configuration.speechify;
       const provider = createProvider(
         voice.provider,
-        { ...configuration, speechify: { ...configuration.speechify, atOnce } },
+        { ...configuration, speechify },
         providerDeps,
       );
       const controller = new AbortController();
@@ -436,7 +464,17 @@ const scheduler = createScheduler({
   tasks: () => tasks,
   plan: (document) => loadPlan(document),
   connected: () => online,
-  allowed: () => loaded && !storeError && !playing && (foreground || !expired),
+  // Not held back while a Reading plays (#75): a Reading keeps its precedence
+  // where requests are queued in the app, which is Speechify's queue alone.
+  // Away from the screen, the end of the bounded background time stops a
+  // download only once neither a Reading nor a continued task the phone
+  // accepted keeps the app running (ADR 0053).
+  allowed: () =>
+    loaded &&
+    !storeError &&
+    (foreground || !expired || readingPlays || continued.running()),
+  // Where the hidden rendering prepares a chapter's text (#76).
+  foreground: () => AppState.currentState === "active",
   changed: persist,
   // The texts a chapter holds are the Utterances' own; what is checked, spoken
   // and saved is their Speech Text, as reading asks for it (#25).
@@ -503,7 +541,7 @@ const scheduler = createScheduler({
     ]);
     const epoch = deletionEpochs.get(key) ?? 0;
     const speech = downloadSpeech(text, settings);
-    const clip = await synthesize(task.document, task.voice, speech, settings, settings.sentencesAtOnce[task.voice.provider]);
+    const clip = await synthesize(task.document, task.voice, speech, settings, { atOnce: settings.sentencesAtOnce[task.voice.provider] });
     // A paused task can keep its paid in-flight result; a removed chapter cannot.
     const wanted = () =>
       tasks.includes(task) &&
@@ -520,6 +558,81 @@ const scheduler = createScheduler({
   },
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
+/** The names the Library shows, which the Live Activity shows for a download away from the screen. */
+const documentTitles = new Map<string, string>();
+export function nameDocuments(
+  entries: readonly { id: string; title: string }[],
+): void {
+  let renamed = false;
+  for (const { id, title } of entries)
+    if (documentTitles.get(id) !== title) {
+      documentTitles.set(id, title);
+      renamed = true;
+    }
+  if (renamed) continued.follow();
+}
+/** ADR 0053: the continued processing task a download away from the screen runs under. */
+const continued = createContinuedProcessing({
+  native: offlineNative,
+  tasks: () => tasks,
+  shown: async (task) =>
+    continuedShown(
+      task,
+      documentTitles.get(task.document) ?? APP_NAME,
+      await (await offlineRepository()).progress(task.document, task.voice),
+      planOf(task.document),
+    ),
+  foreground: () => foreground,
+});
+const runsAway = () =>
+  tasks.some((task) =>
+    ["preparing", "downloading", "queued"].includes(task.state),
+  );
+/**
+ * The bounded background time, begun on leaving the app unless a continued
+ * task the phone accepted keeps it running; a submission still out does not
+ * count, since the phone may refuse it (ADR 0053).
+ */
+function beginBounded() {
+  if (offlineNative)
+    void offlineNative.beginBackground().then((allowed) => {
+      expired = !allowed;
+      emit();
+    });
+  else {
+    expired = true;
+    emit();
+  }
+}
+/**
+ * The owner started or resumed a download on the screen, or opened the app
+ * while one goes on by itself: it may go on away from the screen. Apple asks
+ * for the submission to follow a person's action, and the owner counts opening
+ * the app as one (#77, 2026-09-28), so a launch and every return to the
+ * foreground submit, as the taps do. Nothing submits while the app is away
+ * (`start` checks again right before the native call), nor when the phone ends
+ * the task: its end pauses what it covered. Where nothing goes on by itself,
+ * `start` submits nothing.
+ *
+ * The app may leave while the submission is out; it then began the bounded
+ * time, which a refusal leaves running. An acceptance gives it back: the
+ * continued task keeps the app running from then on.
+ */
+function continueAway() {
+  if (!foreground) return;
+  void continued.start().then((running) => {
+    if (running && !foreground) void offlineNative?.endBackground();
+  });
+}
+/**
+ * Away from the screen, the time ran out: what was being written continues on
+ * the return. A playing Reading keeps the app running, and its download with
+ * it (#75), until it stops (`setReadingPlays`).
+ */
+function interruptAway() {
+  expired = true;
+  if (!readingPlays) interruptWriting();
+}
 const kick = () => {
   void scheduler
     .run()
@@ -580,6 +693,8 @@ export function startDownloads(): () => void {
           task.state = "queued";
       loaded = true;
       await persist();
+      // Opened with a download that goes on by itself (#77).
+      continueAway();
       // Before the first run, so the scheduler never trusts keys computed under
       // a setting the owner has since changed.
       await ensureSpeechKeys();
@@ -600,13 +715,26 @@ export function startDownloads(): () => void {
       kick();
     },
   );
+  // The bounded time ran out. Where the phone accepted a continued task after
+  // the app left, that task keeps the app running, and the download with it;
+  // the bounded time was given back, and an end that arrives anyway is ignored.
   const expiration = offlineNative?.addListener("expired", () => {
-    expired = true;
-    for (const task of tasks)
-      if (["preparing", "downloading"].includes(task.state))
-        task.state = "interrupted";
-    fire(persist());
+    if (!continued.running()) interruptAway();
   });
+  // The phone ended the continued task, at the owner's stop in the Live
+  // Activity or under pressure; the two cannot be told apart, and both are
+  // taken as the owner's stop (#77, 2026-09-28). The downloads it covered that
+  // go on by themselves are paused as Pause all pauses them, on the screen or
+  // away (the stop itself opens the app for a moment), so opening the app
+  // resumes nothing and submits nothing; Resume all does. The rest are left.
+  const continuedExpiration = offlineNative?.addListener(
+    "continuedExpired",
+    () => {
+      for (const task of continued.expired()) pausing.pauseAll(task);
+      if (!foreground) expired = true;
+      fire(persist());
+    },
+  );
   const state = AppState.addEventListener("change", (value) => {
     foreground = value === "active";
     if (foreground) {
@@ -614,22 +742,13 @@ export function startDownloads(): () => void {
       void offlineNative?.endBackground();
       for (const task of tasks)
         if (task.state === "interrupted") task.state = "queued";
+      // Back with a download that goes on by itself: leaving again keeps it going without a tap (#77).
+      continueAway();
       fire(persist().then(kick));
-    } else if (
-      tasks.some((task) =>
-        ["preparing", "downloading", "queued"].includes(task.state),
-      )
-    ) {
-      if (offlineNative)
-        void offlineNative.beginBackground().then((allowed) => {
-          expired = !allowed;
-          emit();
-        });
-      else {
-        expired = true;
-        emit();
-      }
-    }
+    } else if (!continued.running() && runsAway()) beginBounded();
+  });
+  const leaving = AppState.addEventListener("change", (value) => {
+    if (value !== "active") abandonPreparation();
   });
   // Without a platform connectivity observer, periodically retry only connectivity failures.
   const timer = Platform.OS !== "ios" ? setInterval(kick, 5000) : null;
@@ -637,17 +756,37 @@ export function startDownloads(): () => void {
   return () => {
     network?.remove();
     expiration?.remove();
+    continuedExpiration?.remove();
     state.remove();
+    leaving.remove();
     if (timer) clearInterval(timer);
   };
 }
-export function playbackActive(active: boolean): void {
-  playing = active;
-  if (!active) {
-    for (const task of tasks)
-      if (task.state === "interrupted" && foreground) task.state = "queued";
-    kick();
+/** What the end of the background time does to the download being written. */
+function interruptWriting() {
+  for (const task of tasks)
+    if (["preparing", "downloading"].includes(task.state))
+      task.state = "interrupted";
+  fire(persist());
+}
+/**
+ * Whether a Reading is playing, told by the one place that holds it
+ * (`reading-host.tsx`, ADR 0049). Away from the screen after the background
+ * time has run out, its audio is what keeps the app running (#75): when it
+ * stops there, the download is interrupted as the end of that time would have
+ * done, and when it starts there, an interrupted download goes on beside it.
+ */
+export function setReadingPlays(plays: boolean): void {
+  if (readingPlays === plays) return;
+  readingPlays = plays;
+  if (foreground || !expired) return;
+  if (!plays) {
+    interruptWriting();
+    return;
   }
+  for (const task of tasks)
+    if (task.state === "interrupted") task.state = "queued";
+  fire(persist().then(kick));
 }
 export function enqueue(
   document: string,
@@ -676,6 +815,7 @@ export function enqueue(
       failed: [],
     });
   registerVoice(voice);
+  continueAway();
   fire(persist().then(kick));
 }
 /**
@@ -695,12 +835,18 @@ export const goesOn = (task: DownloadTask) =>
 /** Pause all while any chapter goes on by itself; otherwise Resume all, which is also Retry failed. */
 export function toggleTask(task: DownloadTask): void {
   if (goesOn(task)) pausing.pauseAll(task);
-  else pausing.resumeAll(task);
+  else {
+    pausing.resumeAll(task);
+    continueAway();
+  }
   fire(persist().then(kick));
 }
-/** A tap on one chapter's ring (#56). */
+/** A tap on one chapter's ring (#56); one that resumes may go on away from the screen. */
 export function toggleChapter(task: DownloadTask, chapter: string): void {
+  const resumes =
+    !pausing.GOES_ON.includes(task.state) || pausing.isPaused(task, chapter);
   pausing.tapChapter(task, chapter, completeIn(task));
+  if (resumes) continueAway();
   fire(persist().then(kick));
 }
 export async function deleteDownloaded(
