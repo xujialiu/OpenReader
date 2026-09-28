@@ -1,0 +1,60 @@
+# Several sentences at once (#64, `download-concurrency.ts`)
+
+`download-concurrency.ts` measures how fast a provider answers with one, two or more requests out at once. It goes through the app's own `createProvider`, `segmentBlocks` with `splitWithSentencex`, and `downloadSpeech`, so each request is exactly what a download sends. No simulator is involved. It reads the key from the settings export as `context-probe.ts` does (the two share `node-kit.ts`), and `OUT` must be outside the repository, because it receives the owner's book text.
+
+```sh
+OUT=/path/outside/the/repo; B=~/Works/epub_books
+npx tsx test/manual-test/downloads/download-concurrency.ts "$OUT" "$B/My Vampire System/My Vampire System 1-250.epub" 1,4,2,8,5,6,10,3,1 40 20   # run.json, report.txt
+npx tsx test/manual-test/downloads/download-concurrency.ts report "$OUT"   # the table again, from run.json
+```
+
+The arguments after the book are the levels in the order they run, the sentences per level, the first long section to take sentences from, and the provider (`fish` when left out). Running 1 first and last shows whether the service slowed down during the run. Every level sends different sentences. `fetch` is wrapped to record every exchange, a retried `429` included, with the `ratelimit-*` headers, and the clips are decoded with ffmpeg only after the timed part. Results of 2026-09-25 are in `notes/NOTES_2026-09-25.md`.
+
+What it cannot show: the phone's own network, since it runs from the Mac through its proxy; the time the app spends saving each clip; how a provider other than Fish counts its limits, such as Azure's requests per minute (#40); whether Fish will enforce the limit it states.
+
+## Timing a chapter download on the simulator
+
+`download-chapter.cjs` prints `enqueued <ISO time>` as it hands the chapters to the runtime. Each saved clip is a file in `Documents/offline-narration-v2/<document>/<voice>/`, and the file's birth time is when the scheduler saved it, so the birth times time the download to the millisecond:
+
+```sh
+python3 -c 'import os,sys; d=sys.argv[1]; b=sorted(os.stat(os.path.join(d,f)).st_birthtime for f in os.listdir(d) if f.endswith((".audio",".m4a"))); print(len(b), b[0], b[-1])' VOICE_DIRECTORY
+```
+
+To compare with one request at a time: delete the chapters' audio through the runtime (`deleteDownloaded`, through `cdp.cjs`, then check that `occupied` reads 0), choose 1 in Settings › Providers › Fish Audio › Sentences at once (before beta26 this was `AT_ONCE` in `src/offline/scheduler.ts`), confirm that `settings.json` in the app container's `Documents` holds `"fish":1` under `sentencesAtOnce`, and download the same chapters again. Put it back to 5 afterwards. The number is read as each chapter starts, so change it only between downloads. Run the download with five at once first, so that anything the service remembers could only speed up the slower run. Configure Fish in the app first with `kit/run-probe.sh OfflineFixProbe … -only-testing:testConfigureFishProvider` (Pitfalls: before 2026-09-25 that method could pass with Fish still disabled).
+
+## OpenAI Compatible's 422→MP3 fallback (#65) and Speechify's own queue, on the short fixture
+
+`DownloadConcurrencyProbe.swift` also covers #65 (a PCM refusal falling back to
+MP3) and confirms #64's Speechify `RequestQueue` change did not break plain
+playback/download, both against the short two-chapter fixture rather than the
+real book — a fresh voice directory each time, no pre-seeded state to manage:
+
+```sh
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureCompatibleProviderRealTouches
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseEmilyVoiceAndPlayShortFixture
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testCompatibleSentencesAtOnceFiveAndDownloadShortFixture
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureSpeechifyRealTouches
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseSpeechifyVoiceRealTouches
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testSpeechifyDownloadAndPlayShortFixture
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testResetCompatibleSentencesAtOnceToDefault
+```
+
+Each method is its own invocation, run in the order above, the same discipline
+as `AzureProviderProbe` and `OfflineFixProbe`: later methods depend on state
+earlier ones leave (OpenAI Compatible configured and enabled, the short
+fixture's voice chosen, Sentences at once at a particular value). The short
+fixture needs adding first if it is not already in the Library ([../README.md](../README.md), "Real
+books"; the fixture is generated by `short-test-fixture.ts` and added through
+the walkthrough harness's `add` command, which works for this one-shot use even
+on a day the harness is otherwise unreliable for reading interactions).
+OpenAI Compatible's Address/Model/Extra headers are read from
+`/tmp/openreader-compat-{baseurl,model,headers}.txt` and Speechify's key from
+`/tmp/openreader-speechify-key.txt`, the same host-only-file discipline as
+`OfflineFixProbe.testConfigureFishProvider`. The last method resets OpenAI
+Compatible's Sentences at once to its own default (1); Speechify's is never
+changed from 1, and Fish's own default (5) is untouched by any of this.
+
+What it cannot show: the app's MP3 decode path is only exercised end-to-end
+through actual playback (item 2), not inspected directly; the OpenAI
+Compatible connection check's own request shape is covered by this and by the
+unit tests, not by inspecting wire bytes from the simulator.

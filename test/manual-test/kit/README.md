@@ -8,7 +8,8 @@ What every area uses:
 - `silence.sh`: the simulator's own volume, set to zero and checked (the top
   README).
 - `lock-device.sh` with `DeviceLockProbe.swift`: the simulator's lock button,
-  Home, and the lock screen's own Play and Pause (`downloads/README.md`).
+  Home, and the lock screen's own Play and Pause (`downloads/download-away.md`,
+  `downloads/download-beside-reading.md`).
 - `cdp.cjs`: a warning capture or one expression evaluated in the running app
   (below); `cdp-rtt.cjs` and `cdp-profile.cjs` time its JavaScript thread.
 - `hx.cjs`: one command to the walkthrough harness.

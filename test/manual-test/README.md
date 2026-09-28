@@ -1,13 +1,14 @@
 # Device and manual tests
 
 Everything here runs by hand against a simulator or a phone, outside Vitest.
-Before writing a script, find the feature's area below and read its README: it
-is the recipe for how that feature was tested, and every script, Swift probe and
-analyser it uses sits beside it. Reuse or extend one before writing another.
-Save a useful new reproduction, inspection or verification script in its area
-as soon as it works, and add to that area's README its invocation,
-prerequisites, expected result and what it cannot prove. One-off probes may stay
-temporary; a working tool needed for the next run belongs here.
+Before writing a script, find the feature's area below, read its README, and
+read the recipe for what you are testing: how that feature was tested, with
+every script, Swift probe and analyser it uses beside it. Reuse or extend one
+before writing another. Save a useful new reproduction, inspection or
+verification script in its area as soon as it works, and write its invocation,
+prerequisites, expected result and what it cannot prove into the recipe it
+belongs to. One-off probes may stay temporary; a working tool needed for the
+next run belongs here.
 
 Keep generated Xcode projects, builds, logs and screenshots outside the
 repository. Accept device IDs and artifact destinations as arguments. Load only
@@ -22,8 +23,11 @@ measured, and stop immediately afterwards, including after failures.
   XCTest probe, `silence.sh`, `lock-device.sh`, `cdp.cjs`, `hx.cjs` and
   `reading.cjs`. [kit/README.md](kit/README.md) lists them all.
 - `fixtures/`: the EPUB generators ([fixtures/README.md](fixtures/README.md)).
-- One folder per area (**Areas** below): its `README.md` and the scripts,
-  `*Probe.swift` files and analysers it uses.
+- One folder per area (**Areas** below): its recipes and the scripts,
+  `*Probe.swift` files and analysers they use. A short area's `README.md` holds
+  its recipes. A longer one lists them, one `.md` file each, with the scripts
+  and probes each documents; split a `README.md` that way once its recipes pass
+  about 200 lines. A new recipe goes where the area's others are.
 - `pitfalls/`: what went wrong and what fixed it, by tool rather than by area.
 - `archive/`: superseded experiments kept because a recipe or the engineering
   log cites them ([archive/README.md](archive/README.md)).
@@ -101,7 +105,8 @@ What has gone wrong before, and what fixed it, one file per area. Before using a
 ## Areas
 
 How each feature was tested, with its scripts and probes, one folder per area.
-Read the area's README before writing a new script, and add a new recipe to it.
+Read the area's README before writing a new script; **Layout** says where a new
+recipe goes.
 
 - [Downloads and offline narration](downloads/README.md): Offline narration and reader actions; Issues #13/#14: a fresh Library, Fish from empty settings, and the two destructive confirmations the other probes always cancel; The download ring, pausing, and Manage downloads' listed-chapters rule (#37, #38, #56); A download away from the screen, and beside a Reading (#75, #76, #77); A Reading paused and played with the phone locked, and the drawer beside a Reading (#75); Two fingers: Files' own selection, and the download drawer's copy (#57); Several sentences at once (#64, `download-concurrency.ts`).
 - [The Library and the reader](library-and-reader/README.md): Cold Library opening; Library and reader actions drawer (long press, '...', Delete); Long-press lookup and translation (issue #73, `TranslationProbe.swift`); Pinch and double tap on the reading page (#79, `zoom.sh`, `ZoomProbe.swift`).
