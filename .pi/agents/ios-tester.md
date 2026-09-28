@@ -3,7 +3,7 @@ name: ios-tester
 description: Verify final iOS app changes in the simulator or on the owner's iPhone, and report evidence.
 model: zai-coding-cn/glm-5.3-flash
 thinking: max
-tools: read, grep, find, ls, bash, edit, write, mcp:mobilebuildmcp, mcp:expo
+tools: read, grep, find, ls, bash, edit, write, mcp
 async: true
 ---
 
