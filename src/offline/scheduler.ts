@@ -35,15 +35,6 @@ export class PreparationInterrupted extends Error {
   }
 }
 
-/**
- * How many of the chapters the scheduler will write next have their text
- * prepared ahead while one is written (#76). Bounded, because a whole long
- * document can be one download (2,077 chapters, notes/NOTES_2026-09-20.md) and
- * each preparation renders a section and writes the catalogue: after the first
- * few, one chapter is prepared for each chapter written, as before (ADR 0027).
- */
-export const PREPARED_AHEAD = 10;
-
 /** One pass at a time, with durable progress owned by stored clips. Every
  * await is a cancellation boundary; removing a task never resurrects it on
  * completion.
@@ -51,9 +42,10 @@ export const PREPARED_AHEAD = 10;
  * Chapters are written one at a time; inside the one being written, up to
  * `concurrency` of its texts are requested at once (#64).
  *
- * While the app is in the foreground and a chapter is written, the text of the
- * next `PREPARED_AHEAD` chapters it will write is prepared, one after another,
- * so that away from the screen those can be written too (#76). The writer and
+ * While the app is in the foreground and a chapter is written, the text of
+ * every chapter it will write is prepared, one after another, so that away from
+ * the screen those can be written too (#76; every chapter, not the next ten,
+ * by the owner's choice of 2026-09-28). The writer and
  * that preparation share one path with one preparation out at a time, and the
  * writer waits only for the chapter it needs next. Away from the screen nothing
  * is prepared: a chapter that is not prepared makes the task `interrupted`, and
@@ -93,55 +85,92 @@ export function createScheduler(deps: SchedulerDeps) {
     flight.then(settled, settled);
     return flight;
   }
-  /** The task being written, its chapters finished in this pass, and what its preparation ahead did; null between passes. */
-  let pass: { task: DownloadTask; finished: Set<string>; prepared: Set<string>; failed: Set<string> } | null = null;
-  let ahead: Promise<void> | null = null;
   /**
-   * The chapters the writer will take after the one it is on, in the list's
-   * order: in the task and not finished, failed or paused; at most
-   * `PREPARED_AHEAD` of them.
+   * The task being written, its chapters finished in this pass, and what its
+   * preparation ahead did: the chapters it prepared, and how many times each
+   * chapter it could not prepare failed. Null between passes.
    */
-  function following(plan: NarrationPlan, task: DownloadTask, finished: ReadonlySet<string>): Chapter[] {
+  interface Pass { task: DownloadTask; finished: Set<string>; prepared: Set<string>; failures: Map<string, number> }
+  let pass: Pass | null = null;
+  let ahead: Promise<void> | null = null;
+  /** Asked again while the preparation ahead goes on: it starts again from the top of the list. */
+  let rewind = false;
+  /** A preparation ahead fails this many times before the chapter is left to the writer. */
+  const TRIES_AHEAD = 2;
+  /**
+   * Where, from `from` on, the next chapter to prepare ahead is in the list,
+   * or -1: a chapter the writer will take after the one it is on (in the task,
+   * not finished, failed or paused), not yet prepared, and not given up on
+   * ahead. Sets, because a whole long document can be one download (2,077
+   * chapters, notes/NOTES_2026-09-20.md): a step costs one look at the task's
+   * lists and at the chapters it passes, never a walk over the task per chapter.
+   */
+  function nextAhead({ task, finished, prepared, failures }: Pass, plan: NarrationPlan, from: number): number {
     const chosen = new Set(task.chapters);
     const failed = new Set(task.failed);
     const paused = new Set(task.paused);
-    const next: Chapter[] = [];
-    for (const chapter of plan.chapters) {
-      if (next.length >= PREPARED_AHEAD) break;
-      const id = chapter.id;
-      if (chosen.has(id) && id !== task.current && !finished.has(id) && !failed.has(id) && !paused.has(id)) next.push(chapter);
+    for (let at = from; at < plan.chapters.length; at++) {
+      const { id, prepared: ready } = plan.chapters[at];
+      if (ready === false && chosen.has(id) && id !== task.current && !finished.has(id) && !failed.has(id) && !paused.has(id)
+        && !prepared.has(id) && (failures.get(id) ?? 0) < TRIES_AHEAD) return at;
     }
-    return next;
+    return -1;
   }
   /**
-   * Prepares the following chapters that are not prepared, one at a time, while
-   * the task runs and the app is in the foreground. It stops at the first
-   * preparation that does not succeed: an abandoned one is asked for again when
-   * the app returns, and a failed one is left to the writer, which asks for it
-   * again when it is that chapter's turn and records the failure as before.
-   * Nothing on the screen shows a failure ahead, so it is logged once, by
-   * chapter and message: one on the simulator ended after 0.59 s with the app
-   * in front and left no trace of why (notes/NOTES_2026-09-28.md, 05:01). A
-   * request withdrawn because the task stopped is not a failure to report.
+   * Prepares every chapter the writer will take that is not prepared, one at a
+   * time and in the list's order, while the task runs and the app is in the
+   * foreground. It goes on down the list from where it was, and starts again
+   * from the top whenever it is asked for during it, since a chapter resumed or
+   * added may be above it. It stops at a preparation abandoned as the app left,
+   * and starts again at the next `run` in the foreground.
+   *
+   * A preparation that fails is tried once more after the chapter that follows
+   * it, or at once when none does, so that one passing failure does not stop a
+   * download away from the screen at that chapter. After a second failure the
+   * chapter is left to the writer, which asks for it again when it is its turn
+   * and records a failure as before. Nothing on the screen shows a failure
+   * ahead, so each is logged, by chapter and message: one on the simulator
+   * ended after 0.59 s with the app in front and left no trace of why
+   * (notes/NOTES_2026-09-28.md, 05:01). A request withdrawn because the task
+   * stopped is not a failure to report.
+   *
    * Started as each chapter is written and when `run` is called during a pass.
    */
   function prepareAhead() {
-    if (ahead || !pass || !deps.prepare) return;
-    const { task, finished, prepared, failed } = pass;
+    if (!pass || !deps.prepare) return;
+    if (ahead) { rewind = true; return; }
+    const walk = pass;
+    const { task, prepared, failures } = walk;
     const going = () => active(task) && deps.allowed() && foreground();
+    rewind = false;
     ahead = (async () => {
+      let from = 0;
+      /** Where a chapter that failed once waits to be tried again, after the next preparation. */
+      let again: number | null = null;
       while (going()) {
         const plan = await deps.plan(task.document);
         if (!plan || !going()) return;
-        const next = following(plan, task, finished).find((c) => c.prepared === false && !prepared.has(c.id) && !failed.has(c.id));
-        if (!next) return;
-        try { await prepare(task, next); prepared.add(next.id); }
+        if (rewind) { rewind = false; from = 0; }
+        const at = nextAhead(walk, plan, from);
+        if (at < 0) {
+          if (again === null) return;
+          from = again; again = null;
+          continue;
+        }
+        const chapter = plan.chapters[at];
+        const waiting = again;
+        let failedFirst = false;
+        try { await prepare(task, chapter); prepared.add(chapter.id); }
         catch (error) {
           if (error instanceof PreparationInterrupted || !active(task)) return;
-          failed.add(next.id);
-          console.warn(`Chapter ${next.id} was not prepared ahead: ${error instanceof Error ? error.message : String(error)}`);
-          return;
+          const times = (failures.get(chapter.id) ?? 0) + 1;
+          failures.set(chapter.id, times);
+          failedFirst = times < TRIES_AHEAD;
+          console.warn(`Chapter ${chapter.id} was not prepared ahead: ${error instanceof Error ? error.message : String(error)}`);
         }
+        from = at + 1;
+        if (waiting !== null) { from = Math.min(from, waiting); again = failedFirst ? at : null; }
+        else if (failedFirst) again = at;
       }
     })().catch(() => {}).finally(() => { ahead = null; }); // A plan that cannot be read is the writer's to report.
   }
@@ -193,7 +222,8 @@ export function createScheduler(deps: SchedulerDeps) {
     return whole;
   }
   async function run() {
-    // Asked again during a pass, as when the app returns to the foreground: the preparation ahead goes on.
+    // Asked again during a pass, as when the app returns to the foreground or a chapter is resumed: the
+    // preparation ahead goes on, from the top of the list.
     if (running) { prepareAhead(); return; }
     if (!deps.allowed()) return;
     running = true;
@@ -213,7 +243,7 @@ export function createScheduler(deps: SchedulerDeps) {
         // text is finished without ever counting as complete (ADR 0027), so it is
         // remembered here rather than chosen again.
         const finished = new Set(await deps.completed?.(task));
-        pass = { task, finished, prepared: new Set(), failed: new Set() };
+        pass = { task, finished, prepared: new Set(), failures: new Map() };
         /** The chapters still to write, and whether each is one the owner paused; sets, because a whole long book can be one task. */
         const unfinished = () => {
           const failed = new Set(task.failed);
