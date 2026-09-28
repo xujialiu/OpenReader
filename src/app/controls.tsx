@@ -190,7 +190,7 @@ export const INK = {
  * The measurements the settings pages are drawn to (#48).
  *
  * The phone's own, not the app's: taken from the phone's Settings on an iPhone
- * 17 simulator running iOS 27.0 (`test/manual-test/native-reference.sh`, notes
+ * 17 simulator running iOS 27.0 (`test/manual-test/settings/native-reference.sh`, notes
  * 2026-09-23), and checked against the phone rather than against each other
  * (design 0042). When the phone's look changes, measure again and change them
  * here.

@@ -162,7 +162,7 @@ walk it follows already asks for the computed style of every element.
 to 24 by 1 and from 26 to 32 by 2. `stepFontSize` returns null at either end,
 which the sheet shows as a disabled button. The sheet shows the size between −
 and +, and the "Use document appearance" line is gone.
-`test/manual-test/ios/OfflineProbe.swift` now steps back instead of tapping it.
+`test/manual-test/downloads/OfflineProbe.swift` now steps back instead of tapping it.
 
 `settings-storage.ts` accepts `appearance.size` only when it is on the ladder.
 The build before this stored `appearance.scale`, a percentage or null, and that

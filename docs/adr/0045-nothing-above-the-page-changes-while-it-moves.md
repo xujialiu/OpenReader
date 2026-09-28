@@ -23,7 +23,7 @@ forward by up to a whole section, back by several. The owner reported it after
 ## What was measured
 
 iPhone 17 simulator, iOS 27.0, 2026-09-24, the owner's "My Vampire System 1-250"
-(253 sections). `test/manual-test/fling-jump.cjs` makes real XCTest flicks and
+(253 sections). `test/manual-test/scrolling-and-theme/fling-jump.cjs` makes real XCTest flicks and
 reads, on every animation frame, which section and which offset within it is at
 the top of the viewport and how much of the viewport displayed sections cover;
 it wraps the manager methods below to log each call. The details are in
@@ -154,6 +154,6 @@ states is about this app's page.
 moves": the library facts above, pinned in the installed epub.js's continuous
 manager, and the program's wrapping, its test for movement and its rest loop.
 The program half was seen failing before the change. The device is the only
-place the defect exists: `test/manual-test/fling-jump.cjs`, red on the unchanged
+place the defect exists: `test/manual-test/scrolling-and-theme/fling-jump.cjs`, red on the unchanged
 tree in both directions and with the install line commented out, green on the
 change.

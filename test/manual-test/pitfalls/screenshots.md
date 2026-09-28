@@ -230,7 +230,7 @@
   landing (2026-09-21), network round trip included, and one `.tap()` on a
   coordinate took **1.60 s** to dispatch — wider than the window it was aiming
   at. Point `sync.url` at the stalling stub (`slow-webdav.py`, **Against the
-  owner's real folder** in [../recipes/sync.md](../recipes/sync.md)) instead: the stub decides when the place
+  owner's real folder** in [../sync/README.md](../sync/README.md)) instead: the stub decides when the place
   arrives, so the tap can be scheduled against its delay.
 - **`press(.home)` pokes a sync of its own, so a timed tap's clock starts
   there.** `shell.tsx` pokes on `background` as well as on `active`, and
@@ -760,7 +760,7 @@
 - **The same banner covers the player's `Contents` button, and a dev client
   that lost Metro for a moment raises it.** Measured 2026-09-24 13:50
   (`LineColourProbe`, #29): the Contents drawer never opened, and the next
-  step failed "No drawer to close". `node test/manual-test/cdp.cjs --warnings`
+  step failed "No drawer to close". `node test/manual-test/kit/cdp.cjs --warnings`
   read the one warning behind it: `Cannot connect to Expo CLI … URL:
   localhost:8091 … Error: undefined`, while that Metro answered
   `packager-status:running` throughout. A terminate and launch cleared it and
@@ -804,7 +804,7 @@
   "Issues #13/#14" section describes seeding it once through
   `identifyDocument`/`serializeLibrary` directly, as a one-time step on the
   original device; a later, different device needs it seeded again.
-  `test/manual-test/short-test-fixture.ts` generates the same two chapters
+  `test/manual-test/fixtures/short-test-fixture.ts` generates the same two chapters
   and 17 utterances, for loading through the walkthrough harness's `add`
   command instead (README, "Real books") — an equally direct, non-picker
   path, proven working 2026-09-24.

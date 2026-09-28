@@ -44,7 +44,7 @@
   already held a project from a same-named directory an unrelated `ui`
   worktree's session had used earlier that day; the build failed with `Build
   input file cannot be found:
-  '/Users/xujialiu/orca/workspaces/openreader/ui/test/manual-test/ios/PlayerTouchProbe.swift'`
+  '/Users/xujialiu/orca/workspaces/openreader/ui/test/manual-test/player-and-reading-held/PlayerTouchProbe.swift'`
   — a different worktree's absolute path, baked into that project by
   `Xcodeproj::Project.new(...).new_target(...).add_file_references([project.main_group.new_file(File.expand_path(source, __dir__))])`
   at the time it was generated. Give every generated project a path that

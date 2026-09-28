@@ -47,4 +47,4 @@ XCTest's own `swipeUp()` on the drawer's list also chose the row it began on, 5 
 
 ## Testing
 
-`test/manual-test/two-finger.sh` stages sixty rows in Files and runs `TwoFingerProbe`, which synthesizes two-finger paths through XCUIAutomation's private `XCPointerEventPath`, `XCSynthesizedEventRecord` and `eventSynthesizer`, read out of Xcode 27.0's binary. Its `testFiles…` methods are the measurements above; `testDrawerSweeps` drives the drawer the same way.
+`test/manual-test/downloads/two-finger.sh` stages sixty rows in Files and runs `TwoFingerProbe`, which synthesizes two-finger paths through XCUIAutomation's private `XCPointerEventPath`, `XCSynthesizedEventRecord` and `eventSynthesizer`, read out of Xcode 27.0's binary. Its `testFiles…` methods are the measurements above; `testDrawerSweeps` drives the drawer the same way.

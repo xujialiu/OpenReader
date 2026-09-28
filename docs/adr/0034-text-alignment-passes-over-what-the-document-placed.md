@@ -103,7 +103,7 @@ inline `style`.
 
 iPhone 17 simulator, iOS 27.0, Debug build on this tree, 2026-09-22.
 
-**`Alignment Fixture`** (`test/manual-test/alignment-fixture.ts`), each element's
+**`Alignment Fixture`** (`test/manual-test/fixtures/alignment-fixture.ts`), each element's
 computed `text-align`, `*` where marked (notes, 12:46):
 
 | element | the Document set | Justify | Left |

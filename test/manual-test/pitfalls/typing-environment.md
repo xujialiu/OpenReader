@@ -93,7 +93,7 @@
   Play was audible. The machine's volume is the owner's, not the test's: it is
   restored by things outside the run, and muting it takes the owner's sound away
   for as long as the run lasts and after it. Silence the device instead, with
-  `bash test/manual-test/silence.sh set SIMULATOR_UDID` ([README](../README.md)); never
+  `bash test/manual-test/kit/silence.sh set SIMULATOR_UDID` ([README](../README.md)); never
   `set volume output volume 0`.
 - **`sim_volume` can go back to 60 without a boot.** Measured 2026-09-21:
   `silence.sh set` read `0` back at 22:43, the device was never shut down or

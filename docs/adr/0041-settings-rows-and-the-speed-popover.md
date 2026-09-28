@@ -108,7 +108,7 @@ range and handlers are those of ADR 0020, unchanged.
   would take `presentationBackground`, and it was declined.
 - VoiceOver says `Back` where the phone's own Settings says the screen's name.
 - `SETTINGS` holds the phone's measurements as of iOS 27.0. When the phone's look
-  changes, `test/manual-test/native-reference.sh` and `design-shots.sh` repeat
+  changes, `test/manual-test/settings/native-reference.sh` and `design-shots.sh` repeat
   the comparison, and the constants change in one place.
 
 ## Alternatives

@@ -21,7 +21,7 @@ page. The owner met it on "My Vampire System": the contents page dark, "Chapter
 1: Just an old Book" below it white.
 
 Reproduced on the iPhone 17 simulator (iOS 27.0), 2026-09-22, with
-`test/manual-test/scroll-fixture.ts` and `scroll-theme.cjs`: 150 animation
+`test/manual-test/fixtures/scroll-fixture.ts` and `scroll-theme.cjs`: 150 animation
 frames of 300 px each towards the start of the book left a displayed section
 with no `#openreader-highlight` in **6 of 15** flings. In one such state, at
 Font Size 20, the chapter beside it read `20px`, `rgb(17, 17, 20)` and
@@ -142,6 +142,6 @@ document.
 fast it arrived": the program registers `sweep` on the content hook and not on
 `rendered`, and the three library facts above are pinned in the installed
 package, so a library change that removes one fails the suite. The behaviour is
-the device's to show: `test/manual-test/scroll-theme.cjs`, red on 6 of 15 and
+the device's to show: `test/manual-test/scrolling-and-theme/scroll-theme.cjs`, red on 6 of 15 and
 then 3 of 15 flings before the change, green on 0 of 15 twice after it, and on
 0 of 6 towards the end of the book and 0 of 6 at 150 px a frame.

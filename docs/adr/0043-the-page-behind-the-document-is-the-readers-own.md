@@ -24,7 +24,7 @@ a short document and while a document was being laid out.
 iPhone 17 simulator, iOS 27.0, 2026-09-23 and 24, the owner's "My Vampire System
 1-250" (925,559 bytes), app theme dark on a light simulator. The screen was
 recorded with `simctl io recordVideo` and every frame's page area read by
-`test/manual-test/white-flash.py`: white when more than 30 % of it has luminance
+`test/manual-test/scrolling-and-theme/white-flash.py`: white when more than 30 % of it has luminance
 above 200. A dark page of text reads 4–6 %, a white page 91–98 %.
 
 - **Opening**, 5 of 5 runs: the reader slid in with its page already white, and
@@ -127,7 +127,7 @@ package; `READER_THEME` equal to the installed default but for a transparent
 page; `defaultTheme` declared and given in `readerProps`; the provider effect.
 Each new rule was seen failing before its change.
 
-On the simulator, with `test/manual-test/white-flash.sh`, before → after: `open`
+On the simulator, with `test/manual-test/scrolling-and-theme/white-flash.sh`, before → after: `open`
 5 of 5 red → 0 of 5; `relaunch` 6 of 6 red → 0 of 6; `fling` 3 of 3 red (49 and
 71 white frames) → 0 of 3. The same script, run against the tree with only
 `reader-bridge.ts` put back, was red on `open` and `relaunch` again. The light
