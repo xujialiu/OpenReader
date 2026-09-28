@@ -44,6 +44,43 @@ it('counts only the chapters in the download, whatever else of the document is s
     .toMatchObject({ subtitle: '0 of 1 chapter', completed: 0, total: 1000 });
 });
 
+/** Chapters a to f, each of ten texts, prepared. */
+const six: NarrationPlan = {
+  version: 2,
+  chapters: ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id, title: id, depth: 0, parent: null, texts: [], textCount: 10 })),
+};
+
+it('leaves out the chapters the owner paused while the download goes on, unless they are complete, and keeps failed ones', () => {
+  // It read `49 of 188 chapters` with 140 paused (#77).
+  const task = download({ chapters: ['a', 'b', 'c', 'd', 'e', 'f'], paused: ['b', 'c'], failed: ['e'], current: 'd' });
+  const shown = continuedShown(task, 'Book', [
+    { id: 'a', count: 10, complete: true },
+    { id: 'b', count: 10, complete: true },
+    { id: 'c', count: 3, complete: false },
+    { id: 'd', count: 5, complete: false },
+    { id: 'e', count: 0, complete: false },
+  ], six);
+  // a and b are complete, b although paused; c is paused and left out; d, e (failed) and f are still counted.
+  expect(shown).toEqual({ title: 'Book', subtitle: '2 of 5 chapters', completed: 2500, total: 5000 });
+});
+
+it('moves the bar for no paused chapter, even the one the writer is leaving', () => {
+  const task = download({ chapters: ['a', 'b', 'c'], paused: ['b'], current: 'b' });
+  expect(continuedShown(task, 'Book', [{ id: 'b', count: 5, complete: false }], six))
+    .toEqual({ title: 'Book', subtitle: '0 of 2 chapters', completed: 0, total: 2000 });
+});
+
+it.each([
+  ['Pause all', { state: 'paused' as const, paused: ['a', 'b', 'c', 'd'] }],
+  ['the ring that paused the last chapter going on', { state: 'paused' as const, paused: ['c', 'd'] }],
+])('counts the whole download again once it is paused as a whole, by %s, so the last report is never a full count', (_, over) => {
+  const task = download({ chapters: ['a', 'b', 'c', 'd'], ...over });
+  expect(continuedShown(task, 'Book', [
+    { id: 'a', count: 10, complete: true },
+    { id: 'b', count: 10, complete: true },
+  ], six)).toEqual({ title: 'Book', subtitle: '2 of 4 chapters', completed: 2000, total: 4000 });
+});
+
 function harness(tasks: DownloadTask[], { submit = async () => true, update = async () => {} }: {
   submit?: () => Promise<boolean>; update?: () => Promise<void>;
 } = {}) {

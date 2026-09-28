@@ -597,9 +597,13 @@ function beginBounded() {
   }
 }
 /**
- * The owner started or resumed a download, on the screen: it may go on away
- * from it. Only here, because Apple asks for the submission to follow a
- * person's action; a launch or a return to the app never submits.
+ * The owner started or resumed a download on the screen, or opened the app
+ * while one goes on by itself: it may go on away from the screen. Apple asks
+ * for the submission to follow a person's action, and the owner counts opening
+ * the app as one (#77, 2026-09-28), so a launch and every return to the
+ * foreground submit, as the taps do. Nothing submits while the app is away, nor
+ * when the phone ends the task while the app is on the screen: the next return
+ * does. Where nothing goes on by itself, `start` submits nothing.
  */
 function continueAway() {
   if (!foreground) return;
@@ -676,6 +680,8 @@ export function startDownloads(): () => void {
           task.state = "queued";
       loaded = true;
       await persist();
+      // Opened with a download that goes on by itself (#77).
+      continueAway();
       // Before the first run, so the scheduler never trusts keys computed under
       // a setting the owner has since changed.
       await ensureSpeechKeys();
@@ -714,6 +720,8 @@ export function startDownloads(): () => void {
       void offlineNative?.endBackground();
       for (const task of tasks)
         if (task.state === "interrupted") task.state = "queued";
+      // Back with a download that goes on by itself: leaving again keeps it going without a tap (#77).
+      continueAway();
       fire(persist().then(kick));
     } else if (!continued.holding() && runsAway()) beginBounded();
   });

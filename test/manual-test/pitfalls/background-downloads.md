@@ -54,9 +54,12 @@
     chapters were paused from earlier runs. Nothing paused it.
   - Fix: read `chapterProgress(document, voice).get(id).complete` before
     treating a `paused` state as a pause.
-  - The continued task's subtitle counts the paused chapters too: one fresh
+  - The continued task's subtitle counted the paused chapters too: one fresh
     chapter enqueued into that task was submitted as `48 of 187 chapters`, as
-    ADR 0052 specifies.
+    ADR 0052 then specified. Since the owner's decision of 2026-09-28 (#77) it
+    leaves out paused chapters that are not complete while the download goes
+    on, so such a task no longer counts all 187; a download paused as a whole
+    is counted whole.
 - **What JavaScript got back from the native module.** `continued-processing.ts`
   logs nothing. To see whether `submitContinued` resolved `false`, replace it
   through `cdp.cjs --eval` with a recording wrapper. Assigning to the Expo

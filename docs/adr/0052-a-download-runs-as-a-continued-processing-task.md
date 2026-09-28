@@ -168,32 +168,58 @@ native module and the catalogue passed in. It is tested in
 - **What it shows.** The title is the Document's name as the Library shows it:
   the shell hands `library.entries` to the runtime's `nameDocuments`, and a
   rename is reported. The subtitle is `{saved} of {n} chapters`, or
-  `chapter` when `n` is 1, where `n` is `task.chapters.length`. That includes
-  chapters paused or failed, and chapters already complete. Chapters of the
-  Document outside the download are not counted. Progress is 1,000 units per
-  chapter: `completed` is the complete chapters plus the saved share of
-  `task.current`, read from `repository.progress` and the plan's text count, so
-  the bar moves with every saved clip. The report is taken after every
+  `chapter` when `n` is 1. While the download goes on by itself (`GOES_ON`),
+  `n` is the download's chapters that are complete for its voice or not
+  paused: the owner decided on 2026-09-28 (#77) that the count leaves out the
+  chapters the owner paused, after the first version, which counted
+  `task.chapters.length`, read `49 of 188 chapters` with 140 paused. Failed
+  chapters are counted, and so is a paused chapter that is complete. Once the
+  download no longer goes on by itself, as when it is paused as a whole by
+  Pause all or by the ring that pauses the last chapter going on, `n` is every
+  chapter of it again, so the last report before `finishContinued` reads where
+  it stopped (`49 of 188`), never a full `49 of 49` or `0 of 0` that looks
+  complete. Chapters of the Document outside the download are not counted.
+  Progress is 1,000 units per counted chapter: `completed` is the complete
+  chapters plus the saved share of `task.current` when it is counted, read from
+  `repository.progress` and the plan's text count, so the bar moves with every
+  saved clip. The report is taken after every
   `persist()`, which the scheduler calls after each saved clip and each change
   of state. One report waits its turn at a time and reads the downloads when it
   runs, the same one-in-flight rule as the drawer's `requestProgress`.
-- **When it is submitted.** It is submitted only after the owner's own start
-  or resume, while `AppState` is `active`. That means `enqueue` (Download
-  selected), `toggleTask` when it resumes (Resume all, Retry failed), and
-  `toggleChapter` when the tap resumes. A tap resumes when the chapter was
-  paused, or when the download was paused, blocked or interrupted, which is
-  the ring's Continue. **It is never submitted** at launch (`startDownloads`
-  restoring a download), on the return to the foreground, or when playback
-  stops. Apple asks for a submission to follow a person's action on this very
-  work, and opening the app is not one. The cost: after the task has ended
-  away from the screen, the download goes on when the app comes back. If the
-  owner then leaves again without tapping anything, only the bounded task is
-  left.
+- **When it is submitted.** After the owner's own start or resume, while
+  `AppState` is `active`. That means `enqueue` (Download selected),
+  `toggleTask` when it resumes (Resume all, Retry failed), and `toggleChapter`
+  when the tap resumes. A tap resumes when the chapter was paused, or when the
+  download was paused, blocked or interrupted, which is the ring's Continue.
+  And, by the owner's decision of 2026-09-28 (#77), whenever the app comes to
+  the foreground with a download that goes on by itself: the `AppState`
+  `active` handler calls `continueAway()` after making `interrupted` tasks
+  `queued`, and `startDownloads` calls it once the stored tasks are restored,
+  which submits if the app is then in front. `continued.start()` submits
+  nothing when no download is in `GOES_ON`, and only reports while a task is
+  being submitted or runs, so a return while the task still runs submits
+  nothing. The owner treats opening the app as the person's action. The first
+  version submitted only after a tap, because Apple asks for a submission to
+  follow a person's action on this very work and says people do not expect
+  tasks to start automatically (above); after the task had ended away from the
+  screen, the download went on when the app came back, and leaving again
+  without a tap had only the bounded task. What is given up: whether the phone
+  refuses or cancels a task submitted when the app is opened, as unexpected
+  work, is not known until the owner's iPhone shows it; a refusal falls back to
+  the bounded task as before. **It is never submitted** while the app is away,
+  when playback stops, nor from `continuedExpired` while the app is on the
+  screen: the phone has just ended the task, and the next return submits it.
+  Every `active` counts as a return, including the one after `inactive`
+  (Control Center, the app switcher, a system alert), and each submission
+  registers a fresh identifier, so where the phone refuses, each return
+  registers one more handler and logs one more refusal; on the simulator that
+  is every return with a download going on.
 - **Why `.fail`.** A queued request would start later, beside a bounded task
   already begun, for a download that may be over by then. It would also give
   the runtime a third state (submitted, not running) to reconcile with the
   bounded task's expiry. With `.fail`, a download either has a continued task
-  from the tap onwards or has the old behaviour.
+  from the tap, or from the app's return to the foreground, onwards or has the
+  old behaviour.
 - **Leaving the app.** The `AppState` handler begins the bounded task only
   when no continued task holds (`holding()`, which is true while one is being
   submitted or runs). If a submission is refused after the app has left, the
@@ -211,15 +237,20 @@ native module and the catalogue passed in. It is tested in
   return to the foreground queues them again. On the screen, the download needs
   no task and nothing changes. The plan on #77 asked that the owner's cancel in
   the Live Activity pause the download, as Pause all does. The two cannot be
-  told apart (above), so both are treated as an interruption, and **that choice
-  is the owner's to confirm**.
+  told apart (above), so both are treated as an interruption, which the owner
+  confirmed on 2026-09-28 (#77). What is given up: a stop in the Live Activity
+  does not pause the download. It goes on when the app is next opened, and is
+  submitted again then; to stop it for good the owner uses Pause all in the
+  app.
 
 ## Not yet known
 
 Nothing here has run on a device. The owner's iPhone (iOS 27) has to show how
 long clips keep being saved with the phone locked and nothing playing, what the
 Lock Screen and the Dynamic Island show, what the Live Activity's cancel does,
-whether a download waiting for the network is expired as stalled, and whether
+whether a submission made when the app is opened is accepted and kept like one
+made after a tap, whether a download waiting for the network is expired as
+stalled, and whether
 `success: false` looks different from `true`. The simulator has to show that
 its refusal is the documented `unavailable` and that the bounded fallback still
 behaves as measured at 02:49. Crossing a chapter boundary away from the screen

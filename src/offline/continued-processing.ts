@@ -5,8 +5,9 @@ import { GOES_ON } from './pausing';
 /**
  * A download away from the screen (ADR 0052, #77).
  *
- * On iOS 26 and later, a download the owner starts or resumes on the screen is
- * submitted as a continued processing task, which lets the app go on running
+ * On iOS 26 and later, a download the owner starts or resumes on the screen, or
+ * one that goes on by itself when the owner opens the app, is submitted as a
+ * continued processing task, which lets the app go on running
  * after the owner leaves it, while the phone shows the download's progress in a
  * Live Activity from which the owner can stop it. The phone ends the task under
  * pressure, or when the owner stops it there, and the app cannot tell which.
@@ -38,10 +39,20 @@ export interface ContinuedNative {
 /** Progress units per chapter, so the chapter being written moves the bar with every saved clip. */
 const UNITS = 1000;
 
+const goesOn = (task: DownloadTask) => GOES_ON.includes(task.state);
+
 /**
  * The download's chapters saved for its voice, of the chapters in it, and the
  * share of the chapter being written. Chapters of the Document outside the
  * download are not counted, whatever is saved for them.
+ *
+ * While the download goes on by itself, a chapter the owner paused is counted
+ * only once it is complete: the count is of what this download is writing (it
+ * read `49 of 188 chapters` with 140 paused, #77). Failed chapters stay
+ * counted. Once nothing goes on by itself, as when the download is paused as a
+ * whole by Pause all or by the ring that paused the last chapter going on,
+ * every chapter is counted again, so the last report before the finish shows
+ * where it stopped rather than a full `49 of 49`.
  */
 export function continuedShown(
   task: DownloadTask,
@@ -50,11 +61,14 @@ export function continuedShown(
   plan: NarrationPlan | null,
 ): ContinuedShown {
   const saved = new Map(progress.map((chapter) => [chapter.id, chapter]));
-  const total = task.chapters.length;
-  const done = task.chapters.filter((id) => saved.get(id)?.complete).length;
+  const complete = (id: string) => !!saved.get(id)?.complete;
+  const paused = new Set(goesOn(task) ? task.paused : []);
+  const counted = task.chapters.filter((id) => complete(id) || !paused.has(id));
+  const total = counted.length;
+  const done = counted.filter(complete).length;
   let part = 0;
-  const current = task.current ? plan?.chapters.find((chapter) => chapter.id === task.current) : undefined;
-  if (current && current.prepared !== false && !saved.get(current.id)?.complete) {
+  const current = task.current && !paused.has(task.current) ? plan?.chapters.find((chapter) => chapter.id === task.current) : undefined;
+  if (current && current.prepared !== false && !complete(current.id)) {
     const texts = chapterTextCount(current);
     if (texts > 0) part = Math.min((saved.get(current.id)?.count ?? 0) / texts, 0.999);
   }
@@ -74,16 +88,15 @@ export interface ContinuedDeps {
   shown(task: DownloadTask): Promise<ContinuedShown>;
 }
 
-const goesOn = (task: DownloadTask) => GOES_ON.includes(task.state);
-
 /**
  * One continued processing task at a time, covering every download that goes
  * on by itself; it shows the one being written, or else the first waiting its
  * turn, and follows the scheduler from one Document to the next.
  *
- * - `start` after the owner's own start or resume, on the screen: submits
- *   when no task runs, and otherwise only reports. Apple asks for a submission
- *   to follow a person's action, so nothing else submits.
+ * - `start` after the owner's own start or resume, on the screen, and when the
+ *   owner opens the app: submits when no task runs, and otherwise only reports.
+ *   Apple asks for a submission to follow a person's action, so nothing else
+ *   submits.
  * - `follow` after any change: reports progress, or, once nothing goes on by
  *   itself, shows where the download ended and finishes the task. It succeeds
  *   when every download is done without a failed chapter or was paused by the

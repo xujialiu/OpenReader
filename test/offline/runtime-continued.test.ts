@@ -3,9 +3,10 @@ import type { DownloadTask } from '../../src/offline/model';
 
 /**
  * The runtime's half of ADR 0052 (#77): a download the owner starts or resumes
- * on the screen is submitted as a continued processing task, which keeps the
- * app running when the owner leaves it; without one, leaving asks for the
- * bounded background time as before. The native module is doubled, as in
+ * on the screen, or one that goes on by itself when the app is launched or
+ * comes back to the foreground, is submitted as a continued processing task,
+ * which keeps the app running when the owner leaves it; without one, leaving
+ * asks for the bounded background time as before. The native module is doubled, as in
  * `runtime.test.ts`. The Document's plan never arrives, so the scheduler holds
  * a started download `queued` and nothing is fetched.
  */
@@ -121,21 +122,67 @@ it('asks for the bounded time as before when the phone refuses the continued tas
   }
 });
 
-it('submits nothing for a download restored at launch or on coming back, nor for a ring that pauses; a ring that resumes submits', async () => {
+it('submits a download restored at launch in the foreground, since opening the app is the owner\'s action', async () => {
   const stored: DownloadTask = { id: 't', document: 'book', voice, chapters: ['a', 'b'], state: 'downloading', error: null, failed: [] };
   const { runtime, stop } = await start([stored]);
   try {
-    const [task] = runtime.downloadTasks('book');
-    expect(task.state).toBe('queued');
+    expect(runtime.downloadTasks('book')[0].state).toBe('queued');
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledWith('My Vampire System', '0 of 2 chapters', 0, 2000));
+    // Leaving the app: the continued task keeps it running.
+    await new Promise((resolve) => setTimeout(resolve, 10));
     mock.appState('background');
-    expect(mock.beginBackground).toHaveBeenCalledTimes(1);
+    expect(mock.beginBackground).not.toHaveBeenCalled();
+    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
+  } finally {
+    stop();
+  }
+});
+
+it('submits a download restored at a launch away from the screen only once the app comes to the foreground', async () => {
+  mock.appStateNow = 'background';
+  const stored: DownloadTask = { id: 't', document: 'book', voice, chapters: ['a'], state: 'queued', error: null, failed: [] };
+  const { stop } = await start([stored]);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mock.submitContinued).not.toHaveBeenCalled();
     mock.appState('active');
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+  } finally {
+    stop();
+  }
+});
+
+it('submits nothing at launch or on coming back when no download goes on by itself', async () => {
+  const stored: DownloadTask[] = [
+    { id: 'p', document: 'book', voice, chapters: ['a'], state: 'paused', error: null, failed: [], paused: ['a'] },
+    { id: 'd', document: 'other', voice, chapters: ['a'], state: 'done', error: null, failed: [] },
+    { id: 'b', document: 'third', voice, chapters: ['a'], state: 'blocked', error: 'The key was refused.', failed: [] },
+  ];
+  const { stop } = await start(stored);
+  try {
+    mock.appState('background');
+    mock.appState('active');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mock.submitContinued).not.toHaveBeenCalled();
+  } finally {
+    stop();
+  }
+});
+
+it('submits nothing for a ring that pauses; a ring that resumes submits', async () => {
+  const stored: DownloadTask = { id: 't', document: 'book', voice, chapters: ['a', 'b'], state: 'queued', error: null, failed: [] };
+  // Refused at launch, as the simulator refuses every one, so that each later submission shows.
+  mock.submitContinued.mockImplementation(async () => false);
+  const { runtime, stop } = await start([stored]);
+  try {
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+    const [task] = runtime.downloadTasks('book');
     runtime.toggleChapter(task, 'a');
     expect(task).toMatchObject({ state: 'queued', paused: ['a'] });
-    await Promise.resolve();
-    expect(mock.submitContinued).not.toHaveBeenCalled();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
     runtime.toggleChapter(task, 'a');
-    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(2));
   } finally {
     stop();
   }
@@ -159,7 +206,7 @@ it('finishes the continued task at Pause all, and submits it again at Resume all
   }
 });
 
-it('interrupts the download when the continued task ends away from the screen, and continues it on coming back without submitting again', async () => {
+it('interrupts the download when the continued task ends away from the screen, and on coming back continues it and submits it again', async () => {
   const { runtime, stop } = await start();
   try {
     runtime.enqueue('book', voice, ['a']);
@@ -171,15 +218,50 @@ it('interrupts the download when the continued task ends away from the screen, a
     expect(task.state).toBe('interrupted');
     mock.appState('active');
     expect(task.state).toBe('queued');
+    // So that leaving again keeps it going without a tap (#77).
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(2));
     await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
+    mock.appState('background');
     expect(mock.beginBackground).not.toHaveBeenCalled();
   } finally {
     stop();
   }
 });
 
-it('leaves the download going on when the continued task ends on the screen, and leaving afterwards asks for the bounded time', async () => {
+it('submits nothing more on coming back while the continued task still runs', async () => {
+  const { runtime, stop } = await start();
+  try {
+    runtime.enqueue('book', voice, ['a']);
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+    mock.appState('background');
+    mock.appState('active');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
+  } finally {
+    stop();
+  }
+});
+
+it('submits again on each return to the foreground after a refusal, and leaving after each asks for the bounded time', async () => {
+  mock.submitContinued.mockImplementation(async () => false);
+  const { runtime, stop } = await start();
+  try {
+    runtime.enqueue('book', voice, ['a']);
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    mock.appState('background');
+    expect(mock.beginBackground).toHaveBeenCalledTimes(1);
+    mock.appState('active');
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    mock.appState('background');
+    expect(mock.beginBackground).toHaveBeenCalledTimes(2);
+  } finally {
+    stop();
+  }
+});
+
+it('leaves the download going on when the continued task ends on the screen without submitting it again, and leaving afterwards asks for the bounded time', async () => {
   const { runtime, stop } = await start();
   try {
     runtime.enqueue('book', voice, ['a']);
@@ -188,8 +270,13 @@ it('leaves the download going on when the continued task ends on the screen, and
     task.state = 'downloading';
     mock.continuedExpired!();
     expect(task.state).toBe('downloading');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
     mock.appState('background');
     expect(mock.beginBackground).toHaveBeenCalledTimes(1);
+    // The next return submits it again.
+    mock.appState('active');
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(2));
   } finally {
     stop();
   }
