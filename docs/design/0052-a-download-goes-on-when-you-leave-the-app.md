@@ -20,8 +20,7 @@ chapter or continues a stopped download. A download still going on by itself
 when the owner opens the app goes on after they leave it again, too. While it
 goes on, the phone shows it as a Live Activity, as it shows a delivery or a
 timer: on the Lock Screen and, on a phone that has one, in the Dynamic Island.
-That display belongs to the phone and not to the app, and nobody has seen it on
-the owner's iPhone yet. It shows:
+That display belongs to the phone and not to the app. It shows:
 
 - the document's name, as the Library shows it;
 - how many of the download's chapters are saved, for example
@@ -37,22 +36,49 @@ When the download finishes, or the owner pauses all of it, the phone shows it
 done for a moment and then takes it away. When it moves on to another
 document's download, the name and the count follow it.
 
+## What the owner's iPhone showed
+
+On the owner's iPhone the phone took the download on at once, both after
+Download selected and each time the app was opened with a download going on.
+With the phone locked and nothing playing, the download went on for more than
+five minutes, saving sentences every few seconds, and moved from one chapter to
+the next by itself. The Lock Screen read `2 of 15 chapters`, with a ring that
+filled.
+
+About five minutes in, with the download 16% done, the phone asked by itself,
+on the Lock Screen, whether to keep running it in the background, with Continue
+and Stop. The app does not cause that question and cannot prevent it. After
+Continue, the download went on.
+
 ## Stopping it from the Lock Screen
 
-The owner can stop it from what the phone shows, without opening the app. The
-phone also ends it by itself when it needs the resources. The app is told only
-that it has ended, never which of the two happened. Both are therefore treated
-the same way: the download is interrupted, keeps everything already saved, and
-goes on when the app is opened again. The drawer says
-`Interrupted · continues when available`, as it always has.
+The owner can stop the download from what the phone shows. Stopping it there
+now pauses it, exactly as Pause all does: everything already saved is kept,
+and opening the app neither starts it again nor asks the phone to show it
+again. The drawer offers Resume all, which starts it again and shows it on the
+Lock Screen once more. Downloads that had already stopped, paused or finished
+are left as they were.
 
-The plan was that stopping it from the Lock Screen would pause the download, as
-Pause all does. That cannot be told apart from the phone's own stop, and a
-pause would mean a download the phone stopped for its own reasons also stays
-stopped until the owner finds it. The owner chose on 2026-09-28 that both
-interrupt. What is given up: a stop on the Lock Screen is not a pause. The
-download goes on the next time the app is opened, and to stop it for good the
-owner taps Pause all in the app.
+The stop takes a moment. On the owner's iPhone, tapping it briefly opened the
+app, which then went back behind the Lock Screen, and the phone ended the
+download 4 to 10 seconds later. It is paused whether the app is open or
+not when that happens.
+
+The first version treated the stop as an interruption: the download kept what
+it had saved and went on the next time the app was opened. On the owner's
+iPhone that meant the stop stopped nothing. Twice, the owner stopped it, opened
+the app, and saw the download going again and the phone showing it once more.
+Pause all in the app was the only way to stop it.
+
+The phone also ends the download by itself when it needs the resources, and the
+app is told only that it has ended, never which of the two happened. Both are
+now treated as the owner's stop. What is given up: when the phone ends a
+download for its own reasons, it stays paused until the owner taps Resume all,
+where the first version would have gone on the next time the app was opened.
+The owner accepted this on 2026-09-28, unless the two can one day be told apart
+reliably. So far only the owner's stops have been seen, and the app now notes
+what it can see at each end so that a stop the phone makes itself can be
+compared with them.
 
 ## When the owner asks, or opens the app
 
@@ -67,15 +93,13 @@ The owner decided on 2026-09-28 that opening the app counts as asking. So when
 the app is opened, or comes back to the front, while a download is going on by
 itself, it goes on after the owner leaves again without a tap. That includes a
 download that was interrupted and one the app picks up again when it starts.
-When the phone ends it while the app is open, nothing more is asked of the
-phone until the owner leaves and opens the app again: the phone has only just
-ended it.
+A download the phone has ended is paused (above), so opening the app does not
+start it again; Resume all does.
 
 What is given up: the phone's maker says people do not expect work to start on
-its own, and the phone may refuse or end work it takes to be unasked for.
-Whether it treats opening the app that way has not been seen on the owner's
-iPhone. Where it refuses, the download stops within a minute of leaving the
-app, as before.
+its own, and the phone may refuse or end work it takes to be unasked for. On
+the owner's iPhone it took the download on each time the app was opened. Where
+it refuses, the download stops within a minute of leaving the app, as before.
 
 ## Where it does not apply
 
@@ -102,7 +126,9 @@ download, and the phone does not tell the app.
 - A long download now uses the network and the battery while the phone is
   locked, which is what the owner asked for.
 - The phone may still end it early, and a long document is not promised to finish
-  while the phone stays locked.
+  while the phone stays locked. After about five minutes the phone may ask the
+  owner whether to keep going.
+- When the phone ends it for its own reasons, the download is paused, and the
+  owner has to tap Resume all to go on.
 - Where a new chapter starts away from the screen, its text has to have been
   prepared while the app was open (#76).
-- None of this has been measured on the owner's iPhone yet.

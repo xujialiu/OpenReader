@@ -8,7 +8,8 @@ _The product half is [design 0052](../design/0052-a-download-goes-on-when-you-le
 Issue #77. It revises "iOS uses a bounded UIApplication background task" in
 [ADR 0027](0027-whole-document-offline-narration.md), which has an amendment
 pointing here. The measurement that opened the issue is in
-`notes/NOTES_2026-09-28.md`, 02:49._
+`notes/NOTES_2026-09-28.md`, 02:49, and the first run on the owner's iPhone
+is in the same file, 19:26._
 
 With nothing playing, a download went on for less than a minute after the owner
 left the app or locked the phone. `beginBackgroundTask` bought that minute and
@@ -85,15 +86,24 @@ background" with its code. The quotations are theirs.
   prioritizes the termination of tasks that reflect minimal progress".
   Progress is `task.progress`, an `NSProgress`: `totalUnitCount` and
   `completedUnitCount`. `updateTitle:subtitle:` changes the text of the Live
-  Activity.
+  Activity. On the owner's iPhone (notes 19:26) the phone showed that prompt
+  on the Live Activity about five minutes after the submission, with the
+  download locked and saving clips in every 10 s bin: "My Vampire System —
+  Chapters 251–500 is 16% complete. Do you want to continue running this task
+  in the background?" with Continue and Stop. The app neither causes nor
+  controls it, and is not told of it; after Continue the task went on.
 - **Expiration.** The article says "If a person cancels a task through the
   interface, the framework invokes the task's expiration handler", and "the
   system expires your task, as occurs when a person cancels the task in the
   system UI". The handler takes no argument. **The owner's cancel and the
   system's expiry therefore arrive the same way**, and nothing documented tells
-  them apart. The article also says: "The system cancels any running tasks if a
-  person closes the app in the app switcher, but the app doesn't receive an
-  indication of cancellation in that case."
+  them apart. On the owner's iPhone both stops in the Live Activity logged
+  dasd's private `ActivityExpirationEvent(… reasons: 1048576)`,
+  `_BGTaskExpirationRequest … reason: 2` and a progress `CANCELLED`. No end
+  the phone chose itself has been seen, so whether those differ for one is not
+  known, and nothing private is read. The article also says: "The system
+  cancels any running tasks if a person closes the app in the app switcher,
+  but the app doesn't receive an indication of cancellation in that case."
 - **Completion.** `BGTask.h`: "Not setting an expiration handler results in the
   system marking your task as complete and unsuccessful"; "Not calling
   `setTaskCompletedWithSuccess:` before the time for the task expires may result
@@ -143,7 +153,15 @@ event, all on the main queue:
 - `finishContinued(success)` calls `setTaskCompleted(success:)` and forgets
   the task.
 - `continuedExpired` is sent from the expiration handler on the main queue,
-  and the task is then completed with `success: false`.
+  and the task is then completed with `success: false`. The handler first
+  records what is publicly visible as the task ends, in one `NSLog` line
+  (`OpenReaderOffline: continued task <id> expired: progress cancelled …,
+  fraction …, … of …; thermal state …, low power …`), and the event carries
+  the same values (`ContinuedEnded`): the task's `progress.isCancelled`,
+  `fractionCompleted`, `completedUnitCount` and `totalUnitCount`, and
+  `ProcessInfo`'s `thermalState` (0 nominal to 3 critical) and
+  `isLowPowerModeEnabled`. Nothing decides on them. They are there so that
+  an end the phone chooses can one day be compared with the owner's stop.
 - `OnDestroy` completes a running task, because a reload makes a new module
   and the old one's task would otherwise never be completed.
 
@@ -203,12 +221,14 @@ native module and the catalogue passed in. It is tested in
   follow a person's action on this very work and says people do not expect
   tasks to start automatically (above); after the task had ended away from the
   screen, the download went on when the app came back, and leaving again
-  without a tap had only the bounded task. What is given up: whether the phone
-  refuses or cancels a task submitted when the app is opened, as unexpected
-  work, is not known until the owner's iPhone shows it; a refusal falls back to
-  the bounded task as before. **It is never submitted** while the app is away,
-  when playback stops, nor from `continuedExpired` while the app is on the
-  screen: the phone has just ended the task, and the next return submits it.
+  without a tap had only the bounded task. What is given up: the phone may
+  refuse or cancel a task submitted when the app is opened, as unexpected
+  work; on the owner's iPhone it accepted both such submissions (below), and a
+  refusal falls back to the bounded task as before. **It is never
+  submitted** while the app is away, when playback stops, nor from
+  `continuedExpired`: the end pauses the downloads the task covered (below),
+  so the next return finds nothing going on by itself and submits nothing
+  either.
   `start` reads what the Live Activity will show from the catalogue before it
   submits, and checks `foreground` again right before `submitContinued`,
   settling as not running if the app has left. At 8aa75f6 it checked only
@@ -222,7 +242,11 @@ native module and the catalogue passed in. It is tested in
   (Control Center, the app switcher, a system alert), and each submission
   registers a fresh identifier, so where the phone refuses, each return
   registers one more handler and logs one more refusal; on the simulator that
-  is every return with a download going on.
+  is every return with a download going on. On the owner's iPhone (notes
+  19:26) the submission after Download selected was accepted at once
+  (`SUBMITTED` 3 ms after the registration, `Running task` 4 ms after that),
+  and so were the two made when the app was opened, at 19:20:23 and 19:21:14;
+  the second ran until Pause all at 19:26:52.
 - **Why `.fail`.** A queued request would start later, beside a bounded task
   already begun, for a download that may be over by then. It would also give
   the runtime a third state (submitted, not running) to reconcile with the
@@ -251,32 +275,71 @@ native module and the catalogue passed in. It is tested in
 - **The end.** When nothing goes on by itself, the next report shows where the
   download ended and then calls `finishContinued`. That happens at Pause all,
   at the last chapter done, at a key or quota failure, or when deletion leaves
-  nothing. `success` is decided at that moment. It is true when every
-  download is `done` without a failed chapter, or `paused`, and false
-  otherwise. Every native call waits for the one before it, so a new submission
+  nothing. `success` is decided at that moment, over the downloads the task
+  covered: each that went on by itself between its submission and its end,
+  including one that started going on while it ran, and is still there. It is
+  true when every one of them is `done` without a failed chapter, or `paused`,
+  and false otherwise; a download the task did not cover is not judged. At
+  9bda89e every download was: on the owner's iPhone, Pause all at 19:26:49
+  finished the task with `complete with success: 0` at 19:26:52, because an
+  old download of another Document sat `blocked` (notes 19:26). An expiry is
+  never a success; the module completes that task with `success: false`
+  itself. Every native call waits for the one before it, so a new submission
   never lands between a finishing task's last report and its finish.
-- **Expiry, and the owner's cancel.** On `continuedExpired` away from the
-  screen, the runtime does what the bounded task's `expired` has always done:
-  `expired = true`, and preparing and downloading become `interrupted`. The
-  return to the foreground queues them again. On the screen, the download needs
-  no task and nothing changes. The plan on #77 asked that the owner's cancel in
-  the Live Activity pause the download, as Pause all does. The two cannot be
-  told apart (above), so both are treated as an interruption, which the owner
-  confirmed on 2026-09-28 (#77). What is given up: a stop in the Live Activity
-  does not pause the download. It goes on when the app is next opened, and is
-  submitted again then; to stop it for good the owner uses Pause all in the
-  app.
+- **Expiry, and the owner's stop.** The owner decided on 2026-09-28 (#77),
+  from what the iPhone showed, that the Live Activity's stop is Pause all. On
+  `continuedExpired`, on the screen or away, `continued.expired()` names the
+  downloads the task covered that still go on by themselves (`GOES_ON`), and
+  each is paused as Pause all pauses it (`pausing.pauseAll`: every chapter not
+  failed in `paused`, the state `paused`); the downloads are then saved.
+  Downloads already stopped (`blocked`, `interrupted`, `paused`, `done`) are
+  left as they are. An `interrupted` one, stopped away from the screen at a
+  chapter not prepared, is queued again at the next opening as before; the
+  opening that the stop itself causes does that before the end arrives, so in
+  the phone's order it is going on again by then and is paused with the rest.
+  Away, `expired` is also set, as the app has no background time left.
+  Opening the app then resumes nothing and, with nothing going on by itself,
+  submits nothing; the owner resumes with Resume all, which submits again.
+  It applies on the screen too, because the stop itself opens the app: on
+  the phone SpringBoard logged `Received request to open
+  "top.xujialiu.openreader" … on behalf of ActivityProgres` at the tap
+  (19:19:38), the app was in front for about 4 s and back in the background
+  at 19:19:43, and the task ended at 19:19:48–49, 10 s after the tap. The
+  second stop ended it 4.0 s after the app reached the background.
 
-## Not yet known
+  Until then (9bda89e) the end was an interruption, as the bounded task's
+  `expired` is: away, preparing and downloading became `interrupted`, and on
+  the screen nothing changed. On the phone the app was suspended 0.15 s and
+  1.3 s after the two ends, no clip was saved until it was opened, and each
+  opening queued the download again and submitted a new task, accepted with
+  the same Live Activity. To the owner, the stop stopped nothing.
 
-Nothing here has run on a device. The owner's iPhone (iOS 27) has to show how
-long clips keep being saved with the phone locked and nothing playing, what the
-Lock Screen and the Dynamic Island show, what the Live Activity's cancel does,
-whether a submission made when the app is opened is accepted and kept like one
-made after a tap, whether a download waiting for the network is expired as
-stalled, and whether
-`success: false` looks different from `true`. The simulator has to show that
-its refusal is the documented `unavailable` and that the bounded fallback still
-behaves as measured at 02:49. Crossing a chapter boundary away from the screen
-needs the chapter's text to have been prepared in the foreground beforehand,
-which is #76's work.
+  **Every end is taken as the owner's stop**, because the public API gives the
+  handler no reason and nothing private is branched on (above). What is given
+  up: when the phone ends the task under pressure, the download is paused
+  too, and stays paused until the owner taps Resume all, where the first
+  version went on at the next opening. The owner accepted that on 2026-09-28
+  unless the two can be told apart reliably, which is what the logged values
+  are for. The pause is saved after the event, and the module completes the
+  task right after sending it. A save not finished when the app is suspended
+  finishes when it resumes; it is lost only if the phone ends the suspended
+  app first, and the next launch then restores the download as going on.
+
+## What the owner's iPhone showed, and what is not yet known
+
+The first run on the owner's iPhone 16 Pro (iOS 27.0, 24A437), Release
+0.0.2-beta45 at 9bda89e, is in `notes/NOTES_2026-09-28.md`, 19:26. The
+submission after Download selected and the two made when the app was opened
+were accepted at once. Locked, with nothing playing, clips were saved in every
+10 s bin (4 to 12 per bin) for over five minutes, and the download crossed
+chapter boundaries (nav.5 to nav.8) with their text prepared ahead (#76). The
+Live Activity read `2 of 15 chapters` with a circular progress. The phone's
+own prompt to continue came at about five minutes and 16% (Progress, above),
+and what the stop did is under "Expiry, and the owner's stop".
+
+Not yet known: what the Dynamic Island shows; what Stop in the phone's own
+prompt does, presumably the same expiry; what the logged values look like for
+an end the phone chooses; whether a download waiting for the network is
+expired as stalled; and whether `success: false` looks different from `true`.
+The simulator has to show that its refusal is the documented `unavailable`
+and that the bounded fallback still behaves as measured at 02:49.

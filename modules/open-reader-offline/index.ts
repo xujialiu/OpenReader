@@ -1,5 +1,15 @@
 import { requireOptionalNativeModule } from 'expo';
 
+/** The continued task's progress, and the phone's thermal state (0 nominal to 3 critical) and Low Power Mode, as it ended. */
+export interface ContinuedEnded {
+  cancelled: boolean;
+  fraction: number;
+  completed: number;
+  total: number;
+  thermalState: number;
+  lowPower: boolean;
+}
+
 interface OfflineNative {
   writeJson(uri: string, contents: string): void;
   excludeFromBackup(uri: string): void;
@@ -16,7 +26,11 @@ interface OfflineNative {
   finishContinued(success: boolean): Promise<void>;
   addListener(event: 'connectivity', listener: (event: { connected: boolean }) => void): { remove(): void };
   addListener(event: 'expired', listener: () => void): { remove(): void };
-  /** The phone ended the continued task: under pressure, or the owner stopped it in the Live Activity. */
-  addListener(event: 'continuedExpired', listener: () => void): { remove(): void };
+  /**
+   * The phone ended the continued task: under pressure, or the owner stopped it
+   * in the Live Activity, which it cannot tell apart (ADR 0052). With what was
+   * publicly visible as it ended, also logged, for a future comparison of the two.
+   */
+  addListener(event: 'continuedExpired', listener: (event: ContinuedEnded) => void): { remove(): void };
 }
 export const offlineNative = requireOptionalNativeModule<OfflineNative>('OpenReaderOffline');

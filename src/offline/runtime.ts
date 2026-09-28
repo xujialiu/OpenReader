@@ -611,8 +611,8 @@ function beginBounded() {
  * the app as one (#77, 2026-09-28), so a launch and every return to the
  * foreground submit, as the taps do. Nothing submits while the app is away
  * (`start` checks again right before the native call), nor when the phone ends
- * the task while the app is on the screen: the next return does. Where nothing
- * goes on by itself, `start` submits nothing.
+ * the task: its end pauses what it covered. Where nothing goes on by itself,
+ * `start` submits nothing.
  *
  * The app may leave while the submission is out; it then began the bounded
  * time, which a refusal leaves running. An acceptance gives it back: the
@@ -721,14 +721,18 @@ export function startDownloads(): () => void {
   const expiration = offlineNative?.addListener("expired", () => {
     if (!continued.running()) interruptAway();
   });
-  // The phone ended the continued task, under pressure or at the owner's stop
-  // in the Live Activity; the two cannot be told apart. On the screen the
-  // download needs no task and goes on.
+  // The phone ended the continued task, at the owner's stop in the Live
+  // Activity or under pressure; the two cannot be told apart, and both are
+  // taken as the owner's stop (#77, 2026-09-28). The downloads it covered that
+  // go on by themselves are paused as Pause all pauses them, on the screen or
+  // away (the stop itself opens the app for a moment), so opening the app
+  // resumes nothing and submits nothing; Resume all does. The rest are left.
   const continuedExpiration = offlineNative?.addListener(
     "continuedExpired",
     () => {
-      continued.expired();
-      if (!foreground) interruptAway();
+      for (const task of continued.expired()) pausing.pauseAll(task);
+      if (!foreground) expired = true;
+      fire(persist());
     },
   );
   const state = AppState.addEventListener("change", (value) => {

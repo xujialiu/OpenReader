@@ -10,7 +10,8 @@ import { GOES_ON } from './pausing';
  * continued processing task, which lets the app go on running
  * after the owner leaves it, while the phone shows the download's progress in a
  * Live Activity from which the owner can stop it. The phone ends the task under
- * pressure, or when the owner stops it there, and the app cannot tell which.
+ * pressure, or when the owner stops it there, and the app cannot tell which:
+ * both pause the downloads it covered, as Pause all does (#77, 2026-09-28).
  * Where there is no such task (an earlier iOS, the simulator, a refusal), the
  * runtime keeps the bounded background time it always asked for.
  *
@@ -104,9 +105,14 @@ export interface ContinuedDeps {
  *   0.85-0.96 s after the app reached the background.
  * - `follow` after any change: reports progress, or, once nothing goes on by
  *   itself, shows where the download ended and finishes the task. It succeeds
- *   when every download is done without a failed chapter or was paused by the
- *   owner.
- * - `expired` when the phone has ended the task.
+ *   when every download it covered is done without a failed chapter or was
+ *   paused by the owner; a download elsewhere that stopped by itself before
+ *   (on the owner's iPhone, an old `blocked` one) does not count.
+ * - `expired` when the phone has ended the task: names the downloads it
+ *   covered that still go on by themselves, which the owner's stop pauses.
+ *
+ * It covers every download that goes on by itself from its submission to its
+ * end, including one that starts going on while it runs.
  *
  * Every native call waits for the one before it, so a submission never lands
  * between a finishing task's last report and its finish.
@@ -121,6 +127,9 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
   let shownLast: DownloadTask | null = null;
   /** The submission out while `state` is 'submitting': whether the phone runs the task. */
   let submission: Promise<boolean> = Promise.resolve(false);
+  /** Every download that went on by itself while the task was being submitted or ran. */
+  let covering = new Set<DownloadTask>();
+  const cover = () => deps.tasks().filter(goesOn).forEach((task) => covering.add(task));
   let chain: Promise<unknown> = Promise.resolve();
   const turn = <T>(work: () => Promise<T>): Promise<T> => {
     const next = chain.then(work);
@@ -132,7 +141,9 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
     return on.find((task) => task.state === 'preparing' || task.state === 'downloading') ?? on[0] ?? null;
   };
   const succeeded = () =>
-    deps.tasks().every((task) => (task.state === 'done' && !task.failed.length) || task.state === 'paused');
+    deps.tasks()
+      .filter((task) => covering.has(task))
+      .every((task) => (task.state === 'done' && !task.failed.length) || task.state === 'paused');
 
   /** Decided when nothing went on, not when the call goes out: the owner may resume in between. */
   async function finish(native: ContinuedNative, success: boolean) {
@@ -152,6 +163,7 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
   function follow(): void {
     const native = deps.native;
     if (state === 'submitting') changed = true;
+    if (state !== 'idle') cover();
     if (state !== 'running' || !native || queued) return;
     queued = true;
     void turn(async () => {
@@ -160,7 +172,9 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
       const task = showing();
       if (!task) {
         state = 'idle';
-        await finish(native, succeeded());
+        const success = succeeded();
+        covering = new Set();
+        await finish(native, success);
         return;
       }
       shownLast = task;
@@ -181,6 +195,8 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
     if (!task) return Promise.resolve(false);
     state = 'submitting';
     changed = false;
+    covering = new Set();
+    cover();
     submission = turn(async () => {
       shownLast = task;
       const shown = await deps.shown(task);
@@ -191,6 +207,7 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
       .then((running) => {
         if (state !== 'submitting') return running;
         state = running ? 'running' : 'idle';
+        if (!running) covering = new Set();
         if (running && changed) follow();
         return running;
       });
@@ -200,9 +217,12 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
   return {
     start,
     follow,
-    expired(): void {
+    expired(): DownloadTask[] {
+      const covered = deps.tasks().filter((task) => covering.has(task) && goesOn(task));
       state = 'idle';
       shownLast = null;
+      covering = new Set();
+      return covered;
     },
     /**
      * Whether a continued task the phone accepted keeps the app running. Not

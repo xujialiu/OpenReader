@@ -172,25 +172,44 @@ public final class OpenReaderOfflineModule: Module {
 
   /// On the main queue, where it was registered. The expiration handler is
   /// the phone ending the task, under pressure or at the owner's stop in the
-  /// Live Activity; it cannot say which.
+  /// Live Activity; it cannot say which, and JavaScript takes both as the
+  /// owner's stop (ADR 0052). What is publicly visible as it ends is logged
+  /// and sent with the event, so that an end the phone chose can one day be
+  /// compared with the owner's: both of the owner's stops on 2026-09-28 logged
+  /// dasd's private `reasons: 1048576` and `reason: 2`, and no end the phone
+  /// chose has been seen.
   @available(iOS 26.0, *)
   private func launchedContinued(_ task: BGTask, identifier: String) {
-    guard identifier == continuedIdentifier, task is BGContinuedProcessingTask else {
+    guard identifier == continuedIdentifier, let processing = task as? BGContinuedProcessingTask else {
       task.setTaskCompleted(success: true)
       return
     }
     continued = task
-    task.expirationHandler = { [weak self] in
-      DispatchQueue.main.async { self?.expiredContinued(identifier: identifier) }
+    task.expirationHandler = { [weak self, weak processing] in
+      let progress = processing?.progress
+      let cancelled = progress?.isCancelled ?? false
+      let fraction = progress?.fractionCompleted ?? 0
+      let completed = progress?.completedUnitCount ?? 0
+      let total = progress?.totalUnitCount ?? 0
+      let thermalState = ProcessInfo.processInfo.thermalState.rawValue
+      let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+      NSLog(
+        "OpenReaderOffline: continued task %@ expired: progress cancelled %@, fraction %.4f, %lld of %lld; thermal state %ld, low power %@",
+        identifier, cancelled ? "yes" : "no", fraction, completed, total, thermalState, lowPower ? "yes" : "no")
+      let ended: [String: Any?] = [
+        "cancelled": cancelled, "fraction": fraction, "completed": completed, "total": total,
+        "thermalState": thermalState, "lowPower": lowPower,
+      ]
+      DispatchQueue.main.async { self?.expiredContinued(identifier: identifier, ended: ended) }
     }
     showContinued()
   }
 
-  private func expiredContinued(identifier: String) {
+  private func expiredContinued(identifier: String, ended: [String: Any?]) {
     guard identifier == continuedIdentifier, let task = continued else { return }
     continued = nil
     continuedIdentifier = nil
-    sendEvent("continuedExpired", [:])
+    sendEvent("continuedExpired", ended)
     task.setTaskCompleted(success: false)
   }
 

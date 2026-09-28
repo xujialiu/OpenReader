@@ -161,6 +161,53 @@ it('counts a download the owner paused as a success', async () => {
   await vi.waitFor(() => expect(calls.at(-1)).toBe('finish true'));
 });
 
+it('judges its success by the downloads it covered, not by one elsewhere that stopped before it', async () => {
+  // The owner's iPhone, 2026-09-28 19:26:52: Pause all finished the task with success 0, for an old
+  // download of another Document that sat `blocked` (#77).
+  const tasks = [download(), download({ id: 'old', document: 'other', state: 'blocked', error: 'The key was refused.' })];
+  const { continued, calls } = harness(tasks);
+  await continued.start();
+  tasks[0].state = 'paused';
+  continued.follow();
+  await vi.waitFor(() => expect(calls.at(-1)).toBe('finish true'));
+});
+
+it('covers a download that starts going on while it runs, and judges it too', async () => {
+  const tasks = [download(), download({ id: 'later', document: 'other', state: 'blocked' })];
+  const { continued, calls } = harness(tasks);
+  await continued.start();
+  // Resumed while the task runs.
+  tasks[1].state = 'queued';
+  continued.follow();
+  await vi.waitFor(() => expect(calls).toHaveLength(2));
+  tasks[0].state = 'done';
+  tasks[1].state = 'blocked';
+  continued.follow();
+  await vi.waitFor(() => expect(calls.at(-1)).toBe('finish false'));
+});
+
+it('names, as the phone ends it, the downloads it covered that still go on by themselves, and leaves the others', async () => {
+  const tasks = [
+    download({ id: 'w', state: 'downloading' }),
+    download({ id: 'q', document: 'second', state: 'queued' }),
+    download({ id: 'n', document: 'third', state: 'waiting' }),
+    download({ id: 'b', document: 'old', state: 'blocked' }),
+    download({ id: 'p', document: 'fifth', state: 'paused' }),
+  ];
+  const { continued } = harness(tasks);
+  await continued.start();
+  // Covered, but done before the end.
+  tasks[1].state = 'done';
+  continued.follow();
+  expect(continued.expired().map((task) => task.id)).toEqual(['w', 'n']);
+  expect(continued.running()).toBe(false);
+});
+
+it('names nothing when the phone ends a task it never ran', () => {
+  const { continued } = harness([download()]);
+  expect(continued.expired()).toEqual([]);
+});
+
 it('reports nothing more once the phone has ended the task, and a later start submits again', async () => {
   const tasks = [download()];
   const { continued, native, calls } = harness(tasks);

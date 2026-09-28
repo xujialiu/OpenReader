@@ -6,7 +6,9 @@ import type { DownloadTask } from '../../src/offline/model';
  * on the screen, or one that goes on by itself when the app is launched or
  * comes back to the foreground, is submitted as a continued processing task,
  * which keeps the app running when the owner leaves it; without one, leaving
- * asks for the bounded background time as before. The native module is doubled, as in
+ * asks for the bounded background time as before. When the phone ends it, at
+ * the owner's stop in the Live Activity or by itself, the downloads it covered
+ * are paused as Pause all pauses them. The native module is doubled, as in
  * `runtime.test.ts`. The Document's plan never arrives, so the scheduler holds
  * a started download `queued` and nothing is fetched.
  */
@@ -29,6 +31,8 @@ const mock = vi.hoisted(() => ({
   endBackground: vi.fn(async () => {}),
   /** The catalogue's progress, which what the phone shows is read from before each submission. */
   progress: vi.fn(async (): Promise<unknown[]> => []),
+  /** Every save of the downloads; the last is what the next launch reads back. */
+  saveTasks: vi.fn(async (_tasks: DownloadTask[]) => {}),
 }));
 vi.mock('react-native', () => ({
   AppState: {
@@ -76,7 +80,7 @@ async function start(stored: DownloadTask[] = []) {
   const runtime = await import('../../src/offline/runtime');
   mock.open.mockResolvedValue({
     tasks: async () => stored,
-    catalog: { saveTasks: async () => {}, speechKeying: async () => null },
+    catalog: { saveTasks: mock.saveTasks, speechKeying: async () => null },
     plan: () => new Promise(() => {}),
     progress: () => mock.progress(),
   });
@@ -209,23 +213,84 @@ it('finishes the continued task at Pause all, and submits it again at Resume all
   }
 });
 
-it('interrupts the download when the continued task ends away from the screen, and on coming back continues it and submits it again', async () => {
-  const { runtime, stop } = await start();
+/** Downloads that do not go on by themselves, which the end of a continued task leaves as they are. */
+const stoppedElsewhere = (): DownloadTask[] => [
+  { id: 'old', document: 'other', voice, chapters: ['x'], state: 'blocked', error: 'The key was refused.', failed: [] },
+  { id: 'held', document: 'third', voice, chapters: ['y', 'z'], state: 'paused', error: null, failed: [], paused: ['z'] },
+  { id: 'saved', document: 'fourth', voice, chapters: ['w'], state: 'done', error: null, failed: [] },
+];
+
+it('pauses the downloads the continued task covered when it ends away from the screen, as Pause all does; coming back submits nothing, and Resume all submits again', async () => {
+  const { runtime, stop } = await start(stoppedElsewhere());
+  try {
+    runtime.enqueue('book', voice, ['a', 'b', 'c']);
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+    const [task] = runtime.downloadTasks('book');
+    runtime.toggleChapter(task, 'c');
+    task.state = 'downloading';
+    // The owner's iPhone, 2026-09-28 19:19: locked; the stop in the Live Activity opened the app, which
+    // went back to the background, and the task ended 6 s later (#77).
+    mock.appState('background');
+    mock.appState('active');
+    mock.appState('background');
+    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
+    mock.continuedExpired!();
+    expect(task).toMatchObject({ state: 'paused', paused: ['a', 'b', 'c'] });
+    expect(runtime.downloadTasks('other')[0]).toMatchObject({ state: 'blocked', error: 'The key was refused.' });
+    expect(runtime.downloadTasks('third')[0]).toMatchObject({ state: 'paused', paused: ['z'] });
+    expect(runtime.downloadTasks('fourth')[0].state).toBe('done');
+    await vi.waitFor(() => expect(mock.saveTasks).toHaveBeenLastCalledWith(
+      expect.arrayContaining([expect.objectContaining({ id: task.id, state: 'paused', paused: ['a', 'b', 'c'] })]),
+    ));
+    // Opening the app does not resume it, and so submits nothing; leaving asks for nothing either.
+    mock.appState('active');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(task.state).toBe('paused');
+    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
+    mock.appState('background');
+    expect(mock.beginBackground).not.toHaveBeenCalled();
+    mock.appState('active');
+    runtime.toggleTask(task);
+    expect(task.state).toBe('queued');
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(2));
+  } finally {
+    stop();
+  }
+});
+
+it('pauses the downloads the continued task covered when it ends on the screen, and neither leaving nor coming back asks for anything', async () => {
+  const { runtime, stop } = await start(stoppedElsewhere());
   try {
     runtime.enqueue('book', voice, ['a']);
+    runtime.enqueue('second', voice, ['b']);
     await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
     const [task] = runtime.downloadTasks('book');
     task.state = 'downloading';
-    mock.appState('background');
     mock.continuedExpired!();
-    expect(task.state).toBe('interrupted');
-    mock.appState('active');
-    expect(task.state).toBe('queued');
-    // So that leaving again keeps it going without a tap (#77).
-    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(2));
+    expect(task).toMatchObject({ state: 'paused', paused: ['a'] });
+    expect(runtime.downloadTasks('second')[0]).toMatchObject({ state: 'paused', paused: ['b'] });
+    expect(runtime.downloadTasks('other')[0].state).toBe('blocked');
+    expect(runtime.downloadTasks('third')[0]).toMatchObject({ state: 'paused', paused: ['z'] });
     await new Promise((resolve) => setTimeout(resolve, 10));
     mock.appState('background');
     expect(mock.beginBackground).not.toHaveBeenCalled();
+    mock.appState('active');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
+    expect(mock.finishContinued).not.toHaveBeenCalled();
+  } finally {
+    stop();
+  }
+});
+
+it('finishes the continued task as a success at Pause all, though a download of another Document is blocked', async () => {
+  // The owner's iPhone, 2026-09-28 19:26:52: `complete with success: 0` after Pause all (#77).
+  const { runtime, stop } = await start(stoppedElsewhere());
+  try {
+    runtime.enqueue('book', voice, ['a', 'b']);
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+    runtime.toggleTask(runtime.downloadTasks('book')[0]);
+    await vi.waitFor(() => expect(mock.finishContinued).toHaveBeenCalledWith(true));
   } finally {
     stop();
   }
@@ -259,27 +324,6 @@ it('submits again on each return to the foreground after a refusal, and leaving 
     await new Promise((resolve) => setTimeout(resolve, 10));
     mock.appState('background');
     expect(mock.beginBackground).toHaveBeenCalledTimes(2);
-  } finally {
-    stop();
-  }
-});
-
-it('leaves the download going on when the continued task ends on the screen without submitting it again, and leaving afterwards asks for the bounded time', async () => {
-  const { runtime, stop } = await start();
-  try {
-    runtime.enqueue('book', voice, ['a']);
-    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
-    const [task] = runtime.downloadTasks('book');
-    task.state = 'downloading';
-    mock.continuedExpired!();
-    expect(task.state).toBe('downloading');
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
-    mock.appState('background');
-    expect(mock.beginBackground).toHaveBeenCalledTimes(1);
-    // The next return submits it again.
-    mock.appState('active');
-    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(2));
   } finally {
     stop();
   }
@@ -353,9 +397,9 @@ it('gives the bounded time back when the phone accepts a submission after the ap
     // The bounded time's own end, arriving anyway: the continued task keeps the app, and the download, running.
     mock.expired!();
     expect(task.state).toBe('downloading');
-    // The continued task's end still interrupts it.
+    // The continued task's end pauses it, as Pause all does.
     mock.continuedExpired!();
-    expect(task.state).toBe('interrupted');
+    expect(task).toMatchObject({ state: 'paused', paused: ['a'] });
   } finally {
     stop();
   }
