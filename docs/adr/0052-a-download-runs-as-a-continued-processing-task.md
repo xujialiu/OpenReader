@@ -209,6 +209,15 @@ native module and the catalogue passed in. It is tested in
   the bounded task as before. **It is never submitted** while the app is away,
   when playback stops, nor from `continuedExpired` while the app is on the
   screen: the phone has just ended the task, and the next return submits it.
+  `start` reads what the Live Activity will show from the catalogue before it
+  submits, and checks `foreground` again right before `submitContinued`,
+  settling as not running if the app has left. At 8aa75f6 it checked only
+  when called: in the final simulator run the simulated lock went `inactive`,
+  back to `active` for up to a second, then `background`, the flicker's
+  submission was still reading when the app reached the background, and in
+  two of five locks it reached BGTaskScheduler 0.85–0.96 s after
+  `background` (`test/manual-test/pitfalls/background-downloads.md`). An owner
+  who comes back and leaves within about a second meets the same window.
   Every `active` counts as a return, including the one after `inactive`
   (Control Center, the app switcher, a system alert), and each submission
   registers a fresh identifier, so where the phone refuses, each return
@@ -220,10 +229,25 @@ native module and the catalogue passed in. It is tested in
   bounded task's expiry. With `.fail`, a download either has a continued task
   from the tap, or from the app's return to the foreground, onwards or has the
   old behaviour.
-- **Leaving the app.** The `AppState` handler begins the bounded task only
-  when no continued task holds (`holding()`, which is true while one is being
-  submitted or runs). If a submission is refused after the app has left, the
-  bounded task is begun then.
+- **Leaving the app.** The `AppState` handler begins the bounded task unless
+  a continued task the phone accepted runs (`running()`). A submission still
+  out does not count, since the phone may refuse it. At 8aa75f6 the handler
+  asked `holding()`, true while one was being submitted too, and began the
+  bounded task only once a refusal came back: in the same five simulator locks
+  the app sat in the background with no background task for 0, 0.96, 1.00,
+  1.27 and 3.88 s. Now a refusal leaves the bounded task begun on leaving
+  running, and an acceptance that arrives after the app left gives it back
+  (`endBackground`), since the continued task keeps the app running from then
+  on. The bounded task's own `expired` is then ignored while a continued task
+  runs, as it may already be on its way when `endBackground` arrives, and
+  `allowed()` holds while one runs even if the bounded time was refused
+  (`beginBackground` resolving false sets `expired`). An `expired` that
+  arrives while the phone's answer is still out interrupts the download as
+  before; it would need a submission to take the whole bounded time, about
+  half a minute. `runtime-continued.test.ts` checks each order with the native
+  module doubled, and `runtime-reading.test.ts` a download that goes on under
+  a continued task accepted after the app left, with the bounded time
+  refused.
 - **The end.** When nothing goes on by itself, the next report shows where the
   download ended and then calls `finishContinued`. That happens at Pause all,
   at the last chapter done, at a key or quota failure, or when deletion leaves

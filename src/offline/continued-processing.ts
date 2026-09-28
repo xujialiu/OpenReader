@@ -86,6 +86,8 @@ export interface ContinuedDeps {
   tasks(): readonly DownloadTask[];
   /** What the phone shows for this download now, read from the catalogue. */
   shown(task: DownloadTask): Promise<ContinuedShown>;
+  /** Whether the app is in the foreground, the only place a task is submitted from. */
+  foreground(): boolean;
 }
 
 /**
@@ -96,7 +98,10 @@ export interface ContinuedDeps {
  * - `start` after the owner's own start or resume, on the screen, and when the
  *   owner opens the app: submits when no task runs, and otherwise only reports.
  *   Apple asks for a submission to follow a person's action, so nothing else
- *   submits.
+ *   submits. What the phone will show is read from the catalogue first, and
+ *   the app may leave meanwhile, so the foreground is checked again right
+ *   before the native call: on the simulator at 8aa75f6 a submission went out
+ *   0.85-0.96 s after the app reached the background.
  * - `follow` after any change: reports progress, or, once nothing goes on by
  *   itself, shows where the download ended and finishes the task. It succeeds
  *   when every download is done without a failed chapter or was paused by the
@@ -114,6 +119,8 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
   let changed = false;
   /** The download shown last, so the finish can show where it ended. */
   let shownLast: DownloadTask | null = null;
+  /** The submission out while `state` is 'submitting': whether the phone runs the task. */
+  let submission: Promise<boolean> = Promise.resolve(false);
   let chain: Promise<unknown> = Promise.resolve();
   const turn = <T>(work: () => Promise<T>): Promise<T> => {
     const next = chain.then(work);
@@ -168,15 +175,16 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
     if (!native) return Promise.resolve(false);
     if (state !== 'idle') {
       follow();
-      return Promise.resolve(true);
+      return state === 'running' ? Promise.resolve(true) : submission;
     }
     const task = showing();
     if (!task) return Promise.resolve(false);
     state = 'submitting';
     changed = false;
-    return turn(async () => {
+    submission = turn(async () => {
       shownLast = task;
       const shown = await deps.shown(task);
+      if (!deps.foreground()) return false;
       return native.submitContinued(shown.title, shown.subtitle, shown.completed, shown.total);
     })
       .catch(() => false)
@@ -186,6 +194,7 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
         if (running && changed) follow();
         return running;
       });
+    return submission;
   }
 
   return {
@@ -195,7 +204,11 @@ export function createContinuedProcessing(deps: ContinuedDeps) {
       state = 'idle';
       shownLast = null;
     },
-    /** Whether a continued task keeps the app running, or is being submitted to. */
-    holding: () => state !== 'idle',
+    /**
+     * Whether a continued task the phone accepted keeps the app running. Not
+     * while one is being submitted: until the phone answers, the app has only
+     * the bounded background time.
+     */
+    running: () => state === 'running',
   };
 }

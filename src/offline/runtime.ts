@@ -466,10 +466,13 @@ const scheduler = createScheduler({
   connected: () => online,
   // Not held back while a Reading plays (#75): a Reading keeps its precedence
   // where requests are queued in the app, which is Speechify's queue alone.
-  // Away from the screen, the end of the background time stops a download
-  // only once no Reading keeps the app running.
+  // Away from the screen, the end of the bounded background time stops a
+  // download only once neither a Reading nor a continued task the phone
+  // accepted keeps the app running (ADR 0052).
   allowed: () =>
-    loaded && !storeError && (foreground || !expired || readingPlays),
+    loaded &&
+    !storeError &&
+    (foreground || !expired || readingPlays || continued.running()),
   // Where the hidden rendering prepares a chapter's text (#76).
   foreground: () => AppState.currentState === "active",
   changed: persist,
@@ -579,12 +582,17 @@ const continued = createContinuedProcessing({
       await (await offlineRepository()).progress(task.document, task.voice),
       planOf(task.document),
     ),
+  foreground: () => foreground,
 });
 const runsAway = () =>
   tasks.some((task) =>
     ["preparing", "downloading", "queued"].includes(task.state),
   );
-/** Today's bounded background time, where no continued task keeps the app running. */
+/**
+ * The bounded background time, begun on leaving the app unless a continued
+ * task the phone accepted keeps it running; a submission still out does not
+ * count, since the phone may refuse it (ADR 0052).
+ */
 function beginBounded() {
   if (offlineNative)
     void offlineNative.beginBackground().then((allowed) => {
@@ -601,14 +609,19 @@ function beginBounded() {
  * while one goes on by itself: it may go on away from the screen. Apple asks
  * for the submission to follow a person's action, and the owner counts opening
  * the app as one (#77, 2026-09-28), so a launch and every return to the
- * foreground submit, as the taps do. Nothing submits while the app is away, nor
- * when the phone ends the task while the app is on the screen: the next return
- * does. Where nothing goes on by itself, `start` submits nothing.
+ * foreground submit, as the taps do. Nothing submits while the app is away
+ * (`start` checks again right before the native call), nor when the phone ends
+ * the task while the app is on the screen: the next return does. Where nothing
+ * goes on by itself, `start` submits nothing.
+ *
+ * The app may leave while the submission is out; it then began the bounded
+ * time, which a refusal leaves running. An acceptance gives it back: the
+ * continued task keeps the app running from then on.
  */
 function continueAway() {
   if (!foreground) return;
   void continued.start().then((running) => {
-    if (!running && !foreground && runsAway()) beginBounded();
+    if (running && !foreground) void offlineNative?.endBackground();
   });
 }
 /**
@@ -702,7 +715,12 @@ export function startDownloads(): () => void {
       kick();
     },
   );
-  const expiration = offlineNative?.addListener("expired", interruptAway);
+  // The bounded time ran out. Where the phone accepted a continued task after
+  // the app left, that task keeps the app running, and the download with it;
+  // the bounded time was given back, and an end that arrives anyway is ignored.
+  const expiration = offlineNative?.addListener("expired", () => {
+    if (!continued.running()) interruptAway();
+  });
   // The phone ended the continued task, under pressure or at the owner's stop
   // in the Live Activity; the two cannot be told apart. On the screen the
   // download needs no task and goes on.
@@ -723,7 +741,7 @@ export function startDownloads(): () => void {
       // Back with a download that goes on by itself: leaving again keeps it going without a tap (#77).
       continueAway();
       fire(persist().then(kick));
-    } else if (!continued.holding() && runsAway()) beginBounded();
+    } else if (!continued.running() && runsAway()) beginBounded();
   });
   const leaving = AppState.addEventListener("change", (value) => {
     if (value !== "active") abandonPreparation();

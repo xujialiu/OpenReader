@@ -32,6 +32,8 @@ const mock = vi.hoisted(() => ({
   appStateNow: 'active',
   expired: null as null | (() => void),
   beginBackground: vi.fn(async () => true),
+  /** Refused, as the simulator refuses it, unless a test answers otherwise (ADR 0052). */
+  submitContinued: vi.fn(async (): Promise<boolean> => false),
 }));
 vi.mock('react-native', () => ({
   AppState: {
@@ -52,6 +54,9 @@ vi.mock('../../modules/open-reader-offline', () => ({
     },
     beginBackground: mock.beginBackground,
     endBackground: async () => {},
+    submitContinued: mock.submitContinued,
+    updateContinued: async () => {},
+    finishContinued: async () => {},
   },
 }));
 vi.mock('../../src/app/library', () => ({
@@ -222,6 +227,28 @@ it('goes on again when a Reading starts away from the screen after the backgroun
     setReadingPlays(true);
     await release('Started 2.');
     await vi.waitFor(() => expect(task('away-started').state).toBe('done'));
+  } finally {
+    run.stop();
+  }
+});
+
+it('goes on away from the screen under a continued task the phone accepted after the app left, though the bounded time was refused', async () => {
+  // The app left while the submission was out, so the bounded time was asked for, and refused.
+  let answer = (_running: boolean) => {};
+  mock.submitContinued.mockImplementationOnce(() => new Promise<boolean>((resolve) => { answer = resolve; }));
+  mock.beginBackground.mockImplementationOnce(async () => false);
+  const run = await downloading('away-continued', ['Continued 1.', 'Continued 2.']);
+  try {
+    mock.beginBackground.mockClear();
+    mock.appState('background');
+    await vi.waitFor(() => expect(mock.beginBackground).toHaveBeenCalled());
+    await tick();
+    answer(true);
+    await tick();
+    await release('Continued 1.');
+    await release('Continued 2.');
+    await vi.waitFor(() => expect(task('away-continued').state).toBe('done'));
+    expect([...run.store.saved]).toEqual(['Continued 1.', 'Continued 2.']);
   } finally {
     run.stop();
   }

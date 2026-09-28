@@ -81,27 +81,33 @@ it.each([
   ], six)).toEqual({ title: 'Book', subtitle: '2 of 4 chapters', completed: 2000, total: 4000 });
 });
 
-function harness(tasks: DownloadTask[], { submit = async () => true, update = async () => {} }: {
+function harness(tasks: DownloadTask[], { submit = async () => true, update = async () => {}, read = async () => {} }: {
   submit?: () => Promise<boolean>; update?: () => Promise<void>;
+  /** Stands for the catalogue read behind what the phone shows. */
+  read?: () => Promise<void>;
 } = {}) {
   const calls: string[] = [];
+  /** Whether the app is in the foreground, as the runtime tells it. */
+  const app = { foreground: true };
   const native: ContinuedNative = {
     submitContinued: vi.fn(async (title: string, subtitle: string) => { calls.push(`submit ${title} · ${subtitle}`); return submit(); }),
     updateContinued: vi.fn(async (title: string, subtitle: string) => { calls.push(`update ${title} · ${subtitle}`); await update(); }),
     finishContinued: vi.fn(async (success: boolean) => { calls.push(`finish ${success}`); }),
   };
   // The state stands in for the count, so each call says which moment it showed.
-  const shown = async (task: DownloadTask): Promise<ContinuedShown> =>
-    ({ title: task.document, subtitle: `${task.state}`, completed: 0, total: 1000 });
-  const continued = createContinuedProcessing({ native, tasks: () => tasks, shown });
-  return { continued, native, calls };
+  const shown = async (task: DownloadTask): Promise<ContinuedShown> => {
+    await read();
+    return { title: task.document, subtitle: `${task.state}`, completed: 0, total: 1000 };
+  };
+  const continued = createContinuedProcessing({ native, tasks: () => tasks, shown, foreground: () => app.foreground });
+  return { continued, native, calls, app };
 }
 
 it('submits once for downloads that go on, and afterwards only reports', async () => {
   const tasks = [download({ state: 'queued' })];
   const { continued, calls } = harness(tasks);
   expect(await continued.start()).toBe(true);
-  expect(continued.holding()).toBe(true);
+  expect(continued.running()).toBe(true);
   tasks[0].state = 'downloading';
   expect(await continued.start()).toBe(true);
   await vi.waitFor(() => expect(calls).toEqual(['submit book · queued', 'update book · downloading']));
@@ -111,13 +117,13 @@ it('submits nothing when no download goes on by itself', async () => {
   const { continued, native } = harness([download({ state: 'paused' })]);
   expect(await continued.start()).toBe(false);
   expect(native.submitContinued).not.toHaveBeenCalled();
-  expect(continued.holding()).toBe(false);
+  expect(continued.running()).toBe(false);
 });
 
 it('holds nothing when the phone refuses the task', async () => {
   const { continued } = harness([download()], { submit: async () => false });
   expect(await continued.start()).toBe(false);
-  expect(continued.holding()).toBe(false);
+  expect(continued.running()).toBe(false);
 });
 
 it('shows the download being written, not the first one waiting its turn', async () => {
@@ -134,7 +140,7 @@ it('finishes once nothing goes on, after showing where the download ended, and s
   tasks[0].state = 'done';
   continued.follow();
   await vi.waitFor(() => expect(calls).toEqual(['submit book · downloading', 'update book · done', 'finish true']));
-  expect(continued.holding()).toBe(false);
+  expect(continued.running()).toBe(false);
 });
 
 it('finishes unsuccessfully when a download stopped by itself', async () => {
@@ -160,7 +166,7 @@ it('reports nothing more once the phone has ended the task, and a later start su
   const { continued, native, calls } = harness(tasks);
   await continued.start();
   continued.expired();
-  expect(continued.holding()).toBe(false);
+  expect(continued.running()).toBe(false);
   continued.follow();
   await Promise.resolve();
   expect(native.updateContinued).not.toHaveBeenCalled();
@@ -185,7 +191,7 @@ it('submits after the finish it follows, never between its last update and its f
   release();
   expect(await again).toBe(true);
   expect(calls).toEqual(['submit book · downloading', 'update book · paused', 'finish true', 'submit book · queued']);
-  expect(continued.holding()).toBe(true);
+  expect(continued.running()).toBe(true);
 });
 
 it('finishes a task whose downloads ended while it was being submitted', async () => {
@@ -211,4 +217,33 @@ it('coalesces reports asked for while one is waiting its turn', async () => {
   await vi.waitFor(() => expect(native.updateContinued).toHaveBeenCalledTimes(1));
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(native.updateContinued).toHaveBeenCalledTimes(1);
+});
+
+it('submits nothing when the app left while what the phone would show was being read, and runs nothing', async () => {
+  // Final simulator run at 8aa75f6: the read took long enough for the app to reach the background
+  // first, and the submission went out 0.85-0.96 s after it (#77).
+  let release = () => {};
+  const read = new Promise<void>((resolve) => { release = resolve; });
+  const { continued, native, app } = harness([download()], { read: () => read });
+  const started = continued.start();
+  app.foreground = false;
+  release();
+  expect(await started).toBe(false);
+  expect(native.submitContinued).not.toHaveBeenCalled();
+  expect(continued.running()).toBe(false);
+  // Back on the screen, the next start submits.
+  app.foreground = true;
+  expect(await continued.start()).toBe(true);
+  expect(native.submitContinued).toHaveBeenCalledTimes(1);
+});
+
+it('does not count a task being submitted as running, only one the phone accepted', async () => {
+  let answer = (_running: boolean) => {};
+  const { continued, native } = harness([download()], { submit: () => new Promise<boolean>((resolve) => { answer = resolve; }) });
+  const started = continued.start();
+  await vi.waitFor(() => expect(native.submitContinued).toHaveBeenCalled());
+  expect(continued.running()).toBe(false);
+  answer(true);
+  expect(await started).toBe(true);
+  expect(continued.running()).toBe(true);
 });

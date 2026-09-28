@@ -80,18 +80,23 @@
   property 'chapters' of null` after a relaunch and the 5-minute run measured
   nothing (2026-09-28, check 2's first try). Call `requestPlan(X, TITLE)` and
   poll `planOf` first; opening the reader does not load it.
-- **Since #77's 8aa75f6 the simulated lock's `active` flicker submits a continued
-  task, and the app can be in the background with no background task until the
-  refusal is handled.** Measured 2026-09-28 (final run) in five locks: the
+- **At #77's 8aa75f6 the simulated lock's `active` flicker submitted a continued
+  task, and the app could be in the background with no background task until the
+  refusal was handled.** Measured 2026-09-28 (final run) in five locks: the
   flicker ended the bounded `Prepare narration` and submitted; the new bounded
   task started after the refusal, 0 s, 0.96 s, 1.00 s, 1.27 s and 3.88 s after
   `background`, and in two locks the submission itself reached
-  BGTaskScheduler 0.85–0.96 s after `background`. `holding()` is true while a
-  submission is out, so `background` starts nothing itself. The simulator did
+  BGTaskScheduler 0.85–0.96 s after `background`. `holding()` was true while a
+  submission was out, so `background` started nothing itself. The simulator did
   not suspend the app in those windows (runningboard `running-active`). Read it
   in the stream of the entry above: `Ending task with identifier N … Prepare
   narration`, `submitTaskRequest`, `continued task refused`, `Created background
-  task … Prepare narration`.
+  task … Prepare narration`. Fixed in the commit after 22be978 (ADR 0052,
+  "Leaving the app"): `background` now begins the bounded task unless a
+  continued task the phone accepted runs, and a submission whose catalogue read
+  ends after the app left is dropped. Expect `Created background task …
+  Prepare narration` within milliseconds of every `background` with a download
+  going on, and no `submitTaskRequest` more than a few milliseconds after it.
 - **The Mac on the owner's iPhone hotspot (gateway 172.20.10.1) loses its route
   for a few seconds, and the simulator's download goes `waiting`.** Measured
   2026-09-28 09:55: the Mac's own log said `No network route` at 09:54:58, the

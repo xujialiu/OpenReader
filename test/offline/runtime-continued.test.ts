@@ -27,6 +27,8 @@ const mock = vi.hoisted(() => ({
   finishContinued: vi.fn(async (_success: boolean) => {}),
   beginBackground: vi.fn(async () => true),
   endBackground: vi.fn(async () => {}),
+  /** The catalogue's progress, which what the phone shows is read from before each submission. */
+  progress: vi.fn(async (): Promise<unknown[]> => []),
 }));
 vi.mock('react-native', () => ({
   AppState: {
@@ -76,7 +78,7 @@ async function start(stored: DownloadTask[] = []) {
     tasks: async () => stored,
     catalog: { saveTasks: async () => {}, speechKeying: async () => null },
     plan: () => new Promise(() => {}),
-    progress: async () => [],
+    progress: () => mock.progress(),
   });
   runtime.nameDocuments([{ id: 'book', title: 'My Vampire System' }]);
   const stop = runtime.startDownloads();
@@ -89,6 +91,7 @@ beforeEach(() => {
   mock.appStateNow = 'active';
   mock.appStateListeners = [];
   mock.submitContinued.mockImplementation(async () => true);
+  mock.progress.mockImplementation(async () => []);
 });
 
 it('submits a download the owner starts on the screen, named as the Library names its Document', async () => {
@@ -289,6 +292,114 @@ it('submits nothing for a download started away from the screen', async () => {
     runtime.enqueue('book', voice, ['a']);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(mock.submitContinued).not.toHaveBeenCalled();
+  } finally {
+    stop();
+  }
+});
+
+/** A submission held out until the test answers it, as the phone's answer is. */
+function heldSubmission() {
+  const held = { answer: (_running: boolean) => {} };
+  mock.submitContinued.mockImplementation(() => new Promise<boolean>((resolve) => { held.answer = resolve; }));
+  return held;
+}
+/** The next read of what the phone shows, held until the test lets it go. */
+function heldRead() {
+  const held = { release: () => {} };
+  mock.progress.mockImplementationOnce(() => new Promise<unknown[]>((resolve) => { held.release = () => resolve([]); }));
+  return held;
+}
+
+it('begins the bounded time on leaving while a submission is out, and keeps it when the phone refuses', async () => {
+  const submission = heldSubmission();
+  const { runtime, stop } = await start();
+  try {
+    runtime.enqueue('book', voice, ['a']);
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+    const [task] = runtime.downloadTasks('book');
+    task.state = 'downloading';
+    mock.beginBackground.mockClear();
+    mock.endBackground.mockClear();
+    mock.appState('background');
+    // At 8aa75f6 a submission out counted as holding the app, and nothing was begun here.
+    expect(mock.beginBackground).toHaveBeenCalledTimes(1);
+    submission.answer(false);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mock.endBackground).not.toHaveBeenCalled();
+    expect(mock.beginBackground).toHaveBeenCalledTimes(1);
+    // Its end interrupts the download, as the end of the bounded time always has.
+    mock.expired!();
+    expect(task.state).toBe('interrupted');
+  } finally {
+    stop();
+  }
+});
+
+it('gives the bounded time back when the phone accepts a submission after the app left, and its late end interrupts nothing', async () => {
+  const submission = heldSubmission();
+  const { runtime, stop } = await start();
+  try {
+    runtime.enqueue('book', voice, ['a']);
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+    const [task] = runtime.downloadTasks('book');
+    task.state = 'downloading';
+    mock.beginBackground.mockClear();
+    mock.endBackground.mockClear();
+    mock.appState('background');
+    expect(mock.beginBackground).toHaveBeenCalledTimes(1);
+    submission.answer(true);
+    await vi.waitFor(() => expect(mock.endBackground).toHaveBeenCalledTimes(1));
+    expect(mock.endBackground.mock.invocationCallOrder[0]).toBeGreaterThan(mock.beginBackground.mock.invocationCallOrder[0]);
+    // The bounded time's own end, arriving anyway: the continued task keeps the app, and the download, running.
+    mock.expired!();
+    expect(task.state).toBe('downloading');
+    // The continued task's end still interrupts it.
+    mock.continuedExpired!();
+    expect(task.state).toBe('interrupted');
+  } finally {
+    stop();
+  }
+});
+
+it('submits nothing when the app leaves while what the phone would show is being read, and begins the bounded time', async () => {
+  const read = heldRead();
+  const { runtime, stop } = await start();
+  try {
+    runtime.enqueue('book', voice, ['a']);
+    await vi.waitFor(() => expect(mock.progress).toHaveBeenCalledTimes(1));
+    mock.beginBackground.mockClear();
+    mock.appState('background');
+    expect(mock.beginBackground).toHaveBeenCalledTimes(1);
+    read.release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mock.submitContinued).not.toHaveBeenCalled();
+    // Back on the screen, it is submitted.
+    mock.appState('active');
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+  } finally {
+    stop();
+  }
+});
+
+it('submits nothing for the simulated lock\'s flicker back to active on its way to the background', async () => {
+  // The final simulator run at 8aa75f6: inactive, active for up to a second, then background; the
+  // flicker's submission went out after the background, with no background time until it was refused.
+  mock.submitContinued.mockImplementation(async () => false);
+  const { runtime, stop } = await start();
+  try {
+    runtime.enqueue('book', voice, ['a']);
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const read = heldRead();
+    mock.beginBackground.mockClear();
+    mock.appState('inactive');
+    mock.appState('active');
+    await vi.waitFor(() => expect(mock.progress).toHaveBeenCalledTimes(2));
+    mock.appState('background');
+    expect(mock.beginBackground).toHaveBeenCalledTimes(2);
+    read.release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
   } finally {
     stop();
   }
