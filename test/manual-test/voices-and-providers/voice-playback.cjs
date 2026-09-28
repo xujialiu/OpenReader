@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Real simulator audio graph + deterministic provider replies. Handler probes,
-// not touch tests; reader.sh exercises actual touches separately.
+// not touch tests; ReaderProbe.swift (kit/run-probe.sh) exercises actual touches separately.
 const WebSocket = require('ws');
 const { execFileSync, execFile } = require('node:child_process');
 const [device, output, mode] = process.argv.slice(2);
@@ -170,7 +170,7 @@ const fixture = probeMode => {
             __voiceProbe.touchCompletedAtPause = __voiceProbe.completed;
           }
         }, 50); true`);
-      await new Promise((resolve, reject) => execFile('bash', ['test/manual-test/voices-and-providers/reader.sh', device, output, 'loading'],
+      await new Promise((resolve, reject) => execFile('bash', ['test/manual-test/kit/run-probe.sh', 'ReaderProbe', device, output, '--mode', 'loading'],
         { timeout: 90000 }, (error, stdout) => { if (error) reject(error); else { console.log(stdout); resolve(); } }));
       await assert('__voiceProbe.touchCompletedAtPause === 0', 'Physical pause must happen before audio arrives');
       await wait('__voiceProbe.completed >= 2 && __voiceProbe.engine()?.snapshot().queued > 0', 'background receipt after physical pause');

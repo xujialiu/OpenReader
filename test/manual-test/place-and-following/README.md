@@ -148,14 +148,11 @@ page, which the WebView also counts as browsing. Both need XCTest.
 
 Independent #52 verification, 2026-09-24, of what `browse-probe.cjs` cannot
 touch: a real tap on the Contents button and a real chapter row, a real tap on
-a sentence, and a real finger drag. `browse-touch.sh` has the same shape as
-`scroll-theme-reader.sh` — a new output directory generates the project, an
-existing one reuses it, `-only-testing:` takes the bare method name, and it
-checks the simulator's own volume before anything runs, because three methods
-press Play:
+a sentence, and a real finger drag, through `kit/run-probe.sh`, which checks
+the simulator's own volume before anything runs; three methods press Play:
 
 ```sh
-bash test/manual-test/place-and-following/browse-touch.sh SIMULATOR_UDID /tmp/openreader-browse-touch-01 \
+bash test/manual-test/kit/run-probe.sh BrowseTouchProbe SIMULATOR_UDID /tmp/openreader-browse-touch-01 \
   -only-testing:testOpenBookThenBrowseTwoChaptersAhead
 ```
 
@@ -210,15 +207,14 @@ first (see Pitfalls, the debug banner):
   read `null` both right after the choice and after leaving —
   `Documents/library.json` read directly, not only the harness echo — and the
   Library row still read "Not started." afterwards. Never presses Play.
-- `testSettingsShowsVersion`-equivalent coverage is `settings-version.sh`
-  (`SettingsVersionProbe`), reused rather than duplicated: it reads
+- `testSettingsShowsVersion`-equivalent coverage is
+  `SettingsVersionProbe`, reused rather than duplicated: it reads
   `APP_VERSION` from the working tree at run time, so it needed no change for
   beta14.
 
 What it does not establish: whether the debug-banner precaution
 (`app.terminate(); app.launch()` at the sequence's start) is still needed once
 nothing else in a run logs a warning; a shorter method sequence was not tried.
-`BrowseTouchProbe.swift` is in `test/manual-test/kit/project.rb`'s allow-list.
 
 ## The page follows the line being spoken (#71, `line-follow.cjs`)
 
@@ -330,7 +326,7 @@ line/Utterance-middle series, plus a capture-phase `touchmove`/`touchend`
 listener added to every section document as it renders (additive only; nothing
 the app itself listens for is touched). `glide-touch.sh` then runs
 `GlideTouchProbe.testDragDuringLiveGlideStopsThenRecovers` (same shape as
-`browse-touch.sh`: a new output directory generates the project, an existing
+`kit/run-probe.sh`: a new output directory generates the project, an existing
 one reuses it) — a real tap on Play, a wait for the first Clip's cue (the
 `Pause` button's own `busy` state clearing), a further wait (`DRAG_DELAY_MS`,
 `/tmp/openreader-glide-touch-params.txt`, `KEY=VALUE`, default 2000 —

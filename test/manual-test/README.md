@@ -37,7 +37,7 @@ reported `outputVolume=0.0`. The Mac's own volume was not touched for either.
 Three properties decide how to use it, all of them in [pitfalls/simulators.md](pitfalls/simulators.md): a boot
 resets it to 60, an app takes the value when it activates its audio session, and
 a shut-down device has no file at all. So: boot, `set`, then launch the app.
-`lock-screen.sh` (tap mode), `reading.cjs play-for`, `voice-playback.cjs` and
+`kit/run-probe.sh` (every XCTest probe), `reading.cjs play-for`, `voice-playback.cjs` and
 `offline-playback.cjs` all `check` it before they play.
 
 ## Real books

@@ -22,7 +22,7 @@
 #
 # Needs the app theme set to dark and the reader's harness. Never plays; the
 # XCTest runs still refuse a simulator whose own volume is not zero
-# (scroll-theme-reader.sh). A run whose XCTest failed is reported as such and
+# (kit/run-probe.sh). A run whose XCTest failed is reported as such and
 # its recording is not read: there was nothing in it to read.
 # Exit 1 when any run is RED, 2 when any run's XCTest failed.
 set -u
@@ -39,7 +39,7 @@ send() { python3 -c 'import json, sys, time; json.dump(dict(json.loads(sys.argv[
 record() { xcrun simctl io "$udid" recordVideo --codec h264 --force "$1" > /dev/null 2>&1 & recorder=$!; sleep 1.2; }
 stop() { kill -INT "$recorder"; wait "$recorder" 2>/dev/null; }
 # One XCTest method against the running app; false when it failed or was refused.
-probe() { bash "$here/scroll-theme-reader.sh" "$udid" "$out/xctest" "-only-testing:$1" > "$2" 2>&1; }
+probe() { bash "$here/../kit/run-probe.sh" ScrollThemeReaderProbe "$udid" "$out/xctest" "-only-testing:$1" > "$2" 2>&1; }
 
 status=0
 for run in $(seq 1 "$runs"); do

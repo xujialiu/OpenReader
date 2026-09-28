@@ -11,7 +11,7 @@ import XCTest
 /// paused, resuming one chapter by its ring and the rest by Resume all, and
 /// completion. `testReopenDownloadDrawer` is a second, independent invocation
 /// used only to leave the Download drawer open after a later, unrelated
-/// `offline.sh management` pass has backed up, mutated and restored the offline
+/// `OfflineProbe` `management` pass has backed up, mutated and restored the offline
 /// directory (test/README.md, "Offline narration and reader actions").
 final class DownloadRingProbe: XCTestCase {
   let shortTitle = "A Short Test of Reading Aloud"
@@ -234,7 +234,7 @@ final class DownloadRingProbe: XCTestCase {
   }
 
   /// Reopens the Download drawer on the already-downloaded fixture and leaves it
-  /// open. Used after a separate `offline.sh management` pass has restored the
+  /// open. Used after a separate `OfflineProbe` `management` pass has restored the
   /// offline directory backup and relaunched the app, to put the simulator back
   /// into the required final state without repeating the real download.
   func testReopenDownloadDrawer() throws {

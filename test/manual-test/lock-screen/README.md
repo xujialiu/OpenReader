@@ -11,10 +11,10 @@ captures the existing card and does not start an OpenReader reading. Use a fresh
 output directory for each run:
 
 ```sh
-bash test/manual-test/lock-screen/lock-screen.sh SIMULATOR_UDID /tmp/openreader-lock-screen-01
+bash test/manual-test/kit/run-probe.sh LockScreenProbe SIMULATOR_UDID /tmp/openreader-lock-screen-01 --expect-player
 ```
 
-The script generates a disposable XCTest project, activates OpenReader, swipes
+`kit/run-probe.sh` generates a disposable XCTest project; `LockScreenProbe` activates OpenReader, swipes
 from the **top left** to open Notification Centre's lock-screen surface, records
 its accessibility tree, center-button geometry and screenshot, then returns to
 the app. Right-side swipes open Control Centre instead. This verifies the card
@@ -23,9 +23,9 @@ surface; it does not establish behaviour under actual device locking.
 A missing center button fails the default XCTest assertion. **An accessible button
 can still be invisible**: review the attached screenshot as well. Enabled state,
 a screenshot and an actual press establish different facts; none substitutes for
-the others. Artifacts live in `result.xcresult`, `attachments/` and `test.log`.
+the others. Artifacts live in `result-STAMP.xcresult`, `attachments-STAMP/` and `test-STAMP.log`.
 The script exits nonzero when the build or XCTest fails. To capture a surface
-where no player is expected, pass the bundle ID and `NO` as arguments 3 and 4.
+where no player is expected, leave out `--expect-player` and pass `--bundle BUNDLE_ID`.
 
 The owner reported normal lock-screen display on a physical iPhone after the
 simulator's invisible-icon reproduction. Treat that reproduction as a simulator
@@ -81,7 +81,7 @@ lock-screen screenshot and enabled-button observation.
 After `silence.sh set SIMULATOR_UDID`, with the reading already paused:
 
 ```sh
-bash test/manual-test/lock-screen/lock-screen.sh SIMULATOR_UDID /tmp/openreader-transport-01 top.xujialiu.openreader YES tap
+bash test/manual-test/kit/run-probe.sh LockScreenProbe SIMULATOR_UDID /tmp/openreader-transport-01 --expect-player --mode tap
 ```
 
 This takes the paused screenshot, taps the system's Play button, waits up to
@@ -109,19 +109,19 @@ the screenshot and geometry, and visually confirm any pass.
 With the fixture Document open and a Provider configured, silenced:
 
 ```sh
-bash test/manual-test/lock-screen/pause-suspend.sh SIMULATOR_UDID /tmp/openreader-pause-suspend-01
+bash test/manual-test/kit/run-probe.sh PauseSuspendProbe SIMULATOR_UDID /tmp/openreader-pause-suspend-01 -only-testing:testPauseResumeOrderingAndSkip
 ```
 
 Real XCTest touches only, on the reader's own transport, never the lock
 screen's. Checks the Settings version line first (so a JavaScript-only change
-is proven current, the same reasoning as `settings-version.sh`), then: Play,
+is proven current, the same reasoning as `SettingsVersionProbe`), then: Play,
 Pause, Play, Pause (each Play must resume and keep playing, not just flip the
 button); a Pause immediately followed by Play, measured (`driving`'s ordering
 queue, ADR 0012); two taps of Next sentence while paused followed by Play
 (plays from the skipped-to sentence, not the old one). After every phase it
 checks the player's own notes and the LogBox banner for anything naming
 `suspend`, `resume` or `audio context`. It never touches the lock screen —
-pair it with `lock-screen.sh`'s `tap` mode above for the remote-transport half
+pair it with `LockScreenProbe`'s `tap` mode above for the remote-transport half
 of #66. Measured 2026-09-25: a full run (four Play/Pause cycles, a measured
 quick toggle, and a skip) passed with 0 failures in 49.9 s, and Metro's own
 `HX` log independently corroborated continuous `utterance` progress —

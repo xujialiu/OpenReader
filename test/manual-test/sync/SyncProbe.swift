@@ -1280,8 +1280,8 @@ final class SyncProbe: XCTestCase {
   /// foregrounded until the observation itself. There is no `simctl` command
   /// to lock the simulator's screen (checked: no such subcommand exists), so
   /// this backgrounds for real (Home) and reaches Now Playing through
-  /// Notification Centre's swipe, the same surface `LockScreenProbe`/
-  /// `lock-screen.sh` read; it does not prove behaviour under an actually
+  /// Notification Centre's swipe, the same surface `LockScreenProbe`
+  /// reads; it does not prove behaviour under an actually
   /// locked screen, and says so in its own BLOCKED failure if the surface
   /// cannot be reached.
   /// Scenario C, the way that does not need the remote surface: a remote

@@ -98,13 +98,11 @@ a non-default Metro port (see **Metro and the bundle** above): real XCTest
 touches `scroll-theme.cjs` cannot give — a finger's fling, a tap on a word
 reached only by one, Theme/Appearance applied live to the page, the
 content-hook change's re-centre risk, and a chapter boundary crossed during
-real Fish playback. `scroll-theme-reader.sh` has the same shape as
-`alignment.sh` — a new output directory generates the project, an existing one
-reuses it, and `-only-testing:` takes the bare method name — and it checks the
-simulator's own volume before anything runs, because two methods press Play:
+real Fish playback, through `kit/run-probe.sh`, which checks the simulator's
+own volume before anything runs; two methods press Play:
 
 ```sh
-bash test/manual-test/scrolling-and-theme/scroll-theme-reader.sh SIMULATOR_UDID /tmp/openreader-scroll-reader-01 \
+bash test/manual-test/kit/run-probe.sh ScrollThemeReaderProbe SIMULATOR_UDID /tmp/openreader-scroll-reader-01 \
   -only-testing:testFastFlingBothDirections
 ```
 
@@ -162,8 +160,6 @@ previous one left the reading, and none of them `.terminate()`s or
   requires the `* chapters downloaded` count line; never selects or
   downloads.
 
-`ScrollThemeReaderProbe.swift` is in `test/manual-test/kit/project.rb`'s
-allow-list.
 
 ## A white page behind the dark reader: on opening, and in a long fling (#27)
 

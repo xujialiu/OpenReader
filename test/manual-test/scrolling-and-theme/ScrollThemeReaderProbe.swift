@@ -11,7 +11,7 @@ import XCTest
 /// `app.launch()` would not carry (test/manual-test/README.md Pitfalls,
 /// "A launch argument points a Debug app at another Metro port"). Only the
 /// two playback methods press Play, for six seconds each; run them through
-/// `scroll-theme-reader.sh`, which refuses a simulator whose own volume is not
+/// `kit/run-probe.sh`, which refuses a simulator whose own volume is not
 /// zero.
 final class ScrollThemeReaderProbe: XCTestCase {
   func capture(_ name: String, _ app: XCUIApplication) {

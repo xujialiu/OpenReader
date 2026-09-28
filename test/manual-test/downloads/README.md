@@ -8,7 +8,7 @@ With the latest installed Debug app connected to Metro and the named Document
 already in Library:
 
 ```sh
-bash test/manual-test/library-and-reader/library-open.sh SIMULATOR_UDID /tmp/openreader-library-open-01 '仙逆'
+bash test/manual-test/kit/run-probe.sh LibraryOpenProbe SIMULATOR_UDID /tmp/openreader-library-open-01 --mode '仙逆'
 ```
 
 This restarts the app to discard debugger overrides and in-memory caches,
@@ -37,7 +37,7 @@ After restoration, launch the app again before testing.
 With the current Debug app connected to Metro and the fixture Document `A Short Test of Reading Aloud` in the Library:
 
 ```sh
-bash test/manual-test/downloads/offline.sh SIMULATOR_UDID /tmp/openreader-offline-inspect inspect
+bash test/manual-test/kit/run-probe.sh OfflineProbe SIMULATOR_UDID /tmp/openreader-offline-inspect --mode inspect
 ```
 
 This uses real XCTest touches to check the three-action drawer, font-size stepper, keyboard-visible rename/save and restoration of the fixture's original display name. It then checks persisted download completion, or selects chapters if the fixture has not yet been downloaded. It never presses Play. Review the exported screenshots as well as the assertions.
@@ -64,13 +64,13 @@ node test/manual-test/downloads/offline-playback.cjs SIMULATOR_UDID
 
 This reuses `cdp.cjs` to reject all fetches, temporarily disable the fixture's Fish provider, and route every newly created native audio source through a zero-gain node before Play. It checks actual saved-audio decoding, an active native playback queue and word-timing state, then immediately pauses. A five-second app watchdog and host cleanup also pause on failure. It prints the measured duration and network request count, restores settings/fetch, and keeps generated debugger expressions in a temporary directory. The zero-gain route is additional silence protection for the iOS 27 simulator, whose Control Centre had no volume slider; the `0.6` its `outputVolume` reported is the device's own `sim_volume`, which `silence.sh` now sets to zero. This is a handler probe, not a real Play touch, a physical connectivity test or a drift measurement. Restart the app afterwards to remove debugger instrumentation and verify it remains paused.
 
-The `background` mode of `offline.sh` presses Home, waits 40 seconds to cover the bounded UIKit background-task window, then returns to the app without playback. Use it with a controlled queued task and observe the persisted task state from the host; the UI test alone proves only that the app can be left and reopened, not that synthesis continued or resumed.
+`OfflineProbe`'s `background` mode presses Home, waits 40 seconds to cover the bounded UIKit background-task window, then returns to the app without playback. Use it with a controlled queued task and observe the persisted task state from the host; the UI test alone proves only that the app can be left and reopened, not that synthesis continued or resumed.
 
 With the latest Debug app connected to Metro and the existing fixture Document
 `A Short Test of Reading Aloud` in the Library:
 
 ```sh
-bash test/manual-test/voices-and-providers/reader.sh SIMULATOR_UDID /tmp/openreader-reader-01
+bash test/manual-test/kit/run-probe.sh ReaderProbe SIMULATOR_UDID /tmp/openreader-reader-01
 ```
 
 This reuses the disposable XCTest project builder. It opens the Document if
@@ -102,7 +102,7 @@ transition, with an eight-second watchdog. It reports durations in milliseconds.
 This is a handler probe, not a touch test or a test of live provider audio quality.
 
 The `touch` command uses a **new** artifact directory. It installs a five-second
-reply delay and calls `reader.sh` in loading mode to press Play, inspect the
+reply delay and runs `ReaderProbe` in its `loading` mode to press Play, inspect the
 spinner, and physically tap it to pause before any reply arrives. It then checks
 that audio still arrives and the app remains paused. Do not run loading mode by
 itself: it depends on the fixture and watchdog installed by the outer script.
@@ -121,7 +121,7 @@ Short Test of Reading Aloud`, and the Fish key staged at
 #13/#14** above:
 
 ```sh
-bash test/manual-test/downloads/download-ring.sh SIMULATOR_UDID /tmp/openreader-download-ring-01 \
+bash test/manual-test/kit/run-probe.sh DownloadRingProbe SIMULATOR_UDID /tmp/openreader-download-ring-01 \
   -only-testing:testDownloadRingLifecycle
 ```
 
@@ -154,7 +154,7 @@ finds a chapter's ring by position: the `Pause download` or `Resume download`
 button at the height of the chapter's title and to its right
 (`ring(beside:)`). A second method, `testReopenDownloadDrawer`, just reopens
 that same drawer on an already-downloaded fixture and leaves it open — used to
-restore the final state after a separate run (such as `offline.sh management`)
+restore the final state after a separate run (such as `OfflineProbe`'s `management` mode)
 has left the app elsewhere.
 
 The first two steps race the provider: the fixture's chapters take seconds
@@ -189,18 +189,18 @@ screenshots' contrast against the app's dark palette).
 The two-chapter fixture cannot show order independent of tap order, pausing
 the chapter being written leaving the *next* chapter to finish while the
 paused one stays put, the ring in Manage downloads, or adding a chapter while
-another stays paused — `PauseOrderProbe.swift` (`pause-order.sh`) drives
+another stays paused — `PauseOrderProbe.swift` drives
 these on a disposable five-chapter fixture instead
 (`test/manual-test/fixtures/pause-order-fixture.ts`, seeded through the harness like
 any fixture, never checked into the Library by the generator itself):
 
 ```sh
-bash test/manual-test/downloads/pause-order.sh SIMULATOR_UDID /tmp/openreader-pause-order-01 \
+bash test/manual-test/kit/run-probe.sh PauseOrderProbe SIMULATOR_UDID /tmp/openreader-pause-order-01 \
   -only-testing:PauseOrderProbe/testOrderMixedAddAndRingSweep
 # host-level restart between the two methods — never an in-test app.terminate()/launch()
 xcrun simctl terminate SIMULATOR_UDID top.xujialiu.openreader
 xcrun simctl launch SIMULATOR_UDID top.xujialiu.openreader -RCT_jsLocation localhost:PORT
-bash test/manual-test/downloads/pause-order.sh SIMULATOR_UDID /tmp/openreader-pause-order-02 \
+bash test/manual-test/kit/run-probe.sh PauseOrderProbe SIMULATOR_UDID /tmp/openreader-pause-order-02 \
   -only-testing:PauseOrderProbe/testOrderAfterRestart
 ```
 
@@ -243,7 +243,7 @@ node test/manual-test/downloads/download-away.cjs play     UDID DOCUMENT_ID fish
 node test/manual-test/downloads/download-away.cjs playlock UDID DOCUMENT_ID fish VOICE 120 nav.23 …       # a Reading plays, locked
 ```
 
-Prerequisites: Fish configured (`offline-fix.sh … -only-testing:testConfigureFishProvider`),
+Prerequisites: Fish configured (`OfflineFixProbe … -only-testing:testConfigureFishProvider`),
 the Document in the Library (`{"do":"add"}` through the harness), and the
 chapter ids from `download-chapter.cjs … --list`. Choose chapters without saved
 audio: a chapter already complete is skipped and saves nothing. `play` and
@@ -448,7 +448,7 @@ second apart, no stall or drop). `testDrawerOneFingerTapToggles` confirms a
 plain one-finger tap still selects, then deselects, a row (via `chosenCount()`,
 not `.isSelected` — **Pitfalls › XCTest**). `testDrawerCheckedRowsUnaffectedBySweep`
 and `testDrawerManageSweepSelectsForDelete` need the short fixture already
-downloaded (run right after `download-ring.sh`'s `testDownloadRingLifecycle`,
+downloaded (run right after `DownloadRingProbe`'s `testDownloadRingLifecycle`,
 while its reader is still the active one `openDrawer` reuses): a sweep across
 downloaded rows chooses nothing, and a sweep across saved rows in Manage
 downloads chooses them for `Delete selected (N)`, which the method then
@@ -492,7 +492,7 @@ With Fish enabled and the fixture Document open, this opens Voice, physically
 taps `en-IN` and asserts that `Aarav — Male Indian multilingual (EN)` appears:
 
 ```sh
-bash test/manual-test/voices-and-providers/reader.sh SIMULATOR_UDID /tmp/openreader-fish-picker-01 fish
+bash test/manual-test/kit/run-probe.sh ReaderProbe SIMULATOR_UDID /tmp/openreader-fish-picker-01 --mode fish
 ```
 
 It uses the live voice list, so it needs the configured app key and network.
@@ -506,7 +506,7 @@ With the current Debug app connected to Metro and both `A Short Test of Reading
 Aloud` and `仙逆` in the Library:
 
 ```sh
-bash test/manual-test/library-and-reader/library-actions.sh SIMULATOR_UDID /tmp/openreader-library-actions-01 \
+bash test/manual-test/kit/run-probe.sh LibraryActionsProbe SIMULATOR_UDID /tmp/openreader-library-actions-01 \
   -only-testing:testLibraryAndReaderActions
 ```
 
@@ -535,15 +535,11 @@ The Contents note is checked separately, read-only, against `仙逆`, whose nav
 entries do resolve to real spine items:
 
 ```sh
-xcodebuild -project /tmp/openreader-library-actions-01/ManualTests.xcodeproj \
-  -scheme LockScreenProbe -destination 'id=SIMULATOR_UDID' \
-  -derivedDataPath /tmp/openreader-library-actions-01/build \
-  -resultBundlePath /tmp/openreader-library-actions-02/result.xcresult \
-  -only-testing:LockScreenProbe/LibraryActionsProbe/testContentsExactPrecision test
+bash test/manual-test/kit/run-probe.sh LibraryActionsProbe SIMULATOR_UDID /tmp/openreader-library-actions-01 \
+  -only-testing:testContentsExactPrecision
 ```
 
-(Reuses the project the first command generated; point `-resultBundlePath` at a
-fresh path.) It opens 仙逆, opens Contents, and requires a row to be marked
+(Reuses the project the first command generated.) It opens 仙逆, opens Contents, and requires a row to be marked
 current before asserting that neither of the two approximate-precision
 sentences appears. **Opening Contents immediately after the reader's "Choose a
 Voice" button appears is too early**: `status.rendered` (what marks the row
@@ -560,7 +556,7 @@ Reading Aloud` and `仙逆` in the Library, `A Short Test of Reading Aloud`
 already having some saved audio:
 
 ```sh
-bash test/manual-test/settings/general-fonts.sh SIMULATOR_UDID /tmp/openreader-general-fonts-01 \
+bash test/manual-test/kit/run-probe.sh GeneralFontsProbe SIMULATOR_UDID /tmp/openreader-general-fonts-01 \
   -only-testing:testFontFamiliesAvailableOnSystem \
   -only-testing:testGeneralThemeAndBrackets \
   -only-testing:testManageDownloadsDeleteAll \
@@ -634,7 +630,7 @@ on-device `settings.json` (`Paths.document`, reachable on the simulator via
 `"font": "serif"`, then run the one method that depends on it:
 
 ```sh
-bash test/manual-test/settings/general-fonts.sh SIMULATOR_UDID /tmp/openreader-general-fonts-migration \
+bash test/manual-test/kit/run-probe.sh GeneralFontsProbe SIMULATOR_UDID /tmp/openreader-general-fonts-migration \
   -only-testing:testMigratedFontShowsGeorgia
 ```
 
@@ -650,7 +646,7 @@ None of these modes ever presses Play.
 With the current Debug app connected to Metro:
 
 ```sh
-bash test/manual-test/settings/settings-version.sh SIMULATOR_UDID /tmp/openreader-settings-version-01
+bash test/manual-test/kit/run-probe.sh SettingsVersionProbe SIMULATOR_UDID /tmp/openreader-settings-version-01
 ```
 
 This relaunches the app (so a JavaScript-only change, such as `app-version.ts`,
@@ -665,21 +661,15 @@ one's own nav bar to appear, and returns to Settings each time to confirm the
 version line and the three rows above it are unmoved. It then opens General →
 Theme, picks Light, returns to Settings and photographs it, then Dark and
 photographs it, then restores whichever of Light/Dark/Match Device the device
-had before the run. It never presses Play. Add the probe's filename to
-`kit/project.rb`'s allow-list before first use, the same as any new probe
-source here.
+had before the run. It never presses Play.
 
 ### Long-press lookup and translation (issue #73, `TranslationProbe.swift`)
 
 With the current Debug app connected to Metro and `A Short Test of Reading Aloud` in the Library, build the disposable UI-test project and run `TranslationProbe.testSettingsDefaultsMenusAndPersistence` first, then `TranslationProbe.testLongPressDisabledThenEnabledDrawerAndCopy` and `TranslationProbe.testPronunciationButtonsTouchDictionaryAudio`:
 
 ```sh
-mkdir -p /tmp/openreader-translation-probe
-ruby test/manual-test/kit/project.rb /tmp/openreader-translation-probe top.xujialiu.openreader NO inspect TranslationProbe.swift
-xcodebuild -project /tmp/openreader-translation-probe/ManualTests.xcodeproj -scheme LockScreenProbe \
-  -destination "id=SIMULATOR_UDID" -derivedDataPath /tmp/openreader-translation-probe/build \
-  -resultBundlePath /tmp/openreader-translation-probe/result.xcresult \
-  -only-testing:LockScreenProbe/TranslationProbe/testLongPressDisabledThenEnabledDrawerAndCopy test
+bash test/manual-test/kit/run-probe.sh TranslationProbe SIMULATOR_UDID /tmp/openreader-translation-probe \
+  -only-testing:testLongPressDisabledThenEnabledDrawerAndCopy
 ```
 
 Change the final `-only-testing` method name for the other two methods. The pronunciation method uses `silence.sh`'s zero-volume simulator before the test, taps both dictionary audio buttons, and observes the app's pronunciation-active state; it does not press narration Play or prove narration pause/resume.
@@ -688,15 +678,12 @@ The probe uses real settings taps, native selection long presses, drawer drags, 
 
 ### Fish narration interruption coverage (issue #73, `FishNarrationProbe.swift`)
 
-Use the local Fish credential through `offline-fix.sh` and ask the Fish voice list once before this probe. Open a long book from `~/Works/epub_books` in the Library, leave the reader paused, and run the probe with the simulator silenced:
+Use the local Fish credential through `OfflineFixProbe` and ask the Fish voice list once before this probe. Open a long book from `~/Works/epub_books` in the Library, leave the reader paused, and run the probe with the simulator silenced:
 
 ```sh
-ruby test/manual-test/kit/project.rb /tmp/openreader-fish-narration-probe top.xujialiu.openreader NO inspect FishNarrationProbe.swift
 bash test/manual-test/kit/silence.sh set SIMULATOR_UDID
-xcodebuild -project /tmp/openreader-fish-narration-probe/ManualTests.xcodeproj -scheme LockScreenProbe \
-  -destination "id=SIMULATOR_UDID" -derivedDataPath /tmp/openreader-fish-narration-probe/build \
-  -resultBundlePath /tmp/openreader-fish-narration-probe/result.xcresult \
-  -only-testing:LockScreenProbe/FishNarrationProbe/testRealFishPlayThenPause test
+bash test/manual-test/kit/run-probe.sh FishNarrationProbe SIMULATOR_UDID /tmp/openreader-fish-narration-probe \
+  -only-testing:testRealFishPlayThenPause
 ```
 
 Change `-only-testing` to run `testLookupPausesPreviouslyPlayingFish`, `testPauseOptionOffKeepsFishPlaying`, `testPronunciationInterruptionOnCurrentReader`, or `testPronunciationInterruptionResumeAndCancellation`. The last two use the real Fish audio path and require the pause option off; the second method changes it through Settings, while the current-reader method expects the already-prepared setting. `testPronunciationInterruptionResumeAndCancellation` also exercises close, restart, and changed-selection cancellation.
@@ -708,8 +695,7 @@ For the iOS handle-release regression, run `testSelectionHandleExpansionTranslat
 ### Issues #13/#14: a fresh Library, Fish from empty settings, and the two
 ### destructive confirmations the other probes always cancel
 
-`OfflineFixProbe.swift`, run through `offline-fix.sh` (same shape as
-`general-fonts.sh`), covers what none of the probes above do: a device that has
+`OfflineFixProbe.swift` covers what none of the probes above do: a device that has
 never had a provider configured or a document downloaded, and actually
 confirming (not cancelling) "Delete all saved audio" and "Delete this book".
 It expects two fixtures already in the Library: `A Short Test of Reading
@@ -725,7 +711,7 @@ one-time setup step, not a repeated verification.
 
 ```sh
 printf '%s' "$FISH_API_KEY" > /tmp/openreader-fish-key.txt && chmod 600 /tmp/openreader-fish-key.txt
-bash test/manual-test/downloads/offline-fix.sh SIMULATOR_UDID /tmp/openreader-offline-fix-01 \
+bash test/manual-test/kit/run-probe.sh OfflineFixProbe SIMULATOR_UDID /tmp/openreader-offline-fix-01 \
   -only-testing:testConfigureFishProvider
 ```
 
@@ -741,7 +727,7 @@ left the provider enabled.
 
 `testChooseVoiceForShortFixture` opens the short fixture and taps whichever
 Fish voice sorts first (this is a download/playback mechanics check, not a
-locale-picker test — `reader.sh fish` already covers real navigation to a
+locale-picker test — `ReaderProbe`'s `fish` mode already covers real navigation to a
 specific locale). Choosing while paused leaves the sheet open by design
 (`ReaderProbe.testReaderSheets`); dismissal is `Close Voice`, the same
 full-bleed backdrop button as `Close Download`/`Close Appearance`, not the

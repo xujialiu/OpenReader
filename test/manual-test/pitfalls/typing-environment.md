@@ -54,7 +54,7 @@
   Case`, `Test Suite`, `error:`) rather than printing it whole, and never
   paste it into a report.
 - **`xcodebuild … test` does not pass the caller's environment to the test
-  process.** `PLAY_SECONDS=12 bash sync.sh …` silently uses the probe's default,
+  process.** `PLAY_SECONDS=12 bash sync.sh …` (now `kit/run-probe.sh SyncProbe`) silently uses the probe's default,
   and a run "of twelve seconds" is really five. Pass parameters in a file the
   probe reads instead (`/tmp/openreader-sync-params.txt`, `SyncProbe.param`).
 - **The walkthrough harness re-runs its last command on every launch.**

@@ -42,11 +42,11 @@ A third runner covers what the two above do not — real touches on the freeze
 rule itself, not just its resting screenshots:
 
 ```bash
-bash test/manual-test/settings/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-01 -only-testing:testFailurePathsNoCredentials
-bash test/manual-test/settings/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-02 -only-testing:testSyncRefusalPathAlone
-bash test/manual-test/settings/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-03 -only-testing:testFishVoicesFieldAndEnableDisableCycle
-bash test/manual-test/settings/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-04 -only-testing:testPressedRowHighlightsEdgeToEdge
-bash test/manual-test/settings/provider-freeze.sh SIMULATOR_UDID /tmp/openreader-freeze-05 -only-testing:testDynamicTypeSpotCheck
+bash test/manual-test/kit/run-probe.sh ProviderFreezeProbe SIMULATOR_UDID /tmp/openreader-freeze-01 -only-testing:testFailurePathsNoCredentials
+bash test/manual-test/kit/run-probe.sh ProviderFreezeProbe SIMULATOR_UDID /tmp/openreader-freeze-02 -only-testing:testSyncRefusalPathAlone
+bash test/manual-test/kit/run-probe.sh ProviderFreezeProbe SIMULATOR_UDID /tmp/openreader-freeze-03 -only-testing:testFishVoicesFieldAndEnableDisableCycle
+bash test/manual-test/kit/run-probe.sh ProviderFreezeProbe SIMULATOR_UDID /tmp/openreader-freeze-04 -only-testing:testPressedRowHighlightsEdgeToEdge
+bash test/manual-test/kit/run-probe.sh ProviderFreezeProbe SIMULATOR_UDID /tmp/openreader-freeze-05 -only-testing:testDynamicTypeSpotCheck
 ```
 
 `ProviderFreezeProbe.swift` (independent #48 verification, 2026-09-23):
@@ -103,10 +103,10 @@ What this does not establish: the stepper's own touches, the number between − 
 
 ### The stepper, the highlight and the iPad with real touches (`FontSizeProbe.swift`)
 
-`font-size.sh` runs `FontSizeProbe.swift`. It has the same shape as `general-fonts.sh`: a new output directory generates the project, and an existing one reuses it.
+`FontSizeProbe.swift`, through `kit/run-probe.sh`: a new output directory generates the project, and an existing one reuses it.
 
 ```sh
-bash test/manual-test/settings/font-size.sh SIMULATOR_UDID /tmp/openreader-font-size-01 -only-testing:testStepperLadderDisabledEndsAndFontPage
+bash test/manual-test/kit/run-probe.sh FontSizeProbe SIMULATOR_UDID /tmp/openreader-font-size-01 -only-testing:testStepperLadderDisabledEndsAndFontPage
 ```
 
 - `testStepperLadderDisabledEndsAndFontPage` opens the short fixture with a real tap and walks the ladder 16 → 12 → 32 → 16, asserting every number between − and +. It also asserts that − is disabled at 12 and + at 32, that the "Use document appearance" line is gone, and the round trip through the Fonts page. It leaves the sheet open at 16 so the theme can be switched with the harness for light and dark screenshots of the same sheet. `testCloseAppearanceSheet` then closes it.
@@ -151,11 +151,11 @@ height under both. The page program is baked in when the reader opens, so after
 changing `highlighter.ts` shut and reopen the reader before probing. A
 program that opened before the change has none of it.
 
-`alignment.sh` runs `AlignmentProbe.swift`, the same shape as
-`font-size.sh`. None of its methods presses Play.
+`AlignmentProbe.swift`, through `kit/run-probe.sh`. None of its methods
+presses Play.
 
 ```sh
-bash test/manual-test/settings/alignment.sh SIMULATOR_UDID /tmp/openreader-alignment-01
+bash test/manual-test/kit/run-probe.sh AlignmentProbe SIMULATOR_UDID /tmp/openreader-alignment-01
 ```
 
 - `testChooseFromMenuInsideDrawer` opens the short fixture's Appearance drawer
@@ -204,11 +204,10 @@ failing for a reason unrelated to #32/#33: see **Pitfalls**, XCTest.
 
 ## The two Pauses: General's Reading aloud card, and the gap itself (#60, ADR 0047)
 
-`pause-menu.sh` runs `PauseMenuProbe.swift`, the same disposable-project shape
-as `alignment.sh`:
+`PauseMenuProbe.swift`, through `kit/run-probe.sh`:
 
 ```sh
-bash test/manual-test/settings/pause-menu.sh SIMULATOR_UDID /tmp/openreader-pause-menu-01 \
+bash test/manual-test/kit/run-probe.sh PauseMenuProbe SIMULATOR_UDID /tmp/openreader-pause-menu-01 \
   -only-testing:testReadingAloudCardLayoutAndBothThemes \
   -only-testing:testSentencePauseMenuRealTouches \
   -only-testing:testParagraphPauseMenuRealTouches
@@ -229,7 +228,7 @@ after, the same convention `ProviderFreezeProbe.testDynamicTypeSpotCheck` uses:
 
 ```sh
 xcrun simctl ui SIMULATOR_UDID content_size extra-extra-large
-bash test/manual-test/settings/pause-menu.sh SIMULATOR_UDID /tmp/openreader-pause-menu-02 \
+bash test/manual-test/kit/run-probe.sh PauseMenuProbe SIMULATOR_UDID /tmp/openreader-pause-menu-02 \
   -only-testing:testParagraphMenuAtLargerDynamicType
 xcrun simctl ui SIMULATOR_UDID content_size large
 ```
@@ -282,7 +281,7 @@ state afterwards; put the defaults back when done.
 
 ```sh
 rm -f "$(xcrun simctl get_app_container SIMULATOR_UDID top.xujialiu.openreader data)/Documents/harness.json"
-bash test/manual-test/settings/pause-menu.sh SIMULATOR_UDID /tmp/openreader-pause-menu-03 \
+bash test/manual-test/kit/run-probe.sh PauseMenuProbe SIMULATOR_UDID /tmp/openreader-pause-menu-03 \
   -only-testing:testPauseValuesPersistAcrossRelaunch
 ```
 
@@ -355,13 +354,13 @@ Measured 2026-09-25 (notes, 01:08), Azure `en-US-AndrewNeural`, rate 1.0: `I2`
 4303 ms in C (+1014 in C). Each transition was sampled within 29–52 ms. Each
 run played until its third transition and paused there, 13.5 s and 11.2 s.
 
-## General's Line position row (#71, `line-position.sh`, `LinePositionProbe.swift`)
+## General's Line position row (#71, `LinePositionProbe.swift`)
 
 ```sh
-bash test/manual-test/settings/line-position.sh SIMULATOR_UDID NEW_OUTPUT_DIR_OR_EXISTING_PROJECT_DIR
+bash test/manual-test/kit/run-probe.sh LinePositionProbe SIMULATOR_UDID NEW_OUTPUT_DIR_OR_EXISTING_PROJECT_DIR
 ```
 
-The same disposable-project shape as `pause-menu.sh`. From a fresh launch, with
+From a fresh launch, with
 real touches: Settings → General, the row `Line position, N%` below the paragraph
 pause and above the brackets' card, its menu 20% to 80% top to bottom with only
 the row's value checked, 30% chosen (the row then reads `Line position, 30%`),
@@ -370,7 +369,7 @@ so silence the simulator again before the next play, and reopen the reader with
 `{"do":"open","id":"sha256:…"}`. 0 failures in 29.2 s (2026-09-26 11:12).
 
 ```sh
-bash test/manual-test/settings/line-position.sh SIMULATOR_UDID NEW_OUTPUT_DIR_OR_EXISTING_PROJECT_DIR \
+bash test/manual-test/kit/run-probe.sh LinePositionProbe SIMULATOR_UDID NEW_OUTPUT_DIR_OR_EXISTING_PROJECT_DIR \
   -only-testing:testLinePositionMenuRealTouches -only-testing:testLinePositionPersistsAcrossRelaunch
 ```
 
@@ -382,7 +381,7 @@ after the cold start, then restores 50%. **Remove
 written back to back run only the second" / "The walkthrough harness re-runs
 its last command on every launch") — a leftover `settings` patch from an
 earlier `line-follow.cjs` run would silently rewrite the Line Position right
-after the relaunch, the same trap `pause-menu.sh`'s own persistence method
+after the relaunch, the same trap `PauseMenuProbe`'s own persistence method
 documents. Both methods together: `Executed 2 tests, with 0 failures (0
 unexpected) in 72.327 (72.338) seconds` (2026-09-26 11:41), and the device's
 own `settings.json` read `{"linePosition":50}` afterwards.

@@ -189,9 +189,9 @@ final class PauseSuspendProbe: XCTestCase {
     capture("t2-final-paused", app)
   }
 
-  /// Just enough to hand off to `lock-screen.sh`'s tap mode: open the fixture,
+  /// Just enough to hand off to `LockScreenProbe`'s tap mode: open the fixture,
   /// play briefly to register an active Now Playing session, and pause. Not a
-  /// #66 check by itself — the remote-transport check is `lock-screen.sh`'s.
+  /// #66 check by itself — the remote-transport check is `LockScreenProbe`'s.
   func testEstablishPausedSession() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     app.activate()

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Real drag during a live glide (#71, GlideTouchProbe.swift). Same shape as
-# browse-touch.sh: a new output directory generates the project, an existing
+# kit/run-probe.sh: a new output directory generates the project, an existing
 # one reuses it. Presses Play, so checks the simulator's own volume first.
 # Run `node glide-touch.cjs SIMULATOR_UDID METRO_LOG arm` before this, and
 # `... analyse` after, to read what the drag actually did.

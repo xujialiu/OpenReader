@@ -2,14 +2,14 @@
 
 ## Voice lists at start (#24)
 
-`voice-list.sh` runs `VoiceListProbe.swift`: a cold launch, about five
+`VoiceListProbe.swift`: a cold launch, about five
 seconds, a real tap on `Stat Line Fixture` (below), a tap on `Choose a Voice`,
 and at once a locale chip (`en-US`) must be there and `Asking Fish Audio for
 its Voices…` must not. It then chooses Dax from en-US with a touch, which while
 paused is a preference and sends nothing, and closes the sheet.
 
 ```sh
-bash test/manual-test/voices-and-providers/voice-list.sh SIMULATOR_UDID /tmp/openreader-voice-list-01
+bash test/manual-test/kit/run-probe.sh VoiceListProbe SIMULATOR_UDID /tmp/openreader-voice-list-01
 ```
 
 Measured 2026-09-22 (iPhone 17, iOS 27.0, Fish only enabled): Library row at
@@ -61,7 +61,7 @@ until `spine=` is above 0, then `{"do":"contents","on":true}` shows "None of
 these rows names a file in this book…". Measured the same day, its three lines
 start at x = 51 px like the title (the old build: 3, 2 and 1 px) and end by
 1135 px, inside the right inset at 1158. The 2026-09-20 `Contents-open`
-attachment of a `reader.sh` run is the same sheet before #28. None of the
+attachment of a `ReaderProbe` run is the same sheet before #28. None of the
 fixtures has no contents, or a marked row that is only approximate, so the
 sheet's other two notes were not seen.
 
@@ -123,7 +123,7 @@ the failure at about 8 s), so keep the cap near what the stop word needs.
 ### The bracket switch over an open reader, and the download it names (`BracketsProbe.swift`)
 
 ```sh
-bash test/manual-test/voices-and-providers/brackets.sh SIMULATOR_UDID /tmp/openreader-brackets-01 -only-testing:testDownloadStatLines
+bash test/manual-test/kit/run-probe.sh BracketsProbe SIMULATOR_UDID /tmp/openreader-brackets-01 -only-testing:testDownloadStatLines
 ```
 
 - `testDownloadStatLines`: a cold launch, the Library's `...`, Download, Select
@@ -158,12 +158,11 @@ highlighted.
 
 ## Azure Speech: configuration, the voice sheet, and word-level highlighting (#39)
 
-`azure-provider.sh` runs `AzureProviderProbe.swift`, the same disposable-project
-shape as `general-fonts.sh` and `offline-fix.sh` (its target scheme is still
-`LockScreenProbe`; only the source file differs):
+`AzureProviderProbe.swift`, through `kit/run-probe.sh` (the target scheme is
+still `LockScreenProbe`; only the source file differs):
 
 ```sh
-bash test/manual-test/voices-and-providers/azure-provider.sh SIMULATOR_UDID /tmp/openreader-azure-provider-01 \
+bash test/manual-test/kit/run-probe.sh AzureProviderProbe SIMULATOR_UDID /tmp/openreader-azure-provider-01 \
   -only-testing:testProvidersOrderAndAzureScreenControls
 ```
 
@@ -269,7 +268,7 @@ What it cannot show: the phone's own network, since it runs from the Mac through
 python3 -c 'import os,sys; d=sys.argv[1]; b=sorted(os.stat(os.path.join(d,f)).st_birthtime for f in os.listdir(d) if f.endswith((".audio",".m4a"))); print(len(b), b[0], b[-1])' VOICE_DIRECTORY
 ```
 
-To compare with one request at a time: delete the chapters' audio through the runtime (`deleteDownloaded`, through `cdp.cjs`, then check that `occupied` reads 0), choose 1 in Settings › Providers › Fish Audio › Sentences at once (before beta26 this was `AT_ONCE` in `src/offline/scheduler.ts`), confirm that `settings.json` in the app container's `Documents` holds `"fish":1` under `sentencesAtOnce`, and download the same chapters again. Put it back to 5 afterwards. The number is read as each chapter starts, so change it only between downloads. Run the download with five at once first, so that anything the service remembers could only speed up the slower run. Configure Fish in the app first with `offline-fix.sh … -only-testing:testConfigureFishProvider` (Pitfalls: before 2026-09-25 that method could pass with Fish still disabled).
+To compare with one request at a time: delete the chapters' audio through the runtime (`deleteDownloaded`, through `cdp.cjs`, then check that `occupied` reads 0), choose 1 in Settings › Providers › Fish Audio › Sentences at once (before beta26 this was `AT_ONCE` in `src/offline/scheduler.ts`), confirm that `settings.json` in the app container's `Documents` holds `"fish":1` under `sentencesAtOnce`, and download the same chapters again. Put it back to 5 afterwards. The number is read as each chapter starts, so change it only between downloads. Run the download with five at once first, so that anything the service remembers could only speed up the slower run. Configure Fish in the app first with `kit/run-probe.sh OfflineFixProbe … -only-testing:testConfigureFishProvider` (Pitfalls: before 2026-09-25 that method could pass with Fish still disabled).
 
 ### OpenAI Compatible's 422→MP3 fallback (#65) and Speechify's own queue, on the short fixture
 
@@ -279,13 +278,13 @@ playback/download, both against the short two-chapter fixture rather than the
 real book — a fresh voice directory each time, no pre-seeded state to manage:
 
 ```sh
-bash test/manual-test/downloads/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureCompatibleProviderRealTouches
-bash test/manual-test/downloads/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseEmilyVoiceAndPlayShortFixture
-bash test/manual-test/downloads/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testCompatibleSentencesAtOnceFiveAndDownloadShortFixture
-bash test/manual-test/downloads/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureSpeechifyRealTouches
-bash test/manual-test/downloads/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseSpeechifyVoiceRealTouches
-bash test/manual-test/downloads/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testSpeechifyDownloadAndPlayShortFixture
-bash test/manual-test/downloads/download-concurrency-probe.sh SIMULATOR_UDID OUTPUT_DIR -only-testing:testResetCompatibleSentencesAtOnceToDefault
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureCompatibleProviderRealTouches
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseEmilyVoiceAndPlayShortFixture
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testCompatibleSentencesAtOnceFiveAndDownloadShortFixture
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureSpeechifyRealTouches
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseSpeechifyVoiceRealTouches
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testSpeechifyDownloadAndPlayShortFixture
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testResetCompatibleSentencesAtOnceToDefault
 ```
 
 Each method is its own invocation, run in the order above, the same discipline

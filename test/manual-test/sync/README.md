@@ -14,7 +14,7 @@ printed, never in a screenshot, never committed:
 : > /tmp/openreader-sync-pass.txt
 : > /tmp/openreader-sync-wrongpass.txt  # the same password with a character added
 chmod 600 /tmp/openreader-sync-*.txt
-bash test/manual-test/sync/sync.sh SIMULATOR_UDID /tmp/openreader-sync-01 \
+bash test/manual-test/kit/run-probe.sh SyncProbe SIMULATOR_UDID /tmp/openreader-sync-01 \
   -only-testing:testSyncSwitchOutcomes
 ```
 

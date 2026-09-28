@@ -9,7 +9,7 @@ import XCTest
 /// highlight. Written for this verification and kept here for the next time
 /// this rule needs a real-touch check. Leaves every provider disabled with no
 /// stored key, and Sync empty and off — the same state `design-shots.sh` and
-/// `settings-version.sh` leave the app in.
+/// `SettingsVersionProbe` leave the app in.
 final class ProviderFreezeProbe: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false

@@ -84,7 +84,7 @@ final class OfflineFixProbe: XCTestCase {
   // MARK: - Choosing a Voice for the first time (ADR 0010: also becomes the default)
 
   /// Picking any Fish voice is enough for a mechanical download/playback check;
-  /// this is not a voice-quality or locale-picker test (`reader.sh fish` already
+  /// this is not a voice-quality or locale-picker test (`ReaderProbe`'s `fish` mode already
   /// covers real navigation to a specific locale). Chosen while paused, so the
   /// picker stays open (by design) and is dismissed with the same drag gesture
   /// `ReaderProbe.testReaderSheets` uses. Because a Voice choice becomes the
