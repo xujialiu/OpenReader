@@ -10,7 +10,8 @@ finish. That includes problems you only worked around.
 
 For simulator work, reach first for the two MCP servers in `.mcp.json`, then
 `xcrun simctl`, `xcodebuild` and the existing XCTest/manual-test scripts. Use
-Computer Use only when none of these can perform the action.
+Computer Use only when none of these can perform the action. Codex does not read
+`.mcp.json`; its copy of `mobilebuildmcp` is in `.codex/config.toml`.
 
 - **`mobilebuildmcp`** (the renamed XcodeBuildMCP): native builds and installs
   (`build_run_sim`), screenshots, the accessibility tree with element refs

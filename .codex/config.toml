@@ -1,0 +1,5 @@
+# Codex ignores mcp_servers in .codex/agents/*.toml (codex-cli 0.158.0), so the
+# ios-tester's MCP server lives here and every session and subagent inherits it.
+[mcp_servers.mobilebuildmcp]
+command = "npx"
+args = ["-y", "mobilebuildmcp@2.7.1", "mcp"]

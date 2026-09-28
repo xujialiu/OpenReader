@@ -3,7 +3,3 @@ description = "Verify final iOS app changes in the simulator and report evidence
 model = "gpt-5.6-luna"
 model_reasoning_effort = "max"
 developer_instructions = "Read .agents/ios-tester.md from the repository root and follow its shared verification workflow."
-
-[mcp_servers.mobilebuildmcp]
-command = "npx"
-args = ["-y", "mobilebuildmcp@2.7.1", "mcp"]
