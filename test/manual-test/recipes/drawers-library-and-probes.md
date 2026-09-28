@@ -674,6 +674,7 @@ source here.
 With the current Debug app connected to Metro and `A Short Test of Reading Aloud` in the Library, build the disposable UI-test project and run `TranslationProbe.testSettingsDefaultsMenusAndPersistence` first, then `TranslationProbe.testLongPressDisabledThenEnabledDrawerAndCopy` and `TranslationProbe.testPronunciationButtonsTouchDictionaryAudio`:
 
 ```sh
+mkdir -p /tmp/openreader-translation-probe
 ruby test/manual-test/ios/project.rb /tmp/openreader-translation-probe top.xujialiu.openreader NO inspect TranslationProbe.swift
 xcodebuild -project /tmp/openreader-translation-probe/ManualTests.xcodeproj -scheme LockScreenProbe \
   -destination "id=SIMULATOR_UDID" -derivedDataPath /tmp/openreader-translation-probe/build \
@@ -800,3 +801,49 @@ delete, no PRAGMA restore, no backup/restore of the offline directory or
 `library.json`) — every destructive one expects the caller to have backed up
 first and to restore afterward, the same division of labour as `management`
 mode above.
+
+### Pinch and double tap on the reading page (#79, `zoom.sh`, `ZoomProbe.swift`)
+
+```sh
+bash test/manual-test/zoom.sh SIMULATOR_UDID METRO_PORT METRO_LOG NEW_OUTPUT_DIR
+bash test/manual-test/zoom.sh SIMULATOR_UDID control NEW_OUTPUT_DIR
+```
+
+Prerequisites: `A Short Test of Reading Aloud` in the Library
+(`short-test-fixture.ts`), a Debug app on that Metro, and `METRO_LOG` the file
+that Metro's output goes to. Nothing is played.
+
+For each gesture, the script relaunches the app with `-RCT_jsLocation`, opens
+the fixture through the harness and waits for Metro to print `HX …
+rendered=N`. `ZoomProbe` then pinches (`pinch(withScale: 3, velocity: 2)`
+mid-screen) or double-taps a quarter of the way down, and photographs the page
+before and after. The script asks the page for `visualViewport.scale`,
+`innerWidth` and its viewport through `{"do":"js"}`, and prints `ZOOM pinch
+scale=…` and `ZOOM doubletap scale=…`. It exits 0 when both are 1, 1 when
+either gesture magnified the page, and 2 when a step failed. A final relaunch
+clears the probe's answer from the player's note.
+
+The probe also prints `ZOOM mark <gesture> before=X after=Y`, the player's
+Following mark (A or M), read from the accessibility tree. The script exits 1
+when a pinch turns A into M.
+
+Expected since #79: both gestures read `scale=1 innerWidth=402` on an iPhone
+17, and both marks read `before=A after=A`. The page's viewport reads
+`width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no`.
+Before #79, a pinch read 2.60 and `innerWidth=155`, and it turned A into M
+(engineering log, 2026-09-28).
+
+`control` serves a page with the reader's old viewport on port 8111 and pinches
+it in Safari. It must magnify (measured 1.00 → 2.39), or a reader that stays at
+1 proves nothing about the reader.
+
+What it cannot prove:
+
+- A double tap never magnified the page, even before #79, so its `scale=1`
+  guards only against a regression.
+- Screenshots are the only evidence that a gesture landed on text: the page is
+  not in the accessibility tree (pitfalls/screenshots.md).
+- XCTest's pinch puts both fingers down together, in one section document.
+  A real pinch whose second finger lands a moment later, or in another
+  section document, is not measured. `highlighter.ts` counts moves before the
+  second finger lands as a one-finger drag.

@@ -28,6 +28,13 @@
   for matching '"'` at the end of the script, although `'EOF'` quotes the body.
   Keep such text in a file of its own and `cat` it, as
   `leading-strip-probe.js` is.
+  **When it fails that way, its backticks run as commands.** 2026-09-28 (#79):
+  `gh issue comment 79 --body "$(cat <<'EOF' … EOF)"` around a plan with an
+  apostrophe in `reader's` and words in backticks posted the comment with
+  those words missing and ran them. `` `npm ci` `` installed the worktree's
+  dependencies, and `` `tsc` `` and `` `patch-package` `` answered `command not
+  found`. Write an issue or comment body to a file and pass `--body-file`, or
+  `-F body=@FILE` to `gh api`, which is also how the comment was corrected.
 - **`PIPESTATUS` is bash's, and an agent's commands here run in zsh 5.9.**
   `… | tee run.out; echo "exit ${PIPESTATUS[0]}"` printed `exit ` with nothing
   after it (2026-09-22): zsh has no `PIPESTATUS`, and an unset name expands to
