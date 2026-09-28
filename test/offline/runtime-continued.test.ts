@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import type { DownloadTask } from '../../src/offline/model';
 
 /**
- * The runtime's half of ADR 0052 (#77): a download the owner starts or resumes
+ * The runtime's half of ADR 0053 (#77): a download the owner starts or resumes
  * on the screen, or one that goes on by itself when the app is launched or
  * comes back to the foreground, is submitted as a continued processing task,
  * which keeps the app running when the owner leaves it; without one, leaving

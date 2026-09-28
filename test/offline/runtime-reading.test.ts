@@ -32,7 +32,7 @@ const mock = vi.hoisted(() => ({
   appStateNow: 'active',
   expired: null as null | (() => void),
   beginBackground: vi.fn(async () => true),
-  /** Refused, as the simulator refuses it, unless a test answers otherwise (ADR 0052). */
+  /** Refused, as the simulator refuses it, unless a test answers otherwise (ADR 0053). */
   submitContinued: vi.fn(async (): Promise<boolean> => false),
 }));
 vi.mock('react-native', () => ({

@@ -468,7 +468,7 @@ const scheduler = createScheduler({
   // where requests are queued in the app, which is Speechify's queue alone.
   // Away from the screen, the end of the bounded background time stops a
   // download only once neither a Reading nor a continued task the phone
-  // accepted keeps the app running (ADR 0052).
+  // accepted keeps the app running (ADR 0053).
   allowed: () =>
     loaded &&
     !storeError &&
@@ -571,7 +571,7 @@ export function nameDocuments(
     }
   if (renamed) continued.follow();
 }
-/** ADR 0052: the continued processing task a download away from the screen runs under. */
+/** ADR 0053: the continued processing task a download away from the screen runs under. */
 const continued = createContinuedProcessing({
   native: offlineNative,
   tasks: () => tasks,
@@ -591,7 +591,7 @@ const runsAway = () =>
 /**
  * The bounded background time, begun on leaving the app unless a continued
  * task the phone accepted keeps it running; a submission still out does not
- * count, since the phone may refuse it (ADR 0052).
+ * count, since the phone may refuse it (ADR 0053).
  */
 function beginBounded() {
   if (offlineNative)

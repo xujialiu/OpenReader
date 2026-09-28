@@ -1,7 +1,7 @@
 # A download goes on when you leave the app
 
 _The engineering half of this decision is
-[ADR 0052](../adr/0052-a-download-runs-as-a-continued-processing-task.md).
+[ADR 0053](../adr/0053-a-download-runs-as-a-continued-processing-task.md).
 Issue #77. It changes "Preparation continues beyond the drawer" and
 "Agreement and remaining validation" in
 [decision 0027](0027-whole-document-offline-narration.md)._

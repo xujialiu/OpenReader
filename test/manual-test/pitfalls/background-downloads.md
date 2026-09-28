@@ -56,7 +56,7 @@
     treating a `paused` state as a pause.
   - The continued task's subtitle counted the paused chapters too: one fresh
     chapter enqueued into that task was submitted as `48 of 187 chapters`, as
-    ADR 0052 then specified. Since the owner's decision of 2026-09-28 (#77) it
+    ADR 0053 then specified. Since the owner's decision of 2026-09-28 (#77) it
     leaves out paused chapters that are not complete while the download goes
     on, so such a task no longer counts all 187; a download paused as a whole
     is counted whole.
@@ -91,7 +91,7 @@
   not suspend the app in those windows (runningboard `running-active`). Read it
   in the stream of the entry above: `Ending task with identifier N … Prepare
   narration`, `submitTaskRequest`, `continued task refused`, `Created background
-  task … Prepare narration`. Fixed in the commit after 22be978 (ADR 0052,
+  task … Prepare narration`. Fixed in the commit after 22be978 (ADR 0053,
   "Leaving the app"): `background` now begins the bounded task unless a
   continued task the phone accepted runs, and a submission whose catalogue read
   ends after the app left is dropped. Expect `Created background task …

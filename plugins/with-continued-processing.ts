@@ -2,7 +2,7 @@ import { withInfoPlist, type ConfigPlugin } from 'expo/config-plugins';
 
 /**
  * Permit the continued processing task a download away from the screen runs
- * under (ADR 0052, iOS 26 and later).
+ * under (ADR 0053, iOS 26 and later).
  *
  * One Info.plist key, `BGTaskSchedulerPermittedIdentifiers`, with one wildcard
  * identifier: the bundle identifier, `.download`, and `.*`. The SDK header of
@@ -29,7 +29,7 @@ const withContinuedProcessing: ConfigPlugin = (config) =>
     if (!bundle) {
       throw new Error(
         '[with-continued-processing] app.config.ts has no ios.bundleIdentifier, and the ' +
-          'continued processing task identifier must begin with it (ADR 0052).'
+          'continued processing task identifier must begin with it (ADR 0053).'
       );
     }
 

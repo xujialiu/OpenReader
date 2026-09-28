@@ -16,7 +16,7 @@ private struct ContinuedShown {
 public final class OpenReaderOfflineModule: Module {
   private var monitor: NWPathMonitor?
   private var background: UIBackgroundTaskIdentifier = .invalid
-  /// ADR 0052. The running continued processing task; typed as its iOS 13
+  /// ADR 0053. The running continued processing task; typed as its iOS 13
   /// superclass because a stored property cannot be of an iOS 26 type here.
   private var continued: BGTask?
   /// The identifier submitted last and not finished. A launch for any other is
@@ -63,7 +63,7 @@ public final class OpenReaderOfflineModule: Module {
         self.background = .invalid
       }
     }.runOnQueue(.main)
-    // ADR 0052: a download the owner started goes on away from the screen as
+    // ADR 0053: a download the owner started goes on away from the screen as
     // a continued processing task (iOS 26), shown in a Live Activity. False
     // below iOS 26 and on any refusal, which is logged; the caller then keeps
     // the bounded task above.
@@ -173,7 +173,7 @@ public final class OpenReaderOfflineModule: Module {
   /// On the main queue, where it was registered. The expiration handler is
   /// the phone ending the task, under pressure or at the owner's stop in the
   /// Live Activity; it cannot say which, and JavaScript takes both as the
-  /// owner's stop (ADR 0052). What is publicly visible as it ends is logged
+  /// owner's stop (ADR 0053). What is publicly visible as it ends is logged
   /// and sent with the event, so that an end the phone chose can one day be
   /// compared with the owner's: both of the owner's stops on 2026-09-28 logged
   /// dasd's private `reasons: 1048576` and `reason: 2`, and no end the phone

@@ -3,7 +3,7 @@ import { chapterTextCount, type DownloadTask, type NarrationPlan } from './model
 import { GOES_ON } from './pausing';
 
 /**
- * A download away from the screen (ADR 0052, #77).
+ * A download away from the screen (ADR 0053, #77).
  *
  * On iOS 26 and later, a download the owner starts or resumes on the screen, or
  * one that goes on by itself when the owner opens the app, is submitted as a

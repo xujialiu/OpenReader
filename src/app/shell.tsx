@@ -105,7 +105,7 @@ export function OpenReader() {
   }, [sync]);
   useEffect(() => { configureDownloads(settings); }, [settings]);
   useEffect(() => startDownloads(), []);
-  // The Live Activity of a download away from the screen names its Document as the Library does (ADR 0052).
+  // The Live Activity of a download away from the screen names its Document as the Library does (ADR 0053).
   const libraryEntries = library.entries;
   useEffect(() => { nameDocuments(libraryEntries); }, [libraryEntries]);
   /**

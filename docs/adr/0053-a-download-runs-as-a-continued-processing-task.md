@@ -4,7 +4,7 @@ status: accepted
 
 # A download the owner starts runs as a continued processing task
 
-_The product half is [design 0052](../design/0052-a-download-goes-on-when-you-leave-the-app.md).
+_The product half is [design 0053](../design/0053-a-download-goes-on-when-you-leave-the-app.md).
 Issue #77. It revises "iOS uses a bounded UIApplication background task" in
 [ADR 0027](0027-whole-document-offline-narration.md), which has an amendment
 pointing here. The measurement that opened the issue is in

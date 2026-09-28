@@ -17,7 +17,7 @@ interface OfflineNative {
   beginBackground(): Promise<boolean>;
   endBackground(): Promise<void>;
   /**
-   * The continued processing task of ADR 0052, iOS 26 and later: whether the
+   * The continued processing task of ADR 0053, iOS 26 and later: whether the
    * phone runs it now. False below iOS 26 and on any refusal, which the module
    * logs; the bounded background time is then what is left.
    */
@@ -28,7 +28,7 @@ interface OfflineNative {
   addListener(event: 'expired', listener: () => void): { remove(): void };
   /**
    * The phone ended the continued task: under pressure, or the owner stopped it
-   * in the Live Activity, which it cannot tell apart (ADR 0052). With what was
+   * in the Live Activity, which it cannot tell apart (ADR 0053). With what was
    * publicly visible as it ended, also logged, for a future comparison of the two.
    */
   addListener(event: 'continuedExpired', listener: (event: ContinuedEnded) => void): { remove(): void };

@@ -188,7 +188,7 @@ describe('ADR 0019: four screens, and a book can arrive from another app', () =>
   });
 });
 
-describe('ADR 0052: a download goes on away from the screen as a continued processing task', () => {
+describe('ADR 0053: a download goes on away from the screen as a continued processing task', () => {
   /** The plugin's Info.plist mod, run over a plain generated Info.plist with this app's own config. */
   async function run(plist: InfoPlist, ios: { bundleIdentifier?: string } = { bundleIdentifier: config.ios?.bundleIdentifier }): Promise<InfoPlist> {
     const base = { name: config.name, slug: config.slug, ios };

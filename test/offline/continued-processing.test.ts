@@ -3,7 +3,7 @@ import { continuedShown, createContinuedProcessing, type ContinuedNative, type C
 import type { DownloadTask, NarrationPlan } from '../../src/offline/model';
 
 /**
- * ADR 0052: what the phone shows for a download away from the screen, and when
+ * ADR 0053: what the phone shows for a download away from the screen, and when
  * the continued processing task is submitted, reported and finished. The rules
  * are a pure module with the native side doubled; `runtime-continued.test.ts`
  * checks the runtime's wiring of them.
