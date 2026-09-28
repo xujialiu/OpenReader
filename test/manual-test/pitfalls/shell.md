@@ -8,7 +8,7 @@
   installed. Run a long probe in the background and wait for it to finish
   instead.
 - **`$?` after a pipe is the pipe's last command.** `bash sync.sh … | tail -5;
-  echo $?` printed `0` for a test run that had failed. Redirect the script's
+  echo $?` (the wrapper `SyncProbe` had then) printed `0` for a test run that had failed. Redirect the script's
   output to a file and test its own status, or read `PIPESTATUS`.
 - **`lsof -p PID -d 1,2` lists other processes' files too.** `lsof` ORs its
   selectors, so that command prints every process's descriptors 1 and 2 as
@@ -49,7 +49,7 @@
   rather than waited out.
 - **After a failed test, the result bundle is not complete, and killing
   `xcodebuild` loses the attachments.** Measured 2026-09-22: `library-actions.sh`
-  ran both of its methods, one failed on a missing fixture at 01:21, and
+  (now `kit/run-probe.sh LibraryActionsProbe`) ran both of its methods, one failed on a missing fixture at 01:21, and
   `xcodebuild` was still collecting simulator diagnostics
   (`result.xcresult/Staging/1_Test/Diagnostics/simctl_diagnostics`) at 01:30.
   Killed then, it left `result.xcresult` with no `Info.plist`, and `xcresulttool
@@ -58,8 +58,8 @@
     result.xcresult/Data/data.*` says `PNG image data` for each, and the element
     trees are the `Zstandard compressed data` ones (`zstd -dc`). Their names are
     lost; tell them apart by the labels in the trees.
-  - Better, do not run a method that is going to fail: every runner now takes
-    `-only-testing:METHOD`, `library-actions.sh` included.
+  - Better, do not run a method that is going to fail: `kit/run-probe.sh` takes
+    `-only-testing:METHOD` for every probe.
 - **A runner called with no `-only-testing` died at once with `only_testing[@]:
   unbound variable`.** macOS's `/bin/bash` is 3.2, where `set -u` treats an empty
   array as unset, so "omit the arguments to run the whole class" never worked.
@@ -73,11 +73,11 @@
   matching elements found`. Use `.matching(identifier:).firstMatch`. Group
   headers are set as written since #48 (`Folder`, not `FOLDER`), so a probe
   that still names the capitals finds nothing.
-- **An `xcodebuild`-running wrapper script (`alignment.sh`-shaped) can exceed
+- **An `xcodebuild`-running script (`kit/run-probe.sh`, and the wrappers before it) can exceed
   the harness's own default command timeout and get moved to the background
   without being asked to.** Measured 2026-09-24 verifying #60: a
-  `pause-menu.sh` invocation covering three test methods ran past 120 s and was
-  silently backgrounded, and a retried `azure-provider.sh` call was piped
+  `pause-menu.sh` (`PauseMenuProbe`) invocation covering three test methods ran past 120 s and was
+  silently backgrounded, and a retried `azure-provider.sh` (`AzureProviderProbe`) call was piped
   through `tail`, whose own exit code masked the real `xcodebuild` failure
   underneath it (`$? after a pipe` above). Pass an explicit, generous
   `timeout` on the tool call itself for any wrapper expected to run more than

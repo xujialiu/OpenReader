@@ -52,7 +52,7 @@ Turn the simulator's volume all the way down **before** the first `play`, not
 after someone hears it. The simulator plays through the machine's own speakers,
 and this work happens at every hour.
 
-The simulator's volume, not the Mac's: `bash test/manual-test/silence.sh set
+The simulator's volume, not the Mac's: `bash test/manual-test/kit/silence.sh set
 SIMULATOR_UDID` sets that one device to zero and reads it back. **Never mute the
 machine.** The owner is listening to it while the test runs, and a machine that
 is muted for a test stays muted afterwards. A boot puts the device back to 60, so

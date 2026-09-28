@@ -247,8 +247,8 @@ subfolder), none of them the app being wrong.
   (`xcrun simctl help`, `xcrun simctl` with no arguments): no such
   subcommand exists. A background-and-remote-Play check can go as far as a
   real Home press plus Notification Centre's swipe (the same
-  `UIA.MediaControls.NowPlaying.CenterButton` surface `LockScreenProbe`/
-  `lock-screen.sh` read), reached from the Home Screen the same way
+  `UIA.MediaControls.NowPlaying.CenterButton` surface `LockScreenProbe`
+  reads), reached from the Home Screen the same way
   `testLockScreen` reaches it from inside the app. That establishes
   backgrounded behaviour; it does not establish behaviour under an actually
   locked screen, and a report that turns on this distinction should say which

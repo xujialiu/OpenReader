@@ -109,7 +109,7 @@ iPhone 17 simulator, iOS 27.0, `Cultivation Online 2001-2044.epub`, Fish Audio a
   replayed on a three-line sentence: 20 px in 199 ms, its middle 0.8 px from the
   target (01:44).
 
-`test/manual-test/line-follow.cjs` is the probe. The rules it pins are in
+`test/manual-test/place-and-following/line-follow.cjs` is the probe. The rules it pins are in
 `test/renderer/rules.test.ts` ("the page follows the line being spoken"), and the
 curve is in `test/renderer/glide.test.ts`, which evaluates `GLIDE_SOURCE`, the
 text the program runs.
@@ -477,7 +477,7 @@ and the existing `line-follow.cjs`/`fling-jump.cjs`, on "Cultivation Online."
 A review of the merged branch against #71 and the owner's decisions, and the
 device run above, left five things to change. Each was measured on "iPhone 17
 feat_scroll" (iOS 27.0), Cultivation Online 2001-2044, Fish "Laura" at 1.00×,
-with `test/manual-test/follow-fixes.cjs`; raw lines in
+with `test/manual-test/place-and-following/follow-fixes.cjs`; raw lines in
 `notes/NOTES_2026-09-26.md` from 15:57.
 
 - **Pause stops the page on its frame.** `HoldMessage` gains `stop`, sent by

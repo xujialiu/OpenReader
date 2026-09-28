@@ -88,7 +88,7 @@ only place a highlight changes, so that no later change can skip the repaint.
   well. The workaround stays, because the app supports iOS 17.2 onwards.
 - The Utterance highlight goes through the same `put()` and gets the same
   repaint when the reading moves from one sentence to the next.
-- `test/manual-test/leading-strip.sh` is the regression check, at the only seam
+- `test/manual-test/scrolling-and-theme/leading-strip.sh` is the regression check, at the only seam
   that sees painting: a screenshot. Its `app` mode drives this highlighter; its
   `page` mode is WebKit alone and says when a runtime has WebKit's own fix
   (no strip without `fix=1`).

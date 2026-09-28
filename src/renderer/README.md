@@ -358,7 +358,7 @@ repaint and never erased: #35, an amber strip above a word the voice had already
 left. So `put()`, the only function that changes a highlight, repaints the whole
 Block of every Range it takes out or puts in, through a Range over the Block's
 element in a Highlight that is never registered. A screenshot is the only thing
-that sees it; `test/manual-test/leading-strip.sh` takes one.
+that sees it; `test/manual-test/scrolling-and-theme/leading-strip.sh` takes one.
 
 ## What rests on running the app
 

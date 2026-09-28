@@ -596,7 +596,7 @@ describe('a highlight that moves takes all of itself with it (#35, ADR 0038)', (
    * never erased: on the owner's phone, an amber line above a word the voice had
    * already left. Nothing in a DOM shows it — the registry holds the right Range
    * the whole time — so these pin the lines that repaint the Block, and
-   * `test/manual-test/leading-strip.sh` photographs what they paint.
+   * `test/manual-test/scrolling-and-theme/leading-strip.sh` photographs what they paint.
    */
   it('repaints the Block of every Range it takes out and of every Range it puts in', () => {
     const put = fn(code('highlighter.ts'), 'put');
@@ -1271,7 +1271,7 @@ describe('every section the page shows is adopted, however fast it arrived (ADR 
    * library's own `rendered` listener could no longer throw.
    *
    * Structural, like the rest of this file: the fling, the queue and the hook
-   * chain live in Safari. `test/manual-test/scroll-theme.cjs` is the run that
+   * chain live in Safari. `test/manual-test/scrolling-and-theme/scroll-theme.cjs` is the run that
    * shows it on the device.
    */
   it('adopts from epub.js’s content hook, and not from its rendered event', () => {
@@ -1457,7 +1457,7 @@ describe('a section follow() asked for is centred after epub.js has placed it (#
    * `attach()` centred it from inside epub.js's content hook by scrolling 725 px,
    * and the same display then ran its own `moveTo` to the Block's CFI and scrolled
    * 958 px more. The sentence was painted and sat 724 px above the top of the
-   * screen. Structural, like the rest of this file; `test/manual-test/follow-probe.cjs`
+   * screen. Structural, like the rest of this file; `test/manual-test/place-and-following/follow-probe.cjs`
    * is the run that shows it on the device.
    */
   const program = highlighterSource();
@@ -1528,7 +1528,7 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
    * paused sentence as 14 arrived (`scrollBy -7424`, from
    * `centre<centreOnce<attach<sweep`). epub.js then trimmed 16 away, and the page
    * was back on the reading. Structural, like the rest of this file;
-   * `test/manual-test/browse-probe.cjs` is the run on the device.
+   * `test/manual-test/place-and-following/browse-probe.cjs` is the run on the device.
    */
   const program = highlighterSource();
   const dispatch = fn(program, 'dispatch');
@@ -1838,7 +1838,7 @@ describe('nothing above the page changes while the page moves (#58, ADR 0045)', 
    * page was kept every time.
    *
    * Structural, like the rest of this file: the fling and the dropped scroll
-   * live in iOS. `test/manual-test/fling-jump.cjs` is the run that shows it.
+   * live in iOS. `test/manual-test/scrolling-and-theme/fling-jump.cjs` is the run that shows it.
    */
   const epub = library('epubjs.js');
   const continuous = epub.slice(epub.indexOf('afterScrolledTimeout: 10,'), epub.indexOf('addScrollListeners() {', epub.indexOf('afterScrolledTimeout: 10,')));

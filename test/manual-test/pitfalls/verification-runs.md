@@ -38,7 +38,7 @@
   the same list rather than a bare `hit = null;` after a stray semicolon.
 - **`/tmp/openreader-*` is shared by every worktree on the machine, not just
   this one, and an existing `ManualTests.xcodeproj` there is reused as-is.**
-  `player-touch.sh` (like `line-position.sh`) only regenerates the project
+  `player-touch.sh` (like `kit/run-probe.sh`) only regenerates the project
   when `ManualTests.xcodeproj` does not already exist at the given path, so it
   can reuse one across runs for faster incremental builds. `/tmp/openreader-player-touch-02`
   already held a project from a same-named directory an unrelated `ui`
@@ -50,6 +50,9 @@
   at the time it was generated. Give every generated project a path that
   includes the worktree's own name (`/tmp/openreader-player-touch-feat-scroll-01`,
   not `-02`) rather than trusting a short numeric suffix to be free.
+  `kit/run-probe.sh` records the probe and the tree in `probe.txt` and refuses
+  a directory generated for another of either; the scripts with their own
+  build step do not.
 - **A `section` command sent while playing can take much longer than a few
   seconds to turn into an actual seek, if the target section has not rendered
   yet.** `goToSection` (`use-reading.ts`) calls `bridge.goToSection` at once

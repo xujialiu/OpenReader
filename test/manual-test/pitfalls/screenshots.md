@@ -230,7 +230,7 @@
   landing (2026-09-21), network round trip included, and one `.tap()` on a
   coordinate took **1.60 s** to dispatch — wider than the window it was aiming
   at. Point `sync.url` at the stalling stub (`slow-webdav.py`, **Against the
-  owner's real folder** in [../recipes/sync.md](../recipes/sync.md)) instead: the stub decides when the place
+  owner's real folder** in [../sync/README.md](../sync/README.md)) instead: the stub decides when the place
   arrives, so the tap can be scheduled against its delay.
 - **`press(.home)` pokes a sync of its own, so a timed tap's clock starts
   there.** `shell.tsx` pokes on `background` as well as on `active`, and
@@ -339,34 +339,35 @@
   app.launch()` rather than `app.activate()` avoids it pre-emptively — a
   fresh launch has logged no warning yet — which is cheaper than detecting
   and dismissing the banner on every later method.
-- **`offline-fix.sh`'s `-only-testing` argument is the bare method name; the
-  script prepends the class itself.** Passing
+- **A doubled or missing class in `-only-testing` runs nothing, and exits 0.**
+  `kit/run-probe.sh` now takes a method, `Class/method` or the full
+  `LockScreenProbe/Class/method` and builds the one path Xcode matches; what
+  follows was measured with the per-probe wrappers it replaced. Whichever
+  script runs it, confirm a real duration and `Executed N tests` in the log.
+  `offline-fix.sh` took the bare method name and prepended the class itself.
+  Passing
   `-only-testing:OfflineFixProbe/testConfigureFishProvider` (reasonable by
-  analogy with `reader.sh`'s own `-only-testing:LockScreenProbe/…/testX`
+  analogy with the old `reader.sh`'s own `-only-testing:LockScreenProbe/…/testX`
   examples elsewhere in this file) doubles the class —
   `LockScreenProbe/OfflineFixProbe/OfflineFixProbe/testConfigureFishProvider`
   — which matches no test. Measured 2026-09-22: `xcodebuild` still exited 0,
   in under a tenth of a second, having run nothing. Exit 0 is not evidence of
-  a pass here; use the README's own documented shape,
-  `-only-testing:testConfigureFishProvider`, and confirm a real duration
-  (seconds, not milliseconds) and an assertion count in `test.log`.
+  a pass here; confirm a real duration (seconds, not milliseconds) and an
+  assertion count in `test.log`.
 
-- **`download-ring.sh` has the same bare-method `-only-testing` contract.**
-  Passing `-only-testing:DownloadRingProbe/testReopenDownloadDrawer` makes the
+- **`download-ring.sh`, the wrapper `DownloadRingProbe` had, took the same
+  bare method name.** Passing `-only-testing:DownloadRingProbe/testReopenDownloadDrawer` makes the
   runner prepend the class a second time, yielding
   `LockScreenProbe/DownloadRingProbe/DownloadRingProbe/testReopenDownloadDrawer`;
   Xcode exits 0 after reporting zero executed tests. Measured 2026-09-22 while
-  restoring the final simulator screen. Use the documented
-  `-only-testing:testReopenDownloadDrawer` form, then confirm the test log shows
-  the method running and not only `Executed 0 tests`.
+  restoring the final simulator screen. Confirm the test log shows the
+  method running and not only `Executed 0 tests`.
 
-- **`two-finger.sh` and `pause-order.sh` require the class-qualified selector.**
-  Passing the bare `-only-testing:testDrawerManageSweepSelectsForDelete` form
-  leaves the wrapper's own `-only-testing:` prefix in the generated path, so
-  Xcode exits 0 after reporting zero executed tests. Use
-  `-only-testing:TwoFingerProbe/testDrawerManageSweepSelectsForDelete` (or the
-  matching `PauseOrderProbe/<method>` form), and confirm the test log names a
-  real test case.
+- **`two-finger.sh` and `pause-order.sh` required the class-qualified
+  selector.** Passing the bare `-only-testing:testDrawerManageSweepSelectsForDelete` form
+  left the wrapper's own `-only-testing:` prefix in the generated path, so
+  Xcode exited 0 after reporting zero executed tests. Both now go through
+  `kit/run-probe.sh`, which takes either form.
 
 - **A preserved simulator can violate a probe's documented fresh-fixture state.**
   `DownloadRingProbe` expects zero saved chapters and `PauseOrderProbe` expects
@@ -458,7 +459,7 @@
   (`label BEGINSWITH 'Actions for '`, the same marker `SyncProbe.openBook`
   uses), not a fixed tap count.
 - **A successful Settings version probe leaves the app on Settings.** On
-  2026-09-22 `settings-version.sh` passed, then a Library-based download probe
+  2026-09-22 `SettingsVersionProbe` passed, then a Library-based download probe
   could not find `More actions` because the accessibility tree still showed
   Settings. Relaunch OpenReader before the next Library-based probe, or tap
   Settings' `Library` navigation button explicitly.
@@ -493,7 +494,7 @@
   On 2026-09-22 the download simulator showed `1 chapters downloaded` and the
   catalog held 10 of 17 clips, so a probe requiring `2 chapters downloaded`
   failed before exercising its target control. Inspect the drawer first, then
-  complete the missing chapter with `offline.sh ... download` or use a probe
+  complete the missing chapter with `OfflineProbe`'s `download` mode or use a probe
   whose expected count matches the fixture; back up and restore the offline
   directory when the run must preserve the starting state.
 - **A failed XCTest can remain in `simctl diagnose` long after its assertions
@@ -760,7 +761,7 @@
 - **The same banner covers the player's `Contents` button, and a dev client
   that lost Metro for a moment raises it.** Measured 2026-09-24 13:50
   (`LineColourProbe`, #29): the Contents drawer never opened, and the next
-  step failed "No drawer to close". `node test/manual-test/cdp.cjs --warnings`
+  step failed "No drawer to close". `node test/manual-test/kit/cdp.cjs --warnings`
   read the one warning behind it: `Cannot connect to Expo CLI … URL:
   localhost:8091 … Error: undefined`, while that Metro answered
   `packager-status:running` throughout. A terminate and launch cleared it and
@@ -771,7 +772,11 @@
   assertion failures, and xcodebuild exited at 13:31:34 after
   `IDETestOperationsObserverDebug: Failure collecting diagnostics from
   simulator: Timed out after 600.0 seconds`. `-collect-test-diagnostics never`
-  on the `xcodebuild test` line skips it; `line-colour.sh` passes it.
+  on the `xcodebuild test` line skips it; `line-colour.sh` passes it. It does
+  not happen every time: on 2026-09-29, `kit/run-probe.sh NativeReferenceProbe`
+  failed twice in the same directory on iPhone 17e (iOS 27.0); xcodebuild
+  returned 91 s after the first run started, and the second waited the full
+  ten minutes after its failure at 05:16:01.
 - **Retrying a failed download test against the same fixture inherits its
   partial progress**, because saved audio and task state are persisted
   (SQLite) and reloaded on the next launch, not reset by
@@ -804,7 +809,7 @@
   "Issues #13/#14" section describes seeding it once through
   `identifyDocument`/`serializeLibrary` directly, as a one-time step on the
   original device; a later, different device needs it seeded again.
-  `test/manual-test/short-test-fixture.ts` generates the same two chapters
+  `test/manual-test/fixtures/short-test-fixture.ts` generates the same two chapters
   and 17 utterances, for loading through the walkthrough harness's `add`
   command instead (README, "Real books") — an equally direct, non-picker
   path, proven working 2026-09-24.

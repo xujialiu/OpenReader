@@ -179,7 +179,7 @@ Purely visual checks do not require playback. When audio is needed, turn that
 simulator's own volume all the way down first — never the Mac's:
 
 ```bash
-bash test/manual-test/silence.sh set SIMULATOR_UDID
+bash test/manual-test/kit/silence.sh set SIMULATOR_UDID
 ```
 
 The device must already be booted, and a boot resets it to 60, so set it after

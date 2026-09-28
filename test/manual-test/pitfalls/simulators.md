@@ -50,12 +50,12 @@
   read 0 during setup. Set it back to zero, check again in the same command
   chain, and do not play until that check succeeds; this run then stayed at
   zero throughout.
-- **A manual-test wrapper may not be executable.** On 2026-09-25,
-  `test/manual-test/library-open.sh` returned shell `permission denied` before
-  creating its XCTest project. Invoke the existing wrapper with `bash
-  test/manual-test/library-open.sh …` when its mode lacks the executable bit.
+- **A manual-test script may not be executable.** On 2026-09-25,
+  `library-open.sh` (the wrapper `LibraryOpenProbe` had then) returned shell
+  `permission denied` before creating its XCTest project. Invoke scripts here
+  with `bash …` or `node …` rather than relying on their mode.
 - **A refused XCTest can leave a recording that reads GREEN.** After the
-  00:09:11 reset, the next `scroll-theme-reader.sh` on `iPhone 17 bug_2`
+  00:09:11 reset, the next `scroll-theme-reader.sh` (`ScrollThemeReaderProbe`) on `iPhone 17 bug_2`
   refused it (exit 2) and ran no flings, which `white-flash.sh fling` reported
   as `XCTest failed`. `set`, relaunch the app, and run again. The reset recurred the same
   night, 01:06, independently verifying #27 on the same device: three

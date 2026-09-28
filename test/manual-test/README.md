@@ -1,10 +1,13 @@
 # Device and manual tests
 
-Before writing a script, inspect this directory and reuse or extend the relevant
-one. Save useful new reproduction, inspection and verification scripts here as
-soon as they work. Document the invocation, prerequisites, expected result and
-what the script cannot prove. One-off probes may stay temporary; a working tool
-needed for the next run belongs here.
+Everything here runs by hand against a simulator or a phone, outside Vitest.
+Before writing a script, find the feature's area below and read its README: it
+is the recipe for how that feature was tested, and every script, Swift probe and
+analyser it uses sits beside it. Reuse or extend one before writing another.
+Save a useful new reproduction, inspection or verification script in its area
+as soon as it works, and add to that area's README its invocation,
+prerequisites, expected result and what it cannot prove. One-off probes may stay
+temporary; a working tool needed for the next run belongs here.
 
 Keep generated Xcode projects, builds, logs and screenshots outside the
 repository. Accept device IDs and artifact destinations as arguments. Load only
@@ -13,11 +16,30 @@ Follow the simulator installation guide, MEMORY/device-testing.md's silence and 
 requirements, and MEMORY/app-change.md's final-running-app requirement. Choose playback duration for the fact being
 measured, and stop immediately afterwards, including after failures.
 
+## Layout
+
+- `kit/`: what every area uses. Among it are `run-probe.sh`, which runs any
+  XCTest probe, `silence.sh`, `lock-device.sh`, `cdp.cjs`, `hx.cjs` and
+  `reading.cjs`. [kit/README.md](kit/README.md) lists them all.
+- `fixtures/`: the EPUB generators ([fixtures/README.md](fixtures/README.md)).
+- One folder per area (**Areas** below): its `README.md` and the scripts,
+  `*Probe.swift` files and analysers it uses.
+- `pitfalls/`: what went wrong and what fixed it, by tool rather than by area.
+- `archive/`: superseded experiments kept because a recipe or the engineering
+  log cites them ([archive/README.md](archive/README.md)).
+
+Any XCTest probe runs the same way, and a new one is only its Swift file in its
+area's folder:
+
+```sh
+bash test/manual-test/kit/run-probe.sh AlignmentProbe SIMULATOR_UDID /tmp/openreader-alignment-01 -only-testing:METHOD
+```
+
 ## Silence the simulator, never the Mac
 
 ```sh
-bash test/manual-test/silence.sh set SIMULATOR_UDID     # that device to zero, read back
-bash test/manual-test/silence.sh check SIMULATOR_UDID   # exit 2 unless it is zero
+bash test/manual-test/kit/silence.sh set SIMULATOR_UDID     # that device to zero, read back
+bash test/manual-test/kit/silence.sh check SIMULATOR_UDID   # exit 2 unless it is zero
 ```
 
 This writes `sim_volume` in that one device's own
@@ -37,7 +59,7 @@ reported `outputVolume=0.0`. The Mac's own volume was not touched for either.
 Three properties decide how to use it, all of them in [pitfalls/simulators.md](pitfalls/simulators.md): a boot
 resets it to 60, an app takes the value when it activates its audio session, and
 a shut-down device has no file at all. So: boot, `set`, then launch the app.
-`lock-screen.sh` (tap mode), `reading.cjs play-for`, `voice-playback.cjs` and
+`kit/run-probe.sh` (every XCTest probe), `reading.cjs play-for`, `voice-playback.cjs` and
 `offline-playback.cjs` all `check` it before they play.
 
 ## Real books
@@ -76,17 +98,19 @@ What has gone wrong before, and what fixed it, one file per area. Before using a
 - [A download away from the screen](pitfalls/background-downloads.md): the simulator's bounded background time; the continued processing task's log lines (#75, #76, #77); polling every preparation, the lock's flicker and the continued task, a hotspot's `waiting`.
 - [Merges, seeding and past verification runs](pitfalls/verification-runs.md): Merging main's #67 and #68 into #71 (2026-09-26); Verifying #71 batch 2; Seeding a real book's place through the harness (#68); Independent verification of the collapsed player and its edge swipe (#67); Verifying #71 batches 3 and 4 (2026-09-26); Verifying #75: a download beside a Reading (2026-09-28).
 
-## Recipes
+## Areas
 
-How a feature was tested, with its scripts and probes, one file per area. Read the file for the feature you are testing before writing a new script; add a new recipe to the file for its area.
+How each feature was tested, with its scripts and probes, one folder per area.
+Read the area's README before writing a new script, and add a new recipe to it.
 
-- [The lock screen and the playback icon](recipes/lock-screen.md): Lock-screen screenshot and button inspection; The lock screen's playing state on a physical iPhone; Inspect the simulator's playback icon resource.
-- [Runtime warnings, expressions and the reading handler](recipes/runtime.md): Read runtime warnings or evaluate a targeted expression; Inspect, stop or briefly exercise the reading handler.
-- [The collapsed player and the held Reading](recipes/player-and-reading-held.md): The collapsed player, the navigation bar and the Reading Button (#67); The Reading held in the Library (#68); The Reading held on a real, long book (#68); Disabling the active Provider while a Reading is held (#68, handler probe); A real collapse and reopen during live playback (#71, `player-touch.sh`).
-- [Reader drawers, the Library and the XCTest probes](recipes/drawers-library-and-probes.md): Cold Library opening; Offline narration and reader actions; The download ring, pausing, and Manage downloads' listed-chapters rule (#37, #38, #56); A download away from the screen, and beside a Reading (#75, #76, #77); A Reading paused and played with the phone locked, and the drawer beside a Reading (#75); Two fingers: Files' own selection, and the download drawer's copy (#57); Paused sentence seeking after background receipt; Fish regional picker, actual simulator touch; Library and reader actions drawer (long press, '...', Delete); General, Theme, brackets, Manage-downloads delete-all, and Fonts; The Settings version line, rows above it, and both themes (issue #30, `SettingsVersionProbe.swift`); Long-press lookup and translation (issue #73, `TranslationProbe.swift`); Fish narration interruption coverage (issue #73, `FishNarrationProbe.swift`); Issues #13/#14: a fresh Library, Fish from empty settings, and the two; destructive confirmations the other probes always cancel; Pinch and double tap on the reading page (#79, `zoom.sh`, `ZoomProbe.swift`).
-- [Settings screens](recipes/settings.md): Settings against the phone's own Settings (#48, design 0042); Font Size against Documents that set their own sizes (#17); Text Alignment and the menu it opens (#32, #33); The two Pauses: General's Reading aloud card, and the gap itself (#60, ADR 0047); General's Line position row (#71, `line-position.sh`, `LinePositionProbe.swift`).
-- [Sync](recipes/sync.md): Sync: the Sync screen, the switch, and places crossing devices (#20).
-- [Voices, providers and what is sent](recipes/voices-and-providers.md): Voice lists at start (#24); Short lines, brackets and the Fish language hint (#23, #25); Azure Speech: configuration, the voice sheet, and word-level highlighting (#39); Sentence or paragraph requests (#61, `context-probe.ts`); Several sentences at once (#64, `download-concurrency.ts`).
-- [Scrolling, flings and theme colours](recipes/scrolling-and-theme.md): A moved highlight leaves a strip behind (#35, `leading-strip.sh`); A chapter left unstyled by a fast fling (#34); A white page behind the dark reader: on opening, and in a long fling (#27); A fast scroll that jumps by whole chapters and shows an empty page (#58); A drawer's lines in the other theme's colour (#29, `line-colour.sh`); A live theme change with a drawer already open (#29, `live-theme-drawer.sh`).
-- [The reading place and the page following it](recipes/place-and-following.md): Reading across the end of a downloaded chapter, and a place kept across a renumbering (#26, #45, #46); Play with the page scrolled away, and a place on a chapter heading (#50, #51); A Contents row while paused only moves the page (#52); The page follows the line being spoken (#71, `line-follow.cjs`); A real drag during a live glide (#71, `glide-touch.cjs`, `GlideTouchProbe.swift`); The Following mark, the way back, the collapsed lock, and Continuous (#71 batches 3/4, `FollowingProbe.swift`, `hx.cjs`, `continuous-follow.cjs`); The review fixes: a pause, a re-cue, a Block crossing (#71, `follow-fixes.cjs`).
-- [Native audio queue (#63)](recipes/native-audio-queue.md): Native queue position versus actual rendered audio (#63); Output-driven audio/position prototype (#63, validation only); Production output-driven queue (#63).
+- [Downloads and offline narration](downloads/README.md): Offline narration and reader actions; Issues #13/#14: a fresh Library, Fish from empty settings, and the two destructive confirmations the other probes always cancel; The download ring, pausing, and Manage downloads' listed-chapters rule (#37, #38, #56); A download away from the screen, and beside a Reading (#75, #76, #77); A Reading paused and played with the phone locked, and the drawer beside a Reading (#75); Two fingers: Files' own selection, and the download drawer's copy (#57); Several sentences at once (#64, `download-concurrency.ts`).
+- [The Library and the reader](library-and-reader/README.md): Cold Library opening; Library and reader actions drawer (long press, '...', Delete); Long-press lookup and translation (issue #73, `TranslationProbe.swift`); Pinch and double tap on the reading page (#79, `zoom.sh`, `ZoomProbe.swift`).
+- [Voices, providers and what is sent](voices-and-providers/README.md): Voice lists at start (#24); Short lines, brackets and the Fish language hint (#23, #25); Azure Speech: configuration, the voice sheet, and word-level highlighting (#39); Sentence or paragraph requests (#61, `context-probe.ts`); The reader's sheets and the voice handover (`ReaderProbe.swift`, `voice-playback.cjs`); Paused sentence seeking after background receipt; Fish regional picker, actual simulator touch; Fish narration interruption coverage (issue #73, `FishNarrationProbe.swift`).
+- [Settings screens](settings/README.md): Settings against the phone's own Settings (#48, design 0042); Font Size against Documents that set their own sizes (#17); Text Alignment and the menu it opens (#32, #33); The two Pauses: General's Reading aloud card, and the gap itself (#60, ADR 0047); General's Line position row (#71, `LinePositionProbe.swift`); General, Theme, brackets, Manage-downloads delete-all, and Fonts; The Settings version line, rows above it, and both themes (issue #30, `SettingsVersionProbe.swift`).
+- [The reading place and the page following it](place-and-following/README.md): Reading across the end of a downloaded chapter, and a place kept across a renumbering (#26, #45, #46); Play with the page scrolled away, and a place on a chapter heading (#50, #51); A Contents row while paused only moves the page (#52); The page follows the line being spoken (#71, `line-follow.cjs`); A real drag during a live glide (#71, `glide-touch.cjs`, `GlideTouchProbe.swift`); The Following mark, the way back, the collapsed lock, and Continuous (#71 batches 3/4, `FollowingProbe.swift`, `hx.cjs`, `continuous-follow.cjs`); The review fixes: a pause, a re-cue, a Block crossing (#71, `follow-fixes.cjs`).
+- [The collapsed player and the held Reading](player-and-reading-held/README.md): The collapsed player, the navigation bar and the Reading Button (#67); The Reading held in the Library (#68); The Reading held on a real, long book (#68); Disabling the active Provider while a Reading is held (#68, handler probe); A real collapse and reopen during live playback (#71, `player-touch.sh`).
+- [Scrolling, flings and theme colours](scrolling-and-theme/README.md): A moved highlight leaves a strip behind (#35, `leading-strip.sh`); A chapter left unstyled by a fast fling (#34); A white page behind the dark reader: on opening, and in a long fling (#27); A fast scroll that jumps by whole chapters and shows an empty page (#58); A drawer's lines in the other theme's colour (#29, `line-colour.sh`); A live theme change with a drawer already open (#29, `live-theme-drawer.sh`).
+- [The lock screen and the playback icon](lock-screen/README.md): Lock-screen screenshot and button inspection; The lock screen's playing state on a physical iPhone; Inspect the simulator's playback icon resource.
+- [Sync](sync/README.md): Sync: the Sync screen, the switch, and places crossing devices (#20).
+- [Native audio queue (#63)](native-audio/README.md): Native queue position versus actual rendered audio (#63); Output-driven audio/position prototype (#63, validation only); Production output-driven queue (#63).
+- [The kit](kit/README.md): Run an XCTest probe; Read runtime warnings or evaluate a targeted expression; Inspect, stop or briefly exercise the reading handler.
