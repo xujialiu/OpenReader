@@ -766,6 +766,10 @@ ${constants}
   var touchId = null;
   var touchY = null;
   var touchTop = null;
+  /* Whether the gesture on the page has had two fingers on it: a pinch, which
+     does nothing here (#79). Set by the second finger, and cleared only by the
+     first finger of the next gesture. See landed. */
+  var pinched = false;
   /* Further than a tap's jitter: a finger that moves this far is not tapping. */
   var DRAG_PX = 10;
 
@@ -1105,6 +1109,12 @@ ${constants}
        finger at all, so a finger moving on it neither stops a glide nor browses:
        lockPage() has already made its scroll the program's alone. */
     if (followOnly) return;
+    /* A pinch neither browses nor stops a glide: the page does not answer two
+       fingers at all (#79, design 0052). The page cannot be magnified either;
+       its viewport says so. For the whole gesture, so the finger left after the
+       other lifts is not taken for a drag of its own. */
+    if (event.touches && event.touches.length > 1) pinched = true;
+    if (pinched) return;
     var touch = event.touches && event.touches.length ? event.touches[0] : null;
     if (!touch) return;
     halt();
@@ -1127,6 +1137,16 @@ ${constants}
        screen's and has none in it. */
     var scrolled = event.currentTarget === stage ? 0 : top - touchTop;
     if (Math.abs(touch.clientY - touchY - scrolled) > DRAG_PX) setBrowsing(true);
+  }
+
+  /* A finger comes down on the page. The first finger of a gesture begins it
+     unpinched; a second one, while the first is still down, makes it a pinch
+     until every finger has lifted and a new gesture begins (#79). \`touches\` is
+     every finger down, the one landing included. Passive, like every touch
+     listener here. */
+  function landed(event) {
+    var count = event.touches ? event.touches.length : 0;
+    pinched = count > 1;
   }
 
   /* Browsing starts or ends, and the player's A or M is told — once, when it
@@ -1189,6 +1209,8 @@ ${constants}
     /* And a finger dragging this document's text is Browsing, and a finger
        moving on it at all stops a glide: see dragged. */
     contents.document.addEventListener('touchmove', dragged, { passive: true });
+    /* And a second finger landing makes the gesture a pinch: see landed. */
+    contents.document.addEventListener('touchstart', landed, { passive: true });
 
     var index = contents.sectionIndex;
     var section = null;
@@ -2613,6 +2635,7 @@ ${constants}
      dragged. The container is built with the manager and lives as long as it. */
   var stage = scroller();
   if (stage) stage.addEventListener('touchmove', dragged, { passive: true });
+  if (stage) stage.addEventListener('touchstart', landed, { passive: true });
   /* The page's own scroll, which is how the program knows it moves; and the
      manager whose trims and prepends wait for it to stop (#58). */
   if (stage) stage.addEventListener('scroll', noteScroll, { passive: true });

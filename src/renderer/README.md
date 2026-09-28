@@ -122,6 +122,12 @@ Eight properties of the following, and each is a rule rather than an accident.
   the WebView's flag: displaying the section after next re-rendered the
   reading's own section as a neighbour, and `attach()` took the page to the
   paused sentence as it arrived (−7,424 px, measured 2026-09-23 23:30).
+  A gesture with two fingers on the page, a pinch, neither browses nor stops a
+  glide (#79, design 0052). `landed`, a passive `touchstart` listener beside
+  `dragged`, marks the gesture a pinch when a second finger lands, and
+  `dragged` ignores it until the next gesture's first finger. The page cannot
+  be magnified either: the patched template's viewport is
+  `maximum-scale=1.0, user-scalable=no`.
 - **What clears it** (#71, Zotero-TTS's rule). A revealed highlight — the first
   cue after Play, a tapped sentence, a skip, a place from another device; M
   (`return`); the player collapsing (`followOnly`); and, by itself, a cue the
