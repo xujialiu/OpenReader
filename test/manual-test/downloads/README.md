@@ -1,30 +1,6 @@
-# Reader drawers, the Library and the XCTest probes
+# Downloads and offline narration
 
-## Reader drawers and voice loading
-
-### Cold Library opening
-
-With the latest installed Debug app connected to Metro and the named Document
-already in Library:
-
-```sh
-bash test/manual-test/kit/run-probe.sh LibraryOpenProbe SIMULATOR_UDID /tmp/openreader-library-open-01 --mode '仙逆'
-```
-
-This restarts the app to discard debugger overrides and in-memory caches,
-physically taps the named Library row, and requires the reading player within
-15 seconds. It captures the resulting UI and returns nonzero on failure. The
-threshold detects issue #7's blocked opening; passing does not prove that every
-chapter rendered. It never starts playback, modifies downloads, or supplies
-credentials. Normal opening may update the Library's last-opened timestamp.
-For comparison, run it with `A Short Test of Reading Aloud`. After a failed
-opening that leaves the app unresponsive, restart it with `xcrun simctl` to
-return to Library. Issue #7's original JSON plan was discarded with the owner's
-explicit approval. Verify this path with fresh SQLite data as well as a large
-prepared SQLite plan; a fresh empty store alone does not establish the absence
-of per-text work. The catalog tests also cover 131,686 prepared texts.
-
-### Offline narration and reader actions
+## Offline narration and reader actions
 
 Current offline data lives in `Documents/offline-narration-v2`, including
 `catalog.sqlite` and any SQLite WAL/SHM files. The unreleased JSON store was
@@ -66,54 +42,102 @@ This reuses `cdp.cjs` to reject all fetches, temporarily disable the fixture's F
 
 `OfflineProbe`'s `background` mode presses Home, waits 40 seconds to cover the bounded UIKit background-task window, then returns to the app without playback. Use it with a controlled queued task and observe the persisted task state from the host; the UI test alone proves only that the app can be left and reopened, not that synthesis continued or resumed.
 
-With the latest Debug app connected to Metro and the existing fixture Document
-`A Short Test of Reading Aloud` in the Library:
+## Issues #13/#14: a fresh Library, Fish from empty settings, and the two destructive confirmations the other probes always cancel
+
+`OfflineFixProbe.swift` covers what none of the other probes do: a device that has
+never had a provider configured or a document downloaded, and actually
+confirming (not cancelling) "Delete all saved audio" and "Delete this book".
+It expects two fixtures already in the Library: `A Short Test of Reading
+Aloud` and a second, single-utterance document titled `OpenReader Deletion
+Fixture` (one paragraph, one chapter named `Only Chapter`), used so the
+destructive checks below have a document to spend rather than the shared
+short fixture. Neither fixture's Library entry is written by this probe; both
+were added directly (`library.json` plus `Documents/library/<id>.epub`) using
+the project's own `identifyDocument`/`serializeLibrary` via `tsx`, which is
+the reliable way to seed a fixture Document without reconstructing the
+picker flow — a script that does this is not checked in here since it is a
+one-time setup step, not a repeated verification.
 
 ```sh
-bash test/manual-test/kit/run-probe.sh ReaderProbe SIMULATOR_UDID /tmp/openreader-reader-01
+printf '%s' "$FISH_API_KEY" > /tmp/openreader-fish-key.txt && chmod 600 /tmp/openreader-fish-key.txt
+bash test/manual-test/kit/run-probe.sh OfflineFixProbe SIMULATOR_UDID /tmp/openreader-offline-fix-01 \
+  -only-testing:testConfigureFishProvider
 ```
 
-This reuses the disposable XCTest project builder. It opens the Document if
-needed, drags all four handles/title regions, checks that Voice and Speed have
-no Done button, and checks a paused voice choice stays open when the fixture's
-Sarah/Adrian rows are present. It never presses Play. Inspect exported screenshots
-as well as assertions. It leaves the reader paused. The optional voice choice
-check restores Sarah; use this on the fixture document, not the owner's reading.
+Real touches: Settings → Providers → Fish Audio, types the key read from
+`/tmp/openreader-fish-key.txt` (never printed, logged or checked in — write
+it there from `~/.secrets/openreader/` per MEMORY/device-testing.md before this method runs, `chmod 600`
+it, and remove it afterward) into the still-masked field, taps Enable, and
+waits for "Connection successful". `Show API key` is never tapped, so no
+capture here can show it. Skips the enable step if a previous run already
+left the provider enabled.
 
-For deterministic transport/handover checks, first silence the simulator with
-`silence.sh set`, open the fixture Document, and open Voice once so its Fish list is loaded. Fish
-must already be enabled with its key in the app. No credential is read by or
-printed from the test script. The first eight list entries supply distinct
-choices; an English fixture supplies the test text.
+**A successful Fish connection check can still leave Voice empty on the next cold reader.** Measured 2026-09-26 on the dedicated iPhone 17: the connection row passed, but `testChooseVoiceForShortFixture` found no rows after a relaunch. Sending the walkthrough commands `{"do":"ask","provider":"fish"}` and then `{"do":"voicelist","provider":"fish","n":3}` after the reader was open populated the cached list; the next real Voice touch found `jjk narrator`. Treat an empty Voice sheet after a successful key check as a list-prefetch failure and ask the provider again before testing narration.
 
-```sh
-node test/manual-test/voices-and-providers/voice-playback.cjs SIMULATOR_UDID /tmp/openreader-reader-01
-node test/manual-test/voices-and-providers/voice-playback.cjs SIMULATOR_UDID /tmp/openreader-touch-01 touch
-```
+`testChooseVoiceForShortFixture` opens the short fixture and taps whichever
+Fish voice sorts first (this is a download/playback mechanics check, not a
+locale-picker test — `ReaderProbe`'s `fish` mode already covers real navigation to a
+specific locale, `voices-and-providers/README.md`). Choosing while paused leaves the sheet open by design
+(`ReaderProbe.testReaderSheets`); dismissal is `Close Voice`, the same
+full-bleed backdrop button as `Close Download`/`Close Appearance`, not the
+drag gesture `ReaderProbe` uses for the same result. Because a Voice choice
+also becomes the settings default, this is the only document that needs it:
+the mini fixture's first open inherits the same voice.
 
-The first command requires an existing screenshot directory. It replaces only
-Fish synthesis responses in the running process with delayed silent WAVs and
-word timestamps. The actual provider parser, native audio graph, reader clock,
-React handlers and persistence callbacks run. Assertions cover initial loading,
-pause before receipt without abort, same-Utterance word handover, latest choice
-wins, failure rollback, next-Utterance fallback without timings, and pausing a
-pending handover until the next Play. Each playback interval stops on its checked
-transition, with an eight-second watchdog. It reports durations in milliseconds.
-This is a handler probe, not a touch test or a test of live provider audio quality.
+`testDownloadShortFixture` and `testDownloadMiniFixture` select all and
+download for real (real Fish Audio spend: 17 utterances, then 1). Expected:
+the task completes on its first attempt, including its very first write into
+a brand-new voice directory. Before #15 both failed once there, in this order,
+with "Needs attention · The saved audio could not be verified." and recovered
+on `testRetryBlockedShortFixture` (taps `Continue`): `saveClip` read the
+payload's size without awaiting expo-file-system's asynchronous `move`, so the
+sidecar recorded `size: null` and no payload survived (ADR 0027). A pass here
+is one sample of a timing, not proof of the order; the faithful `move` in
+`test/offline/storage.test.ts` is what holds it. To check a run, compare the
+sidecar's `size` with the payload's bytes on disk. For a fresh directory
+without spending on the short fixture, run `testDeleteAllSavedAudioReal`
+against the mini fixture first: it removes that document's directory, so the
+next `testDownloadMiniFixture` writes into a new one.
 
-The `touch` command uses a **new** artifact directory. It installs a five-second
-reply delay and runs `ReaderProbe` in its `loading` mode to press Play, inspect the
-spinner, and physically tap it to pause before any reply arrives. It then checks
-that audio still arrives and the app remains paused. Do not run loading mode by
-itself: it depends on the fixture and watchdog installed by the outer script.
+`testDeleteAllSavedAudioReal` and `testDeleteThisBookReal` are the
+actually-confirm versions of `GeneralFontsProbe.testManageDownloadsDeleteAll`
+and `LibraryActionsProbe`'s Delete-row check, which both cancel by design.
+Run against the mini fixture only — never the short fixture, which stays
+intact for the other checks. `testDeleteThisBookReal` removes the Library
+entry; **the underlying `Documents/library/<id>.epub` file is not deleted**
+(`use-library.ts`'s `remove` only filters the entries array), which is a
+separate, minor, pre-existing orphaned-file observation, unrelated to #13/#14,
+and incidentally why restoring the entry afterward needs only a `library.json`
+edit.
 
-Both modes restore fetch, the original voice and speed, close the sheet and
-pause in `finally`. They use Metro's existing CDP inspection approach; they add
-no test hooks to production app code. Do not edit app code while a probe runs:
-Fast Refresh can replace the state being inspected. Restart the app afterwards
-to remove all temporary debugger globals and verify final delivery separately.
+`testReaderRespondsPromptlyAfterInterrupt` and `testSeekToSecondChapter`
+support the interrupted-removal check: confirming Play responds in about a
+second when launched right after a hand-applied `removals` marking transaction
+for a *different* document, and moving the reading position into the short
+fixture's second chapter (whose audio survives a chapter-deletion check)
+without using Contents — this fixture's nav/spine mismatch (documented in
+`library-and-reader/README.md`, `LibraryActionsProbe`) makes every Contents row inert here too, so the
+position is moved with ten `Player.onSkip('next-sentence')` handler calls
+instead of a tap.
 
-### The download ring, pausing, and Manage downloads' listed-chapters rule (#37, #38, #56)
+`testDownloadDrawerShowsUpgradeMessage` and `testNetworkReadingHighlightMoves`
+cover the store-failure fallback: with the stopped app's `catalog.sqlite` at
+`PRAGMA user_version = 2`, the Download drawer shows "Update the app to read
+this offline database." (twice — once as the chapter-list load error, once as
+`downloads.downloadError()`) with `Download selected` disabled, and Play still
+reads the current chapter over the network, with the same message repeated
+inline as a reader notice ("Saved audio could not be checked: Error: …").
+Two screenshots 2.5 seconds apart are the evidence the word highlight actually
+advances rather than just appearing once; neither mode presses Play for
+longer than establishing that.
+
+None of these methods restore anything themselves (no in-place undo of a
+delete, no PRAGMA restore, no backup/restore of the offline directory or
+`library.json`) — every destructive one expects the caller to have backed up
+first and to restore afterward, the same division of labour as `management`
+mode above.
+
+## The download ring, pausing, and Manage downloads' listed-chapters rule (#37, #38, #56)
 
 With a fresh Library (no provider configured, no saved audio) holding only `A
 Short Test of Reading Aloud`, and the Fish key staged at
@@ -224,7 +248,7 @@ three still paused and five finished without a tap, resumes three and
 finishes the download. Real spend: 19 short utterances across five chapters,
 a fraction of `DownloadRingProbe`'s per-run cost.
 
-### A download away from the screen, and beside a Reading (#75, #76, #77)
+## A download away from the screen, and beside a Reading (#75, #76, #77)
 
 `download-away.cjs` hands chapters to the runtime's `enqueue`, waits for the
 first ten clips, then takes the app away for `AWAY_SECONDS` and brings it
@@ -334,7 +358,7 @@ artifacts in `/tmp/openreader-final-sim/`:
 | `download-away.cjs playlock` 120 s, fresh nav.229–232 | three chapter boundaries 2.6, 52.8 and 109.7 s after `background`, all prepared ahead 40 s before the lock; no `expired` in 155.8 s; never `interrupted` |
 | `download-lock-at.cjs … left:30`, nothing played, new process | next chapter 17.5 s after `background`; `expired` 27.0 s after it, `interrupted` 0.12 s later with no error; `downloading` 0.25 s after the return |
 
-### A Reading paused and played with the phone locked, and the drawer beside a Reading (#75)
+## A Reading paused and played with the phone locked, and the drawer beside a Reading (#75)
 
 Four more tools, all against a running app (none relaunches it), with
 `OPENREADER_METRO=http://127.0.0.1:PORT`:
@@ -399,7 +423,7 @@ What these cannot show: a phone's own background time, whether a phone ends
 it while a Reading plays or after one is paused (#77), and anything about
 Speechify's queue, which is unit-tested and was not spent on.
 
-### Two fingers: Files' own selection, and the download drawer's copy (#57)
+## Two fingers: Files' own selection, and the download drawer's copy (#57)
 
 `TwoFingerProbe.swift` makes two-finger drags (see **Pitfalls › XCTest**) and
 `two-finger.sh` runs it. Files first needs rows to sweep: launch Files once on
@@ -463,373 +487,63 @@ and a collapsed volume's sweep behaviour on a device, since no book in
 every part's `toc.ncx` is one flat level) — `range-selection.test.ts` is the
 only coverage of that rule.
 
-### Paused sentence seeking after background receipt
+## Several sentences at once (#64, `download-concurrency.ts`)
 
-With the same silenced simulator, fixture Document and loaded Fish list as above:
-
-```sh
-mkdir -p /tmp/openreader-paused-seek-01
-node test/manual-test/voices-and-providers/voice-playback.cjs SIMULATOR_UDID /tmp/openreader-paused-seek-01 paused-seek
-```
-
-This mode pauses before the delayed silent audio arrives, waits for the native
-queue, then sends text-tap messages for the current and next sentences through
-the real reader bridge. It samples the actual WebView CSS highlights across two
-300 ms fixture-word intervals: the sentence must remain highlighted with no word
-range. Each Play must then highlight the selected sentence's first word, and
-playback stops immediately after that observation, with the existing watchdog
-and cleanup paths as backup. Screenshots are saved for both paused selections.
-
-The temporary diagnostic receiver survives React updates and consumes only the
-probe's responses; other renderer errors keep their normal reporting path.
-Restart the app afterwards to discard all debugger state. This is a bridge-message
-probe, not a physical touch test, live-provider audio test or long-term drift test.
-
-
-### Fish regional picker, actual simulator touch
-
-With Fish enabled and the fixture Document open, this opens Voice, physically
-taps `en-IN` and asserts that `Aarav — Male Indian multilingual (EN)` appears:
+`download-concurrency.ts` measures how fast a provider answers with one, two or more requests out at once. It goes through the app's own `createProvider`, `segmentBlocks` with `splitWithSentencex`, and `downloadSpeech`, so each request is exactly what a download sends. No simulator is involved. It reads the key from the settings export as `context-probe.ts` does (the two share `node-kit.ts`), and `OUT` must be outside the repository, because it receives the owner's book text.
 
 ```sh
-bash test/manual-test/kit/run-probe.sh ReaderProbe SIMULATOR_UDID /tmp/openreader-fish-picker-01 --mode fish
+OUT=/path/outside/the/repo; B=~/Works/epub_books
+npx tsx test/manual-test/downloads/download-concurrency.ts "$OUT" "$B/My Vampire System/My Vampire System 1-250.epub" 1,4,2,8,5,6,10,3,1 40 20   # run.json, report.txt
+npx tsx test/manual-test/downloads/download-concurrency.ts report "$OUT"   # the table again, from run.json
 ```
 
-It uses the live voice list, so it needs the configured app key and network.
-It does not select a voice or start playback. It leaves the picker open and
-captures the list for visual review. The source-toggle combinations are covered
-by the provider tests; this mode verifies regional navigation and visibility.
+The arguments after the book are the levels in the order they run, the sentences per level, the first long section to take sentences from, and the provider (`fish` when left out). Running 1 first and last shows whether the service slowed down during the run. Every level sends different sentences. `fetch` is wrapped to record every exchange, a retried `429` included, with the `ratelimit-*` headers, and the clips are decoded with ffmpeg only after the timed part. Results of 2026-09-25 are in `notes/NOTES_2026-09-25.md`.
 
-### Library and reader actions drawer (long press, '...', Delete)
+What it cannot show: the phone's own network, since it runs from the Mac through its proxy; the time the app spends saving each clip; how a provider other than Fish counts its limits, such as Azure's requests per minute (#40); whether Fish will enforce the limit it states.
 
-With the current Debug app connected to Metro and both `A Short Test of Reading
-Aloud` and `仙逆` in the Library:
+### Timing a chapter download on the simulator
+
+`download-chapter.cjs` prints `enqueued <ISO time>` as it hands the chapters to the runtime. Each saved clip is a file in `Documents/offline-narration-v2/<document>/<voice>/`, and the file's birth time is when the scheduler saved it, so the birth times time the download to the millisecond:
 
 ```sh
-bash test/manual-test/kit/run-probe.sh LibraryActionsProbe SIMULATOR_UDID /tmp/openreader-library-actions-01 \
-  -only-testing:testLibraryAndReaderActions
+python3 -c 'import os,sys; d=sys.argv[1]; b=sorted(os.stat(os.path.join(d,f)).st_birthtime for f in os.listdir(d) if f.endswith((".audio",".m4a"))); print(len(b), b[0], b[-1])' VOICE_DIRECTORY
 ```
 
-Without `-only-testing` it runs both methods, and the Contents one below fails
-at once when `仙逆` is not on the shelf, which costs a long `xcodebuild` hang
-(see Pitfalls). This uses real XCTest touches, entirely on the short English
-fixture. It long-presses the Library row and taps its `...`, checking both raise
-the same drawer, Rename/Download/Delete and **no Appearance** (#22: nothing
-behind the Library shows a font change), with no system alert on the `...` tap.
-It taps Delete, checks the `Delete this book?` confirmation, and **cancels** —
-this mode never removes the fixture. It renames the fixture to a long title to
-photograph the `...` button centred against a two-line row, then renames it
-back and confirms the restoration survives a relaunch. It then opens the reader
-itself and checks the Appearance/Rename/Download menu (no Delete row there) and
-that all three still open from that entry point, including the persisted
-Download view. In Appearance it takes Font Size from 16 to 20 and back,
-capturing the page at 16 and at 20 (`reader-appearance-16`/`-20`): a pixel
-comparison of the page above the sheet is what shows Appearance still changes
-the page (measured 2026-09-22: 14.8% of that region changed, 14 lines of text
-became 11). It never presses Play. It does **not** check the Contents note:
-this fixture's nav hrefs do not match its spine (a pre-existing, unrelated
-fact — see `core/document/contents.ts`), so every row is permanently
-unreachable and `here` is always null here, regardless of position.
+To compare with one request at a time: delete the chapters' audio through the runtime (`deleteDownloaded`, through `cdp.cjs`, then check that `occupied` reads 0), choose 1 in Settings › Providers › Fish Audio › Sentences at once (before beta26 this was `AT_ONCE` in `src/offline/scheduler.ts`), confirm that `settings.json` in the app container's `Documents` holds `"fish":1` under `sentencesAtOnce`, and download the same chapters again. Put it back to 5 afterwards. The number is read as each chapter starts, so change it only between downloads. Run the download with five at once first, so that anything the service remembers could only speed up the slower run. Configure Fish in the app first with `kit/run-probe.sh OfflineFixProbe … -only-testing:testConfigureFishProvider` (Pitfalls: before 2026-09-25 that method could pass with Fish still disabled).
 
-The Contents note is checked separately, read-only, against `仙逆`, whose nav
-entries do resolve to real spine items:
+### OpenAI Compatible's 422→MP3 fallback (#65) and Speechify's own queue, on the short fixture
+
+`DownloadConcurrencyProbe.swift` also covers #65 (a PCM refusal falling back to
+MP3) and confirms #64's Speechify `RequestQueue` change did not break plain
+playback/download, both against the short two-chapter fixture rather than the
+real book — a fresh voice directory each time, no pre-seeded state to manage:
 
 ```sh
-bash test/manual-test/kit/run-probe.sh LibraryActionsProbe SIMULATOR_UDID /tmp/openreader-library-actions-01 \
-  -only-testing:testContentsExactPrecision
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureCompatibleProviderRealTouches
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseEmilyVoiceAndPlayShortFixture
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testCompatibleSentencesAtOnceFiveAndDownloadShortFixture
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureSpeechifyRealTouches
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseSpeechifyVoiceRealTouches
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testSpeechifyDownloadAndPlayShortFixture
+bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testResetCompatibleSentencesAtOnceToDefault
 ```
 
-(Reuses the project the first command generated.) It opens 仙逆, opens Contents, and requires a row to be marked
-current before asserting that neither of the two approximate-precision
-sentences appears. **Opening Contents immediately after the reader's "Choose a
-Voice" button appears is too early**: `status.rendered` (what marks the row
-when nothing has been actively read) arrives asynchronously after the WebView's
-first render message, separately from the player footer mounting, and the
-first measured run landed at the top of the 2,076-row list with nothing marked.
-The probe now waits, then retries once after closing and reopening Contents.
-Neither mode touches downloads, rename, or deletion.
+Each method is its own invocation, run in the order above, the same discipline
+as `AzureProviderProbe` and `OfflineFixProbe`: later methods depend on state
+earlier ones leave (OpenAI Compatible configured and enabled, the short
+fixture's voice chosen, Sentences at once at a particular value). The short
+fixture needs adding first if it is not already in the Library (README, "Real
+books"; the fixture is generated by `short-test-fixture.ts` and added through
+the walkthrough harness's `add` command, which works for this one-shot use even
+on a day the harness is otherwise unreliable for reading interactions).
+OpenAI Compatible's Address/Model/Extra headers are read from
+`/tmp/openreader-compat-{baseurl,model,headers}.txt` and Speechify's key from
+`/tmp/openreader-speechify-key.txt`, the same host-only-file discipline as
+`OfflineFixProbe.testConfigureFishProvider`. The last method resets OpenAI
+Compatible's Sentences at once to its own default (1); Speechify's is never
+changed from 1, and Fish's own default (5) is untouched by any of this.
 
-### General, Theme, brackets, Manage-downloads delete-all, and Fonts
-
-With the current Debug app connected to Metro and both `A Short Test of
-Reading Aloud` and `仙逆` in the Library, `A Short Test of Reading Aloud`
-already having some saved audio:
-
-```sh
-bash test/manual-test/kit/run-probe.sh GeneralFontsProbe SIMULATOR_UDID /tmp/openreader-general-fonts-01 \
-  -only-testing:testFontFamiliesAvailableOnSystem \
-  -only-testing:testGeneralThemeAndBrackets \
-  -only-testing:testManageDownloadsDeleteAll \
-  -only-testing:testFontsPageListAndBackButton \
-  -only-testing:testFontSelectionChangesReadingPage \
-  -only-testing:testLatinFontChangesEnglishReadingPage
-```
-
-Omit the `-only-testing` arguments to run the whole class, **except**
-`testMigratedFontShowsGeorgia` (see below), which depends on state the other
-methods do not set up and will fail if it runs alongside them.
-
-`testFontFamiliesAvailableOnSystem` touches no UI: it asks `UIFont` whether
-each of `READING_FONTS`' nine named `preview` faces actually resolves on this
-system (family name or exact PostScript name), which is the same resolution
-path React Native's own font lookup uses. A missing face is not a probe
-failure to fix — it is the fact the test exists to surface, and the failure
-message names the font. On the iOS 27.0 simulator runtime measured here, the
-five Latin faces and `PingFang SC` resolve; `Songti SC`, `Kaiti SC` and
-`Yuanti SC` do not (`UIFont.familyNames` on that runtime contains no CJK
-family beyond the four PingFang variants). Confirm with real touches whenever
-the reported set changes, since a missing face falls back to the system font
-silently rather than erroring, and a screenshot is the only way to see that.
-
-`testGeneralThemeAndBrackets` opens Settings → General with real touches,
-photographs it, opens the Theme menu (#33) and requires Light, Dark and Match
-Device in that order with the system symbols `sun.max`, `moon` and
-`circle.lefthalf.filled`, photographs it, picks Light, requires the row to read
-`Theme, Light`, then restores whatever theme the device had before the run,
-Match Device included (photographed at each step, so both themes are covered
-regardless of which one the device started in). It then drives the full bracket interlock in `general-screen.tsx`: the
-field cannot be typed into while the switch is on (no keyboard appears),
-typing `abc` and `() ()` with the switch off and turning it back on is
-refused with the switch staying off, an inline note naming the offending
-entry, the `Use <> [] instead` recovery link, and zero `app.alerts` — never a
-modal — and a valid non-default list is accepted silently. It ends by
-restoring the default list. It never touches Providers or downloads.
-
-`testManageDownloadsDeleteAll` opens the English fixture's Download drawer,
-enters Manage downloads, and requires `Delete all saved audio` next to `Back
-to downloads` and a confirmation titled `Delete all saved audio?` naming a
-size. It always cancels — this mode never deletes saved audio — and a saved
-SQLite byte count taken before and after confirms nothing was removed.
-
-`testFontsPageListAndBackButton` opens 仙逆's actions drawer, Appearance, then
-Font, and requires all eleven rows (`Original Book Font` through `圆体`),
-exactly one checked, and that the back button returns to Appearance rather
-than closing the drawer. It photographs the list at the top and scrolled.
-Whether the four Chinese rows are actually visually distinct is not something
-XCTest can assert; read the attached screenshot against
-`testFontFamiliesAvailableOnSystem`'s log.
-
-`testFontSelectionChangesReadingPage` (仙逆) and
-`testLatinFontChangesEnglishReadingPage` (the English fixture) each pick a
-sequence of fonts through the same drawer and photograph the reading page
-after every pick, ending back at `Original Book Font`. Neither asserts a
-visual difference — that is also a screenshot-reading task — but a same-sized
-crop diffed across screenshots (`ImageChops.difference` on the exported PNGs)
-is a decisive way to tell a real font change from a coincidence of line
-wrapping: on the measured run, `Times New Roman` and `Original Book Font`
-were pixel-identical on the English fixture (that fixture's EPUB carries no
-CSS of its own, so "follow the document" is WebKit's bare default, which
-happened to already be Times), while `Georgia` differed from both by a wide
-margin. The same diff against 仙逆's `楷体` and `Original Book Font` crops was
-small and, on inspection, explained by sub-pixel/scroll noise rather than a
-font change — consistent with `Kaiti SC` being absent from this runtime.
-
-To verify the `serif`/`sans` id migration, terminate the app, edit the
-on-device `settings.json` (`Paths.document`, reachable on the simulator via
-`xcrun simctl get_app_container UDID top.xujialiu.openreader data`) to set
-`"font": "serif"`, then run the one method that depends on it:
-
-```sh
-bash test/manual-test/kit/run-probe.sh GeneralFontsProbe SIMULATOR_UDID /tmp/openreader-general-fonts-migration \
-  -only-testing:testMigratedFontShowsGeorgia
-```
-
-It launches (picking up the edited file), opens the English fixture's
-Appearance, and requires the Font row to read `Font, Georgia`. Restore the
-backed-up `settings.json` and relaunch afterward; this mode does not restore
-it for you, since it is meant to be run against a deliberately prepared file.
-
-None of these modes ever presses Play.
-
-### The Settings version line, rows above it, and both themes (issue #30, `SettingsVersionProbe.swift`)
-
-With the current Debug app connected to Metro:
-
-```sh
-bash test/manual-test/kit/run-probe.sh SettingsVersionProbe SIMULATOR_UDID /tmp/openreader-settings-version-01
-```
-
-This relaunches the app (so a JavaScript-only change, such as `app-version.ts`,
-is proven current rather than assumed), opens Settings, and requires an
-element labelled exactly `Version <APP_VERSION>` under the Sync row, reading
-`APP_VERSION` from the working tree's `app-version.ts` at run time — the
-accessibility label a screen reader announces, which is not the same thing as
-the line's visible text, since `accessibilityLabel` replaces what iOS exposes
-rather than adding to it (a screenshot is what proves the visible text has no
-"Version" word). It taps General, Providers and Sync in turn, requires each
-one's own nav bar to appear, and returns to Settings each time to confirm the
-version line and the three rows above it are unmoved. It then opens General →
-Theme, picks Light, returns to Settings and photographs it, then Dark and
-photographs it, then restores whichever of Light/Dark/Match Device the device
-had before the run. It never presses Play.
-
-### Long-press lookup and translation (issue #73, `TranslationProbe.swift`)
-
-With the current Debug app connected to Metro and `A Short Test of Reading Aloud` in the Library, build the disposable UI-test project and run `TranslationProbe.testSettingsDefaultsMenusAndPersistence` first, then `TranslationProbe.testLongPressDisabledThenEnabledDrawerAndCopy` and `TranslationProbe.testPronunciationButtonsTouchDictionaryAudio`:
-
-```sh
-bash test/manual-test/kit/run-probe.sh TranslationProbe SIMULATOR_UDID /tmp/openreader-translation-probe \
-  -only-testing:testLongPressDisabledThenEnabledDrawerAndCopy
-```
-
-Change the final `-only-testing` method name for the other two methods. The pronunciation method uses `silence.sh`'s zero-volume simulator before the test, taps both dictionary audio buttons, and observes the app's pronunciation-active state; it does not press narration Play or prove narration pause/resume.
-
-The probe uses real settings taps, native selection long presses, drawer drags, copy, and service-menu touches. It proves Youdao dictionary content, UK/US pronunciation controls, a Google refusal with Retry, and an explicit Youdao switch. `testHandleDragOnPreparedReader` also proves that releasing a native handle changes the selected `The` word to Translation and displays Youdao's real `这个` response. Beta35 had a longer native selection that reached `This is a short test` with `Service, Youdao` but stayed on its spinner for more than 100 seconds; beta37's native wrapper release fix was retested with `testSelectionHandleExpansionTranslatesSentence` followed by `testPreparedHandleReleaseFinishesRequest`, and the root-owned green artifacts `/tmp/openreader-translation-fix-prepare2.xcresult` and `/tmp/openreader-translation-fix-release2.xcresult` show real selected sentence text with Youdao Chinese output (`只写第一句话`, then `第一个句子`).
-
-### Fish narration interruption coverage (issue #73, `FishNarrationProbe.swift`)
-
-Use the local Fish credential through `OfflineFixProbe` and ask the Fish voice list once before this probe. Open a long book from `~/Works/epub_books` in the Library, leave the reader paused, and run the probe with the simulator silenced:
-
-```sh
-bash test/manual-test/kit/silence.sh set SIMULATOR_UDID
-bash test/manual-test/kit/run-probe.sh FishNarrationProbe SIMULATOR_UDID /tmp/openreader-fish-narration-probe \
-  -only-testing:testRealFishPlayThenPause
-```
-
-Change `-only-testing` to run `testLookupPausesPreviouslyPlayingFish`, `testPauseOptionOffKeepsFishPlaying`, `testPronunciationInterruptionOnCurrentReader`, or `testPronunciationInterruptionResumeAndCancellation`. The last two use the real Fish audio path and require the pause option off; the second method changes it through Settings, while the current-reader method expects the already-prepared setting. `testPronunciationInterruptionResumeAndCancellation` also exercises close, restart, and changed-selection cancellation.
-
-The real Fish run measured 2.3 seconds to active playback, continued for 5 seconds, and stopped with a real Pause touch. On a long book, the pause option off run kept the transport in Pause after closing lookup. With the player surface cleared through its real LogBox close touch, the interruption methods proved that pronunciation resumes narration that was playing, leaves already-paused narration paused, and cancels when the drawer closes or the selected word changes. Both pronunciation accents completed naturally, with no audio error, and all runs were made at zero simulator volume.
-
-For the iOS handle-release regression, run `testSelectionHandleExpansionTranslatesSentence` to prepare the fixture, followed by `testPreparedHandleReleaseFinishesRequest`. The second method requires that the native selection changes and then reaches a result or bounded error. In beta35 it failed with `selecting=true`, `loading=false` after the DOM lost the handle's release. The native reader release bridge fixes that path. Its coordinates are measured on the dedicated iPhone 17 fixture; do not reuse them after a font/layout change without a screenshot check.
-
-### Issues #13/#14: a fresh Library, Fish from empty settings, and the two
-### destructive confirmations the other probes always cancel
-
-`OfflineFixProbe.swift` covers what none of the probes above do: a device that has
-never had a provider configured or a document downloaded, and actually
-confirming (not cancelling) "Delete all saved audio" and "Delete this book".
-It expects two fixtures already in the Library: `A Short Test of Reading
-Aloud` and a second, single-utterance document titled `OpenReader Deletion
-Fixture` (one paragraph, one chapter named `Only Chapter`), used so the
-destructive checks below have a document to spend rather than the shared
-short fixture. Neither fixture's Library entry is written by this probe; both
-were added directly (`library.json` plus `Documents/library/<id>.epub`) using
-the project's own `identifyDocument`/`serializeLibrary` via `tsx`, which is
-the reliable way to seed a fixture Document without reconstructing the
-picker flow — a script that does this is not checked in here since it is a
-one-time setup step, not a repeated verification.
-
-```sh
-printf '%s' "$FISH_API_KEY" > /tmp/openreader-fish-key.txt && chmod 600 /tmp/openreader-fish-key.txt
-bash test/manual-test/kit/run-probe.sh OfflineFixProbe SIMULATOR_UDID /tmp/openreader-offline-fix-01 \
-  -only-testing:testConfigureFishProvider
-```
-
-Real touches: Settings → Providers → Fish Audio, types the key read from
-`/tmp/openreader-fish-key.txt` (never printed, logged or checked in — write
-it there from `~/.secrets/openreader/` per MEMORY/device-testing.md before this method runs, `chmod 600`
-it, and remove it afterward) into the still-masked field, taps Enable, and
-waits for "Connection successful". `Show API key` is never tapped, so no
-capture here can show it. Skips the enable step if a previous run already
-left the provider enabled.
-
-**A successful Fish connection check can still leave Voice empty on the next cold reader.** Measured 2026-09-26 on the dedicated iPhone 17: the connection row passed, but `testChooseVoiceForShortFixture` found no rows after a relaunch. Sending the walkthrough commands `{"do":"ask","provider":"fish"}` and then `{"do":"voicelist","provider":"fish","n":3}` after the reader was open populated the cached list; the next real Voice touch found `jjk narrator`. Treat an empty Voice sheet after a successful key check as a list-prefetch failure and ask the provider again before testing narration.
-
-`testChooseVoiceForShortFixture` opens the short fixture and taps whichever
-Fish voice sorts first (this is a download/playback mechanics check, not a
-locale-picker test — `ReaderProbe`'s `fish` mode already covers real navigation to a
-specific locale). Choosing while paused leaves the sheet open by design
-(`ReaderProbe.testReaderSheets`); dismissal is `Close Voice`, the same
-full-bleed backdrop button as `Close Download`/`Close Appearance`, not the
-drag gesture `ReaderProbe` uses for the same result. Because a Voice choice
-also becomes the settings default, this is the only document that needs it:
-the mini fixture's first open inherits the same voice.
-
-`testDownloadShortFixture` and `testDownloadMiniFixture` select all and
-download for real (real Fish Audio spend: 17 utterances, then 1). Expected:
-the task completes on its first attempt, including its very first write into
-a brand-new voice directory. Before #15 both failed once there, in this order,
-with "Needs attention · The saved audio could not be verified." and recovered
-on `testRetryBlockedShortFixture` (taps `Continue`): `saveClip` read the
-payload's size without awaiting expo-file-system's asynchronous `move`, so the
-sidecar recorded `size: null` and no payload survived (ADR 0027). A pass here
-is one sample of a timing, not proof of the order; the faithful `move` in
-`test/offline/storage.test.ts` is what holds it. To check a run, compare the
-sidecar's `size` with the payload's bytes on disk. For a fresh directory
-without spending on the short fixture, run `testDeleteAllSavedAudioReal`
-against the mini fixture first: it removes that document's directory, so the
-next `testDownloadMiniFixture` writes into a new one.
-
-`testDeleteAllSavedAudioReal` and `testDeleteThisBookReal` are the
-actually-confirm versions of `GeneralFontsProbe.testManageDownloadsDeleteAll`
-and `LibraryActionsProbe`'s Delete-row check, which both cancel by design.
-Run against the mini fixture only — never the short fixture, which stays
-intact for the other checks. `testDeleteThisBookReal` removes the Library
-entry; **the underlying `Documents/library/<id>.epub` file is not deleted**
-(`use-library.ts`'s `remove` only filters the entries array), which is a
-separate, minor, pre-existing orphaned-file observation, unrelated to #13/#14,
-and incidentally why restoring the entry afterward needs only a `library.json`
-edit.
-
-`testReaderRespondsPromptlyAfterInterrupt` and `testSeekToSecondChapter`
-support the interrupted-removal check: confirming Play responds in about a
-second when launched right after a hand-applied `removals` marking transaction
-for a *different* document, and moving the reading position into the short
-fixture's second chapter (whose audio survives a chapter-deletion check)
-without using Contents — this fixture's nav/spine mismatch (documented above,
-`LibraryActionsProbe`) makes every Contents row inert here too, so the
-position is moved with ten `Player.onSkip('next-sentence')` handler calls
-instead of a tap.
-
-`testDownloadDrawerShowsUpgradeMessage` and `testNetworkReadingHighlightMoves`
-cover the store-failure fallback: with the stopped app's `catalog.sqlite` at
-`PRAGMA user_version = 2`, the Download drawer shows "Update the app to read
-this offline database." (twice — once as the chapter-list load error, once as
-`downloads.downloadError()`) with `Download selected` disabled, and Play still
-reads the current chapter over the network, with the same message repeated
-inline as a reader notice ("Saved audio could not be checked: Error: …").
-Two screenshots 2.5 seconds apart are the evidence the word highlight actually
-advances rather than just appearing once; neither mode presses Play for
-longer than establishing that.
-
-None of these methods restore anything themselves (no in-place undo of a
-delete, no PRAGMA restore, no backup/restore of the offline directory or
-`library.json`) — every destructive one expects the caller to have backed up
-first and to restore afterward, the same division of labour as `management`
-mode above.
-
-### Pinch and double tap on the reading page (#79, `zoom.sh`, `ZoomProbe.swift`)
-
-```sh
-bash test/manual-test/library-and-reader/zoom.sh SIMULATOR_UDID METRO_PORT METRO_LOG NEW_OUTPUT_DIR
-bash test/manual-test/library-and-reader/zoom.sh SIMULATOR_UDID control NEW_OUTPUT_DIR
-```
-
-Prerequisites: `A Short Test of Reading Aloud` in the Library
-(`short-test-fixture.ts`), a Debug app on that Metro, and `METRO_LOG` the file
-that Metro's output goes to. Nothing is played.
-
-For each gesture, the script relaunches the app with `-RCT_jsLocation`, opens
-the fixture through the harness and waits for Metro to print `HX …
-rendered=N`. `ZoomProbe` then pinches (`pinch(withScale: 3, velocity: 2)`
-mid-screen) or double-taps a quarter of the way down, and photographs the page
-before and after. The script asks the page for `visualViewport.scale`,
-`innerWidth` and its viewport through `{"do":"js"}`, and prints `ZOOM pinch
-scale=…` and `ZOOM doubletap scale=…`. It exits 0 when both are 1, 1 when
-either gesture magnified the page, and 2 when a step failed. A final relaunch
-clears the probe's answer from the player's note.
-
-The probe also prints `ZOOM mark <gesture> before=X after=Y`, the player's
-Following mark (A or M), read from the accessibility tree. The script exits 1
-when a pinch turns A into M.
-
-Expected since #79: both gestures read `scale=1 innerWidth=402` on an iPhone
-17, and both marks read `before=A after=A`. The page's viewport reads
-`width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no`.
-Before #79, a pinch read 2.60 and `innerWidth=155`, and it turned A into M
-(engineering log, 2026-09-28).
-
-`control` serves a page with the reader's old viewport on port 8111 and pinches
-it in Safari. It must magnify (measured 1.00 → 2.39), or a reader that stays at
-1 proves nothing about the reader.
-
-What it cannot prove:
-
-- A double tap never magnified the page, even before #79, so its `scale=1`
-  guards only against a regression.
-- Screenshots are the only evidence that a gesture landed on text: the page is
-  not in the accessibility tree (pitfalls/screenshots.md).
-- XCTest's pinch puts both fingers down together, in one section document.
-  A real pinch whose second finger lands a moment later, or in another
-  section document, is not measured. `highlighter.ts` counts moves before the
-  second finger lands as a one-finger drag.
+What it cannot show: the app's MP3 decode path is only exercised end-to-end
+through actual playback (item 2), not inspected directly; the OpenAI
+Compatible connection check's own request shape is covered by this and by the
+unit tests, not by inspecting wire bytes from the simulator.

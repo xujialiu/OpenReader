@@ -245,64 +245,103 @@ What it measures: time from `synthesize` to its result (the first sentence again
 
 What it cannot show: latency from the phone's network (it runs from the Mac, through whatever proxy the Mac uses); how iOS's `decodeAudioData` treats Fish's MP3 padding (ffmpeg drops the encoder delay the LAME header declares); the Blocks the renderer would find where a book's stylesheet makes a block element inline; anything about OpenAI or OpenAI-compatible voices, which return no timings and were not configured. The listening page randomises A/B per pair in the browser and keeps the order and answers in that browser's `localStorage`, so clearing it draws new orders.
 
+## The reader's sheets and the voice handover (`ReaderProbe.swift`, `voice-playback.cjs`)
 
-## Several sentences at once (#64, `download-concurrency.ts`)
-
-`download-concurrency.ts` measures how fast a provider answers with one, two or more requests out at once. It goes through the app's own `createProvider`, `segmentBlocks` with `splitWithSentencex`, and `downloadSpeech`, so each request is exactly what a download sends. No simulator is involved. It reads the key from the settings export as `context-probe.ts` does (the two share `node-kit.ts`), and `OUT` must be outside the repository, because it receives the owner's book text.
-
-```sh
-OUT=/path/outside/the/repo; B=~/Works/epub_books
-npx tsx test/manual-test/downloads/download-concurrency.ts "$OUT" "$B/My Vampire System/My Vampire System 1-250.epub" 1,4,2,8,5,6,10,3,1 40 20   # run.json, report.txt
-npx tsx test/manual-test/downloads/download-concurrency.ts report "$OUT"   # the table again, from run.json
-```
-
-The arguments after the book are the levels in the order they run, the sentences per level, the first long section to take sentences from, and the provider (`fish` when left out). Running 1 first and last shows whether the service slowed down during the run. Every level sends different sentences. `fetch` is wrapped to record every exchange, a retried `429` included, with the `ratelimit-*` headers, and the clips are decoded with ffmpeg only after the timed part. Results of 2026-09-25 are in `notes/NOTES_2026-09-25.md`.
-
-What it cannot show: the phone's own network, since it runs from the Mac through its proxy; the time the app spends saving each clip; how a provider other than Fish counts its limits, such as Azure's requests per minute (#40); whether Fish will enforce the limit it states.
-
-### Timing a chapter download on the simulator
-
-`download-chapter.cjs` prints `enqueued <ISO time>` as it hands the chapters to the runtime. Each saved clip is a file in `Documents/offline-narration-v2/<document>/<voice>/`, and the file's birth time is when the scheduler saved it, so the birth times time the download to the millisecond:
+With the latest Debug app connected to Metro and the existing fixture Document
+`A Short Test of Reading Aloud` in the Library:
 
 ```sh
-python3 -c 'import os,sys; d=sys.argv[1]; b=sorted(os.stat(os.path.join(d,f)).st_birthtime for f in os.listdir(d) if f.endswith((".audio",".m4a"))); print(len(b), b[0], b[-1])' VOICE_DIRECTORY
+bash test/manual-test/kit/run-probe.sh ReaderProbe SIMULATOR_UDID /tmp/openreader-reader-01
 ```
 
-To compare with one request at a time: delete the chapters' audio through the runtime (`deleteDownloaded`, through `cdp.cjs`, then check that `occupied` reads 0), choose 1 in Settings › Providers › Fish Audio › Sentences at once (before beta26 this was `AT_ONCE` in `src/offline/scheduler.ts`), confirm that `settings.json` in the app container's `Documents` holds `"fish":1` under `sentencesAtOnce`, and download the same chapters again. Put it back to 5 afterwards. The number is read as each chapter starts, so change it only between downloads. Run the download with five at once first, so that anything the service remembers could only speed up the slower run. Configure Fish in the app first with `kit/run-probe.sh OfflineFixProbe … -only-testing:testConfigureFishProvider` (Pitfalls: before 2026-09-25 that method could pass with Fish still disabled).
+This reuses the disposable XCTest project builder. It opens the Document if
+needed, drags all four handles/title regions, checks that Voice and Speed have
+no Done button, and checks a paused voice choice stays open when the fixture's
+Sarah/Adrian rows are present. It never presses Play. Inspect exported screenshots
+as well as assertions. It leaves the reader paused. The optional voice choice
+check restores Sarah; use this on the fixture document, not the owner's reading.
 
-### OpenAI Compatible's 422→MP3 fallback (#65) and Speechify's own queue, on the short fixture
-
-`DownloadConcurrencyProbe.swift` also covers #65 (a PCM refusal falling back to
-MP3) and confirms #64's Speechify `RequestQueue` change did not break plain
-playback/download, both against the short two-chapter fixture rather than the
-real book — a fresh voice directory each time, no pre-seeded state to manage:
+For deterministic transport/handover checks, first silence the simulator with
+`silence.sh set`, open the fixture Document, and open Voice once so its Fish list is loaded. Fish
+must already be enabled with its key in the app. No credential is read by or
+printed from the test script. The first eight list entries supply distinct
+choices; an English fixture supplies the test text.
 
 ```sh
-bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureCompatibleProviderRealTouches
-bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseEmilyVoiceAndPlayShortFixture
-bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testCompatibleSentencesAtOnceFiveAndDownloadShortFixture
-bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testConfigureSpeechifyRealTouches
-bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testChooseSpeechifyVoiceRealTouches
-bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testSpeechifyDownloadAndPlayShortFixture
-bash test/manual-test/kit/run-probe.sh DownloadConcurrencyProbe SIMULATOR_UDID OUTPUT_DIR -only-testing:testResetCompatibleSentencesAtOnceToDefault
+node test/manual-test/voices-and-providers/voice-playback.cjs SIMULATOR_UDID /tmp/openreader-reader-01
+node test/manual-test/voices-and-providers/voice-playback.cjs SIMULATOR_UDID /tmp/openreader-touch-01 touch
 ```
 
-Each method is its own invocation, run in the order above, the same discipline
-as `AzureProviderProbe` and `OfflineFixProbe`: later methods depend on state
-earlier ones leave (OpenAI Compatible configured and enabled, the short
-fixture's voice chosen, Sentences at once at a particular value). The short
-fixture needs adding first if it is not already in the Library (README, "Real
-books"; the fixture is generated by `short-test-fixture.ts` and added through
-the walkthrough harness's `add` command, which works for this one-shot use even
-on a day the harness is otherwise unreliable for reading interactions).
-OpenAI Compatible's Address/Model/Extra headers are read from
-`/tmp/openreader-compat-{baseurl,model,headers}.txt` and Speechify's key from
-`/tmp/openreader-speechify-key.txt`, the same host-only-file discipline as
-`OfflineFixProbe.testConfigureFishProvider`. The last method resets OpenAI
-Compatible's Sentences at once to its own default (1); Speechify's is never
-changed from 1, and Fish's own default (5) is untouched by any of this.
+The first command requires an existing screenshot directory. It replaces only
+Fish synthesis responses in the running process with delayed silent WAVs and
+word timestamps. The actual provider parser, native audio graph, reader clock,
+React handlers and persistence callbacks run. Assertions cover initial loading,
+pause before receipt without abort, same-Utterance word handover, latest choice
+wins, failure rollback, next-Utterance fallback without timings, and pausing a
+pending handover until the next Play. Each playback interval stops on its checked
+transition, with an eight-second watchdog. It reports durations in milliseconds.
+This is a handler probe, not a touch test or a test of live provider audio quality.
 
-What it cannot show: the app's MP3 decode path is only exercised end-to-end
-through actual playback (item 2), not inspected directly; the OpenAI
-Compatible connection check's own request shape is covered by this and by the
-unit tests, not by inspecting wire bytes from the simulator.
+The `touch` command uses a **new** artifact directory. It installs a five-second
+reply delay and runs `ReaderProbe` in its `loading` mode to press Play, inspect the
+spinner, and physically tap it to pause before any reply arrives. It then checks
+that audio still arrives and the app remains paused. Do not run loading mode by
+itself: it depends on the fixture and watchdog installed by the outer script.
+
+Both modes restore fetch, the original voice and speed, close the sheet and
+pause in `finally`. They use Metro's existing CDP inspection approach; they add
+no test hooks to production app code. Do not edit app code while a probe runs:
+Fast Refresh can replace the state being inspected. Restart the app afterwards
+to remove all temporary debugger globals and verify final delivery separately.
+
+## Paused sentence seeking after background receipt
+
+With the same silenced simulator, fixture Document and loaded Fish list as above:
+
+```sh
+mkdir -p /tmp/openreader-paused-seek-01
+node test/manual-test/voices-and-providers/voice-playback.cjs SIMULATOR_UDID /tmp/openreader-paused-seek-01 paused-seek
+```
+
+This mode pauses before the delayed silent audio arrives, waits for the native
+queue, then sends text-tap messages for the current and next sentences through
+the real reader bridge. It samples the actual WebView CSS highlights across two
+300 ms fixture-word intervals: the sentence must remain highlighted with no word
+range. Each Play must then highlight the selected sentence's first word, and
+playback stops immediately after that observation, with the existing watchdog
+and cleanup paths as backup. Screenshots are saved for both paused selections.
+
+The temporary diagnostic receiver survives React updates and consumes only the
+probe's responses; other renderer errors keep their normal reporting path.
+Restart the app afterwards to discard all debugger state. This is a bridge-message
+probe, not a physical touch test, live-provider audio test or long-term drift test.
+
+## Fish regional picker, actual simulator touch
+
+With Fish enabled and the fixture Document open, this opens Voice, physically
+taps `en-IN` and asserts that `Aarav — Male Indian multilingual (EN)` appears:
+
+```sh
+bash test/manual-test/kit/run-probe.sh ReaderProbe SIMULATOR_UDID /tmp/openreader-fish-picker-01 --mode fish
+```
+
+It uses the live voice list, so it needs the configured app key and network.
+It does not select a voice or start playback. It leaves the picker open and
+captures the list for visual review. The source-toggle combinations are covered
+by the provider tests; this mode verifies regional navigation and visibility.
+
+## Fish narration interruption coverage (issue #73, `FishNarrationProbe.swift`)
+
+Use the local Fish credential through `OfflineFixProbe` (`downloads/README.md`, Issues #13/#14) and ask the Fish voice list once before this probe. Open a long book from `~/Works/epub_books` in the Library, leave the reader paused, and run the probe with the simulator silenced:
+
+```sh
+bash test/manual-test/kit/silence.sh set SIMULATOR_UDID
+bash test/manual-test/kit/run-probe.sh FishNarrationProbe SIMULATOR_UDID /tmp/openreader-fish-narration-probe \
+  -only-testing:testRealFishPlayThenPause
+```
+
+Change `-only-testing` to run `testLookupPausesPreviouslyPlayingFish`, `testPauseOptionOffKeepsFishPlaying`, `testPronunciationInterruptionOnCurrentReader`, or `testPronunciationInterruptionResumeAndCancellation`. The last two use the real Fish audio path and require the pause option off; the second method changes it through Settings, while the current-reader method expects the already-prepared setting. `testPronunciationInterruptionResumeAndCancellation` also exercises close, restart, and changed-selection cancellation.
+
+The real Fish run measured 2.3 seconds to active playback, continued for 5 seconds, and stopped with a real Pause touch. On a long book, the pause option off run kept the transport in Pause after closing lookup. With the player surface cleared through its real LogBox close touch, the interruption methods proved that pronunciation resumes narration that was playing, leaves already-paused narration paused, and cancels when the drawer closes or the selected word changes. Both pronunciation accents completed naturally, with no audio error, and all runs were made at zero simulator volume.
+
+For the iOS handle-release regression, run `testSelectionHandleExpansionTranslatesSentence` to prepare the fixture, followed by `testPreparedHandleReleaseFinishesRequest`. The second method requires that the native selection changes and then reaches a result or bounded error. In beta35 it failed with `selecting=true`, `loading=false` after the DOM lost the handle's release. The native reader release bridge fixes that path. Its coordinates are measured on the dedicated iPhone 17 fixture; do not reuse them after a font/layout change without a screenshot check.
