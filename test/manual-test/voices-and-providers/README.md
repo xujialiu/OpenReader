@@ -22,6 +22,9 @@ that names the script or probe you are about to run.
   its audio has arrived, and Fish's regional picker by real touch.
   `ReaderProbe.swift` (default, `loading`, `fish`), `voice-playback.cjs`
   (default, `touch`, `paused-seek`).
+- [system-voices.md](system-voices.md): which of the phone's own voices
+  exist, in how many languages, and whether `AVSpeechSynthesizer.write`
+  marks their words. `ListSystemVoices.swift`, `SystemVoiceMarkers.swift`.
 - [fish-narration.md](fish-narration.md) (#73): a lookup and a pronunciation
   interrupting real Fish narration, and a selection handle's release.
   `FishNarrationProbe.swift`.
