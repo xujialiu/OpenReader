@@ -33,6 +33,7 @@ import { Portal } from 'react-native-teleport';
 
 import type { DocumentId, ReadingPlace, ReadingPosition } from '../core/document';
 import type { ProviderId } from '../core/providers/types';
+import { cutText, debugLog, shortId } from '../debug/debug-log';
 import { setReadingPlays } from '../offline/runtime';
 
 import { openDocument, type OpenDocument } from './document';
@@ -148,16 +149,21 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     library.opened(heldId);
     sync.poke('open');
     const adoptedAt = library.adoptedAt[heldId] ?? null;
+    const started = Date.now();
+    debugLog('document', `opening ${shortId(heldId)} ${cutText(entry.title)}`);
     openDocument(entry, entry.title)
       .then((document) => {
+        debugLog('document', `opened ${shortId(heldId)} in ${Date.now() - started} ms`);
         if (alive) setHeld((was) => (was?.id === heldId ? { ...was, opened: { document, position: entry.position, adoptedAt } } : was));
       })
       .catch((problem: unknown) => {
         const said = problem instanceof Error ? problem.message : String(problem);
+        debugLog('document', `${shortId(heldId)} would not open: ${said}`);
         if (alive) setHeld((was) => (was?.id === heldId ? { ...was, note: said } : was));
       });
     return () => {
       alive = false;
+      debugLog('document', `closed ${shortId(heldId)}`);
     };
     // Once per Reading: the entry is rebuilt on every Library write, and
     // re-reading a 34 MB book for that would be absurd.

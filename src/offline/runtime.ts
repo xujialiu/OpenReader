@@ -7,7 +7,7 @@ import {
   type ChapterMetadata,
 } from "../core/document/navigation";
 import { documentFile } from "../app/library";
-import { offlineNative } from "../../modules/open-reader-offline";
+import { offlineNative, type ContinuedEnded } from "../../modules/open-reader-offline";
 import { createMemoryCache } from "../core/memory-cache";
 import { createProvider } from "../core/providers/factory";
 import { SynthesisError } from "../core/providers/errors";
@@ -28,6 +28,7 @@ import {
   keepWarm,
   keyIsOffered,
   providerDeps,
+  providerDepsFor,
   providerSettings,
   readiness,
   readinessSentence,
@@ -46,8 +47,11 @@ import * as pausing from "./pausing";
 import {
   continuedShown,
   createContinuedProcessing,
+  type ContinuedNative,
 } from "./continued-processing";
 import { APP_NAME } from "../../app-name";
+import { cutText, debugLog, describeProblem, shortId } from "../debug/debug-log";
+import { DEBUG_MODE } from "../debug/mode";
 import { offlineRepository } from "./database";
 import { audioKey, voiceKey } from "./catalog-keys";
 import { downloadSpeech, speechKeying } from "./speech";
@@ -409,25 +413,38 @@ async function synthesize(
       const speechify = download
         ? { ...configuration.speechify, atOnce: download.atOnce, download: true }
         : configuration.speechify;
+      // In the Debug Log (ADR 0054), the Reading's every request, and only a
+      // download's failures: a long download asks for tens of thousands of
+      // sentences, which would push everything else out of it.
       const provider = createProvider(
         voice.provider,
         { ...configuration, speechify },
-        providerDeps,
+        download ? providerDeps : providerDepsFor(voice.provider),
       );
       const controller = new AbortController();
-      const result = await withTimeout(
-        provider.synthesize(text, {
-          voice: voice.voice,
-          signal: controller.signal,
-        }),
-        60_000,
-        () =>
-          new SynthesisError(
-            "network",
-            "The speech service did not respond within 60 seconds.",
-          ),
-        () => controller.abort(),
-      );
+      const started = Date.now();
+      const asked = `${voice.provider} for ${download ? "a download" : "the Reading"}`;
+      if (!download) debugLog("provider", `synthesis ${asked}, voice ${voice.voice}, ${text.length} chars ${cutText(text)}`);
+      let result: SynthesisResult;
+      try {
+        result = await withTimeout(
+          provider.synthesize(text, {
+            voice: voice.voice,
+            signal: controller.signal,
+          }),
+          60_000,
+          () =>
+            new SynthesisError(
+              "network",
+              "The speech service did not respond within 60 seconds.",
+            ),
+          () => controller.abort(),
+        );
+      } catch (problem) {
+        debugLog("provider", `synthesis ${asked} failed after ${Date.now() - started} ms: ${describeProblem(problem)}`);
+        throw problem;
+      }
+      if (!download) debugLog("provider", `synthesis ${asked} done in ${Date.now() - started} ms: ${clipFacts(result)}`);
       await memory.put(key, toStored(result));
       return result;
     })();
@@ -435,6 +452,13 @@ async function synthesize(
     void flight.catch(() => {}).finally(() => flights.delete(key));
   }
   return flight;
+}
+/** What a Debug Log line says of a Provider's reply: how much audio, and whether it came with Word Timings. */
+function clipFacts(result: SynthesisResult): string {
+  const audio = result.audio === "pcm"
+    ? `${(result.samples.byteLength / 2 / result.sampleRate).toFixed(2)} s of PCM at ${result.sampleRate} Hz`
+    : `${result.bytes.byteLength} bytes of ${result.mediaType}`;
+  return `${audio}, ${result.timestamps?.length ?? 0} word timings`;
 }
 export function offlineProvider(
   document: string,
@@ -508,6 +532,9 @@ const scheduler = createScheduler({
     const plan = planOf(task.document)!;
     const held = plan.chapters.find((c) => c.id === chapter.id)!;
     if (held.prepared !== false) return held;
+    const started = Date.now();
+    const which = `${shortId(task.document)} chapter ${chapter.id} (section ${section})`;
+    debugLog("download", `preparing ${which}`);
     await new Promise<void>((resolve, reject) => {
       rendererDocument = task.document;
       preparation = {
@@ -529,7 +556,11 @@ const scheduler = createScheduler({
           })),
       };
       emit();
+    }).catch((problem: unknown) => {
+      debugLog("download", `preparing ${which} ${problem instanceof PreparationInterrupted ? "waits for the foreground" : "failed"} after ${Date.now() - started} ms: ${describeProblem(problem)}`);
+      throw problem;
     });
+    debugLog("download", `prepared ${which} in ${Date.now() - started} ms`);
     return planOf(task.document)!.chapters.find((c) => c.id === chapter.id)!;
   },
   fetch: async (task, text, chapter) => {
@@ -541,7 +572,11 @@ const scheduler = createScheduler({
     ]);
     const epoch = deletionEpochs.get(key) ?? 0;
     const speech = downloadSpeech(text, settings);
-    const clip = await synthesize(task.document, task.voice, speech, settings, { atOnce: settings.sentencesAtOnce[task.voice.provider] });
+    const clip = await synthesize(task.document, task.voice, speech, settings, { atOnce: settings.sentencesAtOnce[task.voice.provider] })
+      .catch((problem: unknown) => {
+        debugLog("download", `${shortId(task.document)} chapter ${chapter}: a sentence was not synthesized, ${describeProblem(problem)}`);
+        throw problem;
+      });
     // A paused task can keep its paid in-flight result; a removed chapter cannot.
     const wanted = () =>
       tasks.includes(task) &&
@@ -573,7 +608,7 @@ export function nameDocuments(
 }
 /** ADR 0053: the continued processing task a download away from the screen runs under. */
 const continued = createContinuedProcessing({
-  native: offlineNative,
+  native: offlineNative && loggedContinued(offlineNative),
   tasks: () => tasks,
   shown: async (task) =>
     continuedShown(
@@ -584,6 +619,35 @@ const continued = createContinuedProcessing({
     ),
   foreground: () => foreground,
 });
+/**
+ * The continued task's native calls, each also a Debug Log line in Debug Mode
+ * (ADR 0054); an update only when what the Live Activity shows changes, not at
+ * every saved clip.
+ */
+function loggedContinued(native: ContinuedNative): ContinuedNative {
+  if (!DEBUG_MODE) return native;
+  let shown = "";
+  return {
+    async submitContinued(title, subtitle, completed, total) {
+      const running = await native.submitContinued(title, subtitle, completed, total);
+      debugLog("download", `continued task submitted for ${cutText(title)}, ${subtitle}: ${running ? "running" : "not run"}`);
+      shown = `${title}\n${subtitle}`;
+      return running;
+    },
+    updateContinued(title, subtitle, completed, total) {
+      if (`${title}\n${subtitle}` !== shown) {
+        shown = `${title}\n${subtitle}`;
+        debugLog("download", `continued task shows ${cutText(title)}, ${subtitle}`);
+      }
+      return native.updateContinued(title, subtitle, completed, total);
+    },
+    finishContinued(success) {
+      shown = "";
+      debugLog("download", `continued task finished, ${success ? "succeeded" : "did not succeed"}`);
+      return native.finishContinued(success);
+    },
+  };
+}
 const runsAway = () =>
   tasks.some((task) =>
     ["preparing", "downloading", "queued"].includes(task.state),
@@ -719,6 +783,7 @@ export function startDownloads(): () => void {
   // the app left, that task keeps the app running, and the download with it;
   // the bounded time was given back, and an end that arrives anyway is ignored.
   const expiration = offlineNative?.addListener("expired", () => {
+    debugLog("download", `the bounded background time expired${continued.running() ? ", under a running continued task" : ""}`);
     if (!continued.running()) interruptAway();
   });
   // The phone ended the continued task, at the owner's stop in the Live
@@ -729,7 +794,14 @@ export function startDownloads(): () => void {
   // resumes nothing and submits nothing; Resume all does. The rest are left.
   const continuedExpiration = offlineNative?.addListener(
     "continuedExpired",
-    () => {
+    (ended?: ContinuedEnded) => {
+      debugLog(
+        "download",
+        ended
+          ? `continued task expired: cancelled ${ended.cancelled}, ${ended.completed} of ${ended.total}, ` +
+              `thermal state ${ended.thermalState}, Low Power Mode ${ended.lowPower}`
+          : "continued task expired",
+      );
       for (const task of continued.expired()) pausing.pauseAll(task);
       if (!foreground) expired = true;
       fire(persist());
