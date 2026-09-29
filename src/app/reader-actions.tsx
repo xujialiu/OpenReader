@@ -9,7 +9,8 @@ import { Icon } from './icon';
 import { useHeldReading } from './reading-host';
 import { useShell } from './routes';
 import { PROVIDER_LABELS, selectVoice, settingsForDocument } from './settings';
-import { Sheet } from './sheet';
+import { shareDocument } from './share-document';
+import { Sheet, SheetNote } from './sheet';
 import { knownVoice } from './voice-catalog';
 
 /**
@@ -26,6 +27,13 @@ import { knownVoice } from './voice-catalog';
  * its size show anything. From the Library the row changed a setting the owner
  * could not see, and it is not the book's to begin with — it is the owner's, for
  * every Document (CONTEXT.md, **Appearance**).
+ *
+ * **Share** (#95) is the round button beside the Document's name, on the menu
+ * page only: the other pages are titled with their own names, and the button
+ * shares the book the title names. It is offered wherever the drawer is, since
+ * the file is the same from the Library and from the reader. The drawer stays
+ * open under the share sheet, so cancelling comes back to it; a failure is said
+ * here, above the rows, because this is where the owner is looking.
  */
 export function ReaderActions({ document, onClose, onDelete, appearance = false }: { document: DocumentId; onClose(): void; onDelete?(): void; appearance?: boolean }) {
   const { library, settings, setSettings } = useShell();
@@ -40,15 +48,24 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false 
   const section = (held?.id === document ? held.section : null) ?? sectionOf(entry?.position ?? null);
   const [page, setPage] = useState<'menu' | 'appearance' | 'rename' | 'download' | 'fonts'>('menu');
   const [name, setName] = useState(entry?.title ?? '');
+  const [sharing, setSharing] = useState(false);
+  const [unshared, setUnshared] = useState<string | null>(null);
   const current = settingsForDocument(settings, entry?.voice ?? null);
   const voice = { provider: current.provider, voice: current.voice, label: current.voice ? knownVoice(current)?.label ?? `${PROVIDER_LABELS[current.provider]} · ${current.voice}` : '' };
   if (!entry) return null;
   const titles = { menu: entry.title, appearance: 'Appearance', rename: 'Rename', download: 'Download', fonts: 'Fonts' };
   const rows: readonly ('appearance' | 'rename' | 'download')[] = appearance ? ['appearance', 'rename', 'download'] : ['rename', 'download'];
+  const share = () => {
+    setSharing(true);
+    setUnshared(null);
+    shareDocument(entry).catch((problem: unknown) => setUnshared(problem instanceof Error ? problem.message : String(problem))).finally(() => setSharing(false));
+  };
   // Only Fonts goes back, because only Fonts is a page inside a page. The three
   // pages off the menu are dismissed rather than returned from, which is what
   // the drag on the handle already does.
-  return <Sheet visible title={titles[page]} onClose={onClose} onBack={page === 'fonts' ? () => setPage('appearance') : undefined}>
+  return <Sheet visible title={titles[page]} onClose={onClose} onBack={page === 'fonts' ? () => setPage('appearance') : undefined}
+    action={page === 'menu' ? { icon: 'share', label: 'Share', onPress: share, disabled: sharing } : undefined}>
+    {page === 'menu' && unshared ? <SheetNote attention>{unshared}</SheetNote> : null}
     {page === 'menu' ? <View style={styles.menu}>
       {rows.map((action) => <Pressable key={action} accessibilityRole="button" accessibilityLabel={titles[action]}
         onPress={() => setPage(action)} style={({ pressed }) => [styles.row, { borderBottomColor: borders.line }, pressed && { opacity: 0.5 }]}>

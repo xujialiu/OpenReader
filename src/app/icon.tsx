@@ -24,6 +24,9 @@ const paths = {
   // every size, and nothing here can wrap.
   appearance: 'm3 16 4.5-9 4.5 9 M4 14h7 M21 14h-5 M16 16v-3.5a2.5 2.5 0 0 1 5 0V16',
   trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6',
+  // An arrow rising out of an open box: the phone's own share mark
+  // (`square.and.arrow.up`), redrawn in this set's stroke.
+  share: 'M12 3v11 M8 7l4-4 4 4 M9 10H7a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2',
   // Two chevrons, one up one down: what iOS puts on a row that opens a menu.
   menu: 'm8 10 4-4 4 4 M8 14l4 4 4-4',
   check: 'm5 12 4 4L19 6',

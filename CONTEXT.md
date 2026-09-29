@@ -150,6 +150,13 @@ It holds what the owner put there and nothing else — it is not browsable for
 documents the owner does not have, and removing an entry leaves the file alone.
 _Avoid_: shelf, catalogue, collection, bookshelf, recents
 
+**Share**:
+Handing a copy of one document's file, under the name the Library shows for
+it, to another app or person through the phone's own share sheet. Only the file
+goes: the Library entry, its reading position and its offline narration stay
+behind. It has nothing to do with Shared Settings.
+_Avoid_: export, send
+
 **Reading Position**:
 Where the reading is in a document: the sentence speech last reached, on this
 device or another. Only speech moves it. Pointing the reading at another
