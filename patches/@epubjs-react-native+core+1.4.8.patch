@@ -1,12 +1,23 @@
 diff --git a/node_modules/@epubjs-react-native/core/lib/commonjs/View.js b/node_modules/@epubjs-react-native/core/lib/commonjs/View.js
-index 0de0fef..19de579 100644
+index 0de0fef..acc0605 100644
 --- a/node_modules/@epubjs-react-native/core/lib/commonjs/View.js
 +++ b/node_modules/@epubjs-react-native/core/lib/commonjs/View.js
-@@ -417,6 +417,7 @@ function View({
+@@ -72,7 +72,8 @@ function View({
+   waitForLocationsReady = false,
+   keepScrollOffsetOnLocationChange,
+   flow,
+-  onChangeSection = () => {}
++  onChangeSection = () => {},
++  webviewDebuggingEnabled = false
+ }) {
+   const {
+     registerBook,
+@@ -417,6 +418,8 @@ function View({
        uri: templateUri
      },
      showsVerticalScrollIndicator: false,
 +    contentMode: "mobile",
++    webviewDebuggingEnabled: webviewDebuggingEnabled,
      javaScriptEnabled: true,
      originWhitelist: ['*'],
      scrollEnabled: false,
@@ -54,14 +65,25 @@ index 6399d97..7ceb72b 100644
      style: {
        width,
 diff --git a/node_modules/@epubjs-react-native/core/lib/module/View.js b/node_modules/@epubjs-react-native/core/lib/module/View.js
-index 63f3c24..435d7af 100644
+index 63f3c24..c637c9b 100644
 --- a/node_modules/@epubjs-react-native/core/lib/module/View.js
 +++ b/node_modules/@epubjs-react-native/core/lib/module/View.js
-@@ -408,6 +408,7 @@ export function View({
+@@ -63,7 +63,8 @@ export function View({
+   waitForLocationsReady = false,
+   keepScrollOffsetOnLocationChange,
+   flow,
+-  onChangeSection = () => {}
++  onChangeSection = () => {},
++  webviewDebuggingEnabled = false
+ }) {
+   const {
+     registerBook,
+@@ -408,6 +409,8 @@ export function View({
        uri: templateUri
      },
      showsVerticalScrollIndicator: false,
 +    contentMode: "mobile",
++    webviewDebuggingEnabled: webviewDebuggingEnabled,
      javaScriptEnabled: true,
      originWhitelist: ['*'],
      scrollEnabled: false,
@@ -108,3 +130,21 @@ index 4aea733..9272f9c 100644
    }, /*#__PURE__*/React.createElement(View, {
      style: {
        width,
+diff --git a/node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts b/node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts
+index e8a0a79..a60e8ec 100644
+--- a/node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts
++++ b/node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts
+@@ -423,6 +423,12 @@ export interface ReaderProps {
+      * Default is 1600
+      */
+     charactersPerLocation?: number;
++    /**
++     * Passed to the WebView: whether Safari's Web Inspector may attach (`isInspectable` on iOS 16.4 and later).
++     *
++     * Default is false
++     */
++    webviewDebuggingEnabled?: boolean;
+ }
+ export {};
+ //# sourceMappingURL=types.d.ts.map
+\ No newline at end of file

@@ -5,6 +5,7 @@ import { documentFile } from '../app/library';
 import { useReaderFileSystem } from '../app/reader-file-system';
 import { asDocumentId } from '../core/document';
 import type { Block } from '../core/segmenter';
+import { DEBUG_MODE } from '../debug/mode';
 import { highlighterSource } from '../renderer/highlighter';
 import { sectionChapters, type NavPoint } from './model';
 import { EMPTY_LOCATIONS_SOURCE } from './reader-locations';
@@ -63,5 +64,7 @@ function Indexer({ document, request }: { document: string; request: Preparation
   return <Reader src={bytes} fileSystem={useIndexFileSystem} width={size.width} height={size.height}
     manager="default" flow="scrolled-doc" initialLocations={emptyLocations} initialLocation={initialLocation} injectedJavascript={source} onWebViewMessage={receive}
     onDisplayError={(error) => { if (latest.current) failPreparation(latest.current.token, error); }}
-    renderLoadingFileComponent={() => null} renderOpeningBookComponent={() => null} />;
+    renderLoadingFileComponent={() => null} renderOpeningBookComponent={() => null}
+    // Safari's Web Inspector reaches this WebView in Debug Mode (ADR 0054).
+    webviewDebuggingEnabled={DEBUG_MODE} />;
 }

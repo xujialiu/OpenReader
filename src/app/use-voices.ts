@@ -12,7 +12,7 @@ import {
   headersAreOffered,
   keyIsOffered,
   PROVIDER_LABELS,
-  providerDeps,
+  providerDepsFor,
   providerSettings,
   type AppSettings,
 } from './settings';
@@ -49,7 +49,7 @@ export const voiceLists = createVoiceLists({
           headers: gateway?.outcome === 'found' ? gateway.secret : '',
         },
       ),
-      providerDeps,
+      providerDepsFor(provider),
     );
     return built.listVoices({ signal });
   },

@@ -49,6 +49,32 @@ module.exports = defineConfig([
   { ignores: ['dist/*', 'ios/*', 'android/*', '.worktrees/'] },
 
   /**
+   * ADR 0054. Any module may write a Debug Log line, the ones the suite runs
+   * under Node included, so the half of `src/debug/` they import takes the
+   * platform — the file system, the system log, AppState — as injected
+   * dependencies. `install.ts` is the half that holds it, run once from
+   * `launch.ts`. test/debug/import-boundary.test.ts checks this rule fires.
+   */
+  {
+    files: ['src/debug/**/*.{ts,tsx}'],
+    ignores: ['src/debug/install.ts', 'src/debug/launch.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [...PLATFORM, '**/modules/**'],
+              message:
+                'ADR 0054: src/debug/ is imported by modules the suite runs under Node. Take the platform in install.ts and hand it to createDebugLog.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  /**
    * `src/core/` is the part of OpenReader that runs under Node. That is not a
    * tidiness preference: it is what lets the Zotero-TTS plugin's provider
    * suite — about 3,200 lines driven entirely by fake `fetch` implementations

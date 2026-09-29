@@ -33,6 +33,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { withTimeout } from '../core/timeout';
 import { createPositionsTransport, type PositionsTransport, type SyncClient, type SyncOutcome } from '../core/sync/transport';
 import { createWebDAVClient, WebDAVError, type WebDAVClient } from '../core/sync/webdav';
+import { forbidCredential } from '../debug/credentials';
+import { cutAddress, debugLog } from '../debug/debug-log';
+import { SYNC_PASSWORD_ENTRY_NAME } from '../keys/entry-name';
 import { readSyncPassword } from '../keys/store';
 
 import type { AppSettings, SyncSettings } from './settings';
@@ -99,6 +102,7 @@ export function useSync(settings: AppSettings, library: Library, deps: SyncDeps 
       transportRef.current = createPositionsTransport({
         enabled: () => settingsRef.current.sync.enabled,
         client: async (): Promise<SyncClient> => {
+          debugLog('sync', `run against ${cutAddress(settingsRef.current.sync.url)}`);
           const lookup = await readSyncPassword();
           if (lookup.outcome === 'refused') passwordRefused(lookup.refusal.message);
           const password = lookup.outcome === 'found' ? lookup.secret : '';
@@ -110,7 +114,14 @@ export function useSync(settings: AppSettings, library: Library, deps: SyncDeps 
         // The status line says it; there is no second channel, and a sentence in
         // a box over the book would be the interruption design 0026 removed.
         report: () => {},
-        onSynced: (outcome) => setLast(outcome),
+        onSynced: (outcome) => {
+          debugLog(
+            'sync',
+            `${outcome.trigger}: ${outcome.result}${outcome.error ? ` (${outcome.error})` : ''}, ${outcome.remote} items in the file, ` +
+              `${outcome.adopted.length} places taken, ${outcome.uploaded ? 'uploaded' : 'nothing uploaded'}`,
+          );
+          setLast(outcome);
+        },
       });
     }
     return transportRef.current;
@@ -146,12 +157,21 @@ export function useSync(settings: AppSettings, library: Library, deps: SyncDeps 
   );
 
   const check = useCallback(async (url: string, username: string, password: string) => {
+    // Typed and perhaps not yet saved, so the Keychain may not have handed it to
+    // the Debug Log's guard: held as the WebDAV password's entry, which it is.
+    forbidCredential(SYNC_PASSWORD_ENTRY_NAME, password);
     try {
       await depsRef.current.client({ url, username, enabled: false }, password).check();
+      debugLog('sync', `check of ${cutAddress(url)}: the folder is there`);
       return { ok: true as const, folderMissing: false };
     } catch (problem) {
-      if (problem instanceof WebDAVError && problem.kind === 'not-found') return { ok: true as const, folderMissing: true };
-      return { ok: false as const, reason: problem instanceof Error ? problem.message : String(problem) };
+      if (problem instanceof WebDAVError && problem.kind === 'not-found') {
+        debugLog('sync', `check of ${cutAddress(url)}: no folder yet, the first upload makes it`);
+        return { ok: true as const, folderMissing: true };
+      }
+      const reason = problem instanceof Error ? problem.message : String(problem);
+      debugLog('sync', `check of ${cutAddress(url)} failed: ${reason}`);
+      return { ok: false as const, reason };
     }
   }, []);
 

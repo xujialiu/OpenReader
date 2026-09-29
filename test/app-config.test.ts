@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import type { ExportedConfig, ExportedConfigWithProps, InfoPlist } from 'expo/config-plugins';
 import { describe, expect, it } from 'vitest';
 
@@ -226,5 +227,50 @@ describe('ADR 0053: a download goes on away from the screen as a continued proce
 
   it('fails the prebuild without a bundle identifier to begin the identifier with', async () => {
     await expect(run({}, {})).rejects.toThrow(/no ios.bundleIdentifier/);
+  });
+});
+
+describe('ADR 0054: Debug Mode is fixed in the bundle, and no build takes another\'s', () => {
+  const require = createRequire(import.meta.url);
+  /** metro.config.js as Metro loads it, with `value` for the switch in the environment. */
+  function metroWith(value: string | undefined) {
+    const path = require.resolve('../metro.config.js');
+    delete require.cache[path];
+    const was = process.env.EXPO_PUBLIC_OPENREADER_DEBUG_MODE;
+    if (value === undefined) delete process.env.EXPO_PUBLIC_OPENREADER_DEBUG_MODE;
+    else process.env.EXPO_PUBLIC_OPENREADER_DEBUG_MODE = value;
+    try {
+      return require(path) as { transformer: Record<string, unknown> };
+    } finally {
+      if (was === undefined) delete process.env.EXPO_PUBLIC_OPENREADER_DEBUG_MODE;
+      else process.env.EXPO_PUBLIC_OPENREADER_DEBUG_MODE = was;
+    }
+  }
+
+  it('puts every EXPO_PUBLIC_ value in the transformer configuration, which Metro hashes into its cache key', () => {
+    // babel-preset-expo writes the value into mode.ts's transformed code, and
+    // Metro's key is the file and the transformer's configuration: without this,
+    // a bundle made without the switch after one with it came out with Debug
+    // Mode on (notes/NOTES_2026-09-29.md; Expo drops the Xcode phase's
+    // --reset-cache when CI is set).
+    const on = metroWith('1').transformer.publicEnvironment as string[];
+    const off = metroWith(undefined).transformer.publicEnvironment as string[];
+    expect(on).toContain('EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1');
+    expect(off.some((entry) => entry.startsWith('EXPO_PUBLIC_OPENREADER_DEBUG_MODE='))).toBe(false);
+  });
+
+  it('keeps Expo\'s own configuration under it', () => {
+    // A metro.config.js that replaced rather than extended Expo's would lose its
+    // transformer, and every bundle with it.
+    expect(metroWith(undefined).transformer.babelTransformerPath).toMatch(/@expo\/metro-config/);
+  });
+
+  it('writes each Debug Log line to the system log at the default level, and public', () => {
+    // INFO, where React Native's console lines go, is kept only while a stream is
+    // attached (pitfalls/physical-iphone.md); `.notice` is the default level,
+    // which the phone persists. A private argument is collected as `<private>`.
+    const swift = readFileSync(new URL('../modules/open-reader-debug-log/ios/OpenReaderDebugLogModule.swift', import.meta.url), 'utf8');
+    pin(swift, 'Logger(subsystem: "top.xujialiu.openreader", category: "debug-log")', 'OpenReaderDebugLogModule.swift');
+    pin(swift, 'self.logger.notice("\\(line, privacy: .public)")', 'OpenReaderDebugLogModule.swift');
   });
 });

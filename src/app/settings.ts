@@ -36,6 +36,8 @@ import { OPENAI_URL } from '../core/providers/openai';
 import { SPEECHIFY_API } from '../core/providers/speechify';
 import type { ProviderId } from '../core/providers/types';
 import { createWarmConnections, originOf } from '../core/warm-connections';
+import { DEBUG_MODE } from '../debug/mode';
+import { loggedFetch } from '../debug/requests';
 
 /**
  * The one set of Provider connections the app has, kept from dying of quiet
@@ -71,6 +73,16 @@ export const providerDeps: ProviderDeps = {
   getWebSocket: () => WebSocket as unknown as HeaderWebSocket,
   newRequestId: () => Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
 };
+
+/**
+ * `providerDeps` for one Provider, with each of its requests a Debug Log line
+ * in Debug Mode (ADR 0054): the method, the address, the status and how long it
+ * took, never its headers (`src/debug/requests.ts`). `providerDeps` itself in a
+ * build without Debug Mode.
+ */
+export function providerDepsFor(provider: ProviderId): ProviderDeps {
+  return DEBUG_MODE ? { ...providerDeps, fetch: loggedFetch('provider', provider, providerDeps.fetch) } : providerDeps;
+}
 
 /**
  * Where a Provider's synthesis goes, as an origin, or null when there is no

@@ -47,6 +47,7 @@ import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { readLocator, type ReadingPlace, type ReadingPosition } from '../core/document';
 import { contentsOf, type NavigationEntry } from '../core/document/contents';
+import { DEBUG_MODE } from '../debug/mode';
 import { chapterOf, useNowPlaying } from '../now-playing';
 import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
 
@@ -628,6 +629,8 @@ export function ReadingView({
             onDisplayError={setDisplayError}
             renderLoadingFileComponent={() => <Waiting words={`Reading ${document.title}…`} />}
             renderOpeningBookComponent={() => <Waiting words="Laying the document out…" />}
+            // Safari's Web Inspector reaches the page in Debug Mode (ADR 0054).
+            webviewDebuggingEnabled={DEBUG_MODE}
             /**
              * Last, and it carries more than the highlighter: `manager` and
              * `flow` come through here too, because ADR 0011's continuous scroll

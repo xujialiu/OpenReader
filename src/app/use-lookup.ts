@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { cutText, debugLog } from '../debug/debug-log';
+import { loggedFetch } from '../debug/requests';
 import { readTranslationKey } from '../keys/store';
 import type { ReaderBridge } from '../renderer/reader-bridge';
 import { lookup, type LookupResult } from '../translation/services';
@@ -72,6 +74,9 @@ export function useLookup(settings: LookupSettings, reading: {
     const abort = new AbortController();
     let live = true;
     setLoading(true);
+    const asked = `${selection.mode} by ${selection.mode === 'translation' ? settings.service : 'dictionary'}, ${settings.direction}`;
+    const started = Date.now();
+    debugLog('lookup', `${asked}: ${cutText(selection.text)}`);
     void (async () => {
       let microsoftKey: string | undefined;
       if (selection.mode === 'translation' && settings.service === 'microsoft') {
@@ -80,9 +85,13 @@ export function useLookup(settings: LookupSettings, reading: {
         if (saved.outcome === 'found') microsoftKey = saved.secret;
       }
       if (!live) return;
-      const answer = await lookup({ ...settings, ...selection, microsoftKey }, { fetch: (url, init) => fetch(url, init), signal: abort.signal });
+      const answer = await lookup({ ...settings, ...selection, microsoftKey }, {
+        fetch: loggedFetch('lookup', selection.mode, (url, init) => fetch(url, init)), signal: abort.signal,
+      });
+      debugLog('lookup', `${asked} answered in ${Date.now() - started} ms from ${answer.source}: ${cutText(answer.text)}`);
       if (live) setResult(answer);
     })().catch((failure: unknown) => {
+      debugLog('lookup', `${asked} failed after ${Date.now() - started} ms: ${failure instanceof Error ? failure.message : String(failure)}`);
       if (live) setError(failure instanceof Error ? failure.message : 'The request failed. Try again.');
     }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; abort.abort(); };
