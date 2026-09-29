@@ -84,6 +84,23 @@ Change the final `-only-testing` method name for the other two methods. The pron
 
 The probe uses real settings taps, native selection long presses, drawer drags, copy, and service-menu touches. It proves Youdao dictionary content, UK/US pronunciation controls, a Google refusal with Retry, and an explicit Youdao switch. `testHandleDragOnPreparedReader` also proves that releasing a native handle changes the selected `The` word to Translation and displays Youdao's real `这个` response. Beta35 had a longer native selection that reached `This is a short test` with `Service, Youdao` but stayed on its spinner for more than 100 seconds; beta37's native wrapper release fix was retested with `testSelectionHandleExpansionTranslatesSentence` followed by `testPreparedHandleReleaseFinishesRequest`, and the root-owned green artifacts `/tmp/openreader-translation-fix-prepare2.xcresult` and `/tmp/openreader-translation-fix-release2.xcresult` show real selected sentence text with Youdao Chinese output (`只写第一句话`, then `第一个句子`).
 
+## A long press that starts no selection, on the phone (#74, `long-press-watch.py`)
+
+```sh
+PMD3=/path/to/venv/bin/pymobiledevice3 python3 test/manual-test/library-and-reader/long-press-watch.py \
+  live --udid IPHONE_UDID --out NEW_OUTPUT_DIR
+python3 test/manual-test/library-and-reader/long-press-watch.py archive \
+  --archive X.logarchive --start "YYYY-MM-DD HH:MM:SS" [--end "…"] --out NEW_OUTPUT_DIR
+```
+
+Prerequisites: a paired iPhone reachable by `devicectl`, pymobiledevice3 in a throwaway venv (pitfalls/physical-iphone.md), any build (Release included). For `archive`, a log collected with `pymobiledevice3 syslog collect OUT --udid IPHONE_UDID --start-time EPOCH` soon after the presses; WebKit's lines were gone from a day-old collection.
+
+It classifies each long press on a page from WebKit's own lines: `Drag session requested` (about 0.65 s after touch-down) followed within 1.5 s by `Text interaction changing selection using '-[WKContentView(WKInteraction) selectTextWithGranularity…` is OK; no selection line is FAIL. `live` prints one line per press and, on FAIL, writes the preceding 90 s and the following 3 s of the app's non-network lines (WebKit, UIKit, `HX`, `[DEBUG-lp74]`) to `fail-YYYYMMDD-HHMMSS.log`, and echoes the last `HX` state line and any `[DEBUG-lp74] wk` decisions. It keeps the whole filtered stream in `raw-*.log`. Measured on 2026-09-29's archive (07:50–08:08): 8 FAIL then OK at 08:07:06.892, the same record as reading the lines by hand (engineering log, 2026-09-29 08:20).
+
+With the temporary `DEBUG-lp74` build (`modules/open-reader-debug-lp74`, #74) the phone also persists, subsystem `top.xujialiu.openreader.lp74`: at touch-down (`down #N`) the first responder, every WKWebView with its content view's first-responder state, the touched WKContentView's interactions and recognizers, every recognizer in the window not in Possible, and the scroll views above the touch; while down, recognizer transitions (`gr #N`) and WKContentView's answers (`wk #N`: `gestureRecognizerShouldBegin:`, `hasSelectablePositionAtPoint:`, `textInteractionGesture:shouldBeginAtPoint:`, first-responder calls; which ones it could hook is logged once as `WKContentView hooks:`); `held #N` 1.2 s in and `lift #N` with the touch's recognizers and their states; and every `HX` line (`[DEBUG-lp74] js HX …`).
+
+What it cannot prove: a press that WebKit never treats as a drag attempt (for example on a link or an image) is not counted at all; a press shorter than about 0.65 s is not a long press to WebKit and is not counted either. It says whether a selection started, not whether the lookup drawer then showed a result.
+
 ## Pinch and double tap on the reading page (#79, `zoom.sh`, `ZoomProbe.swift`)
 
 ```sh

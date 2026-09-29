@@ -46,9 +46,25 @@
 - **The harness reaches a Release build on the phone.** `xcrun devicectl device
   copy to --device IPHONE_UDID --domain-type appDataContainer
   --domain-identifier top.xujialiu.openreader --source FILE --destination
-  Documents/harness.json` is picked up by the reader's poll. A Release build
-  prints no `HX` lines anywhere, so read the effect (here `mediaremoted`), not
-  an answer.
+  Documents/harness.json` is picked up by the reader's poll. Its `HX` answers
+  do reach the phone's log (next item). A `js` command's answer also shows in
+  the player's note ("The highlight could not be drawn: PROBE …"), readable
+  with `devicectl device capture screenshot`.
+- **A Release build's `HX` lines are in the phone's log, but only while a live
+  stream is attached** (2026-09-29, #74). An earlier entry here said a Release
+  build prints no `HX` lines anywhere. `pymobiledevice3 syslog live --udid
+  IPHONE_UDID -pn OpenReader` shows them as `OpenReader{React} <INFO>: HX …`,
+  label `[com.facebook.react.log][javascript]`. INFO is kept only in memory, so
+  an archive collected afterwards holds them from the moment a stream attached,
+  not before. The #74 diagnostic build also writes them at the default level.
+- **`pymobiledevice3 syslog collect OUT --start-time EPOCH` needs no root** and
+  retrieves the persisted log (945 MB for 14 hours). WebKit's notices
+  (`DragAndDrop`, `TextInteraction`, `ActivityState`, `ProcessSuspension`) were
+  in it for the last half day and gone from the day before: collect soon after
+  the event. Filter with `/usr/bin/log show --archive OUT --predicate
+  'process == "OpenReader"' --style compact`, and add `--info --debug` only when
+  a stream was attached. A predicate with `process IN {…}` and several names
+  returned nothing here; `grep` the compact output instead.
 - **`mediaremoted` puts the app after the verb.** Lines read `isPlaying changed
   to true for 【 … top.xujialiu.openreader (PID) … 】`, so a grep for
   `openreader.*isPlaying` never matches; the first draft of the script waited
