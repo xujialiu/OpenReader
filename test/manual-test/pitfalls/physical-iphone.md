@@ -9,6 +9,16 @@
 - **RNAudioAPI reaches linking but FFmpeg symbols such as `avformat_open_input` are undefined** (same run). The four downloaded FFmpeg xcframeworks existed, but `Pods-OpenReader.release.xcconfig` had no corresponding framework paths. Running `pod install` from `ios/` after the binaries were present registered `libavcodec`, `libavformat`, `libavutil` and `libswresample`. Rebuilding with the isolated module cache returned 0 and `codesign --verify --deep --strict` passed. No app source was changed. Installation succeeded after the owner reconnected the phone; launch encountered the separate Security failure below. See `docs/install-on-iphone.md` for the commands.
 - **Physical-device installation succeeds, but launch returns `CoreDeviceError 10002` / `Security`** (2026-09-22, #43). The error names invalid signing, inadequate entitlements or an untrusted profile as alternatives. Local signature verification passed, the profile was unexpired and included the phone, and application/team identifiers matched. The cause remains unconfirmed: the next step is to check developer trust under Settings → General → VPN & Device Management and retry. No successful trust action or launch was observed; do not report this as a verified fix. Full evidence is in `docs/install-on-iphone.md`.
 - **A fresh `npx expo prebuild` fails the device build with `Signing for "OpenReader" requires a development team`** (2026-09-28, #77 final run). The worktree had no `ios/`; prebuild writes no team, and `-allowProvisioningUpdates` does not pick one. Pass the Personal Team on the command line, `DEVELOPMENT_TEAM=TEAM_ID` beside `ENABLE_USER_SCRIPT_SANDBOXING=NO`, or choose it in Xcode as the guide says. The team id is in `defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier` (`teamType = "Personal Team"`) and in the `OU` of the Apple Development certificate. With it, the Release build, `devicectl` install over the old app and launch all returned 0.
+- **A Release build that succeeds prints `error:` lines** (2026-09-29, #83,
+  `0.0.2-beta54`). The `-quiet` log of a build that exited 0 held six
+  `error: the following command failed with exit code 0 but produced no
+  further output`, each right after a compile step's warnings (2,122 warning
+  lines in all), and no `BUILD FAILED`. They are Xcode's wording for a command
+  that printed only warnings. Judge by the exit code, as the guide says, and
+  grep for `BUILD FAILED` or an `error:` naming a file, not for `error:`. The
+  same run needed `DEVELOPMENT_TEAM=UPR29WR8FC` after a prebuild that had
+  cleared `ios/` (the item above); build 3 min 31 s with the 20260927-restored
+  module cache, then install and launch both returned 0 over the cable.
 - **`timeout` is not on macOS** (exit 127, the build never ran). Give the tool call its own timeout instead, or run the build in the background with its exit code written to a file and poll it.
 
 ## Physical iPhone screen
