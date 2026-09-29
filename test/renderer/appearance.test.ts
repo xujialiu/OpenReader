@@ -4,8 +4,10 @@ import {
   appearanceCss,
   DEFAULT_APPEARANCE,
   FONT_SIZES,
+  MARGINS,
   OWN_ALIGNMENT,
   stepFontSize,
+  stepMargins,
   highlightCss,
   READING_FONTS,
   DEFAULT_HIGHLIGHT,
@@ -17,6 +19,11 @@ import { pin } from '../structural';
 const aligned = (value: 'start' | 'justify') =>
   'body *:not(h1, h2, h3, h4, h5, h6, h1 *, h2 *, h3 *, h4 *, h5 *, h6 *, [data-openreader-own-alignment]) ' +
   '{ text-align: ' + value + ' !important; }\n';
+
+/** The one Margins rule, as `appearanceCss` writes it, for the value given. */
+const margined = (points: number) =>
+  'body { margin-left: 0 !important; margin-right: 0 !important; ' +
+  'padding-left: ' + points + 'px !important; padding-right: ' + points + 'px !important; }\n';
 
 /**
  * **Font Size** (CONTEXT.md): how big the body text of every Document is shown,
@@ -53,16 +60,19 @@ describe('Font Size', () => {
  * a stylesheet the owner's choices build.
  */
 describe('Appearance as a stylesheet', () => {
-  it('starts every Document at 16 with its body text justified, and states both like any other choice', () => {
+  it('starts every Document at 16 with 16-point Margins and its body text justified, and states each like any other choice', () => {
     // 16px is what every current Document's body text already is (none of them
     // sets a size of its own), so the default changes nothing anyone has seen.
     // The font still starts on the Document's own; the alignment does not
     // (ADR 0034) — the owner reads justified text unless they say otherwise.
-    expect(DEFAULT_APPEARANCE).toEqual({ font: null, size: 16, textAlignment: 'justify' });
+    // Nor do the Margins (#84): 16 points a side, where the renderer's own
+    // twelfth of the width was about 33.5 on a 402-point phone.
+    expect(DEFAULT_APPEARANCE).toEqual({ font: null, size: 16, margins: 16, textAlignment: 'justify' });
     expect(appearanceCss(DEFAULT_APPEARANCE, 16)).toBe(
       'html, body, body * { -webkit-text-size-adjust: 100% !important; }\n' +
         'html, body, body * { text-size-adjust: 100% !important; }\n' +
-        aligned('justify'),
+        aligned('justify') +
+        margined(16),
     );
   });
 
@@ -75,7 +85,8 @@ describe('Appearance as a stylesheet', () => {
     expect(appearanceCss({ ...DEFAULT_APPEARANCE, size: 24 }, 16)).toBe(
       'html, body, body * { -webkit-text-size-adjust: 150% !important; }\n' +
         'html, body, body * { text-size-adjust: 150% !important; }\n' +
-        aligned('justify'),
+        aligned('justify') +
+        margined(16),
     );
     // A Document that sets its body text at 12px is brought to the owner's 16,
     // rather than kept smaller than every other Document.
@@ -98,22 +109,29 @@ describe('Appearance as a stylesheet', () => {
     // should not.
     const fonts = [null, ...READING_FONTS.map((font) => font.id)];
     const alignments = new Set([aligned('start'), aligned('justify')].map((rule) => rule.trimEnd()));
+    const marginRules = new Set(MARGINS.map((points) => margined(points).trimEnd()));
     for (const font of fonts) {
       for (const size of FONT_SIZES) {
-        for (const textAlignment of TEXT_ALIGNMENTS) {
-          for (const bodyTextSize of [16, 12, 10, 20, 32, 4, 100, Number.NaN]) {
-            const css = appearanceCss({ font, size, textAlignment }, bodyTextSize);
-            expect(css).not.toMatch(/user-select|touch-callout|::highlight/);
-            // And only the properties there are, each in a rule of its own, and
-            // the alignment exactly one of its two rules.
-            for (const declaration of css.split('\n').filter(Boolean)) {
-              if (declaration.includes('text-align:')) {
-                expect(alignments.has(declaration)).toBe(true);
-                continue;
+        for (const margins of MARGINS) {
+          for (const textAlignment of TEXT_ALIGNMENTS) {
+            for (const bodyTextSize of [16, 12, 10, 20, 32, 4, 100, Number.NaN]) {
+              const css = appearanceCss({ font, size, margins, textAlignment }, bodyTextSize);
+              expect(css).not.toMatch(/user-select|touch-callout|::highlight/);
+              // And only the properties there are, each in a rule of its own, the
+              // alignment exactly one of its two rules and the Margins one of theirs.
+              for (const declaration of css.split('\n').filter(Boolean)) {
+                if (declaration.includes('text-align:')) {
+                  expect(alignments.has(declaration)).toBe(true);
+                  continue;
+                }
+                if (declaration.startsWith('body {')) {
+                  expect(marginRules.has(declaration)).toBe(true);
+                  continue;
+                }
+                expect(declaration).toMatch(
+                  /^html, body, body \* \{ (-webkit-text-size-adjust|text-size-adjust|font-family): [^;]+ !important; \}$/,
+                );
               }
-              expect(declaration).toMatch(
-                /^html, body, body \* \{ (-webkit-text-size-adjust|text-size-adjust|font-family): [^;]+ !important; \}$/,
-              );
             }
           }
         }
@@ -202,7 +220,7 @@ describe('Text Alignment', () => {
     expect(appearanceCss({ ...DEFAULT_APPEARANCE, textAlignment: 'left' }, 16)).toContain(aligned('start'));
     // One rule either way, and after the font's, so the font rule above it is
     // unchanged by the choice.
-    const css = appearanceCss({ font: 'georgia', size: 16, textAlignment: 'left' }, 16);
+    const css = appearanceCss({ font: 'georgia', size: 16, margins: 16, textAlignment: 'left' }, 16);
     expect(css.match(/text-align:/g)).toHaveLength(1);
     expect(css.indexOf('text-align:')).toBeGreaterThan(css.indexOf('font-family:'));
   });
@@ -234,6 +252,55 @@ describe('Text Alignment', () => {
       expect(css).toContain(aligned('justify'));
       expect(css).not.toContain('display');
       expect(css).not.toContain('center');
+    }
+  });
+});
+
+/**
+ * **Margins** (CONTEXT.md): the empty space between a Document's text and each
+ * side of the screen, the owner's and never the Document's (#84, ADR 0056).
+ */
+describe('Margins', () => {
+  it('offers 8 to 48 points, four at a time', () => {
+    // The owner's ladder (#84). Not below 8: at 0 or 4 the letters meet the
+    // edge of the glass.
+    expect(MARGINS).toEqual([8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]);
+  });
+
+  it('moves one step per tap and stops at either end', () => {
+    expect(stepMargins(16, 1)).toBe(20);
+    expect(stepMargins(16, -1)).toBe(12);
+    // Null is a button with nowhere to go, which the sheet shows as disabled.
+    expect(stepMargins(48, 1)).toBeNull();
+    expect(stepMargins(8, -1)).toBeNull();
+  });
+
+  it('sets the same padding on both sides of the body, and clears the body\'s own side margins', () => {
+    // epub.js writes `padding: 0 <width / 12>px` on each section's body as an
+    // inline style, which a stylesheet rule with !important beats; the side
+    // margins go to 0 so a Document's own `!important` body margin cannot add
+    // to the owner's.
+    for (const margins of MARGINS) {
+      const css = appearanceCss({ ...DEFAULT_APPEARANCE, margins }, 16);
+      expect(css).toContain(margined(margins));
+      expect(css.match(/padding/g)).toHaveLength(2);
+    }
+  });
+
+  it('reaches the body alone, so a Document\'s own indents come on top', () => {
+    // A quotation's or a list's indent is inside the body and is the Document's.
+    const rule = appearanceCss(DEFAULT_APPEARANCE, 16).split('\n').find((line) => line.includes('padding'));
+    expect(rule?.startsWith('body { ')).toBe(true);
+  });
+
+  it('reads Margins it does not know as 16, rather than writing them into a rule', () => {
+    // A number on the ladder is all that can reach the stylesheet. The cast is
+    // what a settings file from another build would do.
+    for (const margins of [0, 4, 15, 50, -8, Number.NaN, '16', '8px; } body { display: none } p {', null, undefined] as never[]) {
+      const css = appearanceCss({ ...DEFAULT_APPEARANCE, margins }, 16);
+      expect(css).toContain(margined(16));
+      expect(css).not.toContain('display');
+      expect(css.match(/padding-left/g)).toHaveLength(1);
     }
   });
 });

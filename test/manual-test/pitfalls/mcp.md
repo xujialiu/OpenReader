@@ -11,3 +11,23 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 - **A quick synthesized `tap` can silently no-op while an explicit touch down/up pair works, and the state comes and goes with the simulator.** Seen 2026-09-29 (issue #82 recheck): `tap` on a drawer's Close button answered "simulated successfully" with an unchanged `screenHash` and the drawer still open; the same button closed instantly on `touch` down then `touch` up. The same day, the same quick taps registered 4 runs out of 4 right after a simulator reboot (XCTest `tap`s inside `TranslationProbe` too), and failed again half an hour later on a Release build with the feature's code entirely off — so the split is the simulator's input state, not the app under test, and a prior session's stuck synthetic touch-down is the standing suspect. Never trust the tool's success line: verify a tap by a fresh `snapshot_ui`/screenshot (or the changed `screenHash` in the response). When quick taps no-op, do the step with `touch` down+up, and if that spreads, reboot the simulator (then re-silence it; a boot resets `sim_volume` to 60).
 - **`touch` down and up are two tool calls seconds apart, so the pair lands as a multi-second hold.** On the Library, a down/up pair on a document row opened that row's actions drawer — the long-press action — instead of opening the document (both 2026-09-29). Use `tap` for quick activations where taps are reliable (bullet above); reserve `touch` pairs for controls that fire on release and carry no long-press meaning (a Switch, a Test connection button), where the same pair reads as a tap.
 - **An element ref dies across a `simctl` relaunch or a screen change (`SNAPSHOT_EXPIRED`)** — the tool names it and asks for a fresh `snapshot_ui`; re-snapshot and retry with the new refs instead of reusing coordinates from the old tree.
+- **An action that closes a sheet or navigates answers "refreshed runtime
+  snapshot did not settle before timeout" (`SNAPSHOT_CAPTURE_FAILED`), and the
+  follow-up touch-up can then answer `SNAPSHOT_MISSING` — the action itself
+  landed.** Seen throughout the #84/#85 run: every Close Appearance, Back and
+  More-actions touch pair reported the warning while the sheet closed normally,
+  and once the down had already navigated so the up had no snapshot to resolve
+  against. The post-action capture races the close/navigation animation's
+  2.5 s settle window. Take a fresh `snapshot_ui` and re-resolve refs from it
+  instead of retrying the action.
+- **`snapshot_ui`'s summary lists only "likely targets" and one text line — the
+  full element tree is reachable through the bundled AXe binary.** Headers,
+  values and non-tappable elements never appear in the summary; the
+  `TARGET_NOT_ACTIONABLE` error dumps candidates, but only when the ref
+  resolves. For the whole tree with roles and labels use the AXe that ships
+  inside mobilebuildmcp:
+  `AXE=$(find ~/.npm/_npx -path "*mobilebuildmcp/bundled/axe" | head -1)`;
+  `"$AXE" describe-ui --udid UDID` prints every element as JSON with
+  `role`/`AXLabel`/`AXFrame` (it is how the #85 title's `AXHeading` was
+  proven; XCUITest has no header query at all). The bundle path moves with the
+  npx cache, so `find` it.
