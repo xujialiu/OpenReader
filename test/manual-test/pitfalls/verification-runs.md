@@ -458,3 +458,40 @@ plus harness sequences for the failure-note and dark-theme checks.
   Nothing had played and no output device changed that the Mac reported. The kit's
   existing rule — `set` again, then let the next `run-probe.sh` check gate the run —
   is what worked; no new fix needed.
+
+## Verifying #88/#89: the drawer's marked chapter beside a Reading (2026-09-30)
+
+- **The marked row is the row of the spine section the Reading is in, and a
+  section index is not a chapter number.** My Vampire System — Chapters 1–250
+  has two front-matter spine items (253 sections for 250 chapters), so a paused
+  `hx.cjs '{"do":"say"}'` reading `section=173` with the position on Chapter
+  172's tail sentences ("He didn't want to upset this little family…") marked —
+  in the Download drawer opened from the Library while playing and in Contents
+  alike — "Chapter 172: Bad Timing", and one utterance later, on Chapter 173's
+  first sentence (section 174), both marked "Chapter 173: My Puppet". When the
+  brief says "Chapter 173 on the page", read the HX `utterance=`/`section=`
+  line before naming the row the drawer should mark.
+- **The 10 s window fits the Library → `…` → Download chain, but budget the
+  screenshots.** `play-for 10` schedules the in-app pause 10 s after `onPlay`
+  (which itself lands about 1.5 s after the spawn); Back, the row's `…`,
+  Download and two `simctl io screenshot` calls took about 7 s. Each
+  screenshot costs 1.5–2 s — order the steps so the screenshot you must have
+  inside the window comes first, and rebuild the timeline afterwards from the
+  files' mtimes against `play.log`'s.
+- **A screenshot taken 1.5 s after Back still showed the reader.** The
+  navigation had not reached the frame `simctl io` captured (the Library was
+  only proven by the next taps landing). Take the post-navigation screenshot at
+  least 2 s after the tap.
+- **Reopening the reader reverted a paused tap-cue to the previous stop.** The
+  tap-cue moved the position to "It wasn't too hot…" (the Library row's Last
+  read quoted it), but after closing and reopening the reader the paused status
+  read `utterance=321` — "He didn't want to upset this little family…", the
+  sentence the reading had last stopped on — and playback resumed there. The
+  cue did not survive the close/reopen. Reported as a reader finding, not a
+  drawer one: the drawer followed the live Reading either way, and the follow-up
+  run (paused on Chapter 173's heading) marked "Chapter 173: My Puppet".
+- **The Reading Button's playing state is provable from stills by byte-compare.**
+  Crops of the button region from two paused screenshots taken ten minutes apart
+  were byte-identical, while crops from two screenshots 1.5 s apart during
+  playback differed from them and from each other — the waveform animates while
+  playing and is static while paused.
