@@ -53,6 +53,11 @@ export interface HeldReading {
   buffering: boolean;
   /** Whether the player is shown in full, and the navigation bar with it (#67). */
   chrome: boolean;
+  /**
+   * The section the Reading's contents list marks, or null before the view has
+   * said: where the download drawer marks and opens (#88).
+   */
+  section: number | null;
 }
 
 export interface ReadingHandle {
@@ -97,8 +102,8 @@ export function ReadingHost({ children }: { children: ReactNode }) {
    * just started has said nothing yet, and the one before it was unmounted with
    * its last word still here.
    */
-  const [live, setLive] = useState<{ id: DocumentId | null; playing: boolean; buffering: boolean; chrome: boolean }>(
-    { id: null, playing: false, buffering: false, chrome: true },
+  const [live, setLive] = useState<{ id: DocumentId | null; playing: boolean; buffering: boolean; chrome: boolean; section: number | null }>(
+    { id: null, playing: false, buffering: false, chrome: true, section: null },
   );
   const [barHeight, setBarHeight] = useState(0);
   /** Read by `left`, which runs in a cleanup and must see the state of now, not of the render it closed over. */
@@ -217,7 +222,16 @@ export function ReadingHost({ children }: { children: ReactNode }) {
   const reached = useCallback((place: ReadingPlace) => { if (openedId) library.reached(openedId, place); }, [library, openedId]);
   const titled = useCallback((said: string) => { if (openedId) library.retitled(openedId, said); }, [library, openedId]);
   const onChrome = useCallback(
-    (chrome: boolean) => setLive((was) => (was.id === openedId ? (was.chrome === chrome ? was : { ...was, chrome }) : { id: openedId, playing: false, buffering: false, chrome })),
+    (chrome: boolean) => setLive((was) => (was.id === openedId ? (was.chrome === chrome ? was : { ...was, chrome }) : { id: openedId, playing: false, buffering: false, chrome, section: null })),
+    [openedId],
+  );
+  const onSection = useCallback(
+    (section: number | null) =>
+      setLive((was) =>
+        was.id === openedId
+          ? (was.section === section ? was : { ...was, section })
+          : { id: openedId, playing: false, buffering: false, chrome: true, section },
+      ),
     [openedId],
   );
   const onState = useCallback(
@@ -225,7 +239,7 @@ export function ReadingHost({ children }: { children: ReactNode }) {
       setLive((was) =>
         was.id === openedId
           ? (was.playing === playing && was.buffering === buffering ? was : { ...was, playing, buffering })
-          : { id: openedId, playing, buffering, chrome: true },
+          : { id: openedId, playing, buffering, chrome: true, section: null },
       ),
     [openedId],
   );
@@ -240,6 +254,7 @@ export function ReadingHost({ children }: { children: ReactNode }) {
             playing: mine && live.playing,
             buffering: mine && live.buffering,
             chrome: mine ? live.chrome : true,
+            section: mine ? live.section : null,
           }
         : null,
       show,
@@ -287,6 +302,7 @@ export function ReadingHost({ children }: { children: ReactNode }) {
             barHeight={barHeight}
             onChrome={onChrome}
             onState={onState}
+            onSection={onSection}
           />
           </View>
         ) : null}

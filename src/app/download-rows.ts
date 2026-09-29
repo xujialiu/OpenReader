@@ -1,3 +1,4 @@
+import { rowOfSection } from '../core/document/contents';
 import type { ChapterProgress } from '../offline/catalog';
 import { chapterTextCount, type Chapter, type DownloadTask, type TaskState } from '../offline/model';
 import { isPaused } from '../offline/pausing';
@@ -64,6 +65,27 @@ export function marker(
   if (progress?.complete) return { kind: 'check' };
   if (inTask(chapter, task)) return ring(HALTED.includes(task.state) || isPaused(task, chapter.id));
   return { kind: 'checkbox' };
+}
+
+/**
+ * The shown row the reading is in, marked and opened at as Contents marks and
+ * opens at its own (#88), or null when no shown row can contain it.
+ *
+ * `section` is the spine item the reading is in, as the Contents is given it.
+ * The rule is the Contents' own (`rowOfSection`), applied to the rows the
+ * download view shows rather than to every chapter, so what it names is on
+ * screen there: a file the drawer hides, a cover or a copyright page with
+ * nothing to say, gives the nearest shown row before it; chapters sharing one
+ * file give the first of them; a folded volume gives its heading. Nothing
+ * before the reading, as for a document not started, gives null, and the list
+ * opens at its top. Manage downloads, which lists fewer rows, marks the answer
+ * only where it lists it, rather than asking again among its own rows and
+ * marking a chapter that is not being read.
+ */
+export function readingChapter(shown: readonly Chapter[], section: number | null): string | null {
+  if (section === null) return null;
+  const at = rowOfSection(shown.map((c) => c.section ?? null), section);
+  return at ? shown[at.row].id : null;
 }
 
 /**

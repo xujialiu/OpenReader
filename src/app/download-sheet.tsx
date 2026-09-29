@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { chapterTextCount, descendants, fullyPrepared, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
 import { INK, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
-import { listedInManage, marker, type Marker } from './download-rows';
+import { listedInManage, marker, readingChapter, type Marker } from './download-rows';
 import { Icon } from './icon';
 import { useSweep } from './use-sweep';
 
@@ -20,8 +20,27 @@ const STATE_LINE: Partial<Record<TaskState, string>> = {
 };
 const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.length ? `${task.failed.length} chapters failed` : 'Selected chapters downloaded' : STATE_LINE[task.state];
 
-export function DownloadContent({ document, title, voice, onVoice, onStart }: {
-  document: string; title: string; voice: OfflineVoice; onVoice?(voice: OfflineVoice): void; onStart?(): void;
+/**
+ * How far the drawer's content is set in from its sides. The list alone runs to
+ * the sides, and its rows set themselves back in by as much, so that the list's
+ * scroll indicator runs down the drawer's edge rather than over the rings at
+ * the end of each row (#89).
+ */
+const SIDE = 20;
+/** A row's least height: one line of title and nothing under it, which is most rows. */
+const ROW = 62;
+/** Where the list guesses a row it has not laid out yet to be (#88). */
+const layout = (_: unknown, index: number) => ({ length: ROW, offset: ROW * index, index });
+/** How long after its first content the list keeps bringing the row being read back to its top. */
+const SETTLE_MS = 1500;
+
+/**
+ * @param section The spine item the reading is in, as the Contents is given it,
+ * or null when there is none: the row it names is marked, and the list opens at
+ * it (#88).
+ */
+export function DownloadContent({ document, title, voice, section, onVoice, onStart }: {
+  document: string; title: string; voice: OfflineVoice; section: number | null; onVoice?(voice: OfflineVoice): void; onStart?(): void;
 }) {
   downloads.useDownloads();
   const borders = useBorders();
@@ -51,14 +70,66 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
     ids.forEach((id) => { if (remove) next.delete(id); else next.add(id); }); return next;
   });
   const listed = manage ? listedInManage(chapters, markers) : null;
-  const visible = chapters.filter((chapter) => {
-    if (listed ? !listed.has(chapter.id) : !textual(chapter) && !chapters.some((c) => c.parent === chapter.id)) return false;
-    let parent = chapter.parent;
-    while (parent) { if (collapsed.has(parent)) return false; parent = chapters.find((c) => c.id === parent)?.parent ?? null; }
+  const { byId, parents } = useMemo(() => ({
+    byId: new Map(chapters.map((c) => [c.id, c])), parents: new Set(chapters.map((c) => c.parent)),
+  }), [chapters]);
+  const unfolded = (chapter: Chapter) => {
+    for (let parent = chapter.parent; parent; parent = byId.get(parent)?.parent ?? null) if (collapsed.has(parent)) return false;
     return true;
-  });
+  };
+  // What the download view lists; Manage downloads lists fewer (#37).
+  const rows = chapters.filter((c) => (textual(c) || parents.has(c.id)) && unfolded(c));
+  const visible = listed ? chapters.filter((c) => listed.has(c.id) && unfolded(c)) : rows;
   // Two fingers over the list select the rows under them (#57).
   const sweep = useSweep({ shown: visible, chapters, collapsed, choosable: eligibleIds, selected }, setSelected);
+  // Found among the download view's rows even in Manage downloads, which marks
+  // it only if it lists it: its nearest listed row would be another chapter.
+  const here = readingChapter(rows, section);
+  const hereIndex = here === null ? -1 : visible.findIndex((c) => c.id === here);
+  const list = useRef<FlatList<Chapter> | null>(null);
+  const sweepRef = sweep.list.ref;
+  const attach = useCallback((flat: FlatList<Chapter> | null) => { sweepRef(flat); list.current = flat; }, [sweepRef]);
+  /**
+   * The list opens at the row being read, as Contents does (#88): once, when
+   * its rows first appear, and never again, so switching to Manage downloads or
+   * to another voice leaves the list where the owner has it.
+   *
+   * Without `getItemLayout` the list will not scroll past the last row it has
+   * measured, which grows ten rows a batch, so a far row was never reached
+   * (ADR 0027, #88). Rows differ a little in height, so `layout` is a guess at
+   * every row's least height: it lets the list go straight to where the row
+   * should be, and once the rows there are laid out their measured places take
+   * over from it. So the row is asked for again whenever the content changes
+   * size, until the owner touches the list or it has had a moment to settle,
+   * counted from the list's first content rather than from the open: in the
+   * reader that came 1.4 s after it.
+   */
+  const opened = useRef(false);
+  const settling = useRef<{ id: string; until: number | null } | null>(null);
+  const shown = useRef(visible);
+  useEffect(() => { shown.current = visible; });
+  const settle = useCallback((content = 0) => {
+    const now = settling.current;
+    if (!now) return;
+    if (now.until === null && content > 0) now.until = Date.now() + SETTLE_MS;
+    const index = shown.current.findIndex((c) => c.id === now.id);
+    if (index < 0 || (now.until !== null && Date.now() > now.until)) { settling.current = null; return; }
+    list.current?.scrollToIndex({ index, animated: false });
+  }, []);
+  useEffect(() => {
+    if (opened.current || !visible.length) return;
+    opened.current = true;
+    if (hereIndex <= 0) return;
+    settling.current = { id: visible[hereIndex].id, until: null };
+    settle();
+  }, [visible, hereIndex, settle]);
+  const stopSettling = () => { settling.current = null; };
+  const { onLayout: sweepLayout, onContentSizeChange: sweepSize } = sweep.list;
+  const listLayout = useCallback((event: LayoutChangeEvent) => { sweepLayout(event); settle(); }, [sweepLayout, settle]);
+  const listSize = useCallback((width: number, height: number) => {
+    sweepSize(width, height);
+    settle(height);
+  }, [sweepSize, settle]);
   const full = chapters.filter(textual).length;
   const completed = [...progress.values()].filter((p) => p.complete).length;
   const whole = !!plan && fullyPrepared(plan) && full > 0 && completed === full;
@@ -120,8 +191,8 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
         <Text style={styles.link}>Retry failed</Text>
       </Pressable> : null}
     </View> : null}
-    <GestureDetector gesture={sweep.gesture}><FlatList {...sweep.list} data={visible} style={styles.list} keyExtractor={(c) => c.id} initialNumToRender={14}
-      ListEmptyComponent={plan && !manage ? <Text style={styles.secondary}>No readable text in this document.</Text> : null}
+    <GestureDetector gesture={sweep.gesture}><FlatList {...sweep.list} ref={attach} getItemLayout={layout} onLayout={listLayout} onContentSizeChange={listSize} onTouchStart={stopSettling} data={visible} style={styles.list} keyExtractor={(c) => c.id} initialNumToRender={14}
+      ListEmptyComponent={plan && !manage ? <Text style={[styles.secondary, styles.inset]}>No readable text in this document.</Text> : null}
       renderItem={({ item }) => {
         const children = chapters.some((c) => c.parent === item.id);
         const group = descendants(chapters, item.id);
@@ -131,8 +202,12 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
         const count = progress.get(item.id)?.count ?? 0;
         const failed = !!task?.failed.includes(item.id);
         const mark = children ? null : markers.get(item.id);
-        const name = <Text style={[styles.title, children && { fontWeight: '600' }]} numberOfLines={2}>{item.title || 'Untitled chapter'}</Text>;
-        return <View style={[styles.row, { borderBottomColor: borders.line, paddingLeft: 4 + Math.min(item.depth, 4) * 15 }]}>
+        // Marked as Contents marks the row being read (#88), across the whole drawer.
+        const current = item.id === here;
+        const label = `${item.title || 'Untitled chapter'}${current ? ', being read' : ''}`;
+        const name = <Text style={[styles.title, children && { fontWeight: '600' }, current && styles.titleCurrent]} numberOfLines={2}
+          accessibilityLabel={label}>{item.title || 'Untitled chapter'}</Text>;
+        return <View style={current ? styles.current : null}><View style={[styles.row, { borderBottomColor: borders.line, paddingLeft: 4 + Math.min(item.depth, 4) * 15 }]}>
           {children ? <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed.has(item.id) ? 'Expand' : 'Collapse'} ${item.title}`}
             onPress={() => setCollapsed((was) => { const next = new Set(was); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} style={styles.collapse}>
             <Icon name={collapsed.has(item.id) ? 'next' : 'down'} color={INK.quiet} size={18} />
@@ -140,20 +215,20 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
           {mark?.kind === 'ring' && task ? <View style={styles.chapter}><View style={{ flex: 1 }}>{name}</View>
             <DownloadRing fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={() => downloads.toggleChapter(task, item.id)} />
           </View> :
-          <Pressable accessibilityRole="checkbox" accessibilityLabel={`${item.title || 'Untitled chapter'}${done ? ', downloaded' : ''}`}
+          <Pressable accessibilityRole="checkbox" accessibilityLabel={`${label}${done ? ', downloaded' : ''}`}
             accessibilityState={{ checked: picked, disabled: !ids.length }} disabled={!ids.length} onPress={() => toggle(ids)} style={styles.chapter}>
             <View style={{ flex: 1 }}>{name}
               {!done && (count || failed) ? <Text style={styles.secondary}>{failed ? 'Failed · ' : ''}{count} / {chapterTextCount(item)}</Text> : null}</View>
             {done && !manage ? <Icon name="check" color={INK.reading} size={22} /> :
               ids.length || !children ? <View style={[styles.circle, { borderColor: picked ? borders.reading : borders.quiet }, picked && styles.checked]}>{picked ? <Icon name="check" color={INK.page} size={17} /> : null}</View> : null}
           </Pressable>}
-        </View>;
+        </View></View>;
       }} /></GestureDetector>
     {otherVoices.length ? <View style={styles.other}>{otherVoices.map((v) => <Pressable key={`${v.provider}/${v.voice}`} accessibilityRole="button"
-      onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.(v); }}><Text style={styles.link}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</Text></Pressable>)}</View> : null}
+      onPress={() => { setSelected(new Set()); stopSettling(); if (manage) setManagedVoice(v); else onVoice?.(v); }}><Text style={styles.link}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</Text></Pressable>)}</View> : null}
     <View style={styles.footer}>
       {manageable ? <View style={styles.top}>
-        <Pressable accessibilityRole="button" onPress={() => { setSelected(new Set()); setManage(!manage); setManagedVoice(null); }}><Text style={styles.link}>{manage ? 'Back to downloads' : 'Manage downloads'}</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => { setSelected(new Set()); stopSettling(); setManage(!manage); setManagedVoice(null); }}><Text style={styles.link}>{manage ? 'Back to downloads' : 'Manage downloads'}</Text></Pressable>
         {manage ? downloads.occupied(document) > 0 ? <Pressable accessibilityRole="button" onPress={deleteEverything}>
           <Text style={[styles.link, { color: INK.attention }]}>Delete all saved audio</Text>
         </Pressable> : null :
@@ -171,11 +246,12 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
   </View>;
 }
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, gap: 12, flexShrink: 1 }, top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  content: { paddingHorizontal: SIDE, gap: 12, flexShrink: 1 }, inset: { paddingHorizontal: SIDE }, top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   voice: { color: INK.text, fontSize: 15, flex: 1 }, link: { color: INK.reading, fontSize: 14, paddingVertical: 8 },
   secondary: { color: INK.quiet, fontSize: 13 }, error: { color: INK.text, fontSize: 13 },
-  preparing: { padding: 20, gap: 14, alignItems: 'center' }, list: { height: 330, flexGrow: 0, flexShrink: 1 },
-  row: { minHeight: 62, flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
+  preparing: { padding: 20, gap: 14, alignItems: 'center' }, list: { height: 330, flexGrow: 0, flexShrink: 1, marginHorizontal: -SIDE },
+  row: { minHeight: ROW, flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, marginHorizontal: SIDE },
+  current: { backgroundColor: INK.page }, titleCurrent: { color: INK.reading, fontWeight: '700' },
   chapter: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12, paddingVertical: 12 }, title: { color: INK.text, fontSize: 16 },
   collapse: { width: 30, alignItems: 'center', justifyContent: 'center' }, circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   checked: { backgroundColor: INK.reading },
