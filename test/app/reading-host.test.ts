@@ -15,7 +15,8 @@ import { DEFAULT_SETTINGS } from '../../src/app/settings';
  * and pokes sync (`reading-view.tsx`), so "ended" here is "the view unmounted".
  */
 
-const views = vi.hoisted(() => ({ shown: false, mounted: [] as string[], unmounted: [] as string[], state: null as null | ((playing: boolean, buffering: boolean) => void) }));
+const views = vi.hoisted(() => ({ shown: false, mounted: [] as string[], unmounted: [] as string[], state: null as null | ((playing: boolean, buffering: boolean) => void),
+  section: null as null | ((section: number | null) => void) }));
 const portal = vi.hoisted(() => ({ hostName: undefined as string | undefined }));
 const shell = vi.hoisted(() => ({ current: null as unknown }));
 /** What the offline runtime was last told about the Reading playing (#75). */
@@ -34,9 +35,10 @@ vi.mock('react-native-teleport', () => ({
 vi.mock('../../src/app/reading-view', async () => {
   const { useEffect } = await vi.importActual<typeof import('react')>('react');
   return {
-    ReadingView: (props: { shown: boolean; document: { identity: { id: string } }; onState(playing: boolean, buffering: boolean): void }) => {
+    ReadingView: (props: { shown: boolean; document: { identity: { id: string } }; onState(playing: boolean, buffering: boolean): void; onSection(section: number | null): void }) => {
       const id = props.document.identity.id;
       views.state = props.onState;
+      views.section = props.onSection;
       views.shown = props.shown;
       useEffect(() => {
         views.mounted.push(id);
@@ -165,6 +167,20 @@ describe('the Reading outlives the Reader while it plays (#68)', () => {
     // Deleted while it plays.
     await h.run((r) => r.end(B));
     expect(downloads.readingPlays).toBe(false);
+    await h.close();
+  });
+
+  // Where the download drawer marks and opens, in the Reader and in the Library (#88).
+  it('carries the section its contents list marks, and not into another Document', async () => {
+    const h = await host();
+    await h.run((r) => r.show(A));
+    expect(h.handle.current!.current).toMatchObject({ id: A, section: null });
+    await h.run(() => views.section!(12));
+    await h.run(() => views.state!(true, false));
+    await h.run((r) => r.left(A));
+    expect(h.handle.current!.current).toMatchObject({ id: A, section: 12 });
+    await h.run((r) => r.show(B));
+    expect(h.handle.current!.current).toMatchObject({ id: B, section: null });
     await h.close();
   });
 

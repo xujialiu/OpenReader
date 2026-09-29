@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { chapterTextCount, descendants, fullyPrepared, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
 import { INK, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
-import { listedInManage, marker, type Marker } from './download-rows';
+import { listedInManage, marker, readingChapter, type Marker } from './download-rows';
 import { Icon } from './icon';
 import { useSweep } from './use-sweep';
 
@@ -20,8 +20,23 @@ const STATE_LINE: Partial<Record<TaskState, string>> = {
 };
 const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.length ? `${task.failed.length} chapters failed` : 'Selected chapters downloaded' : STATE_LINE[task.state];
 
-export function DownloadContent({ document, title, voice, onVoice, onStart }: {
-  document: string; title: string; voice: OfflineVoice; onVoice?(voice: OfflineVoice): void; onStart?(): void;
+/**
+ * How far the drawer's content is set in from its sides. The list alone runs to
+ * the sides, and its rows set themselves back in by as much, so that the list's
+ * scroll indicator runs down the drawer's edge rather than over the rings at
+ * the end of each row (#89).
+ */
+const SIDE = 20;
+/** A row's least height, for the first guess at where an unmeasured row is. */
+const ROW = 62;
+
+/**
+ * @param section The spine item the reading is in, as the Contents is given it,
+ * or null when there is none: the row it names is marked, and the list opens at
+ * it (#88).
+ */
+export function DownloadContent({ document, title, voice, section, onVoice, onStart }: {
+  document: string; title: string; voice: OfflineVoice; section: number | null; onVoice?(voice: OfflineVoice): void; onStart?(): void;
 }) {
   downloads.useDownloads();
   const borders = useBorders();
@@ -59,6 +74,35 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
   });
   // Two fingers over the list select the rows under them (#57).
   const sweep = useSweep({ shown: visible, chapters, collapsed, choosable: eligibleIds, selected }, setSelected);
+  const here = readingChapter(visible, section);
+  const hereIndex = here === null ? -1 : visible.findIndex((c) => c.id === here);
+  const list = useRef<FlatList<Chapter> | null>(null);
+  const sweepRef = sweep.list.ref;
+  const attach = useCallback((flat: FlatList<Chapter> | null) => { sweepRef(flat); list.current = flat; }, [sweepRef]);
+  /**
+   * The list opens at the row being read, as Contents does (#88): once, when
+   * its rows first appear, and never again, so switching to Manage downloads or
+   * to another voice leaves the list where the owner has it.
+   */
+  const opened = useRef(false);
+  const tries = useRef(0);
+  useEffect(() => {
+    if (opened.current || !visible.length) return;
+    opened.current = true;
+    if (hereIndex > 0) list.current?.scrollToIndex({ index: hereIndex, animated: false });
+  }, [visible.length, hereIndex]);
+  /**
+   * Rows differ in height, so the list cannot place one it has not laid out
+   * (`getItemLayout` needs one height for all): go to where it is guessed to be,
+   * which lays out the rows around it, and ask again. A few tries, because the
+   * guess improves as rows are measured; and a request the data has since
+   * outgrown, the list having changed under it, is dropped rather than thrown.
+   */
+  const retry = useCallback(({ index, averageItemLength }: { index: number; averageItemLength: number }) => {
+    if (tries.current++ >= 8) return;
+    list.current?.scrollToOffset({ offset: index * (averageItemLength || ROW), animated: false });
+    setTimeout(() => { try { list.current?.scrollToIndex({ index, animated: false }); } catch { /* the list changed under it */ } }, 60);
+  }, []);
   const full = chapters.filter(textual).length;
   const completed = [...progress.values()].filter((p) => p.complete).length;
   const whole = !!plan && fullyPrepared(plan) && full > 0 && completed === full;
@@ -120,8 +164,8 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
         <Text style={styles.link}>Retry failed</Text>
       </Pressable> : null}
     </View> : null}
-    <GestureDetector gesture={sweep.gesture}><FlatList {...sweep.list} data={visible} style={styles.list} keyExtractor={(c) => c.id} initialNumToRender={14}
-      ListEmptyComponent={plan && !manage ? <Text style={styles.secondary}>No readable text in this document.</Text> : null}
+    <GestureDetector gesture={sweep.gesture}><FlatList {...sweep.list} ref={attach} onScrollToIndexFailed={retry} data={visible} style={styles.list} keyExtractor={(c) => c.id} initialNumToRender={14}
+      ListEmptyComponent={plan && !manage ? <Text style={[styles.secondary, styles.inset]}>No readable text in this document.</Text> : null}
       renderItem={({ item }) => {
         const children = chapters.some((c) => c.parent === item.id);
         const group = descendants(chapters, item.id);
@@ -131,8 +175,12 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
         const count = progress.get(item.id)?.count ?? 0;
         const failed = !!task?.failed.includes(item.id);
         const mark = children ? null : markers.get(item.id);
-        const name = <Text style={[styles.title, children && { fontWeight: '600' }]} numberOfLines={2}>{item.title || 'Untitled chapter'}</Text>;
-        return <View style={[styles.row, { borderBottomColor: borders.line, paddingLeft: 4 + Math.min(item.depth, 4) * 15 }]}>
+        // Marked as Contents marks the row being read (#88), across the whole drawer.
+        const current = item.id === here;
+        const label = `${item.title || 'Untitled chapter'}${current ? ', being read' : ''}`;
+        const name = <Text style={[styles.title, children && { fontWeight: '600' }, current && styles.titleCurrent]} numberOfLines={2}
+          accessibilityLabel={label}>{item.title || 'Untitled chapter'}</Text>;
+        return <View style={current ? styles.current : null}><View style={[styles.row, { borderBottomColor: borders.line, paddingLeft: 4 + Math.min(item.depth, 4) * 15 }]}>
           {children ? <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed.has(item.id) ? 'Expand' : 'Collapse'} ${item.title}`}
             onPress={() => setCollapsed((was) => { const next = new Set(was); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} style={styles.collapse}>
             <Icon name={collapsed.has(item.id) ? 'next' : 'down'} color={INK.quiet} size={18} />
@@ -140,14 +188,14 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
           {mark?.kind === 'ring' && task ? <View style={styles.chapter}><View style={{ flex: 1 }}>{name}</View>
             <DownloadRing fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={() => downloads.toggleChapter(task, item.id)} />
           </View> :
-          <Pressable accessibilityRole="checkbox" accessibilityLabel={`${item.title || 'Untitled chapter'}${done ? ', downloaded' : ''}`}
+          <Pressable accessibilityRole="checkbox" accessibilityLabel={`${label}${done ? ', downloaded' : ''}`}
             accessibilityState={{ checked: picked, disabled: !ids.length }} disabled={!ids.length} onPress={() => toggle(ids)} style={styles.chapter}>
             <View style={{ flex: 1 }}>{name}
               {!done && (count || failed) ? <Text style={styles.secondary}>{failed ? 'Failed · ' : ''}{count} / {chapterTextCount(item)}</Text> : null}</View>
             {done && !manage ? <Icon name="check" color={INK.reading} size={22} /> :
               ids.length || !children ? <View style={[styles.circle, { borderColor: picked ? borders.reading : borders.quiet }, picked && styles.checked]}>{picked ? <Icon name="check" color={INK.page} size={17} /> : null}</View> : null}
           </Pressable>}
-        </View>;
+        </View></View>;
       }} /></GestureDetector>
     {otherVoices.length ? <View style={styles.other}>{otherVoices.map((v) => <Pressable key={`${v.provider}/${v.voice}`} accessibilityRole="button"
       onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.(v); }}><Text style={styles.link}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</Text></Pressable>)}</View> : null}
@@ -171,11 +219,12 @@ export function DownloadContent({ document, title, voice, onVoice, onStart }: {
   </View>;
 }
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, gap: 12, flexShrink: 1 }, top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  content: { paddingHorizontal: SIDE, gap: 12, flexShrink: 1 }, inset: { paddingHorizontal: SIDE }, top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
   voice: { color: INK.text, fontSize: 15, flex: 1 }, link: { color: INK.reading, fontSize: 14, paddingVertical: 8 },
   secondary: { color: INK.quiet, fontSize: 13 }, error: { color: INK.text, fontSize: 13 },
-  preparing: { padding: 20, gap: 14, alignItems: 'center' }, list: { height: 330, flexGrow: 0, flexShrink: 1 },
-  row: { minHeight: 62, flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth },
+  preparing: { padding: 20, gap: 14, alignItems: 'center' }, list: { height: 330, flexGrow: 0, flexShrink: 1, marginHorizontal: -SIDE },
+  row: { minHeight: ROW, flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, marginHorizontal: SIDE },
+  current: { backgroundColor: INK.page }, titleCurrent: { color: INK.reading, fontWeight: '700' },
   chapter: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12, paddingVertical: 12 }, title: { color: INK.text, fontSize: 16 },
   collapse: { width: 30, alignItems: 'center', justifyContent: 'center' }, circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   checked: { backgroundColor: INK.reading },

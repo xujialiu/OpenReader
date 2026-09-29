@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { listedInManage, marker, type Marker } from '../../src/app/download-rows';
+import { listedInManage, marker, readingChapter, type Marker } from '../../src/app/download-rows';
 import type { Chapter, DownloadTask } from '../../src/offline/model';
 
 const chapter = (id: string, textCount = 17, prepared = true): Chapter => ({ id, title: id, depth: 0, parent: null, texts: [], textCount, prepared });
@@ -86,5 +86,34 @@ describe('which rows Manage downloads lists', () => {
     const deep = [...plan, heading('Part A', 'Volume 2'), under('c4', 'Part A')];
     const seen = listedInManage(deep, new Map(deep.map((c) => [c.id, c.id === 'c4' ? { kind: 'ring', fraction: 0.5, spinning: false, halted: false } as Marker : null])));
     expect([...seen].sort()).toEqual(['Part A', 'Volume 2', 'c4']);
+  });
+});
+
+describe('which row the download drawer marks and opens at (#88)', () => {
+  const at = (id: string, section: number | null, fragment = ''): Chapter => ({ ...chapter(id), section, fragment });
+  // A cover the drawer hides (no text), a volume heading on its own title page,
+  // two chapters sharing one file, and a copyright page the drawer hides too.
+  const shown = [at('Volume 1', 2), at('c1', 3), at('c2a', 4, 'one'), at('c2b', 4, 'two'), at('c3', 6), at('unlisted', null)];
+  it('marks the chapter whose file the reading is in', () => {
+    expect(readingChapter(shown, 3)).toBe('c1');
+    expect(readingChapter(shown, 6)).toBe('c3');
+  });
+  it('marks the volume heading when the reading is on its own page', () => {
+    expect(readingChapter(shown, 2)).toBe('Volume 1');
+  });
+  it('marks the first of the chapters sharing a file, as Contents does', () => {
+    expect(readingChapter(shown, 4)).toBe('c2a');
+  });
+  it('marks the nearest shown row before a file with no row of its own', () => {
+    expect(readingChapter(shown, 5)).toBe('c2a');
+    expect(readingChapter(shown, 40)).toBe('c3');
+  });
+  it('marks nothing before the first shown row, or with no reading at all', () => {
+    expect(readingChapter(shown, 0)).toBeNull();
+    expect(readingChapter(shown, null)).toBeNull();
+    expect(readingChapter([], 3)).toBeNull();
+  });
+  it('marks the heading of a folded volume, whose chapters are not shown', () => {
+    expect(readingChapter([at('Volume 1', 2), at('Volume 2', 7)], 4)).toBe('Volume 1');
   });
 });

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { DocumentId } from '../core/document';
+import { readLocator, type DocumentId, type ReadingPosition } from '../core/document';
+import { spineIndexOf } from '../renderer';
 import { AppearanceControls, FontList } from './appearance-sheet';
 import { INK, useBorders } from './controls';
 import { DownloadContent } from './download-sheet';
 import { Icon } from './icon';
+import { useHeldReading } from './reading-host';
 import { useShell } from './routes';
 import { PROVIDER_LABELS, selectVoice, settingsForDocument } from './settings';
 import { Sheet } from './sheet';
@@ -29,6 +31,13 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false 
   const { library, settings, setSettings } = useShell();
   const borders = useBorders();
   const entry = library.entries.find((e) => e.id === document);
+  const held = useHeldReading().current;
+  /**
+   * Where Download marks and opens (#88): where this Document's Reading has its
+   * contents list mark, when there is one and it has said, so the two drawers
+   * agree; otherwise the section of the place it was left at.
+   */
+  const section = (held?.id === document ? held.section : null) ?? sectionOf(entry?.position ?? null);
   const [page, setPage] = useState<'menu' | 'appearance' | 'rename' | 'download' | 'fonts'>('menu');
   const [name, setName] = useState(entry?.title ?? '');
   const current = settingsForDocument(settings, entry?.voice ?? null);
@@ -61,12 +70,18 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false 
       <View style={styles.buttons}><Pressable onPress={onClose}><Text style={styles.label}>Cancel</Text></Pressable>
         <Pressable accessibilityRole="button" disabled={!name.trim()} onPress={() => { library.rename(document, name); onClose(); }}><Text style={[styles.label, { color: INK.reading, opacity: name.trim() ? 1 : 0.3 }]}>Save</Text></Pressable></View>
     </View> : null}
-    {page === 'download' ? <DownloadContent document={document} title={entry.title} voice={voice}
+    {page === 'download' ? <DownloadContent document={document} title={entry.title} voice={voice} section={section}
       onStart={() => { if (!entry.voice) library.voiced(document, voice); }} onVoice={(next) => {
       library.voiced(document, next); setSettings((was) => selectVoice(was, next.provider, next.voice));
     }} /> : null}
   </Sheet>;
 }
+/** The spine item a stored Reading Position is in, read off its locator (`spineIndexOf`), or null for none. */
+function sectionOf(position: ReadingPosition | null): number | null {
+  const cfi = position ? readLocator(position.locator, 'epub') : null;
+  return cfi ? spineIndexOf(cfi) : null;
+}
+
 const styles = StyleSheet.create({
   menu: { paddingHorizontal: 24 }, row: { flexDirection: 'row', alignItems: 'center', gap: 18, minHeight: 58, borderBottomWidth: StyleSheet.hairlineWidth },
   last: { borderBottomWidth: 0 }, label: { color: INK.text, fontSize: 16 }, rename: { padding: 20, gap: 24 },

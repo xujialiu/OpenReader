@@ -3,6 +3,7 @@ import {
   EMPTY_CONTENTS,
   contentsOf,
   currentRow,
+  rowOfSection,
   type Contents,
   type NavigationEntry,
 } from '../../../src/core/document/contents';
@@ -160,6 +161,18 @@ describe('locating the reading in the owner’s book', () => {
     const late = contentsOf([{ id: 'a', href: 'Text/chapter1.xhtml', label: 'One', subitems: [] }], XIANNI_SPINE);
     expect(currentRow(late, reading(0))).toBeNull();
     expect(currentRow(late, reading(3))).toEqual({ row: 0, precision: 'exact' });
+  });
+});
+
+describe('the rule over bare spine items, as the download drawer uses it (#88)', () => {
+  it('gives the answer currentRow gives for the same rows', () => {
+    const book = contentsOf(XIANNI_NAVIGATION, XIANNI_SPINE);
+    const targets = book.rows.map((row) => row.target);
+    for (const at of [0, 1, 3, 5, 20, 2076]) expect(rowOfSection(targets, at)).toEqual(currentRow(book, reading(at)));
+  });
+  it('passes over rows that name no spine item', () => {
+    expect(rowOfSection([null, 2, null, 4], 3)).toEqual({ row: 1, precision: 'before' });
+    expect(rowOfSection([null, null], 3)).toBeNull();
   });
 });
 
