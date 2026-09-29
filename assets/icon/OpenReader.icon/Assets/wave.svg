@@ -5,7 +5,7 @@
       <stop offset="1" stop-color="#ffb500"/>
     </linearGradient>
   </defs>
-  <g transform="translate(512 512) scale(2.9) translate(-133 -125.5)" fill="url(#wave)" stroke="#cc8d00" stroke-width="1">
+  <g transform="translate(512 512) scale(3.3684) translate(-133 -125.5)" fill="url(#wave)" stroke="#cc8d00" stroke-width="1">
     <rect x="92" y="156" width="24" height="52" rx="12"/>
     <rect x="120" y="132" width="26" height="91" rx="13"/>
     <rect x="149" y="156" width="24" height="52" rx="12"/>

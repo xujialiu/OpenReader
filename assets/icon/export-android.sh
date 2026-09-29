@@ -5,8 +5,9 @@
 # the top-level `icon` are given PNGs, and those are exported from its layers
 # here rather than drawn a second time, so a colour or a shape is changed in
 # Assets/headphones.svg or Assets/wave.svg and nowhere else. The one exception
-# is the light background, which lives in icon.json as a fill rather than in
-# an SVG, and is repeated below as BG_TOP and BG_BOTTOM.
+# is the white behind the glyph, which lives in icon.json as a fill rather than
+# in an SVG; it is repeated below as BACKGROUND and in app.config.ts as the
+# adaptive icon's backgroundColor.
 #
 # Needs rsvg-convert (`brew install librsvg`). Run it after changing a layer,
 # then prebuild again; nothing runs it for you.
@@ -19,21 +20,16 @@
 set -eu
 cd "$(dirname "$0")"
 
-# icon.json's default fill, top to bottom.
-BG_TOP='#f5f5f7'
-BG_BOTTOM='#e2e2e8'
+BACKGROUND='#ffffff'
 
-# The glyph drawn at 0.731 of its iOS size, so that its furthest point, a
-# bottom corner of an ear cup, sits 0.30 of the canvas from the centre: inside
-# the circle of 66 dp in 108 that every Android launcher mask leaves visible.
-SIZE=748.5
-AT=137.75
+# The layers draw the glyph 0.75 of the canvas wide, on Apple's template grid.
+# Android's mask is a circle of 66 dp in 108 at its smallest, so there the
+# glyph is drawn at 0.6294 of that: its furthest point, a bottom corner of an
+# ear cup, then sits 0.30 of the canvas from the centre, just inside it.
+SIZE=644.5
+AT=189.75
 
 trap 'rm -f .export-*.svg' EXIT
-
-background() {
-  printf '%s' "<linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1024\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"$BG_TOP\"/><stop offset=\"1\" stop-color=\"$BG_BOTTOM\"/></linearGradient>"
-}
 
 layers() { # $1 = position, $2 = size, $3 = optional filter
   for layer in headphones wave; do
@@ -47,9 +43,7 @@ svg() { # $1 = name, $2 = body
 }
 
 # The top-level `icon`: what an Android launcher too old for adaptive icons shows.
-svg icon "<defs>$(background)</defs><rect width=\"1024\" height=\"1024\" fill=\"url(#bg)\"/>$(layers 0 1024 '')"
-
-svg android-background "<defs>$(background)</defs><rect width=\"1024\" height=\"1024\" fill=\"url(#bg)\"/>"
+svg icon "<rect width=\"1024\" height=\"1024\" fill=\"$BACKGROUND\"/>$(layers 0 1024 '')"
 
 svg android-foreground "$(layers $AT $SIZE '')"
 

@@ -306,7 +306,7 @@ describe('#83: the icon is one Icon Composer document, and every image the confi
     // A missing path fails the prebuild only for the platform that reads it,
     // and Android's is not built yet.
     const adaptive = config.android?.adaptiveIcon;
-    const paths = [config.icon, adaptive?.foregroundImage, adaptive?.backgroundImage, adaptive?.monochromeImage];
+    const paths = [config.icon, adaptive?.foregroundImage, adaptive?.monochromeImage];
     for (const path of paths) {
       expect(path).toMatch(/^\.\/assets\/icon\/[a-z-]+\.png$/);
       expect(exists(path!)).toBe(true);

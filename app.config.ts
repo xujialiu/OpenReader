@@ -123,14 +123,14 @@ const config: ExpoConfig = {
     package: 'top.xujialiu.openreader',
     /**
      * #83. Exported from `OpenReader.icon` by `assets/icon/export-android.sh`,
-     * the glyph inside the 66 dp circle every launcher mask leaves visible.
+     * the glyph inside the 66 dp circle every launcher mask leaves visible, on
+     * the same white as the iOS icon's default fill.
      * Not yet seen on an Android device: the app does not run there (`ink()` in
      * src/app/controls.tsx throws off iOS).
      */
     adaptiveIcon: {
-      backgroundColor: '#f5f5f7',
+      backgroundColor: '#ffffff',
       foregroundImage: './assets/icon/android-foreground.png',
-      backgroundImage: './assets/icon/android-background.png',
       monochromeImage: './assets/icon/android-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
