@@ -50,6 +50,29 @@ on the Lock Screen, whether to keep running it in the background, with Continue
 and Stop. The app does not cause that question and cannot prevent it. After
 Continue, the download went on.
 
+## It opens large at the top of the screen until it is swiped
+
+When the owner leaves the app with a download going on, the phone shows the
+Live Activity large at the top of the screen, in the Dynamic Island: the
+document's name, the chapter count and the stop ring, over the Home Screen and
+over whatever app they open next. It stays that way until the owner swipes it
+up. After that it is the small one at the top. On the owner's iPhone it stayed
+large for three minutes, until they swiped it, and every later time they left
+the app it stayed small. A timer's or a delivery's Live Activity shows large
+for a moment and then shrinks by itself; this one does not.
+
+The app cannot change this. Showing it large is the phone's own announcement
+that it has taken the download on, not something the app asks for, and the
+phone gives the app no say in how it is shown. The count changing while the
+owner was away never made it large again. The one the phone shows when a
+download finishes goes away by itself after a few seconds.
+
+The owner decided on 2026-09-29 to accept it, and to report it to Apple.
+Nothing the app could do instead would help: a display of the app's own would
+add a second card beside the phone's rather than replace it, and giving up the
+phone's taking the download on would bring back the download stopping within a
+minute of leaving the app.
+
 ## Stopping it from the Lock Screen
 
 The owner can stop the download from what the phone shows. Stopping it there
@@ -107,7 +130,13 @@ On earlier versions of iOS, and in the simulator used for testing, nothing
 changes: the download stops within about a minute of leaving the app and goes
 on when it is opened again. The same happens when the phone refuses, which it
 may do when it is busy. Closing the app from the app switcher ends the
-download, and the phone does not tell the app.
+download, and the phone does not tell the app. The phone then leaves a card
+reading `Task failed` on the Lock Screen, beside the card of the next download,
+until the owner clears it with the ✕ beside Background Activities. It is not a
+second download, and nothing already saved is lost. On the owner's iPhone one
+such card was still there ten minutes later; another went away by itself after
+about half a minute, for a reason the phone does not record. The app cannot
+clear it: the phone gives it no hold on a card it has stopped.
 
 ## What was turned down
 
