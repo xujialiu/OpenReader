@@ -5,7 +5,7 @@ import XCTest
 /// 600 ms debounce), and while paused must move the highlight and start no
 /// sound. The measured facts themselves — press-to-fetch gap, the utterance the
 /// press landed on — are read outside, from the app's Debug Log and the fake
-/// provider's request log (`issue86.md`); this probe's job is the real touches
+/// provider's request log (`skips-while-playing.md`); this probe's job is the real touches
 /// and their order, with each tap's time printed.
 ///
 /// Needs the issue-86 fixture open, the fake Kokoro provider chosen
@@ -16,7 +16,7 @@ import XCTest
 ///
 /// Params (`/tmp/openreader-tap86-params.txt`, `KEY=VALUE`):
 /// - `TAP_NX`, `TAP_NY` — normalized tap point in the app window, from the
-///   WebView rect probe (`issue86.md`); default the middle of the fixture's
+///   WebView rect probe (`skips-while-playing.md`); default the middle of the fixture's
 ///   first-chapter sentence `#s23`.
 final class Tap86Probe: XCTestCase {
   func param(_ key: String, _ fallback: String) -> String {

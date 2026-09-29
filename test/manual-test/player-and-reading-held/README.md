@@ -21,6 +21,11 @@ that names the script or probe you are about to run.
   playback, and whether the page moves. `player-touch.sh` with
   `PlayerTouchProbe.swift`, around `place-and-following/line-follow.cjs`.
 
+- [skips-while-playing.md](skips-while-playing.md) (#86): a tap, the four
+  Skips and a Contents row while playing, with no wait between the press and
+  the fetch; a fake Kokoro provider that logs every request
+  (`fake-kokoro.cjs`) and `Tap86Probe.swift` for the real touches.
+
 `player-centre.py` has no recipe: whether the Voice name is centred in the
 player, from a screenshot (#70). Its header says how to run it;
 [pitfalls/providers-and-audio.md](../pitfalls/providers-and-audio.md) has a

@@ -25,7 +25,7 @@ npx tsx test/manual-test/fixtures/NAME.ts OUTPUT_DIRECTORY
 - `leading-strip-fixture.ts`: laid out like the owner's web novels, for the
   highlight's leading strip (#35).
 - `issue86-fixture.ts`: five short chapters and a text-less volume page, for
-  the #86 skip/Contents measurements (`../issue86/issue86.md`). Its contents
+  the #86 skip/Contents measurements (`../player-and-reading-held/skips-while-playing.md`). Its contents
   are an **NCX on purpose**: epub.js spells an xhtml nav's hrefs with the nav
   file's folder joined on (`tocPath.join`), so against manifest hrefs like
   `first.xhtml` every row of a `properties="nav"` fixture comes out

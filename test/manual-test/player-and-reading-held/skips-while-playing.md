@@ -34,8 +34,8 @@ press — attribute before quoting.
   WebView sits at the safe-area top inset; for s23 that was `0.5/0.4371` and
   the tap landed on exactly the utterance the probe predicted).
 
-The run's measurements, including the timing tables, are in
-`notes/issue86/verification-notes.md` in the worktree (not committed here).
+The run's measurements, with their times, are in
+`notes/NOTES_2026-09-29.md`, the 20:28 entry.
 
 ## What was measured (all pass)
 

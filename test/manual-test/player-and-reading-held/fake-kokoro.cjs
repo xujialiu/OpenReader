@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// A fake Kokoro-FastAPI for verifying #86 on the simulator (issue86.md). Serves
+// A fake Kokoro-FastAPI for verifying #86 on the simulator (skips-while-playing.md). Serves
 // the two routes `src/core/providers/local/kokoro.ts` calls:
 //
 //   GET  /v1/audio/voices      -> { voices: [{ id, name }] }
@@ -16,8 +16,9 @@
 // fixed length makes every sentence last the same, long enough that a press
 // landing mid-sentence would still have old audio left if it kept playing.
 //
-//   node test/manual-test/issue86/fake-kokoro.cjs [PORT]   # default 8791
+//   node test/manual-test/player-and-reading-held/fake-kokoro.cjs [PORT]   # default 8791
 
+const { Buffer } = require('node:buffer');
 const http = require('node:http');
 
 const PORT = Number(process.argv[2] ?? 8791);
