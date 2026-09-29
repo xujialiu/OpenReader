@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { INK, Note, useBorders } from './controls';
-import { Icon } from './icon';
+import { Icon, type IconName } from './icon';
+
+/** A button at the right end of a drawer's title row. */
+export interface SheetAction {
+  icon: IconName;
+  /** What VoiceOver says. The button shows no words. */
+  label: string;
+  onPress(): void;
+  disabled?: boolean;
+}
 
 /**
  * Only the handle/title owns the drag; lists and steppers retain their gestures.
@@ -11,12 +20,18 @@ import { Icon } from './icon';
  * reads on iOS. It is a header change and not a second drawer on purpose — a
  * page pushed from the right after a drawer rose from the bottom changes
  * direction halfway through one task.
+ *
+ * `action` puts one button at the right end of the title row, in the back
+ * button's circle (#95). A title that does not fit wraps before it. The button
+ * sits beside the first line, at the corner of the drawer, however many lines
+ * the title takes.
  */
-export function Sheet({ visible, title, onClose, onBack, children, style }: {
+export function Sheet({ visible, title, onClose, onBack, action, children, style }: {
   visible: boolean;
   title: string;
   onClose(): void;
   onBack?(): void;
+  action?: SheetAction;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -46,6 +61,10 @@ export function Sheet({ visible, title, onClose, onBack, children, style }: {
               <Icon name="previous" color={INK.text} size={22} />
             </Pressable>
             <Text style={[styles.title, styles.titleCentred]} numberOfLines={1}>{title}</Text>
+            {action ? <SheetActionButton action={action} /> : null}
+          </View> : action ? <View style={styles.titleRow}>
+            <Text style={[styles.title, styles.titleBeside]}>{title}</Text>
+            <SheetActionButton action={action} />
           </View> : <Text style={styles.title}>{title}</Text>}
         </View>
         {children}
@@ -53,6 +72,14 @@ export function Sheet({ visible, title, onClose, onBack, children, style }: {
       </KeyboardAvoidingView>
     </Modal>
   );
+}
+
+function SheetActionButton({ action }: { action: SheetAction }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={action.label} accessibilityState={{ disabled: !!action.disabled }}
+    disabled={action.disabled} onPress={action.onPress}
+    style={({ pressed }) => [styles.back, styles.trailing, (pressed || action.disabled) && { opacity: 0.5 }]}>
+    <Icon name={action.icon} color={INK.text} size={20} />
+  </Pressable>;
 }
 
 /**
@@ -81,4 +108,9 @@ const styles = StyleSheet.create({
   // of it after the button.
   back: { alignItems: 'center', backgroundColor: INK.line, borderRadius: 17, height: 34, justifyContent: 'center', width: 34, zIndex: 1 },
   titleCentred: { flex: 1, paddingHorizontal: 0, position: 'absolute', left: 0, right: 0, textAlign: 'center' },
+  trailing: { marginLeft: 'auto' },
+  // Top-aligned, with the first line's centre on the button's: 22 of line in
+  // 34 of button leaves 6 above it.
+  titleRow: { alignItems: 'flex-start', flexDirection: 'row', paddingRight: 10 },
+  titleBeside: { flex: 1, lineHeight: 22, paddingRight: 12, paddingTop: 6 },
 });
