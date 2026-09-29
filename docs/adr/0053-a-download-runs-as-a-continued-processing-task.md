@@ -308,7 +308,8 @@ native module and the catalogue passed in. It is tested in
   a continued task accepted after the app left, with the bounded time
   refused.
 - **The end.** When nothing goes on by itself, the next report shows where the
-  download ended and then calls `finishContinued`. That happens at Pause all,
+  batch ended (every chapter of its downloads counted, #92) and then calls
+  `finishContinued`. That happens at Pause all,
   at the last chapter done, at a key or quota failure, or when deletion leaves
   nothing. `success` is decided at that moment, over the downloads the task
   covered: each that went on by itself between its submission and its end,

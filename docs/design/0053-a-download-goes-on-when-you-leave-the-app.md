@@ -77,7 +77,7 @@ Continue, the download went on.
 
 When the owner leaves the app with a download going on, the phone shows the
 Live Activity large at the top of the screen, in the Dynamic Island: the
-document's name, the chapter count and the stop ring, over the Home Screen and
+title, the chapter count and the stop ring, over the Home Screen and
 over whatever app they open next. It stays that way until the owner swipes it
 up. After that it is the small one at the top. On the owner's iPhone it stayed
 large for three minutes, until they swiped it, and every later time they left
