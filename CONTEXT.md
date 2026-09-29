@@ -162,6 +162,11 @@ Moving the page to another part of a document while the reading position stays
 where it is.
 _Avoid_: previewing, peeking, jumping, navigating
 
+**Skip**:
+Moving the reading back or forward by one sentence, or to the start of a
+paragraph. Unlike browsing, it moves the reading position.
+_Avoid_: jump, step, seek
+
 **Following**:
 The page moving itself so that the line being spoken stays at the line
 position — a line at a time, or continuously as the words are spoken. Browsing
