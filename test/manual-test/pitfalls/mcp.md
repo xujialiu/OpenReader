@@ -32,3 +32,15 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
   `role`/`AXLabel`/`AXFrame` (it is how the #85 title's `AXHeading` was
   proven; XCUITest has no header query at all). The bundle path moves with the
   npx cache, so `find` it.
+- **AXe `drag` is the reliable way to scroll a list precisely; a tap on the
+  list's own scroll bar does nothing.** 2026-09-29 (#88, iPhone 17 download):
+  moving the reader's Contents from Chapter 169 to Chapter 159 took one
+  `"$AXE" drag --start-x 201 --start-y 480 --end-x 201 --end-y 830 --duration
+  0.8` and landed exactly (the next screenshot showed 159–167, ten 46 pt rows
+  for a 350 pt drag). The same list's `Slider 'Vertical scroll bar'` ignored a
+  physical tap at 98 % of its track (the drawer re-screenshot unchanged), and
+  `"$AXE" slider --label …` refused with "Multiple (2) accessibility elements
+  matched" because RN renders the bar twice and neither copy carries an
+  `AXUniqueId`. Scroll RN lists with `drag` (or `swipe` for flings), read the
+  position back from a screenshot or `describe-ui`, and do not try to drive the
+  scroll bar.
