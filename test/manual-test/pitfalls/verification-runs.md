@@ -427,3 +427,34 @@ plus harness sequences for the failure-note and dark-theme checks.
   `Downloading…` there. The same method passed after `SCROLL_TO` had put the
   row in view (4 `Pause download`). Check where a scroll landed before trusting
   what a probe found on screen.
+
+## Verifying #74: the long-press fix on a fresh simulator (2026-09-29)
+
+- **`TranslationProbe.testLongPressWhenEnabledAndReaderOpen` cannot follow a
+  method that leaves the lookup drawer open — including itself.** Its only
+  precondition waits 10 s for the player footer's `Choose a Voice`, and an open
+  drawer replaces the player footer in the accessibility tree (the drawer holds
+  `Close lookup`, `Lookup panel height` and the pronunciation buttons from y≈500
+  down), so the run failed at once with `XCTAssertTrue failed` before any gesture.
+  The failure attachment's UI hierarchy named the reader's own navigation bar and
+  the open drawer, which is what separates it from an app fault: no long press was
+  made. Fix: run `testCloseCurrentLookupDrawer` first — it ends with the drawer
+  closed and the reader open — or any method that closes the drawer, before it.
+- **The simulator's own log classifies long presses the way the phone's
+  `long-press-watch.py` does**, with no diagnostic build at all: every long press
+  on a word logs `[WebKit:DragAndDrop] Drag session requested` about 0.65 s after
+  touch-down (a working press then logs `Drag session failed (missing staged drag
+  source)` — on the simulator this is normal, not a failure) followed within tens
+  of ms by `[WebKit:TextInteraction] … selectTextWithGranularity:atPoint:`. So:
+  `xcrun simctl spawn UDID log show --style compact --start '…' --predicate 'process
+  == "OpenReader" AND (eventMessage CONTAINS "Drag session requested" OR eventMessage
+  CONTAINS "selectTextWithGranularity:atPoint")'` gives one press per `Drag session
+  requested` line and whether a selection began. A press with lookup disabled also
+  starts the WebKit selection (the app keeps `user-select: text` for its own
+  highlight painting); only the drawer is gated.
+- **The post-boot volume reset recurred on a brand-new iPhone 18 Pro (iOS 27.0),
+  twice.** `silence.sh set` right after `bootstatus -b` read 0; `run-probe.sh`'s own
+  check refused with 60 about ten minutes later, and again 20 minutes after that.
+  Nothing had played and no output device changed that the Mac reported. The kit's
+  existing rule — `set` again, then let the next `run-probe.sh` check gate the run —
+  is what worked; no new fix needed.
