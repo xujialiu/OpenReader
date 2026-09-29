@@ -164,6 +164,26 @@ event, all on the main queue:
   an end the phone chooses can one day be compared with the owner's stop.
 - `OnDestroy` completes a running task, because a reload makes a new module
   and the old one's task would otherwise never be completed.
+- The module observes `UIApplication.willTerminateNotification` from
+  `OnCreate` to `OnDestroy` (#91). On it, on the main thread and
+  synchronously, a running task is logged (`OpenReaderOffline: app will
+  terminate; continued task <id> completed with success: 0`), completed with
+  `setTaskCompleted(success: false)` and forgotten, as `finishContinued` does;
+  with none, `OpenReaderOffline: app will terminate; no continued task` is
+  logged, so that the device log shows whether the notification came at all.
+  It is there because a close from the app switcher lets the phone cancel the
+  task after the process has gone, which leaves a `Task failed` card on the
+  Lock Screen, and a task the app completes itself leaves none. The window is
+  about 40 ms (`notes/NOTES_2026-09-29.md`, 21:40): SpringBoard requested the
+  termination at 20:48:30.253, the app logged `Scene will invalidate` at .271,
+  and dasd saw the process gone at .296 and logged `CANCELED` at .304. Hence
+  no hop to another queue and no event to JavaScript, whose download is
+  restored as going on at the next launch as before. `success: false`, because
+  the download did not finish; `true` would likely make the phone announce it
+  as done. Not the scene's disconnection: the phone may disconnect a
+  background scene without ending the app, and that would end a download that
+  should go on. Whether the notification arrives in those 40 ms, and whether
+  the card then goes, is to be measured on the owner's iPhone (#91).
 
 **Info.plist.** `plugins/with-continued-processing.ts` writes
 `BGTaskSchedulerPermittedIdentifiers = ["<ios.bundleIdentifier>.download.*"]`.

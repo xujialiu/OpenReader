@@ -23,6 +23,7 @@ public final class OpenReaderOfflineModule: Module {
   /// stale and is completed at once.
   private var continuedIdentifier: String?
   private var continuedShown = ContinuedShown()
+  private var willTerminateObserver: NSObjectProtocol?
 
   public func definition() -> ModuleDefinition {
     Name("OpenReaderOffline")
@@ -86,9 +87,30 @@ public final class OpenReaderOfflineModule: Module {
         task.setTaskCompleted(success: success)
       }
     }.runOnQueue(.main)
+    // #91: closed from the app switcher, the app runs about 40 ms before the
+    // phone cancels its continued task, after the process has gone, and leaves
+    // a `Task failed` card on the Lock Screen; a task the app completes itself
+    // leaves none. So the task is completed here, with false because the
+    // download did not finish. Not yet known: whether the notification arrives
+    // in those 40 ms, and whether the card then goes. Not the scene's
+    // disconnection: the phone may disconnect a background scene without
+    // ending the app, and the download should then go on.
+    OnCreate {
+      // No queue: UIKit posts it on the main thread, and the block runs there
+      // before the post returns, with no hop the 40 ms may not allow.
+      self.willTerminateObserver = NotificationCenter.default.addObserver(
+        forName: UIApplication.willTerminateNotification, object: nil, queue: nil
+      ) { [weak self] _ in
+        self?.terminatingContinued()
+      }
+    }
     // A reload makes a new module; a task this one leaves running would never
     // be completed, and the system may kill an app for that.
     OnDestroy {
+      if let observer = self.willTerminateObserver {
+        NotificationCenter.default.removeObserver(observer)
+        self.willTerminateObserver = nil
+      }
       self.continued?.setTaskCompleted(success: false)
       self.continued = nil
       self.continuedIdentifier = nil
@@ -203,6 +225,19 @@ public final class OpenReaderOfflineModule: Module {
       DispatchQueue.main.async { self?.expiredContinued(identifier: identifier, ended: ended) }
     }
     showContinued()
+  }
+
+  /// On the main thread, as the app terminates (#91): synchronous, with no
+  /// event to JavaScript, since the process has about 40 ms left.
+  private func terminatingContinued() {
+    guard let task = continued else {
+      NSLog("OpenReaderOffline: app will terminate; no continued task")
+      return
+    }
+    NSLog("OpenReaderOffline: app will terminate; continued task %@ completed with success: 0", continuedIdentifier ?? "(none)")
+    continued = nil
+    continuedIdentifier = nil
+    task.setTaskCompleted(success: false)
   }
 
   private func expiredContinued(identifier: String, ended: [String: Any?]) {
