@@ -20,21 +20,44 @@ chapter or continues a stopped download. A download still going on by itself
 when the owner opens the app goes on after they leave it again, too. While it
 goes on, the phone shows it as a Live Activity, as it shows a delivery or a
 timer: on the Lock Screen and, on a phone that has one, in the Dynamic Island.
-That display belongs to the phone and not to the app. It shows:
+That display belongs to the phone and not to the app. There is one for every
+download going on, and it shows them together:
 
-- the document's name, as the Library shows it;
-- how many of the download's chapters are saved, for example
-  `12 of 40 chapters`. Chapters the owner paused are left out while the
-  download goes on, unless they are already saved: with most of a book paused
-  it read `49 of 188 chapters`, a count the download was never going to reach.
-  Once the whole download is paused, every chapter is counted again, so that
-  as the phone takes it away it shows where the download stopped rather than a
-  count that looks complete;
+- that the app is downloading, and how many books: `Downloading 2 books`, or
+  `Downloading 1 book`. Two voices of one book are one book, and a book paused
+  before anything of it was saved is not counted. It names no book;
+- how many chapters of all those downloads are saved, for example
+  `120 of 200 chapters`. A download that finishes stays in the count, so the
+  count never goes back: with one book of 100 chapters finished and another at
+  20, it reads `120 of 200 chapters`, and a third of 50 started meanwhile
+  makes it `120 of 250 chapters`. A download the owner deletes leaves the
+  count. Chapters the owner paused are left out while anything goes on, unless
+  they are already saved, and so is the rest of a book the owner paused as a
+  whole meanwhile: with most of a book paused, it read `49 of 188 chapters`, a
+  count the downloads were never going to reach. Once nothing goes on any
+  more, every chapter is counted again, so that as the phone takes it away it
+  shows where the downloads stopped rather than a count that looks complete;
 - a bar that fills as each sentence is saved.
 
-When the download finishes, or the owner pauses all of it, the phone shows it
-done for a moment and then takes it away. When it moves on to another
-document's download, the name and the count follow it.
+When the downloads finish, or the owner pauses all of them, the phone shows
+them done for a moment and then takes it away. A download started or resumed
+while it is shown joins the count; the next time the phone shows one, it
+counts afresh.
+
+Until 2026-09-29 the display showed the one download being written: its book's
+name, and its own chapters. With two books going on, the owner saw one book's
+name and count, then the other's when the first finished, with no sense of how
+much was left of both; the name was cut after about 25 characters; and the
+phone's own question about continuing (below) named only the book being
+written. The owner decided then to show every download together, counted as one, under a
+title that says how many books: the phone's question now reads
+`Downloading 2 books is 6% complete.` Turned down: counting only the downloads
+not yet finished, which makes the count go back each time one finishes;
+counting every download in the Library, paused ones included, a count the
+downloads will never reach; and the titles `2 books`, which the phone's
+question would read as `2 books is 6% complete`, the app's name, which the
+display already shows with its icon, and `Downloading` alone, which hides how
+many books.
 
 ## What the owner's iPhone showed
 
@@ -49,6 +72,29 @@ About five minutes in, with the download 16% done, the phone asked by itself,
 on the Lock Screen, whether to keep running it in the background, with Continue
 and Stop. The app does not cause that question and cannot prevent it. After
 Continue, the download went on.
+
+## It opens large at the top of the screen until it is swiped
+
+When the owner leaves the app with a download going on, the phone shows the
+Live Activity large at the top of the screen, in the Dynamic Island: the
+title, the chapter count and the stop ring, over the Home Screen and
+over whatever app they open next. It stays that way until the owner swipes it
+up. After that it is the small one at the top. On the owner's iPhone it stayed
+large for three minutes, until they swiped it, and every later time they left
+the app it stayed small. A timer's or a delivery's Live Activity shows large
+for a moment and then shrinks by itself; this one does not.
+
+The app cannot change this. Showing it large is the phone's own announcement
+that it has taken the download on, not something the app asks for, and the
+phone gives the app no say in how it is shown. The count changing while the
+owner was away never made it large again. The one the phone shows when a
+download finishes goes away by itself after a few seconds.
+
+The owner decided on 2026-09-29 to accept it, and to report it to Apple.
+Nothing the app could do instead would help: a display of the app's own would
+add a second card beside the phone's rather than replace it, and giving up the
+phone's taking the download on would bring back the download stopping within a
+minute of leaving the app.
 
 ## Stopping it from the Lock Screen
 
@@ -107,7 +153,16 @@ On earlier versions of iOS, and in the simulator used for testing, nothing
 changes: the download stops within about a minute of leaving the app and goes
 on when it is opened again. The same happens when the phone refuses, which it
 may do when it is busy. Closing the app from the app switcher ends the
-download, and the phone does not tell the app.
+download, and the phone does not tell the app; opening the app again carries it
+on. Until 2026-09-29 the phone then left a card reading `Task failed` on the
+Lock Screen, beside the card of the next download, until the owner cleared it
+with the ✕ beside Background Activities: not a second download, and nothing
+already saved was lost, but it read as a failure. On the owner's iPhone one such
+card was still there ten minutes later. Once the phone has stopped a download
+that way, the app has no hold on its card; but the app is given a moment as it
+is closed, and the owner decided that day to try ending the download's display
+itself in that moment, as a download that did not finish. On the owner's iPhone,
+closed that way with two books downloading, it left no card.
 
 ## What was turned down
 

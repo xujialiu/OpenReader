@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { continuedShown, createContinuedProcessing, type ContinuedNative, type ContinuedShown } from '../../src/offline/continued-processing';
+import { continuedShown, createContinuedProcessing, type ContinuedDownload, type ContinuedNative, type ContinuedShown } from '../../src/offline/continued-processing';
 import type { DownloadTask, NarrationPlan } from '../../src/offline/model';
 
 /**
@@ -21,26 +21,30 @@ const plan: NarrationPlan = {
   ],
 };
 
+/** One download of the batch, as the catalogue holds its Document in its voice. */
+const entry = (task: DownloadTask, progress: ContinuedDownload['progress'] = [], of: NarrationPlan | null = plan): ContinuedDownload =>
+  ({ task, progress, plan: of });
+
 it('counts the chapters of the download that are saved, and moves within the chapter being written', () => {
-  const shown = continuedShown(download({ current: 'b' }), 'My Vampire System', [
+  const shown = continuedShown([entry(download({ current: 'b' }), [
     { id: 'a', count: 10, complete: true },
     { id: 'b', count: 10, complete: false },
     { id: 'c', count: 0, complete: false },
-  ], plan);
-  expect(shown).toEqual({ title: 'My Vampire System', subtitle: '1 of 3 chapters', completed: 1250, total: 3000 });
+  ])]);
+  expect(shown).toEqual({ title: 'Downloading 1 book', subtitle: '1 of 3 chapters', completed: 1250, total: 3000, documents: ['book'] });
 });
 
 it('counts a chapter whose text is not yet prepared as nothing written', () => {
-  expect(continuedShown(download({ current: 'c' }), 'Book', [{ id: 'a', count: 10, complete: true }], plan))
+  expect(continuedShown([entry(download({ current: 'c' }), [{ id: 'a', count: 10, complete: true }])]))
     .toMatchObject({ subtitle: '1 of 3 chapters', completed: 1000 });
 });
 
 it('says chapter, not chapters, of a download of one', () => {
-  expect(continuedShown(download({ chapters: ['a'] }), 'Book', [], plan).subtitle).toBe('0 of 1 chapter');
+  expect(continuedShown([entry(download({ chapters: ['a'] }))]).subtitle).toBe('0 of 1 chapter');
 });
 
 it('counts only the chapters in the download, whatever else of the document is saved', () => {
-  expect(continuedShown(download({ chapters: ['b'] }), 'Book', [{ id: 'a', count: 10, complete: true }], plan))
+  expect(continuedShown([entry(download({ chapters: ['b'] }), [{ id: 'a', count: 10, complete: true }])]))
     .toMatchObject({ subtitle: '0 of 1 chapter', completed: 0, total: 1000 });
 });
 
@@ -53,21 +57,21 @@ const six: NarrationPlan = {
 it('leaves out the chapters the owner paused while the download goes on, unless they are complete, and keeps failed ones', () => {
   // It read `49 of 188 chapters` with 140 paused (#77).
   const task = download({ chapters: ['a', 'b', 'c', 'd', 'e', 'f'], paused: ['b', 'c'], failed: ['e'], current: 'd' });
-  const shown = continuedShown(task, 'Book', [
+  const shown = continuedShown([entry(task, [
     { id: 'a', count: 10, complete: true },
     { id: 'b', count: 10, complete: true },
     { id: 'c', count: 3, complete: false },
     { id: 'd', count: 5, complete: false },
     { id: 'e', count: 0, complete: false },
-  ], six);
+  ], six)]);
   // a and b are complete, b although paused; c is paused and left out; d, e (failed) and f are still counted.
-  expect(shown).toEqual({ title: 'Book', subtitle: '2 of 5 chapters', completed: 2500, total: 5000 });
+  expect(shown).toEqual({ title: 'Downloading 1 book', subtitle: '2 of 5 chapters', completed: 2500, total: 5000, documents: ['book'] });
 });
 
 it('moves the bar for no paused chapter, even the one the writer is leaving', () => {
   const task = download({ chapters: ['a', 'b', 'c'], paused: ['b'], current: 'b' });
-  expect(continuedShown(task, 'Book', [{ id: 'b', count: 5, complete: false }], six))
-    .toEqual({ title: 'Book', subtitle: '0 of 2 chapters', completed: 0, total: 2000 });
+  expect(continuedShown([entry(task, [{ id: 'b', count: 5, complete: false }], six)]))
+    .toMatchObject({ subtitle: '0 of 2 chapters', completed: 0, total: 2000 });
 });
 
 it.each([
@@ -75,10 +79,82 @@ it.each([
   ['the ring that paused the last chapter going on', { state: 'paused' as const, paused: ['c', 'd'] }],
 ])('counts the whole download again once it is paused as a whole, by %s, so the last report is never a full count', (_, over) => {
   const task = download({ chapters: ['a', 'b', 'c', 'd'], ...over });
-  expect(continuedShown(task, 'Book', [
+  expect(continuedShown([entry(task, [
     { id: 'a', count: 10, complete: true },
     { id: 'b', count: 10, complete: true },
-  ], six)).toEqual({ title: 'Book', subtitle: '2 of 4 chapters', completed: 2000, total: 4000 });
+  ], six)])).toEqual({ title: 'Downloading 1 book', subtitle: '2 of 4 chapters', completed: 2000, total: 4000, documents: ['book'] });
+});
+
+/** A plan of `n` chapters `c0`… of ten texts each, prepared. */
+const chaptersPlan = (n: number): NarrationPlan => ({
+  version: 2,
+  chapters: Array.from({ length: n }, (_, i) => ({ id: `c${i}`, title: `c${i}`, depth: 0, parent: null, texts: [], textCount: 10 })),
+});
+const ids = (n: number) => Array.from({ length: n }, (_, i) => `c${i}`);
+const saved = (n: number) => ids(n).map((id) => ({ id, count: 10, complete: true }));
+
+it('counts the downloads of the batch together, and names how many books they are', () => {
+  const shown = continuedShown([
+    entry(download({ current: 'b' }), [{ id: 'a', count: 10, complete: true }, { id: 'b', count: 10, complete: false }]),
+    entry(download({ id: 'u', document: 'second', chapters: ['a', 'b'], state: 'queued' })),
+  ]);
+  expect(shown).toEqual({ title: 'Downloading 2 books', subtitle: '1 of 5 chapters', completed: 1250, total: 5000, documents: ['book', 'second'] });
+});
+
+it('keeps a finished download in the count, so the count never goes back', () => {
+  // The plan on #92: two books of 100 chapters, the first finished and the second at 20; a third of 50 added.
+  const first = entry(download({ id: 'x', document: 'first', chapters: ids(100), state: 'done' }), saved(100), chaptersPlan(100));
+  const second = entry(download({ id: 'y', document: 'second', chapters: ids(100), current: 'c20' }), saved(20), chaptersPlan(100));
+  expect(continuedShown([first, second])).toMatchObject({ title: 'Downloading 2 books', subtitle: '120 of 200 chapters', completed: 120000, total: 200000 });
+  const third = entry(download({ id: 'z', document: 'third', chapters: ids(50), state: 'queued' }), [], chaptersPlan(50));
+  expect(continuedShown([first, second, third])).toMatchObject({ title: 'Downloading 3 books', subtitle: '120 of 250 chapters' });
+});
+
+it('counts a paused chapter only once saved in every download of the batch while one goes on, a whole download paused included', () => {
+  const going = download({ id: 'w', chapters: ['a', 'b', 'c', 'd'], paused: ['b'], current: 'a' });
+  // Paused as a whole by Pause all, with a saved and c failed.
+  const held = download({ id: 'h', document: 'held', chapters: ['a', 'b', 'c', 'd'], state: 'paused', paused: ['a', 'b', 'd'], failed: ['c'] });
+  // Paused as a whole before anything was saved: no chapter of it counts, and it is no book.
+  const unsaved = download({ id: 'n', document: 'unsaved', chapters: ['a', 'b'], state: 'paused', paused: ['a', 'b'] });
+  const batch = [
+    entry(going, [{ id: 'a', count: 5, complete: false }], six),
+    entry(held, [{ id: 'a', count: 10, complete: true }], six),
+    entry(unsaved, [], six),
+  ];
+  // going: a, c, d; held: a (saved) and c (failed); unsaved: nothing.
+  expect(continuedShown(batch)).toEqual({
+    title: 'Downloading 2 books', subtitle: '1 of 5 chapters', completed: 1500, total: 5000, documents: ['book', 'held'],
+  });
+  // Once nothing of the batch goes on by itself, every chapter of every download counts: where it stopped.
+  going.state = 'paused';
+  going.paused = ['a', 'b', 'c', 'd'];
+  expect(continuedShown(batch)).toEqual({
+    title: 'Downloading 3 books', subtitle: '1 of 10 chapters', completed: 1500, total: 10000, documents: ['book', 'held', 'unsaved'],
+  });
+});
+
+it('counts two voices of one Document as one book', () => {
+  const shown = continuedShown([
+    entry(download({ id: 'a1' })),
+    entry(download({ id: 'b1', voice: { provider: 'fish', voice: 'B', label: 'B' }, state: 'queued' })),
+  ]);
+  expect(shown).toMatchObject({ title: 'Downloading 1 book', subtitle: '0 of 6 chapters', total: 6000, documents: ['book'] });
+});
+
+it('adds the saved share of each download\'s chapter being written, 1,000 units a chapter', () => {
+  const shown = continuedShown([
+    entry(download({ chapters: ['a', 'b'], current: 'a' }), [{ id: 'a', count: 5, complete: false }], six),
+    entry(download({ id: 'u', document: 'second', chapters: ['a', 'b', 'c'], current: 'b' }), [
+      { id: 'a', count: 10, complete: true },
+      { id: 'b', count: 3, complete: false },
+    ], six),
+  ]);
+  // 1 complete, and half of one chapter and three tenths of another.
+  expect(shown).toMatchObject({ subtitle: '1 of 5 chapters', completed: 1800, total: 5000 });
+});
+
+it('shows a batch with no chapter at all as one chapter of units, so the phone never divides by nothing', () => {
+  expect(continuedShown([])).toMatchObject({ subtitle: '0 of 0 chapters', completed: 0, total: 1000 });
 });
 
 function harness(tasks: DownloadTask[], { submit = async () => true, update = async () => {}, read = async () => {} }: {
@@ -90,14 +166,21 @@ function harness(tasks: DownloadTask[], { submit = async () => true, update = as
   /** Whether the app is in the foreground, as the runtime tells it. */
   const app = { foreground: true };
   const native: ContinuedNative = {
-    submitContinued: vi.fn(async (title: string, subtitle: string) => { calls.push(`submit ${title} · ${subtitle}`); return submit(); }),
-    updateContinued: vi.fn(async (title: string, subtitle: string) => { calls.push(`update ${title} · ${subtitle}`); await update(); }),
+    submitContinued: vi.fn(async (shown: ContinuedShown) => { calls.push(`submit ${shown.title} · ${shown.subtitle}`); return submit(); }),
+    updateContinued: vi.fn(async (shown: ContinuedShown) => { calls.push(`update ${shown.title} · ${shown.subtitle}`); await update(); }),
     finishContinued: vi.fn(async (success: boolean) => { calls.push(`finish ${success}`); }),
   };
-  // The state stands in for the count, so each call says which moment it showed.
-  const shown = async (task: DownloadTask): Promise<ContinuedShown> => {
+  // The batch's Documents stand in for the title and their states for the count, so each call says which
+  // downloads it showed, at which moment.
+  const shown = async (batch: readonly DownloadTask[]): Promise<ContinuedShown> => {
     await read();
-    return { title: task.document, subtitle: `${task.state}`, completed: 0, total: 1000 };
+    return {
+      title: batch.map((task) => task.document).join('+'),
+      subtitle: batch.map((task) => task.state).join('+'),
+      completed: 0,
+      total: 1000,
+      documents: batch.map((task) => task.document),
+    };
   };
   const continued = createContinuedProcessing({ native, tasks: () => tasks, shown, foreground: () => app.foreground });
   return { continued, native, calls, app };
@@ -126,11 +209,63 @@ it('holds nothing when the phone refuses the task', async () => {
   expect(continued.running()).toBe(false);
 });
 
-it('shows the download being written, not the first one waiting its turn', async () => {
-  const tasks = [download({ id: 'x', document: 'first', state: 'queued' }), download({ id: 'y', document: 'second', state: 'downloading' })];
+it('shows at its submission every download going on then, and none that has stopped', async () => {
+  const tasks = [
+    download({ id: 'x', document: 'first', state: 'queued' }),
+    download({ id: 'b', document: 'old', state: 'blocked' }),
+    download({ id: 'y', document: 'second', state: 'downloading' }),
+  ];
   const { continued, calls } = harness(tasks);
   await continued.start();
-  expect(calls).toEqual(['submit second · downloading']);
+  expect(calls).toEqual(['submit first+second · queued+downloading']);
+});
+
+it('keeps a finished download in its batch, takes in one that starts going on, and lets a deleted one go', async () => {
+  // #92: the count never goes back while the task runs.
+  const tasks = [
+    download({ id: 'x', document: 'first' }),
+    download({ id: 'y', document: 'second', state: 'queued' }),
+    download({ id: 'z', document: 'third', state: 'paused' }),
+  ];
+  const { continued, calls } = harness(tasks);
+  await continued.start();
+  tasks[0].state = 'done';
+  tasks[1].state = 'downloading';
+  continued.follow();
+  await vi.waitFor(() => expect(calls.at(-1)).toBe('update first+second · done+downloading'));
+  // Resumed while the task runs.
+  tasks[2].state = 'queued';
+  continued.follow();
+  await vi.waitFor(() => expect(calls.at(-1)).toBe('update first+second+third · done+downloading+queued'));
+  // Deleted.
+  tasks.splice(1, 1);
+  continued.follow();
+  await vi.waitFor(() => expect(calls.at(-1)).toBe('update first+third · done+queued'));
+  // The last report, once nothing goes on, shows the whole batch where it stopped.
+  tasks[1].state = 'paused';
+  continued.follow();
+  await vi.waitFor(() => expect(calls.slice(-2)).toEqual(['update first+third · done+paused', 'finish true']));
+});
+
+it('starts a new batch with a new task', async () => {
+  const tasks = [download({ id: 'x', document: 'first' }), download({ id: 'y', document: 'second', state: 'paused' })];
+  const { continued, calls } = harness(tasks);
+  await continued.start();
+  tasks[0].state = 'done';
+  continued.follow();
+  await vi.waitFor(() => expect(calls.at(-1)).toBe('finish true'));
+  tasks[1].state = 'queued';
+  await continued.start();
+  expect(calls.at(-1)).toBe('submit second · queued');
+});
+
+it('shows nothing at its finish when every download of its batch was deleted', async () => {
+  const tasks = [download()];
+  const { continued, calls } = harness(tasks);
+  await continued.start();
+  tasks.splice(0, 1);
+  continued.follow();
+  await vi.waitFor(() => expect(calls).toEqual(['submit book · downloading', 'finish true']));
 });
 
 it('finishes once nothing goes on, after showing where the download ended, and succeeds when it is done', async () => {

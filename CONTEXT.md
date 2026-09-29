@@ -304,6 +304,12 @@ document being read. It shows whether the Reading is playing, and a press
 brings its controls back; it never plays or pauses.
 _Avoid_: play button, mini player, floating button, now playing
 
+**Live Activity**:
+The phone's own display of the Downloads going on while the app is not in
+front, one for all of them, on the Lock Screen and in the Dynamic Island. The
+phone draws it; it is not a notification, and OpenReader sends none.
+_Avoid_: banner, notification, progress bar, island
+
 ### The app on the owner's devices
 
 **Debug Mode**:

@@ -164,6 +164,31 @@ event, all on the main queue:
   an end the phone chooses can one day be compared with the owner's stop.
 - `OnDestroy` completes a running task, because a reload makes a new module
   and the old one's task would otherwise never be completed.
+- The module observes `UIApplication.willTerminateNotification` from
+  `OnCreate` to `OnDestroy` (#91). On it, on the main thread and
+  synchronously, a running task is logged (`OpenReaderOffline: app will
+  terminate; continued task <id> completed with success: 0`), completed with
+  `setTaskCompleted(success: false)` and forgotten, as `finishContinued` does;
+  with none, `OpenReaderOffline: app will terminate; no continued task` is
+  logged, so that the device log shows whether the notification came at all.
+  It is there because a close from the app switcher lets the phone cancel the
+  task after the process has gone, which leaves a `Task failed` card on the
+  Lock Screen, and a task the app completes itself leaves none. The window is
+  about 40 ms (`notes/NOTES_2026-09-29.md`, 21:40): SpringBoard requested the
+  termination at 20:48:30.253, the app logged `Scene will invalidate` at .271,
+  and dasd saw the process gone at .296 and logged `CANCELED` at .304. Hence
+  no hop to another queue and no event to JavaScript, whose download is
+  restored as going on at the next launch as before. `success: false`, because
+  the download did not finish; `true` would likely make the phone announce it
+  as done. Not the scene's disconnection: the phone may disconnect a
+  background scene without ending the app, and that would end a download that
+  should go on. On the owner's iPhone at 0.0.2-beta59 (notes 23:25) the owner
+  closed the app from the switcher between 23:19:44 and 23:20:28 with two
+  downloads going on and reported no `Task failed` card; the next launch, at
+  23:20:28.489, submitted a new task at 23:20:29.074. The system log was not
+  collected (the cable was out), so the `app will terminate` line itself was
+  not read. `xcrun simctl terminate` never delivers the notification, so the
+  simulator cannot show it (`test/manual-test/pitfalls/background-downloads.md`).
 
 **Info.plist.** `plugins/with-continued-processing.ts` writes
 `BGTaskSchedulerPermittedIdentifiers = ["<ios.bundleIdentifier>.download.*"]`.
@@ -180,27 +205,62 @@ native module and the catalogue passed in. It is tested in
 `test/offline/runtime-continued.test.ts`.
 
 - **One continued task at a time** covers every download that goes on by
-  itself (`GOES_ON`: queued, preparing, downloading, waiting). It shows the
-  download being written, or else the first one waiting its turn. When the
-  scheduler moves to the next Document, the task follows it.
-- **What it shows.** The title is the Document's name as the Library shows it:
-  the shell hands `library.entries` to the runtime's `nameDocuments`, and a
-  rename is reported. The subtitle is `{saved} of {n} chapters`, or
-  `chapter` when `n` is 1. While the download goes on by itself (`GOES_ON`),
-  `n` is the download's chapters that are complete for its voice or not
-  paused: the owner decided on 2026-09-28 (#77) that the count leaves out the
-  chapters the owner paused, after the first version, which counted
-  `task.chapters.length`, read `49 of 188 chapters` with 140 paused. Failed
-  chapters are counted, and so is a paused chapter that is complete. Once the
-  download no longer goes on by itself, as when it is paused as a whole by
-  Pause all or by the ring that pauses the last chapter going on, `n` is every
-  chapter of it again, so the last report before `finishContinued` reads where
-  it stopped (`49 of 188`), never a full `49 of 49` or `0 of 0` that looks
-  complete. Chapters of the Document outside the download are not counted.
-  Progress is 1,000 units per counted chapter: `completed` is the complete
-  chapters plus the saved share of `task.current` when it is counted, read from
-  `repository.progress` and the plan's text count, so the bar moves with every
-  saved clip. The report is taken after every
+  itself (`GOES_ON`: queued, preparing, downloading, waiting), and shows them
+  together (#92). Its batch is every download that went on by itself from the
+  task's submission to its end, including one that starts going on while it
+  runs, and is still there (`covering`, filtered by `deps.tasks()`): a
+  finished download stays in it, so the count never goes back, and a deleted
+  one leaves it. At the submission it is the downloads going on then. The next
+  task starts a new batch. Until the owner's decision of 2026-09-29 (#92, #93)
+  it showed the download being written, or else the first one waiting its
+  turn, and followed the scheduler from one Document to the next: with two
+  books going on, the Live Activity showed one book's count and then the
+  other's, and never how much was left of both.
+- **What it shows.** `continuedShown` reads the batch, each download with the
+  catalogue's `repository.progress` for its voice and its Document's plan.
+  The title is `Downloading {n} books`, or `book` when `n` is 1, where `n` is
+  the distinct Documents among the batch's downloads that put at least one
+  chapter in the total: two voices of one Document are one book, and a
+  download paused before it saved anything is none. It names no Document
+  (#93): until 2026-09-29 the title was the shown Document's name as the
+  Library shows it, handed in by the shell through the runtime's
+  `nameDocuments`; the Live Activity cut it after about 25 characters (#93), it
+  changed as the task followed the scheduler, and the phone's prompt named
+  only that one (`My Vampire System — Chapters 251–500 is 16% complete`).
+  Turned down with it: `{n} books` (the prompt reads `2 books is 6%
+  complete`), `OpenReader` (the Live Activity already shows the app's icon),
+  and `Downloading` alone (`Downloading is 6% complete`, and it hides how many
+  books). The names are still handed in, for the Debug Log: its line
+  `continued task shows "Downloading 2 books", 120 of 200 chapters, for "…",
+  "…"` gives the Documents the title counts, each cut by `cutText`, or a
+  short id where the Library has not named it; a rename no longer reports.
+  The Document ids travel in `ContinuedShown.documents`, and the runtime's
+  `continuedNative` passes the rest to the native calls, which are unchanged.
+  The subtitle is `{saved} of {total} chapters`, or `chapter` when `total` is
+  1, where `total` sums the batch's downloads: two of 100 chapters, the first
+  done and the second at 20, read `120 of 200 chapters`, and a third of 50
+  added reads `120 of 250 chapters`. While any download of the batch goes on
+  by itself (`GOES_ON`), a chapter in a download's `paused` list counts only
+  once it is complete for its voice, in every download of the batch whatever
+  its state, which leaves out all but the saved chapters of a download the
+  owner paused as a whole while another goes on. The owner decided on
+  2026-09-28 (#77) that the count leaves out the chapters the owner paused,
+  after the first version, which counted `task.chapters.length`, read `49 of
+  188 chapters` with 140 paused; on 2026-09-29 (#92) that rule was taken
+  across the batch, where it had held per download. Failed chapters are
+  counted. Once nothing of the batch goes on by itself, as at Pause all or
+  when the ring pauses the last chapter going on, every chapter of every
+  download of the batch counts again, so the last report before
+  `finishContinued` reads where things stopped (`49 of 188`), never a full
+  `49 of 49` or `0 of 0` that looks complete. Chapters of a Document outside
+  its download are not counted. Turned down on 2026-09-29: counting only the
+  downloads not yet finished (the count goes back when one finishes) and
+  counting every download in the Library, paused ones included (a total the
+  batch will never reach). Progress is 1,000 units per counted chapter:
+  `completed` is the complete counted chapters plus the saved share of each
+  download's `task.current` when it is counted, read from `repository.progress`
+  and the plan's text count, so the bar moves with every saved clip; `total`
+  is `max(total, 1)` × 1,000. The report is taken after every
   `persist()`, which the scheduler calls after each saved clip and each change
   of state. One report waits its turn at a time and reads the downloads when it
   runs, the same one-in-flight rule as the drawer's `requestProgress`.
@@ -273,7 +333,8 @@ native module and the catalogue passed in. It is tested in
   a continued task accepted after the app left, with the bounded time
   refused.
 - **The end.** When nothing goes on by itself, the next report shows where the
-  download ended and then calls `finishContinued`. That happens at Pause all,
+  batch ended (every chapter of its downloads counted, #92) and then calls
+  `finishContinued`. That happens at Pause all,
   at the last chapter done, at a key or quota failure, or when deletion leaves
   nothing. `success` is decided at that moment, over the downloads the task
   covered: each that went on by itself between its submission and its end,
@@ -337,9 +398,101 @@ Live Activity read `2 of 15 chapters` with a circular progress. The phone's
 own prompt to continue came at about five minutes and 16% (Progress, above),
 and what the stop did is under "Expiry, and the owner's stop".
 
-Not yet known: what the Dynamic Island shows; what Stop in the phone's own
-prompt does, presumably the same expiry; what the logged values look like for
-an end the phone chooses; whether a download waiting for the network is
-expired as stalled; and whether `success: false` looks different from `true`.
+**The Dynamic Island (#90).** On 2026-09-29 (`notes/NOTES_2026-09-29.md`,
+21:05), on the same iPhone with 0.0.2-beta54 and Debug Mode, the island showed
+the Live Activity expanded (about 374 × 90 pt) over the Home Screen, with
+`My Vampire System —…`, `2 of 250 chapters` and the stop ring, and it went back
+only when the owner swiped it up. The system log
+(`/tmp/openreader-island-0929/system.logarchive`, SpringBoard's categories
+`SpringBoard:Activity`, `SpringBoard:SystemApertureHosting` and
+`SystemAperture:*`; times local, UTC+8) shows it is the phone's own start
+alert. The submission at 20:27:46.698 started activity `606D6C66…` (client
+`com.apple.ActivityProgress.ActivityProgressUI`) at 20:27:46.838, with
+`creating system aperture element`, then `Presenting a prominent alert`,
+`adding to pending alerts`, `alerting with sound` and `Turn on screen`. At
+20:27:46.913 SpringBoard logged `Created alerting activity assertion
+(<SAUIAlertingAssertion …; locked: NO; invalidation interval: 3; timer
+scheduled: NO>)` with a preferred layout `custom` for the reason `alerting
+activity`, and in the same instant `Automatic invalidation disabled:
+<SAUIAlertingAssertion …; locked: YES; invalidation interval: 3; timer
+scheduled: NO>`. Each time the app left the screen (20:27:49.505,
+20:28:29.828, 20:29:20.853) the element went `layoutMode: none -> custom`,
+expanded, and each return `custom -> none`. After the last departure it stayed
+expanded for 178.6 s with the app away, until 20:32:19.458: `Update preferred
+layout mode … compact; _layoutModeChangeReason: user interaction`, the
+alerting assertion invalidated with `layout mode changed by user interaction;
+locked: YES; … timer scheduled: NO`, `invalidating alerting assertion` and
+`layoutMode: custom -> compact`, the owner's swipe. The app's own updates
+raised no alert: its subtitle changed at 20:29:27.527 and 20:31:13.531 (Debug
+Log `continued task shows …`) with no layout change after either; every later
+departure went `none -> compact`; away from 20:37:21.617 to 20:48:09.998 the
+subtitle changed six times (20:37:53 to 20:46:32) and the element never left
+`compact`; and the submissions after the next two launches (activities
+`59C7EFF7…` at 20:48:31.784 and `F4DF5CEA…` at 20:49:48.428) raised no alert.
+At the completion, `continued task finished, succeeded` at 20:51:41.564 with
+the app in front, the element alerted again at 20:51:41.696 (`alerting with
+sound`, layout `custom`, `Automatic invalidation disabled … locked: YES`), and
+at 20:51:47.705 the phone invalidated that assertion itself with
+`SBActivitySystemApertureElementObserver's
+dismissAlertForActivityAlertProvider`, 6.0 s later. So the start alert's
+three-second automatic invalidation is disabled the moment it is created and
+nothing re-enables it, while the completion alert is dismissed by the phone.
+
+Nothing public controls it. `BGContinuedProcessingTaskRequest` takes an
+identifier, a title, a subtitle, a `strategy` and `requiredResources`, and
+`BGContinuedProcessingTask` offers `updateTitle(_:subtitle:)`, `progress` and
+`setTaskCompleted(success:)`; none bears on how the Live Activity is
+presented. The owner decided on 2026-09-29 (#90) to accept it, record it and
+report it to Apple. An ActivityKit Live Activity of the app's own would add a
+second card beside the phone's, not replace it, and giving up the continued
+task would bring back the download stopping within a minute of leaving the app
+(#77).
+
+**Closing the app from the app switcher (#91).** On the same phone and build
+(notes 21:15, `/tmp/openreader-island-0929b/system.logarchive`), the owner's
+Lock Screen at 21:00 showed two OpenReader cards under Background Activities:
+`My Vampire System — Chap…` / `Task failed` with an `!`, and
+`My Vampire System — Chap…` / `17 of 250 chapters` with the phone's
+prompt to continue. The app ran one continued task at a time throughout. At
+20:48:30.249 SpringBoard logged `SBWorkspaceTerminateApplication:
+top.xujialiu.openreader: "killed from app switcher"`, and dasd `CANCELED
+bgContinuedProcessing-…download.18DF6850…` at .304, progress
+`CANCELLED`. After the next launch the app submitted
+`…download.1FCD6BA0…` at 20:48:31.770, and SpringBoard started
+activity `59C7EFF7…` at .784. The first task's activity `72C73F55…` was
+`dismissed` at 20:48:54.899, 24.6 s after its cancellation, the cover sheet
+having been pulled down at 20:48:50; what dismissed it is not in the log.
+Closed from the switcher again, dasd logged `CANCELED
+…download.1FCD6BA0…` at 20:49:46.818, and the app logged nothing: it is
+not told, as the article says (Expiration, above). The next task
+(`305A3A20…`, activity `F4DF5CEA…`) ran to `247 of 247`, `complete with
+success: 1`, and its activity was `dismissed` at 20:51:41.664; the one after
+(`360CC697…`, activity `CDEA5FA7…`) was submitted at 20:53:10.788 with
+the app in front. Between 21:00:01 and 21:00:12 ActivityUIServices brought
+activity `59C7EFF7…`, the task cancelled at 20:49:46, to the foreground on
+the Lock Screen: the `Task failed` card, still there 10 min 15 s after its
+cancellation, beside the running task's. So the second card is not a second
+task but what the phone keeps of a task it cancelled. No public API lets the
+app end or clear the Live Activity of a continued task it no longer holds, and
+its next launch cannot reach the cancelled one; the owner clears it with the
+✕ beside Background Activities. Nothing saved is lost. The app therefore
+completes the task itself as it terminates (What was built), and at
+0.0.2-beta59 a close from the switcher left no card (notes 23:25).
+
+**One Live Activity for two books (#92, #93).** At 0.0.2-beta59 (notes
+23:25) the Debug Log read `continued task shows "Downloading 2 books", 82 of
+500 chapters, for "My Vampire System — Chapters 701–950", "My Vampire System —
+Chapters 951–1200"` at 23:01:38.209, 2.7 s after `"Downloading 1 book", 82 of
+250 chapters`, as the second book started; away, the count went on to `92 of
+500`. The owner reported the Live Activity as expected.
+
+Not yet known: what Stop in the phone's own prompt does, presumably the same
+expiry; what the logged values look like for an end the phone chooses; whether
+a download waiting for the network is expired as stalled; whether
+`success: false` looks different from `true`; and what dismissed the
+`72C73F55…` card 24.6 s after its cancellation, and whether a `Task failed`
+card ever goes by itself; and, on a close from the switcher, whether the
+module's `app will terminate` line comes before dasd's cancellation, which
+the beta59 run did not read.
 The simulator has to show that its refusal is the documented `unavailable`
 and that the bounded fallback still behaves as measured at 02:49.
