@@ -153,13 +153,16 @@ On earlier versions of iOS, and in the simulator used for testing, nothing
 changes: the download stops within about a minute of leaving the app and goes
 on when it is opened again. The same happens when the phone refuses, which it
 may do when it is busy. Closing the app from the app switcher ends the
-download, and the phone does not tell the app. The phone then leaves a card
-reading `Task failed` on the Lock Screen, beside the card of the next download,
-until the owner clears it with the ✕ beside Background Activities. It is not a
-second download, and nothing already saved is lost. On the owner's iPhone one
-such card was still there ten minutes later; another went away by itself after
-about half a minute, for a reason the phone does not record. The app cannot
-clear it: the phone gives it no hold on a card it has stopped.
+download, and the phone does not tell the app; opening the app again carries it
+on. Until 2026-09-29 the phone then left a card reading `Task failed` on the
+Lock Screen, beside the card of the next download, until the owner cleared it
+with the ✕ beside Background Activities: not a second download, and nothing
+already saved was lost, but it read as a failure. On the owner's iPhone one such
+card was still there ten minutes later. Once the phone has stopped a download
+that way, the app has no hold on its card; but the app is given a moment as it
+is closed, and the owner decided that day to try ending the download's display
+itself in that moment, as a download that did not finish. On the owner's iPhone,
+closed that way with two books downloading, it left no card.
 
 ## What was turned down
 

@@ -182,8 +182,13 @@ event, all on the main queue:
   the download did not finish; `true` would likely make the phone announce it
   as done. Not the scene's disconnection: the phone may disconnect a
   background scene without ending the app, and that would end a download that
-  should go on. Whether the notification arrives in those 40 ms, and whether
-  the card then goes, is to be measured on the owner's iPhone (#91).
+  should go on. On the owner's iPhone at 0.0.2-beta59 (notes 23:25) the owner
+  closed the app from the switcher between 23:19:44 and 23:20:28 with two
+  downloads going on and reported no `Task failed` card; the next launch, at
+  23:20:28.489, submitted a new task at 23:20:29.074. The system log was not
+  collected (the cable was out), so the `app will terminate` line itself was
+  not read. `xcrun simctl terminate` never delivers the notification, so the
+  simulator cannot show it (`test/manual-test/pitfalls/background-downloads.md`).
 
 **Info.plist.** `plugins/with-continued-processing.ts` writes
 `BGTaskSchedulerPermittedIdentifiers = ["<ios.bundleIdentifier>.download.*"]`.
@@ -470,13 +475,24 @@ cancellation, beside the running task's. So the second card is not a second
 task but what the phone keeps of a task it cancelled. No public API lets the
 app end or clear the Live Activity of a continued task it no longer holds, and
 its next launch cannot reach the cancelled one; the owner clears it with the
-✕ beside Background Activities. Nothing saved is lost.
+✕ beside Background Activities. Nothing saved is lost. The app therefore
+completes the task itself as it terminates (What was built), and at
+0.0.2-beta59 a close from the switcher left no card (notes 23:25).
+
+**One Live Activity for two books (#92, #93).** At 0.0.2-beta59 (notes
+23:25) the Debug Log read `continued task shows "Downloading 2 books", 82 of
+500 chapters, for "My Vampire System — Chapters 701–950", "My Vampire System —
+Chapters 951–1200"` at 23:01:38.209, 2.7 s after `"Downloading 1 book", 82 of
+250 chapters`, as the second book started; away, the count went on to `92 of
+500`. The owner reported the Live Activity as expected.
 
 Not yet known: what Stop in the phone's own prompt does, presumably the same
 expiry; what the logged values look like for an end the phone chooses; whether
 a download waiting for the network is expired as stalled; whether
 `success: false` looks different from `true`; and what dismissed the
 `72C73F55…` card 24.6 s after its cancellation, and whether a `Task failed`
-card ever goes by itself.
+card ever goes by itself; and, on a close from the switcher, whether the
+module's `app will terminate` line comes before dasd's cancellation, which
+the beta59 run did not read.
 The simulator has to show that its refusal is the documented `unavailable`
 and that the bounded fallback still behaves as measured at 02:49.
