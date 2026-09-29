@@ -97,10 +97,10 @@ What has gone wrong before, and what fixed it, one file per area. Before using a
 - [Providers and audio](pitfalls/providers-and-audio.md): Native drift investigation (#63); Real touches on the player's head row, and Azure's own timing (#69, #70); Fish Audio from the simulator; Node probes against providers and books.
 - [WebDAV and cross-device items](pitfalls/webdav.md): Talking to the owner's WebDAV host from the Mac; Crafting a cross-device item for #54/#55.
 - [The shell](pitfalls/shell.md).
-- [The simulator MCP servers](pitfalls/mcp.md): mobilebuildmcp's new names, its scheme and device defaults, installing expo-mcp.
+- [The simulator MCP servers](pitfalls/mcp.md): mobilebuildmcp's new names, its scheme and device defaults, installing expo-mcp; the share sheet's actions invisible to snapshot_ui/AXe, Cells to XCUITest, and synthetic taps it eats; axe's pixel coordinate space; the ~30 s automation-session wait after a boot (#95).
 - [Evaluating in the app through `cdp.cjs`](pitfalls/cdp.md).
 - [A download away from the screen](pitfalls/background-downloads.md): the simulator's bounded background time; the continued processing task's log lines (#75, #76, #77); polling every preparation, the lock's flicker and the continued task, a hotspot's `waiting`.
-- [Merges, seeding and past verification runs](pitfalls/verification-runs.md): Merging main's #67 and #68 into #71 (2026-09-26); Verifying #71 batch 2; Seeding a real book's place through the harness (#68); Independent verification of the collapsed player and its edge swipe (#67); Verifying #71 batches 3 and 4 (2026-09-26); Verifying #75: a download beside a Reading (2026-09-28).
+- [Merges, seeding and past verification runs](pitfalls/verification-runs.md): Merging main's #67 and #68 into #71 (2026-09-26); Verifying #71 batch 2; Seeding a real book's place through the harness (#68); Independent verification of the collapsed player and its edge swipe (#67); Verifying #71 batches 3 and 4 (2026-09-26); Verifying #75: a download beside a Reading (2026-09-28); A leftover `harness.json` replays its last `add` at every relaunch and resurrects a moved-away file (#95).
 
 ## Areas
 

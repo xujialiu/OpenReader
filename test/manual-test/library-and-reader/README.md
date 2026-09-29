@@ -166,3 +166,38 @@ See [bar-title.md](bar-title.md) for the whole recipe: what to measure (two
 centred lines inside the 54-pt bar, clear of both glasses, ellipsis past two
 lines, short name equal to the native title by glyph-mask IoU), what each
 check cannot prove, and the `-RCT_jsLocation` every probe launch needs.
+
+## The share button in the actions drawer (#95, `ShareProbe.swift`)
+
+With the current Debug app connected to Metro and a book whose title begins
+`The First Legendary Beast Master` in the Library (a part of the owner's copy
+in `~/Works/epub_books`, per **Real books**), run the methods one at a time,
+in this order:
+
+```sh
+TEST_RUNNER_OPENREADER_METRO_PORT=PORT bash test/manual-test/kit/run-probe.sh ShareProbe SIMULATOR_UDID NEW_OUTPUT_DIR \
+  -only-testing:LockScreenProbe/ShareProbe/testSheetClosesBackToOpenDrawer
+```
+
+1. `testSheetClosesBackToOpenDrawer`: Library `…` → Share → the system sheet
+   over the drawer → its `Copy` cell closes it → the drawer is still open with
+   Share back.
+2. `testReaderDrawerShareOnlyOnMenu`: the reader's More actions shows Share at
+   the same frame, and Appearance, Fonts (the `Font, <chosen>` row), Rename and
+   Download do not.
+3. `testLongTitleWrapsBeforeButtonAndShareName`: renames through the Rename
+   page to the long name and checks that the title wraps before the button.
+   Then `ls` the data container's `Library/Caches/share/` for
+   `The First Legendary Beast Master, Volume Three - The Long Road Through the Northern Mountains and Beyond.epub`
+   and `cmp` it against `Documents/library/sha256-*.epub`.
+4. `testMissingFileShowsAttentionNote`: first overwrite `Documents/harness.json`
+   (`printf '{"seq":9999,"do":"shelf"}'`, pitfalls/verification-runs.md) and
+   move the kept `Documents/library/sha256-*.epub` out of the container, or
+   the launch re-adds it. Then `testShareAgainAfterFileRestored`, with the file
+   put back.
+
+The sheet's own actions (Save to Files, AirDrop) cannot be driven from here
+(pitfalls/mcp.md, "The share sheet's actions"). The bytes are proved by `cmp`
+on the `Caches/share/` copy instead. On 2026-09-30 (iPhone 17, iOS 27.0) all
+five methods passed. The Debug Log showed `copied in 4–13 ms` for a 1 MB book
+and `sheet closed after 2589–3250 ms`.

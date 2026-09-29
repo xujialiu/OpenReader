@@ -458,3 +458,9 @@ plus harness sequences for the failure-note and dark-theme checks.
   Nothing had played and no output device changed that the Mac reported. The kit's
   existing rule — `set` again, then let the next `run-probe.sh` check gate the run —
   is what worked; no new fix needed.
+
+## A leftover `harness.json` replays its last command at every app relaunch (#95, 2026-09-30)
+
+- **Symptom:** testing the share button's missing-file note, the kept `library/sha256-*.epub` was moved out and `ls` confirmed the directory empty; one probe relaunch later the file was back (its original birth time — an APFS clone), the share sheet rose, and the "missing file" assertion failed.
+- **Cause:** the walkthrough harness polls `Documents/harness.json` from `seenRef = -1` at every launch, so whatever command is still in the file runs again. This tree's file still held `{"seq":1,"do":"add","file":"…"}`; the Debug Log shows `[hx] added sha256:…` one second after each `[launch]` line (02:28:37, 02:29:43, 02:31:22, 02:33:36), and `library.add` re-copies the file from `Documents/Inbox` (`add` uses `move: false`, so the Inbox copy survives as a permanent re-adding source). The relaunch had silently undone the fixture change.
+- **Fix:** before any test that removes or changes container files across a relaunch, overwrite `harness.json` with a harmless high-seq command, e.g. `printf '{"seq":9999,"do":"shelf"}' > "$CONT/Documents/harness.json"`. Check the Debug Log's `[hx]` lines when a fixture refuses to stay as you left it.
