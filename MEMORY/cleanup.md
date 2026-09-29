@@ -18,5 +18,5 @@ clean up, with keeping the delivery for inspection as one of the options:
   process that another live session may be using, or the `openreader-metro-*`
   launchd services.
 - **The worktree**: if the branch is merged (`git merge-base --is-ancestor HEAD
-  main`), remind the owner that the worktree can be deleted. Do not delete it
-  yourself.
+  main`) and `./.worktrees/` is empty (AGENTS.md, "Sub-worktrees"), remind the
+  owner that the worktree can be deleted. Do not delete it yourself.

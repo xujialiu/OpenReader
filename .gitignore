@@ -45,3 +45,6 @@ yarn-error.*
 # to and nowhere else, and a key in git history has gone somewhere else forever.
 /.secrets
 __pycache__/
+
+# Sub-worktrees an agent creates for other agents (AGENTS.md, "Sub-worktrees")
+/.worktrees/
