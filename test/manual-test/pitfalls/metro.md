@@ -109,6 +109,13 @@
   iOS 27.0 device fetched its bundle from port 8088 on its first launch, Metro
   logged `iOS Bundled`, and the device appeared in `/json/list` there. It
   belongs to the launch it is passed to, so pass it on every relaunch.
+  On a **freshly created** device the first launch with the argument can still
+  connect to nothing: measured 2026-09-29 (issue #86, a device created that
+  minute), the app came up on the Library, fetched no bundle, and every
+  Metro's `/json/list` stayed empty; a second `terminate` + `launch` with the
+  same argument bundled at once. A fresh container's first launch races its
+  own defaults; if `/json/list` on your port is empty and no Metro logged a
+  bundle, just relaunch with the argument again before editing anything.
 - **An existing probe's own `app.terminate(); app.launch()` drops that launch
   argument too, and reconnects to whatever Metro the container plist last
   held.** Every probe in `ios/` does this at the start of most methods

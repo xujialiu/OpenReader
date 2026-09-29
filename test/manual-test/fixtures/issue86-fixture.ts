@@ -22,6 +22,12 @@
  * names its chapter, paragraph and number, so one line of a fake provider's
  * request log maps to one Utterance. Every sentence is different, so no Clip of
  * one can answer for another.
+ *
+ * The contents are an EPUB 2 `toc.ncx`, not a `properties="nav"` xhtml nav, on
+ * purpose: epub.js spells a nav document's hrefs with the nav file's folder
+ * joined on (`tocPath.join`), so against manifest hrefs like `first.xhtml` every
+ * row of an xhtml nav comes out unreachable (`contents.unreachable`), while an
+ * NCX's `src` is kept as written and matches. The owner's books are NCX.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -79,28 +85,29 @@ const PACKAGE = `<?xml version="1.0" encoding="UTF-8"?>
     <meta property="dcterms:modified">2026-09-29T00:00:00Z</meta>
   </metadata>
   <manifest>
-    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
     <item id="first" href="first.xhtml" media-type="application/xhtml+xml"/>
     <item id="second" href="second.xhtml" media-type="application/xhtml+xml"/>
     <item id="volume" href="volume.xhtml" media-type="application/xhtml+xml"/>
     <item id="third" href="third.xhtml" media-type="application/xhtml+xml"/>
     <item id="fourth" href="fourth.xhtml" media-type="application/xhtml+xml"/>
   </manifest>
-  <spine><itemref idref="first"/><itemref idref="second"/><itemref idref="volume"/><itemref idref="third"/><itemref idref="fourth"/></spine>
+  <spine toc="ncx"><itemref idref="first"/><itemref idref="second"/><itemref idref="volume"/><itemref idref="third"/><itemref idref="fourth"/></spine>
 </package>
 `;
 
-const NAV = `<?xml version="1.0" encoding="UTF-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-<head><title>Contents</title></head>
-<body><nav epub:type="toc"><ol>
-  <li><a href="first.xhtml">The First Chapter</a></li>
-  <li><a href="second.xhtml">The Second Chapter</a></li>
-  <li><a href="volume.xhtml">Volume Two</a></li>
-  <li><a href="third.xhtml">The Third Chapter</a></li>
-  <li><a href="fourth.xhtml">The Fourth Chapter</a></li>
-</ol></nav></body>
-</html>
+const NCX = `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="urn:openreader:issue-86-check-of-skips-and-contents"/></head>
+  <docTitle><text>${TITLE}</text></docTitle>
+  <navMap>
+    <navPoint id="c1" playOrder="1"><navLabel><text>The First Chapter</text></navLabel><content src="first.xhtml"/></navPoint>
+    <navPoint id="c2" playOrder="2"><navLabel><text>The Second Chapter</text></navLabel><content src="second.xhtml"/></navPoint>
+    <navPoint id="v2" playOrder="3"><navLabel><text>Volume Two</text></navLabel><content src="volume.xhtml"/></navPoint>
+    <navPoint id="c3" playOrder="4"><navLabel><text>The Third Chapter</text></navLabel><content src="third.xhtml"/></navPoint>
+    <navPoint id="c4" playOrder="5"><navLabel><text>The Fourth Chapter</text></navLabel><content src="fourth.xhtml"/></navPoint>
+  </navMap>
+</ncx>
 `;
 
 export function main(output: string): void {
@@ -109,7 +116,7 @@ export function main(output: string): void {
     { name: 'mimetype', data: utf8('application/epub+zip') },
     { name: 'META-INF/container.xml', data: utf8(CONTAINER) },
     { name: 'OEBPS/content.opf', data: utf8(PACKAGE) },
-    { name: 'OEBPS/nav.xhtml', data: utf8(NAV) },
+    { name: 'OEBPS/toc.ncx', data: utf8(NCX) },
     { name: 'OEBPS/first.xhtml', data: utf8(chapter('The First Chapter', 'First')) },
     { name: 'OEBPS/second.xhtml', data: utf8(chapter('The Second Chapter', 'Second')) },
     { name: 'OEBPS/volume.xhtml', data: utf8(VOLUME_PAGE) },

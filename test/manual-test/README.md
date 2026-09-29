@@ -119,3 +119,4 @@ recipe goes.
 - [Sync](sync/README.md): Sync: the Sync screen, the switch, and places crossing devices (#20).
 - [Native audio queue (#63)](native-audio/README.md): Native queue position versus actual rendered audio (#63); Output-driven audio/position prototype (#63, validation only); Production output-driven queue (#63).
 - [The kit](kit/README.md): Run an XCTest probe; Read runtime warnings or evaluate a targeted expression; Inspect, stop or briefly exercise the reading handler; Pull the Debug Log off the phone (#82, `debug-log.py`).
+- [Issue #86: skips and Contents rows while playing](issue86/issue86.md): the fake Kokoro provider, the fixture, `Tap86Probe`'s real touches, and how the press-to-fetch timings were read (#86).
