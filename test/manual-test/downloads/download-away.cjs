@@ -66,7 +66,16 @@ function births() {
     for (const v of readdirSync(d)) {
       const dir = join(d, v);
       if (!statSync(dir).isDirectory()) continue;
-      for (const f of readdirSync(dir)) if (/\.(audio|m4a|mp3|wav|ogg|opus)$/.test(f)) out.push(statSync(join(dir, f)).birthtimeMs);
+      for (const f of readdirSync(dir)) {
+        // A clip being written is `*.pending.m4a` until it is renamed, and may be
+        // gone by the time it is stat'ed (2026-09-29, ENOENT mid-run).
+        if (!/\.(audio|m4a|mp3|wav|ogg|opus)$/.test(f) || f.includes('.pending.')) continue;
+        try {
+          out.push(statSync(join(dir, f)).birthtimeMs);
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error;
+        }
+      }
     }
   }
   return out;

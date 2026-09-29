@@ -117,3 +117,22 @@
   call, while its runner was being launched, before any flick. The recording's
   `flicks began` is when `xcodebuild` started; the flicks come 15–25 s later.
   Leave the runner's launch out when timing what the app does.
+- **`download-away.cjs` crashed with `ENOENT … stat …pending.m4a` in the
+  middle of a run** (2026-09-29, 0.0.2-beta59 simulator check). Cause: its
+  clip count stat'ed every `.m4a` it listed, and a clip being written is
+  `*.pending.m4a` until it is renamed, so one listed by `readdirSync` was gone
+  by the `statSync`. The script died before its cleanup, with the download still
+  going on. Fix: `births()` skips `.pending.` files and ignores an `ENOENT`.
+- **A `simctl spawn … log stream` running across an away test missed a line
+  that the log archive has.** On 2026-09-29 the stream never printed
+  `[download] the bounded background time expired`, which
+  `xcrun simctl spawn UDID log show` found at 22:05:49.936, written while the
+  app was in the background. Cause not established. Fix: read the away window
+  with `log show` (or the Debug Log file in the container) before concluding a
+  line was not written.
+- **`xcrun simctl terminate` does not tell the app it is terminating.** With the
+  #91 observer of `UIApplication.willTerminateNotification` installed, a
+  `simctl terminate` at 22:09:50 (2026-09-29) ended the process and neither
+  `OpenReaderOffline: app will terminate; …` line appeared. A close from the app
+  switcher is the case to test, and only the phone can show what it does to a
+  continued task.
