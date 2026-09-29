@@ -71,12 +71,37 @@ const config: ExpoConfig = {
    */
   version: '0.0.1',
   orientation: 'portrait',
-  icon: './assets/icon.png',
+  /**
+   * #83. Everything the icon is lives in `assets/icon/`, and its one source is
+   * `OpenReader.icon`, which `ios.icon` below is given whole. This PNG and the
+   * Android ones are exported from that document's two layers by
+   * `assets/icon/export-android.sh`; after changing a layer, run it and prebuild
+   * again. On iOS `ios.icon` overrides this key, so here it is only what an
+   * Android launcher too old for adaptive icons shows.
+   */
+  icon: './assets/icon/icon.png',
   userInterfaceStyle: 'automatic',
 
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'top.xujialiu.openreader',
+
+    /**
+     * #83. An Icon Composer document rather than PNGs: one file carries the
+     * default, dark, clear and tinted appearances and gives the icon Liquid
+     * Glass. It has to be this string — Expo's `withIosIcons` warns when a
+     * `.icon` is put inside the `{ light, dark, tinted }` object — and its base
+     * name, `OpenReader`, becomes ASSETCATALOG_COMPILER_APPICON_NAME.
+     *
+     * Below iOS 26 the phone shows flat icons Xcode renders from it at build
+     * time: `actool` at `--minimum-deployment-target 17.2` wrote light, dark
+     * and tintable renditions into Assets.car (notes, 2026-09-29).
+     *
+     * The dark icon follows the phone's Home Screen icon appearance, never the
+     * app's Theme: switching icons with the Theme would take the alternate-icon
+     * API, whose every switch shows the owner a system alert.
+     */
+    icon: './assets/icon/OpenReader.icon',
 
     /**
      * ADR 0001's floor, above the platform minimum. Built into the config from
@@ -96,11 +121,17 @@ const config: ExpoConfig = {
 
   android: {
     package: 'top.xujialiu.openreader',
+    /**
+     * #83. Exported from `OpenReader.icon` by `assets/icon/export-android.sh`,
+     * the glyph inside the 66 dp circle every launcher mask leaves visible.
+     * Not yet seen on an Android device: the app does not run there (`ink()` in
+     * src/app/controls.tsx throws off iOS).
+     */
     adaptiveIcon: {
-      backgroundColor: '#E6F4FE',
-      foregroundImage: './assets/android-icon-foreground.png',
-      backgroundImage: './assets/android-icon-background.png',
-      monochromeImage: './assets/android-icon-monochrome.png',
+      backgroundColor: '#f5f5f7',
+      foregroundImage: './assets/icon/android-foreground.png',
+      backgroundImage: './assets/icon/android-background.png',
+      monochromeImage: './assets/icon/android-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
   },

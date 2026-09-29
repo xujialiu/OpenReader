@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { ExportedConfig, ExportedConfigWithProps, InfoPlist } from 'expo/config-plugins';
 import { describe, expect, it } from 'vitest';
@@ -272,5 +272,44 @@ describe('ADR 0054: Debug Mode is fixed in the bundle, and no build takes anothe
     const swift = readFileSync(new URL('../modules/open-reader-debug-log/ios/OpenReaderDebugLogModule.swift', import.meta.url), 'utf8');
     pin(swift, 'Logger(subsystem: "top.xujialiu.openreader", category: "debug-log")', 'OpenReaderDebugLogModule.swift');
     pin(swift, 'self.logger.notice("\\(line, privacy: .public)")', 'OpenReaderDebugLogModule.swift');
+  });
+});
+
+describe('#83: the icon is one Icon Composer document, and every image the config names exists', () => {
+  type IconDocument = {
+    'fill-specializations': { appearance?: string }[];
+    groups: { layers: { 'image-name': string; 'fill-specializations'?: { appearance?: string }[] }[] }[];
+  };
+  const root = new URL('../', import.meta.url);
+  const exists = (path: string) => existsSync(new URL(path, root));
+
+  it('gives iOS the .icon as a string, which is the only form Expo compiles as one', () => {
+    // Inside the `{ light, dark, tinted }` object, withIosIcons warns and treats
+    // it as an image path.
+    expect(config.ios?.icon).toBe('./assets/icon/OpenReader.icon');
+  });
+
+  it('carries a dark background and a tinted fill for each layer, and every layer image it names', () => {
+    const icon = './assets/icon/OpenReader.icon';
+    const document = JSON.parse(readFileSync(new URL(`${icon}/icon.json`, root), 'utf8')) as IconDocument;
+    const appearances = document['fill-specializations'].map((entry) => entry.appearance);
+    expect(appearances).toEqual([undefined, 'dark', 'tinted']);
+    const layers = document.groups.flatMap((group) => group.layers);
+    expect(layers.map((layer) => layer['image-name']).sort()).toEqual(['headphones.svg', 'wave.svg']);
+    for (const layer of layers) {
+      expect(exists(`${icon}/Assets/${layer['image-name']}`)).toBe(true);
+      expect(layer['fill-specializations']?.map((entry) => entry.appearance)).toEqual(['tinted']);
+    }
+  });
+
+  it('points every other icon key at a file that is there', () => {
+    // A missing path fails the prebuild only for the platform that reads it,
+    // and Android's is not built yet.
+    const adaptive = config.android?.adaptiveIcon;
+    const paths = [config.icon, adaptive?.foregroundImage, adaptive?.backgroundImage, adaptive?.monochromeImage];
+    for (const path of paths) {
+      expect(path).toMatch(/^\.\/assets\/icon\/[a-z-]+\.png$/);
+      expect(exists(path!)).toBe(true);
+    }
   });
 });

@@ -57,6 +57,16 @@
   Home through XCTest (`testHome`): `inactive` 1.9 s after the probe's
   `LOCKPROBE home at` line, `background` 1.7 s later. `home-on FILE` waits
   like `lock-on`.
+- **The Home Screen's own controls do not answer `mobilebuildmcp` taps on
+  iOS 27.0, and the system's dark appearance does not darken its icons.**
+  Measured 2026-09-29 (#83, `iPhone 17 download`): a `long_press` on the
+  "Home screen icons" scroll area does enter edit mode, but `tap` and `touch`
+  (0.3 s) on its `Edit` button, at (69, 33), left edit mode instead of opening
+  the menu that holds Customize, twice. `simctl ui UDID appearance dark` darkens
+  the wallpaper and dock and leaves every icon light, because the icon style is
+  set in Edit → Customize. To see an app's dark or tinted icon, choose it there
+  by hand, or drive `com.apple.springboard` through XCTest as
+  `DeviceLockProbe` does; the AXe route does not reach it.
 - **A swipe that closes Control Center can fail and leave it open, and the
   next Home press then closes Control Center instead of going Home.**
   Measured 2026-09-28 09:49 (final run, check 4 part F): `axe swipe` from
