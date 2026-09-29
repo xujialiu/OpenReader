@@ -222,6 +222,7 @@ export interface AppSettings {
    * The size goes one step further and is never the book's at all (ADR 0030):
    * two books typeset differently read at the same size. So does the Text
    * Alignment (ADR 0034): body text is justified until the owner picks Left.
+   * So do the Margins (ADR 0056): 16 points a side in every book.
    * The font still starts on each book's own, so a face the owner liked needs
    * no putting back.
    */
@@ -230,9 +231,9 @@ export interface AppSettings {
    * Light, dark, or whatever the phone is doing: the **theme** (ADR 0022).
    *
    * In General and not in the Appearance sheet, and the two are not the same
-   * question. Appearance is how the text on the page is set — the owner's size
-   * and alignment, and a font that starts on the book's own; the theme is what
-   * the whole app looks like, in the room the owner is in, and it reaches the
+   * question. Appearance is how the text on the page is set — the owner's size,
+   * margins and alignment, and a font that starts on the book's own; the theme
+   * is what the whole app looks like, in the room the owner is in, and it reaches the
    * Library and the Settings screens as well as the page.
    */
   theme: ThemeSetting;

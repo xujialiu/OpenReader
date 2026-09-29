@@ -26,6 +26,10 @@ on each such element before the stylesheet is created. So "exactly one"
 DOM mutation below is now two kinds: the `<style>` element, still created
 once, and that attribute.
 
+**ADR 0056 adds a fourth row, the Margins**, as a fourth part of the same
+stylesheet: one rule on `body` whose `!important` padding replaces the twelfth
+of the width epub.js writes there inline. It makes no DOM mutation of its own.
+
 ADR 0019 decided that Appearance is a **sheet over the reader** and not a route,
 and left what it holds to this one. It holds two rows, a font and a size, and
 both default to **follow the document** — `Appearance` in `src/renderer/highlighter.ts`,
