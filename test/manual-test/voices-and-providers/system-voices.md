@@ -34,13 +34,16 @@ owner downloaded in Settings → Accessibility → Spoken Content → Voices.
 ## On the phone: the System Voices app
 
 `SystemVoicesApp.swift` does both jobs inside a signed app, for every voice the
-phone has: the list, then one sentence per voice through `write`, in the
+phone has. Every launch lists the voices (`voices.tsv`, `summary.txt`). Launched
+with `--measure`, it then writes one sentence per voice through `write`, in the
 voice's language where the app has one (en, zh, yue, ja, ko, de, fr, es, ru;
-English otherwise, marked `nativeText=no`). It also records how long each
-synthesis took. It shows the results on screen and writes `voices.tsv`,
-`summary.txt` and `markers.tsv` to its Documents, then `done.txt` when every
-voice has been written. Nothing is played. It keeps the screen awake while it
-runs; a locked phone suspends it.
+English otherwise, marked `nativeText=no`), and records the format, the word
+markers and how long each synthesis took (`markers.tsv`); without it, the last
+`markers.tsv` is shown. Then every English voice writes a longer passage,
+introduced by its own name, to `Documents/samples/FAMILY-LOCALE-NAME.wav`, and
+`done.txt` is written. Nothing is played until the owner taps a voice's row,
+which speaks the passage on the phone. It keeps the screen awake while it runs;
+a locked phone suspends it. A run of both takes about 30 s.
 
 ```sh
 out=/tmp/openreader-systemvoices-app; mkdir -p $out
@@ -51,9 +54,9 @@ xcodebuild -project $out/SystemVoices.xcodeproj -scheme SystemVoices \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration -quiet build
 xcrun devicectl device install app --device IPHONE_UDID \
   $out/DerivedData/Build/Products/Release-iphoneos/SystemVoices.app
-xcrun devicectl device process launch --device IPHONE_UDID \
-  top.xujialiu.openreader.systemvoices
-for f in summary.txt voices.tsv markers.tsv done.txt; do
+xcrun devicectl device process launch --terminate-existing --device IPHONE_UDID \
+  top.xujialiu.openreader.systemvoices --measure
+for f in summary.txt voices.tsv markers.tsv done.txt samples; do
   xcrun devicectl device copy from --device IPHONE_UDID \
     --domain-type appDataContainer \
     --domain-identifier top.xujialiu.openreader.systemvoices \
@@ -65,5 +68,9 @@ A new bundle id needs a new provisioning profile, so Xcode must have the
 owner's Apple ID signed in (pitfalls/physical-iphone.md, `No Accounts`). The
 phone must be unlocked for the launch. `done.txt` missing means the run has not
 finished; copy again later.
+
+The phone's voice identifiers are not fixed: between two runs ten minutes apart
+41 `super-compact` voices came back as `compact` ones (notes/NOTES_2026-09-29.md,
+21:25). Compare lists by name and locale, not by identifier.
 
 Measured results: notes/NOTES_2026-09-29.md, 20:56.

@@ -3,7 +3,10 @@
 // through AVSpeechSynthesizer.write for each voice and records the buffer
 // format, the length, the time the synthesis took and every word marker.
 // Nothing is played. Results go to the app's Documents (voices.tsv,
-// summary.txt, markers.tsv, done.txt) and are shown on screen.
+// summary.txt, markers.tsv, done.txt) and are shown on screen. Every English
+// voice then writes a longer passage, introduced by its own name, to
+// Documents/samples/*.wav, for listening on the Mac. A tap on a voice's row
+// speaks that passage (or the voice's own-language sentence) on the phone.
 // Built by system-voices-app.rb; recipe in system-voices.md.
 import AVFoundation
 import SwiftUI
@@ -19,6 +22,8 @@ let sentences: [String: String] = [
   "es": "El rápido zorro marrón salta sobre el perro perezoso.",
   "ru": "Быстрая бурая лиса перепрыгивает через ленивую собаку.",
 ]
+/// What a listener hears: a book's first lines, with an abbreviation and quotation marks in them.
+let englishPassage = "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. \u{201C}My dear Mr. Bennet,\u{201D} said his lady to him one day, \u{201C}have you heard that Netherfield Park is let at last?\u{201D}"
 let traditional = "敏捷的棕色狐狸跳過了懶狗。"
 let cantonese = "敏捷嘅啡色狐狸跳過咗隻懶狗。"
 
@@ -60,6 +65,23 @@ func traitsName(_ v: AVSpeechSynthesisVoice) -> String {
   return traits.joined(separator: "+")
 }
 
+/// What kind of voice an identifier is, as the sample files are named.
+func familyName(_ v: AVSpeechSynthesisVoice) -> String {
+  let id = v.identifier
+  if id.contains(".eloquence.") { return "eloquence" }
+  if id.contains("ttsbundle.siri") { return "siri" }
+  if id.contains(".super-compact.") { return "super-compact" }
+  if id.contains(".voice.compact.") { return "compact" }
+  if id.contains(".voice.enhanced.") { return "enhanced" }
+  if id.contains(".voice.premium.") { return "premium" }
+  if id.contains("speech.synthesis.voice") { return v.voiceTraits.contains(.isNoveltyVoice) ? "novelty" : "macintalk" }
+  return "other"
+}
+
+func listeningText(_ v: AVSpeechSynthesisVoice) -> String {
+  primaryLanguage(v.language) == "en" ? "\(v.name). " + englishPassage : sentence(for: v.language).0
+}
+
 func formatName(_ f: AVAudioCommonFormat) -> String {
   switch f {
   case .pcmFormatFloat32: return "float32"
@@ -86,13 +108,24 @@ final class Collector: @unchecked Sendable {
   var resumed = false
 }
 
+final class SampleWriter: @unchecked Sendable {
+  let lock = NSLock()
+  var file: AVAudioFile?
+  var resumed = false
+  var timedOut = false
+}
+
 @MainActor
 final class Probe: ObservableObject {
   @Published var voices: [AVSpeechSynthesisVoice] = []
   @Published var results: [String: String] = [:]
   @Published var summary = ""
   @Published var progress = ""
-  private let synth = AVSpeechSynthesizer()
+  @Published var busy = true
+  /// A synthesizer that has timed out once was seen to time out on every later
+  /// voice too (2026-09-29, 21:19), so a timeout replaces it.
+  private var synth = AVSpeechSynthesizer()
+  private let speaker = AVSpeechSynthesizer()
   private var started = false
   private let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
 
@@ -137,17 +170,89 @@ final class Probe: ObservableObject {
     save("summary.txt", summary + "\n")
     print(summary)
 
-    var markers = "identifier\tlanguage\tnativeText\tformat\tbytesPerFrame\tframes\tseconds\tsynthSeconds\twordMarks\totherMarks\tfinished\tmarks\n"
-    save("markers.tsv", markers)
-    for (i, v) in all.enumerated() {
-      progress = "Writing \(i + 1) of \(all.count): \(v.name)"
-      let (line, short) = await measure(v)
-      markers += line + "\n"
-      results[v.identifier] = short
+    // The marker run only when launched with --measure (system-voices.md);
+    // otherwise the last run's results are shown.
+    if ProcessInfo.processInfo.arguments.contains("--measure") {
+      var markers = "identifier\tlanguage\tnativeText\tformat\tbytesPerFrame\tframes\tseconds\tsynthSeconds\twordMarks\totherMarks\tfinished\tmarks\n"
       save("markers.tsv", markers)
+      for (i, v) in all.enumerated() {
+        progress = "Writing \(i + 1) of \(all.count): \(v.name)"
+        let (line, short) = await measure(v)
+        markers += line + "\n"
+        results[v.identifier] = short
+        save("markers.tsv", markers)
+      }
+    } else if let saved = try? String(contentsOf: documents.appendingPathComponent("markers.tsv"), encoding: .utf8) {
+      for row in saved.split(separator: "\n").dropFirst() {
+        let f = row.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        guard f.count >= 11 else { continue }
+        results[f[0]] = f[10] == "yes" ? "\(f[8]) word marks \u{00B7} \(f[3])" : "timed out"
+      }
     }
-    progress = "Done: \(all.count) voices written"
+    let samples = documents.appendingPathComponent("samples")
+    try? FileManager.default.removeItem(at: samples)
+    try? FileManager.default.createDirectory(at: samples, withIntermediateDirectories: true)
+    let english = all.filter { primaryLanguage($0.language) == "en" }
+    for (i, v) in english.enumerated() {
+      progress = "Sample \(i + 1) of \(english.count): \(v.name)"
+      let name = "\(familyName(v))-\(v.language)-\(v.name.replacingOccurrences(of: " ", with: "_")).wav"
+      await writeSample(v, to: samples.appendingPathComponent(name))
+    }
+    progress = "Tap a voice to hear it."
+    busy = false
     save("done.txt", ISO8601DateFormatter().string(from: Date()) + "\n")
+  }
+
+  /// Speaks the voice's listening text on the phone; a second tap stops it.
+  func speak(_ v: AVSpeechSynthesisVoice) {
+    if speaker.isSpeaking {
+      speaker.stopSpeaking(at: .immediate)
+      return
+    }
+    try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+    try? AVAudioSession.sharedInstance().setActive(true)
+    let utterance = AVSpeechUtterance(string: listeningText(v))
+    utterance.voice = v
+    speaker.speak(utterance)
+  }
+
+  private func writeSample(_ v: AVSpeechSynthesisVoice, to url: URL) async {
+    let utterance = AVSpeechUtterance(string: listeningText(v))
+    utterance.voice = v
+    let w = SampleWriter()
+    let synth = self.synth
+    await withCheckedContinuation { (k: CheckedContinuation<Void, Never>) in
+      let finish: @Sendable () -> Void = {
+        w.lock.lock()
+        let go = !w.resumed
+        w.resumed = true
+        w.file = nil
+        w.lock.unlock()
+        if go { k.resume() }
+      }
+      synth.write(utterance, toBufferCallback: { buffer in
+        guard let pcm = buffer as? AVAudioPCMBuffer else { return }
+        if pcm.frameLength == 0 { finish(); return }
+        w.lock.lock()
+        defer { w.lock.unlock() }
+        if w.resumed { return }
+        if w.file == nil {
+          w.file = try? AVAudioFile(forWriting: url, settings: pcm.format.settings,
+            commonFormat: pcm.format.commonFormat, interleaved: pcm.format.isInterleaved)
+        }
+        try? w.file?.write(from: pcm)
+      }, toMarkerCallback: { _ in })
+      DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
+        w.lock.lock()
+        let pending = !w.resumed
+        w.lock.unlock()
+        guard pending else { return }
+        w.timedOut = true
+        synth.stopSpeaking(at: .immediate)
+        finish()
+      }
+    }
+    if w.timedOut { self.synth = AVSpeechSynthesizer() }
   }
 
   private func measure(_ v: AVSpeechSynthesisVoice) async -> (String, String) {
@@ -202,6 +307,7 @@ final class Probe: ObservableObject {
       }
     }
     let synthSeconds = Date().timeIntervalSince(t0)
+    if !c.lock.withLock({ c.finished }) { self.synth = AVSpeechSynthesizer() }
     return c.lock.withLock { summarize(v, c, native, synthSeconds) }
   }
 
@@ -236,13 +342,16 @@ struct ContentView: View {
         ForEach(probe.groups, id: \.0) { language, voices in
           Section("\(Locale.current.localizedString(forIdentifier: language) ?? language) · \(language)") {
             ForEach(voices, id: \.identifier) { v in
+              Button { probe.speak(v) } label: {
               VStack(alignment: .leading, spacing: 2) {
-                Text(v.name)
-                Text([qualityName(v), traitsName(v), probe.results[v.identifier] ?? "…"]
+                Text(v.name).foregroundStyle(.primary)
+                Text([familyName(v), traitsName(v), probe.results[v.identifier] ?? ""]
                   .filter { !$0.isEmpty }.joined(separator: " · "))
                   .font(.caption)
                   .foregroundStyle(.secondary)
               }
+              }
+              .disabled(probe.busy)
             }
           }
         }
