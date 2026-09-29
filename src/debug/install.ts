@@ -19,7 +19,7 @@ import { DEBUG_MODE } from './mode';
  * Where the Debug Log is kept, from the app's container. Under Library, which
  * iOS never purges (Caches it may) and which the Files app never shows, and
  * excluded from iCloud backup: a debugging record is not the owner's data.
- * `test/manual-test/kit/debug-log.sh` copies it with `devicectl device copy
+ * `test/manual-test/kit/debug-log.py` copies it with `devicectl device copy
  * from --domain-type appDataContainer`.
  */
 export const DEBUG_LOG_FOLDER = ['Library', 'Application Support', 'debug-log'] as const;
