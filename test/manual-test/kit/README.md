@@ -181,4 +181,8 @@ What it cannot prove: nothing here has run against a phone yet. The whole-folder
 copy and the listing's JSON shape are `devicectl`'s, read from its `--help` on
 Xcode 27.0 and not measured; the fallback exists for that reason. The span and
 the summary were checked against Debug Log files written by the test suite's
-format.
+format. On 2026-09-29 the script also ran against a stand-in `xcrun` and
+`pymobiledevice3` that copy two such files: the whole-folder copy, the fallback
+through a listing, `--syslog` (`syslog collect … --udid … --start-time` with
+the first line's epoch) and exit 1 for an empty folder did what is described
+here.
