@@ -121,7 +121,7 @@ describe('an adopted place asks for its section (defect 3)', () => {
     // "Has that section reported" is the one set a stored place also waits on (#51),
     // which counts a section that reported no Block as reported.
     pin(reveal, 'reportedSectionsRef.current.has(section)', 'use-reading.ts, revealPendingPlace');
-    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace, stopWaitingIfArrived],');
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, followRow, revealPendingPlace, stopWaitingIfArrived],');
     pin(blocks, 'if (resumeRef.current && adoptedPendingRef.current) revealPendingPlace(resumeRef.current);', 'use-reading.ts, handleBlocks');
     const resume = within(reading, 'const resumeAt = useCallback(', '[tryResume, revealPendingPlace, stopWaitingIfArrived],');
     pin(resume, 'revealPendingPlace(place);', 'use-reading.ts, resumeAt');

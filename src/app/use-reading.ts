@@ -73,6 +73,7 @@ import {
   documentLanguage,
   firstUtteranceOfSection,
   outOfTextSentence,
+  readingFromRow,
   samePrefix,
   segmentDocument,
   type Segmented,
@@ -384,9 +385,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    *
    * The second half of that tap: the page has been moved and the reading cannot
    * follow until the section reports its Blocks, because until then it has no
-   * Utterance to seek to (`firstUtteranceOfSection`).
+   * Utterance to seek to (`readingFromRow`). `onward` is a row pressed while
+   * playing: the engine is silenced for the wait, and a section that reports with
+   * no text is read past (#86).
    */
-  const pendingSectionRef = useRef<number | null>(null);
+  const pendingSectionRef = useRef<{ section: number; onward: boolean } | null>(null);
   /**
    * The stored Reading Position, until an Utterance has been found for it.
    *
@@ -807,6 +810,55 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   );
 
   /**
+   * Take the reading where a Contents row points, as far as the sections reported
+   * so far can say (`readingFromRow`), and remember the section still to wait for.
+   *
+   * `onward` is a row pressed while playing (#86). The voice stops at the tap
+   * rather than read on in the chapter being left: the engine is silenced while
+   * the section is waited for, and the player shows the wait. A page with no text,
+   * which is a volume's title page, is read past to the first section after it
+   * that has some, as the owner chose; the section waited for is then asked for,
+   * because nothing else displays a section no sentence has reached. When nothing
+   * after the row has text, the reading stops where it was, since nothing has
+   * moved it, and says why.
+   */
+  const followRow = useCallback((section: number, onward: boolean) => {
+    const target = readingFromRow(
+      loadedRef.current,
+      blocksRef.current,
+      { spine: renderedRef.current?.spine ?? 0, reported: reportedSectionsRef.current },
+      section,
+      onward,
+    );
+    debugLog('reading', `contents row ${section}${onward ? ' while playing' : ''}: ${target.kind === 'utterance' ? `utterance ${target.utterance}` : target.kind === 'wait' ? `wait for section ${target.section}` : target.kind}`);
+    if (target.kind === 'utterance') {
+      pendingSectionRef.current = null;
+      seekTo(target.utterance);
+      return;
+    }
+    if (target.kind === 'wait') {
+      pendingSectionRef.current = { section: target.section, onward };
+      if (target.section !== section) bridgeRef.current?.goToSection(target.section);
+      if (onward) engineRef.current?.silence();
+      return;
+    }
+    pendingSectionRef.current = null;
+    if (target.kind === 'nothing') return;
+    playIntent.current = false;
+    const engine = engineRef.current;
+    engine?.pause();
+    // Ends the silence, paused: Play reads on from the sentence the reading is on.
+    if (atRef.current !== null) engine?.seek(atRef.current);
+    bridgeRef.current?.hold({ stop: true });
+    setStatus((was) => ({
+      ...was,
+      playing: false,
+      buffering: false,
+      note: 'Nothing after this point of the document can be read aloud.',
+    }));
+  }, [seekTo]);
+
+  /**
    * A contents row: **Browsing** while paused (#52), and otherwise **two steps**
    * (ADR 0020).
    *
@@ -819,6 +871,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * index to seek to yet — the section contributes no Utterance until it reports its
    * Blocks — so the target is remembered and `handleBlocks` finishes the job. That
    * second case is the common one and is why this is two steps rather than one.
+   * While playing, the voice stops at the tap and a row with no text reads on
+   * past it (`followRow`, #86).
    */
   const goToSection = useCallback(
     (section: number) => {
@@ -839,35 +893,19 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        * the place up, as it did before (#51).
        */
       if (!playIntent.current && atRef.current !== null && !unreadRef.current) {
+        // A row pressed while playing may still be waiting, with the engine
+        // silenced for it; that wait is given up, and the engine goes back to the
+        // sentence the reading is on.
+        const waited = pendingSectionRef.current;
         pendingSectionRef.current = null;
+        if (waited?.onward) engineRef.current?.seek(atRef.current);
         bridgeRef.current?.browse(section);
         return;
       }
       bridgeRef.current?.goToSection(section);
-      const already = firstUtteranceOfSection(loadedRef.current, blocksRef.current, section);
-      if (already !== null) {
-        pendingSectionRef.current = null;
-        seekTo(already);
-        return;
-      }
-      /**
-       * A section that has already reported its Blocks and yielded no Utterance is
-       * finished with, not waited for: the page has moved to it and there is nothing
-       * on it to read. Waiting would be waiting for ever — the renderer reports a
-       * section again only when its text has changed (`blocks.ts`), so a title page
-       * that rendered empty will never report a second time.
-       */
-      const reported = blocksRef.current.some((block) => block.sectionIndex === section);
-      pendingSectionRef.current = reported ? null : section;
-      /**
-       * Waiting for the chapter, the sentence being spoken is the one the owner has
-       * just asked to leave, so it stops now rather than play on until the chapter
-       * reports (#86). Playing only: a paused engine has nothing to stop, and a
-       * book with no place yet is choosing where the first Play starts.
-       */
-      if (!reported && playIntent.current) engineRef.current?.silence();
+      followRow(section, playIntent.current);
     },
-    [seekTo],
+    [followRow],
   );
 
   /**
@@ -1003,7 +1041,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        */
       if (next.length === 0) {
         if (seekingRef.current) walkForward(section);
-        if (pendingSectionRef.current === section.index) pendingSectionRef.current = null;
+        const waited = pendingSectionRef.current;
+        if (waited?.section === section.index) {
+          if (waited.onward) followRow(section.index, true);
+          else pendingSectionRef.current = null;
+        }
         // Play is waiting for a place, and this may be its section, holding nothing
         // to read: the attempt keeps the sentence that says so, and the wait ends.
         if (awaitingPlaceRef.current && resumeRef.current) {
@@ -1043,20 +1085,26 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        * rendered, so the reading can follow the page to it.
        */
       const wanted = pendingSectionRef.current;
-      if (wanted === section.index) {
-        pendingSectionRef.current = null;
-        const first = firstUtteranceOfSection(next, reported, wanted);
+      if (wanted?.section === section.index) {
+        const first = firstUtteranceOfSection(next, reported, wanted.section);
         if (first !== null) {
+          pendingSectionRef.current = null;
           atRef.current = first;
           adopt(next, reported, true);
           seekTo(first);
           return;
         }
+        // Reported with no text. Pressed while playing, the reading goes on past it
+        // (#86); otherwise the row is finished with, as the page has moved there.
+        adopt(next, reported);
+        if (wanted.onward) followRow(wanted.section, true);
+        else pendingSectionRef.current = null;
+        return;
       }
 
       adopt(next, reported);
     },
-    [adopt, walkForward, tryResume, seekTo, revealPendingPlace, stopWaitingIfArrived],
+    [adopt, walkForward, tryResume, seekTo, followRow, revealPendingPlace, stopWaitingIfArrived],
   );
 
   const handleProblem = useCallback((problem: ProblemMessage) => {

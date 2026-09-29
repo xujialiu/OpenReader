@@ -245,6 +245,15 @@ A volume's title page has no words on it at all. Tapping it takes you there, whi
 is what you asked for, and nothing is read: there is nothing to read. It is a place
 in the book rather than a failure.
 
+While the book is being read, a title page is read past, like a blank page in a
+printed book: choosing the second volume starts reading its first chapter, and the
+page moves on to it as the voice starts (#86). The alternatives were to go back to
+the sentence the voice was on, which would read the first volume to someone
+looking at the second, or to stop and wait for Play. Choosing a volume while
+listening means "read me this volume", so neither was what was asked for. If
+nothing after the chosen place has any words, the reading stops and says so.
+Paused, choosing a volume still only takes the page there.
+
 ## Pointing somewhere else stops the voice at once
 
 _Added for issue #86._

@@ -63,8 +63,9 @@ describe('a tap, a skip or a Contents row stops the sound at the press (#86)', (
   it('seeks from the press itself, with no timer in between', () => {
     const reading = code('use-reading.ts');
     const seekTo = within(reading, 'const seekTo = useCallback(', '}, [sectionOf');
-    // One call into the engine's seek in the whole file, and it is this one.
-    expect(reading.match(/\.seek\(/g)).toHaveLength(1);
+    // Three calls into the engine's seek in the whole file: this one, and the two
+    // that end a Contents row's silenced wait at the sentence the reading is on.
+    expect(reading.match(/\.seek\(/g)).toHaveLength(3);
     pin(seekTo, 'engineRef.current?.seek(at);', 'use-reading.ts seekTo');
     expect(seekTo).not.toContain('setTimeout(');
     expect(reading).not.toContain('SKIP_DEBOUNCE');
@@ -76,8 +77,13 @@ describe('a tap, a skip or a Contents row stops the sound at the press (#86)', (
   });
 
   it('stops the sound while a Contents row waits for its chapter, and only a seek ends the wait', () => {
-    const goToSection = within(code('use-reading.ts'), 'const goToSection = useCallback(', '[seekTo]');
-    pin(goToSection, 'if (!reported && playIntent.current) engineRef.current?.silence();', 'use-reading.ts goToSection');
+    const reading = code('use-reading.ts');
+    const goToSection = within(reading, 'const goToSection = useCallback(', '[followRow]');
+    pin(goToSection, 'followRow(section, playIntent.current);', 'use-reading.ts goToSection');
+    pin(goToSection, 'if (waited?.onward) engineRef.current?.seek(atRef.current);', 'use-reading.ts goToSection');
+    const followRow = within(reading, 'const followRow = useCallback(', '}, [seekTo]);');
+    pin(followRow, 'if (onward) engineRef.current?.silence();', 'use-reading.ts followRow');
+    pin(followRow, 'if (atRef.current !== null) engine?.seek(atRef.current);', 'use-reading.ts followRow');
     const engine = readFileSync(new URL('../../src/playback/engine.ts', import.meta.url).pathname, 'utf8');
     const pump = within(engine, '  function pump(): void {', '\n  }\n');
     // Nothing is fetched or queued while waiting: the front of the empty queue is
@@ -148,7 +154,7 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     // What has rendered goes with it, so a place waits for its own section rather
     // than being found in whatever reported first — a contents page (#51).
     expect(attempt).toContain('reported: reportedSectionsRef.current');
-    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace, stopWaitingIfArrived],');
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, followRow, revealPendingPlace, stopWaitingIfArrived],');
     // `true`: the resume has pointed the cursor into the new list already, so a
     // renumbering must not carry it across a second time (#46).
     expect(blocks).toContain('tryResume(next, reported, () => adopt(next, reported, true))');
@@ -288,7 +294,7 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
     // Sections render out of order, so the last to report is routinely behind the
     // furthest — and a document's last spine items are where the sections that
     // render with no text in them live.
-    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, revealPendingPlace, stopWaitingIfArrived],');
+    const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, followRow, revealPendingPlace, stopWaitingIfArrived],');
     expect(blocks).toContain('furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);');
   });
 });

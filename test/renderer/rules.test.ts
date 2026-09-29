@@ -1646,8 +1646,9 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
   it('stops the page on the frame the owner pauses, and not on the hold after a Clip cued while paused (#71)', () => {
     pin(branch('hold', 'browse'), 'if (message.stop) halt();', "highlighter.ts, the 'hold' branch");
     const reading = readFileSync(new URL('../../src/app/use-reading.ts', import.meta.url).pathname, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    // pause(), and the reading ending on a failure: both the owner's stop.
-    expect(reading.match(/bridgeRef\.current\?\.hold\(\{ stop: true \}\);/g)).toHaveLength(2);
+    // pause(), the reading ending on a failure, and a Contents row pressed while
+    // playing with nothing after it to read (#86): each is where the reading stops.
+    expect(reading.match(/bridgeRef\.current\?\.hold\(\{ stop: true \}\);/g)).toHaveLength(3);
     // The paused cue's hold stops the tick loop only.
     pin(reading, 'if (!playIntent.current) bridgeRef.current?.hold();', 'use-reading.ts, the clock');
   });

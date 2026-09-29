@@ -182,6 +182,23 @@ buffering. A tapped word or a skip during the wait gives the row up
 (`pointAt` clears `pendingSectionRef`), so the chapter reporting later does not
 take the reading away from where the owner pointed since.
 
+A row whose section has no text, a volume's title page, used to leave the old
+voice reading on, and silenced it would wait for ever. The owner chose to read on
+past it: `readingFromRow` (`src/app/segment.ts`) walks from the row's section
+through the sections that have reported without text to the first with an
+Utterance, or to the first that has not reported, which `followRow` asks the
+renderer for with `goToSection`, since no sentence has reached it to trigger
+`renderAhead`. A section counts as reported if `reportedSectionsRef` holds it or a
+Block of it is in hand. The walk is only for a row pressed while playing
+(`pendingSectionRef.onward`); paused, in a book with no place yet, a row names its
+own section and no further, as before. On the owner's book the title page of
+第二卷 修真血影 is `Text/chapter56.xhtml`, whose body is a hidden `<h1>` and
+`<p>&#160;</p>`; the walk lands on 第55章 夺基大法, `Text/chapter57.xhtml`. If no
+section from the row to the end has text, the reading pauses, the engine is
+sought back to `atRef` to end the silence, and the player says that nothing after
+this point can be read aloud. A Browsing row pressed during a silenced wait ends
+it the same way.
+
 ### A contents tap is two steps, and the second one has a case the first misses
 
 While playing, and in a Document with no Reading Position yet. Paused, it is one
