@@ -229,9 +229,11 @@
   simulator app had been launched by hand with `-RCT_jsLocation
   localhost:8085` all day, but the probe's plain `app.terminate();
   app.launch()` started it without the argument, the app read the container's
-  stored `RCT_jsLocation` — `localhost:8081`, a dead port — showed nothing but
-  the Library, and the probe failed 4 assertions ("Reader never became
+  stored `RCT_jsLocation` — `localhost:8081`, not this tree's Metro — never
+  reached the reader, and the probe failed 4 assertions ("Reader never became
   ready", no "More actions", no title element) before any of them could say
   anything about the app. Fix: set the argument on the probe's own launch —
-  `app.launchArguments = ["-RCT_jsLocation", "localhost:8085"]` — the same
+  `app.launchArguments = ["-RCT_jsLocation", "localhost:" + port]`, the port
+  from `TEST_RUNNER_OPENREADER_METRO_PORT` (xcodebuild hands the runner the
+  variable without its prefix), as `ReaderTitleProbe.swift` does — the same
   rule the manual launches already follow.

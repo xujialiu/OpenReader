@@ -36,9 +36,12 @@ final class ReaderTitleProbe: XCTestCase {
   func testTitleIsHeaderWithFullNameAndMarginsLabels() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     // The installed build has an empty RCTMetroPort, so every launch must name
-    // this tree's Metro (docs/install-on-simulator.md, "A port is taken by a
-    // Metro that serves another tree" in pitfalls/metro.md).
-    app.launchArguments = ["-RCT_jsLocation", "localhost:8085"]
+    // this tree's Metro (pitfalls/metro.md, "An XCTest probe's `app.launch()`
+    // does not carry `simctl`'s launch arguments"). The port comes from
+    // TEST_RUNNER_OPENREADER_METRO_PORT, which xcodebuild hands the runner
+    // without its prefix.
+    let port = ProcessInfo.processInfo.environment["OPENREADER_METRO_PORT"] ?? "8081"
+    app.launchArguments = ["-RCT_jsLocation", "localhost:" + port]
     app.terminate(); app.launch()
     if app.buttons["Back"].waitForExistence(timeout: 3) {
       // A restored Reader: leave it, the row tap below is only for the Library path.

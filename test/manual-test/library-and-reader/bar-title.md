@@ -6,15 +6,15 @@ semibold, centred, up to two lines, tail-truncated, not scaled by Dynamic Type,
 whole name. These are the checks that verified it on the simulator, and what
 each cannot prove.
 
-Prerequisites: this tree's Metro running (`npx expo start --port 8085`), the
-Debug app launched with `-RCT_jsLocation localhost:8085` (the build's
+Prerequisites: this tree's Metro running on a free PORT (`npx expo start --port
+PORT`), the Debug app launched with `-RCT_jsLocation localhost:PORT` (the build's
 `RCTMetroPort` is empty, so every launch needs it — pitfalls/metro.md), the
 Scroll Fixture `sha256:9acbcbe4…` in the Library. No playback, so no silencing.
 
 ## Set a name and open the reader
 
 ```sh
-bash test/manual-test/library-and-reader/rename.sh SIMULATOR_UDID "《第一位传奇驯兽师 第三卷 穿越北方群山的漫长道路以及更远的地方》"
+bash test/manual-test/library-and-reader/rename.sh SIMULATOR_UDID "《第一位传奇驯兽师 第三卷 穿越北方群山的漫长道路以及更远的地方》" PORT
 sleep 5
 node test/manual-test/kit/hx.cjs SIMULATOR_UDID '{"do":"open","id":"sha256:9acbcbe4480c15ba1319ecf56bad78e13a478470d2107f89791ba0f5b74f1606"}'
 sleep 8

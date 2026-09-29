@@ -156,10 +156,10 @@ full-res screenshots; the VoiceOver heading proof is the bundled AXe binary's
 tree, since XCUITest cannot query headers:
 
 ```sh
-bash test/manual-test/library-and-reader/rename.sh SIMULATOR_UDID "A long name…"
+bash test/manual-test/library-and-reader/rename.sh SIMULATOR_UDID "A long name…" PORT
 node test/manual-test/kit/hx.cjs SIMULATOR_UDID '{"do":"open","id":"sha256:…"}'
 python3 test/manual-test/kit/ink.py /tmp/title.png
-bash test/manual-test/kit/run-probe.sh ReaderTitleProbe SIMULATOR_UDID NEW_OUTPUT_DIR
+TEST_RUNNER_OPENREADER_METRO_PORT=PORT bash test/manual-test/kit/run-probe.sh ReaderTitleProbe SIMULATOR_UDID NEW_OUTPUT_DIR
 ```
 
 See [bar-title.md](bar-title.md) for the whole recipe: what to measure (two

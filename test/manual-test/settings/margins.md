@@ -9,7 +9,7 @@ Documents/settings.json as `appearance.margins`, and a change re-centres the
 sentence being read without moving the Reading Position.
 
 Prerequisites: this tree's Metro and the Debug app launched with
-`-RCT_jsLocation localhost:8085`; the Scroll Fixture open and paused with a
+`-RCT_jsLocation localhost:PORT`, PORT being that Metro's; the Scroll Fixture open and paused with a
 highlighted sentence mid-page (the harness `{"do":"seek","utterance":N}` sets
 one without playback, or open the Document whose position already names one).
 No playback, so no silencing.

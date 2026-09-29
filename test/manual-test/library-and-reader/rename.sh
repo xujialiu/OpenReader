@@ -1,6 +1,6 @@
 #!/bin/bash
-# rename.sh UDID "NEW NAME" — set the Scroll Fixture's display name with the app
-# stopped, then relaunch it against this tree's Metro (bar-title.md).
+# rename.sh UDID "NEW NAME" PORT — set the Scroll Fixture's display name with the
+# app stopped, then relaunch it against this tree's Metro on PORT (bar-title.md).
 #
 # Writes the name into Documents/display-names.json and library.json (the two
 # places a renamed title lives, #73's rename) for the Document
@@ -10,6 +10,7 @@
 set -euo pipefail
 udid=$1
 name=$2
+port=$3
 container=$(xcrun simctl get_app_container "$udid" top.xujialiu.openreader data)
 doc="$container/Documents"
 id='sha256:9acbcbe4480c15ba1319ecf56bad78e13a478470d2107f89791ba0f5b74f1606'
@@ -30,4 +31,4 @@ for e in d.get("entries", []):
 json.dump(d, open(p, "w"), ensure_ascii=False)
 print("renamed to:", name)
 PY
-xcrun simctl launch "$udid" top.xujialiu.openreader -RCT_jsLocation localhost:8085
+xcrun simctl launch "$udid" top.xujialiu.openreader -RCT_jsLocation "localhost:$port"
