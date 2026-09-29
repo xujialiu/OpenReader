@@ -65,8 +65,13 @@ the words selected, a title, the address of the sync server.
 No key to any speech or translation service, no password to the sync server,
 and nothing the owner typed to get past a gateway in front of their own server.
 None of these is ever written into a line. Where the app might pass one on by
-accident, in an error it did not write itself, every value the phone's secure
-storage has handed over is replaced by a marker before the line is kept.
+accident, in an error it did not write itself, each key, password and gateway
+secret the phone's secure storage has handed over is replaced by a marker
+before the line is kept, as it was last saved or read. Anything shorter than
+eight characters is not searched for, because searching for a few characters
+blanks every word they occur in: typing a key once turned every letter s in the
+record into the marker. A sync password that short is still never written into
+a line by the app itself.
 
 The record stays on the phone. Nothing is sent anywhere: it leaves the phone
 only when the owner connects it to the Mac and copies it off.

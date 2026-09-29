@@ -232,13 +232,18 @@ Three guards, each tested in test/debug/credential-rule.test.ts:
 3. **The values.** `src/keys/store.ts` is the one place a secret is read from or
    written to the Keychain (the test counts its four `SecureStore` calls), and
    its `readSecret` and `writeSecret` hand each one to
-   `src/debug/credentials.ts`. For Gateway Headers, `forbidGatewayHeaders`
-   holds the whole text, each value, and a value's last word, the token of
-   `Bearer <token>`; a value shorter than 4 characters is not searched for on
-   its own, so a flag like `X-Debug: 1` does not blank every `1`. The Sync
-   screen's typed password is handed over by `check` before it is saved. Every
-   line, to the file and to the system log, is written with each held value,
-   and its JSON-escaped and URL-encoded spellings, replaced by `[credential]`.
+   `src/debug/credentials.ts` with the name of its Keychain entry
+   (`forbidCredential(entry, secret)`, `forbidGatewayHeaders(entry, text)`).
+   An entry holds only the latest value written or read for it, and
+   `removeSecret` drops it once the Keychain has removed the entry
+   (`forgetCredential(entry)`); no value shorter than 8 characters is held
+   (below). For Gateway Headers, `forbidGatewayHeaders` holds the whole text,
+   each value, and a value's last word, the token of `Bearer <token>`, all as
+   the entry's; the minimum is why a flag like `X-Debug: 1` does not blank
+   every `1`. The Sync screen's typed password is handed over by `check`
+   before it is saved, as the WebDAV password's entry. Every line, to the file
+   and to the system log, is written with each held value, and its
+   JSON-escaped and URL-encoded spellings, replaced by `[credential]`.
    Three patterns catch what no held value can: a `Bearer` or `Basic` token of
    eight characters or more (the WebDAV header is the Base64 of username and
    password, neither of the values held), the value of a header named
@@ -254,6 +259,61 @@ Speechify, OpenAI and compatible servers `Authorization: Bearer`; Azure
 `Ocp-Apim-Subscription-Key` on the WebSocket upgrade), and Gateway Headers
 travel as headers, never in an address.
 A secret the running app has not read was never in its memory to be logged.
+
+### A typed key blanked every `s`: one value per entry, none under 8 characters
+
+The guard first held every value `store.ts` handed it, for the rest of the run.
+Measured 2026-09-29 on the simulator (notes 12:19), Debug build
+`0.0.2-beta51`: after `OfflineFixProbe.testConfigureFishProvider` typed a Fish
+key into Settings, every later Debug Log line had each `s` replaced:
+
+```
+[provider] fi[credential]h GET http[credential]://api.fi[credential]h.audio/model -> 200 in 823 m[credential]
+```
+
+A Provider's key and Extra headers fields save on every keystroke
+(`use-secret-input.ts`'s `change`, through `saveProviderEdit`), and so does the
+Sync screen's password. Each save went through `writeSecret` to the guard, so
+every prefix of what was typed was held, the one-character `s` among them.
+Nothing leaked; the log was unreadable from that edit to the end of the run.
+
+The rule now in force, in `src/debug/credentials.ts`:
+
+- **One value per Keychain entry.** The guard keeps the spellings it holds by
+  entry name. A value written or read for an entry replaces what that entry
+  held, so a typed prefix stops being held when the next keystroke is saved; a
+  Gateway Headers entry's whole text and its parts are replaced together. An
+  entry `removeSecret` has removed is held no longer; a removal the Keychain
+  refused leaves the secret there, and held. Different entries are held side by
+  side.
+- **Nothing shorter than 8 characters** (`SHORTEST_HELD`, counted after
+  trimming), whether a whole secret, a Gateway Headers text or one of its parts.
+  It replaces the 4 that applied to a header's parts alone, for the same reason
+  made general: a few characters searched for blank every place they occur, and
+  a typed prefix is exactly that until the next keystroke replaces it. A
+  Provider's key, the Translator key and a gateway's service token are tens of
+  characters, so none of them falls under it. A WebDAV password may be shorter,
+  and is then not held: no line the app builds carries it (guard 1), its
+  request carries it only as `Basic <Base64>` (the pattern), and an address
+  typed with it only as `name:password@` (the pattern again).
+- **Unchanged**: without Debug Mode nothing is held, and the three patterns are
+  as they were.
+
+test/debug/credential-rule.test.ts's "one value held per Keychain entry" drives
+`store.ts` over the Keychain stand-in: a key and Gateway Headers typed one
+character at a time leave `fish GET https://api.fish.audio/model -> 200 in 823
+ms` untouched and still redact the whole key and the token; a second value
+written or read for an entry replaces the first; a forgotten entry is dropped
+and another kept; 7 characters are not held and 8 are; five entries' values are
+held side by side. Before the change five of its six failed, the first writing
+the simulator's line word for word under its own category, `[hx]`; the sixth,
+side by side, passed before as after, and is there so that the fix cannot
+overshoot.
+
+Not measured: a screen that shows a secret's presence re-reads the entry after
+every save (`use-provider-secrets.ts`), unordered with the next keystroke's
+save, so a read that resolves late can hold the value one keystroke older until
+the entry is next read or written.
 
 ## The system log line (decision 5)
 
