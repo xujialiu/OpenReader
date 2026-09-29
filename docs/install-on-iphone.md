@@ -81,7 +81,8 @@ simulators; the physical iPhone's UDID is `IPHONE_UDID` in the commands below.
 
 ### 2. Build a standalone Release version
 
-This is the command that succeeded for this project during the recorded run:
+This is the command that succeeded for this project during the recorded run,
+with the Debug Mode switch added on 2026-09-29 (#82):
 
 ```bash
 xcodebuild \
@@ -92,6 +93,7 @@ xcodebuild \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
   ENABLE_USER_SCRIPT_SANDBOXING=NO \
+  EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1 \
   -quiet build
 ```
 
@@ -102,7 +104,42 @@ warnings in the log or the presence of an `.app` directory as the criterion.
 - `-allowProvisioningUpdates`: allows Xcode to create or update signing profiles using the logged-in account.
 - `-allowProvisioningDeviceRegistration`: allows automatic signing to register the target device.
 - `ENABLE_USER_SCRIPT_SANDBOXING=NO`: the Xcode build setting required by this build so that the React Native bundling script can read the project and write the JavaScript bundle. It applies only to this command and does not modify the project configuration.
+- `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1`: Debug Mode ([ADR 0054](adr/0054-debug-mode-is-fixed-when-the-app-is-built.md)), always set for the owner's phone, so that a fault met away from the Mac leaves a Debug Log on the phone to be read back afterwards. Settings then shows the version ending in `-debug`. The Debug Log is in the app's container at `Library/Application Support/debug-log/`; copy it off with `python3 test/manual-test/kit/debug-log.py IPHONE_UDID OUT_DIR` (`test/manual-test/kit/README.md`, "Pull the Debug Log off the phone").
 - Release bundles the JavaScript and resources into the app, so Metro and a computer connection are not required at runtime. Online speech services and other features still require a network connection.
+
+**A build without Debug Mode**, which is what a release is: the same command
+without the `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` line. Its Settings shows the
+version with no `-debug`, and it keeps no Debug Log, never reads the
+walkthrough harness's `Documents/harness.json`, and its reading page cannot be
+opened in Safari's Web Inspector. Debug Mode is decided when the JavaScript is
+bundled during the build and cannot be switched on afterwards.
+
+Where the switch's value could go stale:
+
+- **Metro's cache: guarded.** `metro.config.js` puts every `EXPO_PUBLIC_` value
+  in Metro's cache key, so a build without the switch right after one with it
+  (or the reverse) never reuses the other's cached answer. Measured on
+  2026-09-29 (ADR 0054): three Release builds in a row, without, with and
+  without again, came out off, on, off; and with the cache kept (`CI=1`, under
+  which Expo skips the phase's cache reset), a build without the switch right
+  after one with it came out on without that file and off with it. The two
+  kinds can be built one after the other, in either order, with no clean.
+- **The shell, `ios/.xcode.env.local` and `.env` files: not guarded.** The
+  bundling phase inherits the shell's environment and sources
+  `ios/.xcode.env.local`, and Expo loads `.env`, `.env.local`, `.env.production`
+  and `.env.production.local` from the repository root when it bundles. A
+  `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` in any of them makes every build, a
+  release included, one with Debug Mode. Pass the switch on the command line
+  only, as above.
+- **To check a build**, read the plain bundle the phase leaves beside the app:
+  `grep -o 'var DEBUG_MODE = [a-z]*;' TARGET_BUILD_DIR/main.jsbundle` (the
+  directory from step 3) prints `true` for a build with Debug Mode and `false`
+  for one without. The copy inside the app is Hermes bytecode.
+
+**Once after pulling #82**, run `pod install` in `ios/` (or a prebuild): the
+Debug Log's system-log line is a new local native module, and an `ios/` from
+before it builds without it. Such a build still starts and still writes the
+Debug Log, and its first line says `system log missing (no native module)`.
 
 ### 3. Find and install the build product
 
