@@ -50,6 +50,29 @@ on the Lock Screen, whether to keep running it in the background, with Continue
 and Stop. The app does not cause that question and cannot prevent it. After
 Continue, the download went on.
 
+## It opens large at the top of the screen until it is swiped
+
+When the owner leaves the app with a download going on, the phone shows the
+Live Activity large at the top of the screen, in the Dynamic Island: the
+document's name, the chapter count and the stop ring, over the Home Screen and
+over whatever app they open next. It stays that way until the owner swipes it
+up. After that it is the small one at the top. On the owner's iPhone it stayed
+large for three minutes, until they swiped it, and every later time they left
+the app it stayed small. A timer's or a delivery's Live Activity shows large
+for a moment and then shrinks by itself; this one does not.
+
+The app cannot change this. Showing it large is the phone's own announcement
+that it has taken the download on, not something the app asks for, and the
+phone gives the app no say in how it is shown. The count changing while the
+owner was away never made it large again. The one the phone shows when a
+download finishes goes away by itself after a few seconds.
+
+The owner decided on 2026-09-29 to accept it, and to report it to Apple.
+Nothing the app could do instead would help: a display of the app's own would
+add a second card beside the phone's rather than replace it, and giving up the
+phone's taking the download on would bring back the download stopping within a
+minute of leaving the app.
+
 ## Stopping it from the Lock Screen
 
 The owner can stop the download from what the phone shows. Stopping it there

@@ -337,9 +337,59 @@ Live Activity read `2 of 15 chapters` with a circular progress. The phone's
 own prompt to continue came at about five minutes and 16% (Progress, above),
 and what the stop did is under "Expiry, and the owner's stop".
 
-Not yet known: what the Dynamic Island shows; what Stop in the phone's own
-prompt does, presumably the same expiry; what the logged values look like for
-an end the phone chooses; whether a download waiting for the network is
-expired as stalled; and whether `success: false` looks different from `true`.
+**The Dynamic Island (#90).** On 2026-09-29 (`notes/NOTES_2026-09-29.md`,
+21:05), on the same iPhone with 0.0.2-beta54 and Debug Mode, the island showed
+the Live Activity expanded (about 374 × 90 pt) over the Home Screen, with
+`My Vampire System —…`, `2 of 250 chapters` and the stop ring, and it went back
+only when the owner swiped it up. The system log
+(`/tmp/openreader-island-0929/system.logarchive`, SpringBoard's categories
+`SpringBoard:Activity`, `SpringBoard:SystemApertureHosting` and
+`SystemAperture:*`; times local, UTC+8) shows it is the phone's own start
+alert. The submission at 20:27:46.698 started activity `606D6C66…` (client
+`com.apple.ActivityProgress.ActivityProgressUI`) at 20:27:46.838, with
+`creating system aperture element`, then `Presenting a prominent alert`,
+`adding to pending alerts`, `alerting with sound` and `Turn on screen`. At
+20:27:46.913 SpringBoard logged `Created alerting activity assertion
+(<SAUIAlertingAssertion …; locked: NO; invalidation interval: 3; timer
+scheduled: NO>)` with a preferred layout `custom` for the reason `alerting
+activity`, and in the same instant `Automatic invalidation disabled:
+<SAUIAlertingAssertion …; locked: YES; invalidation interval: 3; timer
+scheduled: NO>`. Each time the app left the screen (20:27:49.505,
+20:28:29.828, 20:29:20.853) the element went `layoutMode: none -> custom`,
+expanded, and each return `custom -> none`. After the last departure it stayed
+expanded for 178.6 s with the app away, until 20:32:19.458: `Update preferred
+layout mode … compact; _layoutModeChangeReason: user interaction`, the
+alerting assertion invalidated with `layout mode changed by user interaction;
+locked: YES; … timer scheduled: NO`, `invalidating alerting assertion` and
+`layoutMode: custom -> compact`, the owner's swipe. The app's own updates
+raised no alert: its subtitle changed at 20:29:27.527 and 20:31:13.531 (Debug
+Log `continued task shows …`) with no layout change after either; every later
+departure went `none -> compact`; away from 20:37:21.617 to 20:48:09.998 the
+subtitle changed six times (20:37:53 to 20:46:32) and the element never left
+`compact`; and the submissions after the next two launches (activities
+`59C7EFF7…` at 20:48:31.784 and `F4DF5CEA…` at 20:49:48.428) raised no alert.
+At the completion, `continued task finished, succeeded` at 20:51:41.564 with
+the app in front, the element alerted again at 20:51:41.696 (`alerting with
+sound`, layout `custom`, `Automatic invalidation disabled … locked: YES`), and
+at 20:51:47.705 the phone invalidated that assertion itself with
+`SBActivitySystemApertureElementObserver's
+dismissAlertForActivityAlertProvider`, 6.0 s later. So the start alert's
+three-second automatic invalidation is disabled the moment it is created and
+nothing re-enables it, while the completion alert is dismissed by the phone.
+
+Nothing public controls it. `BGContinuedProcessingTaskRequest` takes an
+identifier, a title, a subtitle, a `strategy` and `requiredResources`, and
+`BGContinuedProcessingTask` offers `updateTitle(_:subtitle:)`, `progress` and
+`setTaskCompleted(success:)`; none bears on how the Live Activity is
+presented. The owner decided on 2026-09-29 (#90) to accept it, record it and
+report it to Apple. An ActivityKit Live Activity of the app's own would add a
+second card beside the phone's, not replace it, and giving up the continued
+task would bring back the download stopping within a minute of leaving the app
+(#77).
+
+Not yet known: what Stop in the phone's own prompt does, presumably the same
+expiry; what the logged values look like for an end the phone chooses; whether
+a download waiting for the network is expired as stalled; and whether
+`success: false` looks different from `true`.
 The simulator has to show that its refusal is the documented `unavailable`
 and that the bounded fallback still behaves as measured at 02:49.
