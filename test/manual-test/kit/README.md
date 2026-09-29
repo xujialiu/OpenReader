@@ -19,6 +19,8 @@ What every area uses:
   offline runtime, or lists their ids.
 - `node-kit.ts`: what the Node probes against Providers and books share.
 - `frame-gaps.py`: hitches in a `simctl io recordVideo` recording.
+- `debug-log.py`: copies the Debug Log off a phone, says what time it covers,
+  and collects the phone's system log for that span (below).
 
 ## Run an XCTest probe
 
@@ -40,8 +42,9 @@ a usage or setup error.
   `LockScreenProbe/Class/METHOD`. Without it the whole class runs.
 - Every other argument goes to xcodebuild unchanged.
 - `--mode`, `--bundle` and `--expect-player` are read only by the probes that
-  use them: `OfflineProbe`, `ReaderProbe`, `LibraryOpenProbe`, `LockScreenProbe`
-  and `TwoFingerProbe`.
+  use them: `OfflineProbe`, `ReaderProbe`, `LibraryOpenProbe`, `LockScreenProbe`,
+  `TwoFingerProbe` and `SettingsVersionProbe` (`--mode release`: a build without
+  Debug Mode, whose version has no `-debug`).
 
 A new probe is one Swift file, `NameProbe.swift` with `final class NameProbe`,
 in the folder of the area it tests, and nothing else to register. Write a
@@ -136,3 +139,50 @@ If either reports an unconfirmed pause, stop in the app and verify its state.
 The duration includes synthesis/buffering and does not guarantee that audio
 actually started. These handler calls are not touch tests; use `LockScreenProbe`'s `tap`
 mode (`lock-screen/README.md`) for that. Run `state` afterwards to verify the final paused state.
+
+
+## Pull the Debug Log off the phone
+
+A build with Debug Mode (#82, ADR 0054; every Metro build, and a Release build
+made with `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` as `docs/install-on-iphone.md`
+makes it) keeps the Debug Log in its container at `Library/Application
+Support/debug-log/`: `debug-log-000001.txt`, `…000002.txt`, …, four files of at
+most 5 MB, oldest deleted first, one line per event,
+`2026-09-29 14:03:12.345 +08:00 [category] message`. After the owner reports a
+fault, roughly when, copy it off and read the lines around that time:
+
+```sh
+python3 test/manual-test/kit/debug-log.py IPHONE_UDID OUT_DIR
+python3 test/manual-test/kit/debug-log.py IPHONE_UDID OUT_DIR --syslog --pmd3 /tmp/pmd3-venv/bin/pymobiledevice3
+```
+
+- It copies the folder with `xcrun devicectl device copy from --domain-type
+  appDataContainer --domain-identifier top.xujialiu.openreader --source
+  "Library/Application Support/debug-log"` into `OUT_DIR/debug-log/`; if that
+  leaves no `debug-log-*.txt`, it lists the folder with `devicectl device info
+  files --subdirectory` and copies the files one by one.
+- It prints the number of files, lines and megabytes and the first and last
+  line's times, local with their offset and in UTC, and writes the same to
+  `OUT_DIR/span.txt`.
+- `--syslog` then runs `pymobiledevice3 syslog collect OUT_DIR/system.logarchive
+  --udid IPHONE_UDID --start-time EPOCH` from the first line's time, and writes
+  OpenReader's own lines of the span to `OUT_DIR/system-openreader.txt` with
+  `/usr/bin/log show --archive … --predicate 'process == "OpenReader"' --style
+  compact`. Every Debug Log line is among them as a default-level line of
+  subsystem `top.xujialiu.openreader`, category `debug-log`, beside WebKit's and
+  UIKit's. `--pmd3` or `$PMD3` names the executable
+  ([pitfalls/physical-iphone.md](../pitfalls/physical-iphone.md) installs it
+  into a throwaway venv). The archive runs from that time to now, and the
+  phone keeps only about half a day of WebKit's lines, so collect soon.
+- Exit 1 means the phone holds no Debug Log: the installed build has no Debug
+  Mode, or the app has not run since it was installed.
+
+What it cannot prove: nothing here has run against a phone yet. The whole-folder
+copy and the listing's JSON shape are `devicectl`'s, read from its `--help` on
+Xcode 27.0 and not measured; the fallback exists for that reason. The span and
+the summary were checked against Debug Log files written by the test suite's
+format. On 2026-09-29 the script also ran against a stand-in `xcrun` and
+`pymobiledevice3` that copy two such files: the whole-folder copy, the fallback
+through a listing, `--syslog` (`syslog collect … --udid … --start-time` with
+the first line's epoch) and exit 1 for an empty folder did what is described
+here.

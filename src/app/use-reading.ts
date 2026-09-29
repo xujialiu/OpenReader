@@ -41,6 +41,7 @@ import { asDocumentId, createLocator, readLocator, readingPlaceAt, type ReadingP
 import { hasSavedVoice, inventoryReady, offlineProvider } from '../offline/runtime';
 import type { ProviderId } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
+import { debugLog } from '../debug/debug-log';
 import { lockScreenPosition } from '../now-playing';
 import {
   createPlaybackEngine,
@@ -315,6 +316,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    */
   const scheme = resolveTheme(settings.theme, useColorScheme());
   const [status, setStatus] = useState<ReadingStatus>(NOTHING_YET);
+  // The Reading's notes and errors, as the owner saw them, in the Debug Log (ADR 0054).
+  const { note, voiceError } = status;
+  useEffect(() => { if (note) debugLog('reading', `note: ${note}`); }, [note]);
+  useEffect(() => { if (voiceError) debugLog('reading', `voice error: ${voiceError}`); }, [voiceError]);
 
   const engineRef = useRef<PlaybackEngine | null>(null);
   const playIntent = useRef(false);
@@ -789,6 +794,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    */
   const pointAt = useCallback(
     (utterance: number) => {
+      debugLog('reading', `seek to utterance ${utterance}`);
       unreadRef.current = false;
       seekTo(utterance);
     },
@@ -812,6 +818,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       const list = loadedRef.current;
       if (list.length === 0) return;
       const from = pendingSeekRef.current ?? atRef.current ?? 0;
+      debugLog('reading', `skip ${target} from utterance ${from}`);
       if (target === 'previous-sentence') pointAt(previousSentence(list, from));
       else if (target === 'next-sentence') pointAt(nextSentence(list, from));
       else if (target === 'previous-paragraph') pointAt(previousParagraph(list, from));
@@ -1233,6 +1240,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [settings, hasKey, clock, report, ranOutOfText, document, sectionOf]);
 
   const play = useCallback(() => {
+    debugLog('reading', `play at utterance ${atRef.current ?? 'none'}, ${settings.provider} ${settings.voice}`);
     bridgeRef.current?.resumeFollowing();
     if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
       playIntent.current = false;
@@ -1363,6 +1371,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [status, play]);
 
   const pause = useCallback(() => {
+    debugLog('reading', `pause at utterance ${atRef.current ?? 'none'}`);
     playIntent.current = false;
     revealCue.current = false;
     seekingRef.current = false;

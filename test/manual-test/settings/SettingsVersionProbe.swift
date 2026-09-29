@@ -1,7 +1,8 @@
 import XCTest
 
 /// Issue #30: Settings shows `APP_VERSION` under the Sync row, so the owner
-/// can read off the device which build is running. Checks the line's exact
+/// can read off the device which build is running, with `-debug` after it in
+/// a build with Debug Mode (#82). Checks the line's exact
 /// accessibility label, that the three rows above it still open their screens
 /// and return here, and how the line reads in both the light and dark theme.
 /// Never presses Play.
@@ -56,7 +57,11 @@ final class SettingsVersionProbe: XCTestCase {
     // The version line's accessibility label, exactly. `accessibilityLabel`
     // replaces what iOS exposes, so the raw version text is not a separately
     // queryable label; the screenshot is what proves that.
-    guard let expected = workingTreeVersion() else { return XCTFail("Could not read APP_VERSION from app-version.ts") }
+    // A build with Debug Mode says so after the beta (#82), and every Metro
+    // build has it; `--mode release` expects a build made without it.
+    guard let beta = workingTreeVersion() else { return XCTFail("Could not read APP_VERSION from app-version.ts") }
+    let release = Bundle(for: Self.self).object(forInfoDictionaryKey: "ManualMode") as? String == "release"
+    let expected = release ? beta : "\(beta)-debug"
     let version = app.staticTexts["Version \(expected)"]
     XCTAssertTrue(version.waitForExistence(timeout: 5), "No element labelled 'Version \(expected)'")
     capture("settings-version-1-initial", app)

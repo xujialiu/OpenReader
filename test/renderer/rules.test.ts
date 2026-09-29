@@ -920,6 +920,26 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     );
   });
 
+  it('lets Safari\'s Web Inspector reach the reader\'s WebView and the Indexer\'s in Debug Mode, and no other build (#82)', () => {
+    // The library hands its WebView a fixed list of props and `webviewDebuggingEnabled`
+    // (react-native-webview's name for WKWebView's `isInspectable`, iOS 16.4 and
+    // later) is not among them, so `patches/` adds it to View.js, default false, and
+    // to `ReaderProps`. Reader spreads the rest of its props into View, so the app
+    // sets it on `<Reader>` itself, to Debug Mode, in both places a Reader is made
+    // (ADR 0054). commonjs is what Metro bundles; module is patched alike.
+    for (const build of ['commonjs', 'module']) {
+      const view = readFileSync(new URL(`../../node_modules/@epubjs-react-native/core/lib/${build}/View.js`, import.meta.url).pathname, 'utf8');
+      const where = `the installed @epubjs-react-native/core lib/${build}/View.js`;
+      pin(view, '  webviewDebuggingEnabled = false\n}) {', where);
+      pin(view, 'webviewDebuggingEnabled: webviewDebuggingEnabled,', where);
+    }
+    const types = readFileSync(new URL('../../node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts', import.meta.url).pathname, 'utf8');
+    pin(types, 'webviewDebuggingEnabled?: boolean;', 'the installed @epubjs-react-native/core types.d.ts');
+    for (const file of ['../../src/app/reading-view.tsx', '../../src/offline/indexer.tsx']) {
+      pin(readFileSync(new URL(file, import.meta.url), 'utf8'), 'webviewDebuggingEnabled={DEBUG_MODE}', file.slice(6));
+    }
+  });
+
   it('leaves a long press on the page to WebKit, so no gesture of the library races text selection (#74)', () => {
     // The library wraps the WebView in a gesture-handler `GestureDetector` whose
     // `Gesture.LongPress()` has the default 500 ms minimum, the same as UIKit's

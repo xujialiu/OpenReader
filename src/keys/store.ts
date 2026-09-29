@@ -28,10 +28,16 @@
  * This module cannot be imported under Node — `expo-secure-store` resolves the
  * native module at import time — so the parts of it worth testing live in
  * `entry-name.ts` and `refusal.ts` beside it.
+ *
+ * Every secret read or written here is also handed to the Debug Log's guard
+ * (`src/debug/credentials.ts`, ADR 0054), which in Debug Mode writes each one
+ * as `[credential]` wherever a line would carry it. Being the one place a
+ * secret passes is what makes that complete.
  */
 
 import * as SecureStore from 'expo-secure-store';
 
+import { forbidCredential, forbidGatewayHeaders } from '../debug/credentials';
 import { gatewayHeadersEntryName, providerKeyEntryName, SYNC_PASSWORD_ENTRY_NAME } from './entry-name';
 import { keychainRefusal, type KeychainRefusal } from './refusal';
 
@@ -125,7 +131,8 @@ const KEYCHAIN: SecureStore.SecureStoreOptions = {
  * again, and the alternative is one that cannot be read in the one place it
  * matters.
  */
-async function writeSecret(name: string, secret: string): Promise<SecretChange> {
+async function writeSecret(name: string, secret: string, forbid: (secret: string) => void = forbidCredential): Promise<SecretChange> {
+  forbid(secret);
   try {
     await SecureStore.deleteItemAsync(name, KEYCHAIN);
     await SecureStore.setItemAsync(name, secret, KEYCHAIN);
@@ -143,13 +150,15 @@ async function writeSecret(name: string, secret: string): Promise<SecretChange> 
  * it says, and why a refusal here is reported rather than flattened into
  * "nothing stored".
  */
-async function readSecret(name: string): Promise<SecretLookup> {
+async function readSecret(name: string, forbid: (secret: string) => void = forbidCredential): Promise<SecretLookup> {
   try {
     // `null` is the package's documented answer for "no entry for this key".
     // Everything that went wrong rejects instead, and that is the whole
     // distinction `SecretLookup` keeps.
     const secret = await SecureStore.getItemAsync(name, KEYCHAIN);
-    return secret === null ? { outcome: 'absent' } : { outcome: 'found', secret };
+    if (secret === null) return { outcome: 'absent' };
+    forbid(secret);
+    return { outcome: 'found', secret };
   } catch (cause) {
     return { outcome: 'refused', refusal: keychainRefusal(cause) };
   }
@@ -221,12 +230,12 @@ export async function forgetProviderKey(provider: string): Promise<SecretChange>
 export async function saveGatewayHeaders(provider: string, headers: string): Promise<SecretChange> {
   const name = gatewayHeadersEntryName(provider);
   refuseEmpty(provider, headers, 'gateway headers');
-  return writeSecret(name, headers);
+  return writeSecret(name, headers, forbidGatewayHeaders);
 }
 
 /** Read `provider`'s gateway headers. */
 export async function readGatewayHeaders(provider: string): Promise<SecretLookup> {
-  return readSecret(gatewayHeadersEntryName(provider));
+  return readSecret(gatewayHeadersEntryName(provider), forbidGatewayHeaders);
 }
 
 /** Remove `provider`'s gateway headers, for the same reason a key can be removed: the entry outlives the app. */

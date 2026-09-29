@@ -43,7 +43,10 @@
   mediaremoted` reads the same log over USB without it. Install it into a
   throwaway venv (`python3 -m venv DIR && DIR/bin/pip install pymobiledevice3`),
   not system-wide. zsh has a `log` builtin, so call `/usr/bin/log`.
-- **The harness reaches a Release build on the phone.** `xcrun devicectl device
+- **The harness reaches a Release build on the phone, if it has Debug Mode.**
+  Since #82 the poll runs only in Debug Mode, which the command in
+  `docs/install-on-iphone.md` always sets; a build without it never reads the
+  file. `xcrun devicectl device
   copy to --device IPHONE_UDID --domain-type appDataContainer
   --domain-identifier top.xujialiu.openreader --source FILE --destination
   Documents/harness.json` is picked up by the reader's poll. Its `HX` answers

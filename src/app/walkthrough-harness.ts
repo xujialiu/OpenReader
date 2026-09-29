@@ -2,14 +2,23 @@
 //
 // The fifth harness of this shape (notes 02:50, 03:50, 08:45): a JSON file in
 // the app's own documents directory, polled four times a second, calling the
-// app's own handlers. Answers go to the Metro log as `HX …` lines.
+// app's own handlers. Answers go to the Metro log as `HX …` lines, and to the
+// Debug Log.
+//
+// Only in Debug Mode (#82, ADR 0054): the file can run JavaScript in the
+// reader, change settings and navigate, so a build without Debug Mode never
+// polls it, and never so much as looks for it.
 import { useEffect, useRef } from 'react';
 import { File, Paths } from 'expo-file-system';
+
+import { debugLog } from '../debug/debug-log';
+import { DEBUG_MODE } from '../debug/mode';
 
 export type HarnessCommand = Record<string, unknown>;
 
 export function hlog(line: string): void {
   console.log(`HX ${line}`);
+  debugLog('hx', line);
 }
 
 export function useHarnessCommands(run: (command: HarnessCommand) => void): void {
@@ -20,6 +29,7 @@ export function useHarnessCommands(run: (command: HarnessCommand) => void): void
   });
   const seenRef = useRef(-1);
   useEffect(() => {
+    if (!DEBUG_MODE) return;
     const timer = setInterval(() => {
       try {
         const file = new File(Paths.document, 'harness.json');
