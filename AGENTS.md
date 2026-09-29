@@ -6,6 +6,10 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 Put each decision that is the owner's — a choice in a grilling round, a batch's acceptance, a finding that changes the plan — to them as a question they answer by choosing, through the harness's question tool (`AskUserQuestion` in Claude Code), with the recommended option first. The reasoning goes in the reply above the question. A custom answer is the decision it states, and it often differs from every option offered.
 
+# Announce every worktree you create
+
+The owner cleans up worktrees they do not recognise, and a worktree's branch goes with it. So announce each worktree you create, yourself or through a delegated agent's `isolation: worktree`, in your next reply: its path, its branch, what is working in it, and that it must stay. When its branch is merged or dropped, say it can be removed. On 2026-09-29 an unannounced agent worktree under `~/orca/workspaces/openreader/worktrees/` was cleaned up mid-run, and its branch with it.
+
 # Read before you act
 
 Each file under `MEMORY/` holds the rules for one kind of work. Read it in full when its trigger applies, before the first step it governs.
