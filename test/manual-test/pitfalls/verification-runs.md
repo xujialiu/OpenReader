@@ -495,3 +495,21 @@ plus harness sequences for the failure-note and dark-theme checks.
   were byte-identical, while crops from two screenshots 1.5 s apart during
   playback differed from them and from each other — the waveform animates while
   playing and is static while paused.
+- **`cdp.cjs --warnings` caps at 8000 ms**, printing `Warning capture must be
+  between 0 and 8000 ms` and exiting after only replaying the buffer — a 30000 ms
+  window never listens. Cover a longer interaction with back-to-back 8 s windows,
+  one drawer cycle each; each window also replays the warnings buffered before it.
+- **No LogBox warnings or errors from the drawer, from either entry point.**
+  Three 8 s windows over the whole sequence — Library `…` → Download → close;
+  row → reader `…` → Download open from the reader; reader drawer close → Back —
+  each printed only CDP's own replay notice `Only limited number of console
+  messages can be cached. N messages were discarded at the beginning.` (888,
+  897, 906 as ordinary console logs accumulated; the notice is the debugger's,
+  not the app's). No `GO_BACK` warning: every `hx.cjs` call had carried the
+  harness file's `seq` forward, so no stale command was pending.
+- **A reader reopen at a chapter boundary painted blank first.** With the
+  position on Chapter 173's first sentence (right after its heading), reopening
+  the reader showed nav bar and player over a fully blank page (`rendered=173`
+  while `at=174` — the boundary gap); the text painted by itself about 7 s
+  later, band on the stored sentence. Transient, self-recovered; earlier reopens
+  with the position mid-chapter painted immediately.
