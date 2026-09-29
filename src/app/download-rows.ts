@@ -72,12 +72,15 @@ export function marker(
  * opens at its own (#88), or null when no shown row can contain it.
  *
  * `section` is the spine item the reading is in, as the Contents is given it.
- * The rule is the Contents' own (`rowOfSection`), applied to the rows as shown
- * rather than to every chapter, so what it names is always on screen: a file
- * the drawer hides, a cover or a copyright page with nothing to say, gives the
- * nearest shown row before it; chapters sharing one file give the first of
- * them; a folded volume gives its heading. Nothing before the reading, as for a
- * document not started, gives null, and the list opens at its top.
+ * The rule is the Contents' own (`rowOfSection`), applied to the rows the
+ * download view shows rather than to every chapter, so what it names is on
+ * screen there: a file the drawer hides, a cover or a copyright page with
+ * nothing to say, gives the nearest shown row before it; chapters sharing one
+ * file give the first of them; a folded volume gives its heading. Nothing
+ * before the reading, as for a document not started, gives null, and the list
+ * opens at its top. Manage downloads, which lists fewer rows, marks the answer
+ * only where it lists it, rather than asking again among its own rows and
+ * marking a chapter that is not being read.
  */
 export function readingChapter(shown: readonly Chapter[], section: number | null): string | null {
   if (section === null) return null;
