@@ -6,6 +6,18 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 Put each decision that is the owner's — a choice in a grilling round, a batch's acceptance, a finding that changes the plan — to them as a question they answer by choosing, through the harness's question tool (`AskUserQuestion` in Claude Code), with the recommended option first. The reasoning goes in the reply above the question. A custom answer is the decision it states, and it often differs from every option offered.
 
+# Sub-worktrees
+
+The owner manages the Orca worktrees; you manage the sub-worktrees of the one you run in. A sub-worktree is a worktree you create for another agent, or for a second branch of your own work:
+
+- **Where**: only `./.worktrees/<name>` of the worktree you run in, on branch `<your-branch>--<name>` cut from your branch's HEAD (`git worktree add -b <your-branch>--<name> .worktrees/<name>`). An agent you delegate to works in the sub-worktree you give it as its `cwd` (MEMORY/delegation.md).
+- **Announce**: in your next reply, one line: its path, its branch, who works in it.
+- **Set up**: `npm ci` in it; it shares no `node_modules`.
+- **Accept**: merge its branch into yours, never into `main`. Then remove it (`git worktree remove`, delete its branch) and say so. An unmerged one stays.
+- **Before your own worktree is done**: `./.worktrees/` is empty, or each one left is listed with why. Deleting your worktree deletes them.
+
+On 2026-09-29 an unannounced agent worktree was cleaned up mid-run, and its branch with it.
+
 # Read before you act
 
 Each file under `MEMORY/` holds the rules for one kind of work. Read it in full when its trigger applies, before the first step it governs.

@@ -219,3 +219,5 @@
   suspect). Fix: prove a repointed Metro connection with a plain `simctl
   launch` plus a screenshot and a couple of seconds of polling `/json/list`,
   not `--console-pty` piped through `timeout`/`grep`.
+
+- **A second Metro for a control run answered from another worktree, and the cleanup stopped that one** (2026-09-29). Symptom: `npx expo start --port 8099` printed only `Starting project at …/long_press`, yet `curl localhost:8099/…bundle` answered with an error naming `…/openreader/bug/.` as the project root; `kill $(lsof … :8099)` and `pkill -f "expo start --port 8099"` then stopped that Metro (an orphan: its worktree had already been deleted). Cause: the port was taken, the new Metro did not listen, and the request reached the old one. Fix: before starting, `lsof -nP -iTCP:PORT -sTCP:LISTEN` must print nothing; after starting, `lsof -a -p PID -d cwd` of the listener must be your worktree; stop only PIDs whose cwd is yours.

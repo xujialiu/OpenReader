@@ -23,6 +23,36 @@ index e5431d2..5b3d372 100644
      <title>EPUB.js</title>
      <script id="jszip"></script>
      <script id="epubjs"></script>
+diff --git a/node_modules/@epubjs-react-native/core/lib/commonjs/utils/GestureHandler.js b/node_modules/@epubjs-react-native/core/lib/commonjs/utils/GestureHandler.js
+index 6399d97..7ceb72b 100644
+--- a/node_modules/@epubjs-react-native/core/lib/commonjs/utils/GestureHandler.js
++++ b/node_modules/@epubjs-react-native/core/lib/commonjs/utils/GestureHandler.js
+@@ -22,7 +22,6 @@ function GestureHandler({
+ }) {
+   const singleTap = _reactNativeGestureHandler.Gesture.Tap().runOnJS(true).maxDuration(250).cancelsTouchesInView(false).onStart(onSingleTap);
+   const doubleTap = _reactNativeGestureHandler.Gesture.Tap().runOnJS(true).maxDuration(250).numberOfTaps(2).cancelsTouchesInView(false).onStart(onDoubleTap);
+-  const longPress = _reactNativeGestureHandler.Gesture.LongPress().runOnJS(true).cancelsTouchesInView(false).onStart(onLongPress);
+   const swipeLeft = _reactNativeGestureHandler.Gesture.Fling().runOnJS(true).direction(_reactNative.I18nManager.isRTL ? _reactNativeGestureHandler.Directions.RIGHT : _reactNativeGestureHandler.Directions.LEFT).onStart(onSwipeLeft);
+   const swipeRight = _reactNativeGestureHandler.Gesture.Fling().runOnJS(true).direction(_reactNative.I18nManager.isRTL ? _reactNativeGestureHandler.Directions.LEFT : _reactNativeGestureHandler.Directions.RIGHT).onStart(onSwipeRight);
+   const swipeUp = _reactNativeGestureHandler.Gesture.Fling().runOnJS(true).direction(_reactNativeGestureHandler.Directions.UP).onStart(onSwipeUp);
+@@ -49,7 +48,7 @@ function GestureHandler({
+         flex: 1
+       }
+     }, /*#__PURE__*/_react.default.createElement(_reactNativeGestureHandler.GestureDetector, {
+-      gesture: _reactNativeGestureHandler.Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, longPress, doubleTap, singleTap)
++      gesture: _reactNativeGestureHandler.Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, doubleTap, singleTap)
+     }, /*#__PURE__*/_react.default.createElement(_reactNativeGestureHandler.TouchableWithoutFeedback, {
+       style: {
+         width,
+@@ -64,7 +63,7 @@ function GestureHandler({
+       flex: 1
+     }
+   }, /*#__PURE__*/_react.default.createElement(_reactNativeGestureHandler.GestureDetector, {
+-    gesture: _reactNativeGestureHandler.Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, longPress, doubleTap, singleTap)
++    gesture: _reactNativeGestureHandler.Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, doubleTap, singleTap)
+   }, /*#__PURE__*/_react.default.createElement(_reactNative.View, {
+     style: {
+       width,
 diff --git a/node_modules/@epubjs-react-native/core/lib/module/View.js b/node_modules/@epubjs-react-native/core/lib/module/View.js
 index 63f3c24..435d7af 100644
 --- a/node_modules/@epubjs-react-native/core/lib/module/View.js
@@ -48,3 +78,33 @@ index fbb87aa..6b31ff2 100644
      <title>EPUB.js</title>
      <script id="jszip"></script>
      <script id="epubjs"></script>
+diff --git a/node_modules/@epubjs-react-native/core/lib/module/utils/GestureHandler.js b/node_modules/@epubjs-react-native/core/lib/module/utils/GestureHandler.js
+index 4aea733..9272f9c 100644
+--- a/node_modules/@epubjs-react-native/core/lib/module/utils/GestureHandler.js
++++ b/node_modules/@epubjs-react-native/core/lib/module/utils/GestureHandler.js
+@@ -15,7 +15,6 @@ export function GestureHandler({
+ }) {
+   const singleTap = Gesture.Tap().runOnJS(true).maxDuration(250).cancelsTouchesInView(false).onStart(onSingleTap);
+   const doubleTap = Gesture.Tap().runOnJS(true).maxDuration(250).numberOfTaps(2).cancelsTouchesInView(false).onStart(onDoubleTap);
+-  const longPress = Gesture.LongPress().runOnJS(true).cancelsTouchesInView(false).onStart(onLongPress);
+   const swipeLeft = Gesture.Fling().runOnJS(true).direction(I18nManager.isRTL ? Directions.RIGHT : Directions.LEFT).onStart(onSwipeLeft);
+   const swipeRight = Gesture.Fling().runOnJS(true).direction(I18nManager.isRTL ? Directions.LEFT : Directions.RIGHT).onStart(onSwipeRight);
+   const swipeUp = Gesture.Fling().runOnJS(true).direction(Directions.UP).onStart(onSwipeUp);
+@@ -42,7 +41,7 @@ export function GestureHandler({
+         flex: 1
+       }
+     }, /*#__PURE__*/React.createElement(GestureDetector, {
+-      gesture: Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, longPress, doubleTap, singleTap)
++      gesture: Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, doubleTap, singleTap)
+     }, /*#__PURE__*/React.createElement(TouchableWithoutFeedback, {
+       style: {
+         width,
+@@ -57,7 +56,7 @@ export function GestureHandler({
+       flex: 1
+     }
+   }, /*#__PURE__*/React.createElement(GestureDetector, {
+-    gesture: Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, longPress, doubleTap, singleTap)
++    gesture: Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, doubleTap, singleTap)
+   }, /*#__PURE__*/React.createElement(View, {
+     style: {
+       width,

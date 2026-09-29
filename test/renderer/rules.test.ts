@@ -920,6 +920,27 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     );
   });
 
+  it('leaves a long press on the page to WebKit, so no gesture of the library races text selection (#74)', () => {
+    // The library wraps the WebView in a gesture-handler `GestureDetector` whose
+    // `Gesture.LongPress()` has the default 500 ms minimum, the same as UIKit's
+    // selection loupe on WKContentView. On the owner's iPhone the two raced: when
+    // `RNBetterLongPressGestureRecognizer` began first (+503 ms), UIKit failed the
+    // loupe before WebKit was asked, and the press selected nothing; when WebKit
+    // was asked first (+504 ms), the word was selected (engineering log,
+    // 2026-09-29). The app passes the reader no `onLongPress`, so `patches/`
+    // removes the gesture. commonjs is what Metro bundles (`"react-native"` in the
+    // library's package.json); module is patched alike.
+    for (const build of ['commonjs', 'module']) {
+      const handler = readFileSync(
+        new URL(`../../node_modules/@epubjs-react-native/core/lib/${build}/utils/GestureHandler.js`, import.meta.url).pathname,
+        'utf8',
+      );
+      const where = `the installed @epubjs-react-native/core lib/${build}/utils/GestureHandler.js`;
+      expect(handler, where).not.toContain('Gesture.LongPress(');
+      pinCount(handler, 'Gesture.Exclusive(swipeLeft, swipeRight, swipeUp, swipeDown, doubleTap, singleTap)', 2, where);
+    }
+  });
+
   it('restyles every rendered section and then re-centres, because the text has moved', () => {
     // The opposite of the `inset` message, and the difference is the whole of it:
     // the player collapsing moves not one character (01:11), and a font change

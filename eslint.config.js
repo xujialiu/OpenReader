@@ -46,7 +46,7 @@ const ABOVE_CORE = [
 module.exports = defineConfig([
   expoConfig,
 
-  { ignores: ['dist/*', 'ios/*', 'android/*'] },
+  { ignores: ['dist/*', 'ios/*', 'android/*', '.worktrees/'] },
 
   /**
    * `src/core/` is the part of OpenReader that runs under Node. That is not a
