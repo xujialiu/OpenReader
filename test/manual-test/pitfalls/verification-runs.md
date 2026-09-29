@@ -513,3 +513,15 @@ plus harness sequences for the failure-note and dark-theme checks.
   while `at=174` — the boundary gap); the text painted by itself about 7 s
   later, band on the stored sentence. Transient, self-recovered; earlier reopens
   with the position mid-chapter painted immediately.
+- **The held Reading was gone after reader → its Download drawer → Back, and
+  only then.** Byte-comparing the Library's bottom-right corner: the Reading
+  Button (paused waveform) survived a Library drawer open+close at 00:29 and two
+  earlier reader → Back returns (00:12 paused, 00:26 playing), but it was absent
+  from 00:35:33 on, after the cycle row → reader → `…` → Download → close drawer
+  → Back with the Reading paused. `reading.cjs state` on the Library then fails
+  with `Reading handler evaluation failed` (no mounted Player), which is itself
+  the sign the held Reading is gone, not that playback runs. The stored Reading
+  Position stayed intact (the row's Last read still quoted it). Whether a paused
+  Reading adopted by the reader should survive that particular path is the
+  implementing agent's call; items 5 and 6 above were both established before
+  it, and the leaving condition (Library, stopped) holds.
