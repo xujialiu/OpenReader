@@ -263,10 +263,9 @@ export interface ReaderBridge {
    * Draw this Utterance's highlight now, at **utterance level and with no words**,
    * and follow the page to it.
    *
-   * What a skip button paints before its Clip exists. ADR 0020 requires rapid
-   * presses to coalesce — five taps must not be five synthesis requests, which is
-   * Zotero's own 600 ms debounce — while the highlight moves on every press. The
-   * debounced `seek` is the caller's; this is the immediate half, and it is the
+   * What a skip button paints before its Clip exists. The caller's `seek` goes out
+   * at the same press (#86), and the Clip it asks for takes as long as the
+   * Provider takes; this is the highlight for that wait, and it is the
    * same `SpeakMessage` the clock sends, with `words: null` and a zero duration.
    * The WebView's own loop starts only when there are words, so nothing spins and
    * nothing is estimated (ADR 0005): the sentence is lit whole until its Clip

@@ -164,6 +164,13 @@ Moving the page to another part of a document while the reading position stays
 where it is.
 _Avoid_: previewing, peeking, jumping, navigating
 
+**Skip**:
+Moving the reading back or forward by one sentence, or to the start of a
+paragraph. Unlike browsing, it moves the reading: while it plays, speech goes
+there and the reading position follows; while it is paused, only where Play
+starts moves.
+_Avoid_: jump, step, seek
+
 **Following**:
 The page moving itself so that the line being spoken stays at the line
 position — a line at a time, or continuously as the words are spoken. Browsing
@@ -300,6 +307,12 @@ the Player when it is collapsed, and in the Library, the way back to the
 document being read. It shows whether the Reading is playing, and a press
 brings its controls back; it never plays or pauses.
 _Avoid_: play button, mini player, floating button, now playing
+
+**Live Activity**:
+The phone's own display of the Downloads going on while the app is not in
+front, one for all of them, on the Lock Screen and in the Dynamic Island. The
+phone draws it; it is not a notification, and OpenReader sends none.
+_Avoid_: banner, notification, progress bar, island
 
 ### The app on the owner's devices
 

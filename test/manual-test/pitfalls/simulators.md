@@ -44,6 +44,14 @@
   immediately before `check`, with `check` immediately before `onPlay()` and
   nothing else in between — `pause-gap.cjs` now does this itself rather than
   relying on a `set` done once earlier in the session.
+  The walkthrough harness's own `play` command does **not** check the volume
+  the way `reading.cjs play-for` does: measured 2026-09-29 verifying #86 on a
+  device created that hour, a `check` refused (60 again, ~25 minutes after the
+  boot's `set`) but a hand-written `hx.cjs '{"do":"play"}'` beside it ran the
+  reading anyway, because nothing chained the two. Chain every harness play
+  the same way — `silence.sh check UDID && hx.cjs … '{"do":"play"}'` — and on
+  a failed check `set` again and relaunch the app (the volume is read when the
+  audio session activates) before playing.
 - **The simulator volume can reset immediately before a chapter run even when
   the preceding check was zero.** Measured 2026-09-25 at 10:42 on `iPhone 17
   issue63`: the first check before `play` read 60, although the device had

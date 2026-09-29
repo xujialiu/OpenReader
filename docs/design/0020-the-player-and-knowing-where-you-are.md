@@ -238,11 +238,51 @@ playing, and in a book you have not read yet._
 
 The page goes there straight away. The reading follows a second or two later, once
 the app has laid that chapter out and can tell where its first sentence is — there
-is nothing to start reading from until then.
+is nothing to start reading from until then. The voice stops at the tap rather
+than read on in the chapter you left, and the play button shows the wait (#86).
 
 A volume's title page has no words on it at all. Tapping it takes you there, which
 is what you asked for, and nothing is read: there is nothing to read. It is a place
 in the book rather than a failure.
+
+While the book is being read, a title page is read past, like a blank page in a
+printed book: choosing the second volume starts reading its first chapter, and the
+page moves on to it as the voice starts (#86). The alternatives were to go back to
+the sentence the voice was on, which would read the first volume to someone
+looking at the second, or to stop and wait for Play. Choosing a volume while
+listening means "read me this volume", so neither was what was asked for. If
+nothing after the chosen place has any words, the reading stops and says so.
+Paused, choosing a volume still only takes the page there.
+
+## Pointing somewhere else stops the voice at once
+
+_Added for issue #86._
+
+Tapping a sentence, going back or forward a sentence or a paragraph, or choosing a
+chapter while the book is being read stops the voice the moment you press, and
+the reading asks for the sentence you pointed at straight away. Until it arrives
+the play button shows that it is waiting, and the sentence you pointed at is lit.
+
+Before this, the highlight moved at once but the old sentence went on being read
+for about half a second, and sometimes the highlight went back to it. That half
+second was a wait copied from the desktop plugin's reader, so that pressing "next
+sentence" five times quickly would ask the voice service for one sentence rather
+than five. The desktop reader stops its voice before that wait; this app copied
+the wait and not the stop.
+
+**The alternatives were to keep a wait.** Stopping the voice and then waiting half
+a second after the last press, as the desktop does, would mean every skip starts
+half a second late, even a single one. Starting a single press at once and
+gathering only quick repeat presses would keep that saving for bursts. Both were
+turned down: nothing waits, however quickly you press.
+
+The cost is paid when you press quickly. Each press asks for its own sentence and
+the next one, so five quick presses of "next paragraph" can ask the voice service
+for about ten sentences and use two of them. Each costs very little, but on a
+service with a limit on requests a minute, such as the free tier of Microsoft's,
+a long burst can reach the limit and stop the reading with an error. Going
+forward a sentence at a time rarely costs anything, because those sentences have
+usually been fetched already.
 
 ## What is deliberately not here
 

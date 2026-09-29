@@ -76,6 +76,48 @@ export function firstUtteranceOfSection(
   return null;
 }
 
+/** Where a Contents row takes the reading, as far as the sections reported so far can say (#86). */
+export type RowReading =
+  | { kind: 'utterance'; utterance: number }
+  /** That section has not reported, so it names no Utterance yet. */
+  | { kind: 'wait'; section: number }
+  /** Not reading on, and the row's own section has reported without text. */
+  | { kind: 'nothing' }
+  /** Reading on, and no section from the row to the end of the document has text. */
+  | { kind: 'end' };
+
+/**
+ * The Utterance a Contents row reads from, or the section it has to wait for.
+ *
+ * `onward` is the owner's choice for a row pressed **while playing** (#86): the
+ * voice stops at the tap, and a row whose page has no text — a volume's title
+ * page, the cover — reads on from the first section after it that has some, as a
+ * reader turns past a blank page. Without it, which is a paused book with no place
+ * yet choosing where the first Play starts, the row names only its own section.
+ *
+ * A section counts as reported when the renderer has said so, whether or not it
+ * held a Block (`rendered.reported`), or when a Block of it is in hand. Only the
+ * first section not yet reported is waited for; the walk goes no further than the
+ * sections that have, so it never guesses at text that has not arrived.
+ */
+export function readingFromRow(
+  utterances: readonly Utterance[],
+  blocks: readonly SectionedBlock[],
+  rendered: { spine: number; reported: ReadonlySet<number> },
+  section: number,
+  onward: boolean,
+): RowReading {
+  for (let at = section; ; at++) {
+    const first = firstUtteranceOfSection(utterances, blocks, at);
+    if (first !== null) return { kind: 'utterance', utterance: first };
+    const reported = rendered.reported.has(at) || blocks.some((block) => block.sectionIndex === at);
+    if (!reported) return { kind: 'wait', section: at };
+    if (!onward) return { kind: 'nothing' };
+    if (at + 1 >= rendered.spine) return { kind: 'end' };
+  }
+}
+
+
 /** Whether the reading stopped because the book ended, and what the owner is told either way. */
 export interface OutOfText {
   /** True when the furthest section the renderer has reported is the document's last spine item. */

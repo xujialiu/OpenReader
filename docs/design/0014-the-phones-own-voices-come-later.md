@@ -1,5 +1,9 @@
 # The phone's own voices come later, and arrive properly
 
+_Since 2026-09-29, [decision 0058](0058-the-phones-own-voices-are-not-offered-for-now.md):
+the owner listened to the phone's voices and they are not being built for now.
+What follows is still how they would arrive._
+
 The first working version reads only through providers the owner has an account
 with. The voices already built into the phone — free, offline, no account, no
 spending — are not in it.

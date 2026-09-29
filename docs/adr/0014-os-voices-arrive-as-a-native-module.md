@@ -4,6 +4,15 @@ status: accepted
 
 # The operating system's voices arrive as a native module, not through expo-speech
 
+_2026-09-29: not being built for now. The owner judged the phone's voices not
+good enough to listen to (design 0058). Everything below still holds for when
+they are. The measurements are in `notes/NOTES_2026-09-29.md`, 20:56, 21:13 and
+21:25. They cover 193 voices on the owner's iPhone under iOS 27.0, all written by
+`write` with markers. `byteSampleOffset` counts bytes of Float32 frames. Eloquence
+marks only the first word in zh, ja and ko. Voice identifiers change when the
+phone upgrades a voice. The tools are in
+`test/manual-test/voices-and-providers/system-voices.md`._
+
 There is no zero-key path in the first working version — it reads through the
 remote providers that already exist. The OS voices come next, and when they do
 they come through a native module built on

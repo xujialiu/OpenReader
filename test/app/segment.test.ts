@@ -6,6 +6,7 @@ import {
   documentLanguage,
   firstUtteranceOfSection,
   outOfTextSentence,
+  readingFromRow,
   samePrefix,
   segmentDocument,
 } from '../../src/app/segment';
@@ -164,6 +165,55 @@ describe('carryUtterance', () => {
  * tapping a chapter and being read a different one, which is the confidently wrong
  * answer ADR 0020 calls the expensive defect.
  */
+/**
+ * Where a Contents row takes the reading (#86), now that the voice stops at the
+ * tap. A row whose page has no text — a volume's title page, thirteen of them in
+ * the owner's book — reads on from the first section after it that has text,
+ * while playing; paused, in a book with no place yet, the row names only itself.
+ */
+describe('readingFromRow', () => {
+  // Section 2 is a volume's title page: it reported and holds nothing to read.
+  const sectioned = [
+    { text: 'Chapter one ends.', sectionIndex: 1 },
+    { text: 'Chapter two begins. It runs on.', sectionIndex: 3 },
+  ];
+  const utterances = segmentDocument(sectioned, 'en');
+  const rendered = (reported: number[], spine = 6) => ({ spine, reported: new Set(reported) });
+
+  it("reads the row's own section when it has text", () => {
+    expect(readingFromRow(utterances, sectioned, rendered([1, 3]), 3, true)).toEqual({ kind: 'utterance', utterance: 1 });
+    expect(readingFromRow(utterances, sectioned, rendered([1, 3]), 3, false)).toEqual({ kind: 'utterance', utterance: 1 });
+  });
+
+  it("waits for the row's own section when it has not reported", () => {
+    expect(readingFromRow(utterances, sectioned, rendered([1, 3]), 4, true)).toEqual({ kind: 'wait', section: 4 });
+    expect(readingFromRow(utterances, sectioned, rendered([1, 3]), 4, false)).toEqual({ kind: 'wait', section: 4 });
+  });
+
+  it('reads on past a section with no text to the first section after it that has some', () => {
+    expect(readingFromRow(utterances, sectioned, rendered([1, 2, 3]), 2, true)).toEqual({ kind: 'utterance', utterance: 1 });
+  });
+
+  it('waits for the next section when the one after the title page has not reported yet', () => {
+    const early = sectioned.slice(0, 1);
+    expect(readingFromRow(segmentDocument(early, 'en'), early, rendered([1, 2]), 2, true)).toEqual({ kind: 'wait', section: 3 });
+  });
+
+  it('counts a section whose Blocks are in hand as reported, before the set has heard of it', () => {
+    expect(readingFromRow(utterances, sectioned, rendered([]), 2, true)).toEqual({ kind: 'wait', section: 2 });
+    const titled = [...sectioned.slice(0, 1), { text: ' ', sectionIndex: 2 }, ...sectioned.slice(1)];
+    expect(readingFromRow(segmentDocument(titled, 'en'), titled, rendered([]), 2, true)).toEqual({ kind: 'utterance', utterance: 1 });
+  });
+
+  it('has nowhere to go when nothing after the row has text', () => {
+    expect(readingFromRow(utterances, sectioned, rendered([1, 2, 3, 4, 5]), 4, true)).toEqual({ kind: 'end' });
+  });
+
+  it('names only the row itself when it is not to read on', () => {
+    expect(readingFromRow(utterances, sectioned, rendered([1, 2, 3]), 2, false)).toEqual({ kind: 'nothing' });
+  });
+});
+
 describe('firstUtteranceOfSection', () => {
   /** Two Blocks per section, as `blocks.ts` concatenates them: by spine index, in reading order. */
   const sectioned = [

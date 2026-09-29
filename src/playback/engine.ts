@@ -191,6 +191,18 @@ export interface PlaybackEngine {
   pause(): void;
   /** Jump to an Utterance: the queue is cleared, the clock re-anchored, and the reading resumes there if it was playing. */
   seek(utterance: number): void;
+  /**
+   * Stop the sound now and wait, queueing and fetching nothing, until a `seek`
+   * says where the reading goes (#86).
+   *
+   * For a Contents row whose chapter has not reported its text yet: the owner has
+   * asked to leave the sentence being spoken, and the sentence to go to does not
+   * exist until that chapter has rendered. Playing stays playing, so the player
+   * shows the wait as buffering and the seek that ends it starts the new sentence.
+   * A `load` in the meantime, which is a section above reporting and renumbering
+   * the list, does not end it: it would start the old sentence again.
+   */
+  silence(): void;
   setRate(rate: number): void;
   switchVoice(provider: TTSProvider, voice: string, selected: () => void, failed: (error: unknown) => void): void;
   cancelVoiceSwitch(): void;
@@ -268,6 +280,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     deadline: ReturnType<typeof setTimeout> | null;
   };
   let pending: PendingSwitch | null = null;
+  /** Set by `silence` and cleared by `seek`: nothing is fetched, queued or switched while it holds. */
+  let waiting = false;
   let lastQueued: number | null = null;
   let chapterPause: { next: number; ready: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
   let lastState = '';
@@ -288,6 +302,10 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
   function pump(): void {
     if (disposed) return;
+    if (waiting) {
+      publish();
+      return;
+    }
     for (const index of pending?.armed ? [] : fetchWindow({ cursor, nextToEnqueue, total: utterances.length, inFlight: inFlight.size, stateOf })) {
       startFetch(index);
     }
@@ -615,7 +633,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
   function prepareSwitch() {
     const target = pending;
-    if (!target || target.armed || !graph || disposed) return;
+    // Waiting, the front of an empty queue is the sentence the owner has just left.
+    if (!target || target.armed || !graph || disposed || waiting) return;
     const queue = timeline.clips();
     const front = queue[0];
     const index = front?.utterance ?? nextToEnqueue;
@@ -658,6 +677,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     load(list, from = 0, options = {}) {
       generation++;
       utterances = list;
+      // Not the end of a `silence`: only a seek names the sentence it waits for.
       restart(from);
       quiet = options.quiet === true && !playing;
       pump();
@@ -704,9 +724,19 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     seek(utterance) {
       if (disposed) return;
       restart(utterance);
+      waiting = false;
       // No `resume()` here: `clearBuffers()` leaves the node in the playing
       // state and an empty queue renders silence until the next buffer arrives
       // (footgun 3). A stop to "reset" it is exactly what breaks resumption.
+      pump();
+    },
+
+    silence() {
+      if (disposed) return;
+      // `restart` is what stops the sound: `graph.clear()` stops the source node
+      // and retires its callbacks, so nothing the old queue says can cue it again.
+      restart(cursor);
+      waiting = true;
       pump();
     },
 
