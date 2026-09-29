@@ -19,6 +19,7 @@
   same run needed `DEVELOPMENT_TEAM=UPR29WR8FC` after a prebuild that had
   cleared `ios/` (the item above); build 3 min 31 s with the 20260927-restored
   module cache, then install and launch both returned 0 over the cable.
+- **A new bundle id fails to sign with `No Accounts: Add a new account in Accounts settings`** (2026-09-29 21:10, the System Voices app). It came with `No profiles for 'top.xujialiu.openreader.systemvoices' were found`, under `-allowProvisioningUpdates` and `DEVELOPMENT_TEAM=UPR29WR8FC`. Cause: Xcode had no Apple ID signed in (`defaults read com.apple.dt.Xcode DVTDeveloperAccountManagerAppleIDLists` held an empty list), and the only profile on the Mac was OpenReader's own (`~/Library/Developer/Xcode/UserData/Provisioning Profiles/`, expiring 2026-10-04 03:43:34 UTC). OpenReader still builds from that profile; anything that needs a new or renewed profile, a new app or OpenReader after that date, needs the owner to sign in again under Xcode → Settings → Accounts. Check the list before a build that needs a new profile.
 - **`timeout` is not on macOS** (exit 127, the build never ran). Give the tool call its own timeout instead, or run the build in the background with its exit code written to a file and poll it.
 
 ## Physical iPhone screen

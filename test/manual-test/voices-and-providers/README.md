@@ -24,7 +24,7 @@ that names the script or probe you are about to run.
   (default, `touch`, `paused-seek`).
 - [system-voices.md](system-voices.md): which of the phone's own voices
   exist, in how many languages, and whether `AVSpeechSynthesizer.write`
-  marks their words. `ListSystemVoices.swift`, `SystemVoiceMarkers.swift`.
+  marks their words. `ListSystemVoices.swift`, `SystemVoiceMarkers.swift`, `SystemVoicesApp.swift`, `system-voices-app.rb`.
 - [fish-narration.md](fish-narration.md) (#73): a lookup and a pronunciation
   interrupting real Fish narration, and a selection handle's release.
   `FishNarrationProbe.swift`.
