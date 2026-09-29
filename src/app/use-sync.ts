@@ -35,6 +35,7 @@ import { createPositionsTransport, type PositionsTransport, type SyncClient, typ
 import { createWebDAVClient, WebDAVError, type WebDAVClient } from '../core/sync/webdav';
 import { forbidCredential } from '../debug/credentials';
 import { cutAddress, debugLog } from '../debug/debug-log';
+import { SYNC_PASSWORD_ENTRY_NAME } from '../keys/entry-name';
 import { readSyncPassword } from '../keys/store';
 
 import type { AppSettings, SyncSettings } from './settings';
@@ -156,8 +157,9 @@ export function useSync(settings: AppSettings, library: Library, deps: SyncDeps 
   );
 
   const check = useCallback(async (url: string, username: string, password: string) => {
-    // Typed and not yet saved, so the Keychain has not handed it to the Debug Log's guard.
-    forbidCredential(password);
+    // Typed and perhaps not yet saved, so the Keychain may not have handed it to
+    // the Debug Log's guard: held as the WebDAV password's entry, which it is.
+    forbidCredential(SYNC_PASSWORD_ENTRY_NAME, password);
     try {
       await depsRef.current.client({ url, username, enabled: false }, password).check();
       debugLog('sync', `check of ${cutAddress(url)}: the folder is there`);

@@ -30,14 +30,15 @@
  * `entry-name.ts` and `refusal.ts` beside it.
  *
  * Every secret read or written here is also handed to the Debug Log's guard
- * (`src/debug/credentials.ts`, ADR 0054), which in Debug Mode writes each one
- * as `[credential]` wherever a line would carry it. Being the one place a
- * secret passes is what makes that complete.
+ * (`src/debug/credentials.ts`, ADR 0054) with its entry's name, which in Debug
+ * Mode writes the entry's latest value as `[credential]` wherever a line would
+ * carry it, and stops when the entry is removed. Being the one place a secret
+ * passes is what makes that complete.
  */
 
 import * as SecureStore from 'expo-secure-store';
 
-import { forbidCredential, forbidGatewayHeaders } from '../debug/credentials';
+import { forbidCredential, forbidGatewayHeaders, forgetCredential } from '../debug/credentials';
 import { gatewayHeadersEntryName, providerKeyEntryName, SYNC_PASSWORD_ENTRY_NAME } from './entry-name';
 import { keychainRefusal, type KeychainRefusal } from './refusal';
 
@@ -131,8 +132,8 @@ const KEYCHAIN: SecureStore.SecureStoreOptions = {
  * again, and the alternative is one that cannot be read in the one place it
  * matters.
  */
-async function writeSecret(name: string, secret: string, forbid: (secret: string) => void = forbidCredential): Promise<SecretChange> {
-  forbid(secret);
+async function writeSecret(name: string, secret: string, forbid: (entry: string, secret: string) => void = forbidCredential): Promise<SecretChange> {
+  forbid(name, secret);
   try {
     await SecureStore.deleteItemAsync(name, KEYCHAIN);
     await SecureStore.setItemAsync(name, secret, KEYCHAIN);
@@ -150,14 +151,14 @@ async function writeSecret(name: string, secret: string, forbid: (secret: string
  * it says, and why a refusal here is reported rather than flattened into
  * "nothing stored".
  */
-async function readSecret(name: string, forbid: (secret: string) => void = forbidCredential): Promise<SecretLookup> {
+async function readSecret(name: string, forbid: (entry: string, secret: string) => void = forbidCredential): Promise<SecretLookup> {
   try {
     // `null` is the package's documented answer for "no entry for this key".
     // Everything that went wrong rejects instead, and that is the whole
     // distinction `SecretLookup` keeps.
     const secret = await SecureStore.getItemAsync(name, KEYCHAIN);
     if (secret === null) return { outcome: 'absent' };
-    forbid(secret);
+    forbid(name, secret);
     return { outcome: 'found', secret };
   } catch (cause) {
     return { outcome: 'refused', refusal: keychainRefusal(cause) };
@@ -172,10 +173,14 @@ async function readSecret(name: string, forbid: (secret: string) => void = forbi
  * shapes the package has ever written and ignores every status, so forgetting
  * something that was never there succeeds. Reporting that as a failure would be
  * the false signal — what the caller asked to be true is true.
+ *
+ * Only then does the Debug Log's guard stop holding the entry's value: an entry
+ * the Keychain would not remove still holds its secret, and stays held.
  */
 async function removeSecret(name: string): Promise<SecretChange> {
   try {
     await SecureStore.deleteItemAsync(name, KEYCHAIN);
+    forgetCredential(name);
     return { outcome: 'done' };
   } catch (cause) {
     return { outcome: 'refused', refusal: keychainRefusal(cause) };

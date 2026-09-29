@@ -227,7 +227,7 @@ describe('rolling: four files of 5 MB, the oldest dropped first', () => {
 
 describe('never a credential', () => {
   it('writes a secret the app has held as [credential], in the file and in the system log', () => {
-    forbidCredential('sk-proj-TESTKEY-0123456789');
+    forbidCredential('provider-key.openai-official', 'sk-proj-TESTKEY-0123456789');
     const disk = folder();
     const systemLog = vi.fn();
     const log = createDebugLog({ files: disk.files, now: () => AT, systemLog });
