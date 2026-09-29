@@ -33,7 +33,11 @@ describe('the sub-worktrees in ./.worktrees are outside this project', () => {
       const read = ts.readConfigFile(path.join(root, 'tsconfig.json'), ts.sys.readFile);
       const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, root);
       expect(parsed.fileNames.some((file) => file.includes('/src/app/shell.tsx'))).toBe(true);
-      expect(parsed.fileNames.filter((file) => file.includes('/.worktrees/'))).toEqual([]);
+      // This project's own `.worktrees`, not any `/.worktrees/`: a sub-worktree's
+      // checkout has that in every path of its own (found running this suite
+      // inside one, 2026-09-29).
+      const own = path.join(root, '.worktrees') + path.sep;
+      expect(parsed.fileNames.filter((file) => path.resolve(file).startsWith(own))).toEqual([]);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
