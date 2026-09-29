@@ -179,9 +179,18 @@ python3 test/manual-test/kit/debug-log.py IPHONE_UDID OUT_DIR --syslog --pmd3 /t
 - Exit 1 means the phone holds no Debug Log: the installed build has no Debug
   Mode, or the app has not run since it was installed.
 
-What it cannot prove: nothing here has run against a phone yet. The whole-folder
-copy and the listing's JSON shape are `devicectl`'s, read from its `--help` on
-Xcode 27.0 and not measured; the fallback exists for that reason. The span and
+On the owner's iPhone (iOS 27.0, 0.0.2-beta54) on 2026-09-29 at 20:53 the
+whole-folder copy worked: one file, 3,626 lines, 0.6 MB, spanning 11:15 to
+20:51; the pitfalls' #82 entry has it working over Wi-Fi too. `--syslog` was not
+used that time: a separate `pymobiledevice3 syslog collect --start-time` over
+the cable, from 20:25, took 12 s and wrote 325 MB, and `pip install` into a
+fresh `/tmp/pmd3-venv` with the commands in
+[pitfalls/physical-iphone.md](../pitfalls/physical-iphone.md) succeeded first
+time.
+
+What it cannot prove: the listing's JSON shape is `devicectl`'s, read from its
+`--help` on Xcode 27.0 and not measured, so the fallback has never run against
+a phone. The span and
 the summary were checked against Debug Log files written by the test suite's
 format. On 2026-09-29 the script also ran against a stand-in `xcrun` and
 `pymobiledevice3` that copy two such files: the whole-folder copy, the fallback
