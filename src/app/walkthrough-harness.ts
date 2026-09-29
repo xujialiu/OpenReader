@@ -5,11 +5,13 @@
 // app's own handlers. Answers go to the Metro log as `HX …` lines.
 import { useEffect, useRef } from 'react';
 import { File, Paths } from 'expo-file-system';
+import { markLp74 } from '../../modules/open-reader-debug-lp74'; // DEBUG-lp74
 
 export type HarnessCommand = Record<string, unknown>;
 
 export function hlog(line: string): void {
   console.log(`HX ${line}`);
+  markLp74(`HX ${line}`); // DEBUG-lp74: persisted beside the long-press diagnostics (#74)
 }
 
 export function useHarnessCommands(run: (command: HarnessCommand) => void): void {
