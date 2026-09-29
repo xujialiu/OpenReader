@@ -160,3 +160,13 @@
   (2026-09-28) the old build would have answered `play` and `pause` with a test
   that does not exist. Delete the directory once after changing the probe; the
   next call rebuilds it (about 30 s).
+- **`xcrun simctl get_app_container` can say "No such file or directory" for an
+  installed, running app on a booted device.** Seen 2026-09-29 (#88, iPhone 17
+  download, iOS 27.0): both `data` and `app` failed with
+  `NSPOSIXErrorDomain code=2` while the app was foregrounded and Metro
+  connected — a CoreSimulator lookup glitch, not an uninstalled app. Fix: read
+  the container straight off disk,
+  `~/Library/Developer/CoreSimulator/Devices/<UDID>/data/Containers/Data/Application/<ID>/`,
+  and pick the entry by a marker file (`Documents/harness.json` for
+  OpenReader). Everything the container path is used for (harness.json,
+  catalog.sqlite, Inbox) works from that path.
