@@ -13,8 +13,8 @@ import { pin } from '../structural';
  * runner: a renderer mock would prove the mock was called. But each of the three
  * below is **one line**, deleting it is easy and plausible, and every one of them
  * fails **silently** — the reading starts at the wrong place, or the contents open
- * at the top of a two-thousand-chapter book, or a burst of presses quietly spends
- * five synthesis requests where it should spend one.
+ * at the top of a two-thousand-chapter book, or the old sentence plays on after
+ * the owner has pointed the reading somewhere else.
  *
  * So the same shape as `test/renderer/rules.test.ts` and
  * `test/app/no-outgoing-links.test.ts`: read the line that obeys the rule and fail
@@ -38,10 +38,10 @@ function code(name: string): string {
 /**
  * One function of a file, from its opening line to its closing one.
  *
- * Load-bearing rather than tidy: `clearTimeout(seekTimerRef.current)` and
- * `pendingSeekRef.current = null` **both appear twice** in `use-reading.ts` — once
- * in the debounce and once in the cleanup that runs when the screen goes away — so
- * a rule asserted over the whole file passes while the debounce is gutted. Three
+ * Load-bearing rather than tidy: the skip debounce this file once guarded had
+ * two lines that each **appeared twice** in `use-reading.ts` — once
+ * in the debounce and once in the cleanup that ran when the screen went away — so
+ * a rule asserted over the whole file passed while the debounce was gutted. Three
  * mutations got through this file before it was scoped.
  */
 function within(source: string, from: string, to: string): string {
@@ -52,47 +52,42 @@ function within(source: string, from: string, to: string): string {
   return source.slice(start, end + to.length);
 }
 
-describe('a burst of skip presses is one synthesis request (ADR 0020)', () => {
+describe('a tap, a skip or a Contents row stops the sound at the press (#86)', () => {
   /**
-   * Measured on the device (`notes/NOTES_2026-09-20.md`, 01:12): five presses of
-   * previous-sentence produced **one** `engine.seek`, 612 ms after the burst. With
-   * the debounce removed and nothing else changed, the same five presses produced
-   * **five** seeks in 24 ms — five restarts, five Utterances fetched, four thrown
-   * away. That is the owner's money, and nothing on the screen would say so.
+   * The 600 ms debounce ADR 0020 copied from Zotero deferred `engine.seek`, and
+   * `engine.seek` is the first thing that stops the source node, so the old
+   * sentence played on through the wait and its next cue could move the highlight
+   * back to it. Zotero stops the sound before its own wait
+   * (notes/NOTES_2026-09-29.md, 19:04); the owner chose no wait at all.
    */
-  it('reaches the engine from the timer, and otherwise only when Play settles the same pending target', () => {
+  it('seeks from the press itself, with no timer in between', () => {
     const reading = code('use-reading.ts');
     const seekTo = within(reading, 'const seekTo = useCallback(', '}, [sectionOf');
-    // Two calls into the engine in the whole file: this timer's, and Play's, which
-    // sends the one target the timer was holding when Play starts the engine (#54)
-    // and takes it, so a burst of presses is still one seek however it ends.
-    expect(reading.match(/\.seek\(/g)).toHaveLength(2);
-    expect(seekTo).toContain('setTimeout(');
-    expect(seekTo).toContain('}, SKIP_DEBOUNCE_MS);');
-    expect(seekTo.indexOf('setTimeout(')).toBeLessThan(seekTo.indexOf('.seek('));
-    expect(seekTo).toContain('.seek(');
-    const play = within(reading, 'const play = useCallback(', '}, [settings, build, report, walkForward');
-    expect(play).toContain('if (seekTimerRef.current) clearTimeout(seekTimerRef.current);');
-    expect(play).toContain('const target = pendingSeekRef.current;');
-    expect(play.indexOf('pendingSeekRef.current = null;')).toBeLessThan(play.indexOf('.seek('));
+    // One call into the engine's seek in the whole file, and it is this one.
+    expect(reading.match(/\.seek\(/g)).toHaveLength(1);
+    pin(seekTo, 'engineRef.current?.seek(at);', 'use-reading.ts seekTo');
+    expect(seekTo).not.toContain('setTimeout(');
+    expect(reading).not.toContain('SKIP_DEBOUNCE');
   });
 
-  it('keeps both guards, because only one of them was carrying it', () => {
-    // Removing the `clearTimeout` alone still produced one seek on the device,
-    // because the first timer to fire takes the pending target and leaves null
-    // behind for the rest — so neither half can be dropped as redundant on the
-    // evidence of the other. The timer keeps one call; the payload keeps one target.
-    const seekTo = within(code('use-reading.ts'), 'const seekTo = useCallback(', '}, [sectionOf');
-    expect(seekTo).toContain('if (seekTimerRef.current) clearTimeout(seekTimerRef.current);');
-    expect(seekTo).toContain('const target = pendingSeekRef.current;');
-    expect(seekTo).toContain('pendingSeekRef.current = null;');
-    expect(seekTo).toContain('if (target === null) return;');
+  it('counts a skip from the sentence the previous press already sought to', () => {
+    const skip = within(code('use-reading.ts'), 'const skip = useCallback(', '[pointAt]');
+    pin(skip, 'const from = atRef.current ?? 0;', 'use-reading.ts skip');
   });
 
-  it('is the number Zotero debounces by, not a number of our own', () => {
-    // 600 ms, `SKIP_DEBOUNCE_DELAY` at `reader.js:39904`. A narrower one would let a
-    // fast hand through; a wider one would make the reading feel stuck.
-    expect(code('use-reading.ts')).toContain('const SKIP_DEBOUNCE_MS = 600;');
+  it('stops the sound while a Contents row waits for its chapter, and only a seek ends the wait', () => {
+    const goToSection = within(code('use-reading.ts'), 'const goToSection = useCallback(', '[seekTo]');
+    pin(goToSection, 'if (!reported && playIntent.current) engineRef.current?.silence();', 'use-reading.ts goToSection');
+    const engine = readFileSync(new URL('../../src/playback/engine.ts', import.meta.url).pathname, 'utf8');
+    const pump = within(engine, '  function pump(): void {', '\n  }\n');
+    // Nothing is fetched or queued while waiting: the front of the empty queue is
+    // the sentence the owner has just left.
+    expect(pump.indexOf('if (waiting)')).toBeGreaterThan(-1);
+    expect(pump.indexOf('if (waiting)')).toBeLessThan(pump.indexOf('fetchWindow('));
+    const seek = within(engine, '    seek(utterance) {', '\n    },\n');
+    pin(seek, 'waiting = false;', 'engine.ts seek');
+    // Beside its declaration, the one place it is cleared.
+    expect(engine.match(/^\s+waiting = false;/gm)).toHaveLength(1);
   });
 });
 

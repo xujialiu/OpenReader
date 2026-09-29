@@ -11,8 +11,10 @@ list's place among the six seeks below is revised by
 row is Browsing and names no Utterance. What collapsing leaves is revised by
 [ADR 0048](0048-the-bar-floats-and-the-page-keeps-room-for-it.md): the
 navigation bar goes with the player, and the one button left, the Reading
-Button, shows the player and never plays or pauses. Historical measurements
-below are retained unchanged.
+Button, shows the player and never plays or pauses. The skip debounce is
+removed by #86: every seek stops the sound and reaches the engine at the press
+(below, "The sound stops at the press, and nothing waits"). Historical
+measurements below are retained unchanged.
 
 _The product argument is
 `docs/design/0020-the-player-and-knowing-where-you-are.md`._
@@ -135,6 +137,50 @@ The highlight moving immediately is `bridge.show`: the same `SpeakMessage` the
 clock sends, with `words: null` and a zero duration. The WebView's own loop starts
 only when there are words, so nothing spins and nothing is estimated — the sentence
 is lit whole until its Clip arrives and replaces it with the real timings.
+
+### The sound stops at the press, and nothing waits (#86, 2026-09-29)
+
+The debounce above deferred `engine.seek`, and `engine.seek` → `restart` →
+`graph.clear()` is the first thing that stops the source node. So for the 600 ms
+after a tap or a skip the old sentence played on under a highlight that had
+already moved, and an `onBufferEnded` inside those 600 ms cued the next old
+Utterance, which moved the highlight and `atRef` back to the old reading until the
+new Clip was cued.
+
+This ADR recorded Zotero's debounce and its immediate highlight and missed the
+line between them. In Zotero 10.0.3, `_skipTo` calls `_stop()`, which stops and
+disconnects the source node, **before** `_speak('skip')`; only the speak is
+debounced, trailing edge only (notes/NOTES_2026-09-29.md, 19:04). Zotero's 600
+has no comment giving a reason, and nothing here ever measured it.
+
+The owner chose no wait at all over both Zotero's shape (stop, then speak 600 ms
+after the last press) and a leading-edge one (the first press at once, later
+presses within 600 ms gathered). So `seekTo` calls `engine.seek` at the press;
+`SKIP_DEBOUNCE_MS`, the pending target and Play's flush of it are gone, and a skip
+counts from `atRef`, which the previous press has already moved and which no old
+callback can move back, because `graph.clear()` bumps the source generation.
+
+The cost is the one the counterfactual above measured: five quick presses are five
+seeks. Each asks for its target and the read-ahead behind it, two at a time, and
+requests a seek leaves behind are not cancelled: they finish into the memory
+cache. Next-sentence bursts mostly land on Clips the read-ahead already holds;
+five quick next-paragraph presses can put about ten requests in flight, eight for
+sentences passed over, which can reach Azure's free-tier 20 requests a minute
+(#40). Cancelling them was turned down: a Provider may still charge for a request
+it has received, the per-minute count is not reduced, and the cache would lose
+them. So was holding at most two requests across seeks: a single tap would then
+wait behind the read-ahead already in flight.
+
+A Contents row whose section has not reported has no Utterance to seek to. While
+playing it now calls `engine.silence()`: `restart` at the cursor, which stops the
+sound, and a `waiting` flag under which `pump` fetches and queues nothing and
+`prepareSwitch` arms nothing, because the front of the empty queue is the
+sentence the owner has just left. `load` does not end it, since a section above
+reporting and renumbering the list reloads at the carried cursor, which is the old
+sentence; only `seek` does. `playing` stays true, so the player shows the wait as
+buffering. A tapped word or a skip during the wait gives the row up
+(`pointAt` clears `pendingSectionRef`), so the chapter reporting later does not
+take the reading away from where the owner pointed since.
 
 ### A contents tap is two steps, and the second one has a case the first misses
 
@@ -264,7 +310,8 @@ Copied from Zotero unchanged, each verified in its source:
 - **Paused navigation moves the highlight and does not resume**
   (`reader.js:39460-39470`; `_speakInternal` returns early while paused,
   `:40155-40172`).
-- **Rapid presses coalesce.** Zotero debounces the fetch by 600 ms
+- **Rapid presses coalesce.** _No longer followed since #86: see "The sound
+  stops at the press, and nothing waits" above._ Zotero debounces the fetch by 600 ms
   (`SKIP_DEBOUNCE_DELAY`, `reader.js:39904`, applied `:40222`) while moving the
   highlight immediately. We need the same, for the same reason: five taps must
   not be five synthesis requests.

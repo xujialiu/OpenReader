@@ -19,7 +19,7 @@
  * here is the index arithmetic, and it returns the *current* index rather than
  * nothing at a document end precisely so that the re-speak happens.
  *
- * One behaviour deliberately diverges: **previous-paragraph**. Zotero skips an
+ * Two behaviours deliberately diverge. The first is **previous-paragraph**. Zotero skips an
  * extra paragraph when the position is mid-paragraph ("so paragraphs are treated
  * as a single unit for skipping"); we go to the current paragraph's own first
  * Utterance instead. ADR 0020 gives the reason as a duration asymmetry rather
@@ -27,11 +27,11 @@
  * owner's novel runs to half a minute, so Zotero's rule makes "read that
  * paragraph again" unreachable in one press.
  *
- * Debouncing rapid presses is **not** here. ADR 0020 requires it (five taps must
- * not be five synthesis requests) and Zotero's own number is 600 ms, but a
- * debounce is a timer belonging to whatever handles the press; these functions
- * are pure so that the debounced call and the immediate highlight move can both
- * be computed from the same answer.
+ * The second is that **rapid presses are not gathered**. Zotero stops the sound
+ * at a skip and speaks again 600 ms after the last press, so a burst is one
+ * synthesis request; here every press seeks at once (#86), so each press of a
+ * burst asks for the sentence it lands on and the read-ahead behind it, less
+ * whatever is already cached. There is no timer anywhere.
  *
  * ## What a paragraph is, read off the spans
  *

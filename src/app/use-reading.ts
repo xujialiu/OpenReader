@@ -98,17 +98,6 @@ export type HighlightLevel = 'word' | 'utterance';
  */
 export type SkipTarget = 'previous-paragraph' | 'previous-sentence' | 'next-sentence' | 'next-paragraph';
 
-/**
- * How long a burst of skip presses is gathered before one seek goes out.
- *
- * **600 ms, which is Zotero's own number** (`SKIP_DEBOUNCE_DELAY`,
- * `reader.js:39904`, applied at `:40222`), and it is here for the reason ADR 0020
- * gives: five taps must not be five synthesis requests. The highlight moves on
- * every press — `bridge.show` paints it at once — and only the synthesis waits, so
- * the debounce costs nothing a reader can see.
- */
-const SKIP_DEBOUNCE_MS = 600;
-
 /** Everything the player bar and the status line show. Nothing in here changes more than once per Utterance. */
 export interface ReadingStatus {
   playing: boolean;
@@ -214,8 +203,8 @@ export interface Reading {
    *
    * What tapping a word and tapping a contents row both end in, and what the four
    * skips below are: **six controls, one seek**, which is ADR 0020's whole
-   * argument. The highlight moves at once and the synthesis is debounced by
-   * `SKIP_DEBOUNCE_MS`.
+   * argument. All of it happens at the press: the highlight moves, the sound
+   * stops and the sentence is asked for (#86).
    *
    * It does not resume a paused reading and it does not pause a playing one: the
    * engine's own `seek` is `restart(); pump()` with deliberately no `resume()`, so
@@ -390,18 +379,6 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    */
   const seekingRef = useRef(false);
   const languageRef = useRef('en');
-  /**
-   * The Utterance a burst of presses has arrived at, waiting for
-   * `SKIP_DEBOUNCE_MS` to run out.
-   *
-   * The **base** the next press counts from as well as the payload of the pending
-   * seek, which is what makes five presses of previous-sentence go back five
-   * sentences rather than one. It cannot be `atRef`: a Clip boundary inside the
-   * 600 ms would move that, and the timer would then seek to wherever the engine
-   * had got to instead of where the owner pointed.
-   */
-  const pendingSeekRef = useRef<number | null>(null);
-  const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * The spine item a contents tap is waiting on, or null.
    *
@@ -617,7 +594,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * the book's first line and wrote it over the stored place.
    *
    * So every index that names a sentence of the old list — the cursor, the
-   * sentence a resume landed on, a seek still waiting out its debounce — is
+   * sentence a resume landed on — is
    * carried to the same sentence in the new one (`carryUtterance`: its first
    * Block, where it starts there, and its text, which is an exact match and not
    * an estimate), and the engine is loaded again there. `load` is still the one
@@ -654,7 +631,6 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     const cursor = atRef.current;
     const at = pointed ? cursor : carry(cursor);
     resumedAtRef.current = carry(resumedAtRef.current);
-    pendingSeekRef.current = carry(pendingSeekRef.current);
 
     // `load` cancels a voice switch the engine was preparing (`restart`), so the
     // choice is let go here as a seek lets it go, rather than left spinning.
@@ -731,11 +707,19 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * Read from an Utterance: the one call every control in the player ends in
    * (ADR 0020).
    *
-   * Two things happen, and the split between them is the whole of this function.
-   * The **highlight moves now**, through `bridge.show`, which paints the Utterance
-   * whole and scrolls the page to it without knowing anything about a Clip. The
-   * **seek waits** `SKIP_DEBOUNCE_MS`, so that a burst of presses is one synthesis
-   * request rather than five (ADR 0020, and Zotero's own 600 ms).
+   * Two things happen, both at once (#86). The **highlight moves**, through
+   * `bridge.show`, which paints the Utterance whole and scrolls the page to it
+   * without knowing anything about a Clip. And the **engine seeks**, which stops
+   * the sentence being spoken (`restart` stops the source node and retires its
+   * callbacks, so the old queue cannot cue the highlight back) and asks for the new
+   * one.
+   *
+   * There is deliberately no debounce. It used to wait 600 ms, Zotero's
+   * `SKIP_DEBOUNCE_DELAY`, so that a burst of presses was one synthesis request;
+   * the old sentence played on through the wait, and Zotero itself stops the sound
+   * before its wait (notes/NOTES_2026-09-29.md, 19:04). The owner chose no wait at
+   * all over gathering a burst: five quick presses are five seeks, and the
+   * Utterances skipped past are fetched and cached for nothing (ADR 0020).
    *
    * `atRef` is moved at once as well, and that is not bookkeeping: it is where the
    * engine is told to start when it is built (`build`) and where `adopt` re-anchors
@@ -760,7 +744,6 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // this is a no-op on that path.
     abandonResume();
     const at = Math.min(list.length - 1, Math.max(0, Math.trunc(utterance)));
-    pendingSeekRef.current = at;
     atRef.current = at;
     // Pointed somewhere, so wherever the cursor is next is a place to write —
     // the resume's own seek sets this again right after, which is the exception.
@@ -770,18 +753,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // be fetched carries Word Timings is not known yet, and the last Clip's answer
     // is the honest thing to keep showing until it is.
     setStatus((was) => ({ ...was, utterance: at, section: sectionOf(at) }));
-
-    if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
-    seekTimerRef.current = setTimeout(() => {
-      seekTimerRef.current = null;
-      const target = pendingSeekRef.current;
-      pendingSeekRef.current = null;
-      if (target === null) return;
-      // No engine is not a failure to report: the owner has pointed at a sentence
-      // without having pressed Play, `atRef` holds it, and the engine that gets
-      // built will be loaded there.
-      engineRef.current?.seek(target);
-    }, SKIP_DEBOUNCE_MS);
+    // No engine is not a failure to report: the owner has pointed at a sentence
+    // without having pressed Play, `atRef` holds it, and the engine that gets
+    // built will be loaded there.
+    engineRef.current?.seek(at);
   }, [sectionOf, abandonResume]);
 
   /**
@@ -796,6 +771,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     (utterance: number) => {
       debugLog('reading', `seek to utterance ${utterance}`);
       unreadRef.current = false;
+      // A Contents row still waiting for its chapter is given up: the owner has
+      // pointed somewhere since, and the chapter reporting later must not take the
+      // reading away from it.
+      pendingSectionRef.current = null;
       seekTo(utterance);
     },
     [seekTo],
@@ -808,16 +787,16 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * including the one divergence from Zotero, that previous-paragraph restarts the
    * paragraph you are in before stepping back to the one before it.
    *
-   * It counts from the **pending** position rather than from the engine's, which is
-   * what makes five presses of previous-sentence go back five sentences: the seek
-   * has not happened yet, and the position the owner is aiming from is the one the
-   * previous press moved the highlight to.
+   * It counts from `atRef`, which the previous press has already moved, so five
+   * presses of previous-sentence go back five sentences. Nothing moves it back in
+   * between: the seek retired the old queue's callbacks, and the next cue is the
+   * new sentence's own.
    */
   const skip = useCallback(
     (target: SkipTarget) => {
       const list = loadedRef.current;
       if (list.length === 0) return;
-      const from = pendingSeekRef.current ?? atRef.current ?? 0;
+      const from = atRef.current ?? 0;
       debugLog('reading', `skip ${target} from utterance ${from}`);
       if (target === 'previous-sentence') pointAt(previousSentence(list, from));
       else if (target === 'next-sentence') pointAt(nextSentence(list, from));
@@ -880,6 +859,13 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
        */
       const reported = blocksRef.current.some((block) => block.sectionIndex === section);
       pendingSectionRef.current = reported ? null : section;
+      /**
+       * Waiting for the chapter, the sentence being spoken is the one the owner has
+       * just asked to leave, so it stops now rather than play on until the chapter
+       * reports (#86). Playing only: a paused engine has nothing to stop, and a
+       * book with no place yet is choosing where the first Play starts.
+       */
+      if (!reported && playIntent.current) engineRef.current?.silence();
     },
     [seekTo],
   );
@@ -1294,22 +1280,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       return;
     }
 
-    /**
-     * A seek still waiting out its debounce goes now, and only its target: the
-     * engine is about to speak, and it speaks the sentence the highlight is on.
-     * Left to the timer, an engine that already exists would first play the queue
-     * it paused on — this device's older sentence, when the reading has just
-     * landed on a place from another device (#54) — and one built below, loaded
-     * at the cursor that seek has already moved, would be sought to the same
-     * sentence 600 ms later and start it again. The one pending target is taken
-     * once, so a burst of presses is still one seek.
-     */
-    if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
-    seekTimerRef.current = null;
-    const target = pendingSeekRef.current;
-    pendingSeekRef.current = null;
-    if (target !== null) engineRef.current?.seek(target);
-
+    // No seek here: every one has already reached the engine at its press (#86),
+    // so the queue it paused on is the sentence the highlight is on — a place just
+    // landed from another device included (#54).
     if (engineRef.current) {
       engineRef.current.play();
       setStatus((was) => ({ ...was, playing: true, buffering: engineRef.current!.snapshot().queued === 0, note: null }));
@@ -1534,11 +1507,6 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       buildingRef.current = null;
       seekingRef.current = false;
       awaitingPlaceRef.current = false;
-      // A skip's 600 ms could otherwise fire into an engine that has been disposed,
-      // or into the next one built around a different Provider.
-      if (seekTimerRef.current) clearTimeout(seekTimerRef.current);
-      seekTimerRef.current = null;
-      pendingSeekRef.current = null;
       pendingSectionRef.current = null;
       void engine?.dispose();
       /**
