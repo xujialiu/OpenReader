@@ -33,6 +33,17 @@ const mock = vi.hoisted(() => ({
   progress: vi.fn(async (): Promise<unknown[]> => []),
   /** Every save of the downloads; the last is what the next launch reads back. */
   saveTasks: vi.fn(async (_tasks: DownloadTask[]) => {}),
+  debugLog: vi.fn((_category: string, _message: string) => {}),
+}));
+/** Debug Mode, off unless a test turns it on; the runtime reads it as it loads. */
+const debug = vi.hoisted(() => ({ on: false }));
+vi.mock('../../src/debug/mode', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/debug/mode')>()),
+  get DEBUG_MODE() { return debug.on; },
+}));
+vi.mock('../../src/debug/debug-log', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/debug/debug-log')>()),
+  debugLog: mock.debugLog,
 }));
 vi.mock('react-native', () => ({
   AppState: {
@@ -84,7 +95,6 @@ async function start(stored: DownloadTask[] = []) {
     plan: () => new Promise(() => {}),
     progress: () => mock.progress(),
   });
-  runtime.nameDocuments([{ id: 'book', title: 'My Vampire System' }]);
   const stop = runtime.startDownloads();
   await vi.waitFor(() => expect(runtime.downloadsReady()).toBe(true));
   return { runtime, stop };
@@ -94,22 +104,42 @@ beforeEach(() => {
   // Each test imports a fresh runtime, which reads the app's state as it loads.
   mock.appStateNow = 'active';
   mock.appStateListeners = [];
+  debug.on = false;
   mock.submitContinued.mockImplementation(async () => true);
   mock.progress.mockImplementation(async () => []);
 });
 
-it('submits a download the owner starts on the screen, named as the Library names its Document', async () => {
+it('submits a download the owner starts on the screen, and counts with it one started while the task runs', async () => {
   const { runtime, stop } = await start();
   try {
     runtime.enqueue('book', voice, ['a', 'b']);
-    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledWith('My Vampire System', '0 of 2 chapters', 0, 2000));
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledWith('Downloading 1 book', '0 of 2 chapters', 0, 2000));
     // Leaving the app: the continued task keeps it running, so the bounded time is not asked for.
     mock.appState('background');
     expect(runtime.downloadTasks('book')[0].state).toBe('queued');
     expect(mock.beginBackground).not.toHaveBeenCalled();
-    // A rename is shown.
-    runtime.nameDocuments([{ id: 'book', title: 'Book One' }]);
-    await vi.waitFor(() => expect(mock.updateContinued).toHaveBeenLastCalledWith('Book One', '0 of 2 chapters', 0, 2000));
+    // One more download, of another Document, is counted with it (#92, #93).
+    runtime.enqueue('second', voice, ['c']);
+    await vi.waitFor(() => expect(mock.updateContinued).toHaveBeenLastCalledWith('Downloading 2 books', '0 of 3 chapters', 0, 3000));
+    expect(mock.submitContinued).toHaveBeenCalledTimes(1);
+  } finally {
+    stop();
+  }
+});
+
+it('says in the Debug Log which Documents what the Live Activity shows covers, by the names the Library shows', async () => {
+  debug.on = true;
+  const { runtime, stop } = await start();
+  try {
+    runtime.nameDocuments([{ id: 'book', title: 'My Vampire System' }, { id: 'second', title: 'Book Two' }]);
+    runtime.enqueue('book', voice, ['a', 'b']);
+    runtime.enqueue('second', voice, ['c']);
+    await vi.waitFor(() => expect(mock.debugLog).toHaveBeenCalledWith(
+      'download', 'continued task shows "Downloading 2 books", 0 of 3 chapters, for "My Vampire System", "Book Two"',
+    ));
+    expect(mock.debugLog).toHaveBeenCalledWith(
+      'download', 'continued task submitted showing "Downloading 1 book", 0 of 2 chapters, for "My Vampire System": running',
+    );
   } finally {
     stop();
   }
@@ -134,7 +164,7 @@ it('submits a download restored at launch in the foreground, since opening the a
   const { runtime, stop } = await start([stored]);
   try {
     expect(runtime.downloadTasks('book')[0].state).toBe('queued');
-    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledWith('My Vampire System', '0 of 2 chapters', 0, 2000));
+    await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledWith('Downloading 1 book', '0 of 2 chapters', 0, 2000));
     // Leaving the app: the continued task keeps it running.
     await new Promise((resolve) => setTimeout(resolve, 10));
     mock.appState('background');
@@ -204,7 +234,7 @@ it('finishes the continued task at Pause all, and submits it again at Resume all
     runtime.toggleTask(task);
     expect(task.state).toBe('paused');
     await vi.waitFor(() => expect(mock.finishContinued).toHaveBeenCalledWith(true));
-    expect(mock.updateContinued).toHaveBeenLastCalledWith('My Vampire System', '0 of 2 chapters', 0, 2000);
+    expect(mock.updateContinued).toHaveBeenLastCalledWith('Downloading 1 book', '0 of 2 chapters', 0, 2000);
     runtime.toggleTask(task);
     expect(task.state).toBe('queued');
     await vi.waitFor(() => expect(mock.submitContinued).toHaveBeenCalledTimes(2));

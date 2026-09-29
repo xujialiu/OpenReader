@@ -20,21 +20,44 @@ chapter or continues a stopped download. A download still going on by itself
 when the owner opens the app goes on after they leave it again, too. While it
 goes on, the phone shows it as a Live Activity, as it shows a delivery or a
 timer: on the Lock Screen and, on a phone that has one, in the Dynamic Island.
-That display belongs to the phone and not to the app. It shows:
+That display belongs to the phone and not to the app. There is one for every
+download going on, and it shows them together:
 
-- the document's name, as the Library shows it;
-- how many of the download's chapters are saved, for example
-  `12 of 40 chapters`. Chapters the owner paused are left out while the
-  download goes on, unless they are already saved: with most of a book paused
-  it read `49 of 188 chapters`, a count the download was never going to reach.
-  Once the whole download is paused, every chapter is counted again, so that
-  as the phone takes it away it shows where the download stopped rather than a
-  count that looks complete;
+- that the app is downloading, and how many books: `Downloading 2 books`, or
+  `Downloading 1 book`. Two voices of one book are one book, and a book paused
+  before anything of it was saved is not counted. It names no book;
+- how many chapters of all those downloads are saved, for example
+  `120 of 200 chapters`. A download that finishes stays in the count, so the
+  count never goes back: with one book of 100 chapters finished and another at
+  20, it reads `120 of 200 chapters`, and a third of 50 started meanwhile
+  makes it `120 of 250 chapters`. A download the owner deletes leaves the
+  count. Chapters the owner paused are left out while anything goes on, unless
+  they are already saved, and so is the rest of a book the owner paused as a
+  whole meanwhile: with most of a book paused, it read `49 of 188 chapters`, a
+  count the downloads were never going to reach. Once nothing goes on any
+  more, every chapter is counted again, so that as the phone takes it away it
+  shows where the downloads stopped rather than a count that looks complete;
 - a bar that fills as each sentence is saved.
 
-When the download finishes, or the owner pauses all of it, the phone shows it
-done for a moment and then takes it away. When it moves on to another
-document's download, the name and the count follow it.
+When the downloads finish, or the owner pauses all of them, the phone shows
+them done for a moment and then takes it away. A download started or resumed
+while it is shown joins the count; the next time the phone shows one, it
+counts afresh.
+
+Until 2026-09-29 the display showed the one download being written: its book's
+name, and its own chapters. With two books going on, the owner saw one book's
+name and count, then the other's when the first finished, with no sense of how
+much was left of both; the name was cut after about 25 characters; and the
+phone's own question about continuing (below) named only the book being
+written. The owner decided then to show every download together, counted as one, under a
+title that says how many books: the phone's question now reads
+`Downloading 2 books is 6% complete.` Turned down: counting only the downloads
+not yet finished, which makes the count go back each time one finishes;
+counting every download in the Library, paused ones included, a count the
+downloads will never reach; and the titles `2 books`, which the phone's
+question would read as `2 books is 6% complete`, the app's name, which the
+display already shows with its icon, and `Downloading` alone, which hides how
+many books.
 
 ## What the owner's iPhone showed
 

@@ -180,27 +180,62 @@ native module and the catalogue passed in. It is tested in
 `test/offline/runtime-continued.test.ts`.
 
 - **One continued task at a time** covers every download that goes on by
-  itself (`GOES_ON`: queued, preparing, downloading, waiting). It shows the
-  download being written, or else the first one waiting its turn. When the
-  scheduler moves to the next Document, the task follows it.
-- **What it shows.** The title is the Document's name as the Library shows it:
-  the shell hands `library.entries` to the runtime's `nameDocuments`, and a
-  rename is reported. The subtitle is `{saved} of {n} chapters`, or
-  `chapter` when `n` is 1. While the download goes on by itself (`GOES_ON`),
-  `n` is the download's chapters that are complete for its voice or not
-  paused: the owner decided on 2026-09-28 (#77) that the count leaves out the
-  chapters the owner paused, after the first version, which counted
-  `task.chapters.length`, read `49 of 188 chapters` with 140 paused. Failed
-  chapters are counted, and so is a paused chapter that is complete. Once the
-  download no longer goes on by itself, as when it is paused as a whole by
-  Pause all or by the ring that pauses the last chapter going on, `n` is every
-  chapter of it again, so the last report before `finishContinued` reads where
-  it stopped (`49 of 188`), never a full `49 of 49` or `0 of 0` that looks
-  complete. Chapters of the Document outside the download are not counted.
-  Progress is 1,000 units per counted chapter: `completed` is the complete
-  chapters plus the saved share of `task.current` when it is counted, read from
-  `repository.progress` and the plan's text count, so the bar moves with every
-  saved clip. The report is taken after every
+  itself (`GOES_ON`: queued, preparing, downloading, waiting), and shows them
+  together (#92). Its batch is every download that went on by itself from the
+  task's submission to its end, including one that starts going on while it
+  runs, and is still there (`covering`, filtered by `deps.tasks()`): a
+  finished download stays in it, so the count never goes back, and a deleted
+  one leaves it. At the submission it is the downloads going on then. The next
+  task starts a new batch. Until the owner's decision of 2026-09-29 (#92, #93)
+  it showed the download being written, or else the first one waiting its
+  turn, and followed the scheduler from one Document to the next: with two
+  books going on, the Live Activity showed one book's count and then the
+  other's, and never how much was left of both.
+- **What it shows.** `continuedShown` reads the batch, each download with the
+  catalogue's `repository.progress` for its voice and its Document's plan.
+  The title is `Downloading {n} books`, or `book` when `n` is 1, where `n` is
+  the distinct Documents among the batch's downloads that put at least one
+  chapter in the total: two voices of one Document are one book, and a
+  download paused before it saved anything is none. It names no Document
+  (#93): until 2026-09-29 the title was the shown Document's name as the
+  Library shows it, handed in by the shell through the runtime's
+  `nameDocuments`; the Live Activity cut it after about 25 characters (#93), it
+  changed as the task followed the scheduler, and the phone's prompt named
+  only that one (`My Vampire System — Chapters 251–500 is 16% complete`).
+  Turned down with it: `{n} books` (the prompt reads `2 books is 6%
+  complete`), `OpenReader` (the Live Activity already shows the app's icon),
+  and `Downloading` alone (`Downloading is 6% complete`, and it hides how many
+  books). The names are still handed in, for the Debug Log: its line
+  `continued task shows "Downloading 2 books", 120 of 200 chapters, for "…",
+  "…"` gives the Documents the title counts, each cut by `cutText`, or a
+  short id where the Library has not named it; a rename no longer reports.
+  The Document ids travel in `ContinuedShown.documents`, and the runtime's
+  `continuedNative` passes the rest to the native calls, which are unchanged.
+  The subtitle is `{saved} of {total} chapters`, or `chapter` when `total` is
+  1, where `total` sums the batch's downloads: two of 100 chapters, the first
+  done and the second at 20, read `120 of 200 chapters`, and a third of 50
+  added reads `120 of 250 chapters`. While any download of the batch goes on
+  by itself (`GOES_ON`), a chapter in a download's `paused` list counts only
+  once it is complete for its voice, in every download of the batch whatever
+  its state, which leaves out all but the saved chapters of a download the
+  owner paused as a whole while another goes on. The owner decided on
+  2026-09-28 (#77) that the count leaves out the chapters the owner paused,
+  after the first version, which counted `task.chapters.length`, read `49 of
+  188 chapters` with 140 paused; on 2026-09-29 (#92) that rule was taken
+  across the batch, where it had held per download. Failed chapters are
+  counted. Once nothing of the batch goes on by itself, as at Pause all or
+  when the ring pauses the last chapter going on, every chapter of every
+  download of the batch counts again, so the last report before
+  `finishContinued` reads where things stopped (`49 of 188`), never a full
+  `49 of 49` or `0 of 0` that looks complete. Chapters of a Document outside
+  its download are not counted. Turned down on 2026-09-29: counting only the
+  downloads not yet finished (the count goes back when one finishes) and
+  counting every download in the Library, paused ones included (a total the
+  batch will never reach). Progress is 1,000 units per counted chapter:
+  `completed` is the complete counted chapters plus the saved share of each
+  download's `task.current` when it is counted, read from `repository.progress`
+  and the plan's text count, so the bar moves with every saved clip; `total`
+  is `max(total, 1)` × 1,000. The report is taken after every
   `persist()`, which the scheduler calls after each saved clip and each change
   of state. One report waits its turn at a time and reads the downloads when it
   runs, the same one-in-flight rule as the drawer's `requestProgress`.
