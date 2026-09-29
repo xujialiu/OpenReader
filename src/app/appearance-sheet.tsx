@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { READING_FONTS, stepFontSize, TEXT_ALIGNMENTS, type Appearance, type TextAlignment } from '../renderer/highlighter';
+import { READING_FONTS, stepFontSize, stepMargins, TEXT_ALIGNMENTS, type Appearance, type TextAlignment } from '../renderer/highlighter';
 import { ChoiceMenu, INK, useBorders, type Choice } from './controls';
 import { Icon } from './icon';
 import { Sheet } from './sheet';
@@ -21,29 +21,48 @@ const ALIGNMENT_CHOICES: readonly Choice<TextAlignment>[] = TEXT_ALIGNMENTS.map(
 /** The row's height, which the menu is laid out at (`ChoiceMenu`). */
 const ROW_HEIGHT = 56;
 
+/**
+ * A row that steps a number along a ladder: its name, then minus, the number
+ * and plus. The number is the one thing about it the page behind cannot show —
+ * how far a tap moved it (#17) — and a button goes grey where the ladder ends.
+ */
+function StepperRow<T extends number>({ label, name, value, step, onStep }: {
+  /** The row's name, as the owner reads it. */
+  label: string;
+  /** The same, in the words VoiceOver puts after Decrease and Increase. */
+  name: string;
+  value: T;
+  step(value: T, direction: 1 | -1): T | null;
+  onStep(next: T): void;
+}) {
+  const button = (direction: 1 | -1) => {
+    const next = step(value, direction);
+    const disabled = next === null;
+    return <Pressable accessibilityRole="button" accessibilityLabel={`${direction < 0 ? 'Decrease' : 'Increase'} ${name}`}
+      accessibilityState={{ disabled }} disabled={disabled} style={[styles.step, disabled && { opacity: 0.3 }]}
+      onPress={() => { if (next !== null) onStep(next); }}>
+      <Icon name={direction < 0 ? 'minus' : 'plus'} color={INK.text} size={26} />
+    </Pressable>;
+  };
+  return <View style={styles.row}><Text style={styles.label}>{label}</Text><View style={styles.stepper}>
+    {button(-1)}<Text style={styles.size}>{value}</Text>{button(1)}
+  </View></View>;
+}
+
 export function AppearanceControls({ appearance, onChange, onFonts }: {
   appearance: Appearance; onChange(next: Appearance): void; onFonts(): void;
 }) {
   const chosen = READING_FONTS.find((font) => font.id === appearance.font)?.label ?? ORIGINAL_FONT;
-  const step = (direction: 1 | -1) => {
-    const size = stepFontSize(appearance.size, direction);
-    const disabled = size === null;
-    return <Pressable accessibilityRole="button" accessibilityLabel={direction < 0 ? 'Decrease font size' : 'Increase font size'}
-      accessibilityState={{ disabled }} disabled={disabled} style={[styles.step, disabled && { opacity: 0.3 }]}
-      onPress={() => { if (size !== null) onChange({ ...appearance, size }); }}>
-      <Icon name={direction < 0 ? 'minus' : 'plus'} color={INK.text} size={26} />
-    </Pressable>;
-  };
   return <View style={styles.content}>
     <Pressable accessibilityRole="button" accessibilityLabel={`Font, ${chosen}`} onPress={onFonts} style={styles.row}>
       <Text style={styles.label}>Font</Text>
       <View style={styles.value}><Text style={styles.detail} numberOfLines={1}>{chosen}</Text><Icon name="next" color={INK.quiet} size={18} /></View>
     </Pressable>
-    {/* The size itself between the two buttons: a number, which is the one thing
-        about it the page behind cannot show — how far a tap moved it (#17). */}
-    <View style={styles.row}><Text style={styles.label}>Font Size</Text><View style={styles.stepper}>
-      {step(-1)}<Text style={styles.size}>{appearance.size}</Text>{step(1)}
-    </View></View>
+    <StepperRow label="Font Size" name="font size" value={appearance.size} step={stepFontSize}
+      onStep={(size) => onChange({ ...appearance, size })} />
+    {/* Above Alignment, where the owner put it (#84). */}
+    <StepperRow label="Margins" name="margins" value={appearance.margins} step={stepMargins}
+      onStep={(margins) => onChange({ ...appearance, margins })} />
     <ChoiceMenu label="Alignment" choices={ALIGNMENT_CHOICES} chosen={appearance.textAlignment} height={ROW_HEIGHT}
       onChoose={(textAlignment) => onChange({ ...appearance, textAlignment })}>
       <View style={styles.row}>

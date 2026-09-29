@@ -211,16 +211,24 @@ ends in a few random characters.
 _Avoid_: machine id, device id, host name
 
 **Appearance**:
-How the text of a document is set: which font it is shown in, its font size
-and its text alignment. It belongs to the owner rather than to a document, so
-one choice applies to every document; the font starts out following whatever
-the document itself asked for, and the font size and text alignment never do.
+How the text of a document is set: which font it is shown in, its font size,
+its margins and its text alignment. It belongs to the owner rather than to a
+document, so one choice applies to every document; the font starts out
+following whatever the document itself asked for, and the font size, margins
+and text alignment never do.
 _Avoid_: theme, style, typography, display settings, font settings
 
 **Font Size**:
 How big the body text of every document is shown. It is the owner's and never
 the document's, so body text is the same size in every document.
 _Avoid_: scale, zoom, text size, percentage
+
+**Margins**:
+The empty space between a document's text and the left and right edges of the
+screen, always the same on both sides. It is the owner's and never the
+document's; an indent a document sets inside its own text, for a quotation or a
+list, comes on top of it.
+_Avoid_: padding, gutter, side space, inset, page margin
 
 **Text Alignment**:
 How the lines of body text meet the margins: flush with both, or with the left

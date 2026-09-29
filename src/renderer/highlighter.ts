@@ -200,6 +200,26 @@ export function stepFontSize(size: FontSize, direction: 1 | -1): FontSize | null
 }
 
 /**
+ * The **Margins** the Margins row steps through (CONTEXT.md, #84): the empty
+ * space between the text and each side of the screen, in CSS pixels, which are
+ * points on the phone. Four at a time from 8 to 48.
+ *
+ * Not below 8: at 0 or 4 the letters meet the edge of the glass, and a case's
+ * lip covers them. The same number on every screen, where the renderer's own
+ * margin it replaces was a twelfth of the width (about 33.5 on a 402-point
+ * phone): the owner chose points over a share of the screen.
+ */
+export const MARGINS = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48] as const;
+
+/** One of `MARGINS`. */
+export type Margin = (typeof MARGINS)[number];
+
+/** The margin one tap away, or null where the ladder ends in that direction. */
+export function stepMargins(margins: Margin, direction: 1 | -1): Margin | null {
+  return MARGINS[MARGINS.indexOf(margins) + direction] ?? null;
+}
+
+/**
  * The two **Text Alignments** (CONTEXT.md), in the order the Appearance menu
  * offers them: lines flush with the left margin only, or with both (ADR 0034).
  *
@@ -245,15 +265,23 @@ export const OWN_ALIGNMENTS = ['center', 'right', 'end', '-webkit-center', '-web
  * **The Text Alignment never does** (ADR 0034): it is the owner's from the
  * first page, and it reaches body text only — a heading, or a line the
  * Document centres or sets to the right, keeps the place the Document gave it.
+ *
+ * **Nor do the Margins** (ADR 0056): the space at each side of the page is the
+ * owner's from the first page, and a Document's own indents come on top of it.
  */
 export interface Appearance {
   font: ReadingFont | null;
   size: FontSize;
+  margins: Margin;
   textAlignment: TextAlignment;
 }
 
-/** 16px, the Document's own font and justified body text, which is what a Document is read as until the owner says otherwise. */
-export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 16, textAlignment: 'justify' };
+/**
+ * 16px, the Document's own font, 16-point Margins and justified body text,
+ * which is what a Document is read as until the owner says otherwise. 16 is
+ * the phone's own distance from the edge to its back button.
+ */
+export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 16, margins: 16, textAlignment: 'justify' };
 
 /** A quarter to four times, whatever the two numbers were: a measurement gone wrong must not make a book unreadable. */
 const MIN_PERCENT = 25;
@@ -301,9 +329,18 @@ const BODY_TEXT = 'body *:not(' + [...HEADINGS, ...HEADINGS.map((heading) => hea
  * *is* the last line of its block, which justification sets flush left, so
  * every chapter title would move to the margin.
  *
- * It cannot produce a fourth kind of rule: the font is looked up in
+ * **The Margins are one rule, on the body alone** (ADR 0056). epub.js's
+ * scrolled `Contents.size()` writes `padding: 0 <width / 12>px` and `margin: 0`
+ * on each section's `body` as inline styles, and an inline style without
+ * `!important` loses to this one, so the owner's padding replaces the twelfth.
+ * The body's side margins go to 0 as well, so a Document that declares its own
+ * with `!important` still does not add to the owner's. Nothing inside the body
+ * is touched: a Document's indents for quotations and lists come on top.
+ *
+ * It cannot produce a fifth kind of rule: the font is looked up in
  * `READING_FONTS` rather than interpolated, the size is arithmetic on two
- * numbers, and the alignment is one of two words written here — so nothing an
+ * numbers, the margins are a number found in `MARGINS`, and the alignment is
+ * one of two words written here — so nothing an
  * owner could type reaches a stylesheet, and in particular **nothing here can
  * declare `user-select`**, which silently stops `::highlight()` from painting
  * (see `SELECTABLE`). That is asserted in `test/renderer/appearance.test.ts`
@@ -330,6 +367,12 @@ export function appearanceCss(appearance: Appearance, bodyTextSize?: number | nu
   // this build does not know still lays the book out the way a new one would.
   const align = appearance.textAlignment === 'left' ? 'start' : 'justify';
   css += BODY_TEXT + ' { text-align: ' + align + ' !important; }\n';
+  // A number from the ladder or the default, so a settings file cannot put
+  // anything else into the rule.
+  const margins = MARGINS.find((one) => one === appearance.margins) ?? DEFAULT_APPEARANCE.margins;
+  css +=
+    'body { margin-left: 0 !important; margin-right: 0 !important; ' +
+    'padding-left: ' + margins + 'px !important; padding-right: ' + margins + 'px !important; }\n';
   return css;
 }
 

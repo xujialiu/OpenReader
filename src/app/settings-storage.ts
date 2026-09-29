@@ -1,7 +1,7 @@
 import { parseLookupSettings } from '../translation/settings';
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
-import { FONT_SIZES, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
+import { FONT_SIZES, MARGINS, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type Margin, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
 import { DEFAULT_SETTINGS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLINGS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type DocumentVoice, type Scrolling } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
@@ -30,6 +30,11 @@ function readFont(value: unknown): AppSettings['appearance']['font'] {
  */
 function readSize(value: unknown): FontSize {
   return FONT_SIZES.find((size) => size === value) ?? DEFAULT_SETTINGS.appearance.size;
+}
+
+/** A margin on the ladder, or 16: a file written before #84 has none, and reads as a new install does. */
+function readMargins(value: unknown): Margin {
+  return MARGINS.find((margins) => margins === value) ?? DEFAULT_SETTINGS.appearance.margins;
 }
 
 /** One of the two, or Justify: a file written before ADR 0034 has none, and reads as a new install does. */
@@ -103,6 +108,7 @@ export function parseSettings(value: unknown): AppSettings {
     appearance: {
       font: readFont(appearance.font),
       size: readSize(appearance.size),
+      margins: readMargins(appearance.margins),
       textAlignment: readTextAlignment(appearance.textAlignment),
     },
     // The switch is read as written: it was turned on after a check passed,

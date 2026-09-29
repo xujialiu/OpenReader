@@ -419,3 +419,35 @@ describe('the navigation bar comes and goes with the player, and floats (#67, AD
     pin(code('player.tsx'), 'onPress={() => onCollapsed(false)}', 'player.tsx');
   });
 });
+
+describe('the Document’s name in the bar takes two lines before it is cut (#85, ADR 0057)', () => {
+  it('is the app’s own title in the reader, and still the screen’s title for the back menu', () => {
+    const screen = code('reader-screen.tsx');
+    pin(screen, 'headerTitle: () => <ReaderTitle title={title} />,', 'reader-screen.tsx');
+    // The back button's long-press menu names the screen by `title`.
+    pin(screen, '      title,\n', 'reader-screen.tsx');
+  });
+
+  it('wraps onto a second line, then ends that line in an ellipsis', () => {
+    const title = code('reader-title.tsx');
+    pin(title, 'numberOfLines={2}', 'reader-title.tsx');
+    pin(title, 'ellipsizeMode="tail"', 'reader-title.tsx');
+  });
+
+  it('is the phone’s own bar title: 17-point semibold, centred, and not scaled', () => {
+    // Two lines of a larger size would not fit the 54-point bar, and the phone's
+    // own bar title does not scale either.
+    const title = code('reader-title.tsx');
+    pin(title, 'export const TITLE_SIZE = 17;', 'reader-title.tsx');
+    pin(title, "fontSize: TITLE_SIZE, fontWeight: '600', textAlign: 'center'", 'reader-title.tsx');
+    pin(title, 'allowFontScaling={false}', 'reader-title.tsx');
+  });
+
+  it('is as wide as the window less the measured room for a button on each side', () => {
+    // Measured on the iPhone 18 Pro simulator, iOS 27.0: More actions' glass
+    // starts at 333 of 402 points and the phone leaves about 12 before it.
+    const title = code('reader-title.tsx');
+    pin(title, 'export const TITLE_SIDE = 81;', 'reader-title.tsx');
+    pin(title, 'maxWidth: Math.max(0, width - 2 * TITLE_SIDE)', 'reader-title.tsx');
+  });
+});

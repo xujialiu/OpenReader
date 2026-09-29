@@ -18,7 +18,7 @@ describe('local settings persistence', () => {
   });
   it('roundtrips enablement, voice history, sources and appearance across reloads', () => {
     const settings = selectVoice({ ...DEFAULT_SETTINGS, enabledProviders: ['fish', 'azure'], azure: { region: 'East Asia' },
-      appearance: { font: 'helvetica', size: 20, textAlignment: 'left' }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
+      appearance: { font: 'helvetica', size: 20, margins: 28, textAlignment: 'left' }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
     writeSettings(settings);
     expect(readSettings()).toEqual(settings);
   });
@@ -92,9 +92,9 @@ describe('local settings persistence', () => {
     // The app has not been released, so a percentage saved by the previous build is
     // not converted: it is dropped and the owner starts at 16 (#17).
     expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', size: 20 } } }).appearance)
-      .toEqual({ font: 'georgia', size: 20, textAlignment: 'justify' });
+      .toEqual({ font: 'georgia', size: 20, margins: 16, textAlignment: 'justify' });
     expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', scale: 150 } } }).appearance)
-      .toEqual({ font: 'georgia', size: 16, textAlignment: 'justify' });
+      .toEqual({ font: 'georgia', size: 16, margins: 16, textAlignment: 'justify' });
     for (const size of [25, 17.5, '18', 0, -1, null]) {
       expect(parseSettings({ version: 1, settings: { appearance: { size } } }).appearance.size).toBe(16);
     }
@@ -109,6 +109,18 @@ describe('local settings persistence', () => {
       expect(parseSettings({ version: 1, settings: { appearance: { textAlignment } } }).appearance.textAlignment).toBe('justify');
     }
     expect(parseSettings({}).appearance.textAlignment).toBe('justify');
+  });
+  it('keeps Margins on the ladder and reads anything else, or nothing, as 16', () => {
+    // A settings file written before #84 has no Margins in it, and is read the
+    // way a new install starts. Nothing is migrated, since the app has not been
+    // released.
+    for (const margins of [8, 16, 36, 48]) {
+      expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance.margins).toBe(margins);
+    }
+    for (const margins of [undefined, null, 0, 4, 18, 52, '16', 16.5, true]) {
+      expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance.margins).toBe(16);
+    }
+    expect(parseSettings({}).appearance.margins).toBe(16);
   });
   it('defaults missing sources to official only and rejects unknown enabled ids', () => {
     expect(parseSettings({ version: 1, settings: { sync: { url: 'https://dav.example/or', username: 'ann', enabled: true } } }).sync)

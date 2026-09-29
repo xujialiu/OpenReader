@@ -14,9 +14,10 @@
  * is kept.
  *
  * The navigation bar is the platform's: a back arrow that is also the edge
- * swipe, the Document's own name, and More actions on the right. It floats over
- * the page and goes when the player collapses (#67, ADR 0048); the edge swipe
- * works either way.
+ * swipe, the Document's own name, and More actions on the right. The name is
+ * the one part drawn by the app, on up to two lines (`reader-title.tsx`, #85).
+ * The bar floats over the page and goes when the player collapses (#67, ADR
+ * 0048); the edge swipe works either way.
  *
  * It never shows nothing. A blank screen and a crashed app look identical, which
  * is the reason the screen this replaces existed (ADR 0018's launch crash
@@ -36,6 +37,7 @@ import { useHarnessCommands, type HarnessCommand } from './walkthrough-harness';
 
 import { AppearanceSheet } from './appearance-sheet';
 import { ReaderActions } from './reader-actions';
+import { ReaderTitle } from './reader-title';
 import { HeaderButton, INK, Note } from './controls';
 import { readerSlot, useHeldReading } from './reading-host';
 import { useShell, type ScreenProps } from './routes';
@@ -74,7 +76,9 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
+      // Still set: the back button's long-press menu names the screen by it.
       title,
+      headerTitle: () => <ReaderTitle title={title} />,
       headerRight: () => <HeaderButton label="More actions" icon="more" onPress={() => setActions(true)} />,
     });
   }, [navigation, title]);
