@@ -13,6 +13,8 @@ What every area uses:
 - `cdp.cjs`: a warning capture or one expression evaluated in the running app
   (below); `cdp-rtt.cjs` and `cdp-profile.cjs` time its JavaScript thread.
 - `hx.cjs`: one command to the walkthrough harness.
+- `ink.py`: text-edge and highlight-band measurements from a screenshot, in
+  points at its 3× scale (margins.md, bar-title.md).
 - `reading.cjs`: the reading handler's state, pause, and a short Play (below);
   `play-shots.cjs` takes screenshots at chosen moments of one.
 - `download-chapter.cjs`: downloads chosen chapters through the app's own

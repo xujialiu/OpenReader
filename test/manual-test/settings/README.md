@@ -22,6 +22,11 @@ that names the script or probe you are about to run.
   `fixtures/pause-gap-fixture.ts`, `pause-gap.cjs`.
 - [line-position.md](line-position.md) (#71): General's Line position row, its
   menu, and its value across a relaunch. `LinePositionProbe.swift`.
+- [margins.md](margins.md) (#84, ADR 0056): the Margins row between Font Size
+  and Alignment — the ladder by real touches, both disabled ends, the page's
+  text edges at 8/16/32/48 in both themes via `kit/ink.py`, persistence across
+  a relaunch, and the re-centre that keeps the highlighted sentence at the
+  Line Position.
 - [general-and-fonts.md](general-and-fonts.md): General's Theme menu and bracket
   switch, Manage downloads' Delete all saved audio (always cancelled), the
   Fonts page, which fonts this system has, a font change on the reading page,

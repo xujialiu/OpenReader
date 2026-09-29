@@ -148,3 +148,21 @@ What it cannot prove:
   A real pinch whose second finger lands a moment later, or in another
   section document, is not measured. `highlighter.ts` counts moves before the
   second finger lands as a one-finger drag.
+
+## The reader's title in the navigation bar (#85, `rename.sh`, `ReaderTitleProbe.swift`)
+
+Set the display name with the app stopped and measure the bar from
+full-res screenshots; the VoiceOver heading proof is the bundled AXe binary's
+tree, since XCUITest cannot query headers:
+
+```sh
+bash test/manual-test/library-and-reader/rename.sh SIMULATOR_UDID "A long name…"
+node test/manual-test/kit/hx.cjs SIMULATOR_UDID '{"do":"open","id":"sha256:…"}'
+python3 test/manual-test/kit/ink.py /tmp/title.png
+bash test/manual-test/kit/run-probe.sh ReaderTitleProbe SIMULATOR_UDID NEW_OUTPUT_DIR
+```
+
+See [bar-title.md](bar-title.md) for the whole recipe: what to measure (two
+centred lines inside the 54-pt bar, clear of both glasses, ellipsis past two
+lines, short name equal to the native title by glyph-mask IoU), what each
+check cannot prove, and the `-RCT_jsLocation` every probe launch needs.

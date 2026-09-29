@@ -908,3 +908,25 @@
   Audio's saved, locked API key drew no dots either, beside its eye. Since
   beta28 Extra headers has the same eye as the API key, so the owner can
   check either value on screen.
+## Measuring text edges from a screenshot (#84)
+
+- **The rightmost ink of the last scanned row is not the page's right margin.**
+  - Symptom: a scan of the body band reported the text ending at 321 pt while
+    the same image's widest rows clearly reached 386 pt, and two scans of the
+    same file disagreed.
+  - Cause: the scan tracked a running `right = x` updated by every inked row,
+    so the last row of the paragraph — a short, unjustified line — overwrote
+    the maximum with its own smaller edge. Left has the same trap mirrored.
+  - Fix: keep each row's (left, right) and take the **minimum left and maximum
+    right across rows**; the justified rows carry the true margins. Also
+    exclude the reading highlight's rows when you want text ink: its paint
+    reaches ~1.3–1.7 pt past the glyphs. `kit/ink.py` does both and prints
+    points at the screenshot's 3× scale.
+- **Pixel-diffing the navigation bar between builds diffs the page behind it,
+  not the title.** The bar is translucent, so the page's blurred top rows
+  ghost into the diff; with #84 in between, the old build's text ran 33.3–370
+  pt and the new build's 16–386 pt, and 1.1% of the band's pixels differed
+  while the title itself was identical. Compare the title's glyph masks
+  instead (binarise the central band, IoU): the measured pair agreed to a 1 px
+  vertical offset (IoU 0.80 raw, 0.94 shifted, identical pixel counts), which
+  is antialiasing, not a moved title. See `library-and-reader/bar-title.md`.
