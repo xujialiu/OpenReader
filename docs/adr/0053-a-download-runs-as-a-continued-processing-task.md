@@ -387,9 +387,40 @@ second card beside the phone's, not replace it, and giving up the continued
 task would bring back the download stopping within a minute of leaving the app
 (#77).
 
+**Closing the app from the app switcher (#91).** On the same phone and build
+(notes 21:15, `/tmp/openreader-island-0929b/system.logarchive`), the owner's
+Lock Screen at 21:00 showed two OpenReader cards under Background Activities:
+`My Vampire System — Chap…` / `Task failed` with an `!`, and
+`My Vampire System — Chap…` / `17 of 250 chapters` with the phone's
+prompt to continue. The app ran one continued task at a time throughout. At
+20:48:30.249 SpringBoard logged `SBWorkspaceTerminateApplication:
+top.xujialiu.openreader: "killed from app switcher"`, and dasd `CANCELED
+bgContinuedProcessing-…download.18DF6850…` at .304, progress
+`CANCELLED`. After the next launch the app submitted
+`…download.1FCD6BA0…` at 20:48:31.770, and SpringBoard started
+activity `59C7EFF7…` at .784. The first task's activity `72C73F55…` was
+`dismissed` at 20:48:54.899, 24.6 s after its cancellation, the cover sheet
+having been pulled down at 20:48:50; what dismissed it is not in the log.
+Closed from the switcher again, dasd logged `CANCELED
+…download.1FCD6BA0…` at 20:49:46.818, and the app logged nothing: it is
+not told, as the article says (Expiration, above). The next task
+(`305A3A20…`, activity `F4DF5CEA…`) ran to `247 of 247`, `complete with
+success: 1`, and its activity was `dismissed` at 20:51:41.664; the one after
+(`360CC697…`, activity `CDEA5FA7…`) was submitted at 20:53:10.788 with
+the app in front. Between 21:00:01 and 21:00:12 ActivityUIServices brought
+activity `59C7EFF7…`, the task cancelled at 20:49:46, to the foreground on
+the Lock Screen: the `Task failed` card, still there 10 min 15 s after its
+cancellation, beside the running task's. So the second card is not a second
+task but what the phone keeps of a task it cancelled. No public API lets the
+app end or clear the Live Activity of a continued task it no longer holds, and
+its next launch cannot reach the cancelled one; the owner clears it with the
+✕ beside Background Activities. Nothing saved is lost.
+
 Not yet known: what Stop in the phone's own prompt does, presumably the same
 expiry; what the logged values look like for an end the phone chooses; whether
-a download waiting for the network is expired as stalled; and whether
-`success: false` looks different from `true`.
+a download waiting for the network is expired as stalled; whether
+`success: false` looks different from `true`; and what dismissed the
+`72C73F55…` card 24.6 s after its cancellation, and whether a `Task failed`
+card ever goes by itself.
 The simulator has to show that its refusal is the documented `unavailable`
 and that the bounded fallback still behaves as measured at 02:49.
