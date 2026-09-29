@@ -290,3 +290,16 @@ the Player when it is collapsed, and in the Library, the way back to the
 document being read. It shows whether the Reading is playing, and a press
 brings its controls back; it never plays or pauses.
 _Avoid_: play button, mini player, floating button, now playing
+
+### The app on the owner's devices
+
+**Debug Mode**:
+What a build of the app installed on the owner's own devices has and a released
+build never has: it keeps a Debug Log, and the version it shows ends in
+`-debug`.
+_Avoid_: debug build, diagnostic build, dev build, debug configuration, logging mode
+
+**Debug Log**:
+The record a build with Debug Mode keeps on the device of what the app did, read
+back from the Mac after the owner reports a fault. It never holds a credential.
+_Avoid_: log file, trace, diagnostics, crash log
