@@ -638,7 +638,15 @@
   `Connection successful`, and `settings.json` held `"enabledProviders":
   ["fish"]`. Read `settings.json`, not the verdict, to know whether a
   provider is enabled. Each run also left the stack at Fish Audio's page (see
-  "The harness's `open` pushes the Reader…").
+  "The harness's `open` pushes the Reader…"). Recurred unchanged on
+  2026-09-29 (issue #82 recheck, beta52 on iPhone 18 Pro): the method failed
+  at the same 3 s keyboard wait twice out of two runs (2026-09-25's device
+  and this one), both times with the key fully typed — typing a Provider key
+  saves per keystroke and a successful connection check enables the provider
+  by itself, so the work is done before the false failure. Recovery used:
+  `mobilebuildmcp_toggle_software_keyboard` (or a touch down/up on a heading)
+  to put the keyboard away, then verify `Turn off to edit.` and read
+  `settings.json`.
 - **`download-concurrency.ts` showed Speechify no faster at two or five than
   at one, which measured the provider's queue, not the service.** Measured
   2026-09-25 14:47: 22.2 s at two against 23.3 s at one, each request's own
