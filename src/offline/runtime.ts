@@ -48,8 +48,8 @@ import {
   continuedShown,
   createContinuedProcessing,
   type ContinuedNative,
+  type ContinuedShown,
 } from "./continued-processing";
-import { APP_NAME } from "../../app-name";
 import { cutText, debugLog, describeProblem, shortId } from "../debug/debug-log";
 import { DEBUG_MODE } from "../debug/mode";
 import { offlineRepository } from "./database";
@@ -593,53 +593,73 @@ const scheduler = createScheduler({
   },
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 });
-/** The names the Library shows, which the Live Activity shows for a download away from the screen. */
+/**
+ * The names the Library shows, which the Debug Log gives for the Documents a
+ * continued task's Live Activity covers: its title names none (#93).
+ */
 const documentTitles = new Map<string, string>();
 export function nameDocuments(
   entries: readonly { id: string; title: string }[],
 ): void {
-  let renamed = false;
-  for (const { id, title } of entries)
-    if (documentTitles.get(id) !== title) {
-      documentTitles.set(id, title);
-      renamed = true;
-    }
-  if (renamed) continued.follow();
+  for (const { id, title } of entries) documentTitles.set(id, title);
 }
 /** ADR 0053: the continued processing task a download away from the screen runs under. */
 const continued = createContinuedProcessing({
-  native: offlineNative && loggedContinued(offlineNative),
+  native: offlineNative && continuedNative(offlineNative),
   tasks: () => tasks,
-  shown: async (task) =>
-    continuedShown(
-      task,
-      documentTitles.get(task.document) ?? APP_NAME,
-      await (await offlineRepository()).progress(task.document, task.voice),
-      planOf(task.document),
-    ),
+  shown: async (batch) => {
+    const repository = await offlineRepository();
+    return continuedShown(
+      await Promise.all(
+        batch.map(async (task) => ({
+          task,
+          progress: await repository.progress(task.document, task.voice),
+          plan: planOf(task.document),
+        })),
+      ),
+    );
+  },
   foreground: () => foreground,
 });
 /**
  * The continued task's native calls, each also a Debug Log line in Debug Mode
  * (ADR 0054); an update only when what the Live Activity shows changes, not at
- * every saved clip.
+ * every saved clip. The line names the Documents covered, as the title does not.
  */
-function loggedContinued(native: ContinuedNative): ContinuedNative {
-  if (!DEBUG_MODE) return native;
+function continuedNative(
+  native: NonNullable<typeof offlineNative>,
+): ContinuedNative {
+  const submit = ({ title, subtitle, completed, total }: ContinuedShown) =>
+    native.submitContinued(title, subtitle, completed, total);
+  const update = ({ title, subtitle, completed, total }: ContinuedShown) =>
+    native.updateContinued(title, subtitle, completed, total);
+  if (!DEBUG_MODE)
+    return {
+      submitContinued: submit,
+      updateContinued: update,
+      finishContinued: (success) => native.finishContinued(success),
+    };
+  const described = ({ title, subtitle, documents }: ContinuedShown) =>
+    `${cutText(title)}, ${subtitle}, for ${documents
+      .map((id) => {
+        const name = documentTitles.get(id);
+        return name === undefined ? shortId(id) : cutText(name);
+      })
+      .join(", ")}`;
   let shown = "";
   return {
-    async submitContinued(title, subtitle, completed, total) {
-      const running = await native.submitContinued(title, subtitle, completed, total);
-      debugLog("download", `continued task submitted for ${cutText(title)}, ${subtitle}: ${running ? "running" : "not run"}`);
-      shown = `${title}\n${subtitle}`;
+    async submitContinued(next) {
+      const running = await submit(next);
+      shown = described(next);
+      debugLog("download", `continued task submitted showing ${shown}: ${running ? "running" : "not run"}`);
       return running;
     },
-    updateContinued(title, subtitle, completed, total) {
-      if (`${title}\n${subtitle}` !== shown) {
-        shown = `${title}\n${subtitle}`;
-        debugLog("download", `continued task shows ${cutText(title)}, ${subtitle}`);
+    updateContinued(next) {
+      if (described(next) !== shown) {
+        shown = described(next);
+        debugLog("download", `continued task shows ${shown}`);
       }
-      return native.updateContinued(title, subtitle, completed, total);
+      return update(next);
     },
     finishContinued(success) {
       shown = "";
