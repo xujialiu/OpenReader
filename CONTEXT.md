@@ -158,10 +158,12 @@ behind. It has nothing to do with Shared Settings.
 _Avoid_: export, send
 
 **Reading Position**:
-Where the reading is in a document: the sentence speech stopped on, or the one
-the owner has since pointed it at. One per document, overwritten as the owner
-reads, and not something the owner creates or sees in a list. It is a locator
-and a text anchor together.
+Where the reading is in a document: the sentence speech last reached, on this
+device or another. Only speech moves it. Pointing the reading at another
+sentence while paused changes where Play starts, but not the position, so
+leaving the reader without playing comes back to where speech stopped. One per
+document, overwritten as the owner reads, and not something the owner creates or
+sees in a list. It is a locator and a text anchor together.
 _Avoid_: bookmark, progress, location, savedPosition
 
 **Browsing**:
@@ -171,7 +173,9 @@ _Avoid_: previewing, peeking, jumping, navigating
 
 **Skip**:
 Moving the reading back or forward by one sentence, or to the start of a
-paragraph. Unlike browsing, it moves the reading position.
+paragraph. Unlike browsing, it moves the reading: while it plays, speech goes
+there and the reading position follows; while it is paused, only where Play
+starts moves.
 _Avoid_: jump, step, seek
 
 **Following**:

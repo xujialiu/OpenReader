@@ -162,6 +162,12 @@ export interface ReadingViewProps {
    * what the Library's Reading Button shows while this view is held out of sight.
    */
   onState(playing: boolean, buffering: boolean): void;
+  /**
+   * The section the contents list marks (`at` below), for the download drawer to
+   * mark and open at the same chapter (#88). The drawer is the screen's, not
+   * this view's, so it hears it through the shell as the Reading Button does.
+   */
+  onSection(section: number | null): void;
 }
 
 /**
@@ -235,6 +241,7 @@ export function ReadingView({
   barHeight,
   onChrome,
   onState,
+  onSection,
 }: ReadingViewProps) {
   const fileSystem = useReaderFileSystem;
   const { sync, library, setSettings } = useShell();
@@ -535,6 +542,7 @@ export function ReadingView({
    * better than opening the list at the top of a two-thousand-chapter book.
    */
   const at = status.section ?? status.rendered?.index ?? null;
+  useEffect(() => { onSection(at); }, [at, onSection]);
 
   const selectReadingVoice = reading.chooseVoice;
   const chooseVoice = useCallback(

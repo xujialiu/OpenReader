@@ -363,14 +363,27 @@ export interface CurrentRow {
  *   with one that already crosses the bridge.
  */
 export function currentRow(contents: Contents, reading: ReadingSpineItem): CurrentRow | null {
-  const at = reading.sectionIndex;
+  return rowOfSection(
+    contents.rows.map((row) => row.target),
+    reading.sectionIndex,
+  );
+}
+
+/**
+ * `currentRow`'s rule over a bare list of spine items, one per row and null for
+ * a row that names none, for a list that is not the Contents but names its
+ * rows' places the same way: the download drawer's chapters (#88). One rule,
+ * so the two drawers never mark different rows for one reading.
+ */
+export function rowOfSection(targets: readonly (number | null)[], sectionIndex: number): CurrentRow | null {
+  const at = sectionIndex;
   /** The latest spine item at or before the reading that any row names. */
   let latest = -1;
   let row = -1;
   /** How many rows name `latest`. More than one and the answer is coarse. */
   let sharing = 0;
-  for (let index = 0; index < contents.rows.length; index++) {
-    const target = contents.rows[index].target;
+  for (let index = 0; index < targets.length; index++) {
+    const target = targets[index];
     if (target === null || target > at) continue;
     if (target > latest) {
       latest = target;

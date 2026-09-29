@@ -53,6 +53,36 @@ downloaded rows chooses nothing, and a sweep across saved rows in Manage
 downloads chooses them for `Delete selected (N)`, which the method then
 actually taps through — fine for this fixture, never the owner's.
 
+Re-measured 2026-09-29 after #88/#89 (the list ref and the sweep ref are now
+one, and the list spans the drawer full width), on `iPhone 17 download`
+(iOS 27.0), Debug against Metro 8095 at 3386b42, fresh `Shadow Slave 1-250`
+added through the harness so the drawer opens at its top with every row
+choosable: `testDrawerSweeps` passed in 145.6 s — run-0-3 chose 4, after-out 4,
+from-selected-0-3-1 chose 2, one-finger-0-1-then-3 chose 4, the edge hold chose
+36 with `Chapter 28–32` then in view (deeper than 2024-09-24's 26; the hold is
+the same), and the closing one-finger drag changed nothing (36 → 36). The
+sweep survives the merged ref and the full-width rows.
+
+The run that failed first is the trap worth repeating. The probe sweeps the
+first rows shown where the drawer opens, and only chapters with no download
+under way and no saved clip are choosable. Two more row kinds look like rows
+but are not choosable: a completed chapter keeps its checkbox role but is
+`disabled`, its label ends `, downloaded`, and a sweep chooses nothing; a
+chapter inside a download that has not finished shows a ring (label
+`Resume download` when the task is held) and has no checkbox at all. On a
+simulator that has seen downloads, the book at the reading position can have
+almost no choosable rows — on 2026-09-29 `My Vampire System 1-250` had 90
+chapters done and 245 of 253 inside a held task, leaving 8 choosable chapters
+and no 4 in a row — so `shownRows` came back empty, the assertion failed, and
+indexing `rows[0]` of the empty array crashed the runner; xcodebuild restarted
+it, ran 0 tests and then sat (the ten-minute sits in **Pitfalls › XCTest**).
+Check the rows before running (`axe describe-ui`, look for `, downloaded`
+suffixes and `Resume download` buttons around the open position), and run the
+battery on a fresh part added through the harness (`Shadow Slave 1-250`) when
+the intended book cannot show four choosable rows in a row. A failed
+`XCTAssertGreaterThanOrEqual` does not stop the test: after one, indexing the
+array it guarded must not follow.
+
 What it cannot establish: that a real hand does the same — a real finger
 trembles, flicks and lands 20–40 pt apart, where these are two exact paths 36 pt
 apart; Files' top edge band (a hold over its search field could not be read

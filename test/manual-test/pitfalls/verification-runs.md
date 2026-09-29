@@ -459,6 +459,73 @@ plus harness sequences for the failure-note and dark-theme checks.
   existing rule — `set` again, then let the next `run-probe.sh` check gate the run —
   is what worked; no new fix needed.
 
+## Verifying #88/#89: the drawer's marked chapter beside a Reading (2026-09-30)
+
+- **The marked row is the row of the spine section the Reading is in, and a
+  section index is not a chapter number.** My Vampire System — Chapters 1–250
+  has two front-matter spine items (253 sections for 250 chapters), so a paused
+  `hx.cjs '{"do":"say"}'` reading `section=173` with the position on Chapter
+  172's tail sentences ("He didn't want to upset this little family…") marked —
+  in the Download drawer opened from the Library while playing and in Contents
+  alike — "Chapter 172: Bad Timing", and one utterance later, on Chapter 173's
+  first sentence (section 174), both marked "Chapter 173: My Puppet". When the
+  brief says "Chapter 173 on the page", read the HX `utterance=`/`section=`
+  line before naming the row the drawer should mark.
+- **The 10 s window fits the Library → `…` → Download chain, but budget the
+  screenshots.** `play-for 10` schedules the in-app pause 10 s after `onPlay`
+  (which itself lands about 1.5 s after the spawn); Back, the row's `…`,
+  Download and two `simctl io screenshot` calls took about 7 s. Each
+  screenshot costs 1.5–2 s — order the steps so the screenshot you must have
+  inside the window comes first, and rebuild the timeline afterwards from the
+  files' mtimes against `play.log`'s.
+- **A screenshot taken 1.5 s after Back still showed the reader.** The
+  navigation had not reached the frame `simctl io` captured (the Library was
+  only proven by the next taps landing). Take the post-navigation screenshot at
+  least 2 s after the tap.
+- **Reopening the reader reverted a paused tap-cue to the previous stop.** The
+  tap-cue moved the position to "It wasn't too hot…" (the Library row's Last
+  read quoted it), but after closing and reopening the reader the paused status
+  read `utterance=321` — "He didn't want to upset this little family…", the
+  sentence the reading had last stopped on — and playback resumed there. The
+  cue did not survive the close/reopen. Reported as a reader finding, not a
+  drawer one: the drawer followed the live Reading either way, and the follow-up
+  run (paused on Chapter 173's heading) marked "Chapter 173: My Puppet".
+- **The Reading Button's playing state is provable from stills by byte-compare.**
+  Crops of the button region from two paused screenshots taken ten minutes apart
+  were byte-identical, while crops from two screenshots 1.5 s apart during
+  playback differed from them and from each other — the waveform animates while
+  playing and is static while paused.
+- **`cdp.cjs --warnings` caps at 8000 ms**, printing `Warning capture must be
+  between 0 and 8000 ms` and exiting after only replaying the buffer — a 30000 ms
+  window never listens. Cover a longer interaction with back-to-back 8 s windows,
+  one drawer cycle each; each window also replays the warnings buffered before it.
+- **No LogBox warnings or errors from the drawer, from either entry point.**
+  Three 8 s windows over the whole sequence — Library `…` → Download → close;
+  row → reader `…` → Download open from the reader; reader drawer close → Back —
+  each printed only CDP's own replay notice `Only limited number of console
+  messages can be cached. N messages were discarded at the beginning.` (888,
+  897, 906 as ordinary console logs accumulated; the notice is the debugger's,
+  not the app's). No `GO_BACK` warning: every `hx.cjs` call had carried the
+  harness file's `seq` forward, so no stale command was pending.
+- **A reader reopen at a chapter boundary painted blank first.** With the
+  position on Chapter 173's first sentence (right after its heading), reopening
+  the reader showed nav bar and player over a fully blank page (`rendered=173`
+  while `at=174` — the boundary gap); the text painted by itself about 7 s
+  later, band on the stored sentence. Transient, self-recovered; earlier reopens
+  with the position mid-chapter painted immediately.
+- **The held Reading was gone after reader → its Download drawer → Back, and
+  only then.** Byte-comparing the Library's bottom-right corner: the Reading
+  Button (paused waveform) survived a Library drawer open+close at 00:29 and two
+  earlier reader → Back returns (00:12 paused, 00:26 playing), but it was absent
+  from 00:35:33 on, after the cycle row → reader → `…` → Download → close drawer
+  → Back with the Reading paused. `reading.cjs state` on the Library then fails
+  with `Reading handler evaluation failed` (no mounted Player), which is itself
+  the sign the held Reading is gone, not that playback runs. The stored Reading
+  Position stayed intact (the row's Last read still quoted it). Whether a paused
+  Reading adopted by the reader should survive that particular path is the
+  implementing agent's call; items 5 and 6 above were both established before
+  it, and the leaving condition (Library, stopped) holds.
+
 ## A leftover `harness.json` replays its last command at every app relaunch (#95, 2026-09-30)
 
 - **Symptom:** testing the share button's missing-file note, the kept `library/sha256-*.epub` was moved out and `ls` confirmed the directory empty; one probe relaunch later the file was back (its original birth time — an APFS clone), the share sheet rose, and the "missing file" assertion failed.

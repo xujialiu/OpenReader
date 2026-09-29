@@ -106,6 +106,7 @@ export {
   EMPTY_CONTENTS,
   contentsOf,
   currentRow,
+  rowOfSection,
   type Contents,
   type ContentsRow,
   type ContentsSection,
