@@ -329,6 +329,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const pendingChoice = useRef<{ provider: ProviderId; voice: string } | null>(null);
   const retainedIdentity = useRef<string | null>(null);
   const bridgeRef = useRef<ReaderBridge | null>(null);
+  /** The Reading has ended: the view unmounted, and a late `play` or `resumeAt` does nothing (#106, the unmount effect). */
+  const endedRef = useRef(false);
   /** Being built: a second press of play must not build a second engine and a second audio session. */
   const buildingRef = useRef<Promise<PlaybackEngine | null> | null>(null);
   /** The Utterances the engine holds. Its indices are what every cue and every correction is about. */
@@ -886,8 +888,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [seekTo]);
 
   /**
-   * A contents row: **Browsing** while paused (#52), and otherwise **two steps**
-   * (ADR 0020).
+   * A contents row: **Browsing** wherever the reading is on a sentence it keeps
+   * (#52, #107), and otherwise **two steps** (ADR 0020).
    *
    * The page moves first and always, because that is what a contents tap most
    * obviously means and it works for a row whose spine item has no text on it at
@@ -898,34 +900,42 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * index to seek to yet — the section contributes no Utterance until it reports its
    * Blocks — so the target is remembered and `handleBlocks` finishes the job. That
    * second case is the common one and is why this is two steps rather than one.
-   * While playing, the voice stops at the tap and a row with no text reads on
-   * past it (`followRow`, #86).
+   * Playing with no sentence yet, the voice stops at the tap and a row with no
+   * text reads on past it (`followRow`, #86).
    */
   const goToSection = useCallback(
     (section: number) => {
       /**
-       * Browsing (#52): paused, with the reading on a sentence that is its Reading
-       * Position, the row moves the page and nothing else. No seek, so the
-       * highlight stays and nothing is synthesized for a chapter the owner only
-       * looked at; no status, so the marked Contents row is still the reading's;
-       * no stored place given up; and nothing written. Measured on the owner's
-       * book on 2026-09-23 at 23:19 before this: a row to section 14 moved a
-       * reading paused on Utterance 176 to 423, that chapter's heading, and wrote
-       * the heading over the stored place.
+       * Browsing (#52, #107): with the reading on a sentence that is its Reading
+       * Position, the row moves the page and nothing else, playing or paused. No
+       * seek, so the highlight stays, a playing voice goes on with its sentence,
+       * and nothing is synthesized for a chapter the owner only looked at; no
+       * status, so the marked Contents row is still the reading's; no stored place
+       * given up; and nothing written. Measured on the owner's book on 2026-09-23
+       * at 23:19 before #52: a row to section 14 moved a reading paused on
+       * Utterance 176 to 423, that chapter's heading, and wrote the heading over
+       * the stored place.
        *
-       * Not while playing, where the page follows the voice and could not stay on
-       * a chapter the voice is not in. Not in a book with no place yet, where the
-       * row chooses where to start. And not while a stored place is still waiting
-       * for its section, with no highlighted sentence to keep: there the row gives
-       * the place up, as it did before (#51).
+       * Playing, the page stays on the chapter as it does after a finger drag
+       * (#71): each later cue recovers, and gives the page back only at a sentence
+       * that begins on the visible page. Play reveals through its first cue, so a
+       * row pressed before that cue arrives takes the reveal back, or the cue would
+       * take the page straight back from the chapter the owner chose.
+       *
+       * Not in a book with no place yet, where the row chooses where to start —
+       * the cursor is not a Reading Position until Play, and while playing there is
+       * no sentence until the first cue, or while Play walks past a cover. And not
+       * while a stored place is still waiting for its section, with no highlighted
+       * sentence to keep: there the row gives the place up, as it did before (#51).
        */
-      if (!playIntent.current && atRef.current !== null && !unreadRef.current) {
+      if (atRef.current !== null && !unreadRef.current) {
         // A row pressed while playing may still be waiting, with the engine
         // silenced for it; that wait is given up, and the engine goes back to the
         // sentence the reading is on.
         const waited = pendingSectionRef.current;
         pendingSectionRef.current = null;
         if (waited?.onward) engineRef.current?.seek(atRef.current);
+        revealCue.current = false;
         bridgeRef.current?.browse(section);
         return;
       }
@@ -1038,6 +1048,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
 
   const resumeAt = useCallback(
     (place: ReadingPlace): boolean => {
+      // An ended Reading has no page to take a place on, and keeps none (#106,
+      // `endedRef`).
+      if (endedRef.current) return false;
       // Already being read: Play took the place from its own sync and started,
       // and the arrival effect passes the same adoption on the render after
       // (#105). Taken, and nothing moves. Landing it again would seek the
@@ -1333,6 +1346,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [settings, hasKey, clock, report, ranOutOfText, document, sectionOf]);
 
   const play = useCallback(() => {
+    if (endedRef.current) {
+      debugLog('reading', 'play after the reading ended: ignored');
+      return;
+    }
     debugLog('reading', `play at utterance ${atRef.current ?? 'none'}, ${settings.provider} ${settings.voice}`);
     bridgeRef.current?.resumeFollowing();
     if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
@@ -1660,7 +1677,25 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     retainedIdentity.current = null;
     disposeEngine();
   }, [identity, settings, disposeEngine]);
-  useEffect(() => disposeEngine, [disposeEngine]);
+  /**
+   * The Reading ends here, when the view unmounts (ADR 0049), and nothing
+   * starts it again (#106). A callback can outlive the view: `reading-view.tsx`'s
+   * `play` waits for its sync before it calls `play`, and the owner can leave
+   * while it is still paused, open another Document or delete this one
+   * meanwhile. The generation above cannot stop that call, because it takes the
+   * generation the disposal has already moved on to, and it built a new engine,
+   * loaded and played it, with nothing left to pause or dispose it (measured
+   * 2026-09-30). So `play`, the one path that builds an engine, and `resumeAt`
+   * do nothing once this is set. Not `disposeEngine` itself: that also runs for
+   * a Voice, a Provider or a credential changed while the Reading lasts.
+   */
+  useEffect(() => {
+    endedRef.current = false;
+    return () => {
+      endedRef.current = true;
+      disposeEngine();
+    };
+  }, [disposeEngine]);
 
   /**
    * The Utterance being spoken, written down as a place in the document.

@@ -567,11 +567,28 @@ the log — and the phone's own next sentence was written above the desktop's
 place ("Phone old continuation.", Stamp 1790783206549, iPhone-ioldisho, at
 23:46:46). The next sync moment uploaded exactly that item (PUT #78/#79:
 `exact='Phone old continuation.' device=iPhone-ioldisho`), and B appears in
-no upload. In both control attempts the Pause tap itself missed (the first
-ran past the document's end at ~30 s; the second lost the press to the
-eaten-input state), so the control's pause→upload was captured as the
-written place's next-moment upload rather than the pause poke; the
+no upload. In both control attempts the reading reached the document's end
+before the probe's Pause tap (end 22:56:48, tap 22:56:56; end 23:46:53, tap
+23:46:58). So the stop was the engine's own at the end of the book, and the
+cursor stayed on Utterance 6, not B's 3. The control's upload was captured
+as the written place's next-moment upload rather than the pause poke; the
 kept-place-let-go behaviour is the run's own.
+
+**Every XCTest run, as its `test.log` says it** (checked by the implementing
+agent against the Debug Log):
+
+| run | method | result | where it came from |
+| --- | --- | --- | --- |
+| 21:08 | ProviderHeaders105Probe | 1 failure | the probe's own predicate; the gateway answered 200 |
+| 21:23 | SavePassword105Probe | skipped | no alert up |
+| 21:26 | SavePassword105Probe | 0 failures | |
+| 22:09 | testPlayPauseWithHeldDownload | 1 failure | no `Play` in the tree; no handler call |
+| 22:23 | testPlayPauseWithHeldDownload | 0 failures | the main scenario |
+| 22:26 | testPlayFromAdoptedPlaceThenPause | 0 failures | the second half |
+| 22:29, 22:40 | testPlayFromAdoptedPlaceThenPause | 2 failures each | Play hit point `{-1, -1}`; no `play` in the Debug Log |
+| 22:54 | testPlayPauseWithHeldDownload | 2 failures | Pause after the end of the book |
+| 23:02, 23:15, 23:29 | testPlayPauseWithHeldDownload | 2, 3, 3 failures | Play hit point `{-1, -1}`; no `play` in the Debug Log |
+| 23:46 | testPlayPauseWithHeldDownload | 2 failures | Pause after the end of the book |
 
 **Not established here:** the pause from the lock screen / Now Playing (item
 3 of the plan) — the engine-self-stop path was exercised repeatedly (every

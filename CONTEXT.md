@@ -167,8 +167,8 @@ sees in a list. It is a locator and a text anchor together.
 _Avoid_: bookmark, progress, location, savedPosition
 
 **Browsing**:
-Moving the page to another part of a document while the reading position stays
-where it is.
+Moving the page to another part of a document without moving the reading,
+whether it plays or is paused.
 _Avoid_: previewing, peeking, jumping, navigating
 
 **Skip**:

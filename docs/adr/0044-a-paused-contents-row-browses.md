@@ -7,6 +7,11 @@ status: accepted
 _The product argument is
 [design 0044](../design/0044-looking-at-another-chapter-keeps-your-place.md)._
 
+_Superseded in part by [ADR 0063](0063-a-contents-row-browses-while-playing.md)
+(#107): the row browses while playing too, and `goToSection`'s condition has
+no `!playIntent.current`. What follows about the "Not playing" condition
+describes the code before #107._
+
 While the reading is paused, a Contents row is **Browsing** (CONTEXT.md). The
 page goes to the spine item. The cursor, its highlight, the stored Reading
 Position and the engine are left alone, and Play resumes the paused sentence.

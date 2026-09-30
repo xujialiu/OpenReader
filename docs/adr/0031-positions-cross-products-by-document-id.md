@@ -224,8 +224,10 @@ place it declines while playing. The effect that sees the reading stop, by a
 pause, the lock screen, the headphones or the end of the book, takes that place
 if `readingPosition()` is still null. Otherwise it lets the place go: speech
 reached another sentence, or the owner tapped or skipped, and the pause writes
-that sentence above the kept place. A Contents row chosen while playing lets
-it go at once, before its chapter reports and moves the cursor. And a place
+that sentence above the kept place. A Contents row that only browses while
+the reading plays (#107) moves neither the reading nor the kept place. One that
+chooses where a reading with no sentence yet starts (#86) lets it go at once,
+before its chapter reports and moves the cursor. And a place
 the cursor is already on is taken without a seek. Otherwise Play taking an
 adoption, followed by the arrival effect passing the same place on after
 playback starts, would re-seek the sentence at the next pause.

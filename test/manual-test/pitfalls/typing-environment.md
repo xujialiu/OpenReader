@@ -190,3 +190,18 @@
   (the simulator process shares the host filesystem,
   `ProviderHeaders105Probe.swift`) and types into the masked field. Record
   the pbcopy failure before assuming a paste-based plan works.
+
+## Typing on the #106 simulator (2026-09-30, fresh iPhone 17, iOS 27.0)
+
+- **HID typing drops characters at random, in every tool.** `axe type` put a
+  lone `h` into a WebDAV address field; a retried `--stdin` run produced
+  `ios106-sync/ios06-snc/`; `mobilebuildmcp type_text` (34 characters sent)
+  turned `127.0.0.1:8722` into `127.0.0.1:722`. No character class is safe.
+  Fix: verify the field's value in a fresh `describe-ui` after every type and
+  retype (type_text `replaceExisting`) until it is exact — the second attempt
+  has landed exactly every time so far. Budget two or three tries per field.
+- **`xcrun simctl pbcopy` exits 0 and the pasteboard stays empty.** `simctl
+  pbpaste` read back nothing after a successful `pbcopy`, and a Cmd+V
+  (`axe key-combo --modifiers 227 --key 25`) pasted nothing. The clipboard
+  route into a simulator field was unusable on this setup; type_text retries
+  are the working path.
