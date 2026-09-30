@@ -14,6 +14,7 @@ cannot use Expo Go as a substitute.
 - Bundle ID: `top.xujialiu.openreader`.
 - Automatic signing used `Xujia Liu (Personal Team)`, with an Apple Development certificate.
 - On 2026-09-30 the account joined the Apple Developer Program, and the Personal Team was upgraded in place rather than joined by a second team: Xcode's Settings → Apple Accounts lists one team, `Xujia Liu`, as a Developer Team with the Admin role and a "Download Manual Profiles" button, and the owner confirmed in developer.apple.com/account → Membership details that the Team ID is still `UPR29WR8FC`. So `DEVELOPMENT_TEAM=UPR29WR8FC` below is unchanged. Xcode's cached team list (`defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier`) still read `Personal Team` after the pane was opened; do not take it as the membership's state. The keychain still held only the Apple Development certificate, and the profiles already on the Mac were the free-team ones (the app's expires `2026-10-04 03:43:34 UTC`).
+- Later on 2026-09-30, `0.0.2-beta73` (Debug Mode) was built from a worktree whose prebuild writes `DEVELOPMENT_TEAM` itself (`ios.appleTeamId` in `app.config.ts`, #108). Xcode keeps using a cached profile that is still valid: that day's App Store archive, built with `-allowProvisioningUpdates`, embedded the free team's profile expiring 2026-10-04. So that profile was first moved out of `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`. Xcode then made a new `iOS Team Provisioning Profile: top.xujialiu.openreader` for the paid team: created 2026-09-30 22:47 CST, expiring **2027-09-30 22:47 CST**, one device. A simulator build of the same workspace was running, so this build had its own `-derivedDataPath`, and from scratch it returned 0 in 20.5 minutes. `devicectl` installed over the existing app and launched it (both 0), with no Security error.
 - The `xcodebuild` command below returned 0; `devicectl` confirmed that the app was installed.
 - Automatic launch returned a Security error containing “profile has not been explicitly trusted by the user”. The user was prompted to trust the developer on the phone; this record does not confirm launch, reading, or audio functionality after trust was granted.
 - 2026-09-22 follow-up: on the same phone and account, a fresh Release build, install,
@@ -196,7 +197,7 @@ functionality works.
 
 | Symptom | Conclusion and handling from this run |
 | --- | --- |
-| The Release build fails with `Signing for "OpenReader" requires a development team` (2026-09-29, a worktree whose `ios/` a prebuild had just made) | A prebuild writes no team, so the Xcode step in "Initial setup" has to be redone, or the team passed on the command line instead. Add `DEVELOPMENT_TEAM=TEAM_ID CODE_SIGN_STYLE=Automatic` to the `xcodebuild` command above; it changes only that build. `TEAM_ID` is the `OU` of the Apple Development certificate: `security find-certificate -c "Apple Development" -p \| openssl x509 -noout -subject`, not the ID in parentheses after the account's name. With it, 0.0.2-beta59 built in 3 min 17 s and returned 0. |
+| The Release build fails with `Signing for "OpenReader" requires a development team` (2026-09-29, a worktree whose `ios/` a prebuild had just made) | Before #108 a prebuild wrote no team. `app.config.ts` now sets `ios.appleTeamId`, so a fresh prebuild writes `DEVELOPMENT_TEAM = UPR29WR8FC`. An older `ios/` needs the Xcode step in "Initial setup" redone, or the team passed on the command line instead. Add `DEVELOPMENT_TEAM=TEAM_ID CODE_SIGN_STYLE=Automatic` to the `xcodebuild` command above; it changes only that build. `TEAM_ID` is the `OU` of the Apple Development certificate: `security find-certificate -c "Apple Development" -p \| openssl x509 -noout -subject`, not the ID in parentheses after the account's name. With it, 0.0.2-beta59 built in 3 min 17 s and returned 0. |
 | Expo reports `No code signing certificates are available to use` | `security find-identity` confirmed 0 identities. Creating an Apple Development certificate in Xcode resolved it. |
 | Xcode shows `Communication with Apple failed`, specifically saying that the team has no devices, and also reports that no profile exists | Select the physical iPhone and use the automatic signing and device registration options above; this allowed compilation to proceed during the recorded run. The title alone is not enough to diagnose a network failure; read the detailed reason. |
 | `npx expo run:ios --device … --configuration Release` reports `No profiles … found` and requests `-allowProvisioningUpdates` | The Expo command did not complete profile creation during this run. Switching to the `xcodebuild` command above succeeded. Do not repeatedly run the same Expo command expecting signing to recover automatically. |
@@ -204,10 +205,10 @@ functionality works.
 | Installation succeeds, but launch reports `CoreDeviceError 10002` / `Security` | The error lists signing, entitlements, or an untrusted profile among its possible causes. First trust the developer on the phone, then retry. If it still fails after trust, inspect the actual signing and provisioning profile; do not attribute every Security error to an untrusted profile. |
 
 Installation through a Personal Team is subject to provisioning profile expiry.
-The team has been a paid one since 2026-09-30 (above). A profile Xcode makes
-for it should last longer than the free team's; this has not been measured yet,
-so read the expiry from the next build's `embedded.mobileprovision` and record
-it here.
+The team has been a paid one since 2026-09-30 (above), and a profile Xcode makes
+for it lasts a year: 2027-09-30, measured above. Xcode keeps using a cached
+profile until it expires, so after the team changes, move the old one out of
+`~/Library/Developer/Xcode/UserData/Provisioning Profiles/` before building.
 Release describes the build configuration and does not mean the signature is
 permanent. Re-sign and reinstall after expiry. Do not uninstall the old app for
 this purpose: uninstalling may delete the local library and settings.
