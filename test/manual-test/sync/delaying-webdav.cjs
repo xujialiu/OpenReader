@@ -22,6 +22,7 @@
 //
 // DELAY_MS=0 is the fast server for a sync that finishes inside the wait.
 
+const { Buffer } = require('node:buffer');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
