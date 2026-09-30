@@ -53,9 +53,19 @@ final class Issue106Probe: XCTestCase {
   }
 
   /// The staged reader: in front, paused, its Play button hittable.
+  /// Raw coordinates (points, from the host's describe-ui) instead of element
+  /// queries: on this simulator `app.buttons["Play"]` resolved a ghost — the
+  /// tap landed 54 pt high, on "Choose a Voice" — while the live button's own
+  /// frame is stable at {{168, 793.7}, {52, 52}} (centre 194, 819.7) and the
+  /// back arrow at {{24, 60}, {28, 48}} (centre 38, 84).
   func stagedReader(_ app: XCUIApplication) {
     app.activate()
     XCTAssertTrue(until(10) { self.inReaderPaused(app) }, "Not staged: the reader is not in front paused")
+    print("ELEMENTS play=\(app.buttons["Play"].count) pause=\(app.buttons["Pause"].count) back=\(app.buttons["BackButton"].count)")
+  }
+
+  func tapPoint(_ app: XCUIApplication, _ x: CGFloat, _ y: CGFloat) {
+    app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: x, dy: y)).tap()
   }
 
   func inReaderPaused(_ app: XCUIApplication) -> Bool {
@@ -68,10 +78,9 @@ final class Issue106Probe: XCTestCase {
   func testLeaveInsideSyncWaitStartsNothing() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     stagedReader(app)
-    let play = app.buttons["Play"]
     let playAt = Date()
-    play.tap()
-    app.buttons["BackButton"].tap()
+    tapPoint(app, 194, 820)
+    tapPoint(app, 38, 84)
     let backAt = Date()
     print("TIMING play=\(playAt.timeIntervalSince1970) back=\(backAt.timeIntervalSince1970) gap=\(backAt.timeIntervalSince(playAt))")
     XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5), "The back arrow did not return to the Library")
@@ -90,8 +99,8 @@ final class Issue106Probe: XCTestCase {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     stagedReader(app)
     let playAt = Date()
-    app.buttons["Play"].tap()
-    app.buttons["BackButton"].tap()
+    tapPoint(app, 194, 820)
+    tapPoint(app, 38, 84)
     let backAt = Date()
     let otherRow = row(other, app)
     XCTAssertTrue(otherRow.waitForExistence(timeout: 3), "The other document's row is not in the Library")
@@ -106,10 +115,10 @@ final class Issue106Probe: XCTestCase {
     capture("21-second-reader-paused-past-continuation", app)
     // The second book's own Play is undisturbed: it starts, and is stopped again.
     let secondPlayAt = Date()
-    app.buttons["Play"].tap()
+    tapPoint(app, 194, 820)
     XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 12), "The second document's Play did not start")
     print("TIMING secondPlayStarted=\(Date().timeIntervalSince1970) gap=\(Date().timeIntervalSince(secondPlayAt))")
-    app.buttons["Pause"].tap()
+    tapPoint(app, 194, 820)
     XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Did not pause the second reading")
   }
 
@@ -125,14 +134,14 @@ final class Issue106Probe: XCTestCase {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     stagedReader(app)
     let playAt = Date()
-    app.buttons["Play"].tap()
+    tapPoint(app, 194, 820)
     // Held sync: the wait runs out at 2 s, then the engine builds and the first
     // Clip arrives from the fake Kokoro — give that 12 s.
     XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 12), "Play did not start after the held sync ran out")
     print("TIMING case4held play=\(playAt.timeIntervalSince1970) playing=\(Date().timeIntervalSince1970) delay=\(Date().timeIntervalSince(playAt))")
     shot("30-playing-in-reader-after-held-sync")
     let backAt = Date()
-    app.buttons["BackButton"].tap()
+    tapPoint(app, 38, 84)
     XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5), "The back arrow did not return to the Library")
     print("TIMING backWhilePlaying=\(backAt.timeIntervalSince1970)")
     let btn = returnButton(app)
@@ -150,11 +159,11 @@ final class Issue106Probe: XCTestCase {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     stagedReader(app)
     let playAt = Date()
-    app.buttons["Play"].tap()
+    tapPoint(app, 194, 820)
     XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 8), "Play did not start after the fast sync")
     print("TIMING case4fast play=\(playAt.timeIntervalSince1970) playing=\(Date().timeIntervalSince1970) delay=\(Date().timeIntervalSince(playAt))")
     shot("40-playing-after-fast-sync")
-    app.buttons["Pause"].tap()
+    tapPoint(app, 194, 820)
     XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Did not pause after the fast-sync play")
   }
 }
