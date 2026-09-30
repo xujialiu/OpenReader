@@ -60,10 +60,16 @@ describe('durable download scheduling', () => {
     expect(f.tasks[0].failed).toEqual(['a']);
     expect(f.stored.has('Two.')).toBe(false);
   });
-  it.each(['auth', 'quota', 'no-key'] as const)('pauses all remaining requests on %s', async (kind) => {
+  it.each(['auth', 'quota', 'no-key', 'declined'] as const)('pauses all remaining requests on %s', async (kind) => {
     const f = fixture(); f.fetch.mockRejectedValue(new SynthesisError(kind));
     await f.scheduler.run();
     expect(f.tasks[0].state).toBe('blocked'); expect(f.fetch).toHaveBeenCalledTimes(1);
+  });
+  it('stops the whole download for a Provider the owner did not allow, says why, and fails no chapter (#109)', async () => {
+    const f = fixture();
+    f.fetch.mockRejectedValue(new SynthesisError('declined', 'Fish Audio was not allowed to receive this document\'s text.'));
+    await f.scheduler.run();
+    expect(f.tasks[0]).toMatchObject({ state: 'blocked', error: 'Fish Audio was not allowed to receive this document\'s text.', failed: [] });
   });
   it('does not resurrect a removed task', async () => {
     const f = fixture(); f.fetch.mockImplementationOnce(async () => { f.tasks.splice(0); });
