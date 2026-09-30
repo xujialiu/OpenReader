@@ -588,7 +588,7 @@ describe('a section reported above the reading (#46)', () => {
  * voice is not in; and in a book with no Reading Position yet, where the row
  * chooses where the first Play starts.
  */
-describe('a Contents row while paused only moves the page (#52)', () => {
+describe('a Contents row only moves the page, paused (#52) or playing (#107)', () => {
   const ONE = blocks(1, ['Chapter One.', 'The ferry left before dawn. Nobody waved.']);
   const TWO = blocks(2, ['Chapter Two.', 'Snow had covered the pass. The mules refused to climb.']);
   const THREE = blocks(3, ['Chapter Three.', 'The archive burned for a week. Its keeper wept.']);
@@ -675,18 +675,74 @@ describe('a Contents row while paused only moves the page (#52)', () => {
     await m.down();
   });
 
-  it('still takes the reading to the chapter while playing', async () => {
+  it('moves only the page while playing too: the voice goes on, and its next sentence leaves the page on the chapter (#107)', async () => {
     const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
     await m.up();
     await m.report(ALL, 3);
     await m.press((reading) => reading.play());
-    await m.press(() => engines.built[0].deps.clock.onClip(cue(at(FERRY))));
+    const engine = engines.built[0];
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY))));
     bridge.show.mockClear();
+    bridge.goToSection.mockClear();
+    const calls = engine.calls.length;
+
+    await m.press((reading) => reading.goToSection(3));
+    expect(bridge.browse).toHaveBeenCalledWith(3);
+    expect(bridge.goToSection).not.toHaveBeenCalled();
+    expect(bridge.show).not.toHaveBeenCalled();
+    // Nothing reaches the engine: no seek, no silence, no pause.
+    expect(engine.calls.slice(calls)).toEqual([]);
+    expect(m.reading.status.playing).toBe(true);
+    expect(m.reading.status.utterance).toBe(at(FERRY));
+    expect(m.reading.status.section).toBe(1);
+
+    // The chapter arriving is the page arriving, not the reading.
+    await m.report(ALL, 3);
+    expect(bridge.show).not.toHaveBeenCalled();
+    expect(m.reading.status.utterance).toBe(at(FERRY));
+
+    // The voice moving on recovers, as after a finger drag: the page stays on the
+    // chapter unless the sentence begins where the owner can see it (#71).
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY) + 1)));
+    expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) + 1 }), { reveal: false, recover: true });
+    expect(m.reading.status.utterance).toBe(at(FERRY) + 1);
+    await m.down();
+  });
+
+  it('is not undone by the first cue after Play when the row comes before that cue (#107)', async () => {
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report(ALL, 3);
+    await m.press((reading) => reading.seekTo(at(FERRY)));
+    await m.press((reading) => reading.play());
+    const engine = engines.built[0];
+
+    // Pressed while the first Clip is still being fetched.
+    await m.press((reading) => reading.goToSection(3));
+    expect(bridge.browse).toHaveBeenCalledWith(3);
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY))));
+    expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) }), { reveal: false, recover: true });
+
+    // Play after a pause still asks for the reading.
+    await m.press((reading) => reading.pause());
+    await m.press((reading) => reading.play());
+    await m.press(() => engine.deps.clock.onClip(cue(at(FERRY))));
+    expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) }), { reveal: true });
+    await m.down();
+  });
+
+  it('while playing with no sentence yet, still takes the reading to the chapter (#86)', async () => {
+    // Play in a book with no place, before its first Clip: there is no sentence
+    // being read to keep, so the row chooses where the reading starts.
+    const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
+    await m.up();
+    await m.report(ALL, 3);
+    await m.press((reading) => reading.play());
+    expect(m.reading.status.utterance).toBeNull();
 
     await m.press((reading) => reading.goToSection(2));
     expect(bridge.browse).not.toHaveBeenCalled();
     expect(bridge.goToSection).toHaveBeenCalledWith(2);
-    expect(bridge.show).toHaveBeenLastCalledWith(at('Chapter Two.'));
     expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
     await m.down();
   });

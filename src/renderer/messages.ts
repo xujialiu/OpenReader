@@ -359,8 +359,8 @@ export interface ClearMessage {
 
 /**
  * The page is about to be moved to a part of the document the owner only wants to
- * look at: **Browsing** (CONTEXT.md, #52), which a Contents row is while the
- * reading is paused.
+ * look at: **Browsing** (CONTEXT.md, #52), which a Contents row is whenever the
+ * reading is on a sentence it keeps, playing or paused (#107).
  *
  * Sent just before the display that moves the page, so that the sections that
  * display renders — the reading's own among them, when it is next door — arrive

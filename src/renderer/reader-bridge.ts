@@ -387,8 +387,8 @@ export interface ReaderBridge {
   goToSection(index: number): void;
   /**
    * Move the page to a spine item, and leave the reading where it is:
-   * **Browsing** (CONTEXT.md, #52), which is what a Contents row is while the
-   * reading is paused.
+   * **Browsing** (CONTEXT.md, #52), which is what a Contents row is whenever the
+   * reading is on a sentence it keeps, playing or paused (#107).
    *
    * `goToSection`'s display, preceded by a message that stops the page following
    * the reading until a highlight is next revealed. Without it the reading's own
