@@ -13,6 +13,7 @@ cannot use Expo Go as a substitute.
 - Workspace: `ios/OpenReader.xcworkspace`; scheme: `OpenReader`.
 - Bundle ID: `top.xujialiu.openreader`.
 - Automatic signing used `Xujia Liu (Personal Team)`, with an Apple Development certificate.
+- On 2026-09-30 the account joined the Apple Developer Program, and the Personal Team was upgraded in place rather than joined by a second team: Xcode's Settings → Apple Accounts lists one team, `Xujia Liu`, as a Developer Team with the Admin role and a "Download Manual Profiles" button, and the owner confirmed in developer.apple.com/account → Membership details that the Team ID is still `UPR29WR8FC`. So `DEVELOPMENT_TEAM=UPR29WR8FC` below is unchanged. Xcode's cached team list (`defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier`) still read `Personal Team` after the pane was opened; do not take it as the membership's state. The keychain still held only the Apple Development certificate, and the profiles already on the Mac were the free-team ones (the app's expires `2026-10-04 03:43:34 UTC`).
 - The `xcodebuild` command below returned 0; `devicectl` confirmed that the app was installed.
 - Automatic launch returned a Security error containing “profile has not been explicitly trusted by the user”. The user was prompted to trust the developer on the phone; this record does not confirm launch, reading, or audio functionality after trust was granted.
 - 2026-09-22 follow-up: on the same phone and account, a fresh Release build, install,
@@ -203,6 +204,10 @@ functionality works.
 | Installation succeeds, but launch reports `CoreDeviceError 10002` / `Security` | The error lists signing, entitlements, or an untrusted profile among its possible causes. First trust the developer on the phone, then retry. If it still fails after trust, inspect the actual signing and provisioning profile; do not attribute every Security error to an untrusted profile. |
 
 Installation through a Personal Team is subject to provisioning profile expiry.
+The team has been a paid one since 2026-09-30 (above). A profile Xcode makes
+for it should last longer than the free team's; this has not been measured yet,
+so read the expiry from the next build's `embedded.mobileprovision` and record
+it here.
 Release describes the build configuration and does not mean the signature is
 permanent. Re-sign and reinstall after expiry. Do not uninstall the old app for
 this purpose: uninstalling may delete the local library and settings.
