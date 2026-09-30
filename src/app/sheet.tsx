@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { INK, Note, useBorders } from './controls';
 import { Icon, type IconName } from './icon';
+import { TEXT } from './text-styles';
 
 /** A button at the right end of a drawer's title row. */
 export interface SheetAction {
@@ -104,7 +105,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 32, gap: 10, maxHeight: '90%' },
   header: { paddingTop: 10, paddingBottom: 4, gap: 16, minHeight: 62 },
   grip: { alignSelf: 'center', backgroundColor: INK.line, borderRadius: 3, height: 5, width: 40 },
-  title: { color: INK.text, fontSize: 18, fontWeight: '700', paddingHorizontal: 16 },
+  title: { ...TEXT.headline, color: INK.text, paddingHorizontal: 16 },
   inset: { paddingHorizontal: 16 },
   headerRow: { alignItems: 'center', flexDirection: 'row', paddingHorizontal: 10 },
   // Absolute, so the title is centred on the sheet rather than on what is left

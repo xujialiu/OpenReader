@@ -41,6 +41,7 @@ import { useProviderKey } from './use-provider-secrets';
 import { ReaderActions } from './reader-actions';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { useHeldReading } from './reading-host';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 import { formatBytes, occupied, removeDownloads, requestInventory } from '../offline/runtime';
 
 /** How much of the last Utterance a row shows. Two lines of it at this size; more would push the next Document off the screen. */
@@ -217,7 +218,7 @@ const styles = StyleSheet.create({
   reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   banner: { paddingHorizontal: 16, paddingTop: 12 },
   empty: { alignItems: 'flex-start', gap: 12, padding: 24 },
-  emptyTitle: { color: INK.text, fontSize: 20, fontWeight: '700' },
-  emptyWords: { color: INK.quiet, fontSize: 15, lineHeight: 22 },
+  emptyTitle: { ...TEXT_EMPHASIZED.title3, color: INK.text },
+  emptyWords: { ...TEXT.subhead, color: INK.quiet },
   screen: { backgroundColor: INK.page, flex: 1 },
 });

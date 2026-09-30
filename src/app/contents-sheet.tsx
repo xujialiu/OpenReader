@@ -35,6 +35,7 @@ import { currentRow, type Contents, type ContentsRow } from '../core/document/co
 
 import { INK, useBorders } from './controls';
 import { Sheet, SheetNote } from './sheet';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /** One line per row, and the same height for every one of them: what makes the list open where it should. */
 const ROW_HEIGHT = 46;
@@ -175,8 +176,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rowCurrent: { backgroundColor: INK.page },
-  rowHeading: { fontSize: 16, fontWeight: '700' },
-  rowLabel: { color: INK.text, fontSize: 15, paddingHorizontal: 16 },
-  rowLabelCurrent: { color: INK.reading, fontWeight: '700' },
+  rowHeading: TEXT.headline,
+  rowLabel: { ...TEXT.body, color: INK.text, paddingHorizontal: 16 },
+  rowLabelCurrent: { color: INK.reading, fontWeight: TEXT_EMPHASIZED.body.fontWeight },
   rowUnreachable: { color: INK.quiet },
 });

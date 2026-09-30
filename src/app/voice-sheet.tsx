@@ -46,6 +46,7 @@ import type { VoiceLists } from './use-voices';
 import { levelOfVoice, voiceLevels } from './voices';
 import { Sheet, SheetNote } from './sheet';
 import { LoadingSpinner } from './loading-spinner';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 export interface VoiceSheetProps {
   visible: boolean;
@@ -255,14 +256,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   chipChosen: { backgroundColor: INK.text },
-  chipLabel: { color: INK.text, fontSize: 14 },
-  chipLabelChosen: { color: INK.page, fontWeight: '600' },
+  chipLabel: { ...TEXT.subhead, color: INK.text },
+  chipLabelChosen: { color: INK.page, fontWeight: TEXT_EMPHASIZED.subhead.fontWeight },
   locales: { flexGrow: 0 },
   localesBody: { gap: 8, paddingHorizontal: 16 },
   pressed: { opacity: 0.65 },
   providers: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingVertical: 12 },
-  rowLabel: { flex: 1, color: INK.text, fontSize: 15, fontWeight: '600' },
+  rowLabel: { ...TEXT.body, flex: 1, color: INK.text },
   rowLabelChosen: { color: INK.reading },
   voices: { height: 260 },
 });
