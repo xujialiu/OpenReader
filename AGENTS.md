@@ -31,3 +31,4 @@ Each file under `MEMORY/` holds the rules for one kind of work. Read it in full 
 - **Cleanup** — [MEMORY/cleanup.md](MEMORY/cleanup.md): when all tasks are done and committed, before the final reply.
 - **iPhone** — [docs/install-on-iphone.md](docs/install-on-iphone.md): before installing on the owner's iPhone, fixing its signing or provisioning, or building a standalone Release for it. In anything committed, write its UDID as `IPHONE_UDID`; look up the real one with `xcrun devicectl list devices`.
 - **Simulator** — [docs/install-on-simulator.md](docs/install-on-simulator.md): before installing or updating the simulator app, or fixing a Metro connection or simulator build.
+- **Release** — [docs/release-to-app-store.md](docs/release-to-app-store.md): before building for, uploading to or submitting on App Store Connect, or tagging a release.

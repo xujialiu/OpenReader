@@ -51,6 +51,16 @@ never comes back by itself. A reading asks for the next few sentences ahead of
 time, and without that rule each of them would put the same alert back on the
 screen the moment it was dismissed.
 
+A no is never kept, only a yes. So to allow a service after refusing it, the
+owner asks for the thing again and answers Allow this time.
+
+The owner confirmed these on 2026-09-30, after trying the alternatives:
+- the question returns only when the owner asks again, not once per launch, and
+  it is not left to a switch in Settings;
+- a refused lookup closes rather than staying open to say it was not sent;
+- Allow is the bold button, as in the phone's permission prompts;
+- there is no way yet to take a yes back inside the app (below).
+
 ## Why
 
 The store's rules say that before an app sends someone's data to another
