@@ -145,7 +145,12 @@ export function DownloadContent({ document, title, voice, section, onVoice, onSt
           void downloads.deleteDownloaded(document, choice, chosen).then(()=>setSelected(new Set()),e=>Alert.alert('Could not delete audio',String(e)));
         } },
       ]);
-      else { onStart?.(); downloads.enqueue(document, choice, chosen); setSelected(new Set()); }
+      // The Provider is asked about first (#109): "Don't Allow" starts nothing and keeps the selection.
+      else void downloads.startDownload(document, choice, chosen).then((started) => {
+        if (!started) return;
+        onStart?.();
+        setSelected(new Set());
+      }, (e) => Alert.alert('Download could not start', String(e)));
     } catch (e) { Alert.alert('Download could not start', String(e)); }
   };
   /**

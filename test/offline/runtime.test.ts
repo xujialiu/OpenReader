@@ -50,6 +50,8 @@ vi.mock('../../src/core/providers/factory', () => ({
 vi.mock('../../src/offline/database', () => ({ offlineRepository: () => mock.open() }));
 
 const { downloadError, hasSavedVoice, offlineProvider, requestInventory, startDownloads } = await import('../../src/offline/runtime');
+// The owner has allowed every Provider here (#109): what these tests are about comes after that question.
+(await import('../../src/app/consent')).configureConsent({ kept: () => true, keep: () => {}, ask: async () => true });
 const { voiceKey } = await import('../../src/offline/catalog-keys');
 const settings = { ...DEFAULT_SETTINGS, provider: 'openai-official' as const, enabledProviders: ['openai-official' as const], openai: { model: 'tts-1' }, voice: 'alloy' };
 const spoken = (): SynthesisResult => ({ audio: 'encoded', bytes: new Uint8Array([1, 2, 3]), mediaType: 'audio/mp4' });

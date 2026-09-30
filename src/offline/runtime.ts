@@ -50,6 +50,7 @@ import {
   type ContinuedNative,
   type ContinuedShown,
 } from "./continued-processing";
+import { consent, declinedSentence, providerRecipient } from "../app/consent";
 import { cutText, debugLog, describeProblem, shortId } from "../debug/debug-log";
 import { DEBUG_MODE } from "../debug/mode";
 import { offlineRepository } from "./database";
@@ -402,6 +403,14 @@ async function synthesize(
           "no-key",
           readinessSentence(voice.provider, ready.missing),
         );
+      // Asked here, once the request could go out and before anything is built
+      // or sent (#109, ADR 0064). A Reading and a download both send from here,
+      // Azure's WebSocket included, so this is the one question on the way out.
+      // A refusal sends nothing: the Reading stops where it is and says nothing,
+      // and a download stops for it (`scheduler.ts`).
+      const recipient = providerRecipient(configured, voice.provider, keyResult?.outcome === "found");
+      if (!(await consent.ensure(recipient)))
+        throw new SynthesisError("declined", declinedSentence(recipient));
       const configuration = providerSettings(configured, {
         key: keyResult?.outcome === "found" ? keyResult.secret : "",
         headers: headers?.outcome === "found" ? headers.secret : "",
@@ -880,6 +889,31 @@ export function setReadingPlays(plays: boolean): void {
     if (task.state === "interrupted") task.state = "queued";
   fire(persist().then(kick));
 }
+/**
+ * A download the owner started from the Download drawer (#109, ADR 0064). The
+ * Provider is asked about before a task exists, so "Don't Allow" leaves nothing
+ * behind. The press is the owner asking again, so an earlier no does not stand
+ * in for the answer. Resolves true once the chapters are queued.
+ */
+export async function startDownload(
+  document: string,
+  voice: OfflineVoice,
+  chapters: string[],
+): Promise<boolean> {
+  if (!chapters.length || !settings) return false;
+  const found = keyIsOffered(voice.provider)
+    ? (await readProviderKey(voice.provider)).outcome === "found"
+    : false;
+  const recipient = providerRecipient(
+    { ...settings, provider: voice.provider, voice: voice.voice },
+    voice.provider,
+    found,
+  );
+  consent.again(recipient.key);
+  if (!(await consent.ensure(recipient))) return false;
+  enqueue(document, voice, chapters);
+  return true;
+}
 export function enqueue(
   document: string,
   voice: OfflineVoice,
@@ -928,6 +962,9 @@ export const goesOn = (task: DownloadTask) =>
 export function toggleTask(task: DownloadTask): void {
   if (goesOn(task)) pausing.pauseAll(task);
   else {
+    // Resume all, or Retry failed: the owner asking again, so a Provider they
+    // refused is asked about again as the download reaches it (#109).
+    consent.again();
     pausing.resumeAll(task);
     continueAway();
   }
@@ -938,7 +975,10 @@ export function toggleChapter(task: DownloadTask, chapter: string): void {
   const resumes =
     !pausing.GOES_ON.includes(task.state) || pausing.isPaused(task, chapter);
   pausing.tapChapter(task, chapter, completeIn(task));
-  if (resumes) continueAway();
+  if (resumes) {
+    consent.again();
+    continueAway();
+  }
   fire(persist().then(kick));
 }
 export async function deleteDownloaded(
