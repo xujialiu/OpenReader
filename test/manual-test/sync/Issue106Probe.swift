@@ -61,7 +61,7 @@ final class Issue106Probe: XCTestCase {
   func stagedReader(_ app: XCUIApplication) {
     app.activate()
     XCTAssertTrue(until(10) { self.inReaderPaused(app) }, "Not staged: the reader is not in front paused")
-    print("ELEMENTS play=\(app.buttons["Play"].count) pause=\(app.buttons["Pause"].count) back=\(app.buttons["BackButton"].count)")
+    print("ELEMENTS play=\(app.buttons.matching(NSPredicate(format: "label == 'Play' OR identifier == 'Play'")).count) pause=\(app.buttons.matching(NSPredicate(format: "label == 'Pause' OR identifier == 'Pause'")).count) back=\(app.buttons.matching(NSPredicate(format: "identifier == 'BackButton'")).count)")
   }
 
   func tapPoint(_ app: XCUIApplication, _ x: CGFloat, _ y: CGFloat) {
