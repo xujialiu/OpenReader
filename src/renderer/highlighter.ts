@@ -49,7 +49,7 @@
  *   What can be *seen*: ADR 0020's player floats over the bottom of that
  *   container and tells this file how much it covers.
  * - **Whether the page is following, and the way back** (#71, ADR 0050). A
- *   finger that drags the page, or a Contents row while paused, is Browsing,
+ *   finger that drags the page, or a Contents row (#52, #107), is Browsing,
  *   and the page stays where it was put across sentences. It comes back when
  *   the owner asks — a revealed highlight, or M (the 'return' message) — when
  *   the player collapses ('followOnly', which also stops a finger scrolling the
@@ -692,7 +692,7 @@ ${constants}
   var onScreen = null;
   /* The owner has moved the page away from the reading, and it stays where they
      put it: Browsing (CONTEXT.md, #52), the player's M (#71). Set by a Contents
-     row while the reading is paused (the 'browse' message) and by a finger
+     row, playing or paused (the 'browse' message, #107), and by a finger
      dragging the page. Cleared by a highlight that is revealed — Play's first
      cue, a tapped sentence, a skip or a place from another device — by M (the
      'return' message), by the player collapsing ('followOnly'), and by itself
@@ -2849,7 +2849,7 @@ ${constants}
       return;
     }
     if (message.kind === 'browse') {
-      /* A Contents row while the reading is paused (#52). The display that moves
+      /* A Contents row, playing or paused (#52, #107). The display that moves
          the page comes right after this, so the sections it renders, the
          reading's own among them, arrive to a page that is not following. */
       setBrowsing(true);

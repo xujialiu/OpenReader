@@ -859,8 +859,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [seekTo]);
 
   /**
-   * A contents row: **Browsing** while paused (#52), and otherwise **two steps**
-   * (ADR 0020).
+   * A contents row: **Browsing** wherever the reading is on a sentence it keeps
+   * (#52, #107), and otherwise **two steps** (ADR 0020).
    *
    * The page moves first and always, because that is what a contents tap most
    * obviously means and it works for a row whose spine item has no text on it at
@@ -871,34 +871,42 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * index to seek to yet — the section contributes no Utterance until it reports its
    * Blocks — so the target is remembered and `handleBlocks` finishes the job. That
    * second case is the common one and is why this is two steps rather than one.
-   * While playing, the voice stops at the tap and a row with no text reads on
-   * past it (`followRow`, #86).
+   * Playing with no sentence yet, the voice stops at the tap and a row with no
+   * text reads on past it (`followRow`, #86).
    */
   const goToSection = useCallback(
     (section: number) => {
       /**
-       * Browsing (#52): paused, with the reading on a sentence that is its Reading
-       * Position, the row moves the page and nothing else. No seek, so the
-       * highlight stays and nothing is synthesized for a chapter the owner only
-       * looked at; no status, so the marked Contents row is still the reading's;
-       * no stored place given up; and nothing written. Measured on the owner's
-       * book on 2026-09-23 at 23:19 before this: a row to section 14 moved a
-       * reading paused on Utterance 176 to 423, that chapter's heading, and wrote
-       * the heading over the stored place.
+       * Browsing (#52, #107): with the reading on a sentence that is its Reading
+       * Position, the row moves the page and nothing else, playing or paused. No
+       * seek, so the highlight stays, a playing voice goes on with its sentence,
+       * and nothing is synthesized for a chapter the owner only looked at; no
+       * status, so the marked Contents row is still the reading's; no stored place
+       * given up; and nothing written. Measured on the owner's book on 2026-09-23
+       * at 23:19 before #52: a row to section 14 moved a reading paused on
+       * Utterance 176 to 423, that chapter's heading, and wrote the heading over
+       * the stored place.
        *
-       * Not while playing, where the page follows the voice and could not stay on
-       * a chapter the voice is not in. Not in a book with no place yet, where the
-       * row chooses where to start. And not while a stored place is still waiting
-       * for its section, with no highlighted sentence to keep: there the row gives
-       * the place up, as it did before (#51).
+       * Playing, the page stays on the chapter as it does after a finger drag
+       * (#71): each later cue recovers, and gives the page back only at a sentence
+       * that begins on the visible page. Play reveals through its first cue, so a
+       * row pressed before that cue arrives takes the reveal back, or the cue would
+       * take the page straight back from the chapter the owner chose.
+       *
+       * Not in a book with no place yet, where the row chooses where to start —
+       * the cursor is not a Reading Position until Play, and while playing there is
+       * no sentence until the first cue, or while Play walks past a cover. And not
+       * while a stored place is still waiting for its section, with no highlighted
+       * sentence to keep: there the row gives the place up, as it did before (#51).
        */
-      if (!playIntent.current && atRef.current !== null && !unreadRef.current) {
+      if (atRef.current !== null && !unreadRef.current) {
         // A row pressed while playing may still be waiting, with the engine
         // silenced for it; that wait is given up, and the engine goes back to the
         // sentence the reading is on.
         const waited = pendingSectionRef.current;
         pendingSectionRef.current = null;
         if (waited?.onward) engineRef.current?.seek(atRef.current);
+        revealCue.current = false;
         bridgeRef.current?.browse(section);
         return;
       }
