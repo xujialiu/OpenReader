@@ -6,20 +6,22 @@ import XCTest
 /// 4 000 ms, the wait always runs out its full bound, so the continuation fires
 /// almost exactly 2 s after the Play press — a window a second tap can land in.
 ///
-/// Leaving the paused Reader inside that window (Back, or opening another
-/// Document) must end the Reading, and the late `play` must start nothing: no
-/// engine, no audio, no Reading Button in the Library. The app-side log lines
-/// (`play after the reading ended: ignored`, and no `play at utterance` after
-/// the leave) are read from the Debug Log by the host afterwards; so are the
-/// fake Kokoro requests (`fake-kokoro.cjs`'s own log) and the server's
-/// requests (`delaying-webdav.cjs`'s).
+/// The host stages every run (harness `open`/`collapse`, labelled handler-level
+/// in the report): the reader is already open, paused, with the player shown,
+/// so each method's taps land early in the XCUITest session — on this simulator
+/// synthetic input has silently died later in a session (README Pitfalls), and
+/// a landed Play tap is verifiable in the server's own request log.
+///
+/// The app-side log lines (`play after the reading ended: ignored`, and no
+/// `play at utterance` after the leave), the fake Kokoro requests and the
+/// server's requests are read by the host afterwards.
 ///
 /// Prerequisites: `A Short Test of Reading Aloud` and `Boundary Fixture` in the
-/// Library; sync ON against the delaying server (any throwaway credentials);
-/// the Local Provider enabled against `player-and-reading-held/fake-kokoro.cjs`
-/// with voice `af_bella`; the app running against this tree's Metro.
-/// `.activate()` only. Every method that presses Play is run after the runner's
-/// volume check (kit/run-probe.sh) and ends with playback stopped.
+/// Library; sync ON against the delaying server (throwaway credentials); the
+/// Local Provider enabled against `player-and-reading-held/fake-kokoro.cjs`
+/// with voice `af_bella`; the app against this tree's Metro. Every method that
+/// presses Play runs after the runner's volume check (kit/run-probe.sh) and
+/// ends with playback stopped or leaves the stopping to the host's next step.
 final class Issue106Probe: XCTestCase {
   let fixture = "A Short Test of Reading Aloud"
   let other = "Boundary Fixture"
@@ -44,65 +46,20 @@ final class Issue106Probe: XCTestCase {
     return false
   }
 
-  /// React Native's "Open debugger to view warnings." banner, which a warning
-  /// raises over the bottom of the screen: over the player and over the
-  /// Library's Reading Button. Dismissed by its own close button, never by a
-  /// tap on its body (that opens DevTools on the Mac).
-  func clearLogBox(_ app: XCUIApplication) {
-    let banner = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Open debugger to view warnings'")).firstMatch
-    guard banner.exists else { return }
-    let frame = banner.frame
-    app.coordinate(withNormalizedOffset: .zero)
-      .withOffset(CGVector(dx: frame.maxX - 22, dy: frame.midY)).tap()
-    _ = until(3) { !banner.exists }
-  }
-
-  /// A tap on a control at the bottom of the screen, clear of the banner.
-  func press(_ element: XCUIElement, _ app: XCUIApplication) {
-    clearLogBox(app)
-    element.tap()
-  }
-
   func returnButton(_ app: XCUIApplication) -> XCUIElement { app.buttons["Return to the reading"] }
   func inLibrary(_ app: XCUIApplication) -> Bool { app.navigationBars["Library"].exists }
-  func inReader(_ app: XCUIApplication) -> Bool {
-    app.buttons["Collapse the player"].exists || app.buttons["Show the player"].exists
-  }
   func row(_ title: String, _ app: XCUIApplication) -> XCUIElement {
     app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title + ",")).firstMatch
   }
 
-  /// The reader's own waiting lines: any of them after a return means the page was opened again.
-  func reloading(_ app: XCUIApplication) -> Bool {
-    app.staticTexts.matching(NSPredicate(
-      format: "label BEGINSWITH 'Laying the document out' OR label BEGINSWITH 'Opening ' OR label BEGINSWITH 'Reading '")).firstMatch.exists
-  }
-
-  /// Back to the Library, ending nothing: from the reader only while paused.
-  func toLibrary(_ app: XCUIApplication) {
+  /// The staged reader: in front, paused, its Play button hittable.
+  func stagedReader(_ app: XCUIApplication) {
     app.activate()
-    var steps = 0
-    while !inLibrary(app) && steps < 6 {
-      if app.buttons["Show the player"].exists { press(app.buttons["Show the player"], app) }
-      if app.buttons["Pause"].exists { press(app.buttons["Pause"], app) }
-      if app.buttons["BackButton"].exists { app.buttons["BackButton"].tap() }
-      steps += 1
-      Thread.sleep(forTimeInterval: 0.8)
-    }
-    XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5), "Could not get back to the Library")
+    XCTAssertTrue(until(10) { self.inReaderPaused(app) }, "Not staged: the reader is not in front paused")
   }
 
-  /// Into the fixture's reader, paused, the player shown.
-  func openFixture(_ app: XCUIApplication) {
-    if returnButton(app).exists { press(returnButton(app), app) } else {
-      let book = row(fixture, app)
-      XCTAssertTrue(book.waitForExistence(timeout: 10), "The fixture is not in the Library")
-      book.tap()
-    }
-    XCTAssertTrue(until(20) { self.inReader(app) && !self.reloading(app) }, "The reader did not open")
-    if app.buttons["Show the player"].exists { press(app.buttons["Show the player"], app) }
-    if app.buttons["Pause"].exists { press(app.buttons["Pause"], app) }
-    XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Expected the reader paused")
+  func inReaderPaused(_ app: XCUIApplication) -> Bool {
+    app.buttons["Collapse the player"].exists || app.buttons["Show the player"].exists
   }
 
   /// Case 1: Play, Back inside the 2 s wait. The Reading ends, and the late
@@ -110,15 +67,10 @@ final class Issue106Probe: XCTestCase {
   /// no Reading Button, no Pause, in the Library, past the wait and beyond.
   func testLeaveInsideSyncWaitStartsNothing() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
-    app.activate()
-    toLibrary(app)
-    XCTAssertFalse(returnButton(app).exists, "A Reading was already held before this test")
-    openFixture(app)
-    // Let the open moment's own sync run finish (its GET is held 4 s) so the
-    // Play press starts a fresh run and the wait's bound is the whole window.
-    Thread.sleep(forTimeInterval: 6)
+    stagedReader(app)
+    let play = app.buttons["Play"]
     let playAt = Date()
-    app.buttons["Play"].tap()
+    play.tap()
     app.buttons["BackButton"].tap()
     let backAt = Date()
     print("TIMING play=\(playAt.timeIntervalSince1970) back=\(backAt.timeIntervalSince1970) gap=\(backAt.timeIntervalSince(playAt))")
@@ -131,15 +83,12 @@ final class Issue106Probe: XCTestCase {
     capture("02-library-after-continuation", app)
   }
 
-  /// Case 2: Play, Back, and the other Document opened, all inside the wait.
-  /// The first book's late play starts nothing; the second reader is paused and
-  /// its own Play works afterwards.
+  /// Case 2: Play, Back, and the other Document's row, back to back inside the
+  /// wait. The first book's late play starts nothing; the second reader is
+  /// paused and its own Play works afterwards.
   func testOpenAnotherInsideSyncWait() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
-    app.activate()
-    toLibrary(app)
-    openFixture(app)
-    Thread.sleep(forTimeInterval: 6)
+    stagedReader(app)
     let playAt = Date()
     app.buttons["Play"].tap()
     app.buttons["BackButton"].tap()
@@ -149,32 +98,34 @@ final class Issue106Probe: XCTestCase {
     otherRow.tap()
     let otherAt = Date()
     print("TIMING play=\(playAt.timeIntervalSince1970) back=\(backAt.timeIntervalSince1970) other=\(otherAt.timeIntervalSince1970) gaps=\(backAt.timeIntervalSince(playAt))/\(otherAt.timeIntervalSince(playAt))")
-    XCTAssertTrue(until(20) { self.inReader(app) && !self.reloading(app) }, "The other document did not open")
-    XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "The other document's reader is not paused")
+    XCTAssertTrue(until(20) { app.buttons["Play"].exists && !self.reloadingNow(app) }, "The other document did not open paused")
     // Past the first Play's continuation: still nothing playing over the second reader.
     Thread.sleep(forTimeInterval: 4)
     XCTAssertFalse(app.buttons["Pause"].exists, "Audio started for the abandoned first Reading")
+    XCTAssertTrue(app.buttons["Play"].exists, "The second document's reader lost its own Play")
     capture("21-second-reader-paused-past-continuation", app)
     // The second book's own Play is undisturbed: it starts, and is stopped again.
     let secondPlayAt = Date()
-    press(app.buttons["Play"], app)
+    app.buttons["Play"].tap()
     XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 12), "The second document's Play did not start")
     print("TIMING secondPlayStarted=\(Date().timeIntervalSince1970) gap=\(Date().timeIntervalSince(secondPlayAt))")
-    press(app.buttons["Pause"], app)
+    app.buttons["Pause"].tap()
     XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Did not pause the second reading")
   }
 
+  func reloadingNow(_ app: XCUIApplication) -> Bool {
+    app.staticTexts.matching(NSPredicate(
+      format: "label BEGINSWITH 'Laying the document out' OR label BEGINSWITH 'Opening ' OR label BEGINSWITH 'Reading '")).firstMatch.exists
+  }
+
   /// Cases 3 and 4 (held): Play starts normally after the held sync's wait ran
-  /// out; Back to the Library keeps it playing with the Reading Button (#68);
-  /// paused from the Library's own media card. Ends with playback stopped.
+  /// out; Back to the Library keeps it playing with the Reading Button (#68).
+  /// The host pauses what this leaves playing (harness `pause`, labelled).
   func testPlayAfterHeldSyncKeepsPlayingInLibrary() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
-    app.activate()
-    toLibrary(app)
-    openFixture(app)
-    Thread.sleep(forTimeInterval: 6)
+    stagedReader(app)
     let playAt = Date()
-    press(app.buttons["Play"], app)
+    app.buttons["Play"].tap()
     // Held sync: the wait runs out at 2 s, then the engine builds and the first
     // Clip arrives from the fake Kokoro — give that 12 s.
     XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 12), "Play did not start after the held sync ran out")
@@ -191,45 +142,19 @@ final class Issue106Probe: XCTestCase {
     Thread.sleep(forTimeInterval: 6)
     XCTAssertTrue(btn.exists && (btn.value as? String)?.hasSuffix("Playing") == true, "The reading did not keep playing in the Library")
     capture("31-library-playing", app)
-
-    // Pause it from the Library: the media card's own Pause, as ReadingHeldProbe
-    // does it. If the card is not there, fall back to the reader's Pause and say so.
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.01))
-      .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.7)))
-    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-    let center = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
-    if center.waitForExistence(timeout: 5), center.label == "Pause" {
-      center.tap()
-      let paused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Play"), object: center)
-      XCTAssertEqual(XCTWaiter.wait(for: [paused], timeout: 3), .completed, "The media card's Pause did not take")
-      print("PAUSED-VIA media-card")
-    } else {
-      print("PAUSED-VIA reader-fallback (no media card)")
-      app.activate()
-      press(returnButton(app), app)
-      XCTAssertTrue(until(5) { self.inReader(app) }, "The Reading Button did not return to the reader")
-      press(app.buttons["Pause"], app)
-    }
-    app.activate()
-    XCTAssertTrue(returnButton(app).waitForExistence(timeout: 5), "The Reading Button went with the pause")
-    XCTAssertTrue(until(3) { (self.returnButton(app).value as? String)?.hasSuffix("Paused") == true }, "The Reading Button does not say the reading is paused")
-    capture("32-library-paused", app)
   }
 
   /// Case 4 (fast): with the server answering at once (DELAY_MS 0), Play starts
-  /// promptly after a sync that reports `ok`. Ends with playback stopped.
+  /// promptly after a sync that reports `ok`. Ends paused.
   func testPlayAfterFastSyncStarts() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
-    app.activate()
-    toLibrary(app)
-    openFixture(app)
-    Thread.sleep(forTimeInterval: 3)
+    stagedReader(app)
     let playAt = Date()
-    press(app.buttons["Play"], app)
+    app.buttons["Play"].tap()
     XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 8), "Play did not start after the fast sync")
     print("TIMING case4fast play=\(playAt.timeIntervalSince1970) playing=\(Date().timeIntervalSince1970) delay=\(Date().timeIntervalSince(playAt))")
     shot("40-playing-after-fast-sync")
-    press(app.buttons["Pause"], app)
+    app.buttons["Pause"].tap()
     XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Did not pause after the fast-sync play")
   }
 }
