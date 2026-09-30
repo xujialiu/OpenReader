@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenReader Privacy Policy</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+<h1>OpenReader Privacy Policy</h1>
+<p class="muted">Last updated 30 September 2026</p>
+
+<p>OpenReader reads EPUB documents aloud with a speech service you choose. It has no account, no server of its own, no analytics and no advertising. The developer receives none of your data.</p>
+
+<h2>What stays on your iPhone</h2>
+<ul>
+<li>The documents you add, your library, your reading positions and your settings are stored in the app on your iPhone.</li>
+<li>Audio you download for listening offline is stored in the app.</li>
+<li>API keys you enter are stored in the iOS Keychain on your iPhone. A key is only ever sent to the service it belongs to.</li>
+</ul>
+
+<h2>What leaves your iPhone, and where it goes</h2>
+<p>OpenReader sends data to another service only when you use a feature that needs it. The first time it would send text to a service, it asks you first, and sends nothing unless you agree.</p>
+
+<h3>Reading aloud and downloading audio</h3>
+<p>To speak a document, OpenReader sends its text, a sentence or paragraph at a time, to the speech service you chose, together with your API key for that service:</p>
+<ul>
+<li>OpenAI</li>
+<li>Fish Audio</li>
+<li>Microsoft Azure Speech, in the region you set</li>
+<li>Speechify</li>
+<li>A server you run yourself, at the address you enter (OpenAI-compatible or Kokoro-FastAPI)</li>
+</ul>
+<p>Each service handles what it receives under its own privacy policy and terms, through the account the key belongs to. OpenReader has no arrangement with any of them and does not control what they keep.</p>
+
+<h3>Word Lookup &amp; Translation</h3>
+<p>When you look up or translate a selection, OpenReader sends only the selected text to the service you chose: Youdao, Google Translate, the Free Dictionary API (dictionaryapi.dev), or Microsoft Translator with your own key. A word's pronunciation is played from Youdao, or from the recording the Free Dictionary API links to. Nothing else from the document is sent, and no history of lookups is kept.</p>
+
+<h3>Sync</h3>
+<p>If you turn on Sync, OpenReader keeps a small positions file on the WebDAV server you set up, using the credentials you enter. For each document with a reading position, the file holds the document's identifier (a fingerprint of the file, not its name or contents), your place in it, the sentence at that place with a few words either side, when you were there, and a name for your device. The documents themselves are never uploaded.</p>
+
+<h3>Voice lists</h3>
+<p>To show a service's voices, OpenReader asks that service for its list, sending your API key and nothing from your documents.</p>
+
+<h2>What OpenReader does not do</h2>
+<ul>
+<li>No analytics, crash reporting, advertising or tracking of any kind.</li>
+<li>Nothing is sent to the developer, sold or shared for any other purpose.</li>
+<li>It does not use your location, contacts, photos, camera or microphone.</li>
+</ul>
+
+<h2>Removing your data</h2>
+<p>Deleting OpenReader deletes the documents, audio, positions and settings stored in it. iOS can keep Keychain items after an app is deleted, so remove your API keys in OpenReader's Providers settings first if you want them gone. The positions file on your WebDAV server is yours to delete there.</p>
+
+<h2>Children</h2>
+<p>OpenReader is not directed at children, and it collects no personal data from anyone.</p>
+
+<h2>Changes</h2>
+<p>If this policy changes, the new version will be posted on this page with a new date.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy: <a href="mailto:xujialiuphd@gmail.com">xujialiuphd@gmail.com</a>.</p>
+
+<p class="muted"><a href="./">OpenReader support</a></p>
+</main>
+</body>
+</html>

@@ -3,6 +3,11 @@
 _The engineering half of this decision is
 [ADR 0044](../adr/0044-a-paused-contents-row-browses.md)._
 
+_Since [design 0063](0063-a-chapter-chosen-while-listening-only-takes-the-page-there.md)
+a chapter chosen while playing only takes the page there too, and the voice
+carries on. Where this file says a chapter still moves the reading while
+playing, read design 0063._
+
 While the reading is paused, choosing a chapter in the contents takes the page
 there and does nothing else. The sentence you stopped on keeps its highlight,
 your saved place stays where it was, and pressing play carries on from that
