@@ -136,7 +136,8 @@ export interface ReadingViewProps {
   /**
    * A place that arrived from another device while this book is open, or null
    * (issue #20): `at` is when it arrived, which is what the effect keys on, and
-   * `position` is where it points. The reading moves there unless it is playing.
+   * `position` is where it points. The reading moves there unless it is playing;
+   * then it may move there when it stops (`resumeAt`, #105).
    */
   adopted: { at: number; position: ReadingPlace } | null;
   onRate(rate: number): void;
@@ -371,9 +372,10 @@ export function ReadingView({
 
   /**
    * A place from another device, while this book is open (issue #20). Keyed on
-   * when it arrived, so each arrival is offered once; `resumeAt` declines while
-   * playing, which is the whole of the rule. An arrival Play has already passed
-   * on from its own sync is held by then, and is taken once (#54).
+   * when it arrived, so each arrival is offered once. `resumeAt` declines it
+   * while playing and settles it itself when the reading stops (#105). An arrival
+   * Play has already passed on from its own sync is held or being read by then,
+   * and is taken once (#54).
    */
   const takePlace = reading.resumeAt;
   useEffect(() => {
@@ -431,7 +433,9 @@ export function ReadingView({
    * newest. The outcome is that run's own, so a sync queued meanwhile cannot
    * hide what it adopted; and a place whose section has not rendered yet is
    * waited for by `reading.play()` rather than given up (#54). Past the bound,
-   * or with the server down, it starts from here and does not move afterwards.
+   * or with the server down, it starts from here. A place the run takes after
+   * that does not move the reading while it plays; the Reading keeps it and
+   * takes it when it stops, unless the reading has moved on since (#105).
    */
   const play = useCallback(() => {
     lookup.stopPronunciation(false);
