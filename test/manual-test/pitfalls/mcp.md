@@ -58,3 +58,39 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 - **One rendered Text line appears twice in `snapshot_ui`'s text list and AXe `describe-ui`, at one identical frame.** 2026-09-30 (#103, `iPhone 17 share95`, iOS 27.0): the player's note `No provider is enabled. …` was listed as two StaticText entries (e30, e31) whose frames agreed to ten decimal places (x 12.333333015441895, y 723.333333492279, same size), while the screenshot showed one line. RN exposes the text node twice (container and inner text) under one visual line. Before reporting a visual duplicate — the #72 shape — compare the frames: identical frames are one line; #72's real duplicate was two stacked lines. Confirm with a screenshot.
 - **A lost touch-up can leave a screen transition frozen mid-animation.** Same day, after a Settings→Library Back: the down answered SNAPSHOT_CAPTURE_FAILED (the navigation had started), the up answered SNAPSHOT_MISSING, and the screen sat for over a minute on the half-morphed header (the Library|Settings pill frozen, Settings content showing) instead of settling. The transition waits for the touch to complete. Fix: `snapshot_ui` again, then a fresh touch down+up on the destination element (here the pill's `Library` button) — the Library appeared at once. Per the bullet above, the first action did land; the gesture, not the app, was incomplete.
 - **"`Timed out creating the simulator remote automation session`" for ~30 s after a boot** — both `snapshot_ui` and `axe tap` answered this right after `bootstatus -b` finished (twice, two boots). Sleep ~25 s and retry; nothing is broken.
+
+- **Typing a provider credential raises the system **Save Password?** alert,
+  and the alert is only dismissible through the app's own tree.** 2026-09-30
+  (#105): after typing a gateway's headers into the Provider screen's masked
+  field, the alert covers the reader. `snapshot_ui` and AXe cannot see it
+  (remote view, the share sheet's pattern); `com.apple.springboard`'s
+  buttons/alerts/otherElements have no `Not Now`; raw pixel taps landed twice
+  in six tries. It IS in the app's own tree — `SavePassword105Probe.swift`
+  found it as `app.otherElements.buttons['Not Now']` and XCUITest tapped it
+  first time. Keep a probe, not pixel taps, for system alerts.
+- **A scenario probe that presses the player's transport must re-resolve the
+  button by its current label.** The same button reads `Play` paused and
+  `Pause` playing; a query kept from the paused state resolves to nothing over
+  the playing tree's churn (the highlight re-renders every word), and the tap
+  silently lands nowhere — the first control run's Pause never happened and
+  the reading ran to the end. Fix: `app.buttons["Pause"]` with
+  `waitForExistence` right before the second press
+  (`Scenario105Probe.swift`).
+- **XCTest taps on the player's buttons are eaten in runs, and the run can
+  outlast a spoken sentence.** 2026-09-30 (#105): the same probe's taps
+  started the reading at 22:24, 22:27 and 22:56 and did nothing at 22:29,
+  22:40, 23:03, 23:15 and 23:31 — across an app relaunch and a simulator
+  reboot, and with two other sessions' automations running against their own
+  simulators. A missed Play wastes the run; a missed Pause lets the document
+  finish (this fixture is ~30 s spoken) and the report reads the wrong
+  outcome. Fix: after pressing Play, wait up to 4 s for the `Pause` button and
+  retry the press (three attempts), and time the presses inside ONE XCTest
+  method — host-side tool round trips (30-60 s each under load) cannot land a
+  second press inside a spoken sentence at all (`Scenario105Probe.swift`).
+  How to tell an eaten tap from the app ignoring one: every press that did
+  nothing has `Computed hit point {-1, -1} after scrolling to visible` under
+  its `Synthesize event` in the run's `test.log`, and the Debug Log has no
+  `[reading] play` and no `play` sync for it. No press that worked has that
+  line. So XCTest aimed the tap at no point, and the app never saw it. Grep the
+  log for the hit point before blaming the app, or before calling a failure
+  flaky.

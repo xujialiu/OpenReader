@@ -253,3 +253,40 @@ subfolder), none of them the app being wrong.
   backgrounded behaviour; it does not establish behaviour under an actually
   locked screen, and a report that turns on this distinction should say which
   one was tested.
+
+## Crafting the #105 scenario state host-side (2026-09-30)
+
+Verifying #105 needed the phone's Library reset to a chosen place and the
+served Positions File swapped under a running app, and four things went wrong
+before the run went green:
+
+- **A Library `position` is a ReadingPosition, not a PositionsItem.** Hand-
+  editing `library.json` with the full item (adding `id`, `format`,
+  `publicationId` inside `position`) made the loader raise its unknown-keys
+  guard: "The Library file carries 3 key(s) this build does not know…
+  Nothing was written. The Library on screen and the file on disk have
+  stopped agreeing." The app then ran for an hour without writing the file
+  again. Fix: `position = {locator, anchor, stamp}` only, taken from the
+  phone's own upload (a recorded PUT body), never from a PositionsItem.
+- **A served item without the envelope is dropped, silently as far as the run
+  is concerned.** The stub's served file holding a headless
+  `{locator, anchor, stamp}` item parses `ok` with **zero** items
+  (`parseItem` returns null without an `id`), every sync reports
+  "0 items in the file", nothing is adopted, and the phone uploads its own
+  place over the gap. Fix: craft served files only from complete recorded
+  PUT items, and prove one with the app's own `parsePositionsFile` (tsx)
+  before the run.
+- **The relaunch's own sync moments race the Library load and adopt-or-not
+  against a half-loaded shelf.** With the other device's newer place already
+  served, one relaunch adopted nothing ("0 places taken" — the launch/open
+  pokes ran before the entries were loaded) and the next resumed the reading
+  straight at the desktop's place. Fix: serve the **empty** file across every
+  relaunch, and swap the crafted file in only once the reader is open,
+  resumed and idle — the app idle-paused in a reader makes no sync moments,
+  so nothing consumes the swap or the armed delay before Play.
+- **A pause-poke GET arriving while the target is served adopts it while
+  paused.** Anything that completes a sync between the adoption and the
+  pause delivers the newer place through the #54 paused-path instead. The
+  swap-when-idle rule above covers it; check the stub's log line count
+  before pressing Play (baseline counters), so a stray run is seen rather
+  than assumed away.

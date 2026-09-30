@@ -75,14 +75,14 @@ describe('a place a resume landed on is never written again (observation b, ADR 
   const reading = code('use-reading.ts');
 
   it('answers no place while the cursor is on the resumed sentence', () => {
-    const fn = within(reading, 'const readingPosition = useCallback(', '}, []);');
+    const fn = within(reading, 'const readingPosition = useCallback(', '}, [placeAt]);');
     pin(fn, 'if (at === resumedAtRef.current) return null;', 'use-reading.ts, readingPosition');
   });
 
   it('answers no place while a place is still pending, whose Stamp the stored position already carries (#54)', () => {
     // Without it a pause, a renumbering or leaving the screen wrote this device's
     // older sentence above a place just taken from the desktop, and carried it back.
-    const fn = within(reading, 'const readingPosition = useCallback(', '}, []);');
+    const fn = within(reading, 'const readingPosition = useCallback(', '}, [placeAt]);');
     pin(fn, 'if (resumeRef.current) return null;', 'use-reading.ts, readingPosition');
   });
 
@@ -123,7 +123,7 @@ describe('an adopted place asks for its section (defect 3)', () => {
     pin(reveal, 'reportedSectionsRef.current.has(section)', 'use-reading.ts, revealPendingPlace');
     const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, followRow, revealPendingPlace, stopWaitingIfArrived],');
     pin(blocks, 'if (resumeRef.current && adoptedPendingRef.current) revealPendingPlace(resumeRef.current);', 'use-reading.ts, handleBlocks');
-    const resume = within(reading, 'const resumeAt = useCallback(', '[tryResume, revealPendingPlace, stopWaitingIfArrived],');
+    const resume = within(reading, 'const resumeAt = useCallback(', '[tryResume, revealPendingPlace, stopWaitingIfArrived, placeAt],');
     pin(resume, 'revealPendingPlace(place);', 'use-reading.ts, resumeAt');
   });
 });
