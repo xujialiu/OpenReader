@@ -33,10 +33,9 @@
  */
 
 import type { Utterance } from '../core/segmenter';
-import type { TTSProvider } from '../core/providers/types';
 import { createMemoryCache } from '../core/memory-cache';
 import { createAudioGraph, type AudioGraph, type DecodedClip } from './audio-graph';
-import { createClipFetcher, DEFAULT_CACHE_BYTES, type PreparedClip } from './clips';
+import { createClipFetcher, DEFAULT_CACHE_BYTES, type ClipProvider, type PreparedClip } from './clips';
 import type { ClipCache, StoredClip } from './clip-cache';
 import { DEFAULT_GAP, gapContentSeconds, startsNewBlock, type GapSettings } from './gap';
 import { atTheEar, clampRate, heardSeconds, NATURAL_PACE, scaleTimings } from './rate';
@@ -86,7 +85,7 @@ export interface OutOfTextReport {
 
 export interface PlaybackEngineDeps {
   /** The Provider, already holding its key — which arrives as a setting and never as a side effect (ADR 0002). */
-  provider: TTSProvider;
+  provider: ClipProvider;
   /** Initial Voice. An explicit switch replaces it only at an audible boundary. */
   voice: string;
   /** Where the clock goes: the renderer's bridge (ADR 0005) and the lock screen (ADR 0016) are two readers of one clock. */
@@ -204,7 +203,7 @@ export interface PlaybackEngine {
    */
   silence(): void;
   setRate(rate: number): void;
-  switchVoice(provider: TTSProvider, voice: string, selected: () => void, failed: (error: unknown) => void): void;
+  switchVoice(provider: ClipProvider, voice: string, selected: () => void, failed: (error: unknown) => void): void;
   cancelVoiceSwitch(): void;
   snapshot(): PlaybackSnapshot;
   /** Give back the audio session and close the context. After this the engine is done. */
@@ -277,7 +276,10 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     selected(): void;
     failed(error: unknown): void;
     armed: { cut: string | null; removed: { clip: QueuedClip; audio: DecodedClip }[] } | null;
+    /** Started once nothing the switch has asked for waits on the owner (`startDeadline`), and never before. */
     deadline: ReturnType<typeof setTimeout> | null;
+    /** The sentences being fetched that are not yet cleared: each may be waiting on the owner's answer (#109). */
+    uncleared: Set<number>;
   };
   let pending: PendingSwitch | null = null;
   /** Set by `silence` and cleared by `seek`: nothing is fetched, queued or switched while it holds. */
@@ -631,6 +633,26 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     publish();
   }
 
+  /**
+   * Bound a voice switch's preparation, which begins once nothing it has asked
+   * for waits on the owner (#109, ADR 0064).
+   *
+   * Started from the choice, as it used to be, the deadline counted the owner's
+   * answer as preparation. The first sentences of a Voice not yet allowed wait
+   * on the question, and after 120 s with the alert still open, the switch
+   * failed with "could not catch up". It is started once, and a later sentence
+   * does not restart it: a slow target must still not chase a fast reading
+   * forever.
+   */
+  function startDeadline(target: PendingSwitch) {
+    if (pending !== target || target.armed || target.deadline || disposed) return;
+    target.deadline = setTimeout(() => {
+      if (pending !== target || target.armed) return;
+      cancelVoiceSwitch();
+      target.failed(new Error('The new voice could not catch up. The current voice is unchanged.'));
+    }, 120_000);
+  }
+
   function prepareSwitch() {
     const target = pending;
     // Waiting, the front of an empty queue is the sentence the owner has just left.
@@ -656,8 +678,12 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       const text = utterances[at];
       if (!text || target.ready.has(at) || target.fetching.has(at) || target.fetching.size >= 2) continue;
       target.fetching.add(at);
+      target.uncleared.add(at);
       const built = graph;
-      void target.fetcher.fetch(at, text.text, text.speakable).then((clip) => {
+      void target.fetcher.fetch(at, text.text, text.speakable, () => {
+        target.uncleared.delete(at);
+        if (target.uncleared.size === 0) startDeadline(target);
+      }).then((clip) => {
         if (pending !== target || disposed) return null;
         return built.prepare(clip);
       }).then((audio) => {
@@ -764,15 +790,11 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     switchVoice(provider, voice, selected, failed) {
       cancelVoiceSwitch();
       const target: PendingSwitch = { id: ++switchSerial, fetcher: createClipFetcher({ provider, voice, cache, timeoutMs: deps.synthesisTimeoutMs, brackets: deps.brackets }),
-        ready: new Map(), fetching: new Set(), selected, failed, armed: null, deadline: null };
+        ready: new Map(), fetching: new Set(), selected, failed, armed: null, deadline: null, uncleared: new Set() };
       pending = target;
       // A slow target must not chase a fast reading forever. Pausing still keeps
-      // downloads alive; this bounds preparation, not how long a pause may last.
-      target.deadline = setTimeout(() => {
-        if (pending !== target || target.armed) return;
-        cancelVoiceSwitch();
-        failed(new Error('The new voice could not catch up. The current voice is unchanged.'));
-      }, 120_000);
+      // downloads alive; the deadline bounds preparation, not how long a pause
+      // may last, nor how long the owner takes to answer (`startDeadline`).
       prepareSwitch();
     },
 

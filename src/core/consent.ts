@@ -48,6 +48,8 @@ export interface ConsentGate<R extends ConsentRecipient> {
   ensure(recipient: R): Promise<boolean>;
   /** The person has asked for something to be sent: lift the refusals, for one key or for all, so the next `ensure` asks again. */
   again(key?: string): void;
+  /** Whether a yes is kept for this key. Asks nothing, and waits on nothing. */
+  allows(key: string): boolean;
 }
 
 export function createConsentGate<R extends ConsentRecipient>(deps: ConsentDeps<R>): ConsentGate<R> {
@@ -82,6 +84,9 @@ export function createConsentGate<R extends ConsentRecipient>(deps: ConsentDeps<
     again(key) {
       if (key === undefined) refused.clear();
       else refused.delete(key);
+    },
+    allows(key) {
+      return deps.kept(key);
     },
   };
 }

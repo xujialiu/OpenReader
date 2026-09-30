@@ -98,6 +98,19 @@ describe('the consent gate', () => {
     expect(f.ask.mock.calls.map(([recipient]) => recipient.key)).toEqual(['provider:fish', 'lookup:youdao']);
   });
 
+  it('says whether a yes is kept without asking, waiting on a question or lifting a refusal', async () => {
+    const f = fixture();
+    expect(f.gate.allows('provider:fish')).toBe(false);
+    const open = f.gate.ensure(fish);
+    // Asked, and not yet answered: nothing is kept.
+    expect(f.gate.allows('provider:fish')).toBe(false);
+    await f.answer(true);
+    await open;
+    expect(f.gate.allows('provider:fish')).toBe(true);
+    expect(f.gate.allows('lookup:youdao')).toBe(false);
+    expect(f.ask).toHaveBeenCalledTimes(1);
+  });
+
   it('takes a question that failed to be asked as a no', async () => {
     const kept = new Set<string>();
     const gate = createConsentGate({ kept: (key) => kept.has(key), keep: (key) => { kept.add(key); }, ask: async () => { throw new Error('no window'); } });
