@@ -22,7 +22,10 @@ as a function, which react-native-screens mounts as `navigationItem.titleView`.
 
 `src/app/reader-title.tsx`'s `ReaderTitle` is a `Text` with:
 
-- `numberOfLines={2}` and `ellipsizeMode="tail"`;
+- `numberOfLines={2}` and `ellipsizeMode="tail"`; since design 0060 the `Text`
+  is `NameText`'s (`src/app/name-text.tsx`), which shows the name cut after a
+  whole word, read off an unseen copy laid out at `width={room}`, the title's
+  full `maxWidth`, because the title's own box shrinks to its words;
 - 17-point semibold (`fontWeight: '600'`), centred, `INK.text`: the phone's
   inline bar title is the `headline` style, 17-point semibold;
 - `allowFontScaling={false}`: the phone's own inline bar title does not follow

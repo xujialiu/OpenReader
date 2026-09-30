@@ -26,6 +26,8 @@ already a cut between words.
 
 VoiceOver still reads the whole name.
 
+The name above the page in the reader is cut the same way.
+
 ## Straight on the left, uneven on the right
 
 The name is set flush left, as the phone's own lists set theirs. Justified
@@ -46,6 +48,8 @@ different from before, and the owner kept it as it was.
   names that just fitted on one line now take two, and some that fitted on two
   are now cut.
 - **The app cuts the name itself.** The phone can only cut after a letter, so
-  the app lays each name out a second time, unseen, to learn where its lines
-  break, and cuts it there. The first time a row is drawn, and after a rename,
-  the phone's own cut can show for an instant before the app's replaces it.
+  the app lays each long name out again, unseen, to learn where its lines
+  break, and then once for each cut it tries, keeping as many words as the
+  three dots leave room for. The first time a row is drawn, and after a
+  rename, the phone's own cut can show for an instant before the app's
+  replaces it.

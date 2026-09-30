@@ -14,7 +14,9 @@ two volumes apart.
 
 Now a name that does not fit on one line takes a second, and only a name that
 does not fit on two is cut, with the three dots at the end of the second line.
-A name that fits on one line looks exactly as before.
+The cut falls after a whole word, "Volume Three: The…" rather than
+"Volume Three: The Lo…", as it does in the Library (decision 0060). A name that
+fits on one line looks exactly as before.
 
 ## The same letters, on two lines
 

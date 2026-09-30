@@ -22,11 +22,16 @@
  * 12 points from each button. So the right side, the wider one, keeps 402 - 333
  * + 12 = 81 points, and a title narrower than the window less 81 on each side
  * fits while centred.
+ *
+ * **Cut after a whole word**, as the Library's rows are (`NameText`, design
+ * 0060). The unseen copy is laid out at the full width the title may take,
+ * because the title's own box shrinks to its words.
  */
 
-import { StyleSheet, Text, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { INK } from './controls';
+import { NameText } from './name-text';
 
 /** The room each side of the title leaves for a button and the gap before it, in points (measured, above). */
 export const TITLE_SIDE = 81;
@@ -36,16 +41,12 @@ export const TITLE_SIZE = 17;
 
 export function ReaderTitle({ title }: { title: string }) {
   const { width } = useWindowDimensions();
+  const room = Math.max(0, width - 2 * TITLE_SIDE);
   return (
-    <Text
-      accessibilityRole="header"
-      allowFontScaling={false}
-      ellipsizeMode="tail"
-      numberOfLines={2}
-      style={[styles.title, { maxWidth: Math.max(0, width - 2 * TITLE_SIDE) }]}
-    >
-      {title}
-    </Text>
+    <View>
+      <NameText name={title} lines={2} width={room} accessibilityRole="header" allowFontScaling={false}
+        style={[styles.title, { maxWidth: room }]} />
+    </View>
   );
 }
 

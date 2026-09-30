@@ -22,7 +22,7 @@ import { Children, createContext, isValidElement, useContext, useMemo, useState,
 import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { Icon, type IconName } from './icon';
-import { cutAtWord } from './name-lines';
+import { NameText } from './name-text';
 
 /**
  * One colour that is two, resolved by iOS rather than by React (ADR 0022).
@@ -560,18 +560,14 @@ export function HeaderButton({ label, icon, title, onPress, disabled }: {
  * spacing out its letters as well as its words, and a line of a name in this
  * column is only three or four words (notes, 2026-09-30 09:56).
  *
- * A name longer than two lines is cut after a whole word (`cutAtWord`). An
- * unseen copy of the name, laid out at the same width with no limit, says where
- * its lines break; until it has, and whenever the phone must cut anyway, the
- * phone's own cut stands. The row's label is set rather than read off its
- * words, so VoiceOver still says the whole name, and says it once.
+ * A name longer than two lines is cut after a whole word (`NameText`, design
+ * 0060). The row's label is set rather than read off its words, so VoiceOver
+ * says the whole name, and says it once.
  */
 export function DocumentRow({ title, progress, cover, onPress, onLongPress, onActions }: {
   title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void; onActions(): void;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  const [cut, setCut] = useState<{ title: string; shown: string | null } | null>(null);
-  const shown = (cut?.title === title ? cut.shown : null) ?? title;
   return <View>
     <Pressable accessibilityRole="button" accessibilityLabel={`${title}, ${progress}`} onPress={onPress} onLongPress={onLongPress}
       style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}>
@@ -580,10 +576,8 @@ export function DocumentRow({ title, progress, cover, onPress, onLongPress, onAc
           resizeMode="contain" onError={() => setFailed(cover)} /> : <Icon name="book" color={INK.quiet} size={28} />}
       </View>
       <View style={styles.documentWords}>
-        <Text style={styles.documentTitle} numberOfLines={DOCUMENT_TITLE_LINES}>{shown}</Text>
+        <NameText name={title} lines={2} style={styles.documentTitle} />
         <Text style={styles.rowProgress} numberOfLines={1}>{progress}</Text>
-        <Text style={[styles.documentTitle, styles.measure]} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-          onTextLayout={({ nativeEvent }) => setCut({ title, shown: cutAtWord(nativeEvent.lines.map((line) => line.text), DOCUMENT_TITLE_LINES) })}>{title}</Text>
       </View>
     </Pressable>
     <Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${title}`} onPress={onActions} style={styles.documentActions}>
@@ -599,7 +593,6 @@ export function DocumentRow({ title, progress, cover, onPress, onLongPress, onAc
  */
 const DOCUMENT_ACTIONS = { right: 12, padding: 10, icon: 22 };
 const DOCUMENT_ROW_PADDING = 22;
-const DOCUMENT_TITLE_LINES = 2;
 
 const styles = StyleSheet.create({
   disabled: { opacity: 0.4 },
@@ -611,8 +604,6 @@ const styles = StyleSheet.create({
   documentActions: { position: 'absolute', right: DOCUMENT_ACTIONS.right, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: DOCUMENT_ACTIONS.padding },
   cover: { width: 56, height: 80, borderRadius: 5, backgroundColor: INK.panel, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   coverImage: { width: '100%', height: '100%' },
-  // The unseen copy of a name that says where its lines break.
-  measure: { left: 0, opacity: 0, position: 'absolute', right: 0, top: 0 },
   documentWords: { flex: 1, gap: 7, marginRight: DOCUMENT_ACTIONS.right + 2 * DOCUMENT_ACTIONS.padding + DOCUMENT_ACTIONS.icon - DOCUMENT_ROW_PADDING },
   documentTitle: { color: INK.text, fontSize: 17, fontWeight: '500', lineHeight: 23 },
   headerButton: { color: INK.text, fontSize: 16, fontWeight: '600' },
