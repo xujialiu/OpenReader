@@ -5,8 +5,8 @@
  * Chapter one, in order:
  *
  * - `h1` — the heading (Utterance 0).
- * - p1 — one **long** sentence ("Phone old sentence, …", Utterance 1): about
- *   56 words, roughly 20 s of narration, so a real Pause can land inside it
+ * - p1 — one **long** sentence ("Phone old sentence, …", Utterance 1): about 95
+ *   words, roughly 30 s of narration at the player's 1.50×, so a real Pause can
  *   several seconds after Play's two-second sync bound and the held download.
  * - p2 — three short sentences (Utterances 2-4): `Phone old continuation.`
  *   (the phone's own next), `Desktop new sentence.` (the other device's
@@ -77,7 +77,7 @@ const CHAPTER_ONE = `<?xml version="1.0" encoding="UTF-8"?>
 <head><title>${TITLE}</title></head>
 <body>
 <h1>${TITLE}</h1>
-<p>Phone old sentence, and it goes on for a while so that a pause can land inside it, past the point where the newer place arrives, through a stretch of quiet hills and slow rivers and wide fields under a patient sky, with the voice still reading calmly while the download finishes somewhere behind the page.</p>
+<p>Phone old sentence, and it goes on for a while so that a pause can land inside it, past the point where the newer place arrives, through a stretch of quiet hills and slow rivers and wide fields under a patient sky, with the voice still reading calmly while the download finishes somewhere behind the page, and on past the meadows where the cattle stand in the shade of a single wide tree, dip their heads to the cool brown water and drink as the evening settles over the valley.</p>
 <p>Phone old continuation. Desktop new sentence. Desktop new continuation.</p>
 </body>
 </html>
