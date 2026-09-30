@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { APP_VERSION } from '../../app-version';
+
 /**
  * `installDebugLog` against a file system, an AppState and a native module in
  * memory (ADR 0054). In a build without Debug Mode it must not touch any of
@@ -133,9 +135,10 @@ describe('a build with Debug Mode', () => {
     expect(world.made).toEqual([FOLDER]);
     expect(world.excluded).toEqual([FOLDER]);
     log.flushDebugLog();
-    expect(written()).toMatch(
-      /\[launch\] OpenReader 0\.0\.2-beta\d+, native 0\.0\.1 \(1\), Debug Mode on, embedded bundle, system log on, kept in file:\/\/\/container\/Library\/Application Support\/debug-log\n$/,
-    );
+    // The version is app-version.ts's, so a new beta or release changes nothing here.
+    expect(written()).toMatch(new RegExp(
+      `\\[launch\\] OpenReader ${APP_VERSION.replace(/\./g, '\\.')}, native 0\\.0\\.1 \\(1\\), Debug Mode on, embedded bundle, system log on, kept in file:///container/Library/Application Support/debug-log\n$`,
+    ));
     expect(world.system[0]).toMatch(/^\[launch\] OpenReader /);
   });
 

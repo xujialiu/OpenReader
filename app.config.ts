@@ -117,10 +117,14 @@ const config: ExpoConfig = {
 
     config: {
       /**
-       * #108. Writes ITSAppUsesNonExemptEncryption = NO. The app's only
-       * encryption is HTTPS and WSS through the system, plus the Keychain, and
-       * both are exempt. With the key set, no upload waits on the
-       * export-compliance question.
+       * #108. Writes ITSAppUsesNonExemptEncryption = NO. The app's own
+       * encryption is HTTPS and WSS through the system, plus the Keychain.
+       * FFmpeg's libavformat, vendored by react-native-audio-api, also links
+       * OpenSSL (#111), but FFmpeg is only ever handed bytes the app has
+       * already fetched (`decodeAudioData`), so its TLS code is never reached.
+       * The app's primary function is not information security, so its
+       * encryption is exempt (EAR Category 5 Part 2, Note 4). With the key
+       * set, no upload waits on the export-compliance question.
        */
       usesNonExemptEncryption: false,
     },
