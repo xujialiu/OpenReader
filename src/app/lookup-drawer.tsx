@@ -7,6 +7,7 @@ import { INK, useBorders, ValueRow } from './controls';
 import { Icon } from './icon';
 import { TRANSLATION_SERVICES } from './translation-screen';
 import type { LookupHandle } from './use-lookup';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /** Nonmodal: the native selection handles in the document above remain reachable. */
 export function LookupDrawer({ lookup, height, service, onService }: {
@@ -61,7 +62,7 @@ export function LookupDrawer({ lookup, height, service, onService }: {
     {lookup.selection.mode === 'translation' ? <ValueRow label="Service" choices={TRANSLATION_SERVICES} chosen={service} onChoose={(next) => { setCopied(false); onService(next); }} /> : null}
     <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
       <Text style={styles.word} numberOfLines={lookup.selection.mode === 'dictionary' ? 3 : 2}>{lookup.selection.text}</Text>
-      {lookup.result?.phonetic ? <Text style={styles.quiet}>{lookup.result.phonetic}</Text> : null}
+      {lookup.result?.phonetic ? <Text style={styles.phonetic}>{lookup.result.phonetic}</Text> : null}
       {lookup.result?.pronunciations.length ? <View style={styles.audioRow}>
         {lookup.result.pronunciations.map((audio) => <Pressable key={audio.url} accessibilityRole="button" accessibilityLabel={`Play ${audio.label} pronunciation`}
           onPress={() => lookup.pronounce(audio.url)} style={styles.audio}>
@@ -73,7 +74,7 @@ export function LookupDrawer({ lookup, height, service, onService }: {
       {lookup.error ? <View><Text style={styles.error}>{lookup.error}</Text><Pressable accessibilityRole="button" onPress={lookup.retry} style={styles.retry}><Text style={styles.action}>Retry</Text></Pressable></View> : null}
       {lookup.result ? <>
         <Text selectable style={styles.definition}>{lookup.result.text}</Text>
-        <View style={styles.footer}><Text style={styles.quiet}>{lookup.result.source}</Text>
+        <View style={styles.footer}><Text style={styles.source}>{lookup.result.source}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Copy result" onPress={() => { void copy(); }} style={styles.copy}>
             <Text style={styles.action}>{copied ? 'Copied' : 'Copy'}</Text>
           </Pressable>
@@ -91,13 +92,15 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 8 },
   modes: { flex: 1, flexDirection: 'row', backgroundColor: INK.line, borderRadius: 9, padding: 2 },
   mode: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 7 },
-  chosen: { backgroundColor: INK.card }, modeText: { color: INK.text, fontSize: 14, fontWeight: '600' },
+  chosen: { backgroundColor: INK.card }, modeText: { ...TEXT_EMPHASIZED.subhead, color: INK.text },
   icon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   body: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, gap: 12 },
-  word: { fontSize: 22, fontWeight: '600', color: INK.text },
-  definition: { fontSize: 17, lineHeight: 25, color: INK.text },
-  quiet: { color: INK.quiet, fontSize: 14 }, action: { color: INK.reading, fontSize: 16 },
-  error: { color: INK.attention, fontSize: 15, lineHeight: 21 },
+  // Until it follows Appearance (#98).
+  word: { ...TEXT_EMPHASIZED.title2, color: INK.text },
+  definition: { ...TEXT.body, color: INK.text },
+  phonetic: { ...TEXT.subhead, color: INK.quiet }, source: { ...TEXT.footnote, color: INK.quiet },
+  action: { ...TEXT.body, color: INK.reading },
+  error: { ...TEXT.subhead, color: INK.attention },
   audioRow: { flexDirection: 'row', alignItems: 'center', gap: 20 }, audio: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   retry: { alignSelf: 'flex-start', paddingVertical: 12 }, copy: { padding: 12 }, loading: { paddingVertical: 18 },

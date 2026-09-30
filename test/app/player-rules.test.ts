@@ -428,18 +428,23 @@ describe('the Document’s name in the bar takes two lines before it is cut (#85
     pin(screen, '      title,\n', 'reader-screen.tsx');
   });
 
-  it('wraps onto a second line, then ends that line in an ellipsis', () => {
+  it('wraps onto a second line, then ends that line in an ellipsis after a whole word (design 0060)', () => {
     const title = code('reader-title.tsx');
-    pin(title, 'numberOfLines={2}', 'reader-title.tsx');
-    pin(title, 'ellipsizeMode="tail"', 'reader-title.tsx');
+    pin(title, '<NameText name={title} lines={2} width={room}', 'reader-title.tsx');
+    const name = code('name-text.tsx');
+    pin(name, 'numberOfLines={lines}', 'name-text.tsx');
+    pin(name, 'wordCuts(event.nativeEvent.lines.map((line) => line.text), lines)', 'name-text.tsx');
+    // VoiceOver reads the whole name, not the cut one.
+    pin(name, '<Text accessibilityLabel={name}', 'name-text.tsx');
   });
 
-  it('is the phone’s own bar title: 17-point semibold, centred, and not scaled', () => {
-    // Two lines of a larger size would not fit the 54-point bar, and the phone's
-    // own bar title does not scale either.
+  it('is the phone’s own bar title: Headline, centred, and as large as the other bars’ titles', () => {
+    // The phone grows its bar titles with the text size from 17 to 21 (#100);
+    // at 21 two lines still fit the 54-point bar. The size comes from
+    // `barTitle`, so React Native's own scaling, which has no such limit, is off.
     const title = code('reader-title.tsx');
-    pin(title, 'export const TITLE_SIZE = 17;', 'reader-title.tsx');
-    pin(title, "fontSize: TITLE_SIZE, fontWeight: '600', textAlign: 'center'", 'reader-title.tsx');
+    pin(title, "title: { color: INK.text, textAlign: 'center' }", 'reader-title.tsx');
+    pin(title, 'style={[styles.title, barTitle(fontScale), { maxWidth: room }]}', 'reader-title.tsx');
     pin(title, 'allowFontScaling={false}', 'reader-title.tsx');
   });
 
@@ -448,6 +453,7 @@ describe('the Document’s name in the bar takes two lines before it is cut (#85
     // starts at 333 of 402 points and the phone leaves about 12 before it.
     const title = code('reader-title.tsx');
     pin(title, 'export const TITLE_SIDE = 81;', 'reader-title.tsx');
-    pin(title, 'maxWidth: Math.max(0, width - 2 * TITLE_SIDE)', 'reader-title.tsx');
+    pin(title, 'const room = Math.max(0, width - 2 * TITLE_SIDE);', 'reader-title.tsx');
+    pin(title, 'maxWidth: room', 'reader-title.tsx');
   });
 });

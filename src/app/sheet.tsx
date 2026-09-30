@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { INK, Note, useBorders } from './controls';
 import { Icon, type IconName } from './icon';
+import { TEXT } from './text-styles';
 
 /** A button at the right end of a drawer's title row. */
 export interface SheetAction {
@@ -21,10 +22,10 @@ export interface SheetAction {
  * page pushed from the right after a drawer rose from the bottom changes
  * direction halfway through one task.
  *
- * `action` puts one button at the right end of the title row, in the back
- * button's circle (#95). A title that does not fit wraps before it. The button
- * sits beside the first line, at the corner of the drawer, however many lines
- * the title takes.
+ * `action` puts one button at the right end of the title row (#95): its icon
+ * alone, with no circle, at the size of the drawer's row icons (#97). A title
+ * that does not fit wraps before it, and the button stays at the middle of the
+ * title however many lines it takes.
  */
 export function Sheet({ visible, title, onClose, onBack, action, children, style }: {
   visible: boolean;
@@ -77,8 +78,8 @@ export function Sheet({ visible, title, onClose, onBack, action, children, style
 function SheetActionButton({ action }: { action: SheetAction }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={action.label} accessibilityState={{ disabled: !!action.disabled }}
     disabled={action.disabled} onPress={action.onPress}
-    style={({ pressed }) => [styles.back, styles.trailing, (pressed || action.disabled) && { opacity: 0.5 }]}>
-    <Icon name={action.icon} color={INK.text} size={20} />
+    style={({ pressed }) => [styles.action, styles.trailing, (pressed || action.disabled) && { opacity: 0.5 }]}>
+    <Icon name={action.icon} color={INK.text} size={ACTION_ICON} />
   </Pressable>;
 }
 
@@ -95,13 +96,16 @@ export function SheetNote({ children, attention }: { children: ReactNode; attent
   return <View style={styles.inset}><Note attention={attention}>{children}</Note></View>;
 }
 
+/** The action's icon: the size `ReaderActions` draws Rename and Download at. */
+const ACTION_ICON = 26;
+
 const styles = StyleSheet.create({
   behind: { flex: 1 },
   sheet: { backgroundColor: INK.panel, borderTopWidth: StyleSheet.hairlineWidth,
     borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 32, gap: 10, maxHeight: '90%' },
   header: { paddingTop: 10, paddingBottom: 4, gap: 16, minHeight: 62 },
   grip: { alignSelf: 'center', backgroundColor: INK.line, borderRadius: 3, height: 5, width: 40 },
-  title: { color: INK.text, fontSize: 18, fontWeight: '700', paddingHorizontal: 16 },
+  title: { ...TEXT.headline, color: INK.text, paddingHorizontal: 16 },
   inset: { paddingHorizontal: 16 },
   headerRow: { alignItems: 'center', flexDirection: 'row', paddingHorizontal: 10 },
   // Absolute, so the title is centred on the sheet rather than on what is left
@@ -109,8 +113,12 @@ const styles = StyleSheet.create({
   back: { alignItems: 'center', backgroundColor: INK.line, borderRadius: 17, height: 34, justifyContent: 'center', width: 34, zIndex: 1 },
   titleCentred: { flex: 1, paddingHorizontal: 0, position: 'absolute', left: 0, right: 0, textAlign: 'center' },
   trailing: { marginLeft: 'auto' },
-  // Top-aligned, with the first line's centre on the button's: 22 of line in
-  // 34 of button leaves 6 above it.
-  titleRow: { alignItems: 'flex-start', flexDirection: 'row', paddingRight: 10 },
-  titleBeside: { flex: 1, lineHeight: 22, paddingRight: 12, paddingTop: 6 },
+  // The action's touch area is 44 square around its 26 of icon. The negative
+  // margins keep the row only as tall as the icon, so a one-line title's header
+  // does not grow; `hitSlop` would not do, because a touch outside the row's
+  // own bounds never reaches the button. 15 of padding puts the icon's right
+  // edge 24 from the drawer's, where the rows' icons are from its left.
+  action: { alignItems: 'center', height: 44, justifyContent: 'center', marginVertical: -(44 - ACTION_ICON) / 2, width: 44 },
+  titleRow: { alignItems: 'center', flexDirection: 'row', paddingRight: 15 },
+  titleBeside: { flex: 1, paddingRight: 0 },
 });

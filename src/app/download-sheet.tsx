@@ -8,6 +8,7 @@ import { DownloadRing } from './download-ring';
 import { listedInManage, marker, readingChapter, type Marker } from './download-rows';
 import { Icon } from './icon';
 import { useSweep } from './use-sweep';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /**
  * The line above the list: the download's state, for when its rows are out of
@@ -205,7 +206,7 @@ export function DownloadContent({ document, title, voice, section, onVoice, onSt
         // Marked as Contents marks the row being read (#88), across the whole drawer.
         const current = item.id === here;
         const label = `${item.title || 'Untitled chapter'}${current ? ', being read' : ''}`;
-        const name = <Text style={[styles.title, children && { fontWeight: '600' }, current && styles.titleCurrent]} numberOfLines={2}
+        const name = <Text style={[styles.title, children && styles.titleParent, current && styles.titleCurrent]} numberOfLines={2}
           accessibilityLabel={label}>{item.title || 'Untitled chapter'}</Text>;
         return <View style={current ? styles.current : null}><View style={[styles.row, { borderBottomColor: borders.line, paddingLeft: 4 + Math.min(item.depth, 4) * 15 }]}>
           {children ? <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed.has(item.id) ? 'Expand' : 'Collapse'} ${item.title}`}
@@ -247,13 +248,14 @@ export function DownloadContent({ document, title, voice, section, onVoice, onSt
 }
 const styles = StyleSheet.create({
   content: { paddingHorizontal: SIDE, gap: 12, flexShrink: 1 }, inset: { paddingHorizontal: SIDE }, top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  voice: { color: INK.text, fontSize: 15, flex: 1 }, link: { color: INK.reading, fontSize: 14, paddingVertical: 8 },
-  secondary: { color: INK.quiet, fontSize: 13 }, error: { color: INK.text, fontSize: 13 },
+  voice: { ...TEXT.subhead, color: INK.text, flex: 1 }, link: { ...TEXT.subhead, color: INK.reading, paddingVertical: 8 },
+  secondary: { ...TEXT.footnote, color: INK.quiet }, error: { ...TEXT.footnote, color: INK.text },
   preparing: { padding: 20, gap: 14, alignItems: 'center' }, list: { height: 330, flexGrow: 0, flexShrink: 1, marginHorizontal: -SIDE },
   row: { minHeight: ROW, flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, marginHorizontal: SIDE },
-  current: { backgroundColor: INK.page }, titleCurrent: { color: INK.reading, fontWeight: '700' },
-  chapter: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12, paddingVertical: 12 }, title: { color: INK.text, fontSize: 16 },
+  current: { backgroundColor: INK.page }, titleCurrent: { color: INK.reading, fontWeight: TEXT_EMPHASIZED.body.fontWeight },
+  titleParent: { fontWeight: TEXT_EMPHASIZED.body.fontWeight },
+  chapter: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12, paddingVertical: 12 }, title: { ...TEXT.body, color: INK.text },
   collapse: { width: 30, alignItems: 'center', justifyContent: 'center' }, circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   checked: { backgroundColor: INK.reading },
-  footer: { gap: 6 }, button: { backgroundColor: INK.text, borderRadius: 24, alignItems: 'center', paddingVertical: 15 }, buttonText: { color: INK.page, fontWeight: '600', fontSize: 16 }, other: { gap: 4 },
+  footer: { gap: 6 }, button: { backgroundColor: INK.text, borderRadius: 24, alignItems: 'center', paddingVertical: 15 }, buttonText: { ...TEXT.headline, color: INK.page }, other: { gap: 4 },
 });

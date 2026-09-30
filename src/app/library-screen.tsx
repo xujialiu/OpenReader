@@ -26,7 +26,7 @@
  */
 
 import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 
 import type { LibraryEntry } from '../core/document';
 
@@ -41,7 +41,7 @@ import { useProviderKey } from './use-provider-secrets';
 import { ReaderActions } from './reader-actions';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { useHeldReading } from './reading-host';
-import { Icon } from './icon';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 import { formatBytes, occupied, removeDownloads, requestInventory } from '../offline/runtime';
 
 /** How much of the last Utterance a row shows. Two lines of it at this size; more would push the next Document off the screen. */
@@ -166,13 +166,12 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
         data={library.entries}
         keyExtractor={(entry) => entry.id}
         renderItem={({ item }) => (
-          <View><LibraryDocument
+          <LibraryDocument
             entry={item}
             present={present.has(item.id)}
             onPress={() => navigation.navigate('Reader', { id: item.id })}
-            onLongPress={() => setActions(item)}
-          /><Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${item.title}`} onPress={() => setActions(item)}
-            style={styles.actions}><Icon name="more" color={INK.quiet} size={22} /></Pressable></View>
+            onActions={() => setActions(item)}
+          />
         )}
         ListHeaderComponent={library.note ? <View style={styles.banner}><Note attention>{library.note}</Note></View> : null}
         ListEmptyComponent={
@@ -206,9 +205,10 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   );
 }
 
-function LibraryDocument({ entry, present, onPress, onLongPress }: { entry: LibraryEntry; present: boolean; onPress(): void; onLongPress(): void }) {
+/** A long press on the row opens the same drawer as its `…`. */
+function LibraryDocument({ entry, present, onPress, onActions }: { entry: LibraryEntry; present: boolean; onPress(): void; onActions(): void }) {
   const cover = useDocumentCover(entry);
-  return <DocumentRow title={entry.title} progress={progressOf(entry, present)} cover={cover} onPress={onPress} onLongPress={onLongPress} />;
+  return <DocumentRow title={entry.title} progress={progressOf(entry, present)} cover={cover} onPress={onPress} onLongPress={onActions} onActions={onActions} />;
 }
 
 /** The Reading Button's own height and its distance from the bottom, and the list's usual 12 above it. */
@@ -216,10 +216,9 @@ const READING_BUTTON_ROOM = READING_BUTTON_PLACE.bottom + 52 + 12;
 
 const styles = StyleSheet.create({
   reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
-  actions: { position: 'absolute', right: 12, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 10 },
   banner: { paddingHorizontal: 16, paddingTop: 12 },
   empty: { alignItems: 'flex-start', gap: 12, padding: 24 },
-  emptyTitle: { color: INK.text, fontSize: 20, fontWeight: '700' },
-  emptyWords: { color: INK.quiet, fontSize: 15, lineHeight: 22 },
+  emptyTitle: { ...TEXT_EMPHASIZED.title3, color: INK.text },
+  emptyWords: { ...TEXT.subhead, color: INK.quiet },
   screen: { backgroundColor: INK.page, flex: 1 },
 });

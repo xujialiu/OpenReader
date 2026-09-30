@@ -22,6 +22,8 @@ import { Children, createContext, isValidElement, useContext, useMemo, useState,
 import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { Icon, type IconName } from './icon';
+import { NameText } from './name-text';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /**
  * One colour that is two, resolved by iOS rather than by React (ADR 0022).
@@ -206,8 +208,6 @@ const SETTINGS = {
   cardRadius: 26,
   /** Between one group and the next. The phone's varies from 30 to 40 with what is on either side; this is one number between. */
   groupGap: 32,
-  /** The text of a row, and of what it says on its right. */
-  fontSize: 17,
 } as const;
 
 /**
@@ -544,65 +544,97 @@ export function HeaderButton({ label, icon, title, onPress, disabled }: {
   );
 }
 
-/** One Document in the Library: what it is called, and how far the reading got. */
-export function DocumentRow({ title, progress, cover, onPress, onLongPress }: {
-  title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void;
+/**
+ * One Document in the Library: what it is called, how far the reading got, and
+ * its `…` for the actions drawer.
+ *
+ * The `…` is drawn over the row's right end, and the words end where its touch
+ * area begins (#87), so neither a two-line name nor the progress line runs under
+ * it. The row owns the button for that reason: it is the one place that knows
+ * both the button's width and the words beside it. The button is the row's
+ * sibling rather than its child, so VoiceOver finds `Actions for <name>` as a
+ * button of its own instead of folding it into the row.
+ *
+ * The name is left-aligned, not justified: iOS fills a justified line by
+ * spacing out its letters as well as its words, and a line of a name in this
+ * column is only three or four words (notes, 2026-09-30 09:56).
+ *
+ * A name longer than two lines is cut after a whole word (`NameText`, design
+ * 0060). The row's label is set rather than read off its words, so VoiceOver
+ * says the whole name, and says it once.
+ */
+export function DocumentRow({ title, progress, cover, onPress, onLongPress, onActions }: {
+  title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void; onActions(): void;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} onLongPress={onLongPress}
+  return <View>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${title}, ${progress}`} onPress={onPress} onLongPress={onLongPress}
       style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}>
       <View style={styles.cover} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {cover && failed !== cover ? <Image source={{ uri: cover }} style={styles.coverImage}
           resizeMode="contain" onError={() => setFailed(cover)} /> : <Icon name="book" color={INK.quiet} size={28} />}
       </View>
       <View style={styles.documentWords}>
-        <Text style={styles.documentTitle} numberOfLines={2}>{title}</Text>
+        <NameText name={title} lines={2} style={styles.documentTitle} />
         <Text style={styles.rowProgress} numberOfLines={1}>{progress}</Text>
       </View>
     </Pressable>
-  );
+    <Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${title}`} onPress={onActions} style={styles.documentActions}>
+      <Icon name="more" color={INK.quiet} size={DOCUMENT_ACTIONS.icon} />
+    </Pressable>
+  </View>;
 }
+
+/**
+ * The row's `…`: its distance from the row's right edge, the padding either side
+ * of its icon, and the icon. Its touch area ends 54 from the row's right edge,
+ * against the row's own 22 of padding.
+ */
+const DOCUMENT_ACTIONS = { right: 12, padding: 10, icon: 22 };
+const DOCUMENT_ROW_PADDING = 22;
 
 const styles = StyleSheet.create({
   disabled: { opacity: 0.4 },
-  note: { color: INK.quiet, fontSize: 13, lineHeight: 19 },
+  note: { ...TEXT.footnote, color: INK.quiet },
   noteAttention: { color: INK.attention },
   pressed: { opacity: 0.65 },
   headerTap: { alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44 },
-  documentRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: 22, paddingVertical: 14 },
+  documentRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: DOCUMENT_ROW_PADDING, paddingVertical: 14 },
+  documentActions: { position: 'absolute', right: DOCUMENT_ACTIONS.right, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: DOCUMENT_ACTIONS.padding },
   cover: { width: 56, height: 80, borderRadius: 5, backgroundColor: INK.panel, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   coverImage: { width: '100%', height: '100%' },
-  documentWords: { flex: 1, gap: 7 },
-  documentTitle: { color: INK.text, fontSize: 17, fontWeight: '500', lineHeight: 23 },
-  headerButton: { color: INK.text, fontSize: 16, fontWeight: '600' },
-  rowProgress: { color: INK.quiet, fontSize: 13, lineHeight: 18 },
+  documentWords: { flex: 1, gap: 7, marginRight: DOCUMENT_ACTIONS.right + 2 * DOCUMENT_ACTIONS.padding + DOCUMENT_ACTIONS.icon - DOCUMENT_ROW_PADDING },
+  // A size under Headline, which the drawer's title and the bar's keep: the
+  // owner found the names large in a list of them (#99).
+  documentTitle: { ...TEXT_EMPHASIZED.callout, color: INK.text },
+  headerButton: { ...TEXT.body, color: INK.text },
+  rowProgress: { ...TEXT.footnote, color: INK.quiet },
   settingsPage: { backgroundColor: INK.settingsPage, flex: 1 },
   settingsBody: { gap: SETTINGS.groupGap, paddingBottom: 64, paddingHorizontal: SETTINGS.margin, paddingTop: 16 },
-  groupTitle: { color: INK.secondary, fontSize: 17, fontWeight: '600', lineHeight: 22, marginBottom: 6, paddingHorizontal: SETTINGS.inset },
+  groupTitle: { ...TEXT.headline, color: INK.secondary, marginBottom: 6, paddingHorizontal: SETTINGS.inset },
   groupCard: { backgroundColor: INK.card, borderCurve: 'continuous', borderRadius: SETTINGS.cardRadius, overflow: 'hidden' },
   separator: { backgroundColor: INK.separator, bottom: 0, height: 1, left: SETTINGS.inset, position: 'absolute', right: SETTINGS.inset },
   groupFooter: { gap: 6, marginTop: 8, paddingHorizontal: SETTINGS.inset },
-  footnote: { color: INK.secondary, fontSize: 13, lineHeight: 16 },
+  footnote: { ...TEXT.footnote, color: INK.secondary },
   // One type scale with the phone's Settings: a row's label and what it says
   // are both 17, the value in the secondary grey.
   settingRow: { alignItems: 'center', flexDirection: 'row', gap: 12, justifyContent: 'space-between', minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 10 },
   rowPressed: { backgroundColor: INK.line },
-  settingLabel: { color: INK.text, fontSize: SETTINGS.fontSize, flexShrink: 1 },
-  settingDetail: { color: INK.secondary, fontSize: SETTINGS.fontSize, flexShrink: 1 },
+  settingLabel: { ...TEXT.body, color: INK.text, flexShrink: 1 },
+  settingDetail: { ...TEXT.body, color: INK.secondary, flexShrink: 1 },
   settingValue: { alignItems: 'center', flexDirection: 'row', gap: 4, flexShrink: 1 },
   // The glyph's own box leaves room on its right; pulled in so the chevron's
   // stroke ends where the phone's does, about 21 points from the card's edge.
   chevron: { marginRight: -3 },
   switchWords: { flexShrink: 1, gap: 2 },
-  rowNote: { color: INK.secondary, fontSize: 15, lineHeight: 20 },
+  rowNote: { ...TEXT.subhead, color: INK.secondary },
   fieldRow: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset },
   fieldRowWithAccessory: { paddingRight: 4 },
   fieldLabel: { flexShrink: 0 },
   // As tall as the row, so the whole of the row right of the name is the input.
-  fieldInput: { alignSelf: 'stretch', color: INK.text, flex: 1, fontSize: SETTINGS.fontSize, minWidth: 0, paddingVertical: 12 },
-  textRow: { color: INK.text, fontSize: SETTINGS.fontSize, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 12 },
-  actionLabel: { color: INK.reading, fontSize: SETTINGS.fontSize },
+  fieldInput: { ...TEXT.body, alignSelf: 'stretch', color: INK.text, flex: 1, minWidth: 0, paddingVertical: 12 },
+  textRow: { ...TEXT.body, color: INK.text, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 12 },
+  actionLabel: { ...TEXT.body, color: INK.reading },
   menuRow: { flex: 1 },
   locked: { opacity: 0.5 },
 });

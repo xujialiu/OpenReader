@@ -4,6 +4,7 @@ import { READING_FONTS, stepFontSize, stepMargins, TEXT_ALIGNMENTS, type Appeara
 import { ChoiceMenu, INK, useBorders, type Choice } from './controls';
 import { Icon } from './icon';
 import { Sheet } from './sheet';
+import { TEXT } from './text-styles';
 
 /** What "follow the document" is called where the owner reads it: the book's own, not "the document font". */
 export const ORIGINAL_FONT = 'Original Book Font';
@@ -114,18 +115,18 @@ export function AppearanceSheet(props: { visible: boolean; onClose(): void; docu
 }
 
 const styles = StyleSheet.create({
-  // One type scale with Settings: a row's label is 16 and what it says is 16 in
-  // the quiet ink, never larger than the label naming it.
+  // The phone's Body for a row's label and for what it says, in the quiet ink,
+  // as on the settings pages (#99).
   content: { paddingHorizontal: 20 },
   row: { minHeight: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  label: { color: INK.text, fontSize: 16 },
+  label: { ...TEXT.body, color: INK.text },
   value: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
-  detail: { color: INK.quiet, fontSize: 16, flexShrink: 1 },
+  detail: { ...TEXT.body, color: INK.quiet, flexShrink: 1 },
   fonts: { flexGrow: 0, maxHeight: 420 },
   fontRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: 12, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth },
-  fontChoice: { color: INK.text, fontSize: 17, flexShrink: 1 },
+  fontChoice: { ...TEXT.body, color: INK.text, flexShrink: 1 },
   stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: INK.line, borderRadius: 30 },
   step: { width: 62, height: 44, alignItems: 'center', justifyContent: 'center' },
-  size: { color: INK.text, fontSize: 16, fontVariant: ['tabular-nums'], minWidth: 24, textAlign: 'center' },
+  size: { ...TEXT.body, color: INK.text, fontVariant: ['tabular-nums'], minWidth: 24, textAlign: 'center' },
 });

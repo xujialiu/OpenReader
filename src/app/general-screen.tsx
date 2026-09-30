@@ -40,6 +40,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import { DEFAULT_BRACKET_PAIRS, validateBracketPairs } from '../core/speech-text';
 import { Footnote, INK, SettingsGroup, SettingsPage, SwitchRow, TextRow, ValueRow, type Choice } from './controls';
 import { useShell } from './routes';
+import { TEXT } from './text-styles';
 import { LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLING_LABELS, SCROLLINGS, SENTENCE_PAUSES_MS, THEME_LABELS, THEME_SETTINGS, type Scrolling, type ThemeSetting } from './settings';
 
 /**
@@ -165,5 +166,5 @@ export function GeneralScreen() {
 }
 
 const styles = StyleSheet.create({
-  link: { color: INK.reading, fontSize: 13, lineHeight: 16, paddingVertical: 6 },
+  link: { ...TEXT.footnote, color: INK.reading, paddingVertical: 6 },
 });

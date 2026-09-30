@@ -6,12 +6,15 @@
  * line, and native-stack's `headerTitleStyle` has no line count, so a name
  * longer than the space between the two buttons lost its second half. This is
  * design 0042's second step: the phone's own title, copied rather than
- * remembered — 17-point semibold, centred, in the bar's text colour.
+ * remembered — the phone's Headline, semibold, centred, in the bar's text colour.
  *
- * **Not scaled by the owner's text size**, because the phone's own bar title is
- * not: two lines of a larger size would not fit the 54-point bar, and the bar
- * cannot grow without moving the page, which keeps room for its height (ADR
- * 0048).
+ * **As large as the other bars' titles** (`barTitle`, #100): 17 points at the
+ * phone's default text size, growing with it as the phone's own bar titles do,
+ * to 21 at most. The size is worked out from the text size rather than left to
+ * React Native's scaling, which would grow it without that limit, so
+ * `allowFontScaling` stays off. At 21, two lines take about 50 points, inside
+ * the 54-point bar, which cannot grow without moving the page, which keeps room
+ * for its height (ADR 0048).
  *
  * **Told how wide it may be.** React Native lays the title out before UIKit
  * places it between the two buttons, so it cannot learn the space from the bar.
@@ -22,33 +25,32 @@
  * 12 points from each button. So the right side, the wider one, keeps 402 - 333
  * + 12 = 81 points, and a title narrower than the window less 81 on each side
  * fits while centred.
+ *
+ * **Cut after a whole word**, as the Library's rows are (`NameText`, design
+ * 0060). The unseen copy is laid out at the full width the title may take,
+ * because the title's own box shrinks to its words.
  */
 
-import { StyleSheet, Text, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { INK } from './controls';
+import { NameText } from './name-text';
+import { barTitle } from './text-styles';
 
 /** The room each side of the title leaves for a button and the gap before it, in points (measured, above). */
 export const TITLE_SIDE = 81;
 
-/** The phone's own bar title: 17-point semibold (measured against it on the simulator, ADR 0057). */
-export const TITLE_SIZE = 17;
-
 export function ReaderTitle({ title }: { title: string }) {
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
+  const room = Math.max(0, width - 2 * TITLE_SIDE);
   return (
-    <Text
-      accessibilityRole="header"
-      allowFontScaling={false}
-      ellipsizeMode="tail"
-      numberOfLines={2}
-      style={[styles.title, { maxWidth: Math.max(0, width - 2 * TITLE_SIDE) }]}
-    >
-      {title}
-    </Text>
+    <View>
+      <NameText name={title} lines={2} width={room} accessibilityRole="header" allowFontScaling={false}
+        style={[styles.title, barTitle(fontScale), { maxWidth: room }]} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { color: INK.text, fontSize: TITLE_SIZE, fontWeight: '600', textAlign: 'center' },
+  title: { color: INK.text, textAlign: 'center' },
 });

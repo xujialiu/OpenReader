@@ -11,12 +11,25 @@ Issue #95. **Share** is in CONTEXT.md._
 
 - `src/app/reader-actions.tsx` passes `Sheet` an `action` on its `menu` page
   only: `{ icon: 'share', label: 'Share', onPress, disabled: sharing }`.
-  `Sheet` draws it at the right end of the title row in the back button's own
-  style (`styles.back`: 34 pt, `INK.line`, radius 17) with `marginLeft: 'auto'`.
-  Without `onBack`, the row is `alignItems: 'flex-start'`, and the title gets
-  `lineHeight: 22` and `paddingTop: 6`, which puts the first line's centre on the
-  button's centre. The icon is `share` in `src/app/icon.tsx`, the
-  `square.and.arrow.up` shape in the set's 1.7 stroke, drawn at 20 in the circle.
+  `Sheet` draws it at the right end of the title row with `marginLeft: 'auto'`:
+  the icon alone at 26 in `INK.text`, the size and colour `ReaderActions` gives
+  its row icons, in a 44 × 44 touch area (`styles.action`). Without `onBack`,
+  the row is `alignItems: 'center'`, so the icon sits at the middle of the
+  title however many lines it wraps to. The icon is `share` in
+  `src/app/icon.tsx`, the `square.and.arrow.up` shape in the set's 1.7 stroke.
+- Issue #97 replaced the first look: the back button's 34 pt `INK.line` circle
+  (`styles.back`), a 20 pt icon, and a title with `lineHeight: 22` and
+  `paddingTop: 6` to put its first line's centre on the circle's. Two
+  measurements decide the new geometry. The touch area has
+  `marginVertical: -9`, so the row is only the icon's 26 tall and a one-line
+  title's header does not grow; `hitSlop` would not have done, because on the
+  new architecture a view whose children stay inside its bounds does not pass
+  on a touch outside them, and the row is the button's parent. The row's
+  `paddingRight` is 15, so the 26 pt icon centred in 44 ends 24 pt from the
+  drawer's edge, where `ReaderActions`' `menu` padding starts its row icons on
+  the left. On an iPhone 17 simulator (iOS 27.0, 402 pt) the drawn arrow's
+  right edge was about 29 pt from the edge and the pencil's left edge about
+  27 pt from the other.
 - `src/app/share-document.ts`'s `shareDocument(entry)`:
   1. rejects if `documentFile(id, format)` does not exist, with the sentence the
      drawer shows;

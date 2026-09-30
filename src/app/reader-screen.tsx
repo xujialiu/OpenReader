@@ -41,6 +41,7 @@ import { ReaderTitle } from './reader-title';
 import { HeaderButton, INK, Note } from './controls';
 import { readerSlot, useHeldReading } from './reading-host';
 import { useShell, type ScreenProps } from './routes';
+import { TEXT } from './text-styles';
 
 export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const { id } = route.params;
@@ -162,5 +163,5 @@ const styles = StyleSheet.create({
   screen: { backgroundColor: INK.page, flex: 1 },
   slot: { flex: 1 },
   waiting: { alignItems: 'flex-start', backgroundColor: INK.page, gap: 12, justifyContent: 'center', padding: 24 },
-  waitingWords: { color: INK.quiet, fontSize: 15 },
+  waitingWords: { ...TEXT.subhead, color: INK.quiet },
 });

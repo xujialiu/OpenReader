@@ -12,6 +12,7 @@ import { PROVIDER_LABELS, selectVoice, settingsForDocument } from './settings';
 import { shareDocument } from './share-document';
 import { Sheet, SheetNote } from './sheet';
 import { knownVoice } from './voice-catalog';
+import { TEXT } from './text-styles';
 
 /**
  * A Document's actions, as one drawer wherever it is asked for.
@@ -28,7 +29,7 @@ import { knownVoice } from './voice-catalog';
  * could not see, and it is not the book's to begin with — it is the owner's, for
  * every Document (CONTEXT.md, **Appearance**).
  *
- * **Share** (#95) is the round button beside the Document's name, on the menu
+ * **Share** (#95) is the icon beside the Document's name (#97), on the menu
  * page only: the other pages are titled with their own names, and the button
  * shares the book the title names. It is offered wherever the drawer is, since
  * the file is the same from the Library and from the reader. The drawer stays
@@ -101,6 +102,6 @@ function sectionOf(position: ReadingPosition | null): number | null {
 
 const styles = StyleSheet.create({
   menu: { paddingHorizontal: 24 }, row: { flexDirection: 'row', alignItems: 'center', gap: 18, minHeight: 58, borderBottomWidth: StyleSheet.hairlineWidth },
-  last: { borderBottomWidth: 0 }, label: { color: INK.text, fontSize: 16 }, rename: { padding: 20, gap: 24 },
-  input: { color: INK.text, backgroundColor: INK.page, borderRadius: 12, padding: 14, fontSize: 16 }, buttons: { flexDirection: 'row', justifyContent: 'space-between', padding: 8 },
+  last: { borderBottomWidth: 0 }, label: { ...TEXT.body, color: INK.text }, rename: { padding: 20, gap: 24 },
+  input: { ...TEXT.body, color: INK.text, backgroundColor: INK.page, borderRadius: 12, padding: 14 }, buttons: { flexDirection: 'row', justifyContent: 'space-between', padding: 8 },
 });
