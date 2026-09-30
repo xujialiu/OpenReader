@@ -23,7 +23,7 @@ import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Sw
 import type { ColorValue } from 'react-native';
 import { Icon, type IconName } from './icon';
 import { NameText } from './name-text';
-import { TEXT } from './text-styles';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /**
  * One colour that is two, resolved by iOS rather than by React (ADR 0022).
@@ -604,7 +604,9 @@ const styles = StyleSheet.create({
   cover: { width: 56, height: 80, borderRadius: 5, backgroundColor: INK.panel, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   coverImage: { width: '100%', height: '100%' },
   documentWords: { flex: 1, gap: 7, marginRight: DOCUMENT_ACTIONS.right + 2 * DOCUMENT_ACTIONS.padding + DOCUMENT_ACTIONS.icon - DOCUMENT_ROW_PADDING },
-  documentTitle: { ...TEXT.headline, color: INK.text },
+  // A size under Headline, which the drawer's title and the bar's keep: the
+  // owner found the names large in a list of them (#99).
+  documentTitle: { ...TEXT_EMPHASIZED.callout, color: INK.text },
   headerButton: { ...TEXT.body, color: INK.text },
   rowProgress: { ...TEXT.footnote, color: INK.quiet },
   settingsPage: { backgroundColor: INK.settingsPage, flex: 1 },

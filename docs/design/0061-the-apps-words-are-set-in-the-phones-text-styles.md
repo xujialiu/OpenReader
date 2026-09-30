@@ -25,10 +25,11 @@ The phone has a short list of named text styles, each a size and a weight,
 and uses them in its own apps. The app now uses the same list and nothing
 else. Every piece of text is one of them:
 
-- **Headline**, semibold: a book's name, wherever it appears, every drawer's
-  title, every title above a page, a group's heading in Settings, the speed in
-  its bubble.
+- **Headline**, semibold: every drawer's title, a book's name included, every
+  title above a page, a group's heading in Settings, the speed in its bubble.
 - **Body**: a row, and what the row says on its right; a field; a plain button.
+- **Callout**, a size under Body, in its heavier weight: a book's name in the
+  Library's list.
 - **Subhead**, a size smaller: a line that goes with a list, such as the voice
   line above the chapters in Download, the filter chips in Voice, a row's note
   in Settings, the voice name in the player.
@@ -41,9 +42,13 @@ else. Every piece of text is one of them:
 A row that is chosen or being read, such as the chapter being read in Contents,
 takes the same style in its heavier weight, as the phone does.
 
-So a book's name is now the same in the Library, in its drawer and above its
-page. The drawers' titles came down a size to match the titles above every page,
-and their rows came up to the size of a row in Settings.
+So a book's name is the same in its drawer and above its page. In the Library
+it is a size smaller: it was Headline at first, like the other two, and the
+owner, looking at a list of books on the phone at a larger text size, found the
+names large. As a title a name stands alone; in the Library it is one of many
+rows, each with its cover and its progress under it. The drawers' titles came
+down a size to match the titles above every page, and their rows came up to the
+size of a row in Settings.
 
 ## How far apart the lines are
 

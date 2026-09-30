@@ -87,7 +87,7 @@ the card was not measured again.
 | Text | Before | Style |
 | --- | --- | --- |
 | Drawer titles (`sheet.tsx`), bar titles, the reader's title | 18/700; the phone's; 17/600 | `headline` |
-| Library row name (`DocumentRow`) | 17/500/23 | `headline` |
+| Library row name (`DocumentRow`) | 17/500/23 | `callout` emphasized (16/600); `headline` in the first two builds, which the owner found large in the list on the phone (beta68) |
 | Settings group title | 17/600/22 | `headline` |
 | Speed in the bubble (`player.tsx` `rate`) | 17/600 | `headline` |
 | Download's main button | 16/600 | `headline` |
