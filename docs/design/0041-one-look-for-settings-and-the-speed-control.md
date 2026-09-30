@@ -63,15 +63,17 @@ Turned down:
 
 ## The front page says only what is not behind it
 
-The front page is three rows. Providers says how many are enabled and Sync says
+The front page is four rows. Providers says how many are enabled and Sync says
 whether it is on, each on the right in grey, where the phone puts a row's
 current value. General says nothing: the word `Theme` it used to carry described
 what was behind the row rather than anything true of it, and had stopped being
 the whole of it once General also held the removal of brackets. There are no
-coloured icons beside the rows, because three rows need nothing to be found by.
+coloured icons beside the rows, because four rows need nothing to be found by.
 
-The version number sits under the card in the same grey as any card's
-explanation.
+Below that card, a second card holds one row, Privacy Policy. It is set in the
+amber the app uses wherever the phone would draw a link in its blue, and opens
+the policy on the project's own site (decision 0017). The version number sits
+under this last card, in the same grey as any card's explanation.
 
 ## A field is one row
 

@@ -11,9 +11,15 @@ import { describe, expect, it } from 'vitest';
  * `Linking`", which one could check by eye because every control was in that one
  * file. ADR 0019 ended that: `src/app/opened-document.ts` reads the URL another
  * app opened this one with, and reading an incoming URL is the opposite of the
- * thing forbidden. So the property is stated the way it will stay — **nothing in
- * `src/` opens a URL** — and is checked here, because it is no longer a property
- * an eye can check.
+ * thing forbidden. So the property was restated as **nothing in `src/` opens a
+ * URL**, and is checked here, because it is no longer a property an eye can
+ * check.
+ *
+ * #110 made one exception, and it is as narrow as this file can pin. The
+ * privacy policy has to be reachable from inside the app (guideline 5.1.1(i)),
+ * so `src/app/own-site.ts` opens it, and nothing else, and only pages on the
+ * project's own site. The ban it guards is unchanged: a Provider's page is not
+ * on that site.
  *
  * Source text and not a type: opening a URL type-checks perfectly, and what is
  * being prevented is someone "improving onboarding" by adding a Get API Key
@@ -29,6 +35,12 @@ import { describe, expect, it } from 'vitest';
  */
 
 const SOURCE = join(__dirname, '..', '..', 'src');
+
+/** The one module that may open a URL: the project's own pages (#110). */
+const OWN_SITE = join(SOURCE, 'app', 'own-site.ts');
+
+/** Where the project's own pages are: GitHub Pages, from `site/` in this repository. */
+const SITE = 'https://xujialiu.github.io/OpenReader/';
 
 /** Anything that hands a URL to the operating system. `openSettings` is not one: it opens this app's own page and names no Provider. */
 const FORBIDDEN = ['openURL', 'canOpenURL', 'sendIntent'];
@@ -48,11 +60,28 @@ describe('ADR 0017: no provider links in the binary', () => {
 
   it('finds source to check, so an empty sweep cannot pass for a clean one', () => {
     expect(files.length).toBeGreaterThan(20);
+    expect(files).toContain(OWN_SITE);
   });
 
-  it.each(FORBIDDEN)('never calls %s anywhere under src/', (call) => {
+  it.each(FORBIDDEN)('never calls %s anywhere under src/ but the module for the project\'s own pages', (call) => {
     const pattern = calls(call);
-    const offenders = files.filter((path) => pattern.test(readFileSync(path, 'utf8')));
+    const offenders = files.filter((path) => path !== OWN_SITE && pattern.test(readFileSync(path, 'utf8')));
     expect(offenders.map((path) => path.slice(SOURCE.length + 1))).toEqual([]);
+  });
+
+  it('opens only the privacy policy from that module, and names no address off the project\'s own site (#110)', () => {
+    const text = readFileSync(OWN_SITE, 'utf8');
+    const addresses = text.match(/https?:\/\/[^\s'"`)]+/g) ?? [];
+    expect(addresses).toEqual([SITE]);
+    const opened = [...text.matchAll(/\bopenURL\s*\(([^)]*)\)/g)].map((match) => match[1]!.trim());
+    expect(opened).toEqual(['PRIVACY_POLICY']);
+    expect(text).toContain('export const PRIVACY_POLICY = `${SITE}privacy.html`;');
+    expect(text).not.toMatch(calls('canOpenURL'));
+    expect(text).not.toMatch(calls('sendIntent'));
+  });
+
+  it('points at a page this repository publishes', () => {
+    // `.github/workflows/pages.yml` publishes site/ to SITE.
+    expect(statSync(join(__dirname, '..', '..', 'site', 'privacy.html')).isFile()).toBe(true);
   });
 });

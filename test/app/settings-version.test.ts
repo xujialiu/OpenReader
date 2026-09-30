@@ -14,6 +14,9 @@ import { DEFAULT_SETTINGS } from '../../src/app/settings';
  */
 const footnotes = vi.hoisted(() => [] as { label: string | undefined; text: ReactNode }[]);
 const rows = vi.hoisted(() => [] as string[]);
+const links = vi.hoisted(() => new Map<string, () => void>());
+const openPrivacyPolicy = vi.hoisted(() => vi.fn());
+vi.mock('../../src/app/own-site', () => ({ openPrivacyPolicy }));
 vi.mock('../../src/app/controls', () => ({
   SettingsPage: ({ children }: { children: ReactNode }) => children,
   SettingsGroup: ({ footer, children }: { footer: ReactNode; children: ReactNode }) => [footer, children],
@@ -23,6 +26,11 @@ vi.mock('../../src/app/controls', () => ({
   },
   NavigationRow: ({ label, value }: { label: string; value?: string }) => {
     rows.push(value ? `${label}: ${value}` : label);
+    return null;
+  },
+  ActionRow: ({ label, onPress }: { label: string; onPress(): void }) => {
+    rows.push(`link: ${label}`);
+    links.set(label, onPress);
     return null;
   },
 }));
@@ -61,5 +69,12 @@ it('shows the beta alone in a build without Debug Mode, and the rows above it ar
   expect(off.footnote.label).toBe(`Version ${APP_VERSION}`);
   const on = await shown(true);
   expect(on.rows).toEqual(off.rows);
-  expect(off.rows).toEqual(['General', 'Word Lookup & Translation', 'Providers: 0 enabled', 'Sync: Off']);
+  expect(off.rows).toEqual(['General', 'Word Lookup & Translation', 'Providers: 0 enabled', 'Sync: Off', 'link: Privacy Policy']);
+});
+
+it('opens the privacy policy from its own row, under the settings and above the version (#110)', async () => {
+  await shown(false);
+  openPrivacyPolicy.mockClear();
+  links.get('Privacy Policy')!();
+  expect(openPrivacyPolicy).toHaveBeenCalledTimes(1);
 });

@@ -12,8 +12,10 @@
  * imports `Linking`**, which was ADR 0017's ban on a tappable route to a
  * Provider's signup, checkable by eye. That sentence is no longer true and the
  * decision has not changed, so the property is now stated the way it will stay:
- * **nothing in `src/` calls `Linking.openURL` or `Linking.canOpenURL`**, and
- * `test/app/no-outgoing-links.test.ts` fails if that stops being true. This file
+ * **nothing in `src/` calls `Linking.openURL` or `Linking.canOpenURL`** except
+ * `src/app/own-site.ts`, which opens only the project's own privacy policy
+ * (#110), and `test/app/no-outgoing-links.test.ts` fails if that stops being
+ * true. This file
  * reads two things — the URL the app was opened with, and the URLs it is handed
  * afterwards — and opens none.
  *

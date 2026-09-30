@@ -36,6 +36,21 @@ app.
 Combined with having no in-app purchase at all (ADR 0002), which removes any
 second paid path a reviewer could compare against, this is the whole posture.
 
+## The one link: the project's own pages (#110)
+
+The rule was "nothing in `src/` opens a URL" (`test/app/no-outgoing-links.test.ts`).
+#110 narrowed it by one module, because guideline 5.1.1(i) requires the privacy
+policy to be reachable inside the app, and the policy is a page on the project's
+own site: GitHub Pages, published from `site/` by `.github/workflows/pages.yml`.
+
+`src/app/own-site.ts` opens `https://xujialiu.github.io/OpenReader/privacy.html`
+from a row at the foot of the Settings front page. The test allows `openURL` in
+that module and nowhere else. The only address the module may name is the
+site's, and its one call must open the policy's constant. A Provider's signup,
+pricing or key console is still unreachable from the binary. The line the
+rejection drew was a route to a Provider's paid signup, and a page of our own
+that names none is not one.
+
 ## What is deliberately deferred
 
 Guideline 5.1.2(i), amended in late 2025 to name third-party AI explicitly,

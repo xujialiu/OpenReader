@@ -47,6 +47,15 @@ for less" — it leads the next person to strip out something the store never
 objected to, and to make the app worse in the name of a rule that was never
 broken.
 
+## The one link the app does have
+
+The app opens exactly one page: its own privacy policy, from a row at the foot
+of Settings. The store requires the policy to be reachable from inside the app,
+and it lives on the project's own site. It is not the route this decision
+closes, because it leads to no provider's signup, prices or keys. It is also
+the only link, so the rule stays one anyone can check: nothing in the app leads
+to a provider.
+
 ## What it costs the person setting the app up
 
 The easiest possible first run. Elsewhere a first screen offers a button, the
