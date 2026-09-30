@@ -1,4 +1,5 @@
 import { TranslationScreen } from './translation-screen';
+import { AcknowledgementScreen, AcknowledgementsScreen } from './acknowledgements-screen';
 /**
  * The screens of ADR 0019, and the one way back from each of them.
  *
@@ -357,6 +358,9 @@ export function OpenReader() {
               {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
               <Stack.Screen name="Provider" component={ProviderScreen} options={settingsScreen} />
               <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings', ...settingsScreen }} />
+              <Stack.Screen name="Acknowledgements" component={AcknowledgementsScreen} options={{ title: 'Acknowledgements', headerBackTitle: 'Settings', ...settingsScreen }} />
+              {/* Its title is the component's name and is set by the screen, as the Provider screen sets its own. */}
+              <Stack.Screen name="Acknowledgement" component={AcknowledgementScreen} options={settingsScreen} />
             </Stack.Navigator>
           </NavigationContainer>
           </ReadingHost>

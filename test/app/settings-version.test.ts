@@ -16,6 +16,8 @@ const footnotes = vi.hoisted(() => [] as { label: string | undefined; text: Reac
 const rows = vi.hoisted(() => [] as string[]);
 const links = vi.hoisted(() => new Map<string, () => void>());
 const openPrivacyPolicy = vi.hoisted(() => vi.fn());
+const presses = vi.hoisted(() => new Map<string, () => void>());
+const navigate = vi.hoisted(() => vi.fn());
 vi.mock('../../src/app/own-site', () => ({ openPrivacyPolicy }));
 vi.mock('../../src/app/controls', () => ({
   SettingsPage: ({ children }: { children: ReactNode }) => children,
@@ -24,8 +26,9 @@ vi.mock('../../src/app/controls', () => ({
     footnotes.push({ label: accessibilityLabel, text: children });
     return null;
   },
-  NavigationRow: ({ label, value }: { label: string; value?: string }) => {
+  NavigationRow: ({ label, value, onPress }: { label: string; value?: string; onPress(): void }) => {
     rows.push(value ? `${label}: ${value}` : label);
+    presses.set(label, onPress);
     return null;
   },
   ActionRow: ({ label, onPress }: { label: string; onPress(): void }) => {
@@ -49,7 +52,7 @@ async function shown(debugMode: boolean) {
   const { SettingsScreen } = await import('../../src/app/settings-screen');
   let tree: ReturnType<typeof create> | undefined;
   await act(async () => {
-    tree = create(createElement(SettingsScreen, { navigation: { navigate: () => {} }, route: {} } as never));
+    tree = create(createElement(SettingsScreen, { navigation: { navigate }, route: {} } as never));
   });
   await act(async () => tree!.unmount());
   return { footnote: footnotes.at(-1)!, rows: [...new Set(rows)] };
@@ -69,7 +72,7 @@ it('shows the beta alone in a build without Debug Mode, and the rows above it ar
   expect(off.footnote.label).toBe(`Version ${APP_VERSION}`);
   const on = await shown(true);
   expect(on.rows).toEqual(off.rows);
-  expect(off.rows).toEqual(['General', 'Word Lookup & Translation', 'Providers: 0 enabled', 'Sync: Off', 'link: Privacy Policy']);
+  expect(off.rows).toEqual(['General', 'Word Lookup & Translation', 'Providers: 0 enabled', 'Sync: Off', 'link: Privacy Policy', 'Acknowledgements']);
 });
 
 it('opens the privacy policy from its own row, under the settings and above the version (#110)', async () => {
@@ -77,4 +80,11 @@ it('opens the privacy policy from its own row, under the settings and above the 
   openPrivacyPolicy.mockClear();
   links.get('Privacy Policy')!();
   expect(openPrivacyPolicy).toHaveBeenCalledTimes(1);
+});
+
+it('opens the acknowledgements from the row under the privacy policy (#111)', async () => {
+  await shown(false);
+  navigate.mockClear();
+  presses.get('Acknowledgements')!();
+  expect(navigate).toHaveBeenCalledWith('Acknowledgements');
 });

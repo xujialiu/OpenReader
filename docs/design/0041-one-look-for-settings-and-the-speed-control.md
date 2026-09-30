@@ -70,10 +70,12 @@ what was behind the row rather than anything true of it, and had stopped being
 the whole of it once General also held the removal of brackets. There are no
 coloured icons beside the rows, because four rows need nothing to be found by.
 
-Below that card, a second card holds one row, Privacy Policy. It is set in the
+Below that card, a second card holds two rows. Privacy Policy is set in the
 amber the app uses wherever the phone would draw a link in its blue, and opens
-the policy on the project's own site (decision 0017). The version number sits
-under this last card, in the same grey as any card's explanation.
+the policy on the project's own site (decision 0017). Acknowledgements opens a
+page of the app's own listing everything the app is built from, each with the
+terms it came under (decision 0065). The version number sits under this last
+card, in the same grey as any card's explanation.
 
 ## A field is one row
 

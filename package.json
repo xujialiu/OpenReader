@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "acknowledgements": "node scripts/acknowledgements/generate.mjs"
   },
   "dependencies": {
     "@epubjs-react-native/core": "^1.4.8",
