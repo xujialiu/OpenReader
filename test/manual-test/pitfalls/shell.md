@@ -139,3 +139,11 @@
 - **`tail -n +$(wc -l < FILE)` fails on macOS with `illegal offset -- +`.**
   BSD `wc -l < FILE` pads its number with spaces, so the argument is `+     230`.
   Strip it: `S=$(wc -l < FILE | tr -d ' ')` (2026-09-28, final run of #75–#77).
+
+- **A foreground timeout kills the wrapper, not the xcodebuild under it**
+  (2026-09-30). A `run-probe.sh` invocation inside a 600 s shell timeout was
+  killed by the timeout while xcodebuild kept running detached; the test went
+  on to write its log and the wrapper's tail was lost. The kit's own
+  `reading-held.sh` already has the right shape: start xcodebuild in the
+  background, watch the log for the suite's verdict, stop it two minutes
+  after the verdict. For ad hoc runs: `nohup … &` and poll the log file.
