@@ -23,6 +23,11 @@ What every area uses:
 - `frame-gaps.py`: hitches in a `simctl io recordVideo` recording.
 - `debug-log.py`: copies the Debug Log off a phone, says what time it covers,
   and collects the phone's system log for that span (below).
+- `debug-log-timeline.py`: the Debug Log as a timeline, each change with the
+  app's state beside it; `phone-hx.cjs`: one harness command to the phone and
+  the Debug Log lines that answered it; `probes/`: the `js` probes it sends.
+  When to use them is `docs/debug-on-iphone.md`; their flags are in each
+  file's header (below, "Ask the app on the phone").
 
 ## Run an XCTest probe
 
@@ -197,3 +202,22 @@ format. On 2026-09-29 the script also ran against a stand-in `xcrun` and
 through a listing, `--syslog` (`syslog collect … --udid … --start-time` with
 the first line's epoch) and exit 1 for an empty folder did what is described
 here.
+
+## Ask the app on the phone
+
+```sh
+python3 test/manual-test/kit/debug-log-timeline.py OUT_DIR/debug-log --from 'YYYY-MM-DD HH:MM' --to 'YYYY-MM-DD HH:MM'
+node test/manual-test/kit/phone-hx.cjs IPHONE_UDID '{"do":"navstate"}'
+node test/manual-test/kit/phone-hx.cjs IPHONE_UDID '{}' --code-file test/manual-test/kit/probes/renderer-state.js
+```
+
+Measured on the owner's iPhone (iOS 27.0.1, `0.0.2-beta73` with Debug Mode)
+on 2026-10-01, with the Reader open and the app in the foreground:
+`navstate` answered at 02:09:50 and `renderer-state.js` at 02:10:18, both inside
+the default 6 s wait, and each run put `{"do":"noop"}` back. The timeline, run
+on that day's Debug Log from 01:28 to 01:47, printed the #112 sequence as
+`docs/debug-on-iphone.md` step 2 describes it.
+
+What it cannot prove: a command sent while the app runs no JavaScript waits in
+`harness.json`, and `phone-hx.cjs` then reports no answer after its wait. That
+path has not been run against a phone, and neither has `--restore`.
