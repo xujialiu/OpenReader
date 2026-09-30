@@ -74,20 +74,18 @@ to the promise that this app never spends the owner's money without them knowing
 It is accepted because the alternative is a price on a screenshot in a review
 queue, and because the price list stays reachable where price lists are kept.
 
-## What is still owed before this can ship
+## What was owed before this could ship, and is now paid
 
-One thing, and it is not optional. Before the first sentence of a document goes
+One thing, and it was not optional. Before the first sentence of a document goes
 to a provider, the app has to say plainly what is about to leave the device and
 who it is going to, and wait to be told yes — once for each provider the owner
 uses. The store's rules were amended to name third-party AI services explicitly,
 and an app in this category has already been told that burying this in a privacy
 policy does not count.
 
-It is not built yet. While the only person using the app is the person who would
-be asked, the consent is being sought from the one granting it, and it is one
-question on one path that can be added when there is somebody to ask. This is a
-deliberate debt with a known price rather than something overlooked — and it is
-the last thing standing between the app and a submission.
+It waited while the only person using the app was the person who would be asked.
+It is built now, for the dictionaries and translators as well as the providers:
+decision 0064.
 
 *The engineering half of this decision is
 [ADR 0017](../adr/0017-no-provider-links-in-the-binary.md).*

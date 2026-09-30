@@ -66,17 +66,16 @@ keeping the key field, the save action, the provider picker, the validation and
 every bit of the plumbing. **The credential field was never the problem. The
 tappable route to the provider's paid signup was.**
 
-## Deferred, with a known price
+## Asked before anything is sent
 
 Guideline 5.1.2(i), amended in late 2025 to name third-party AI explicitly,
 requires disclosing what data goes to a third party and obtaining permission
 **before** it is sent, and a rejection in this category stated plainly that a
-privacy policy alone is not sufficient. A per-provider consent sheet, shown
-before the first request, is therefore required to ship.
-
-It is not built, because while the app is used only by its author the consent is
-being asked of the person granting it. It is one check on the synthesis path.
-That is a deferral with a known price, not an oversight.
+privacy policy alone is not sufficient. So before a key and a Document's text
+first go to a Provider, the owner is asked, once per Provider, in the phone's
+own alert (#109, ADR 0064). The question is on the synthesis path,
+`src/offline/runtime.ts`, after the key has been read and before anything is
+built with it.
 
 ## What is here
 

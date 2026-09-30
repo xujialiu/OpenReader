@@ -326,6 +326,14 @@ _Avoid_: banner, notification, progress bar, island
 
 ### The app on the owner's devices
 
+**Consent**:
+The owner's yes to one service receiving text from the app: a Provider
+receiving a Document's text to speak it, or a dictionary or Translation Service
+receiving a selection. Each service is asked about once, the first time it would
+receive any, and the yes is kept on that device only. A server at an address the
+owner typed is a service of its own.
+_Avoid_: permission, approval, opt-in, agreement, privacy prompt
+
 **Debug Mode**:
 What a build of the app installed on the owner's own devices has and a released
 build never has: it keeps a Debug Log, and the version it shows ends in

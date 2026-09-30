@@ -51,7 +51,7 @@ pricing or key console is still unreachable from the binary. The line the
 rejection drew was a route to a Provider's paid signup, and a page of our own
 that names none is not one.
 
-## What is deliberately deferred
+## What was deferred, and is now built (#109)
 
 Guideline 5.1.2(i), amended in late 2025 to name third-party AI explicitly,
 requires disclosing what data goes to a third party and obtaining permission
@@ -59,7 +59,7 @@ requires disclosing what data goes to a third party and obtaining permission
 putting it only in a privacy policy is not sufficient. A per-provider consent
 sheet, shown before the first request, is therefore required to ship.
 
-It is not built yet, because while the app is used only by its author the consent
-is being asked of the person granting it. It is one check on the synthesis path
-and can be added when it is needed. This is a deferral with a known price, not an
-oversight.
+It was deferred while the app was used only by its author, when the consent
+would have been asked of the person granting it. It is built now. There is one
+gate in front of every send, a Provider's synthesis and a lookup service alike,
+asked once per recipient in the phone's own alert: ADR 0064.
