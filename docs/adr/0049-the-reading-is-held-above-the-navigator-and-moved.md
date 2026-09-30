@@ -37,6 +37,16 @@ the reading no longer stops when the Reader screen unmounts._
   `sync('leave')`. `use-reading.ts`'s cleanup disposes the engine and gives
   the audio session back. `useNowPlaying` keeps the lock screen for as long as
   the view is mounted, so it works in the Library.
+- **Nothing starts an ended Reading again** (#106). A callback can outlive
+  the view: `reading-view.tsx`'s `play` waits up to two seconds for its sync
+  before it calls `reading.play()`, and leaving while paused, opening another
+  Document or deleting this one ends the Reading meanwhile. The unmount cleanup
+  in `use-reading.ts` sets `endedRef` before it disposes the engine, and `play`,
+  the only path that builds an engine, and `resumeAt` do nothing once it is set.
+  The engine generation could not stop the late call: it takes the generation
+  the disposal has already moved on to (notes 2026-09-30 19:27). `disposeEngine`
+  is not the signal, because it also runs for a Voice, Provider or credential
+  changed while the Reading lasts.
 - **The Library** renders the Reading Button (`reading-button.tsx`, at
   `READING_BUTTON_PLACE`, labelled `Return to the reading`) whenever a Reading
   is held. Its press is `navigate('Reader', { id })`, which is also what the

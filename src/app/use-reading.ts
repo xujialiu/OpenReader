@@ -325,6 +325,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const pendingChoice = useRef<{ provider: ProviderId; voice: string } | null>(null);
   const retainedIdentity = useRef<string | null>(null);
   const bridgeRef = useRef<ReaderBridge | null>(null);
+  /** The Reading has ended: the view unmounted, and a late `play` or `resumeAt` does nothing (#106, the unmount effect). */
+  const endedRef = useRef(false);
   /** Being built: a second press of play must not build a second engine and a second audio session. */
   const buildingRef = useRef<Promise<PlaybackEngine | null> | null>(null);
   /** The Utterances the engine holds. Its indices are what every cue and every correction is about. */
@@ -993,7 +995,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
 
   const resumeAt = useCallback(
     (place: ReadingPlace): boolean => {
-      if (playIntent.current) return false;
+      // An ended Reading has no page to take a place on (#106, `endedRef`).
+      if (endedRef.current || playIntent.current) return false;
       // Already held: one arrival is passed twice — Play passes on what its own
       // sync adopted, and the adopted-place effect passes the same arrival on the
       // next render (#54). Its section has been asked for already, or is being
@@ -1274,6 +1277,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [settings, hasKey, clock, report, ranOutOfText, document, sectionOf]);
 
   const play = useCallback(() => {
+    if (endedRef.current) {
+      debugLog('reading', 'play after the reading ended: ignored');
+      return;
+    }
     debugLog('reading', `play at utterance ${atRef.current ?? 'none'}, ${settings.provider} ${settings.voice}`);
     bridgeRef.current?.resumeFollowing();
     if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
@@ -1601,7 +1608,25 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     retainedIdentity.current = null;
     disposeEngine();
   }, [identity, settings, disposeEngine]);
-  useEffect(() => disposeEngine, [disposeEngine]);
+  /**
+   * The Reading ends here, when the view unmounts (ADR 0049), and nothing
+   * starts it again (#106). A callback can outlive the view: `reading-view.tsx`'s
+   * `play` waits for its sync before it calls `play`, and the owner can leave
+   * while it is still paused, open another Document or delete this one
+   * meanwhile. The generation above cannot stop that call, because it takes the
+   * generation the disposal has already moved on to, and it built a new engine,
+   * loaded and played it, with nothing left to pause or dispose it (measured
+   * 2026-09-30). So `play`, the one path that builds an engine, and `resumeAt`
+   * do nothing once this is set. Not `disposeEngine` itself: that also runs for
+   * a Voice, a Provider or a credential changed while the Reading lasts.
+   */
+  useEffect(() => {
+    endedRef.current = false;
+    return () => {
+      endedRef.current = true;
+      disposeEngine();
+    };
+  }, [disposeEngine]);
 
   /**
    * The Utterance being spoken, written down as a place in the document.

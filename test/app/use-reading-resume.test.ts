@@ -1086,3 +1086,53 @@ describe('the place a book opens with, passed to resumeAt again (#55)', () => {
     await m.down();
   });
 });
+
+/**
+ * A Play that arrives after the Reading has ended (#106). `reading-view.tsx`'s
+ * `play` waits for its sync before it calls `reading.play()`, and the Reading can
+ * end meanwhile: the owner goes back to the Library while it is still paused,
+ * opens another Document or deletes this one (#68), and the view unmounts.
+ * Measured on 2026-09-30: the late call built a new engine for the unmounted
+ * Reading and loaded and played it, where nothing could pause or dispose it.
+ * Here the callbacks are held from the last render, as that continuation holds them.
+ */
+describe('a Play held past the end of its Reading (#106)', () => {
+  const READY: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
+
+  /** Mounted with one sentence rendered and a ready Provider, no engine built yet: the callbacks of its last render, and the harness. */
+  async function heldThenEnded() {
+    const m = mount({ settings: READY });
+    await m.up();
+    await m.report(blocks(0, ['One sentence is enough.']), 0);
+    const held = m.reading;
+    await m.down();
+    return held;
+  }
+
+  it('builds no engine once the view has unmounted', async () => {
+    const { play } = await heldThenEnded();
+    await act(async () => {
+      play();
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+    expect(engines.built.map((engine) => engine.calls)).toEqual([]);
+  });
+
+  it('takes no place from its sync once the view has unmounted, and asks the renderer for nothing', async () => {
+    const { resumeAt } = await heldThenEnded();
+    let taken = true;
+    await act(async () => { taken = resumeAt(desktopPlace); });
+    expect(taken).toBe(false);
+    expect(bridge.goTo).not.toHaveBeenCalled();
+  });
+
+  it('still plays when it arrives while the Reading lasts (control)', async () => {
+    const m = mount({ settings: READY });
+    await m.up();
+    await m.report(blocks(0, ['One sentence is enough.']), 0);
+    const { play } = m.reading;
+    await m.press(() => play());
+    expect(engines.built.map((engine) => engine.calls)).toEqual([['load:0', 'play']]);
+    await m.down();
+  });
+});
