@@ -101,6 +101,7 @@ import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
 import { BAKED_LINE_POSITION, BAKED_SCROLLING, GLIDE_SOURCE } from './glide';
 import type { HighlightMessage } from './messages';
 import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, PROBLEM_MESSAGE, RENDERER_MESSAGE, TAP_MESSAGE, SELECTION_MESSAGE } from './messages';
+import { EPUB_GUARDS_SOURCE } from './epub-guards';
 import { RENDERER_LOG_SOURCE } from './renderer-log';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
@@ -2335,6 +2336,10 @@ ${constants}
          further on — the reading stopped for good, with a sentence to show for
          it this time and nothing that would ever produce another. */
       asked.delete(next.index);
+      /* Taken off the page before it finished (settleRemovedViews, #112): a
+         display() cleared the views, which is a race and not a failure, and
+         the next cue asks again. */
+      if (error && error.openreaderRemoved) return;
       report('could not render the section the reading is walking into: ' + error);
     });
   }
@@ -2596,6 +2601,8 @@ ${constants}
       : '';
   }
 
+  /* ---- epub.js's queues, away from the screen and after a clear (#112) ---- */
+${EPUB_GUARDS_SOURCE}
   /* Where epub.js puts a section it already has on the page: at the top of the
      container, by scrolling to the view's offsetTop — which the space above
      counts in, so that section's first line would go under the bar. A section it
@@ -2691,6 +2698,9 @@ ${constants}
   if (stage) stage.addEventListener('scroll', noteScroll, { passive: true });
   holdStill(rendition.manager);
   landBelowBar(rendition.manager);
+  settleRemovedViews(rendition.manager);
+  tickWithoutFrames(rendition.manager && rendition.manager.q);
+  tickWithoutFrames(rendition.q);
   /* And again whenever the reading position moves, which is what keeps
      \`onScreen\` current after the manager trims a view — a trim displays
      nothing, so the hook does not hear it. Idempotent per document: one lookup

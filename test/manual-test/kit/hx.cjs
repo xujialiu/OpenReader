@@ -8,6 +8,7 @@
 //
 //   node test/manual-test/kit/hx.cjs SIMULATOR_UDID '{"do":"say"}'
 //   node test/manual-test/kit/hx.cjs SIMULATOR_UDID '{"do":"settings","patch":{"theme":"dark"}}'
+//   node test/manual-test/kit/hx.cjs SIMULATOR_UDID '{}' --code-file test/manual-test/kit/probes/renderer-state.js
 //
 // Prints the container's Documents path and the command actually written.
 // Sends only; reading the answer back is still Metro's log (`HX …` lines) or
@@ -16,15 +17,24 @@ const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const [device, json] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const fileAt = args.indexOf('--code-file');
+const codeFile = fileAt < 0 ? null : args.splice(fileAt, 2)[1];
+const [device, json] = args;
 if (!device || !json) {
-  console.error('Usage: hx.cjs SIMULATOR_UDID JSON_COMMAND_WITHOUT_SEQ');
+  console.error('Usage: hx.cjs SIMULATOR_UDID JSON_COMMAND_WITHOUT_SEQ [--code-file PROBE.js]');
   process.exit(2);
 }
 let command;
 try { command = JSON.parse(json); } catch (problem) {
   console.error(`Not valid JSON: ${problem.message}`);
   process.exit(2);
+}
+// A probe file defines `function probe()` (kit/probes/); the harness runs a
+// `js` command's code as a function's body, so the call is appended.
+if (codeFile) {
+  command.do = 'js';
+  command.code = `${fs.readFileSync(codeFile, 'utf8')}\nreturn probe();`;
 }
 const documents = path.join(
   execFileSync('xcrun', ['simctl', 'get_app_container', device, 'top.xujialiu.openreader', 'data']).toString().trim(),

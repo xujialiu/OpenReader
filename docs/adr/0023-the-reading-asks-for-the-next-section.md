@@ -314,3 +314,70 @@ still loading clears the half-built view and starts again; it never reads the
 location of a document that has not loaded. The only signal that could have told
 the guard to lift is the promise above.
 
+
+## Amendment (2026-10-01, #112): away from the screen, and after a clear
+
+`renderAhead` asked for the next section through the manager's queue, and so
+waited for what that queue waits for. The owner's phone showed two defects,
+one after the other, and the simulator reproduced both
+(`notes/NOTES_2026-10-01.md`, 02:52 to 03:25;
+`test/manual-test/place-and-following/background-crossing.md`).
+
+- **Away from the screen, nothing is rendered ahead.** epub.js's `Queue.run()`
+  runs each task on `requestAnimationFrame`, and a page the app has left draws
+  no frames. The request for the next section, and every `display()` that
+  `follow()` asked for, waited until the app came back. That happened at 5 of 5
+  chapter crossings made with the phone locked. A Reading heard with the phone
+  locked therefore stopped at the end of every chapter until the phone was
+  unlocked.
+- **Coming back could stop the manager's queue for good.** When the voice
+  reaches a section whose view epub.js has unloaded, `follow()` asks
+  `rendition.display(cfi)`, and `manager.display()` then `clear()`s every view.
+  If the manager's queue was displaying the next section at that moment, that
+  view was removed half-built. An `IframeView` removed before its iframe loads
+  never settles its `display()`: `destroy()` does nothing to a view that is not
+  displayed, and the iframe, out of the page with its element, never loads. The
+  queue task waiting on that display never ended, and nothing queued after it
+  ran, `renderAhead` included. The rendition's queue then waited on the
+  manager's, through `fill()`. The reading ran out of text with the note
+  promising it would carry on, and nothing could make it.
+
+**Decided:** two guards in the program, `src/renderer/epub-guards.ts`,
+installed beside `holdStill`:
+
+- **A display whose view is taken off the page before it finished ends then**
+  (`settleRemovedViews`). The manager's `View.prototype.display` returns a
+  promise the removal can reject, and `manager.views.destroy`, through which
+  `remove()` and `clear()` pass, rejects it with `removed before its display
+  finished` for a view that is not displayed. `check()` and `update()` already
+  absorb a rejected display. `renderAhead`'s rejection path already forgets the
+  section and asks again at the next cue; for this rejection it no longer
+  reports a problem, because a clear is a race and not a failure.
+- **Both queues tick without frames** (`tickWithoutFrames`). The next task runs
+  on the first of a frame and a 100 ms timer (`FRAMELESS_MS`). On the screen the
+  frame comes first, as before. Away from it, the timer runs whenever WebKit
+  lets the page run.
+
+Measured on the simulator: 5 of 5 crossings away from the screen rendered the
+next section 0.1 to 0.2 s after the voice arrived; before the fix, 4 of 4 did
+not until the app came back. The race forced on demand now ends in
+`rejected: removed before its display finished`, with both queues idle; before,
+it ended in `pending`, with the manager's queue `running` for good.
+
+**Not settled here.** A real iPhone suspends the page's process in the
+background and wakes it for a median of 7 ms at a time, about 700 times in #112's
+17 minutes. The simulator does not. Whether the next section renders while the
+phone is locked, rather than only once the voice's own `follow()` display runs,
+needs the owner's phone.
+
+**Also affected.** The download Indexer installs the same program, so its
+`rendition.display(index)` no longer waits for a frame either.
+
+**Considered and not done:**
+
+- Keeping `follow()`'s display off a busy queue. The display is what brings back
+  a section epub.js unloaded, and waiting for an idle queue that itself waits
+  for a frame deadlocks away from the screen.
+- Rendering two sections ahead. This narrows the window and leaves both defects.
+- Preparing the next section's text outside the WebView, which would redraw
+  this ADR's whole chain.

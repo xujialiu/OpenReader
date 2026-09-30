@@ -17,6 +17,9 @@
 // landing mid-sentence would still have old audio left if it kept playing.
 //
 //   node test/manual-test/player-and-reading-held/fake-kokoro.cjs [PORT]   # default 8791
+//
+// OPENREADER_FAKE_TTS_SECONDS sets the clip length (default 2.5 s); a short one
+// walks a real chapter in seconds (#112's chapter-boundary loop).
 
 const { Buffer } = require('node:buffer');
 const http = require('node:http');
@@ -24,7 +27,7 @@ const http = require('node:http');
 const PORT = Number(process.argv[2] ?? 8791);
 const LOG = process.env.OPENREADER_FAKE_TTS_LOG ?? '/tmp/openreader-issue86/fake-tts.log';
 const SAMPLE_RATE = 24000;
-const SILENCE_SECONDS = 2.5;
+const SILENCE_SECONDS = Number(process.env.OPENREADER_FAKE_TTS_SECONDS ?? 2.5);
 
 let served = 0;
 

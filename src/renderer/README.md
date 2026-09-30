@@ -100,6 +100,15 @@ Eight properties of the following, and each is a rule rather than an accident.
   program also sweeps on every Clip cue, which is what closed the state the
   reading of 04:43 died in — a section epub.js rendered by itself, sitting on the
   page unreported — before the content hook did.
+- **The queues go on without frames, and a removed view's display ends**
+  (#112, ADR 0023's 2026-10-01 amendment, `epub-guards.ts`). epub.js runs each
+  queued task on a frame, and a page the app has left draws none. So
+  `tickWithoutFrames` runs the next task on the first of a frame and a 100 ms
+  timer, and the section after the voice's is rendered with the phone locked
+  too. A `clear()` from `rendition.display()` could remove a view the manager's
+  queue was still displaying, and that display never settled, so the queue
+  stopped for good. `settleRemovedViews` rejects it instead, and `renderAhead`
+  asks again at the next cue.
 - **A section `follow()` had to display is placed on the frame after it
   arrives** (#50, ADR 0023). The content hook that adopts it runs inside that
   display, before epub.js's own `moveTo` to the Block the display named, and in

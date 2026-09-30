@@ -27,6 +27,10 @@ that names the script or probe you are about to run.
   `following-touch.sh`, `continuous-follow.cjs`, the kit's `hx.cjs`.
 - [follow-fixes.md](follow-fixes.md) (#71): the review fixes, a pause, a re-cue
   and a Block crossing. `follow-fixes.cjs`.
+- [background-crossing.md](background-crossing.md) (#112): a section crossed
+  with the app away from the screen, and the queue race that stopped the
+  owner's reading for good. `background-crossing.sh`, `queue-race-arm.js`,
+  `queue-race-read.js`.
 
 `PausedTransportProbe.swift` has no recipe: Play after an idle pause and a
 paused word tap by real touches (#26, #45, #46, #49). Its header says what it

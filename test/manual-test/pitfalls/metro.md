@@ -244,3 +244,12 @@
   from `TEST_RUNNER_OPENREADER_METRO_PORT` (xcodebuild hands the runner the
   variable without its prefix), as `ReaderTitleProbe.swift` does — the same
   rule the manual launches already follow.
+- **Away from the screen, the app's console lines can miss Metro, and the
+  Reader's status line can stop.** Measured 2026-10-01 03:07 (#112,
+  `iPhone 17 bug112`, a Reading playing with the app in the background): the
+  Debug Log recorded `[renderer]` lines at 03:08:00 and 03:08:32, while Metro's
+  log had no `HX` line from the play to the pause, and the Debug Log's own
+  `[hx] playing=` line stopped a second after the app left. An earlier run the
+  same night had status lines in Metro while away. Fix: judge a background run by
+  the Debug Log's `[renderer]` and `[app]` stamps, read after the app is back in
+  front (which appends what was waiting), as `background-crossing.sh` does.
