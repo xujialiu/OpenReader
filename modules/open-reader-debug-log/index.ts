@@ -9,7 +9,7 @@ import { requireOptionalNativeModule } from 'expo';
  * missing, rather than the app failing to start in Debug Mode.
  */
 interface DebugLogNative {
-  /** `CFBundleShortVersionString`, the released version the build carries. */
+  /** `CFBundleShortVersionString`, the version the build leads to (`APP_VERSION` without its beta). */
   readonly nativeVersion: string;
   /** `CFBundleVersion`. */
   readonly nativeBuild: string;

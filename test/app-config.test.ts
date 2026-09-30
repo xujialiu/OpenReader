@@ -130,27 +130,21 @@ describe('ADR 0001: ios/ and android/ are generated, never committed', () => {
   });
 });
 
-/** Whether dotted version `a` comes after `b`, compared part by part. */
-function isLater(a: string, b: string): boolean {
-  const [x, y] = [a, b].map((version) => version.split('.').map(Number));
-  const at = x!.findIndex((part, i) => part !== y![i]);
-  return at >= 0 && x![at]! > y![at]!;
-}
-
 describe('AGENTS.md: every app change carries a beta version', () => {
-  it('keeps one released version in app.config.ts and package.json, in a form iOS accepts', () => {
+  it('uploads a build as the version it leads to, the same in app.config.ts and package.json, in a form iOS accepts (#108)', () => {
     // app.config.ts's becomes CFBundleShortVersionString: integers and dots,
-    // never the beta suffix (ITMS-90060). Nothing but this reconciles the two.
+    // never the beta suffix (ITMS-90060). It is APP_VERSION without the beta,
+    // because a released version takes no more uploads (ITMS-90186), so a beta
+    // labelled with the last release would be refused.
     expect(config.version).toBe(manifest.version);
     expect(config.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(config.version).toBe(APP_VERSION.replace(/-beta[1-9]\d*$/, ''));
   });
 
-  it('shows in Settings either that version or a beta of a later one', () => {
+  it('shows in Settings that version, or a beta of it', () => {
     const shown = /^(\d+\.\d+\.\d+)(?:-beta([1-9]\d*))?$/.exec(APP_VERSION);
     expect(shown, `${APP_VERSION} is neither X.Y.Z nor X.Y.Z-betaN`).not.toBeNull();
-    const [, base, beta] = shown!;
-    if (beta === undefined) expect(base).toBe(manifest.version);
-    else expect(isLater(base!, manifest.version), `${base} is not after ${manifest.version}`).toBe(true);
+    expect(shown![1]).toBe(manifest.version);
   });
 });
 

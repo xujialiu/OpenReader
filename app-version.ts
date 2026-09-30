@@ -7,11 +7,12 @@
  * reload from Metro shows the new number as surely as a new build does — and a
  * reload is how most changes reach the simulator.
  *
- * **Not `version` in app.config.ts.** That one stays at the released version,
- * and the comment there says why. test/app-config.test.ts holds the two
- * together: this is either that version or a beta of the next one.
+ * **Not `version` in app.config.ts.** That one is this without the `-beta<n>`,
+ * the version the build leads to (#108), and the comment there says why.
+ * `package.json` declares the same numbers, and test/app-config.test.ts holds
+ * all three together.
  *
- * A release drops the suffix here and moves app.config.ts and `package.json` to
- * the same number.
+ * A release drops the suffix here. The first beta of the next version moves
+ * `package.json` to its numbers.
  */
 export const APP_VERSION = '0.0.2-beta73';

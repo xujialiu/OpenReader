@@ -9,8 +9,10 @@ the device which build is running. Every app change — each one that ends with
 the latest app in the simulator — sets it before the tree goes to the tester:
 the next patch version plus `-beta1` after a release (`0.0.1` → `0.0.2-beta1`),
 then `-beta2`, `-beta3`, … for each later change. Minor and major bumps are the
-owner's call. `package.json` and `app.config.ts` keep the released version; the
-comment on `version` in `app.config.ts` says why.
+owner's call. `app.config.ts` takes its version from `APP_VERSION` without the
+`-beta<n>`, and `package.json` carries the same numbers, so the first `-beta1`
+of a new version moves `package.json` too; the comment on `version` in
+`app.config.ts` says why.
 
 Worktrees that start from the same base can pick the same number. Before naming
 one, read `app-version.ts` on `main` and in each worktree (`git worktree list`)
