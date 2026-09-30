@@ -72,7 +72,9 @@ The owner confirmed these on 2026-09-30, after trying the alternatives:
   it is not left to a switch in Settings;
 - a refused lookup closes rather than staying open to say it was not sent;
 - Allow is the bold button, as in the phone's permission prompts;
-- there is no way yet to take a yes back inside the app (below).
+- there is no way yet to take a yes back inside the app (below);
+- audio already on the phone plays without the question, which comes only when
+  a sentence would be sent, and the reading waits there (confirmed 2026-10-01).
 
 ## Why
 
