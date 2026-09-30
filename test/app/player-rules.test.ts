@@ -438,13 +438,13 @@ describe('the Document’s name in the bar takes two lines before it is cut (#85
     pin(name, '<Text accessibilityLabel={name}', 'name-text.tsx');
   });
 
-  it('is the phone’s own bar title: 17-point semibold, centred, and not scaled', () => {
-    // Two lines of a larger size would not fit the 54-point bar, and the phone's
-    // own bar title does not scale either.
+  it('is the phone’s own bar title: Headline, centred, and as large as the other bars’ titles', () => {
+    // The phone grows its bar titles with the text size from 17 to 21 (#100);
+    // at 21 two lines still fit the 54-point bar. The size comes from
+    // `barTitle`, so React Native's own scaling, which has no such limit, is off.
     const title = code('reader-title.tsx');
-    // The phone's Headline, 17-point semibold, from the one place sizes are
-    // written (#99).
-    pin(title, "title: { ...TEXT.headline, color: INK.text, textAlign: 'center' }", 'reader-title.tsx');
+    pin(title, "title: { color: INK.text, textAlign: 'center' }", 'reader-title.tsx');
+    pin(title, 'style={[styles.title, barTitle(fontScale), { maxWidth: room }]}', 'reader-title.tsx');
     pin(title, 'allowFontScaling={false}', 'reader-title.tsx');
   });
 

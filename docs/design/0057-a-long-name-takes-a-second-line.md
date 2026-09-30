@@ -28,9 +28,16 @@ name, but the title would then change size from one book to the next, and a
 name that only just needed a second line would look smaller than a name that
 only just fitted on one.
 
-The title does not grow when the owner makes the phone's text bigger, because
-the phone's own titles above a page do not either. At a bigger size two lines
-would not fit above the page.
+The title grows when the owner makes the phone's text bigger, exactly as far as
+the phone's own titles above a page grow, and so do the titles of every other
+page in the app: from 17 points up to 21, and no further, however large the
+text is made. At 21, two lines still fit above the page. The phone does not
+shrink its titles when the text is made smaller, and neither does the app.
+
+At first the title did not grow at all, on the belief that the phone's own
+titles did not. Measured, they do (issue #100), so the app's did not match them,
+and at the owner's larger text size the titles were the one thing on the
+screen that stayed small.
 
 ## The page does not move
 

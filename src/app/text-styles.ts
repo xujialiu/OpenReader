@@ -45,3 +45,35 @@ export const TEXT = styles(false);
 
 /** Each style at its emphasized weight: a chosen chip, the chapter being read. */
 export const TEXT_EMPHASIZED = styles(true);
+
+/**
+ * How far a title above a page follows the phone's text size, as React
+ * Native's multiplier (`fontScale`, 1 at the default size): never below the
+ * default, never above `extra-extra-large`'s 1.235 (#100).
+ */
+const BAR_TITLE_SCALE = { min: 1, max: 1.235 } as const;
+
+/**
+ * A title above a page: every navigation bar's, and the reader's Document name,
+ * at the phone's text size `fontScale` (#100).
+ *
+ * The phone grows its own bar titles with the text size, but only so far.
+ * Measured on its own Settings › General › About (notes, 2026-09-30 12:05):
+ * 17 pt at the default size and every smaller one, about 19 at `extra-large`,
+ * about 21 at `extra-extra-large` and every larger size, accessibility sizes
+ * included. That is Headline at the current size, held between 17 and 21.
+ * React Native's own multipliers put 17 at exactly those sizes (1.118 gives
+ * 19.0, 1.235 gives 21.0), so the title is Headline times the multiplier, held
+ * between them.
+ *
+ * The size is worked out here and handed over whole: react-native-screens
+ * fixes a bar title's font at 17 as soon as any title style is passed, and the
+ * app passes the title's colour, so the phone cannot grow it itself. It is a
+ * whole number of points because react-native-screens takes `titleFontSize` as
+ * an `Int32` and drops the fraction: 20.995 was drawn at 20 (notes, 2026-09-30
+ * 12:15). The reader's title takes the same whole number, to match.
+ */
+export function barTitle(fontScale: number): Readonly<Pick<TextStyle, 'fontSize' | 'fontWeight'>> {
+  const scale = Math.min(BAR_TITLE_SCALE.max, Math.max(BAR_TITLE_SCALE.min, fontScale));
+  return { fontSize: Math.round(HIG.headline.size * scale), fontWeight: HIG.headline.weight };
+}

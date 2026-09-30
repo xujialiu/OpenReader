@@ -87,4 +87,6 @@ buttons and notes stay in the app's styles.
   the list has to be read again.
 - **Larger text grows evenly.** When the owner makes the phone's text larger,
   every style here grows by the same share. The phone grows its own styles by
-  different amounts, small text more than large. This has not been measured.
+  different amounts, small text more than large. This has not been measured,
+  except for the titles above pages: those grow exactly as the phone's own do,
+  from 17 points to 21 and no further (issue #100).

@@ -39,7 +39,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PortalProvider } from 'react-native-teleport';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Appearance, AppState, useColorScheme } from 'react-native';
+import { Alert, Appearance, AppState, useColorScheme, useWindowDimensions } from 'react-native';
 
 
 import { PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
@@ -55,7 +55,7 @@ import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
 import { SyncScreen } from './sync-screen';
-import { TEXT } from './text-styles';
+import { barTitle } from './text-styles';
 import { useLibrary } from './use-library';
 import { voiceLists } from './use-voices';
 import { useSync } from './use-sync';
@@ -248,6 +248,8 @@ export function OpenReader() {
    * so an owner who chose Light keeps it whatever the phone does at sunset.
    */
   const scheme = resolveTheme(settings.theme, useColorScheme());
+  /** The phone's text size, which the bars' titles follow as far as the phone's own do (#100). */
+  const { fontScale } = useWindowDimensions();
   const navigationTheme = useMemo(() => {
     const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
     return { ...base, colors: { ...base.colors, background: PALETTE[scheme].page,
@@ -329,7 +331,7 @@ export function OpenReader() {
                 // long-press menu, which still lists it.
                 headerBackButtonDisplayMode: 'minimal',
                 headerTintColor: PALETTE[scheme].text,
-                headerTitleStyle: { ...TEXT.headline, color: PALETTE[scheme].text },
+                headerTitleStyle: { ...barTitle(fontScale), color: PALETTE[scheme].text },
                 contentStyle: { backgroundColor: PALETTE[scheme].page },
               }}
             >

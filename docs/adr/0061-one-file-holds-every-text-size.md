@@ -19,9 +19,17 @@ Appearance instead (#98)._
   `fontWeight: TEXT_EMPHASIZED.body.fontWeight`.
 - Every file in `src/app` refers to it. `SETTINGS.fontSize` (17) in
   `controls.tsx` and `TITLE_SIZE` (17) in `reader-title.tsx` are gone. The
-  native-stack bars get `headerTitleStyle: { ...TEXT.headline, color }` in
-  `shell.tsx`: the phone still draws the title, and is handed the size and
-  weight it already used.
+  native-stack bars get `headerTitleStyle: { ...barTitle(fontScale), color }`
+  in `shell.tsx` (#100): the phone still draws the title, handed Headline's
+  weight and a size that follows the text size as its own bar titles do
+  (`fontScale` from `useWindowDimensions`, so a change of text size while the
+  app runs reaches it). `barTitle` is `round(17 × fontScale)` with `fontScale`
+  held between 1 and 1.235: the phone's own About title measured 17 pt at
+  `large` and below, 19 at `extra-large`, 21 at `extra-extra-large` and above
+  (notes, 2026-09-30 12:05). Whole points, because react-native-screens 4.26.2
+  takes `titleFontSize` as `Int32` and drew 20.995 at 20 (12:15). Before #100
+  the app passed only the colour, and react-native-screens then fixed the title
+  at `boldSystemFontOfSize:17` whatever the text size (11:53).
 - `test/app/text-styles.test.ts` reads every `.ts`/`.tsx` in `src/app` except
   `text-styles.ts` and fails on `fontSize:` or `lineHeight:` anywhere, and on
   `fontWeight:` not followed by `TEXT.` or `TEXT_EMPHASIZED.`
@@ -30,7 +38,7 @@ Appearance instead (#98)._
   `:\s*`, the `\s*` backtracks to zero and the lookahead sees the space. It pins
   the values of `headline`, `body`, `subhead`, `footnote`, `caption1` and
   `title2` emphasized, that no style carries `lineHeight`, and the bars'
-  `headerTitleStyle`.
+  `headerTitleStyle`, and `barTitle` at every text size's multiplier.
 - The renderer's page CSS is not covered: its sizes are Appearance's.
 
 ## The numbers, and where they come from
@@ -103,4 +111,8 @@ the card was not measured again.
   size (`allowFontScaling`), where iOS scales each text style by its own amount.
   At the default size the two agree; above it they do not, by amounts not
   measured here.
-- The reader's title keeps `allowFontScaling={false}` (ADR 0057).
+- The titles above pages are the exception: they follow the phone's own rule,
+  measured (`barTitle`, above).
+- At `accessibility-extra-extra-extra-large` (3.571×) the player's text
+  overflows its controls: the speed read `1 !` and the A/M letter was cut
+  (notes, 2026-09-30 12:15).

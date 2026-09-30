@@ -27,9 +27,16 @@ as a function, which react-native-screens mounts as `navigationItem.titleView`.
   whole word, read off an unseen copy laid out at `width={room}`, the title's
   full `maxWidth`, because the title's own box shrinks to its words;
 - 17-point semibold (`fontWeight: '600'`), centred, `INK.text`: the phone's
-  inline bar title is the `headline` style, 17-point semibold;
-- `allowFontScaling={false}`: the phone's own inline bar title does not follow
-  Dynamic Type, and two lines at a larger size would not fit the bar;
+  inline bar title is the `headline` style, 17-point semibold; since #100 the
+  size is `barTitle(fontScale)` (`text-styles.ts`), the same the other bars'
+  titles are handed;
+- `allowFontScaling={false}`: first because "the phone's own inline bar title
+  does not follow Dynamic Type". **That was wrong** (#100, notes 2026-09-30
+  12:05): the phone's grows from 17 to 21 pt, Headline at the current size held
+  between `large` and `extra-extra-large`. `allowFontScaling` stays off because
+  `barTitle` already scales the size, with that limit; React Native's own
+  scaling would grow it without one. Two lines at 21 pt (SF's own line height,
+  about 25 each) take about 50 of the bar's 54 points;
 - `accessibilityRole="header"`; VoiceOver reads the whole name, not the
   truncated one;
 - `maxWidth: windowWidth - 2 * TITLE_SIDE`, `TITLE_SIDE = 81` (below).
