@@ -15,7 +15,7 @@
 // seconds apart, through fling-jump.sh, waits until the page has rested for a
 // second and the queue is empty, and reads the probe's log, which the WebView
 // posts to a server this script runs on 127.0.0.1. The harness's own `js`
-// answer is cut at 500 characters (README Pitfalls), far too little for a log.
+// answer is one line in Metro's log, far too little for a log of every frame.
 //
 // A frame is BLANK when displayed sections cover less than half the viewport,
 // and a JUMP when the text at the viewport's top moved half a viewport further
@@ -75,12 +75,10 @@ const logSince = (offset) => {
     return bytes.toString('utf8');
   } finally { fs.closeSync(fd); }
 };
-// A `js` answer arrives as the reader's note in its HX status line, JSON-escaped
-// and cut at 500 characters: parse the quoted string after note= (README Pitfalls).
+// A `js` answer is its own line in Metro's log, `HX PROBE <answer>`, uncut (#113).
 const answers = (text) => text.split('\n').flatMap((line) => {
-  const at = line.indexOf(' note="');
-  if (!line.includes('HX playing=') || at < 0) return [];
-  try { return [JSON.parse(line.slice(at + 6)).replace(/^The highlight could not be drawn: PROBE /, '')]; } catch { return []; }
+  const at = line.indexOf('HX PROBE ');
+  return at < 0 ? [] : [line.slice(at + 'HX PROBE '.length)];
 });
 async function ask(code, test = () => true, ms = 5000) {
   const offset = logSize();

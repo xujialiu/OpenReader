@@ -85,7 +85,8 @@ CODE="$(cat "$HERE/leading-strip-probe.js")
 return leadingStripProbe($(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$LINE_HEIGHT"));"
 BEFORE=$(wc -l < "$METRO_LOG")
 hx "$(python3 -c 'import json,sys; print(json.dumps({"do": "js", "code": sys.argv[1]}))' "$CODE")" 6
-ANSWER=$(tail -n +"$((BEFORE + 1))" "$METRO_LOG" | grep -o 'PROBE [^"]*' | head -1)
+# The answer is its own line in Metro's log, `HX PROBE <answer>` (#113).
+ANSWER=$(tail -n +"$((BEFORE + 1))" "$METRO_LOG" | grep -o 'HX PROBE .*' | head -1 | sed 's/^HX //; s/[[:space:]]*$//')
 echo "${ANSWER:-no answer from the reader}"
 xcrun simctl io "$UDID" screenshot "$OUT/app.png" > /dev/null 2>&1
 # No answer means the program never ran in a reader, so the screenshot shows

@@ -38,11 +38,14 @@ each frame's step, and where the line came to rest against the target.
   of that case, not a real Provider's.
 - **`DURING=collapse`** collapses the player a third of the way into the play and
   expands it at two thirds; **`DURING=note`** puts a note on the player a third of
-  the way in (a `js` answer is one) and leaves it. Both show in the `msg` lines as
+  the way in (a problem message the script posts, `noted`) and leaves it. Both show in the `msg` lines as
   `inset bottom … open …`: `bottom` moves, `open` must not, and nothing should
   scroll at those moments (2026-09-26 11:06–11:08).
-- **Notes are always there.** Every `ask` answer stays on the player as a note
-  while paused, so each run starts with the player taller than its open height,
+- **Notes are always there.** The `started` answer that ends arming also posts a
+  problem message, which stays on the player as a note while paused. Until
+  #113 every `ask` answer was one; now an answer is its own `HX PROBE …` line
+  in Metro's log, and only `noted` leaves a note. So each run starts with the
+  player taller than its open height,
   and a Play clears it. That was how batch 1's inset-based target was caught
   (87 px moved at Play). It is also why a paused skip is the way to show that
   a note moves nothing: the `other move` lines print `its first line rest`, the
@@ -80,7 +83,8 @@ which only ever presses Play itself, cannot see it.
 Also proved item 5 of #71 batch 2 (a note on the player must not move the page
 at Play): `arm` at the Line Position already in effect (so the bridge sends no
 `following` message — a real change is its own legitimate move, measured
-separately above) leaves a note (every `ask()` answer is one), then a bare
+separately above) leaves a note (then every `ask()` answer was one; now its
+`started` answer's `noted`), then a bare
 harness `play`/`pause` with nothing in between. Measured 2026-09-26: `msg` line
 `note attention=true "The highlight could not be drawn: PROBE started …"`
 present immediately before `play`, and the run's `other` array empty — no
