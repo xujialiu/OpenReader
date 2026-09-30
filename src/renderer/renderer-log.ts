@@ -52,16 +52,22 @@ import { debugLog } from '../debug/debug-log';
 
 import { PROBE_MESSAGE, RENDERER_MESSAGE, type ProbeMessage, type RendererMessage } from './messages';
 
-/** Awake seconds a queue may hold `running` with nothing started or finished before the watchdog says so. */
+/**
+ * How long a queue may hold `running` with nothing started or finished before
+ * the watchdog says so, **counted** rather than read off the clock: each look
+ * adds the time since the last, but never more than `LOOK_GAP_MS`.
+ */
 export const STALL_MS = 10_000;
 /** The watchdog's tick. */
 export const WATCH_MS = 1_000;
 /**
- * The most one tick counts as awake time. A tick that comes later than this
- * after the last is a WebView iOS suspended in between, and a queue cannot move
- * while nothing runs, so the gap is not a stall.
+ * The most one look counts. A look that comes later than this after the last
+ * is a WebView iOS suspended in between, and a queue cannot move while nothing
+ * runs, so the gap is not a stall. In #112's background the WebView ran a median
+ * 7 ms each time the app woke it (notes/NOTES_2026-10-01.md), so a stall there
+ * is counted from the looks each Clip cue gives it, 2 s at most apiece.
  */
-export const AWAKE_GAP_MS = 2_000;
+export const LOOK_GAP_MS = 2_000;
 /** How long a view's display may run before a line says it has not finished. */
 export const SLOW_DISPLAY_MS = 10_000;
 /** At most this many lines per `LINE_WINDOW_MS`; the rest are counted, and the count is written. */
@@ -93,7 +99,7 @@ export function isPageLine(message: { type?: unknown }): message is RendererMess
 export const RENDERER_LOG_SOURCE =
   'var RLOG_STALL_MS = ' + STALL_MS + ';\n' +
   'var RLOG_WATCH_MS = ' + WATCH_MS + ';\n' +
-  'var RLOG_AWAKE_GAP_MS = ' + AWAKE_GAP_MS + ';\n' +
+  'var RLOG_LOOK_GAP_MS = ' + LOOK_GAP_MS + ';\n' +
   'var RLOG_SLOW_DISPLAY_MS = ' + SLOW_DISPLAY_MS + ';\n' +
   'var RLOG_LINES = ' + LINES_PER_WINDOW + ';\n' +
   'var RLOG_WINDOW_MS = ' + LINE_WINDOW_MS + ';\n' +
@@ -205,7 +211,7 @@ function installRendererLog(env) {
 
   function hookQueue(name, q) {
     if (!q || q.rlogWatch || typeof q.enqueue !== 'function' || typeof q.dequeue !== 'function') return;
-    var watch = { name: name, q: q, started: 0, settled: 0, flight: null, token: '', awake: 0, since: now(), reported: false };
+    var watch = { name: name, q: q, started: 0, settled: 0, flight: null, token: '', counted: 0, since: now(), reported: false };
     q.rlogWatch = watch;
     var enqueue = q.enqueue;
     q.enqueue = function rlogEnqueue(task) {
@@ -616,17 +622,17 @@ function installRendererLog(env) {
   /* ---- the watchdog ---- */
 
   var lastTick = now();
-  function watchQueue(q, at, awake) {
+  function watchQueue(q, at, counted) {
     var watch = q && q.rlogWatch;
     if (!watch) return;
     var token = watch.started + ':' + watch.settled;
     if (!q.running || token !== watch.token) {
       if (watch.reported) {
-        line(watch.name + ' queue moving again after ' + seconds(watch.awake) + ' s awake, ' + seconds(at - watch.since) + ' s on the clock' +
+        line(watch.name + ' queue moving again after ' + seconds(at - watch.since) + ' s on the clock (' + seconds(watch.counted) + ' s counted)' +
           (q.running ? '' : ', and idle') + '; ' + watch.name + ' queue ' + queueBrief(q));
       }
       watch.token = token;
-      watch.awake = 0;
+      watch.counted = 0;
       watch.since = at;
       watch.reported = false;
       return;
@@ -634,21 +640,21 @@ function installRendererLog(env) {
     /* Waiting for a frame while the page is hidden is what a hidden page does,
        and not a stall: WebKit draws no frames for it. */
     if (!watch.flight && document.visibilityState === 'hidden') return;
-    watch.awake += awake;
-    if (watch.reported || watch.awake < RLOG_STALL_MS) return;
+    watch.counted += counted;
+    if (watch.reported || watch.counted < RLOG_STALL_MS) return;
     watch.reported = true;
-    line(watch.name + ' queue stalled: running, and nothing started or finished for ' + seconds(watch.awake) + ' s awake, ' +
-      seconds(at - watch.since) + ' s on the clock; ' + snapshot());
+    line(watch.name + ' queue stalled: running, and nothing started or finished for ' + seconds(at - watch.since) + ' s on the clock (' +
+      seconds(watch.counted) + ' s counted); ' + snapshot());
   }
   function rlogTick() {
     safely(function () {
       var at = now();
-      var awake = Math.min(Math.max(at - lastTick, 0), RLOG_AWAKE_GAP_MS);
+      var counted = Math.min(Math.max(at - lastTick, 0), RLOG_LOOK_GAP_MS);
       lastTick = at;
       rlogFlushDropped(at);
       hookAll();
-      watchQueue(rendition.manager && rendition.manager.q, at, awake);
-      watchQueue(rendition.q, at, awake);
+      watchQueue(rendition.manager && rendition.manager.q, at, counted);
+      watchQueue(rendition.q, at, counted);
     });
   }
 

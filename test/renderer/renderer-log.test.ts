@@ -7,7 +7,7 @@ import { LINE_CHARS, setDebugLogWriter, type DebugCategory } from '../../src/deb
 import { highlighterSource } from '../../src/renderer/highlighter';
 import { PROBE_MESSAGE, PROBLEM_MESSAGE, RENDERER_MESSAGE } from '../../src/renderer/messages';
 import {
-  AWAKE_GAP_MS,
+  LOOK_GAP_MS,
   LINE_WINDOW_MS,
   LINES_PER_WINDOW,
   logFromPage,
@@ -414,6 +414,14 @@ describe('the section life cycle, event by event', () => {
     await world.frames();
     expect(world.rendition.displays).toEqual(['epubcfi(/6/68!/4/2[chapter-34]/2/1:0)']);
   });
+
+  it('writes a display finishing, and one epub.js could not make', () => {
+    const world = page();
+    const mark = world.lines.length;
+    world.rendition.emit('displayed', world.spine[34]);
+    world.rendition.emit('displayerror', new Error('No Section Found'));
+    expect(world.since(mark)).toEqual(['display finished: section 34', 'display failed: "Error: No Section Found"']);
+  });
 });
 
 describe('renderAhead, as the program runs it', () => {
@@ -483,14 +491,14 @@ describe('the stall watchdog', () => {
   it('writes one line with a snapshot when a queue has made no progress for STALL_MS, and one when it moves again', async () => {
     const { world, lost } = await stuck();
     const mark = world.lines.length;
-    // The first tick finds the queue as it is; each after it is a second awake.
+    // The first tick finds the queue as it is; each after it counts a second.
     await world.ticks(STALL_MS / 1000);
     expect(world.since(mark).filter((one) => one.includes('stalled'))).toEqual([]);
     await world.ticks(1);
     await world.ticks(40);
     const stalls = world.since(mark).filter((one) => one.includes('queue stalled'));
     expect(stalls).toHaveLength(1);
-    expect(stalls[0]).toMatch(/^manager queue stalled: running, and nothing started or finished for 10 s awake, 10 s on the clock; views \[33 displayed 10559px\]; /);
+    expect(stalls[0]).toMatch(/^manager queue stalled: running, and nothing started or finished for 10 s on the clock \(10 s counted\); views \[33 displayed 10559px\]; /);
     expect(stalls[0]).toContain('manager queue running, in flight renderAhead(34) for 11 s, 42 waiting: trim@stuck ×41, () => world.manager.check()@stuck;');
     expect(stalls[0]).toContain('asked [34], reported [0–33]');
     expect(stalls[0].length).toBeLessThanOrEqual(LINE_CHARS);
@@ -503,19 +511,19 @@ describe('the stall watchdog', () => {
     await settled();
     await world.ticks(1);
     expect(world.since(again).filter((one) => one.includes('moving again'))).toEqual([
-      expect.stringMatching(/^manager queue moving again after 50 s awake, 51 s on the clock; manager queue running, \d+ waiting$/),
+      expect.stringMatching(/^manager queue moving again after 51 s on the clock \(50 s counted\); manager queue running, \d+ waiting$/),
     ]);
   });
 
-  it('counts a suspended WebView’s gap as AWAKE_GAP_MS at most, and says how long it was on the clock', async () => {
+  it('counts a suspended WebView’s gap as LOOK_GAP_MS at most, and says how long it was on the clock', async () => {
     const { world } = await stuck();
     await world.ticks(1);
     const mark = world.lines.length;
     await world.pass(25 * 60_000);
     expect(world.since(mark).filter((one) => one.includes('stalled'))).toEqual([]);
-    await world.ticks((STALL_MS - AWAKE_GAP_MS) / 1000);
+    await world.ticks((STALL_MS - LOOK_GAP_MS) / 1000);
     const stalls = world.since(mark).filter((one) => one.includes('stalled'));
-    expect(stalls).toEqual([expect.stringMatching(/for 10 s awake, 1508 s on the clock;/)]);
+    expect(stalls).toEqual([expect.stringMatching(/for 1508 s on the clock \(10 s counted\);/)]);
   });
 
   it('looks again at every Clip cue, which is when iOS lets a background WebView run at all', async () => {
@@ -529,7 +537,7 @@ describe('the stall watchdog', () => {
     for (let i = 0; i < 5; i++) cue();
     expect(world.since(mark).filter((one) => one.includes('stalled'))).toEqual([]);
     cue();
-    expect(world.since(mark).filter((one) => one.includes('stalled'))).toEqual([expect.stringMatching(/for 10 s awake, 20 s on the clock;/)]);
+    expect(world.since(mark).filter((one) => one.includes('stalled'))).toEqual([expect.stringMatching(/for 20 s on the clock \(10 s counted\);/)]);
   });
 
   it('does not call a queue that waits for a frame of a hidden page stalled, and does when the page is shown', async () => {
