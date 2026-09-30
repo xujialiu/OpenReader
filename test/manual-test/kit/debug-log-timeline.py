@@ -27,7 +27,8 @@ import re
 import sys
 
 LINE = re.compile(r'^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}) [+-]\d\d:\d\d \[([a-z-]+)\] (.*)$')
-STATUS = re.compile(r'^playing=(\S+) utterance=(\S+) known=(\S+) section=(\S+) rendered=(\S+) .*?note=(.*)$')
+# `app=` is on the line from #113 on; older lines lack it.
+STATUS = re.compile(r'^playing=(\S+) (?:app=\S+ )?utterance=(\S+) known=(\S+) section=(\S+) rendered=(\S+) .*?note=(.*)$')
 APP = re.compile(r'^app (\w+)')
 
 

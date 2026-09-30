@@ -5,8 +5,8 @@ screenshot and a time. It gets from that report to the state the app was in,
 in one pass. It was written from #112 (2026-10-01), where the pass took four
 rounds; each step below is one of those rounds, done in order.
 
-The phone is the owner's own. Everything here only reads it, except the probe
-answer in step 4, which replaces the note on the player. Anything that would
+The phone is the owner's own. Everything here only reads it; on a build before
+`0.0.2-beta76` a probe's answer in step 4 also replaces the note on the player. Anything that would
 play, pause, navigate or change a setting on the phone needs the owner's
 go-ahead first, and so does playing audio (MEMORY/device-testing.md).
 
@@ -63,9 +63,16 @@ status line appears only when `playing`, `known`, `section`, `rendered` or
 | `[document] opening … / opened …` | a Document opened in the Reader |
 | `[reading] play at / pause at utterance N` | Play and Pause, from the player or the lock screen |
 | `[reading] note: …` | the sentence the player showed, word for word |
-| `[hx] playing=… utterance=… known=… section=… rendered=I/S …` | the Reading's status, every 0.5 s when it changes and every 5 s when it does not, while a Document is open or its Reading is held. `known` is the number of Utterances the app holds, `section` the spine index being read, `rendered` the last section the page reported out of `S` spine items. |
+| `[hx] playing=… app=… utterance=… known=… section=… rendered=I/S …` | the Reading's status, every 0.5 s when it changes and every 5 s when it does not, while a Document is open or its Reading is held. `app=` (from `0.0.2-beta76`) is the app's state then. `known` is the number of Utterances the app holds, `section` the spine index being read, `rendered` the last section the page reported out of `S` spine items. |
+| `[renderer] …` | (from `0.0.2-beta76`, #113) epub.js on the reader's page, event by event: `renderAhead:` asking for the next section, and `done` or why nothing was asked; `view N appended / displayed in X ms / unloaded / removed before its display finished / has not finished displaying`; `display "…" asked by X ← Y`; `views cleared`; `stage resized`; `page hidden / visible`; `manager queue stalled` with what is in flight and waiting, then `moving again`; and `snapshot, the reading ran out of text` beside the out-of-text note |
+| `[probe]` | a harness `js` probe's answer (step 4) |
 | `[sync]`, `[download]`, `[provider]` | skipped by the timeline by default; `--skip ''` shows them |
 | `[warn]`, `[error]` | `console.warn` and `console.error`, uncaught errors, unhandled rejections |
+
+On a build with `[renderer]` lines, read those around the fault first: they
+say what epub.js was doing and waiting on, which is what #112 needed four rounds
+of probing to learn. Search `stalled`, `has not finished displaying` and
+`snapshot`.
 
 Compare the fault's window with an earlier stretch where the same thing worked.
 In #112 the comparison was the finding. In the foreground, entering section N
@@ -107,8 +114,10 @@ node test/manual-test/kit/phone-hx.cjs IPHONE_UDID '{}' --code-file test/manual-
 
 `probes/renderer-state.js` reads epub.js inside the reader's page: views,
 both queues, scroll against height, and which spine items are loaded. Write a
-new probe beside it when a fault needs another question, and keep its answer
-under about 1,900 characters (the Debug Log cuts a line at 2,000).
+new probe beside it when a fault needs another question: a file that defines
+`function probe()` returning a string (`--code-file` appends the call). Keep
+its answer under about 1,900 characters, because the Debug Log cuts a line at
+2,000.
 
 - **It needs the JavaScript running**: in the foreground, and in the
   background while a Reading plays (the status line keeps coming then). `js`
@@ -116,10 +125,11 @@ under about 1,900 characters (the Debug Log cuts a line at 2,000).
   says so and leaves the command in `harness.json`. Whether the reader's page
   answers a `js` probe with the app in the background has not been measured:
   every #112 probe ran with the app in the foreground.
-- **A `js` answer replaces the note on the player** until the next note. Tell
-  the owner what the new note is. The answer travels as a `problem` message, and
-  two answers within milliseconds of each other leave only the second in the Debug Log:
-  one answer per probe.
+- **The answer is a `[probe]` line** from `0.0.2-beta76` on (#113). It changes
+  nothing on the owner's screen, and every answer is kept. On an older build the
+  answer replaces the note on the player until the next note, so tell the owner
+  what the new note is. Two answers within milliseconds of each other there
+  leave only the second in the Debug Log, so send one answer per probe.
 - **Read only.** A probe that changes the renderer, the reading or a setting is
   an intervention on the owner's phone: ask first.
 - **The owner may be using the phone at the same time.** Their Play, Pause and

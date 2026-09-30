@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname */
 // One walkthrough-harness command to the owner's iPhone, and its answer read
 // back out of the phone's Debug Log (docs/debug-on-iphone.md). The phone's
 // counterpart of hx.cjs, which reaches only a simulator.
@@ -9,8 +10,9 @@
 //
 // 1. Reads the phone's Documents/harness.json for its `seq` and writes the
 //    command with the next one (the poll runs a command whose seq it has not
-//    seen). `--code-file` makes it a `js` command with that file as its body;
-//    the body is parsed here first, so a syntax error never reaches the phone.
+//    seen). `--code-file` makes it a `js` command that runs the file's
+//    `function probe()` (probes/); the code is parsed here first, so a syntax
+//    error never reaches the phone.
 // 2. Waits --wait seconds (default 6: the poll is 250 ms, the Debug Log is
 //    appended at most 2 s after a line, and the copy itself takes a moment),
 //    copies the Debug Log off with debug-log.py, and prints every line stamped
@@ -90,8 +92,10 @@ try {
   process.exit(2);
 }
 if (codeFile) {
+  // A probe file defines `function probe()`; the harness runs its code as a
+  // function's body, so the call is appended here.
   command.do = 'js';
-  command.code = fs.readFileSync(codeFile, 'utf8');
+  command.code = `${fs.readFileSync(codeFile, 'utf8')}\nreturn probe();`;
 }
 if (command.do === 'js') {
   try {
