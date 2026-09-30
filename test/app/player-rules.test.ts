@@ -327,10 +327,29 @@ describe('the player names the Voice, and a resume is not an error (design 0020)
   });
 
   it('carries the tone of each line from the model to the style that paints it', () => {
-    pin(view, 'if (status.resumeNeedsAttention && status.resume) said.push({ said: status.resume, attention: true });', 'reading-view.tsx');
-    pin(view, "if (status.note) said.push({ said: status.note, attention: true });", 'reading-view.tsx');
+    pin(view, 'if (status.resumeNeedsAttention && status.resume) say(status.resume, true);', 'reading-view.tsx');
+    pin(view, 'if (status.note) say(status.note, true);', 'reading-view.tsx');
+    pin(view, 'said.push({ said: words, attention });', 'reading-view.tsx');
     pin(player, 'style={[styles.note, note.attention && styles.noteAttention]}', 'player.tsx');
     pin(player, 'noteAttention: { color: INK.attention },', 'player.tsx');
+  });
+
+  it('says each sentence once, whichever of its sources says it (#72)', () => {
+    // The readiness sentence and a refused Play's `status.note` are the same words,
+    // and the player keys each note by its text.
+    pin(view, '!said.some((note) => note.said === words)', 'reading-view.tsx');
+    pin(player, 'key={note.said}', 'player.tsx');
+  });
+
+  it('names no Provider on the Voice button while no Voice is chosen (#103)', () => {
+    pin(player, "if (!settings.voice) return 'Choose a Voice';", 'player.tsx');
+  });
+
+  it('leaves the no-provider sentence to the Voice sheet while it is open (#103)', () => {
+    // Measured on the simulator: the sheet is one line tall then, and the player's
+    // sentence stood just above its `Enable a provider in Settings to choose a voice.`
+    pin(view, 'const hidden = voicesOpen ? NO_PROVIDER_SENTENCE : null;', 'reading-view.tsx');
+    pin(view, 'if (words !== hidden && !said.some((note) => note.said === words))', 'reading-view.tsx');
   });
 
   it('claims no Highlight Level until a Clip has answered with one', () => {

@@ -35,6 +35,13 @@
   found. Fix: check the screen with `snapshot_ui` before trusting a `simctl`
   shot, or take it with `mobilebuildmcp`'s `screenshot`, which showed the
   Rename page at once.
+- **A shot taken while a sheet is still opening shows no sheet at all.**
+  2026-09-30 18:26 (#103, same device): 0.8 s after the harness opened the
+  Voice sheet, the screenshot showed the reader without it; 1.8 s after, the
+  sheet was there. Whether it is the stale-frame bullet above or a frame from
+  before the slide-in began, the lesson is the same: sleep ≥2 s after opening
+  a sheet before shooting it, and confirm what opened with `snapshot_ui`'s
+  screenHash (it changes when the sheet's elements appear) or the shot itself.
 
 ## Screenshots of the reading page
 

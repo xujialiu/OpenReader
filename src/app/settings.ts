@@ -478,8 +478,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
  * What is still missing before the app can speak, in the owner's words.
  *
  * A list rather than the first problem found, because "enter a key" followed by
- * "now choose a Voice" followed by "now type a model" is three trips to the same
- * sheet for something that could have been said once.
+ * "now type a model" is two trips to the same page for something that could
+ * have been said once. Three entries stand alone instead, each the one thing to
+ * do next: `no provider`, `a Voice` and `enabling` (#103).
  */
 export type Readiness = { readonly ready: true } | { readonly ready: false; readonly missing: readonly string[] };
 
@@ -491,10 +492,15 @@ export type Readiness = { readonly ready: true } | { readonly ready: false; read
  * moment it is needed and handed straight to `providerSettings`.
  */
 export function readiness(settings: AppSettings, hasKey: boolean): Readiness {
+  // Nothing to choose from: enabling one is the only way on, whichever Provider a
+  // book remembers (#103).
+  if (settings.enabledProviders.length === 0) return { ready: false, missing: ['no provider'] };
+  // No Voice means no Provider was chosen either: `settings.provider` is then the
+  // one the settings start with, or one since disabled, and what it lacks is
+  // beside the point. The Voice sheet offers only Providers that are ready (#103).
+  if (!settings.voice.trim()) return { ready: false, missing: ['a Voice'] };
   if (!settings.enabledProviders.includes(settings.provider)) return { ready: false, missing: ['enabling'] };
-  const missing = [...missingBeforeVoice(settings, settings.provider, hasKey)];
-  // Last, because it is the one thing every section needs and reads oddly first.
-  if (!settings.voice.trim()) missing.push('a Voice');
+  const missing = missingBeforeVoice(settings, settings.provider, hasKey);
   return missing.length === 0 ? { ready: true } : { ready: false, missing };
 }
 
@@ -647,12 +653,33 @@ export function andList(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
-/** "OpenAI needs an API key, a model and a Voice." */
+/** What the Library and the player say when no Provider is enabled (#103). */
+export const NO_PROVIDER_SENTENCE = 'No provider is enabled. Enable one in Settings to listen.';
+
+/**
+ * "OpenAI needs an API key and a model."
+ *
+ * A Provider is named only when the owner chose it: with none enabled, or no
+ * Voice chosen, `provider` is only the one the settings start with (#103).
+ */
 export function readinessSentence(provider: ProviderId, missing: readonly string[]): string {
   const label = PROVIDER_LABELS[provider];
+  if (missing.includes('no provider')) return NO_PROVIDER_SENTENCE;
+  if (missing.includes('a Voice')) return 'Choose a Voice.';
   if (missing.includes('enabling')) return `${label} is disabled. Choose an enabled provider.`;
   if (missing.length === 0) return `${label} is ready.`;
   return `${label} needs ${andList(missing)}.`;
+}
+
+/**
+ * What the player says about readiness, or null when there is nothing to say.
+ *
+ * Nothing when only a Voice is missing: the Voice button already reads
+ * `Choose a Voice`, and a note would say it twice (#103).
+ */
+export function readinessNote(provider: ProviderId, ready: Readiness): string | null {
+  if (ready.ready || ready.missing.includes('a Voice')) return null;
+  return readinessSentence(provider, ready.missing);
 }
 
 /**
