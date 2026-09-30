@@ -19,10 +19,22 @@ other apps.
 
 ## Where the button is
 
-It is at the right of the book's name, in a grey circle like the drawer's back
-button. The phone's own panels put their buttons in the same place, in the
-corners of the title line. A long name wraps to a second line before it rather
-than running under it. The button stays beside the name's first line.
+It is at the right of the book's name. The phone's own panels put their buttons
+in the same place, at the ends of the title line. A long name wraps to a second
+line before it rather than running under it, and the button stays at the middle
+of the name, however many lines the name takes.
+
+It is the share symbol alone, at the size of the Rename and Download symbols
+below it and in the same colour, and it sits as far in from the drawer's right
+edge as they sit from its left. It is as easy to tap as before: the part that
+answers a tap is larger than the symbol.
+
+At first it was in a grey circle like the drawer's back button, smaller than
+the symbols below it, and level with the name's first line. Beside a name of
+four lines it sat at the top corner, apart from the name it shares, and the
+circle made it a different kind of button from everything else in the drawer.
+The owner asked for the symbol alone, at their size and in the middle of the
+name (issue #97).
 
 It is on the drawer's first page only. That page is titled with the book's name,
 and the button shares what the title names. Appearance, Rename and Download are

@@ -28,7 +28,7 @@ import { knownVoice } from './voice-catalog';
  * could not see, and it is not the book's to begin with — it is the owner's, for
  * every Document (CONTEXT.md, **Appearance**).
  *
- * **Share** (#95) is the round button beside the Document's name, on the menu
+ * **Share** (#95) is the icon beside the Document's name (#97), on the menu
  * page only: the other pages are titled with their own names, and the button
  * shares the book the title names. It is offered wherever the drawer is, since
  * the file is the same from the Library and from the reader. The drawer stays

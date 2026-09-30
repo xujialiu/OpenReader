@@ -128,7 +128,7 @@ final class ShareProbe: XCTestCase {
   }
 
   /// Check 3: renamed to the long name, the drawer's title wraps before the
-  /// button and the button sits beside the first line; the share copy carries
+  /// button and the button sits at the title's middle (#97); the share copy carries
   /// the renamed title with `:` become ` - `.
   func testLongTitleWrapsBeforeButtonAndShareName() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
@@ -156,8 +156,8 @@ final class ShareProbe: XCTestCase {
     XCTAssertEqual(typed, long, "the field must hold the whole long name after chunked typing")
     app.buttons["Save"].tap()
 
-    // The renamed row, then the drawer's wrapped title with the button beside
-    // its first line.
+    // The renamed row, then the drawer's wrapped title with the button at its
+    // middle.
     let longRow = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", long)).firstMatch
     XCTAssertTrue(longRow.waitForExistence(timeout: 5), "the renamed row must appear")
     let ellipsis2 = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Actions for " + long)).firstMatch
