@@ -41,8 +41,9 @@
   touches (`fling-jump.cjs`, `white-flash.sh fling`) for what is seen during the
   scroll.
 - **A probe can post a long log straight to the Mac.** The harness's `js`
-  answer is cut at 500 characters, and a log of every animation frame is
-  hundreds of kilobytes. From the reader's WebView, a `file://` page,
+  answer is one line in Metro's log (`HX PROBE …`, #113; it was cut at 500
+  characters while it rode the player's note), and a log of every animation
+  frame is hundreds of kilobytes. From the reader's WebView, a `file://` page,
   `fetch('http://127.0.0.1:PORT/…', { method: 'POST', body })` reached a server
   on the Mac (2026-09-24 02:15), answered with `Access-Control-Allow-Origin: *`.
   `fling-jump.cjs` runs one on a free port and hands the probe its number.
@@ -100,16 +101,18 @@
   the section it lands on. Before reading a null tap as a `#34`/`#52`
   regression, check `known`/`rendered` via `{"do":"say"}` first, and retry the
   tap once rather than treating one miss as the result.
-- **A `js` command's answer stays on screen as a visible error banner until
-  something clears it, and a plain skip does not.** Any `{"do":"js",...}`
-  whose return value is read back through the `note`/`PROBE` channel
-  (`line-follow.cjs`, `glide-touch.cjs`) reuses `use-reading.ts`'s "highlight
-  could not be drawn" problem-report path, so the reader keeps showing "The
-  highlight could not be drawn: PROBE {…}" over the player until `status.note`
+- **A note a probe puts on the player stays on screen as a visible error
+  banner until something clears it, and a plain skip does not.** Since #113 a
+  `js` command's answer is its own `HX PROBE …` line and leaves nothing on the
+  player. A probe that posts an `openreader:problem` message itself still goes
+  through `use-reading.ts`'s "highlight could not be drawn" problem-report path
+  (`line-follow.cjs`'s `noted`, which wants a note; until #113 every `js`
+  answer did), so the reader keeps showing "The highlight could not be drawn:
+  …" over the player until `status.note`
   is next set to `null` — which a Play (`onPlay`) does at once, but a paused
   `{"do":"skip",...}` measured here (2026-09-26, #71) does not, even after a
-  skip back and forward. Before handing a reader back with a probe's answer as
-  the last command sent, send a real `play` (a fraction of a second is enough;
+  skip back and forward. Before handing a reader back with such a note as
+  the last thing posted, send a real `play` (a fraction of a second is enough;
   `note: null` is set the instant Play starts, before any Clip) and `pause` it
   again, and confirm with a screenshot that the banner is gone rather than
   trusting the status line's `note=null` alone — the banner is a UI overlay,

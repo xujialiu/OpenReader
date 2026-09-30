@@ -56,12 +56,10 @@ async function waitFor(offset, find, ms) {
     await sleep(40);
   }
 }
-// A `js` answer arrives as the reader's note in its HX status line, JSON-escaped
-// and cut at 500 characters: parse the quoted string after note= (README Pitfalls).
+// A `js` answer is its own line in Metro's log, `HX PROBE <answer>`, uncut (#113).
 const answers = (text) => text.split('\n').flatMap((line) => {
-  const at = line.indexOf(' note="');
-  if (!line.includes('HX playing=') || at < 0) return [];
-  try { return [JSON.parse(line.slice(at + 6)).replace(/^The highlight could not be drawn: PROBE /, '')]; } catch { return []; }
+  const at = line.indexOf('HX PROBE ');
+  return at < 0 ? [] : [line.slice(at + 'HX PROBE '.length)];
 });
 const answer = (offset, test, ms) => waitFor(offset, (text) => answers(text).find(test), ms);
 
@@ -82,7 +80,7 @@ const recorder = `
       d.seen.push(((Date.now() - d.t0) / 1000).toFixed(2) + ' ' + key);
       if (w === ${JSON.stringify(word)} && !d.stopped) {
         d.stopped = true;
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'openreader:problem', utterance: -1, detail: 'PROBE STOPWORD ' + w }));
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'openreader:probe', answer: 'STOPWORD ' + w }));
       }
     } catch (e) {}
   }, 40);
@@ -160,7 +158,7 @@ const recorder = `
     console.log(`after pause: ${JSON.stringify(await state().catch((e) => String(e)))}`);
   }
 
-  // The recorder's log, a page at a time so no answer is cut at 500 characters.
+  // The recorder's log, a page at a time so each answer stays one short line.
   const transitions = [];
   for (let page = 0; page < 12; page++) {
     const offset = logSize();

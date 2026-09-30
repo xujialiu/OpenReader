@@ -28,7 +28,7 @@
 // the player once, before playing, to have the bridge send it again. Then it
 // checks the silence, sends `play`, waits SECONDS, sends `pause` at once
 // (including after a failure), and analyses the frames inside the WebView,
-// because the answer comes back through a note and only a summary fits.
+// because the answer comes back as one line and only a summary fits.
 //
 // With --skips N it plays nothing: while paused, it skips to the next sentence
 // (or SKIP_TARGET, e.g. next-paragraph) N times, a second apart, so the page glides sentence by sentence and walks
@@ -117,8 +117,13 @@ if (!['line', 'continuous'].includes(scrolling)) {
 }
 // Something done to the player while the reading plays, a third of the way in
 // (#71): DURING=collapse collapses it and expands it again at two thirds;
-// DURING=note has a note shown on it (a `js` answer is one), which stays.
+// DURING=note has a note shown on it (`noted`, below), which stays.
 const during = process.env.DURING || '';
+// A `js` answer is no longer the player's note (#113), and a run wants one on
+// the player: this code, run in the WebView, posts the problem message the
+// highlighter reports through, which still is one ("The highlight could not be
+// drawn: …"), and then answers with the same words.
+const noted = (words) => `var said = ${words}; window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'openreader:problem', utterance: -1, detail: said })); return said;`;
 
 const documents = path.join(execFileSync('xcrun', ['simctl', 'get_app_container', device, 'top.xujialiu.openreader', 'data']).toString().trim(), 'Documents');
 const harnessFile = path.join(documents, 'harness.json');
@@ -143,15 +148,10 @@ const logSince = (offset) => {
     return bytes.toString('utf8');
   } finally { fs.closeSync(fd); }
 };
-// A `js` answer becomes the reader's note, read in full from the `say`
-// command's own `note attention=… "…"` line (follow-probe.cjs does the same).
+// A `js` answer is its own line in Metro's log, `HX PROBE <answer>`, uncut (#113).
 const answers = (text) => text.split('\n').flatMap((line) => {
-  const at = line.indexOf('HX note attention=');
-  if (at < 0) return [];
-  try {
-    const said = JSON.parse(line.slice(line.indexOf('"', at)));
-    return said.includes('PROBE ') ? [said.slice(said.indexOf('PROBE ') + 6)] : [];
-  } catch { return []; }
+  const at = line.indexOf('HX PROBE ');
+  return at < 0 ? [] : [line.slice(at + 'HX PROBE '.length)];
 });
 async function ask(code, ms = 4000) {
   const offset = logSize();
@@ -159,7 +159,6 @@ async function ask(code, ms = 4000) {
   await sleep(700);
   const end = Date.now() + ms;
   for (;;) {
-    send({ do: 'say' });
     await sleep(400);
     const found = answers(logSince(offset)).at(-1);
     if (found !== undefined) return found;
@@ -336,7 +335,7 @@ function print(page, label) {
   } catch {
     process.exit(2);
   }
-  await ask('window.__lineFollow.start(); return "started inset=" + window.__lineFollow.inset;');
+  await ask('window.__lineFollow.start(); ' + noted('"started inset=" + window.__lineFollow.inset'));
   if (armMode) {
     console.log('armed and recording at Line position ' + position + '%. Drive the player by real touch now, then run … analyse.');
     process.exit(0);
@@ -416,7 +415,7 @@ function print(page, label) {
       await sleep(seconds * 1000 / 3);
     } else if (during === 'note') {
       await sleep(seconds * 1000 / 3);
-      console.log('note: ' + await ask('return "a note on the player";'));
+      console.log('note: ' + await ask(noted('"a note on the player"')));
       await sleep(Math.max(0, seconds * 1000 * 2 / 3 - 1500));
     } else {
       await sleep(seconds * 1000);

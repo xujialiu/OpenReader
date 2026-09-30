@@ -120,9 +120,9 @@ rendered=N`. `ZoomProbe` then pinches (`pinch(withScale: 3, velocity: 2)`
 mid-screen) or double-taps a quarter of the way down, and photographs the page
 before and after. The script asks the page for `visualViewport.scale`,
 `innerWidth` and its viewport through `{"do":"js"}`, and prints `ZOOM pinch
-scale=…` and `ZOOM doubletap scale=…`. It exits 0 when both are 1, 1 when
-either gesture magnified the page, and 2 when a step failed. A final relaunch
-clears the probe's answer from the player's note.
+scale=…` and `ZOOM doubletap scale=…`, read from Metro's `HX PROBE …` line
+(#113). It exits 0 when both are 1, 1 when either gesture magnified the page,
+and 2 when a step failed. It ends with a relaunch.
 
 The probe also prints `ZOOM mark <gesture> before=X after=Y`, the player's
 Following mark (A or M), read from the accessibility tree. The script exits 1

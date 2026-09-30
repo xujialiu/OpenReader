@@ -61,9 +61,9 @@
   copy to --device IPHONE_UDID --domain-type appDataContainer
   --domain-identifier top.xujialiu.openreader --source FILE --destination
   Documents/harness.json` is picked up by the reader's poll. Its `HX` answers
-  do reach the phone's log (next item). A `js` command's answer also shows in
-  the player's note ("The highlight could not be drawn: PROBE …"), readable
-  with `devicectl device capture screenshot`.
+  do reach the phone's log (next item). A `js` command's answer is written to
+  the Debug Log as a `[probe]` line, and to the console as `HX PROBE …`
+  (#113); it no longer shows in the player's note.
 - **A Release build's `HX` lines are in the phone's log, but only while a live
   stream is attached** (2026-09-29, #74). An earlier entry here said a Release
   build prints no `HX` lines anywhere. `pymobiledevice3 syslog live --udid

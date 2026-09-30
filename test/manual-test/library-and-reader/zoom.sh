@@ -20,8 +20,9 @@
 # The second form is the control: it serves a page with the reader's own
 # viewport on port 8111 and pinches it in Safari, which must magnify.
 #
-# The harness's answer rides the reader's problem note, which stays on screen
-# until the next Play (pitfalls/webview.md). The last relaunch here clears it.
+# The harness's answer is its own line in Metro's log, `HX PROBE …` (#113),
+# found by its marker. It leaves nothing on the player. The script ends with a
+# relaunch.
 set -euo pipefail
 source_dir=$(cd "$(dirname "$0")" && pwd)
 simulator=${1:-}

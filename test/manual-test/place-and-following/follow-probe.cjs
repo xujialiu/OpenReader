@@ -66,17 +66,10 @@ const logSince = (offset) => {
     return bytes.toString('utf8');
   } finally { fs.closeSync(fd); }
 };
-// A `js` answer becomes the reader's note. The status line cuts a note at 500
-// characters, so the answer is read in full from the `say` command's own
-// `note attention=… "…"` line instead.
+// A `js` answer is its own line in Metro's log, `HX PROBE <answer>`, uncut (#113).
 const answers = (text) => text.split('\n').flatMap((line) => {
-  const at = line.indexOf('HX note attention=');
-  if (at < 0) return [];
-  const quoted = line.slice(line.indexOf('"', at));
-  try {
-    const said = JSON.parse(quoted);
-    return said.includes('PROBE ') ? [said.slice(said.indexOf('PROBE ') + 6)] : [];
-  } catch { return []; }
+  const at = line.indexOf('HX PROBE ');
+  return at < 0 ? [] : [line.slice(at + 'HX PROBE '.length)];
 });
 /** One `js` command, answered: the code runs in the reader's WebView and returns a string. */
 async function ask(code, ms = 4000) {
@@ -85,7 +78,6 @@ async function ask(code, ms = 4000) {
   await sleep(700);
   const end = Date.now() + ms;
   for (;;) {
-    send({ do: 'say' });
     await sleep(400);
     const found = answers(logSince(offset)).at(-1);
     if (found !== undefined) return found;
