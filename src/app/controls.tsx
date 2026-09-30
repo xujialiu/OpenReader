@@ -22,6 +22,7 @@ import { Children, createContext, isValidElement, useContext, useMemo, useState,
 import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { Icon, type IconName } from './icon';
+import { cutAtWord } from './name-lines';
 
 /**
  * One colour that is two, resolved by iOS rather than by React (ADR 0022).
@@ -544,25 +545,61 @@ export function HeaderButton({ label, icon, title, onPress, disabled }: {
   );
 }
 
-/** One Document in the Library: what it is called, and how far the reading got. */
-export function DocumentRow({ title, progress, cover, onPress, onLongPress }: {
-  title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void;
+/**
+ * One Document in the Library: what it is called, how far the reading got, and
+ * its `…` for the actions drawer.
+ *
+ * The `…` is drawn over the row's right end, and the words end where its touch
+ * area begins (#87), so neither a two-line name nor the progress line runs under
+ * it. The row owns the button for that reason: it is the one place that knows
+ * both the button's width and the words beside it. The button is the row's
+ * sibling rather than its child, so VoiceOver finds `Actions for <name>` as a
+ * button of its own instead of folding it into the row.
+ *
+ * The name is left-aligned, not justified: iOS fills a justified line by
+ * spacing out its letters as well as its words, and a line of a name in this
+ * column is only three or four words (notes, 2026-09-30 09:56).
+ *
+ * A name longer than two lines is cut after a whole word (`cutAtWord`). An
+ * unseen copy of the name, laid out at the same width with no limit, says where
+ * its lines break; until it has, and whenever the phone must cut anyway, the
+ * phone's own cut stands. The row's label is set rather than read off its
+ * words, so VoiceOver still says the whole name, and says it once.
+ */
+export function DocumentRow({ title, progress, cover, onPress, onLongPress, onActions }: {
+  title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void; onActions(): void;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} onLongPress={onLongPress}
+  const [cut, setCut] = useState<{ title: string; shown: string | null } | null>(null);
+  const shown = (cut?.title === title ? cut.shown : null) ?? title;
+  return <View>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${title}, ${progress}`} onPress={onPress} onLongPress={onLongPress}
       style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}>
       <View style={styles.cover} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {cover && failed !== cover ? <Image source={{ uri: cover }} style={styles.coverImage}
           resizeMode="contain" onError={() => setFailed(cover)} /> : <Icon name="book" color={INK.quiet} size={28} />}
       </View>
       <View style={styles.documentWords}>
-        <Text style={styles.documentTitle} numberOfLines={2}>{title}</Text>
+        <Text style={styles.documentTitle} numberOfLines={DOCUMENT_TITLE_LINES}>{shown}</Text>
         <Text style={styles.rowProgress} numberOfLines={1}>{progress}</Text>
+        <Text style={[styles.documentTitle, styles.measure]} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+          onTextLayout={({ nativeEvent }) => setCut({ title, shown: cutAtWord(nativeEvent.lines.map((line) => line.text), DOCUMENT_TITLE_LINES) })}>{title}</Text>
       </View>
     </Pressable>
-  );
+    <Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${title}`} onPress={onActions} style={styles.documentActions}>
+      <Icon name="more" color={INK.quiet} size={DOCUMENT_ACTIONS.icon} />
+    </Pressable>
+  </View>;
 }
+
+/**
+ * The row's `…`: its distance from the row's right edge, the padding either side
+ * of its icon, and the icon. Its touch area ends 54 from the row's right edge,
+ * against the row's own 22 of padding.
+ */
+const DOCUMENT_ACTIONS = { right: 12, padding: 10, icon: 22 };
+const DOCUMENT_ROW_PADDING = 22;
+const DOCUMENT_TITLE_LINES = 2;
 
 const styles = StyleSheet.create({
   disabled: { opacity: 0.4 },
@@ -570,10 +607,13 @@ const styles = StyleSheet.create({
   noteAttention: { color: INK.attention },
   pressed: { opacity: 0.65 },
   headerTap: { alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44 },
-  documentRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: 22, paddingVertical: 14 },
+  documentRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: DOCUMENT_ROW_PADDING, paddingVertical: 14 },
+  documentActions: { position: 'absolute', right: DOCUMENT_ACTIONS.right, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: DOCUMENT_ACTIONS.padding },
   cover: { width: 56, height: 80, borderRadius: 5, backgroundColor: INK.panel, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   coverImage: { width: '100%', height: '100%' },
-  documentWords: { flex: 1, gap: 7 },
+  // The unseen copy of a name that says where its lines break.
+  measure: { left: 0, opacity: 0, position: 'absolute', right: 0, top: 0 },
+  documentWords: { flex: 1, gap: 7, marginRight: DOCUMENT_ACTIONS.right + 2 * DOCUMENT_ACTIONS.padding + DOCUMENT_ACTIONS.icon - DOCUMENT_ROW_PADDING },
   documentTitle: { color: INK.text, fontSize: 17, fontWeight: '500', lineHeight: 23 },
   headerButton: { color: INK.text, fontSize: 16, fontWeight: '600' },
   rowProgress: { color: INK.quiet, fontSize: 13, lineHeight: 18 },
