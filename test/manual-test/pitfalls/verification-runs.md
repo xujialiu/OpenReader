@@ -1,5 +1,29 @@
 # Merges, seeding and past verification runs
 
+## Verifying #113: the renderer log and the probe channel (2026-10-01)
+
+- **`{"do":"ask","provider":…}` puts no note on the player, even when the ask
+  fails.** Verifying that a `js` probe leaves the player's note unchanged
+  needs a note first; `breakfetch` + `ask` logged `[provider] … failed` and
+  `[hx] fetch refused` but the status line stayed `note=null` — the voices
+  ask reports on the Voices sheet, not through the reading's `status.note`.
+  The reliable recipe is the play refusal: patch
+  `{"do":"settings","patch":{"enabledProviders":[]}}`, send `play` (readiness
+  refuses before any audio and sets the note, e.g. "No provider is enabled.
+  Enable one in Settings to listen."), `pause`, then patch
+  `enabledProviders` back. The note stays while paused and the probe does not
+  touch it.
+- **`download-chapter.cjs` can finish without printing a `preparing`/
+  `prepared` line, because an earlier run already prepared the chapter.**
+  After an aborted run, a rerun of the same chapter id shows only
+  `[download] continued task submitted … 1 of 1 chapter` and goes straight to
+  `state=done` — the preparation lines (`[download] preparing …` /
+  `prepared … in NNN ms`) belong to the earlier run. To watch the preparation
+  itself, download a chapter id that has not been prepared in this
+  install's Debug Log yet.
+- **The LogBox banner is not dismissible through `mobilebuildmcp`'s snapshot**
+  — see pitfalls/screenshots.md.
+
 ## Merging main's #67 and #68 into #71 (2026-09-26)
 
 - **Metro kept "Unable to resolve react-native-teleport" after the merge, even

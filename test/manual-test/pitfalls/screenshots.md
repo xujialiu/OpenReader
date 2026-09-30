@@ -1,5 +1,18 @@
 # Screenshots
 
+## The LogBox warning banner
+
+- **The banner ("Open debugger to view warnings.") sits over the player's
+  transport controls and neither the banner nor its ✕ appears in
+  `mobilebuildmcp_snapshot_ui`'s elements, so it cannot be dismissed by ref —
+  and none of the MCP tools taps raw coordinates.** A screenshot of the
+  player taken under it shows the note line but the play button and rate are
+  hidden, and a touch test at the bottom of the screen hits the banner, not
+  the player. Fix: `xcrun simctl terminate` then `launch` the app again; the
+  banner returns only if a warning re-fires (2026-10-01, verifying #113: the
+  relaunched app came up clean). A boot also resets the simulator's volume,
+  so `silence.sh set` again after the relaunch if anything will play.
+
 ## Screenshots of a sheet
 
 - **A sheet photographed as it opens can be 1 pt short of where it rests, and
