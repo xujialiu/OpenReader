@@ -81,7 +81,34 @@ playIntent.current)`, `if (waited?.onward) …`) still hold, and pass.
 
 ## Measured after the change
 
-_To be filled in from the simulator run (notes, 2026-09-30)._
+On `iPhone 17 ios107` (iOS 27.0), `0.0.2-beta72-debug`, the owner's *Shadow
+Slave — Chapters 1–250*, the repo's silent `fake-kokoro.cjs` as the Provider;
+rows sent as the harness's `section` command, the call a Contents row makes
+(notes, 2026-09-30 21:16):
+
+- **A row while playing.** Playing at Utterance 107 in section 2, a row to
+  section 40: the page top read `rendered=39` from Utterance 135 to 319, with
+  `section` staying the reading's (3) and `playing=true`, and the player showed
+  **M**. That is 90+ cues over about 2 min with no pull-back (ADR 0044's
+  −7,424 px `centreOnce` did not recur). `fake-tts.log`'s one
+  `Chapter 36: Bonfire` is the voice reading section 2's list of links, between
+  chapters 35 and 37. Nothing was synthesized for the browsed chapter.
+- **M while playing**, a real touch: `rendered` 39 → 5, still playing, and the
+  mark read "Following the reading".
+- **Paused (#52) unchanged**: paused at 364, a row to 60 gave `rendered=59`
+  with utterance, section and place unchanged. Play read on from 364, and its
+  first cue brought the page back (59 → 6).
+- **By itself at a visible sentence**: Play at 503, a row to section 6, whose
+  first sentence is 508. When the voice began 508 at the top of the page, the
+  mark went back to following with no touch.
+- **A row before the first Clip**: `play` and a row to 30 about 0.5 s apart.
+  Through Utterances 600–632 the page stayed at `rendered=29` and **M** stayed
+  up. The fake Provider's first-Clip window is 1–2 s; a remote Provider's
+  longer one is covered only by the unit test.
+- `rendered` is the renderer's top-of-page section, and after `browse(N)` it
+  reads N − 1: the chapter's start lies on the top edge, which counts toward the
+  previous section's box. The screenshot showed chapter 36's heading, which is
+  section 40, at the top.
 
 ## Considered
 
