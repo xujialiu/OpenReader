@@ -31,7 +31,9 @@ that names the script or probe you are about to run.
 - [consent.md](consent.md) (#109, with #108 and #110): the phone's alert before
   text leaves it, per Provider and per lookup service, its wording, what a
   refusal does to a Reading, a download and a lookup, the lock screen after one,
-  the Privacy Policy row and the release configuration, and the finding that a
-  question left open for 60 seconds pauses the Reading with a note.
-  `ConsentProbe.swift`, `../player-and-reading-held/fake-kokoro.cjs`,
+  the Privacy Policy row and the release configuration, the finding that a
+  question left open for 60 seconds paused the Reading with a note, and round 2,
+  which held the question open for 78 s on a Play and 139 s on a voice switch
+  and found the finding fixed. `ConsentProbe.swift`, `consent-hold.sh`,
+  `../kit/ax.py`, `../player-and-reading-held/fake-kokoro.cjs`,
   `../lock-screen/LockScreenProbe.swift`.

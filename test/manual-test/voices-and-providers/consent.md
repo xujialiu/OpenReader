@@ -104,6 +104,9 @@ cursor stays; and 00:21:32.98 with nothing sent, when the cursor moves too. Repr
 `wait_for_ui` with `predicate: textContains, text: "no audio within"` and a
 90 s timeout; then Don't Allow and read `say`.
 
+Round 2 (below) ran the same steps on 230beb1, which holds the fix (07799d0),
+and found the finding closed.
+
 ## What it cannot prove
 
 - Azure's WebSocket path and the four hosted Providers other than OpenAI (the
@@ -135,3 +138,82 @@ reading), about 1 s (the compatible Provider's first request, to read `auth=`)
 and 9.2 s (a Play from saved audio that had to outlast a voice switch and its
 refusal). Every other `playing=true` in the Debug Log is a Play waiting on an
 open alert, with no clip and no sound.
+
+## Round 2: the answer comes before every clock (#109's fix, 07799d0)
+
+Run 2026-10-01 02:06–02:49 on the same device and Metro, tree `xujialiu/prepare`
+at 230beb1, `1.0.0-beta1-debug`, the app relaunched at 02:12 and again at 02:32.
+Metro's served bundle (`index.bundle`, 9.7 MB, fetched 02:13) holds `startDeadline`,
+`uncleared` and `ensureConsent`, and the Debug Log's `[launch]` line read
+`OpenReader 1.0.0-beta1 … Metro bundle`.
+
+### What it uses
+
+- `consent-hold.sh` (this folder): raises the alert by a real touch on Play or by
+  choosing a Voice in the sheet, leaves it open for a stated time, samples the
+  app every ten seconds, answers by a touch pair and watches what follows.
+  It needs `kit/ax.py`. It sets the simulator's volume to zero and checks it
+  itself, and checks again immediately before its Play touch, so chain it after
+  `silence.sh set UDID >/dev/null &&`, not after a bare `check` (one reset
+  between the two stopped the first attempt with nothing played,
+  `../pitfalls/simulators.md`).
+
+  ```sh
+  bash kit/silence.sh set UDID >/dev/null && bash kit/silence.sh check UDID && \
+  bash voices-and-providers/consent-hold.sh UDID 75 "Don't Allow" --play --fake-log FAKELOG --after 12 --shots DIR
+  bash voices-and-providers/consent-hold.sh UDID 135 "Don't Allow" --play --voice "OpenAI Compatible" "Bella (fake)" --fake-log FAKELOG --shots DIR
+  ```
+
+  `--shots DIR` saves half-size screenshots of the alert just up, at the end of
+  the hold and after the watch. Each line it prints is `HOLD …`: the last
+  heartbeat (`playing=`, `utterance=`, `note=`), the counts of `no audio within`,
+  `voice error` and `catch up` lines in the Debug Log, and the fake server's new
+  `text=` lines by route.
+- `Scroll Fixture.epub` (`fixtures/scroll-fixture.ts`; 282 sentences, 62
+  chapters), added with `{"do":"add","file":"Scroll Fixture.epub"}` (Document Id
+  `sha256:9acbcbe4…`). The short fixture runs out in about 35 s, and every one of
+  its sentences is saved for `local/af_bella` by the earlier download, so a Play
+  there asks nothing. The long one is read in 7.8 minutes at 1.5×.
+- Settings through the harness: `{"provider":"local","enabledProviders":["local","compatible"],"voice":"af_bella","consent":[]}`
+  for 1a and 1b (`local` is the Kokoro at the fake, without a key);
+  `consent` then holds `provider:local@http://127.0.0.1:8795`, and `compatible`
+  (OpenAI Compatible at the same address, with a key) is the Provider not yet
+  allowed in 2.
+- `ConsentProbe` `testLookupDontAllow` (above) for the first lookup.
+
+### Facts and how each was shown
+
+| Fact | Evidence |
+| --- | --- |
+| 1a. A question left open 78 s is never a Provider that stopped answering | Play at 02:32:57.8 (`[reading] play at utterance 10, local af_bella`, a fresh process, nothing fetched yet); the alert up from 02:32:58.9 to the answer at 02:34:16.6 (77.7 s); 17 heartbeats from 02:32:58.5 to 02:34:17.9, every one `playing=true utterance=10 … note=null` (the old note came 60.09 s after the `[reading] play` line, at 02:33:58.06, between the 02:33:57.4 and 02:34:02.5 beats); samples at +61, +71 and +76 s `alert=up no-audio-notes=0 texts-sent=0`; the screenshot at +76 s shows the alert over a spinner on the Play button and no note |
+| 1a. Don't Allow leaves the Reading where it was, sending nothing | `playing=false utterance=10 … note=null` at 02:34:19.1, 2.5 s after the touch and 10 s before my `pause` (02:34:29.5: the Reading had stopped itself); the Play icon back, the highlight still on `Chapter 3: Walked voice garden`; the fake's `text=` lines 206 before and 206 after; the Debug Log window holds no `[provider]`, no `[hx] fetch`, no `no audio within` line; no alert 17 s after |
+| 1b. The next Play asks again, and Allow sends after the answer | alert again at 02:35:28.4 (a new press), up 77.6 s, `texts-sent=0` at every sample; Allow touched 02:36:46.0; the app's `[provider] synthesis local for the Reading … "Chapter 3: Walked voice garden"` at 02:36:46.6; the first POST at the fake 02:36:47.783 (four in 53 ms: the sentence and three read-ahead); `pause` 02:36:49.4; `settings.json` `consent` `["provider:local@http://127.0.0.1:8795"]` |
+| 2. A voice switch's deadline does not run while the question is up | `local` playing from 02:37:36.1; the sheet's chip and row touched 02:37:44.7 and 02:37:48.3; the alert (`…to the server at 127.0.0.1:8795 with your API key.`) from 02:37:49.1 to the answer at 02:40:07.9, 139.6 s after the choice; the old code's 120 s mark (02:39:48.3) fell inside it, with `alert=up playing=true utterance=84 voice-errors=0 catch-up-errors=0` at +121 s and `utterance=90` at +131 s |
+| 2. The old voice goes on, nothing goes to the new recipient | 93 new `text=` lines between 02:37:39 and 02:40:20, all `route=kokoro` (`local`), none `route=speech` (`compatible`); the heartbeats moved 10 → 93 before the answer and on to 103 at the `pause` (02:40:21.0), 12.8 s after it; 115 heartbeats, none with a note; no `[reading] note`, `voice error`, `catch up` or `no audio within` line in the Debug Log; `say`: `provider=local voice=af_bella`, no `note attention`; the screenshot under the alert shows a spinner on `Bella (fake)` and, after Don't Allow, none and no error text |
+| 4. The first lookup with a service still asks | `CONSENT lookup before answering alert label="Send selected text to Youdao?" texts=["Send selected text to Youdao?", "Word Lookup sends the text you select to Youdao."] buttons=["Don't Allow", "Allow"]`; Don't Allow: `drawer closed=true alertGone=true`; `Executed 1 test, with 0 failures … in 7.866 seconds`; the Debug Log: `[lookup] … "it."` then `not allowed to reach Youdao`, no `GET` |
+
+### What it cannot prove
+
+- That audio already on the phone plays without the question (owner's decision
+  of 2026-10-01): the runs picked sentences that had to be sent. The unit tests
+  hold it.
+- The other side of the switch: Allow for a Voice, where the deadline starts at
+  the answer.
+- A question asked with the app away from the screen, a download, Azure and the
+  four hosted Providers other than OpenAI.
+
+### Playback in the run, and why it lasted that long
+
+All at `sim_volume` 0, each Play chained to a check, with the fake's zero-valued
+PCM, and stopped the moment the fact was established:
+
+- 1a: no audio at all. The Play sat on the question for 81 s and the refusal
+  stopped it at 02:34:19.
+- 1b: Allow at 02:36:46.0 to `pause` at 02:36:49.4, 3.4 s, of which the clip was
+  there from 02:36:47.8: the shortest run that shows the first request coming
+  after the answer.
+- 2: Play 02:37:36.1 to `pause` 02:40:21.0, 164.9 s and 93 sentences (10 → 103).
+  The fact concerns a 120 s deadline, which cannot be seen in less: the old code
+  started it at the choice (02:37:48.3, so it would have fired at 02:39:48.3),
+  and the question had to stay up past it, with the old voice going on all the
+  while, before an answer showed the old voice still going on afterwards (12.8 s).

@@ -33,3 +33,8 @@ that names the script or probe you are about to run.
   and the `serif`/`sans` migration. `GeneralFontsProbe.swift`.
 - [version-line.md](version-line.md) (#30): the Settings version line, the rows
   above it, and both themes. `SettingsVersionProbe.swift`.
+- [acknowledgements.md](acknowledgements.md) (#111, design 0065): the Settings
+  front page's second card, Acknowledgements' 132 rows against
+  `src/app/acknowledgements.json`, two long licence pages (complete, scrolling,
+  selectable) and the back button, in both appearances.
+  `acknowledgements-check.py`, `../kit/ax.py`.
