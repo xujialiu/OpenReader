@@ -129,3 +129,40 @@ caller runs on the host and points `sync.url` at:
 
 A stub is the only way found to measure the bound: a wrong address cannot be
 typed while the switch is on, and a simulator has no way to lose its network.
+
+## A Play that waits past its Reading (#106)
+
+`reading-view.tsx`'s `play` waits for the pre-Play sync for at most
+`WAIT_MS` (2 s) and then calls `reading.play()`. Leaving the paused Reader
+inside that window must end the Reading, and the late continuation must
+start nothing.
+
+- `delaying-webdav.cjs` holds the Positions File's GET and PUT past the
+  bound, so the continuation fires ~2 s after every Play press:
+
+  ```sh
+  node test/manual-test/sync/delaying-webdav.cjs 8722 4000
+  ```
+
+  Point the Sync screen at `http://127.0.0.1:8722/ios106-sync/` with
+  throwaway credentials (the server accepts any). DELAY_MS 0 is the fast
+  server for the control.
+- `Issue106Probe.swift` presses Play and the back arrow with raw coordinate
+  taps (a landed Play is visible in the server's log within a second; the
+  timing prints give the gap). The host reads the verdict from the Debug Log
+  (`play after the reading ended: ignored`, and no `play at utterance` after
+  the leave), the server's log, and the fake Kokoro requests
+  (`player-and-reading-held/fake-kokoro.cjs`). The probe assumes the host
+  staged the reader in front, paused, with the player shown (harness
+  `open`/`collapse`/`say`), because synthetic input on this simulator dies
+  mid-session (Pitfalls).
+- 2026-09-30, beta71: leave inside the wait (gap 1.62 s) started nothing —
+  the ignored line, no engine request, no Reading Button, and a lock-surface
+  capture with no media controls. A 5.67 s gap missed the window and the
+  held-Reading button appeared: the control that says the probe measures the
+  window, not a button.
+
+What it cannot prove: the case-2 shape (another Document opened inside the
+2 s window — three taps would not fit the window reliably) and any physical
+device. The handler-level plays that day (harness `play`) skip the wait
+entirely and are not evidence about this path.
