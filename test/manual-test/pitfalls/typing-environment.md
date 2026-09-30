@@ -75,6 +75,7 @@
   - Fix: wait at least 300 ms after a command before writing the next —
     `line-follow.cjs`'s `pause()` waits 700 ms — and read `playing=false` in a
     `say` answer before trusting a pause.
+- **A `pause` followed by a `say` 0.3 s later was lost, and the reading played 31.7 s instead of one.** 2026-09-30 23:47:39 (#109): `hx.cjs '{"do":"pause"}'` with `sleep 0.3`, then `hx.cjs '{"do":"say"}'`; the answer read `playing=true`, and nobody looked until the next command found `playing=true utterance=15` at 23:48:10 (Debug Log: `play` 23:47:39.058, `pause` 23:48:10.815). `node` starting and the write take part of the 250 ms poll, so 0.3 s is not a safe gap. Leave at least 1.0 s after a `pause`, read `playing=false` in the `say` that follows before doing anything else, and when the play was meant to last a second, check for `[reading] pause` in the Debug Log at once.
 - **The simulator's volume can be back at 60 after an app launch, before
   anything plays.**
   - Symptom (2026-09-26 01:41, #71): `silence.sh check` read 0, `xcrun simctl
