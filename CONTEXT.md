@@ -223,7 +223,10 @@ _Avoid_: machine id, device id, host name
 
 **Appearance**:
 How the text of a document is set: which font it is shown in, its font size,
-its margins and its text alignment. It belongs to the owner rather than to a
+its margins and its text alignment. What a Word Lookup or Text Translation was
+asked about, and what it found, are set in the same font and font size, because
+they are read as part of the reading. The app's own words around them, its
+buttons, rows and notes, are not. It belongs to the owner rather than to a
 document, so one choice applies to every document; the font starts out
 following whatever the document itself asked for, and the font size, margins
 and text alignment never do.
