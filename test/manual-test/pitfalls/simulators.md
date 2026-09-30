@@ -178,3 +178,16 @@
   and pick the entry by a marker file (`Documents/harness.json` for
   OpenReader). Everything the container path is used for (harness.json,
   catalog.sqlite, Inbox) works from that path.
+
+- **`sim_volume` resets to 60 while other sessions' simulators are booted,
+  minutes after every set.** 2026-09-30 (#105, three simulators booted, three
+  sessions): `silence.sh set` read back 0, and 40-90 s later the volume was 60
+  again — four times in an hour, each coinciding with
+  `data/var/run/com.apple.coresimulator.audio.plist` and the device's
+  `var/run/simulatoraudio/` being rewritten (once with the whole `var/run`
+  recreated at 21:13 while the app stayed up). The app sets no volume (no
+  `outputVolume` writer in the repo), so the writer is CoreSimulator's audio
+  layer churning for the other sessions' boots. Consequence: a `set` at setup
+  time proves nothing by play time. Fix: `set && check && play` in one shell,
+  and `check` again inside any tool that plays (the kit's scripts already do).
+  Never trust a silence check older than the minute.
