@@ -58,7 +58,7 @@ import { Player } from './player';
 import { useReaderFileSystem } from './reader-file-system';
 import { useShell } from './routes';
 import { TEXT } from './text-styles';
-import { PROVIDER_LABELS, readiness, readinessSentence, type AppSettings } from './settings';
+import { NO_PROVIDER_SENTENCE, PROVIDER_LABELS, readiness, readinessNote, type AppSettings } from './settings';
 import type { SecretPresence } from './use-provider-secrets';
 import { useReading, type ReadingStatus } from './use-reading';
 import { useVoiceLists } from './use-voices';
@@ -481,22 +481,24 @@ export function ReadingView({
   /** Only actionable problems occupy the player; routine status stays in diagnostics. */
   const notes = useMemo(() => {
     const said: { said: string; attention: boolean }[] = [];
+    // Each sentence once, whichever of its sources says it: the readiness
+    // sentence below and a refused Play's `status.note` are the same words (#72).
+    // While the Voice sheet is open with nothing enabled, it says so itself, just
+    // below this line: `Enable a provider in Settings to choose a voice.` (#103).
+    const hidden = voicesOpen ? NO_PROVIDER_SENTENCE : null;
+    const say = (words: string, attention: boolean) => {
+      if (words !== hidden && !said.some((note) => note.said === words)) said.push({ said: words, attention });
+    };
     // First, because it says which Provider the sentence below is even about.
-    if (voiceNote) said.push({ said: voiceNote, attention: true });
-    if (sayWhatIsMissing && !ready.ready) {
-      said.push({
-        said: readinessSentence(settings.provider, ready.missing),
-        attention: true,
-      });
-    }
-    if (keyPresence.state === 'refused' && !savedVoice) {
-      said.push({ said: `The Keychain would not say whether a key is saved: ${keyPresence.message}`, attention: true });
-    }
-    if (displayError) said.push({ said: `The document would not display: ${displayError}`, attention: true });
-    if (status.resumeNeedsAttention && status.resume) said.push({ said: status.resume, attention: true });
-    if (status.note) said.push({ said: status.note, attention: true });
-    if(inventoryProblem)said.push({said:`Saved audio could not be checked: ${inventoryProblem}`,attention:true});
-    if (status.voiceError && !voicesOpen) said.push({ said: status.voiceError, attention: true });
+    if (voiceNote) say(voiceNote, true);
+    const missing = sayWhatIsMissing ? readinessNote(settings.provider, ready) : null;
+    if (missing) say(missing, true);
+    if (keyPresence.state === 'refused' && !savedVoice) say(`The Keychain would not say whether a key is saved: ${keyPresence.message}`, true);
+    if (displayError) say(`The document would not display: ${displayError}`, true);
+    if (status.resumeNeedsAttention && status.resume) say(status.resume, true);
+    if (status.note) say(status.note, true);
+    if (inventoryProblem) say(`Saved audio could not be checked: ${inventoryProblem}`, true);
+    if (status.voiceError && !voicesOpen) say(status.voiceError, true);
     return said;
   }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status, voicesOpen, savedVoice, inventoryProblem]);
 

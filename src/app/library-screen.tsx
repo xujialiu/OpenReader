@@ -36,8 +36,7 @@ import { useDocumentCover } from './document-cover';
 import { documentFile } from './library';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
-import { PROVIDER_LABELS, readiness, readinessSentence } from './settings';
-import { useProviderKey } from './use-provider-secrets';
+import { NO_PROVIDER_SENTENCE } from './settings';
 import { ReaderActions } from './reader-actions';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { useHeldReading } from './reading-host';
@@ -81,7 +80,6 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
         void removeDownloads(entry.id).then(() => { library.remove(entry.id); setActions(null); }, (error) => library.report(String(error)));
       } },
     ]), (error) => library.report(String(error))); };
-  const key = useProviderKey(settings.provider);
 
   const add = useCallback(async () => {
     setPicking(true);
@@ -155,8 +153,6 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     return found;
   }, [library.entries]);
 
-  const ready = readiness(settings, key.presence.state === 'held');
-
   return (
     <View style={styles.screen}>
       <FlatList
@@ -181,15 +177,12 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
               <Text style={styles.emptyWords}>
                 Add an EPUB to start reading and listening.
               </Text>
-              {ready.ready ? (
-                <Note>
-                  {PROVIDER_LABELS[settings.provider]} is ready to read aloud.
-                </Note>
-              ) : (
-                <Note attention>
-                  {readinessSentence(settings.provider, ready.missing)} Set up a voice in Settings to listen.
-                </Note>
-              )}
+              {/*
+               * Only whether any Provider is enabled: there is no default Voice
+               * (design 0026), so before a book is opened nothing else about
+               * listening is true yet (#103).
+               */}
+              {settings.enabledProviders.length === 0 ? <Note attention>{NO_PROVIDER_SENTENCE}</Note> : null}
             </View>
           )
         }

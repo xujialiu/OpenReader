@@ -16,3 +16,7 @@ leaving the reader while the reading was already stopped left a clean Library
 with no button. This is a handler-action result, not a real Settings-UI
 toggle of Fish's own "Use this provider" switch, which the freeze-while-on
 rule (#48, design 0041) may gate differently.
+
+Since #103, emptying `enabledProviders` gives `No provider is enabled. Enable
+one in Settings to listen.` instead; the Fish sentence above is what 2026-09-26
+measured. It still appears when another Provider stays enabled.

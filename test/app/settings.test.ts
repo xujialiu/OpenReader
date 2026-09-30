@@ -12,6 +12,7 @@ import {
   providerFields,
   providerSettings,
   readiness,
+  readinessNote,
   readinessSentence,
   engineIdentity,
   keyIsOffered,
@@ -42,9 +43,24 @@ import { createProvider } from '../../src/core/providers/factory';
 const settingsWith = (change: Partial<AppSettings>): AppSettings => ({ ...DEFAULT_SETTINGS, enabledProviders: [...PROVIDER_ORDER], ...change });
 
 describe('readiness', () => {
-  it('refuses to claim OpenAI can speak with no key, no model and no Voice', () => {
+  it('asks only for a Voice when there is none, because no Provider has been chosen either (#103)', () => {
     const found = readiness(settingsWith({}), false);
-    expect(found).toEqual({ ready: false, missing: ['an API key', 'a model', 'a Voice'] });
+    expect(found).toEqual({ ready: false, missing: ['a Voice'] });
+  });
+
+  it('says no Provider is enabled before anything else, whichever Provider and Voice a book remembers (#103)', () => {
+    expect(readiness({ ...DEFAULT_SETTINGS, provider: 'fish', voice: 'a-voice' }, true)).toEqual({ ready: false, missing: ['no provider'] });
+    expect(readiness({ ...DEFAULT_SETTINGS, voice: '' }, false)).toEqual({ ready: false, missing: ['no provider'] });
+  });
+
+  it('asks for a Voice rather than for the Provider the settings start with, once another is enabled (#103)', () => {
+    const fishOnly = { ...DEFAULT_SETTINGS, enabledProviders: ['fish'] as const, voice: '' };
+    expect(readiness(fishOnly, false)).toEqual({ ready: false, missing: ['a Voice'] });
+  });
+
+  it('names a chosen Provider that was disabled while another is enabled', () => {
+    const fishDisabled = { ...DEFAULT_SETTINGS, enabledProviders: ['local'] as const, provider: 'fish' as const, voice: 'a-voice' };
+    expect(readiness(fishDisabled, true)).toEqual({ ready: false, missing: ['enabling'] });
   });
 
   it('names everything missing at once rather than one thing per trip to the sheet', () => {
@@ -101,16 +117,36 @@ describe('readiness', () => {
 });
 
 describe('readinessSentence', () => {
-  it('reads as a sentence with one, two and three things missing', () => {
+  it('reads as a sentence with one and two things missing', () => {
     expect(readinessSentence('openai-official', ['an API key'])).toBe('OpenAI needs an API key.');
-    expect(readinessSentence('openai-official', ['an API key', 'a Voice'])).toBe('OpenAI needs an API key and a Voice.');
-    expect(readinessSentence('openai-official', ['an API key', 'a model', 'a Voice'])).toBe(
-      'OpenAI needs an API key, a model and a Voice.',
-    );
+    expect(readinessSentence('openai-official', ['an API key', 'a model'])).toBe('OpenAI needs an API key and a model.');
+  });
+
+  it('names no Provider when none is enabled or none has been chosen (#103)', () => {
+    expect(readinessSentence('openai-official', ['no provider'])).toBe('No provider is enabled. Enable one in Settings to listen.');
+    expect(readinessSentence('fish', ['no provider'])).toBe('No provider is enabled. Enable one in Settings to listen.');
+    expect(readinessSentence('openai-official', ['a Voice'])).toBe('Choose a Voice.');
+  });
+
+  it('names the Provider a book chose when it has been disabled', () => {
+    expect(readinessSentence('fish', ['enabling'])).toBe('Fish Audio is disabled. Choose an enabled provider.');
   });
 
   it('says so when nothing is missing', () => {
     expect(readinessSentence('speechify', [])).toBe('Speechify is ready.');
+  });
+});
+
+describe('readinessNote', () => {
+  it('says nothing when ready, or when only a Voice is missing, which the Voice button already says (#103)', () => {
+    expect(readinessNote('fish', { ready: true })).toBeNull();
+    expect(readinessNote('openai-official', { ready: false, missing: ['a Voice'] })).toBeNull();
+  });
+
+  it('says the readiness sentence for everything else', () => {
+    expect(readinessNote('openai-official', { ready: false, missing: ['no provider'] })).toBe('No provider is enabled. Enable one in Settings to listen.');
+    expect(readinessNote('fish', { ready: false, missing: ['enabling'] })).toBe('Fish Audio is disabled. Choose an enabled provider.');
+    expect(readinessNote('fish', { ready: false, missing: ['an API key'] })).toBe('Fish Audio needs an API key.');
   });
 });
 
@@ -197,7 +233,7 @@ describe('what the owner is offered', () => {
 describe('explicit provider enablement', () => {
   it('offers nothing on first run, even with the prefilled local address', () => {
     expect(enabledProviders(DEFAULT_SETTINGS)).toEqual([]);
-    expect(readiness(DEFAULT_SETTINGS, true)).toEqual({ ready: false, missing: ['enabling'] });
+    expect(readiness(DEFAULT_SETTINGS, true)).toEqual({ ready: false, missing: ['no provider'] });
   });
   it('offers only enabled providers, in display order', () => {
     expect(enabledProviders({ ...DEFAULT_SETTINGS, enabledProviders: ['local', 'fish'] })).toEqual(['fish', 'local']);

@@ -81,7 +81,7 @@ import {
 import {
   engineIdentity,
   readiness,
-  readinessSentence,
+  readinessNote,
   resolveTheme,
   type AppSettings,
 } from './settings';
@@ -1232,7 +1232,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     await Promise.resolve();
     const ready = readiness(settings, hasKey);
     if (!ready.ready && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
-      setStatus((was) => ({ ...was, note: readinessSentence(settings.provider, ready.missing) }));
+      setStatus((was) => ({ ...was, note: readinessNote(settings.provider, ready) }));
       return null;
     }
 
@@ -1279,7 +1279,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
       playIntent.current = false;
       engineRef.current?.pause();
-      setStatus((was) => ({ ...was, playing: false, note: readinessSentence(settings.provider, ['enabling']) }));
+      // What `readiness` says, not `enabling` alone: with nothing enabled that
+      // would name a Provider the owner never chose (#103).
+      const note = readinessNote(settings.provider, readiness(settings, hasKey));
+      setStatus((was) => ({ ...was, playing: false, note }));
       return;
     }
     /**
@@ -1358,7 +1361,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       setStatus((was) => ({ ...was, playing: false, buffering: false }));
       report(error);
     });
-  }, [settings, build, report, walkForward, abandonResume, document]);
+  }, [settings, build, report, walkForward, abandonResume, document, hasKey]);
 
   /**
    * The section Play was looking for has arrived with text in it, so the reading

@@ -113,6 +113,8 @@ citing them:
   on the next `play()`, not on a settings change) rather than a bug. A
   duplicate-note rendering issue found this way is in Pitfalls above, reported
   separately.
+  Since #103 an empty `enabledProviders` gives `No provider is enabled.
+  Enable one in Settings to listen.`, shown once (#72).
 - **Dark theme.** Harness `"do":"settings","patch":{"theme":"dark"}`. The
   floating bar, the page under it, and the collapsed Reading Button (a white
   circle with a black waveform glyph, the inverse of light mode's dark circle

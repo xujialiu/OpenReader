@@ -144,10 +144,13 @@ export interface PlayerProps {
   onOpenHeight(height: number): void;
 }
 
-/** A known name survives leaving the reader; internal ids are never a caption. */
+/**
+ * A known name survives leaving the reader; internal ids are never a caption.
+ * Without a Voice no Provider was chosen, so none is named (#103).
+ */
 function voiceLine(settings: AppSettings, inUse: { label: string; locale: string } | null): string {
+  if (!settings.voice) return 'Choose a Voice';
   const provider = PROVIDER_LABELS[settings.provider];
-  if (!settings.voice) return `${provider} · choose a Voice`;
   if (!inUse) return `${provider} · Voice`;
   return inUse.label;
 }
