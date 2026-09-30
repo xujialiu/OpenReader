@@ -13,12 +13,48 @@ import { File, Paths } from 'expo-file-system';
 
 import { debugLog } from '../debug/debug-log';
 import { DEBUG_MODE } from '../debug/mode';
+import { PROBE_MESSAGE } from '../renderer/messages';
+
+import type { ReadingStatus } from './use-reading';
 
 export type HarnessCommand = Record<string, unknown>;
 
 export function hlog(line: string): void {
   console.log(`HX ${line}`);
   debugLog('hx', line);
+}
+
+/**
+ * The reader's status line, written every 500 ms when it changes and every 5 s
+ * when it does not. `app=` is AppState's `active`, `inactive` or `background`
+ * (#113), right after `playing=` so that the line still starts `playing=`, which
+ * the kit's scripts look for, and so that "the reading entered section N while
+ * in the background" is one line and not a join of two.
+ */
+export function statusLine(
+  status: Pick<ReadingStatus, 'playing' | 'utterance' | 'known' | 'section' | 'rendered' | 'level' | 'seeking' | 'resume' | 'note'>,
+  app: string,
+): string {
+  return (
+    `playing=${status.playing} app=${app} utterance=${status.utterance} known=${status.known} ` +
+    `section=${status.section} rendered=${status.rendered?.index ?? null}/${status.rendered?.spine ?? null} ` +
+    `level=${status.level} seeking=${status.seeking} resume=${status.resume ? JSON.stringify(status.resume.slice(0, 60)) : null} ` +
+    `note=${status.note ? JSON.stringify(status.note.slice(0, 500)) : null}`
+  );
+}
+
+/**
+ * The `js` command's script: run the probe's code in the reader's page and post
+ * what it returns, or what it threw, as a `PROBE_MESSAGE` (#113). The bridge
+ * writes each one as a `[probe]` line, and `HX PROBE …` to the console. Never
+ * the player's note, which it used to replace, and where an answer a few
+ * milliseconds behind another was lost (#112, 01:59:13).
+ */
+export function probeScript(code: string): string {
+  return (
+    '(function(){var answer;try{answer=String((function(){' + code + '\n})());}catch(e){answer=\'threw \'+e;}' +
+    'window.ReactNativeWebView.postMessage(JSON.stringify({type:' + JSON.stringify(PROBE_MESSAGE) + ',answer:answer}));})();true;'
+  );
 }
 
 export function useHarnessCommands(run: (command: HarnessCommand) => void): void {

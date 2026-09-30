@@ -1269,6 +1269,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * kept as a guard.
    */
   const ranOutOfText = useCallback((report: OutOfTextReport) => {
+    // Debug Mode: what epub.js held at this moment, beside the note below (#113).
+    bridgeRef.current?.snapshot('the reading ran out of text');
     const { ended, sentence } = outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0, {
       count: report.unspoken,
       // The engine hands the problem over unconverted, so that the one place a

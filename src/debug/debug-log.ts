@@ -24,7 +24,10 @@
  */
 import { withoutCredentials } from './credentials';
 
-/** What a line is about. `hx` is the walkthrough harness's own lines. */
+/**
+ * What a line is about. `hx` is the walkthrough harness's own lines, `probe` its
+ * `js` answers, and `renderer` epub.js as the reader's page sees it (#113).
+ */
 export type DebugCategory =
   | 'launch'
   | 'app'
@@ -36,7 +39,9 @@ export type DebugCategory =
   | 'provider'
   | 'download'
   | 'sync'
-  | 'lookup';
+  | 'lookup'
+  | 'renderer'
+  | 'probe';
 
 export const FILE_BYTES = 5 * 1024 * 1024;
 export const FILES = 4;

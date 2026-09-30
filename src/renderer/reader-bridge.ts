@@ -30,6 +30,8 @@ import { useReader, type Theme } from '@epubjs-react-native/core';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import type { Utterance } from '../core/segmenter';
+import { cutText, debugLog } from '../debug/debug-log';
+import { DEBUG_MODE } from '../debug/mode';
 import type { ClipCue, PositionCorrection, ReaderClock } from '../playback/reader-clock';
 
 import { blockIds, EMPTY_BLOCKS, withSection, type BlockIndex } from './blocks';
@@ -52,7 +54,9 @@ import {
   BLOCKS_MESSAGE,
   DOCUMENT_MESSAGE,
   FOLLOWING_STATE_MESSAGE,
+  PROBE_MESSAGE,
   PROBLEM_MESSAGE,
+  RENDERER_MESSAGE,
   TAP_MESSAGE,
   SELECTION_MESSAGE,
   type SelectionMessage,
@@ -64,6 +68,7 @@ import {
   type SpeakMessage,
   type WebViewMessage,
 } from './messages';
+import { isPageLine, logFromPage } from './renderer-log';
 
 /**
  * The section epub.js has just rendered, and how long the document's spine is.
@@ -397,6 +402,13 @@ export interface ReaderBridge {
    */
   browse(index: number): void;
   /**
+   * Debug Mode (#113): have the page write a `[renderer]` snapshot of epub.js —
+   * views, queues, scroll, sections asked for and reported, location, the
+   * page's visibility — to the Debug Log now, saying `why`. Does nothing in a
+   * build without Debug Mode, whose program has nothing to answer it with.
+   */
+  snapshot(why: string): void;
+  /**
    * Spread onto `<Reader>`. `injectedJavascript` installs the highlighter once,
    * from the library's own `onReady`; `onWebViewMessage` receives what the
    * highlighter posts back.
@@ -436,7 +448,16 @@ export interface ReaderBridge {
 function asMessage(event: unknown): WebViewMessage | null {
   if (typeof event !== 'object' || event === null) return null;
   const type = (event as { type?: unknown }).type;
-  if (type !== BLOCKS_MESSAGE && type !== DOCUMENT_MESSAGE && type !== FOLLOWING_STATE_MESSAGE && type !== PROBLEM_MESSAGE && type !== TAP_MESSAGE && type !== SELECTION_MESSAGE) {
+  if (
+    type !== BLOCKS_MESSAGE &&
+    type !== DOCUMENT_MESSAGE &&
+    type !== FOLLOWING_STATE_MESSAGE &&
+    type !== PROBLEM_MESSAGE &&
+    type !== TAP_MESSAGE &&
+    type !== SELECTION_MESSAGE &&
+    type !== RENDERER_MESSAGE &&
+    type !== PROBE_MESSAGE
+  ) {
     return null;
   }
   return event as WebViewMessage;
@@ -710,6 +731,9 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
 
   const goTo = useCallback(
     (cfi: string) => {
+      // The page's own `display` line says only "injected code" of every
+      // display the library's goToLocation asks for; this says which (#113).
+      debugLog('renderer', `the app asks epub.js to display ${cutText(cfi)} (goTo)`);
       goToLocation(cfi);
     },
     [goToLocation],
@@ -720,6 +744,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       // `goToLocation` interpolates its argument into `rendition.display('…')`,
       // and epub.js's `Spine.get` reads a target that is not a CFI and is not NaN
       // as a spine index. So the index travels as its own decimal spelling.
+      debugLog('renderer', `the app asks epub.js to display section ${index} (goToSection)`);
       goToLocation(String(index));
     },
     [goToLocation],
@@ -730,15 +755,28 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       // First, so the sections the display renders arrive to a page that has
       // stopped following the reading: both are injected, and run in this order.
       send({ kind: 'browse' });
+      debugLog('renderer', `the app asks epub.js to display section ${index} (browse)`);
       goToLocation(String(index));
     },
     [send, goToLocation],
+  );
+
+  const snapshot = useCallback(
+    (why: string) => {
+      if (DEBUG_MODE) send({ kind: 'snapshot', why });
+    },
+    [send],
   );
 
   const onWebViewMessage = useCallback(
     (event: unknown) => {
       const message = asMessage(event);
       if (!message) return;
+      // Debug Mode's lines from the page (#113): written, and nothing else.
+      if (isPageLine(message)) {
+        if (DEBUG_MODE) logFromPage(message);
+        return;
+      }
       if (message.type === SELECTION_MESSAGE) {
         if (lookupEnabled.current && typeof message.text === 'string' && typeof message.expanded === 'boolean' && typeof message.selecting === 'boolean') {
           selectionCallback.current?.({ ...message, text: message.text.slice(0, 5001) });
@@ -831,7 +869,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    */
   const injectedJavascript = useMemo(
     () =>
-      highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null),
+      highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null, DEBUG_MODE),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -852,7 +890,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, readerProps }),
-    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, readerProps],
+    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, snapshot, readerProps }),
+    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, snapshot, readerProps],
   );
 }
