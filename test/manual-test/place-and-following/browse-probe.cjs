@@ -119,11 +119,14 @@ async function state() {
 }
 const read = `
   var m = rendition.manager, box = m.container.getBoundingClientRect();
+  /* The page's top is below the bar's room (#67, the container's ::before, 54 px
+     on an iPhone 17): a section displayed there starts at it, not at the box. */
+  var edge = box.top + (parseFloat(getComputedStyle(m.container, '::before').height) || 0) + 1;
   var out = { views: m.views.all().map(function (v) { return v.section.index; }), top: null, utt: [], word: [] };
   rendition.getContents().forEach(function (c) {
     var w = c.window; if (!w || !w.frameElement) return;
     var f = w.frameElement.getBoundingClientRect();
-    if (f.top <= box.top + 1 && f.bottom > box.top + 1) out.top = c.sectionIndex;
+    if (f.top <= edge && f.bottom > edge) out.top = c.sectionIndex;
     if (!w.CSS) return;
     [['utt', 'openreader-utterance'], ['word', 'openreader-word']].forEach(function (pair) {
       var h = w.CSS.highlights.get(pair[1]);

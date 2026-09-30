@@ -595,3 +595,16 @@ agent against the Debug Log):
 overshoot) and behaved as the pause does each time, but no lock-screen press
 was made. What the run cannot prove: nothing about real devices, drift, or
 the desktop plugin's writer.
+
+## Verifying #112: a section crossed away from the screen (2026-10-01)
+
+- **`background-crossing.sh` read a stale status line and voided its own run.**
+  - Symptom (ios-tester, 03:33): `VOID: not in section 51 with only 52 rendered ahead`, with the place now in section 1.
+  - Cause: the app had been relaunched at 03:29 and sat on the Library. The script took `known` from the last `[hx] playing=` line in the file, written before the relaunch. Its first `seek` went to a Reader that was not mounted and was dropped, so the next one landed on a sentence in section 1.
+  - Fix, in the script since: it opens the book first, and refuses a status line older than that.
+- **`browse-probe.cjs` read RED on a correct browse.**
+  - Symptom (ios-tester, 03:50–03:58, on both *My Vampire System* and the recipe's own *Cultivation Online*): the probe's `page top` was the section before the one browsed to, while the screenshot showed the chosen chapter's heading at the top.
+  - Cause: the probe took the page's top at the container's edge. Since #67 the bar's room, the container's `::before` (54 px on an iPhone 17), sits above it, and `landBelowBar` lands a displayed section below that room. The previous section's iframe therefore covers the container's edge.
+  - Fix: the probe measures at the edge plus the `::before` height. Re-run at 04:03 on *Cultivation Online*, section 3: `page top=3`, GREEN.
+- **A tester run covering many recipes hit the subagent's 30-minute limit.** It ended in the middle of a chapter download (`download-chapter.cjs`, `Command aborted`), before its report, and wrote none of its pitfalls. Every recipe it had finished was recoverable from its transcript. Give a long verification a longer timeout, or split it into runs of a few recipes each.
+- **`reading.cjs` answered `fetch failed`** against a Metro on 8112. Its default is `127.0.0.1:8081`, like `cdp.cjs` (pitfalls/cdp.md); pass `OPENREADER_METRO=http://127.0.0.1:PORT`.

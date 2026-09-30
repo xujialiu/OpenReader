@@ -9,8 +9,8 @@
 # Env: AWAY (s away from the screen, default 45), WAIT (s, default 15), OFFSET
 # (Utterances before the crossing to start from, default 64: far enough that the
 # page has unloaded the next section's view), FRONT=1 (come back after AWAY and
-# stay 10 s, as the owner did in #112). Needs the book open in the Reader once
-# before, a Provider that answers quickly (fake-kokoro.cjs with
+# stay 10 s, as the owner did in #112). Needs the book in the Library, a
+# Provider that answers quickly (fake-kokoro.cjs with
 # OPENREADER_FAKE_TTS_SECONDS=0.2), and the simulator's volume at zero, which is
 # checked before the play.
 set -u
@@ -31,10 +31,16 @@ front() { xcrun simctl launch "$UDID" top.xujialiu.openreader -RCT_jsLocation "l
 front
 sleep 2
 hx '{"do":"pause"}'
+# The Reader open first: a seek sent while the Library shows is dropped, and the
+# last status line in the file would be a stale one from before.
+SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+hx "{\"do\":\"open\",\"id\":\"$DOC\"}" 8
+FRESH=$(last)
+[[ "$FRESH" > "$SINCE" ]] || { echo "VOID: no status line since the Reader was opened; is it open?"; exit 3; }
 # The place on the last Utterance the Reader holds, which is in the last section
 # rendered (a Contents row while paused moves only the page, #52, so it cannot
 # set the place). Reopened, the page holds that section and the next one.
-NOW=$(last | grep -o 'known=[0-9]*' | cut -d= -f2)
+NOW=$(echo "$FRESH" | grep -o 'known=[0-9]*' | cut -d= -f2)
 hx "{\"do\":\"seek\",\"utterance\":$((NOW - 1))}" 1
 hx '{"do":"shut"}' 3
 hx "{\"do\":\"open\",\"id\":\"$DOC\"}" 8
