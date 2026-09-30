@@ -51,6 +51,8 @@ import { ProvidersScreen } from './providers-screen';
 import { ReaderScreen } from './reader-screen';
 import { navigationRef, ShellContext, type RootStackParamList, type Shell } from './routes';
 import { ReadingHost } from './reading-host';
+import { configureConsent } from './consent';
+import { askWithAlert } from './consent-alert';
 import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
@@ -104,6 +106,17 @@ export function OpenReader() {
     });
     return () => subscription.remove();
   }, [sync]);
+  /**
+   * The consent gate (#109, ADR 0064): the question is the phone's own alert,
+   * and a yes is kept in these settings, on this device. Configured before the
+   * downloads start, because a download left queued from before may be about
+   * to send.
+   */
+  useEffect(() => configureConsent({
+    kept: (key) => settingsRef.current.consent.includes(key),
+    keep: (key) => setSettings((was) => was.consent.includes(key) ? was : { ...was, consent: [...was.consent, key] }),
+    ask: askWithAlert,
+  }), [setSettings]);
   useEffect(() => { configureDownloads(settings); }, [settings]);
   useEffect(() => startDownloads(), []);
   // The Debug Log names the Documents a continued task's Live Activity covers as the Library does (ADR 0053, #93).

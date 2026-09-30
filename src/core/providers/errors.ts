@@ -7,6 +7,12 @@ export type SynthesisErrorKind =
   | 'rate-limit'
   | 'quota'
   | 'decode-failed'
+  /**
+   * Never sent: the person did not allow this Provider to receive the text
+   * (#109, ADR 0064). Not retried, and not a failure to show a Reading's owner,
+   * who has just said no.
+   */
+  | 'declined'
   | 'unknown';
 
 const RETRIABLE: ReadonlySet<SynthesisErrorKind> = new Set([

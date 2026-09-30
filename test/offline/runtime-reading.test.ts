@@ -82,6 +82,8 @@ vi.mock('../../src/core/providers/factory', () => ({
 vi.mock('../../src/offline/database', () => ({ offlineRepository: () => mock.open() }));
 
 const { configureDownloads, downloadTasks, downloadsReady, enqueue, offlineProvider, setReadingPlays, startDownloads } = await import('../../src/offline/runtime');
+// The owner has allowed every Provider here (#109): what these tests are about comes after that question.
+(await import('../../src/app/consent')).configureConsent({ kept: () => true, keep: () => {}, ask: async () => true });
 
 const settings: AppSettings = {
   ...DEFAULT_SETTINGS, provider: 'speechify', enabledProviders: ['speechify'], voice: 'en-US/george',

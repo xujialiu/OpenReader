@@ -289,7 +289,8 @@ export function createScheduler(deps: SchedulerDeps) {
             }
             task.error = error instanceof Error ? error.message : String(error);
             if (!deps.connected()) { task.state = 'waiting'; task.error = 'No network connection, waiting to reconnect'; }
-            else if (!(error instanceof SynthesisError) || ['auth', 'no-key', 'quota'].includes(error.kind)) task.state = 'blocked';
+            // A Provider the owner did not allow stops the whole download, as a missing key does (#109): no chapter failed.
+            else if (!(error instanceof SynthesisError) || ['auth', 'no-key', 'quota', 'declined'].includes(error.kind)) task.state = 'blocked';
             else if (!task.failed.includes(chapterId)) task.failed.push(chapterId);
             await deps.changed();
           }
