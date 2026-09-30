@@ -7,6 +7,7 @@ import type { ReportedBlock } from '../../src/renderer/messages';
 import { segmentDocument } from '../../src/app/segment';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
 import { useReading, type Reading } from '../../src/app/use-reading';
+import { SynthesisError } from '../../src/core/providers/errors';
 
 /**
  * A place taken from another device while a book is open, in a section the
@@ -47,6 +48,7 @@ const engines = vi.hoisted(() => {
   interface Deps {
     clock: { onClip(cue: { utterance: number; words: null; duration: number; rate: number }): void };
     onState?(state: { playing: boolean; buffering: boolean }): void;
+    onError(error: unknown): void;
   }
   interface Load { length: number; from: number; quiet: boolean }
   /** `calls` is every load, extend, seek, play and pause in the order they came, for a test about which came first. */
@@ -1139,6 +1141,39 @@ describe('the place a book opens with, passed to resumeAt again (#55)', () => {
     // The start of the book reports first (#51); the place's own section is still loading.
     await m.report(CONTENTS, 0);
     expect(bridge.goTo).not.toHaveBeenCalled();
+    await m.down();
+  });
+});
+
+/**
+ * #109. What the player shows when the engine reports that a Provider was not
+ * allowed. The engine is the harness's fake, so this is the hook's half only.
+ * The engine's half is to stop quietly at the refused sentence (ADR 0027). The
+ * fetch half, that no clock gives up while the question is up, is in
+ * `test/offline/runtime-consent.test.ts`.
+ */
+describe('a Provider the owner did not allow (#109)', () => {
+  const READY: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
+
+  it('is not a note, and moves nothing, where a Provider that did not answer is a note', async () => {
+    const m = mount({ settings: READY });
+    await m.up();
+    await m.report(CHAPTER_ONE, 0);
+    await m.press((reading) => reading.play());
+    const engine = engines.built.at(-1)!;
+    await act(async () => { engine.deps.clock.onClip({ utterance: 1, words: null, duration: 1, rate: 1 }); });
+    expect(m.reading.status.utterance).toBe(1);
+
+    await act(async () => { engine.deps.onError(new SynthesisError('declined', 'The server at 127.0.0.1:8795 was not allowed to receive this document\'s text.')); });
+    expect(m.reading.status.note).toBeNull();
+    expect(m.reading.status.utterance).toBe(1);
+    expect(engine.seeks).toEqual([]);
+
+    // What the simulator showed instead, at 60.09 s, from the clip fetcher's
+    // clock: a Provider that did not answer is a note, and rightly so. So the fix
+    // is that no clock runs while the owner is asked, not that the note is hidden.
+    await act(async () => { engine.deps.onError(new SynthesisError('network', 'local: no audio within 60s')); });
+    expect(m.reading.status.note).toBe('local: no audio within 60s');
     await m.down();
   });
 });

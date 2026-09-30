@@ -54,6 +54,19 @@ screen the moment it was dismissed.
 A no is never kept, only a yes. So to allow a service after refusing it, the
 owner asks for the thing again and answers Allow this time.
 
+**The question takes as long as the owner does.** While it is on the screen,
+nothing gives up waiting for it. A reading waits to start, and a new voice
+waits to take over. Neither treats an unanswered question as a service that has
+stopped responding. The first try did, after a minute, and the simulator
+caught it: the player said the service had not answered, under an alert that
+had not been answered yet.
+
+A sentence whose sound is already on the phone, downloaded or heard earlier in
+the same session, sends nothing, so it plays while the question is up. The
+question is about the first sentence that would be sent. So Don't Allow leaves
+the reading on that sentence, one on from where Play was pressed if the one
+before it could play, and moves it nowhere else.
+
 The owner confirmed these on 2026-09-30, after trying the alternatives:
 - the question returns only when the owner asks again, not once per launch, and
   it is not left to a switch in Settings;
@@ -98,7 +111,9 @@ the company.
   Nothing is carried over from before the question existed, because no yes was
   ever given.
 - **A download that resumes by itself** after the update, away from the screen,
-  can wait on the question until the owner next opens the app.
+  can wait on the question until the owner next opens the app. So can a
+  reading started from the lock screen that reaches a service not yet allowed:
+  it stays silent, waiting, rather than giving up.
 - **A yes cannot yet be taken back inside the app.** Deleting the app clears it.
   The privacy policy says what each service receives.
 

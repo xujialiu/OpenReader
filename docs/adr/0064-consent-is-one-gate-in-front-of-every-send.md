@@ -91,6 +91,101 @@ it, which is how a device test starts with a recipient already allowed.
 Voice lists are not asked about. `listVoices` and the connection check send the
 key and no text, and the warm-up GET carries nothing at all (ADR 0040).
 
+## The answer comes before every clock
+
+**Measured** on the simulator on 2026-09-30 (iPhone 17, iOS 27.0,
+`0.0.2-beta73-debug`, the fake server at `127.0.0.1:8795`;
+`test/manual-test/voices-and-providers/consent.md`, "What it found"):
+
+- A Provider was not yet allowed. Play was pressed at utterance 6 at
+  00:20:32.896, and the alert was left alone.
+- At 00:21:32.982, 60.09 s later, the player showed
+  `compatible: no audio within 60s` in red under the still-open alert. The
+  engine had paused, `playing=false utterance=7`.
+- A Don't Allow at 00:21:48 sent nothing (0 new requests), and left the note
+  and utterance 7 in place.
+- It was seen twice more, at 23:37:22.4 and about 23:40:59. A harness `pause`
+  sent first left only the note.
+
+**The cause.** The question was asked only inside `synthesize()`. The clip
+fetcher (`clips.ts`) wraps the whole of `provider.synthesize` in its 60 s
+`withTimeout`, so its clock counted the owner's answer as the Provider's
+silence. A Voice switch's 120 s deadline (`engine.ts`) ran from the choice, and
+would have done the same to a switch. Downloads were not affected: their only
+clock is the runtime's own, which starts after the gate.
+
+**Why utterance 7.** Sentence 6 was in the runtime's memory cache from earlier
+in that process, and such a sentence never asks: it is not sent. So 6 played,
+while the read-ahead's request for 7 waited on the question. When 7's clock ran
+out, the engine stopped there, as it stops at any refused Utterance
+(ADR 0027). The same run after this change still plays 6 and waits at 7.
+Don't Allow then leaves the Reading at 7, where it was waiting, with no note.
+The refusal itself moves nothing.
+
+**What was done.** The answer is taken before either clock starts.
+
+- **The fetcher.** `ClipProvider` in `clips.ts` is a Provider with an optional
+  `ensureConsent(text, { voice })`. The fetcher awaits it inside the job that
+  every Utterance wanting that text shares. That is after the fetcher's own
+  cache and before `synthesize()`, whose `withTimeout` is the only clock it has.
+  So one question serves all of them. `fetch()` takes an optional `cleared`,
+  called once that wait is over: at once for silence or a cache hit, after the
+  answer otherwise, and never on a refusal.
+- **The runtime.** `offlineProvider` implements it with `ensureConsent()` in
+  `runtime.ts`, which asks exactly when `synthesize()` would. It returns at once
+  in four cases:
+  - The recipient is already allowed. `consent.allows(key)` is a Set lookup,
+    because the recipient's key needs no credential, so it reads no Keychain
+    entry and no store.
+  - The sentence is in the memory cache.
+  - Its audio is saved (`savedClip`, the same read `synthesize()` makes).
+  - `sendable()` throws, because the sentence could not be sent anyway. Then
+    `synthesize()` meets the same reason and reports it.
+
+  Otherwise it calls `consent.ensure`. `sendable()` holds the network, Keychain
+  and `readiness` checks that `synthesize()` used to make inline, and both call
+  it, so the two cannot disagree about whether a sentence would go out or to
+  whom. The gate in `synthesize()` stays the guarantee that nothing is sent
+  without a yes, and after the step it answers at once.
+- **The switch.** Its deadline is no longer armed in `switchVoice`.
+  `startDeadline` arms it once none of the switch's fetches is uncleared (held
+  in `uncleared`), so the answer is not counted as preparation. It is armed
+  once and never restarted. A slow target still cannot chase a fast reading
+  forever, however many sentences it goes on fetching.
+
+**Alternatives turned down.**
+
+- **Asking in `play()` and `chooseVoice()`, with the runtime's gate behind it.**
+  The question is reached with no press at all. When a Reading crosses from
+  saved or cached audio into a sentence that must be sent, the read-ahead asks
+  mid-reading. That crossing, a tapped sentence and a Play from the lock screen
+  would all have stayed inside the clock. Asking at the press would also ask
+  about audio that is never sent, and a refusal there would stop saved audio
+  that sends nothing.
+- **No fetcher clock for the runtime's Provider.** The runtime already times
+  its own send, after the gate. That gives one clock and no new step, but it
+  would have left the Keychain and store reads before the send unbounded on the
+  Reading path. The switch's deadline would still have counted the answer.
+- **Pausing the clocks while a question is open.** Every timer would have
+  needed to know about the gate, and a rule for how much time it has left once
+  the answer comes.
+
+**What it costs.**
+
+- **Duplicate reads.** While a Provider is not yet allowed, a sentence is
+  looked up twice, by the step and then by `synthesize()`: its saved audio,
+  and for one that must be sent, the Keychain. That happens once for each
+  sentence the read-ahead reaches before the answer. An allowed Provider costs
+  one Set lookup per sentence.
+- **A race.** Saved audio deleted between the step and `synthesize()` would be
+  asked about inside the clock again. The gate still refuses to send without a
+  yes.
+- **A switch with no deadline.** A switch that fetches nothing, while the
+  engine is held silent, has no deadline until it fetches.
+- **A wait away from the screen.** A Reading or a switch that reaches the
+  question away from the screen now waits for the answer, however long, with
+  nothing timed.
+
 ## Why a refusal holds until the owner asks again
 
 The engine asks for up to `CONCURRENT_FETCHES` (2) Utterances at a time, within
@@ -126,6 +221,29 @@ as its message. The kind is not retriable.
 
 ## Tests
 
+For the clocks (#109):
+
+- `test/offline/runtime-consent.test.ts` reproduces the simulator run with the
+  real fetcher over the runtime's Provider and fake timers. Unfixed, the fetch
+  was rejected at 60 s with `SynthesisError('network', 'speechify: no audio
+  within 60s')`. Now it waits 90 s without giving up or sending, and then:
+  - a no is `declined`;
+  - an Allow plays;
+  - a Provider silent after the answer still times out a full clock later.
+
+  It also covers the step's fast paths, including no Keychain or store read
+  for an allowed Provider.
+- `test/playback/clips.test.ts` covers the fetcher's side, and
+  `test/core/consent.test.ts` covers `allows`.
+- `test/app/use-reading-resume.test.ts` covers the hook's side: a refusal is no
+  note and moves nothing, and a timeout is a note.
+- `test/app/consent-paths.test.ts` pins where each clock starts, because
+  `engine.ts` cannot run under Node.
+
+Each guard was seen to fail on the unfixed code or with its rule broken.
+
+For the gate itself:
+
 - `test/core/consent.test.ts`: the gate.
 - `test/app/consent.test.ts`: recipients, the approved wording, the settings
   projection, and the unconfigured gate refusing.
@@ -134,6 +252,9 @@ as its message. The kind is not retriable.
 - `test/app/use-lookup-consent.test.ts`: the real hook.
 - `test/app/consent-paths.test.ts`: the sweep.
 
-Every new guard was watched failing once with its rule broken. Nothing here has
-run on a device yet. The alert's appearance, and the Reading's quiet pause
-after Don't Allow, are for the simulator run.
+Every new guard was watched failing once with its rule broken. The simulator
+run of 2026-09-30 (`test/manual-test/voices-and-providers/consent.md`) showed
+the rest on the phone: the alert, the quiet pause after Don't Allow, a download
+and a lookup each asking, and nothing sent without a yes. The one defect it
+found is the section on the clocks above, and that change has not yet run on a
+device.

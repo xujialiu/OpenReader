@@ -89,3 +89,49 @@ describe('a selection reaches a lookup service only through the gate', () => {
     expect(hook.indexOf('consent.ensure(recipient)')).toBeLessThan(hook.indexOf('const answer = await lookup('));
   });
 });
+
+/**
+ * #109, the simulator run of 2026-09-30: asked only inside `synthesize`, the
+ * question sat inside the clip fetcher's 60 s clock, and a Voice switch's
+ * 120 s deadline was running from the choice. So an alert left open read as a
+ * Provider that had stopped answering. The owner's answer is taken before
+ * either clock now. These pin where, because the engine that holds the second
+ * clock cannot run under Node (`engine.ts`).
+ */
+describe('the owner\'s answer is taken before any clock starts (#109)', () => {
+  it('asks in the clip fetcher before its timed synthesis, inside the job every Utterance wanting the text shares', () => {
+    const clips = read('src/playback/clips.ts');
+    const job = between(clips, 'const result = (async () => {', 'job = { cleared: through, result };', 'src/playback/clips.ts');
+    const ask = 'await deps.provider.ensureConsent?.(speech, { voice: deps.voice });';
+    pin(job, ask, 'the job in src/playback/clips.ts');
+    pin(job, 'return synthesize(key, speech);', 'the job in src/playback/clips.ts');
+    expect(job.indexOf(ask)).toBeLessThan(job.indexOf('return synthesize(key, speech);'));
+    // The one clock is inside `synthesize`, which the job reaches only after the answer.
+    pin(clips, 'withTimeout(', 'src/playback/clips.ts');
+    const timed = between(clips, 'async function synthesize(key: string, text: string)', '  return {\n    fetch(', 'src/playback/clips.ts');
+    pin(timed, 'withTimeout(', 'synthesize() in src/playback/clips.ts');
+  });
+
+  it('gives the Reading\'s Provider that step, deciding who would receive the text with synthesize\'s own reading of the settings', () => {
+    const runtime = read('src/offline/runtime.ts');
+    pin(runtime, 'ensureConsent: (text, options) =>', 'src/offline/runtime.ts');
+    const asking = between(runtime, 'async function ensureConsent(', 'async function synthesize(', 'src/offline/runtime.ts');
+    const sending = between(runtime, 'async function synthesize(', 'function clipFacts(', 'src/offline/runtime.ts');
+    for (const [where, text] of [['ensureConsent()', asking], ['synthesize()', sending]] as const) {
+      pin(text, 'await sendable(voice, current)', `${where} in src/offline/runtime.ts`);
+      pin(text, 'if (!(await consent.ensure(recipient)))', `${where} in src/offline/runtime.ts`);
+    }
+    // It asks and sends nothing: only `synthesize` builds a Provider.
+    expect(asking).not.toMatch(/\bcreateProvider\s*\(/);
+  });
+
+  it('starts a Voice switch\'s deadline once nothing it asked for waits on the owner, never at the choice', () => {
+    const engine = read('src/playback/engine.ts');
+    const choosing = between(engine, 'switchVoice(provider, voice, selected, failed) {', '    cancelVoiceSwitch,\n', 'src/playback/engine.ts');
+    expect(choosing).not.toMatch(/setTimeout\s*\(/);
+    const starting = between(engine, 'function startDeadline(target: PendingSwitch)', 'function prepareSwitch()', 'src/playback/engine.ts');
+    pin(starting, '}, 120_000);', 'startDeadline() in src/playback/engine.ts');
+    pin(engine, 'if (target.uncleared.size === 0) startDeadline(target);', 'src/playback/engine.ts');
+    expect(engine.match(/\bstartDeadline\(/g)).toHaveLength(2);
+  });
+});
