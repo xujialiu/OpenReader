@@ -180,3 +180,13 @@
   the full 4 s. Fix: poll with an explicit `say` (or other command) at the
   cadence the evidence needs, the way `line-follow.cjs`'s own `ask()` does; a
   `sleep` alone proves nothing about what happened during it.
+
+- **`xcrun simctl pbcopy` answers 0 and the device pasteboard stays empty.**
+  Measured 2026-09-30 (#105, iPhone 17 issue105b, iOS 27.0): `printf hello |
+  simctl pbcopy UDID` exited 0 and `simctl pbpaste UDID` answered 0 with no
+  output — a round trip that loses everything, so the paste-into-a-field
+  path for a credential is closed (this before any long-press Paste could be
+  tried). Fix used instead: an XCTest probe reads the staged file itself
+  (the simulator process shares the host filesystem,
+  `ProviderHeaders105Probe.swift`) and types into the masked field. Record
+  the pbcopy failure before assuming a paste-based plan works.
