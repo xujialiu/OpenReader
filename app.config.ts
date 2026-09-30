@@ -83,8 +83,40 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
 
   ios: {
-    supportsTablet: true,
+    /**
+     * #108. iPhone only, the owner's decision for the first release. An iPad
+     * runs the iPhone app in compatibility mode, in portrait: the layout that
+     * has been tested. With `true`, the iPad app allowed all four orientations
+     * (UISupportedInterfaceOrientations~ipad), none of them tested, and App
+     * Review tests on iPad.
+     */
+    supportsTablet: false,
     bundleIdentifier: 'top.xujialiu.openreader',
+
+    /**
+     * #108. The paid team. On 2026-09-30 the free Personal Team became it in
+     * place and kept this ID. A prebuild writes it as DEVELOPMENT_TEAM, so a
+     * fresh ios/ signs without first choosing the team in Xcode.
+     */
+    appleTeamId: 'UPR29WR8FC',
+
+    /**
+     * #108. CFBundleVersion. App Store Connect refuses an upload whose version
+     * already has a build with this number or a higher one, so raise it by one
+     * before each upload. It reaches the app only through a prebuild. It is a
+     * literal rather than computed, so git records which build went up.
+     */
+    buildNumber: '1',
+
+    config: {
+      /**
+       * #108. Writes ITSAppUsesNonExemptEncryption = NO. The app's only
+       * encryption is HTTPS and WSS through the system, plus the Keychain, and
+       * both are exempt. With the key set, no upload waits on the
+       * export-compliance question.
+       */
+      usesNonExemptEncryption: false,
+    },
 
     /**
      * #83. An Icon Composer document rather than PNGs: one file carries the
@@ -211,10 +243,16 @@ const config: ExpoConfig = {
         disableFFmpeg: false,
 
         /**
-         * No microphone. `iosMicrophonePermission` is omitted, so the plugin
-         * writes no NSMicrophoneUsageDescription and the app never asks.
-         * OpenReader records nothing.
+         * #108. OpenReader records nothing and never asks for the microphone.
+         * Nothing calls `requestRecordingPermissions`, and the session category
+         * is `playback` (src/playback/audio-graph.ts), for which iOS never
+         * prompts. The purpose string is required anyway: the library's
+         * AudioSessionManager.mm calls `requestRecordPermission`, and App Store
+         * Connect rejects a binary that references that API without
+         * NSMicrophoneUsageDescription (ITMS-90683), whether or not the app
+         * calls it. expo/expo#33761 is the same rejection, from expo-audio.
          */
+        iosMicrophonePermission: 'OpenReader does not record audio and does not use the microphone.',
       },
     ],
 

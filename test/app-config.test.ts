@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { ExportedConfig, ExportedConfigWithProps, InfoPlist } from 'expo/config-plugins';
 import { describe, expect, it } from 'vitest';
@@ -70,8 +70,25 @@ describe('ADR 0012: playback keeps going with the screen locked', () => {
     expect(plugin('react-native-audio-api')?.disableFFmpeg).toBe(false);
   });
 
-  it('asks for no microphone, because OpenReader records nothing', () => {
-    expect(plugin('react-native-audio-api')).not.toHaveProperty('iosMicrophonePermission');
+  it('carries the microphone purpose string App Store Connect requires of the library (#108)', () => {
+    // AudioSessionManager.mm in react-native-audio-api calls
+    // requestRecordPermission. A binary that references it without
+    // NSMicrophoneUsageDescription is rejected (ITMS-90683), called or not.
+    expect(plugin('react-native-audio-api')?.iosMicrophonePermission).toEqual(expect.any(String));
+  });
+
+  it('never asks for the microphone, because OpenReader records nothing (#108)', () => {
+    // iOS shows the string above only when something asks. Nothing in src/
+    // requests recording permission or records, and a `playback` session
+    // never prompts for the microphone.
+    const root = new URL('../src/', import.meta.url);
+    const sources = (readdirSync(root, { recursive: true }) as string[]).filter((path) => /\.tsx?$/.test(path));
+    expect(sources.length).toBeGreaterThan(0);
+    for (const path of sources) {
+      const text = readFileSync(new URL(path, root), 'utf8');
+      expect(text, `src/${path}`).not.toMatch(/RecordingPermissions|AudioRecorder/);
+      for (const [call] of text.matchAll(/setAudioSessionOptions\(\{[^}]*\}/g)) expect(call, `src/${path}`).toMatch(/iosCategory: 'playback'/);
+    }
   });
 });
 
@@ -134,6 +151,26 @@ describe('AGENTS.md: every app change carries a beta version', () => {
     const [, base, beta] = shown!;
     if (beta === undefined) expect(base).toBe(manifest.version);
     else expect(isLater(base!, manifest.version), `${base} is not after ${manifest.version}`).toBe(true);
+  });
+});
+
+describe('#108: a fresh prebuild is one App Store Connect accepts', () => {
+  it('ships for iPhone only', () => {
+    // An iPad runs it in compatibility mode, in portrait, the tested layout.
+    // With iPad support, the iPad app allowed all four orientations, untested.
+    expect(config.ios?.supportsTablet).toBe(false);
+  });
+
+  it('declares no non-exempt encryption, so no upload waits on the export-compliance question', () => {
+    expect(config.ios?.config?.usesNonExemptEncryption).toBe(false);
+  });
+
+  it('gives CFBundleVersion as a whole number, raised by one for each upload', () => {
+    expect(config.ios?.buildNumber).toMatch(/^[1-9]\d*$/);
+  });
+
+  it('names the signing team, so a fresh ios/ signs without Xcode', () => {
+    expect(config.ios?.appleTeamId).toMatch(/^[A-Z0-9]{10}$/);
   });
 });
 
