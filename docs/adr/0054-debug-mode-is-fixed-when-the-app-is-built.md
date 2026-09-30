@@ -373,3 +373,194 @@ owner's phone come next. Unmeasured: that the phone persists and collects the
 that `devicectl` copies the folder whole (`debug-log.py` was run only against a
 stand-in `xcrun`, whole-folder copy, fallback and `--syslog` alike); that Web
 Inspector attaches; the Debug Log's real size per hour.
+
+## 2026-10-01: the reader's page writes to the Debug Log (#113)
+
+#112 was diagnosed through three `js` probes of the still-stuck app. Its Debug
+Log showed that the reading had run out of text (`known=468 section=33
+rendered=33/253` for 25 minutes, then the out-of-text note). It did not show
+why. Nothing from the reader's page reached the log except `problem` messages.
+The facts that located the fault were `rendition.manager.q` and
+`rendition.q` both `running` with 43 and 49 tasks waiting, section 34's view
+created and then removed before it displayed, and the scroll within the
+manager's offset. They are now written as they happen, in Debug Mode only.
+
+### Spliced in only in Debug Mode
+
+- **Where it lives.** `src/renderer/renderer-log.ts` holds the page's half as
+  source text, `RENDERER_LOG_SOURCE`: one function, `installRendererLog(env)`,
+  in the program's own dialect, as `glide.ts` does.
+- **How it gets in.** `highlighterSource` takes a fifth argument, `debugMode`.
+  `reader-bridge.ts` passes `DEBUG_MODE`, and the download indexer passes
+  nothing. When the argument is true, the source goes into the program's
+  closure just before `window.__openReaderHighlighter` is defined. Three lines
+  join it to the program:
+  - `installRendererLog({ rendition, asked, bySection, post })`;
+  - `renderAhead = rendererLog.traceRenderAhead(renderAhead)`;
+  - a `dispatch` wrapper. It answers the one message only Debug Mode sends,
+    `{ kind: 'snapshot', why }`, and it lets the watchdog look again at every
+    `speak`.
+  Both are function bindings, rebound. Their bodies are untouched, and #112's
+  fix may change them.
+- **Without it, the program is unchanged.** With the argument false, the
+  program text is byte-for-byte that of `4e3544c`. This was compared for
+  `highlighterSource()` and for `highlighterSource(…, 'dark', null)` together,
+  235,232 characters. So a build without Debug Mode posts none of these
+  messages, and has no branch for the snapshot. The Debug Mode program is
+  140,713 characters against 117,468 (`'light', null`).
+- **The tests.** `test/renderer/renderer-log.test.ts` runs the source in
+  `node:vm` against stand-ins written from the bundled epub.js (below). It also
+  pins the splice and the bridge's two `DEBUG_MODE` guards.
+
+### Two new messages, two new categories
+
+- **The categories.** The Debug Log now has thirteen categories. The two new
+  ones are `renderer` and `probe`.
+- **`openreader:renderer` `{ line }`.** The page posts a finished line. The
+  bridge writes it with `debugLog('renderer', line)` through `logFromPage`, and
+  only when `DEBUG_MODE` is on.
+- **`openreader:probe` `{ answer }`.** The harness's `js` command is now
+  `probeScript(code)` in `walkthrough-harness.ts`. It posts what the code
+  returned (`String(…)`), or `threw <error>`. The bridge writes each answer as
+  its own `[probe]` line and prints `HX PROBE <answer>` to the console.
+- **Probe answers leave the player's note.** A probe answer used to be a
+  `problem` message, so it became the player's note, and the note effect's line
+  under `[reading]`. A second answer 4 ms after the first replaced it before it
+  was written: at 01:59:13 the log has only `PROBE raf fired after 4ms …`.
+  Answers now go through no React state, so two answers that arrive together
+  are two lines.
+- **Scripts that need changing.** The kit's scripts that read answers out of
+  `note="…PROBE …"` need `HX PROBE` or `[probe]` instead.
+- **The app asks for displays too.** `goTo`, `goToSection` and `browse` write
+  `[renderer] the app asks epub.js to display … (goTo|goToSection|browse)`.
+  They reach the page through the library's `goToLocation`, whose injected
+  `rendition.display('…')` the page can name only as `injected code`.
+- **The status line.** It carries `app=active|inactive|background` from
+  `AppState.currentState`, right after `playing=`, so it still starts
+  `playing=` and the kit's `HX playing=` matches.
+
+### What the page hooks, read out of the bundled epub.js
+
+These are facts about `@epubjs-react-native/core` 1.4.8's
+`lib/commonjs/epubjs.js`, which the patch does not touch.
+
+- **`Queue`** (around line 1942).
+  - `enqueue(task, …args)` pushes `{ task, args, deferred, promise }` onto
+    `_q` and calls `run()` unless `running` or `paused`.
+  - `run()` sets `running = true` and calls `this.tick`, which is
+    `requestAnimationFrame`. On that frame it `dequeue()`s the first entry and
+    calls `run()` again only when the promise the task returned settles.
+  - So a task whose promise never settles leaves `running` true for good.
+    #112's queues were in that state.
+  - `dequeue()` calls the task bare inside the frame callback. A task that
+    throws synchronously therefore never settles either, and neither does the
+    queue.
+  - Both `enqueue` and `dequeue` are wrapped on each queue instance. The
+    wrappers label each entry with the task's name (a bound function's target,
+    an arrow function's source, cut), its first argument, and the first named
+    caller. They also keep the task in flight.
+- **`Views`** (around line 2281).
+  - `append`, `prepend` and `clear` are wrapped.
+  - `destroy(view)` is wrapped too. It is what removes a view's element, and
+    `remove` and `clear` call it through `this`.
+- **`IframeView`.**
+  - `display()` resolves once `render` has loaded the section into the view's
+    iframe.
+  - `destroy()` does nothing unless the view is `displayed`. A view removed
+    mid-display is therefore detached, and its `display()` never settles. In
+    #112 that was section 34.
+  - Each view's own `display` and `destroy` are wrapped as it is appended.
+- **The continuous manager.**
+  - `update()` enqueues `view.destroy.bind(view)` for a view out of reach, and
+    `this.trim.bind(this)` 250 ms later.
+  - `check()` enqueues an anonymous function bound to the manager that calls
+    `update()`.
+  - The program's own `holdStill` replaces `trim` and `check` with anonymous
+    functions. That is why #112's probe listed forty-one tasks as `bound `.
+  - Debug Mode adds pass-through `rlogTrim` and `rlogCheck` on top, only for
+    their names. The labels now read `trim@…` and `check@…`, and the
+    anonymous update reads `(anonymous)@check`.
+  - `resize()` calls `clear()`, which destroys every view, whenever
+    `stage.size()` differs from `_stageSize`. It is wrapped to write both sizes.
+- **`rendition.display(target)`** queues `_display` on `rendition.q`. It is
+  wrapped on the instance, which is what `follow()`, the resize recovery,
+  `onResized` and injected code all call.
+
+### The lines
+
+Every line is an event, never a word or a frame (ADR 0005). Examples, as the
+tests produce them (the `(anonymous)` callers are the test's own frames; on the
+phone they are epub.js's and the program's):
+
+- `installed: views [33 displayed 10559px]; manager queue idle, 0 waiting; rendition queue idle, 0 waiting; scroll top 9801 + client 812 of 10613, manager top 9801 bounds 812 offset 500 (check() would append); asked [], reported [0–33]; location 32–32 at "epubcfi(/6/66!/4/2/1:0)"; page visible`
+- `view 34 appended, views [33, 34] (append ← (anonymous) ← dequeue)`, then `view 34 displayed in 640 ms`
+- `view 34 removed before its display finished, 1200 ms after it started (remove ← (anonymous) ← (anonymous))`, then `view 34 has not finished displaying 10 s after it started (removed from the page 1.2 s after it started)`
+- `view 33 unloaded, out of reach ((anonymous) ← (anonymous) ← (anonymous))`; `views cleared: [33 not displayed 10559px, 34 displaying for 0 s] (display ← (anonymous) ← (anonymous))`
+- `stage resized from 402×812 to 402×700, every view cleared: [33 displayed 10559px]`
+- `display "epubcfi(/6/68!/4/2[chapter-34]/2/1:0)" asked by follow ← (anonymous) ← (anonymous); rendition queue idle, 0 waiting`; `display "about:srcdoc" (the library's answer to an iframe's about:srcdoc load) asked by onResized ← (anonymous) ← (anonymous); rendition queue running, 1 waiting`; `display finished: section 34`; `display failed: "Error: No Section Found"`
+- `renderAhead: section 34 asked for, the voice is in section 33, the last view`, then `renderAhead: section 34 done in 640 ms, views [33, 34]` or `… failed after 5 ms: "Error: …"`
+- `renderAhead: the voice is in section 33, nothing asked: section 34 was asked for already and has not reported`. A skip is written once for each section and reason, not once per Utterance. The reason is read from the same guards in the same order. Whether it asked is not inferred: it is whether it queued a task on the manager's queue while it ran, and that task is labelled `renderAhead(N)`.
+- `page hidden; manager queue …; rendition queue …` (`visibilitychange`)
+- `snapshot, the reading ran out of text: …`. `ranOutOfText` asks for it through `bridge.snapshot`.
+
+A snapshot has these parts:
+
+- each view, with its index and its state: `displayed` (with its height, and `dead document` if its document has lost its window), `displaying for N s` (with `no iframe` if it has none), or `not displayed`;
+- each queue, `running` or `idle`, with the task in flight and for how long, or `nothing in flight (waiting for a frame)`, and the waiting tasks grouped (`trim@stuck ×41`), eight kinds at most;
+- the container's `scrollTop`, `clientHeight` and `scrollHeight`, against the manager's own `scrollTop`, `_bounds.height` and `settings.offset`, and whether `check()` would append;
+- the sections `renderAhead` has asked for and those whose Blocks reported, as ranges;
+- `rendition.location` start and end index, and the start CFI cut to 80 characters;
+- `document.visibilityState`.
+
+**Callers.** A caller is the first three frames of `new Error().stack` past
+the page's own wrappers, which are all named `rlog…`. WebKit writes a frame as
+`name@place` and injected code as `global code`, which the line calls
+`injected code`. V8's `at name (place)` is parsed too, for the tests.
+
+### The watchdog
+
+- **The timer.** `window.setInterval(…, 1000)` looks at both queues. It never
+  uses `requestAnimationFrame`, which is the queues' own `tick`, so the
+  watchdog does not stop when they do.
+- **Progress.** A queue has made progress when a task has started or settled
+  since the last look, or when it is not `running`.
+- **Counting.** A look adds the time since the last look, but never more than
+  2 s (`LOOK_GAP_MS`). At 10 s counted (`STALL_MS`) it writes one line:
+  `manager queue stalled: running, and nothing started or finished for 10 s on
+  the clock (10 s counted); <snapshot>`. When the queue moves again it writes
+  one more: `manager queue moving again after 51 s on the clock (50 s
+  counted); …`. It writes nothing per tick.
+- **Why the counting is capped.** In #112's background the WebView ran a
+  median 7 ms each time iOS resumed it (notes, 02:20). A 1 s timer hardly
+  comes round there. So the `dispatch` wrapper also looks at every `speak`,
+  the Clip cue that wakes the WebView. Counted time is a bound on counting,
+  not a measure of how long the page ran: a stall in the background is written
+  after about five cues with nothing moving.
+- **A hidden page waiting for a frame is not counted.** A queue with nothing in
+  flight is waiting for a frame, and WebKit draws none for a hidden page.
+  Whether `visibilityState` turns `hidden` when the app goes to the background
+  was not measured. If it stays `visible`, a background spell with work queued
+  writes one stalled line and one moving-again line when the app comes back.
+
+### Limits kept
+
+- The page posts at most 200 lines in any 10 s. Past that it counts, and then
+  writes `N renderer lines dropped: more than 200 in 10 s`. That keeps a runaway
+  loop far under `BUFFERED_LINES`.
+- Each line is cut to 1,990 characters on the page, and the writer still cuts
+  at `LINE_CHARS`.
+- A target, a CFI or an error is quoted cut to `TEXT_CHARS` with `…`, never
+  half a surrogate pair. No document text is quoted.
+- Every line passes `withoutCredentials` in `debugLog`.
+- Every wrapper calls what it wraps with the same `this` and arguments and
+  returns its result, and every line is built inside a `try`.
+
+### Not verified here
+
+Nothing ran on a simulator or a phone. A device run must still show:
+
+- that WebKit's stack names the callers as the tests assume (`follow`,
+  `onResized`, `global code`);
+- whether `document.visibilityState` is `hidden` in the background;
+- that the snapshot a background `ranOutOfText` asks for reaches the log;
+- how many lines an hour of listening and a fast fling add.

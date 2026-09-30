@@ -45,6 +45,12 @@ export const TAP_MESSAGE = 'openreader:tap';
 /** The `type` of the message saying whether the page follows the reading. Same constraint. */
 export const FOLLOWING_STATE_MESSAGE = 'openreader:following';
 
+/** The `type` of a `[renderer]` Debug Log line from the page (#113). Same constraint. Posted only by a program built in Debug Mode. */
+export const RENDERER_MESSAGE = 'openreader:renderer';
+
+/** The `type` of a walkthrough harness `js` answer (#113). Same constraint. Posted only by the harness, which runs only in Debug Mode. */
+export const PROBE_MESSAGE = 'openreader:probe';
+
 /**
  * A **Block** as the WebView found it in the rendered document.
  *
@@ -214,7 +220,38 @@ export interface FollowingStateMessage {
   following: boolean;
 }
 
-export type WebViewMessage = BlocksMessage | DocumentMessage | FollowingStateMessage | ProblemMessage | TapMessage | SelectionMessage;
+/**
+ * One `[renderer]` line, finished on the page (`renderer-log.ts`, #113): an
+ * epub.js event — a view added, displayed or removed, a display asked for, a
+ * resize, `renderAhead`, a queue that stalls or moves again — or a snapshot.
+ * Never per word or per frame. The bridge writes it to the Debug Log as it is.
+ */
+export interface RendererMessage {
+  type: typeof RENDERER_MESSAGE;
+  line: string;
+}
+
+/**
+ * A walkthrough harness `js` answer (#113): what the probe's code returned, or
+ * `threw …`. Its own message, and not a `ProblemMessage`, so that it goes to
+ * the Debug Log as a line of its own and never becomes the player's note, where
+ * a second answer a few milliseconds later replaced the first before it was
+ * written (#112, 01:59:13).
+ */
+export interface ProbeMessage {
+  type: typeof PROBE_MESSAGE;
+  answer: string;
+}
+
+export type WebViewMessage =
+  | BlocksMessage
+  | DocumentMessage
+  | FollowingStateMessage
+  | ProblemMessage
+  | TapMessage
+  | SelectionMessage
+  | RendererMessage
+  | ProbeMessage;
 
 /** A half-open range of one Block's own text, in UTF-16 code units. */
 export interface BlockRange {
@@ -550,8 +587,22 @@ export interface BarMessage {
   reservedPx: number;
 }
 
+/**
+ * Write a `[renderer]` snapshot of epub.js now (#113): the views, both queues,
+ * the scroll against the manager's offset, the sections asked for and reported,
+ * the location and the page's visibility. Sent in Debug Mode only, when the
+ * reading runs out of text; a program built without Debug Mode has no branch
+ * for it.
+ */
+export interface SnapshotMessage {
+  kind: 'snapshot';
+  /** Why, in a few words, written into the line. */
+  why: string;
+}
+
 export type HighlightMessage =
   | LookupControlMessage
+  | SnapshotMessage
   | SpeakMessage
   | CorrectMessage
   | HoldMessage

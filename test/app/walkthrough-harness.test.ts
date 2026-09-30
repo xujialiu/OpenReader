@@ -1,3 +1,5 @@
+import vm from 'node:vm';
+
 import { createElement } from 'react';
 import { act, create } from 'react-test-renderer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -47,4 +49,35 @@ it('polls it four times a second in Debug Mode, and runs a command once per seq'
   expect(new Set(disk.opened)).toEqual(new Set(['Documents/harness.json']));
   expect(run).toHaveBeenCalledTimes(1);
   expect(run).toHaveBeenCalledWith({ seq: 1, do: 'go', route: 'Library' });
+});
+
+/**
+ * #113: a `js` probe's answer is a message of its own, which the bridge writes
+ * as a `[probe]` line, and never the player's note; and the status line says
+ * whether the app is in the foreground, beside the reading.
+ */
+it('posts a js probe’s answer, or what it threw, as a probe message and never as a problem', async () => {
+  const { probeScript } = await import('../../src/app/walkthrough-harness');
+  const { PROBE_MESSAGE } = await import('../../src/renderer/messages');
+  const posted: unknown[] = [];
+  const window = { ReactNativeWebView: { postMessage: (text: string) => posted.push(JSON.parse(text)) } };
+  expect(vm.runInNewContext(probeScript('return rendition.manager.q._q.length; // a comment ends the code'), { window, rendition: { manager: { q: { _q: [1, 2] } } } })).toBe(true);
+  vm.runInNewContext(probeScript('throw new Error("no manager")'), { window });
+  vm.runInNewContext(probeScript('var nothing = 1;'), { window });
+  expect(posted).toEqual([
+    { type: PROBE_MESSAGE, answer: '2' },
+    { type: PROBE_MESSAGE, answer: 'threw Error: no manager' },
+    { type: PROBE_MESSAGE, answer: 'undefined' },
+  ]);
+});
+
+it('writes the app’s state right after playing= in the status line', async () => {
+  const { statusLine } = await import('../../src/app/walkthrough-harness');
+  const status = {
+    playing: true, utterance: 467, known: 468, section: 33, rendered: { index: 33, href: 'c33.xhtml', spine: 253 },
+    level: 'word' as const, seeking: false, resume: null, note: null,
+  };
+  expect(statusLine(status, 'background')).toBe(
+    'playing=true app=background utterance=467 known=468 section=33 rendered=33/253 level=word seeking=false resume=null note=null',
+  );
 });

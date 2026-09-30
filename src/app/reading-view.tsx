@@ -39,11 +39,11 @@ import { LookupDrawer } from './lookup-drawer';
  */
 
 // WALKTHROUGH-HARNESS
-import { hlog, useHarnessCommands, type HarnessCommand } from './walkthrough-harness';
+import { hlog, probeScript, statusLine, useHarnessCommands, type HarnessCommand } from './walkthrough-harness';
 
 import { Reader, useReader } from '@epubjs-react-native/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { AppState, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { readLocator, type ReadingPlace, type ReadingPosition } from '../core/document';
 import { contentsOf, type NavigationEntry } from '../core/document/contents';
@@ -607,20 +607,14 @@ export function ReadingView({
       return;
     }
     if (what === 'js') {
-      injectJavascript(`(function(){try{var answer=(function(){${String(command.code)}})();
-        window.ReactNativeWebView.postMessage(JSON.stringify({type:'openreader:problem',utterance:-1,detail:'PROBE '+answer}));
-        }catch(e){window.ReactNativeWebView.postMessage(JSON.stringify({type:'openreader:problem',utterance:-1,detail:'PROBE threw '+e}));}})();true;`);
+      injectJavascript(probeScript(String(command.code)));
       return;
     }
   });
   const watched = useRef({ line: '', ticks: 0 });
   useEffect(() => {
     const timer = setInterval(() => {
-      const line =
-        `playing=${status.playing} utterance=${status.utterance} known=${status.known} ` +
-        `section=${status.section} rendered=${status.rendered?.index ?? null}/${status.rendered?.spine ?? null} ` +
-        `level=${status.level} seeking=${status.seeking} resume=${status.resume ? JSON.stringify(status.resume.slice(0, 60)) : null} ` +
-        `note=${status.note ? JSON.stringify(status.note.slice(0, 500)) : null}`;
+      const line = statusLine(status, AppState.currentState);
       watched.current.ticks += 1;
       if (line === watched.current.line && watched.current.ticks % 10 !== 0) return;
       watched.current.line = line;

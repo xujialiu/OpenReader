@@ -100,7 +100,8 @@
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
 import { BAKED_LINE_POSITION, BAKED_SCROLLING, GLIDE_SOURCE } from './glide';
 import type { HighlightMessage } from './messages';
-import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, PROBLEM_MESSAGE, TAP_MESSAGE, SELECTION_MESSAGE } from './messages';
+import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, PROBLEM_MESSAGE, RENDERER_MESSAGE, TAP_MESSAGE, SELECTION_MESSAGE } from './messages';
+import { RENDERER_LOG_SOURCE } from './renderer-log';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
 export const UTTERANCE_HIGHLIGHT = 'openreader-utterance';
@@ -555,6 +556,12 @@ export function highlighterSource(
    * indexer's — and so has nothing to measure for.
    */
   bodyTextSize: number | null = PLAIN_BODY_TEXT_SIZE,
+  /**
+   * Debug Mode (ADR 0054, #113): splice in `renderer-log.ts`, whose lines
+   * about epub.js reach the Debug Log. False leaves the program exactly as it
+   * is without it, so a build without Debug Mode cannot post one of them.
+   */
+  debugMode: boolean = false,
 ): string {
   const constants =
     'var WORD = ' + JSON.stringify(WORD_HIGHLIGHT) + ';\n' +
@@ -2976,7 +2983,7 @@ ${constants}
     }
   }
 
-  window.${HIGHLIGHTER} = function (message) {
+${debugMode ? rendererLogSplice() : ''}  window.${HIGHLIGHTER} = function (message) {
     if (!message) return;
     /* Every message is an eval of its own, so an uncaught throw here is lost —
        no stack reaches Hermes and nothing on the React Native side notices. It is
@@ -2994,4 +3001,32 @@ ${constants}
 })();
 true;
 `;
+}
+
+/**
+ * Debug Mode's addition to the program (#113): `renderer-log.ts`'s source, and
+ * the three lines that join it to the program's own names. Inside the
+ * program's closure, before its entry point, so that it can read the sections
+ * `renderAhead` asked for and the ones that reported, and wrap two function
+ * bindings without touching their bodies: `renderAhead`, so that each call says
+ * what it did, and `dispatch`, for the one message only Debug Mode sends and to
+ * let the watchdog look again at every Clip cue.
+ */
+function rendererLogSplice(): string {
+  return (
+    '  var RENDERER = ' + JSON.stringify(RENDERER_MESSAGE) + ';\n' +
+    RENDERER_LOG_SOURCE +
+    '  var rendererLog = installRendererLog({ rendition: rendition, asked: asked, bySection: bySection, ' +
+    'post: function (line) { post({ type: RENDERER, line: line }); } });\n' +
+    '  renderAhead = rendererLog.traceRenderAhead(renderAhead);\n' +
+    '  var dispatchPlain = dispatch;\n' +
+    "  dispatch = function (message) {\n" +
+    "    if (message && message.kind === 'snapshot') {\n" +
+    '      rendererLog.snapshot(message.why);\n' +
+    '      return;\n' +
+    '    }\n' +
+    "    if (message && message.kind === 'speak') rendererLog.watch();\n" +
+    '    dispatchPlain(message);\n' +
+    '  };\n'
+  );
 }

@@ -848,7 +848,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     expect(bridge).toContain("send({ kind: 'appearance', css: appearanceCss(next, bodyTextSize.current) })");
     // Built once, from the first render's options, and never rebuilt.
     expect(bridge).toContain(
-      "highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null)",
+      "highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null, DEBUG_MODE)",
     );
     // The theme is the same message-not-a-rebuild, and it is the same trap.
     expect(bridge).toContain("send({ kind: 'theme', css: themeCss(next) })");
