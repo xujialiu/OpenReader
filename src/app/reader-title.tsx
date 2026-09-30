@@ -6,7 +6,8 @@
  * line, and native-stack's `headerTitleStyle` has no line count, so a name
  * longer than the space between the two buttons lost its second half. This is
  * design 0042's second step: the phone's own title, copied rather than
- * remembered — 17-point semibold, centred, in the bar's text colour.
+ * remembered — the phone's Headline (`TEXT.headline`, 17-point semibold, the
+ * style the other bars' titles are handed too), centred, in the bar's text colour.
  *
  * **Not scaled by the owner's text size**, because the phone's own bar title is
  * not: two lines of a larger size would not fit the 54-point bar, and the bar
@@ -32,12 +33,10 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { INK } from './controls';
 import { NameText } from './name-text';
+import { TEXT } from './text-styles';
 
 /** The room each side of the title leaves for a button and the gap before it, in points (measured, above). */
 export const TITLE_SIDE = 81;
-
-/** The phone's own bar title: 17-point semibold (measured against it on the simulator, ADR 0057). */
-export const TITLE_SIZE = 17;
 
 export function ReaderTitle({ title }: { title: string }) {
   const { width } = useWindowDimensions();
@@ -51,5 +50,5 @@ export function ReaderTitle({ title }: { title: string }) {
 }
 
 const styles = StyleSheet.create({
-  title: { color: INK.text, fontSize: TITLE_SIZE, fontWeight: '600', textAlign: 'center' },
+  title: { ...TEXT.headline, color: INK.text, textAlign: 'center' },
 });

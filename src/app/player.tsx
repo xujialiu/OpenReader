@@ -42,6 +42,7 @@ import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { SkipTarget } from './use-reading';
 import { LoadingSpinner } from './loading-spinner';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /** The open player's padding above and below its rows: part of the height the Line Position is measured above (`onOpenHeight`). */
 const PLAYER_PADDING_TOP = 4;
@@ -504,8 +505,8 @@ const styles = StyleSheet.create({
   // the letter at 13 in the system font (#71).
   mark: { alignItems: 'center', borderRadius: 4, height: 26, justifyContent: 'center', width: 27 },
   markFollowing: { backgroundColor: INK.readingWash },
-  markLetter: { color: INK.text, fontSize: 13, fontWeight: '500' },
-  note: { color: INK.quiet, fontSize: 12, lineHeight: 17 },
+  markLetter: { ...TEXT_EMPHASIZED.footnote, color: INK.text },
+  note: { ...TEXT.caption1, color: INK.quiet },
   noteAttention: { color: INK.attention },
   player: {
     backgroundColor: INK.panel,
@@ -526,15 +527,15 @@ const styles = StyleSheet.create({
   rateTap: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   // A step above the voice's 14 beside it; at 13 it was the smallest thing on
   // the row of 24-point icons it ends.
-  rateLabel: { color: INK.text, fontSize: 15, fontVariant: ['tabular-nums'], fontWeight: '600' },
+  rateLabel: { ...TEXT_EMPHASIZED.subhead, color: INK.text, fontVariant: ['tabular-nums'] },
   bubble: { paddingHorizontal: 14, paddingVertical: 12 },
-  rate: { color: INK.text, fontSize: 17, fontVariant: ['tabular-nums'], fontWeight: '600', minWidth: 64, textAlign: 'center' },
+  rate: { ...TEXT.headline, color: INK.text, fontVariant: ['tabular-nums'], minWidth: 64, textAlign: 'center' },
   speed: { alignItems: 'center', flexDirection: 'row', gap: 16 },
   // Filled rather than outlined, the player's family of round buttons, at 36 with
   // `hitSlop` making up the 44-point target.
   step: { alignItems: 'center', backgroundColor: INK.line, borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
   transport: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   voice: { alignItems: 'center', justifyContent: 'center', maxWidth: '100%', minHeight: 44, minWidth: 44 },
-  voiceLabel: { color: INK.text, fontSize: 14, fontWeight: '500' },
+  voiceLabel: { ...TEXT.subhead, color: INK.text },
   voiceSlot: { alignItems: 'center', flex: 1 },
 });

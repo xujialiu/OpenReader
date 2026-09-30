@@ -442,8 +442,9 @@ describe('the Document’s name in the bar takes two lines before it is cut (#85
     // Two lines of a larger size would not fit the 54-point bar, and the phone's
     // own bar title does not scale either.
     const title = code('reader-title.tsx');
-    pin(title, 'export const TITLE_SIZE = 17;', 'reader-title.tsx');
-    pin(title, "fontSize: TITLE_SIZE, fontWeight: '600', textAlign: 'center'", 'reader-title.tsx');
+    // The phone's Headline, 17-point semibold, from the one place sizes are
+    // written (#99).
+    pin(title, "title: { ...TEXT.headline, color: INK.text, textAlign: 'center' }", 'reader-title.tsx');
     pin(title, 'allowFontScaling={false}', 'reader-title.tsx');
   });
 

@@ -55,6 +55,7 @@ import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
 import { SyncScreen } from './sync-screen';
+import { TEXT } from './text-styles';
 import { useLibrary } from './use-library';
 import { voiceLists } from './use-voices';
 import { useSync } from './use-sync';
@@ -328,7 +329,7 @@ export function OpenReader() {
                 // long-press menu, which still lists it.
                 headerBackButtonDisplayMode: 'minimal',
                 headerTintColor: PALETTE[scheme].text,
-                headerTitleStyle: { color: PALETTE[scheme].text },
+                headerTitleStyle: { ...TEXT.headline, color: PALETTE[scheme].text },
                 contentStyle: { backgroundColor: PALETTE[scheme].page },
               }}
             >

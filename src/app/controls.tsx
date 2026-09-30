@@ -208,8 +208,6 @@ const SETTINGS = {
   cardRadius: 26,
   /** Between one group and the next. The phone's varies from 30 to 40 with what is on either side; this is one number between. */
   groupGap: 32,
-  /** The text of a row, and of what it says on its right. */
-  fontSize: 17,
 } as const;
 
 /**
@@ -607,34 +605,34 @@ const styles = StyleSheet.create({
   coverImage: { width: '100%', height: '100%' },
   documentWords: { flex: 1, gap: 7, marginRight: DOCUMENT_ACTIONS.right + 2 * DOCUMENT_ACTIONS.padding + DOCUMENT_ACTIONS.icon - DOCUMENT_ROW_PADDING },
   documentTitle: { ...TEXT.headline, color: INK.text },
-  headerButton: { color: INK.text, fontSize: 16, fontWeight: '600' },
+  headerButton: { ...TEXT.body, color: INK.text },
   rowProgress: { ...TEXT.footnote, color: INK.quiet },
   settingsPage: { backgroundColor: INK.settingsPage, flex: 1 },
   settingsBody: { gap: SETTINGS.groupGap, paddingBottom: 64, paddingHorizontal: SETTINGS.margin, paddingTop: 16 },
-  groupTitle: { color: INK.secondary, fontSize: 17, fontWeight: '600', lineHeight: 22, marginBottom: 6, paddingHorizontal: SETTINGS.inset },
+  groupTitle: { ...TEXT.headline, color: INK.secondary, marginBottom: 6, paddingHorizontal: SETTINGS.inset },
   groupCard: { backgroundColor: INK.card, borderCurve: 'continuous', borderRadius: SETTINGS.cardRadius, overflow: 'hidden' },
   separator: { backgroundColor: INK.separator, bottom: 0, height: 1, left: SETTINGS.inset, position: 'absolute', right: SETTINGS.inset },
   groupFooter: { gap: 6, marginTop: 8, paddingHorizontal: SETTINGS.inset },
-  footnote: { color: INK.secondary, fontSize: 13, lineHeight: 16 },
+  footnote: { ...TEXT.footnote, color: INK.secondary },
   // One type scale with the phone's Settings: a row's label and what it says
   // are both 17, the value in the secondary grey.
   settingRow: { alignItems: 'center', flexDirection: 'row', gap: 12, justifyContent: 'space-between', minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 10 },
   rowPressed: { backgroundColor: INK.line },
-  settingLabel: { color: INK.text, fontSize: SETTINGS.fontSize, flexShrink: 1 },
-  settingDetail: { color: INK.secondary, fontSize: SETTINGS.fontSize, flexShrink: 1 },
+  settingLabel: { ...TEXT.body, color: INK.text, flexShrink: 1 },
+  settingDetail: { ...TEXT.body, color: INK.secondary, flexShrink: 1 },
   settingValue: { alignItems: 'center', flexDirection: 'row', gap: 4, flexShrink: 1 },
   // The glyph's own box leaves room on its right; pulled in so the chevron's
   // stroke ends where the phone's does, about 21 points from the card's edge.
   chevron: { marginRight: -3 },
   switchWords: { flexShrink: 1, gap: 2 },
-  rowNote: { color: INK.secondary, fontSize: 15, lineHeight: 20 },
+  rowNote: { ...TEXT.subhead, color: INK.secondary },
   fieldRow: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset },
   fieldRowWithAccessory: { paddingRight: 4 },
   fieldLabel: { flexShrink: 0 },
   // As tall as the row, so the whole of the row right of the name is the input.
-  fieldInput: { alignSelf: 'stretch', color: INK.text, flex: 1, fontSize: SETTINGS.fontSize, minWidth: 0, paddingVertical: 12 },
-  textRow: { color: INK.text, fontSize: SETTINGS.fontSize, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 12 },
-  actionLabel: { color: INK.reading, fontSize: SETTINGS.fontSize },
+  fieldInput: { ...TEXT.body, alignSelf: 'stretch', color: INK.text, flex: 1, minWidth: 0, paddingVertical: 12 },
+  textRow: { ...TEXT.body, color: INK.text, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 12 },
+  actionLabel: { ...TEXT.body, color: INK.reading },
   menuRow: { flex: 1 },
   locked: { opacity: 0.5 },
 });

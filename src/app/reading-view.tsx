@@ -57,6 +57,7 @@ import type { OpenDocument } from './document';
 import { Player } from './player';
 import { useReaderFileSystem } from './reader-file-system';
 import { useShell } from './routes';
+import { TEXT } from './text-styles';
 import { PROVIDER_LABELS, readiness, readinessSentence, type AppSettings } from './settings';
 import type { SecretPresence } from './use-provider-secrets';
 import { useReading, type ReadingStatus } from './use-reading';
@@ -712,5 +713,5 @@ const styles = StyleSheet.create({
   document: { backgroundColor: INK.page, flex: 1 },
   screen: { backgroundColor: INK.page, flex: 1 },
   waiting: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 32 },
-  waitingWords: { color: INK.quiet, fontSize: 15 },
+  waitingWords: { ...TEXT.subhead, color: INK.quiet },
 });

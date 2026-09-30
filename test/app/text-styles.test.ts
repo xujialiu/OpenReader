@@ -1,43 +1,51 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { TEXT, TEXT_EMPHASIZED } from '../../src/app/text-styles';
 
 /**
- * The app's text sizes are written in one place (#99): `text-styles.ts`, the
- * phone's own text styles. The drawers and the Library refer to them by name.
+ * The app's text sizes and weights are written in one place (#99):
+ * `text-styles.ts`, the phone's own text styles. Everything else refers to a
+ * style by name. The page's own text is Appearance's, and is set in the page.
  */
 
-const code = (file: string) => readFileSync(join(__dirname, '../../src/app', file), 'utf8');
+const APP = join(__dirname, '../../src/app');
+const code = (file: string) => readFileSync(join(APP, file), 'utf8');
 
-/** A size, line height or weight written as a number rather than taken from a style. */
-const WRITTEN = /\b(fontSize|lineHeight)\s*:\s*\d|\bfontWeight\s*:\s*['"]?\d/g;
+/**
+ * A size, a line height, or a weight not taken from a style. A weight may be
+ * taken on its own (`fontWeight: TEXT_EMPHASIZED.body.fontWeight`), for text
+ * that changes weight and nothing else when it is chosen.
+ */
+const WRITTEN = /\b(fontSize|lineHeight)\s*:|\bfontWeight\s*:(?!\s*TEXT(_EMPHASIZED)?\.)/g;
 
-/** The files wholly on the phone's styles. */
-const ON_STYLES = [
-  'sheet.tsx', 'reader-actions.tsx', 'appearance-sheet.tsx', 'download-sheet.tsx', 'contents-sheet.tsx',
-  'voice-sheet.tsx', 'lookup-drawer.tsx', 'library-screen.tsx', 'name-text.tsx',
-];
+const FILES = readdirSync(APP).filter((file) => /\.tsx?$/.test(file) && file !== 'text-styles.ts');
 
 describe('the phone’s text styles (#99)', () => {
-  it('are Apple’s Dynamic Type sizes at the default size', () => {
-    expect(TEXT.headline).toEqual({ fontSize: 17, lineHeight: 22, fontWeight: '600' });
-    expect(TEXT.body).toEqual({ fontSize: 17, lineHeight: 22, fontWeight: '400' });
-    expect(TEXT.subhead).toEqual({ fontSize: 15, lineHeight: 20, fontWeight: '400' });
-    expect(TEXT.footnote).toEqual({ fontSize: 13, lineHeight: 18, fontWeight: '400' });
+  it('are Apple’s Dynamic Type sizes and weights at the default size', () => {
+    expect(TEXT.headline).toEqual({ fontSize: 17, fontWeight: '600' });
+    expect(TEXT.body).toEqual({ fontSize: 17, fontWeight: '400' });
+    expect(TEXT.subhead).toEqual({ fontSize: 15, fontWeight: '400' });
+    expect(TEXT.footnote).toEqual({ fontSize: 13, fontWeight: '400' });
+    expect(TEXT.caption1).toEqual({ fontSize: 12, fontWeight: '400' });
     expect(TEXT_EMPHASIZED.body.fontWeight).toBe('600');
-    expect(TEXT_EMPHASIZED.title2).toEqual({ fontSize: 22, lineHeight: 28, fontWeight: '700' });
+    expect(TEXT_EMPHASIZED.title2).toEqual({ fontSize: 22, fontWeight: '700' });
   });
 
-  it.each(ON_STYLES)('%s writes no size, line height or weight of its own', (file) => {
+  it('leave the line height to the font, as the phone does', () => {
+    // The phone's own Settings sets a 13-point footer on a 16-point line
+    // (notes, 2026-09-23 17:18), where the HIG's table says 18.
+    for (const style of [...Object.values(TEXT), ...Object.values(TEXT_EMPHASIZED)]) {
+      expect(style).not.toHaveProperty('lineHeight');
+    }
+  });
+
+  it.each(FILES)('%s writes no size, line height or weight of its own', (file) => {
     expect(code(file).match(WRITTEN) ?? []).toEqual([]);
   });
 
-  it('the Library row and the note take theirs from the styles too', () => {
-    const controls = code('controls.tsx');
-    for (const style of ['note: { ...TEXT.footnote', 'documentTitle: { ...TEXT.headline', 'rowProgress: { ...TEXT.footnote']) {
-      expect(controls).toContain(style);
-    }
+  it('the navigation bars’ titles take theirs from the styles too', () => {
+    expect(code('shell.tsx')).toContain('headerTitleStyle: { ...TEXT.headline,');
   });
 });
