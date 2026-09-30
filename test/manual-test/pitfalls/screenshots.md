@@ -26,6 +26,16 @@
   two. Record the screen instead (`VIDEO=1`): `ffmpeg` or `cv2.VideoCapture`
   reads every frame, and the recording keeps the device's 1206×2622 pixels.
 
+- **A `simctl io screenshot` can return the screen as it was before the last
+  navigation.** Symptom (2026-09-30 10:40, #99, `iPhone 17 share95`, iOS 27.0):
+  after a tap opened the drawer's Rename page, `snapshot_ui` listed `Display
+  name` and `Save`, but `xcrun simctl io UDID screenshot` wrote the actions
+  drawer's menu page, byte for byte the size of the shot taken before the tap.
+  An earlier shot taken just after opening a book showed the Library. Cause not
+  found. Fix: check the screen with `snapshot_ui` before trusting a `simctl`
+  shot, or take it with `mobilebuildmcp`'s `screenshot`, which showed the
+  Rename page at once.
+
 ## Screenshots of the reading page
 
 - **The book's text is not in the accessibility tree.** Measured 2026-09-25
