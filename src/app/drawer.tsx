@@ -207,9 +207,12 @@ export interface DrawerAction {
  */
 type DrawerHeader = { onBack?(): void; action?: never } | { action: DrawerAction; onBack?: never };
 
-export function Drawer({ visible, title, onClose, onBack, action, children }: {
+export function Drawer({ visible, title, heading, onClose, onBack, action, children }: {
   visible: boolean;
+  /** The centred title; with `heading`, the name the heading's control is given for VoiceOver. */
   title: string;
+  /** A control drawn where the centred title goes, in its place: the lookup drawer's Dictionary | Translation. */
+  heading?: ReactNode;
   /** Called when the drawer is swiped away, and by VoiceOver's escape. Not by a tap outside: there is none. */
   onClose(): void;
   children: ReactNode;
@@ -234,7 +237,7 @@ export function Drawer({ visible, title, onClose, onBack, action, children }: {
         ]}>
           <RNHostView>
             <View style={styles.body} onAccessibilityEscape={onClose}>
-              <DrawerTitle title={title} onBack={onBack} action={action} />
+              <DrawerTitle title={title} heading={heading} onBack={onBack} action={action} />
               {children}
             </View>
           </RNHostView>
@@ -244,7 +247,7 @@ export function Drawer({ visible, title, onClose, onBack, action, children }: {
   );
 }
 
-function DrawerTitle({ title, onBack, action }: { title: string; onBack?(): void; action?: DrawerAction }) {
+function DrawerTitle({ title, heading, onBack, action }: { title: string; heading?: ReactNode; onBack?(): void; action?: DrawerAction }) {
   if (action) {
     return (
       <View style={styles.header}>
@@ -257,7 +260,7 @@ function DrawerTitle({ title, onBack, action }: { title: string; onBack?(): void
     <View style={styles.header}>
       {/* Absolute and inset by a button on both sides, so the title is centred on the drawer rather than on what the back button leaves of it. */}
       <View style={styles.titleCentred}>
-        <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>
+        {heading ?? <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>}
       </View>
       {onBack ? <RoundButton icon="previous" label={`Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : null}
     </View>
