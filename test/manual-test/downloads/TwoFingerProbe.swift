@@ -279,11 +279,20 @@ final class TwoFingerProbe: XCTestCase {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     app.activate()
     if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
-    // Closed and opened again, so each method starts from a drawer mounted afresh on the code Metro serves now.
-    if app.buttons["Close Download"].exists {
-      app.buttons["Close Download"].tap()
-      _ = until(5) { !app.buttons["Close Download"].exists }
+    // Back to the actions menu and in again, so each method starts from a Download page mounted afresh on the code
+    // Metro serves now. Since #117 the drawer is the phone's sheet, with no close button: its pages go back instead.
+    if app.buttons["Back from Manage"].exists {
+      app.buttons["Back from Manage"].tap()
       Thread.sleep(forTimeInterval: 0.5)
+    }
+    if app.buttons["Back from Download"].exists {
+      app.buttons["Back from Download"].tap()
+      _ = until(5) { !app.buttons["Back from Download"].exists }
+      Thread.sleep(forTimeInterval: 0.5)
+      XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 3))
+      app.buttons["Download"].tap()
+      XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ENDSWITH 'chapters downloaded'")).firstMatch.waitForExistence(timeout: 20))
+      return app
     }
     if !app.buttons["More actions"].waitForExistence(timeout: 3) {
       // Landed on the Library rather than a reader (a fresh launch, or state

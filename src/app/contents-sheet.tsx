@@ -36,34 +36,22 @@
  * says so), and in 仙逆's 2,076 rows the drawer stood empty for 1.4 s before
  * its rows came. A FlatList draws only the rows in view.
  *
- * It opens in two steps (`ContentsList`). First its rows start at the
- * current one, so that row is laid out at the top with nothing to estimate.
- * Then the rows before it are put back in front, under
- * `maintainVisibleContentPosition`, which holds the row in view where it was
- * while the list grows above it; those rows are drawn as the owner scrolls up,
- * at a height estimated from the ones measured, and corrected the same way.
- * `initialScrollIndex` without `getItemLayout` was tried first: it scrolled
- * to the row against rows above it estimated at nothing, and a drag up later
- * left the list blank (notes, 2026-10-01).
- *
- * The phone undoes that hold while the drawer moves: with Shadow Slave's long
- * Chapter 139 among the rows measured, the estimates are a few points out,
- * and the current row ended 14 to 27 pt too high after a swipe up, or after
- * opening. So until the owner scrolls the list, the current row is scrolled
- * back to the top whenever the list is laid out again.
+ * It opens at the current row in the two steps every long list in a drawer
+ * takes (`DrawerList`), because its rows' heights are not known before they
+ * are laid out.
  *
  * A sectioned list with sticky headers would have given the volumes a
  * different behaviour from the chapters for no gain; volumes are rows here,
  * like chapters, set in less far.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
+import { StyleSheet } from 'react-native';
 
 import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
 
 import { INK } from './controls';
-import { Drawer, DrawerFooter, DrawerRow, DrawerRowText } from './drawer';
+import { Drawer, DrawerFooter, DrawerList, DrawerRow, DrawerRowText } from './drawer';
 
 export interface ContentsSheetProps {
   visible: boolean;
@@ -102,6 +90,11 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
     [contents, section],
   );
 
+  const unfollowable = contents.rows.length > 0 && contents.unreachable === contents.rows.length;
+  const approximate = !!here && here.precision !== 'exact';
+  // Something said under the list, which then stops above it rather than running on to the drawer's edge.
+  const footer = unfollowable || approximate;
+
   return (
     <Drawer visible={visible} title="Contents" onClose={onClose}>
 
@@ -111,10 +104,16 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
             nothing else stops working: tapping a sentence still reads from there.
           </DrawerFooter>
         ) : (
-          <ContentsList rows={contents.rows} current={here?.row ?? null} onGo={(target) => { onGo(target); onClose(); }} />
+          // Mounted afresh at every opening of the drawer, which is when it opens again at the current row.
+          <DrawerList data={contents.rows} openAt={here?.row ?? null} ends={!footer}
+            // The row's place in the whole list.
+            keyExtractor={(_, index) => String(index)}
+            renderItem={({ item, index }) => (
+              <Row row={item} current={index === here?.row} onPress={() => { if (item.target !== null) { onGo(item.target); onClose(); } }} />
+            )} />
         )}
 
-        {contents.rows.length > 0 && contents.unreachable === contents.rows.length ? (
+        {unfollowable ? (
           <DrawerFooter attention>
             {!spineKnown
               ? 'The list of this book’s own files has not arrived yet, so no row can be opened. It arrives as the document installs.'
@@ -147,50 +146,6 @@ function precisionLine(precision: 'shared' | 'before'): string {
   return 'This page is not in the contents, so the nearest row before it is marked.';
 }
 
-/**
- * The rows, opened at the current one. Its own component because the drawer
- * mounts it afresh at every opening, which is when it starts again from the
- * current row.
- */
-function ContentsList({ rows, current, onGo }: { rows: readonly ContentsRow[]; current: number | null; onGo(target: number): void }) {
-  // The first row drawn: the current one at first, then, once that has been
-  // laid out at the top, the book's first.
-  const [from, setFrom] = useState(() => current ?? 0);
-  const shown = useMemo(() => rows.slice(from), [rows, from]);
-  const list = useRef<FlatList<ContentsRow>>(null);
-  const scrolled = useRef(false);
-  const frame = useRef<number | null>(null);
-  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
-  // Until the owner scrolls, the current row is put back at the top whenever
-  // the rows drawn above it, or the drawer moving, may have shifted it: a
-  // frame later, once the list has measured what changed.
-  const anchor = () => {
-    if (scrolled.current || from > 0 || current === null) return;
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(() => list.current?.scrollToIndex({ index: current, animated: false }));
-  };
-  return (
-    <FlatList
-      ref={list}
-      data={shown}
-      style={styles.list}
-      // The row's place in the whole list, so a row keeps its key when the rows above it arrive.
-      keyExtractor={(_, index) => String(from + index)}
-      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-      onContentSizeChange={() => { if (from > 0) setFrom(0); else anchor(); }}
-      onLayout={anchor}
-      onScrollBeginDrag={() => { scrolled.current = true; }}
-      // The current row is drawn by the time it is asked for; a row that is not yet is left where it is.
-      onScrollToIndexFailed={() => {}}
-      initialNumToRender={16}
-      windowSize={7}
-      renderItem={({ item, index }) => (
-        <Row row={item} current={current === from + index} onPress={() => { if (item.target !== null) onGo(item.target); }} />
-      )}
-    />
-  );
-}
-
 function Row({ row, current, onPress }: { row: ContentsRow; current: boolean; onPress(): void }) {
   const unreachable = row.target === null;
   return (
@@ -207,9 +162,6 @@ function Row({ row, current, onPress }: { row: ContentsRow; current: boolean; on
 }
 
 const styles = StyleSheet.create({
-  // As tall as its rows, and no taller than the drawer leaves it, so the
-  // footer sits under the last row of a short list.
-  list: { flexGrow: 0, flexShrink: 1 },
   current: { color: INK.reading },
   unreachable: { color: INK.quiet },
 });

@@ -45,6 +45,12 @@
  * theme, because a SwiftUI modifier cannot take an `INK` colour (a
  * `DynamicColorIOS`) and a border must not (ADR 0046).
  *
+ * The sheet is not tinted. A tint on it reaches, through UIKit, the phone's
+ * alerts raised over the drawer (Rename, Download's confirmations), and a
+ * tinted alert draws a disabled button in the tint, so a blank Rename's Save
+ * looked as ready as Cancel (notes, 2026-10-01 22:20; the owner's Q52). The
+ * alerts keep the phone's own colours; what the app draws keeps its amber.
+ *
  * ## A plain list, not cards
  *
  * Every drawer's rows sit straight on the drawer, inset as Apple Books inset
@@ -65,11 +71,17 @@
 
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import {
-  environment, presentationBackground, presentationBackgroundInteraction, presentationDetents,
-  presentationDragIndicator, tint,
+  environment, ignoreSafeArea, presentationBackground, presentationBackgroundInteraction, presentationDetents,
+  presentationDragIndicator,
 } from '@expo/ui/swift-ui/modifiers';
-import { useCallback, useContext, useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions, type AccessibilityState, type StyleProp, type TextStyle } from 'react-native';
+import {
+  createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
+  type ReactElement, type ReactNode,
+} from 'react';
+import {
+  FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
+  type AccessibilityRole, type AccessibilityState, type ColorValue, type FlatListProps, type StyleProp, type TextStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChoiceMenu, Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, type Choice } from './controls';
@@ -114,13 +126,16 @@ export const DRAWER = {
   row: DRAWER_LIST,
   /** From a list to the footer text under it, as the settings pages have it (`controls.tsx`). */
   footerGap: 8,
-  /** Below the last thing in a drawer, above the home indicator's safe area. */
+  /**
+   * Below the last thing in a drawer, above the home indicator's safe area.
+   * A list that ends the drawer runs on under both, to the sheet's bottom
+   * edge, as Books' contents do, and only its last row stops here
+   * (`DrawerList`, `DrawerScroll`).
+   */
   bottom: 16,
   /**
    * Per theme: the sheet (`page`), the line under a row, the marked row
-   * (Contents' current one), the round buttons' fill and rim, and the reading
-   * amber the phone's own controls are tinted with where it would use its
-   * blue (design 0042).
+   * (Contents' current one), and the round buttons' fill and rim.
    *
    * The light column is the settings pages' (`SETTINGS_SURFACE`, the
    * separator `INK.separator` draws there, `PALETTE.light.line`). The dark one
@@ -133,11 +148,11 @@ export const DRAWER = {
   colours: {
     light: {
       page: SETTINGS_SURFACE.light.page, separator: '#e8e8e8', mark: PALETTE.light.line,
-      button: SETTINGS_SURFACE.light.card, rim: PALETTE.light.line, accent: PALETTE.light.reading,
+      button: SETTINGS_SURFACE.light.card, rim: PALETTE.light.line,
     },
     dark: {
       page: SETTINGS_SURFACE.dark.card, separator: '#44444b', mark: '#3e3e47',
-      button: '#2c2c32', rim: '#3e3e47', accent: PALETTE.dark.reading,
+      button: '#2c2c32', rim: '#3e3e47',
     },
   },
 } as const;
@@ -148,6 +163,20 @@ export function useDrawerColours(): (typeof DRAWER.colours)[keyof typeof DRAWER.
   if (!scheme) throw new Error('A drawer was drawn outside the shell, which is what says whether the theme on screen is light or dark.');
   return { ...DRAWER.colours[scheme], scheme };
 }
+
+/**
+ * How far above the sheet's bottom edge a drawer's content ends: the home
+ * indicator's safe area and `DRAWER.bottom`. The sheet's content reaches the
+ * edge (`ignoreSafeArea`), and the drawer's body is padded by this, so words
+ * under a list stand clear of the home indicator. A list that ends the drawer
+ * runs on through the padding and pads its own content instead, so its rows
+ * reach the edge and its last row still scrolls clear.
+ *
+ * The first drawer stopped every list this far above the edge, and a drawer
+ * grown to full height showed a blank strip of 60 pt under its last row, where
+ * Books runs its rows on to the bottom of the screen (notes, 2026-10-01).
+ */
+const DrawerBottom = createContext<number>(DRAWER.bottom);
 
 /** The app's one queue of drawers (`drawer-turns.ts`). */
 const DRAWER_TURNS = createDrawerTurns();
@@ -191,10 +220,14 @@ export function useDrawerTurn(visible: boolean, close: () => void, { animated = 
   return { presented: visible && up, dismissed };
 }
 
-/** The one button at the right end of a title on the left: a Document's Share (batch 2 of #117). */
+/**
+ * The one button at the right end of the header. With an `icon` it is a round
+ * button showing only the icon, `label` being what VoiceOver says: a
+ * Document's Share. Without one it is a capsule with `label` in it: Download's
+ * Select all, as the phone puts a word in a toolbar.
+ */
 export interface DrawerAction {
-  icon: IconName;
-  /** What VoiceOver says. The button shows no words. */
+  icon?: IconName;
   label: string;
   onPress(): void;
   disabled?: boolean;
@@ -202,12 +235,16 @@ export interface DrawerAction {
 
 /**
  * The header's two forms. Centred, with a back button on its left when the
- * page was reached from another page of the same drawer; or the title on the
- * left and one action on its right, which is a Document's actions menu.
+ * page was reached from another page of the same drawer, and an action on its
+ * right when the page has one; or, `titleLeft`, the title on the left in up to
+ * two lines and one action on its right, which is a Document's actions menu
+ * (design 0057).
  */
-type DrawerHeader = { onBack?(): void; action?: never } | { action: DrawerAction; onBack?: never };
+type DrawerHeader =
+  | { titleLeft?: false; onBack?(): void; action?: DrawerAction }
+  | { titleLeft: true; action: DrawerAction; onBack?: never };
 
-export function Drawer({ visible, title, heading, onClose, onBack, action, children }: {
+export function Drawer({ visible, title, heading, onClose, onBack, action, titleLeft, children }: {
   visible: boolean;
   /** The centred title; with `heading`, the name the heading's control is given for VoiceOver. */
   title: string;
@@ -223,6 +260,7 @@ export function Drawer({ visible, title, heading, onClose, onBack, action, child
   const insets = useSafeAreaInsets();
   const opening = { height: drawerDetentHeight(settings.drawerHeight, { width: window.width, height: window.height, bottomInset: insets.bottom }) };
   const turn = useDrawerTurn(visible, onClose);
+  const bottom = insets.bottom + DRAWER.bottom;
   return (
     <Host style={styles.host} colorScheme={colours.scheme}>
       <BottomSheet isPresented={turn.presented} onDismiss={turn.dismissed}
@@ -233,12 +271,15 @@ export function Drawer({ visible, title, heading, onClose, onBack, action, child
           presentationBackgroundInteraction({ type: 'enabledUpThrough', detent: opening }),
           presentationBackground(colours.page),
           environment('colorScheme', colours.scheme),
-          tint(colours.accent),
+          // Down to the sheet's bottom edge, under the home indicator, so a list can run on to it (`DrawerBottom`).
+          ignoreSafeArea({ regions: 'container', edges: 'bottom' }),
         ]}>
           <RNHostView>
-            <View style={styles.body} onAccessibilityEscape={onClose}>
-              <DrawerTitle title={title} heading={heading} onBack={onBack} action={action} />
-              {children}
+            <View style={[styles.body, { paddingBottom: bottom }]} onAccessibilityEscape={onClose}>
+              <DrawerBottom value={bottom}>
+                <DrawerTitle title={title} heading={heading} onBack={onBack} action={action} titleLeft={!!titleLeft} />
+                {children}
+              </DrawerBottom>
             </View>
           </RNHostView>
         </Group>
@@ -247,23 +288,45 @@ export function Drawer({ visible, title, heading, onClose, onBack, action, child
   );
 }
 
-function DrawerTitle({ title, heading, onBack, action }: { title: string; heading?: ReactNode; onBack?(): void; action?: DrawerAction }) {
-  if (action) {
+function DrawerTitle({ title, heading, onBack, action, titleLeft }: { title: string; heading?: ReactNode; onBack?(): void; action?: DrawerAction; titleLeft: boolean }) {
+  // How far in the centred title is kept on both sides: past the wider of the two ends, so it is centred on the drawer.
+  const [actionWidth, setActionWidth] = useState(0);
+  if (titleLeft && action) {
     return (
       <View style={styles.header}>
         <Text style={[styles.title, styles.titleLeading]} accessibilityRole="header" numberOfLines={2}>{title}</Text>
-        <RoundButton icon={action.icon} label={action.label} onPress={action.onPress} disabled={action.disabled} drawn={DRAWER.button.action} />
+        <HeaderAction action={action} />
       </View>
     );
   }
+  const clear = DRAWER.button.side + Math.max(onBack ? DRAWER.button.size : 0, action ? actionWidth : 0, DRAWER.button.size);
   return (
     <View style={styles.header}>
-      {/* Absolute and inset by a button on both sides, so the title is centred on the drawer rather than on what the back button leaves of it. */}
-      <View style={styles.titleCentred}>
+      {/* Absolute, so the title, or the control drawn in its place, is centred on the drawer rather than on what the buttons leave of it. */}
+      <View style={[styles.titleCentred, { left: clear, right: clear }]}>
         {heading ?? <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>}
       </View>
-      {onBack ? <RoundButton icon="previous" label={`Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : null}
+      {onBack ? <RoundButton icon="previous" label={`Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : <View />}
+      {action ? <View onLayout={(event) => setActionWidth(event.nativeEvent.layout.width)}><HeaderAction action={action} /></View> : null}
     </View>
+  );
+}
+
+function HeaderAction({ action }: { action: DrawerAction }) {
+  return action.icon
+    ? <RoundButton icon={action.icon} label={action.label} onPress={action.onPress} disabled={action.disabled} drawn={DRAWER.button.action} />
+    : <CapsuleButton label={action.label} onPress={action.onPress} disabled={action.disabled} />;
+}
+
+/** A word in the header's right end, in the round button's capsule: the phone's toolbar draws a word as it draws an icon. */
+function CapsuleButton({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) {
+  const colours = useDrawerColours();
+  return (
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
+      style={({ pressed }) => [styles.button, styles.capsule, { backgroundColor: colours.button, borderColor: colours.rim },
+        (pressed || disabled) && styles.dimmed]}>
+      <Text style={styles.capsuleText} numberOfLines={1}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -290,31 +353,159 @@ function RoundButton({ icon, label, onPress, disabled, drawn }: {
  * One row of a drawer's list, straight on the drawer: at least 52 pt, as tall
  * as its words when they wrap, with its separator under it. `level` sets it in
  * by `DRAWER.row.indent` per level of a nested list; `marked` gives it the
- * mark's colour (Contents' current row). Without `onPress` it is not a button.
+ * mark's colour (Contents' current row). `icon` stands before the words, and
+ * `accessory` after them at the right: a value, a chevron, a check, a control.
+ * An accessory taller than a line is drawn over the row's padding rather than
+ * growing it, so a one-line row stays 52 pt.
+ *
+ * Without `onPress` it is a plain view, not a button, so it can be what a
+ * system menu draws (`ChoiceMenu`) or hold buttons of its own.
  */
-export function DrawerRow({ children, onPress, marked, level = 0, disabled, accessibilityState }: {
+export function DrawerRow({ children, onPress, marked, level = 0, disabled, icon, iconColour, accessory, accessibilityRole, accessibilityLabel, accessibilityState }: {
   children: ReactNode;
   onPress?(): void;
   marked?: boolean;
   level?: number;
   disabled?: boolean;
+  icon?: IconName;
+  /** The icon's colour, when it is not the words': Delete's red. */
+  iconColour?: ColorValue;
+  accessory?: ReactNode;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityLabel?: string;
   accessibilityState?: AccessibilityState;
 }) {
   const colours = useDrawerColours();
+  const line = (
+    <>
+      <View style={styles.rowLine}>
+        {icon ? <View style={styles.rowIcon}><Icon name={icon} color={iconColour ?? INK.text} size={DRAWER.row.icon} /></View> : null}
+        <View style={styles.rowWords}>{children}</View>
+        {accessory ? <View style={styles.rowAccessory}>{accessory}</View> : null}
+      </View>
+      <DrawerSeparator />
+    </>
+  );
+  const inset = { paddingLeft: DRAWER.row.textInset + level * DRAWER.row.indent };
+  if (!onPress) {
+    return (
+      <View accessibilityRole={accessibilityRole} accessibilityLabel={accessibilityLabel} accessibilityState={accessibilityState}
+        style={[styles.row, inset, marked && { backgroundColor: colours.mark }]}>
+        {line}
+      </View>
+    );
+  }
   return (
     <Pressable
-      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityRole={accessibilityRole ?? 'button'}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled, ...accessibilityState }}
       onPress={onPress}
-      disabled={disabled || !onPress}
-      style={({ pressed }) => [
-        styles.row, { paddingLeft: DRAWER.row.textInset + level * DRAWER.row.indent },
-        marked && { backgroundColor: colours.mark }, pressed && styles.pressed,
-      ]}
+      disabled={disabled}
+      style={({ pressed }) => [styles.row, inset, marked && { backgroundColor: colours.mark }, pressed && styles.pressed]}
     >
-      {children}
-      <DrawerSeparator />
+      {line}
     </Pressable>
+  );
+}
+
+/** At a row's right: the row opens a page. The settings pages' chevron, in the phone's tertiary grey. */
+export function DrawerChevron() {
+  return <View style={styles.chevron}><Icon name="next" color={INK.tertiary} size={22} strokeWidth={2} /></View>;
+}
+
+/** At a row's right: what the row is set to now, as the phone writes a row's value, in its secondary grey. */
+export function DrawerRowValue({ children }: { children: ReactNode }) {
+  return <Text style={styles.rowValue} numberOfLines={1}>{children}</Text>;
+}
+
+/**
+ * What a short page of a drawer scrolls in: as tall as its rows, and no
+ * taller than the drawer leaves it, so a page of seven fonts still reaches its
+ * last at a Drawer Height of 40 %.
+ */
+export function DrawerScroll({ children }: { children: ReactNode }) {
+  const bottom = useContext(DrawerBottom);
+  return <ScrollView style={[styles.scroll, { marginBottom: -bottom }]} contentContainerStyle={{ paddingBottom: bottom }}>{children}</ScrollView>;
+}
+
+/**
+ * A long list in a drawer: Contents' chapters, Download's. A `FlatList`, so
+ * that only the rows in view are drawn, with what both lists need of it.
+ *
+ * **It opens at a row** (`openAt`, #88), whose height, like every row's, is
+ * not known before it is laid out: titles wrap in full. So it opens in two
+ * steps. First its rows start at that one, so it is laid out at the top with
+ * nothing to estimate. Then the rows before it are put back in front, under
+ * `maintainVisibleContentPosition`, which holds the row where it was while the
+ * list grows above it; those rows are drawn as the owner scrolls up, at a
+ * height estimated from the ones measured, and corrected the same way.
+ * `initialScrollIndex` without `getItemLayout` was tried first: it scrolled to
+ * the row against rows above it estimated at nothing, and a drag up later left
+ * the list blank (notes, 2026-10-01 16:35).
+ *
+ * The phone undoes that hold while the drawer moves: with Shadow Slave's long
+ * Chapter 139 among the rows measured, the row ended 14 to 27 pt too high
+ * after a swipe up, or after opening. So until the owner touches the list, or
+ * its rows change in number under it, the row is scrolled back to the top
+ * whenever the list is laid out again.
+ *
+ * `renderItem` and `keyExtractor` are given each row's index in the whole of
+ * `data`, so a row keeps its key when the rows above it arrive.
+ *
+ * **It ends the drawer** (`ends`) when nothing is under it: then it runs on to
+ * the sheet's bottom edge, under the home indicator (`DrawerBottom`).
+ */
+export function DrawerList<T>({ data, openAt = null, ends = false, listRef, keyExtractor, renderItem, style, contentContainerStyle,
+  onContentSizeChange, onLayout, onScrollBeginDrag, onTouchStart, ...list }:
+  Omit<FlatListProps<T>, 'data' | 'keyExtractor' | 'renderItem'> & {
+    data: readonly T[];
+    /** The row to open at, as an index into `data`, or null for the top. Read once, when the list is mounted. */
+    openAt?: number | null;
+    ends?: boolean;
+    listRef?(list: FlatList<T> | null): void;
+    keyExtractor(item: T, index: number): string;
+    renderItem(row: { item: T; index: number }): ReactElement | null;
+  }) {
+  const bottom = useContext(DrawerBottom);
+  // The first row drawn: the one opened at, then, once that has been laid out at the top, the first.
+  const [from, setFrom] = useState(() => openAt ?? 0);
+  const shown = useMemo(() => (from > 0 ? data.slice(from) : data), [data, from]);
+  const flat = useRef<FlatList<T> | null>(null);
+  const holding = useRef(openAt !== null && openAt > 0);
+  // How many rows there were when the rows above came back; another number means they are other rows.
+  const rows = useRef<number | null>(null);
+  const frame = useRef<number | null>(null);
+  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
+  useEffect(() => { if (rows.current !== null && rows.current !== data.length) holding.current = false; }, [data.length]);
+  const anchor = () => {
+    if (!holding.current || from > 0 || openAt === null) return;
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    // A frame later, once the list has measured what changed.
+    frame.current = requestAnimationFrame(() => flat.current?.scrollToIndex({ index: openAt, animated: false }));
+  };
+  return (
+    <FlatList
+      initialNumToRender={16}
+      windowSize={7}
+      // The row is drawn by the time it is asked for; a row that is not yet is left where it is.
+      onScrollToIndexFailed={() => {}}
+      {...list}
+      ref={(next) => { flat.current = next; listRef?.(next); }}
+      data={shown}
+      style={[styles.list, style, ends && { marginBottom: -bottom }]}
+      contentContainerStyle={[contentContainerStyle, ends && { paddingBottom: bottom }]}
+      keyExtractor={(item, index) => keyExtractor(item, from + index)}
+      renderItem={({ item, index }) => renderItem({ item, index: from + index })}
+      maintainVisibleContentPosition={openAt !== null && openAt > 0 ? { minIndexForVisible: 0 } : undefined}
+      onContentSizeChange={(width, height) => {
+        onContentSizeChange?.(width, height);
+        if (from > 0) { rows.current = data.length; setFrom(0); } else anchor();
+      }}
+      onLayout={(event) => { onLayout?.(event); anchor(); }}
+      onScrollBeginDrag={(event) => { holding.current = false; onScrollBeginDrag?.(event); }}
+      onTouchStart={(event) => { holding.current = false; onTouchStart?.(event); }}
+    />
   );
 }
 
@@ -366,17 +557,14 @@ export function DrawerFooter({ children, attention }: { children: ReactNode; att
 const styles = StyleSheet.create({
   // The sheet is presented from the window, not from here; the host only has to exist.
   host: { position: 'absolute', bottom: 0, right: 0, width: 1, height: 1 },
-  body: { flex: 1, paddingBottom: DRAWER.bottom },
+  body: { flex: 1 },
   header: {
     alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', gap: 12,
     marginBottom: DRAWER.header.gap, marginTop: DRAWER.header.top, minHeight: DRAWER.header.height,
     paddingHorizontal: DRAWER.button.side,
   },
   title: { ...TEXT.headline, color: INK.text },
-  titleCentred: {
-    bottom: 0, justifyContent: 'center', left: DRAWER.button.side + DRAWER.button.size, position: 'absolute',
-    right: DRAWER.button.side + DRAWER.button.size, top: 0,
-  },
+  titleCentred: { bottom: 0, justifyContent: 'center', position: 'absolute', top: 0 },
   titleCentredText: { textAlign: 'center' },
   titleLeading: { flex: 1 },
   button: {
@@ -388,6 +576,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center', minHeight: DRAWER.row.rowHeight, paddingRight: DRAWER.row.inset,
     paddingVertical: DRAWER.row.padding,
   },
+  rowLine: { alignItems: 'center', flexDirection: 'row', gap: DRAWER.row.gap },
+  rowIcon: { marginVertical: -DRAWER.row.padding },
+  rowWords: { flex: 1 },
+  // Over the row's padding, up to the row's edges, rather than growing it.
+  rowAccessory: { alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: DRAWER.row.gap / 2, marginVertical: -DRAWER.row.padding },
+  rowValue: { ...drawerRowText(false), color: INK.secondary, flexShrink: 1 },
+  // The settings rows' chevron (`controls.tsx`): its ink ends at the words' right inset.
+  chevron: { marginRight: -3 },
+  scroll: { flexGrow: 0, flexShrink: 1 },
+  // As tall as its rows, and no taller than the drawer leaves it, so what is under a short list sits under its last row.
+  list: { flexGrow: 0, flexShrink: 1 },
+  capsule: { paddingHorizontal: 16, width: undefined },
+  capsuleText: { ...TEXT.body, color: INK.reading },
   pressed: { opacity: 0.65 },
   rowText: { ...drawerRowText(false), color: INK.text },
   rowTextEmphasized: { ...drawerRowText(true), color: INK.text },

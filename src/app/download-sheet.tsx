@@ -1,19 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { chapterTextCount, descendants, fullyPrepared, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
 import { INK, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
 import { listedInManage, marker, readingChapter, type Marker } from './download-rows';
+import { DRAWER, DrawerList, DrawerRow, DrawerRowText, type DrawerAction } from './drawer';
 import { Icon } from './icon';
 import { useSweep } from './use-sweep';
-import { TEXT, TEXT_EMPHASIZED } from './text-styles';
+import { TEXT } from './text-styles';
 
 /**
- * The line above the list: the download's state, for when its rows are out of
- * sight, and what went wrong. Paused is not among them, because Resume all
- * below the list already says it (#56).
+ * The download's state, on its own line above the list for when its rows are
+ * out of sight, with what went wrong. Paused has no words: Resume all, at the
+ * end of the same line, already says it (#56).
  */
 const STATE_LINE: Partial<Record<TaskState, string>> = {
   preparing: 'Preparing selected chapter…', downloading: 'Downloading…', queued: 'Queued', waiting: 'No network connection, waiting to reconnect',
@@ -22,33 +23,51 @@ const STATE_LINE: Partial<Record<TaskState, string>> = {
 const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.length ? `${task.failed.length} chapters failed` : 'Selected chapters downloaded' : STATE_LINE[task.state];
 
 /**
- * How far the drawer's content is set in from its sides. The list alone runs to
- * the sides, and its rows set themselves back in by as much, so that the list's
- * scroll indicator runs down the drawer's edge rather than over the rings at
- * the end of each row (#89).
- */
-const SIDE = 20;
-/** A row's least height: one line of title and nothing under it, which is most rows. */
-const ROW = 62;
-/** Where the list guesses a row it has not laid out yet to be (#88). */
-const layout = (_: unknown, index: number) => ({ length: ROW, offset: ROW * index, index });
-/** How long after its first content the list keeps bringing the row being read back to its top. */
-const SETTLE_MS = 1500;
-
-/**
+ * **Download**, and **Manage**, two pages of a Document's actions drawer
+ * (#117), laid out as Contents is.
+ *
+ * The chapters are the drawer's plain list (`DrawerList`, `DrawerRow`): each
+ * title in full, set in by its level, the chapter being read marked as Contents
+ * marks it, and the list opened at it (#88). Each row keeps its own controls at
+ * its right, in one column so they line up: the selection circle, the check of
+ * a chapter saved, the ring of one being written, and a volume's arrow before
+ * them. Two fingers over the list select the rows under them (#57, ADR 0045).
+ *
+ * Over the list: the voice, the count, and the download's state with Pause all
+ * or Resume all at its end. Under it, fixed whatever the list is scrolled to:
+ * the other voices with saved audio, and Download selected, or on Manage,
+ * Delete all saved audio and Delete selected. Select all is the drawer's header
+ * action, handed up through `onSelectAll`, because only this knows the rows.
+ *
+ * `manage` is which page this is. Manage lists only what has audio to delete
+ * (#37), and is reached from Download's count line, since it manages what the
+ * count counts.
+ *
  * @param section The spine item the reading is in, as the Contents is given it,
  * or null when there is none: the row it names is marked, and the list opens at
  * it (#88).
  */
-export function DownloadContent({ document, title, voice, section, onVoice, onStart }: {
-  document: string; title: string; voice: OfflineVoice; section: number | null; onVoice?(voice: OfflineVoice): void; onStart?(): void;
+export function DownloadContent({ document, title, voice, section, manage, onManage, onSelectAll, onVoice, onStart }: {
+  document: string; title: string; voice: OfflineVoice; section: number | null;
+  manage: boolean;
+  /** Go to Manage (`true`), or back to Download. */
+  onManage(open: boolean): void;
+  /** The header's Select all / Deselect all, or null when this page is gone. */
+  onSelectAll: Dispatch<SetStateAction<DrawerAction | null>>;
+  onVoice?(voice: OfflineVoice): void; onStart?(): void;
 }) {
   downloads.useDownloads();
   const borders = useBorders();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [manage, setManage] = useState(false);
   const [managedVoice, setManagedVoice] = useState<OfflineVoice | null>(null);
+  // Going to Manage and back starts a fresh selection, in the download's own voice.
+  const [page, setPage] = useState(manage);
+  if (page !== manage) {
+    setPage(manage);
+    setSelected(new Set());
+    setManagedVoice(null);
+  }
   const choice = manage && managedVoice ? managedVoice : voice;
   useEffect(() => { downloads.requestPlan(document, title); }, [document, title]);
   const plan = downloads.planOf(document);
@@ -78,66 +97,33 @@ export function DownloadContent({ document, title, voice, section, onVoice, onSt
     for (let parent = chapter.parent; parent; parent = byId.get(parent)?.parent ?? null) if (collapsed.has(parent)) return false;
     return true;
   };
-  // What the download view lists; Manage downloads lists fewer (#37).
+  // What Download lists; Manage lists fewer (#37).
   const rows = chapters.filter((c) => (textual(c) || parents.has(c.id)) && unfolded(c));
   const visible = listed ? chapters.filter((c) => listed.has(c.id) && unfolded(c)) : rows;
   // Two fingers over the list select the rows under them (#57).
   const sweep = useSweep({ shown: visible, chapters, collapsed, choosable: eligibleIds, selected }, setSelected);
-  // Found among the download view's rows even in Manage downloads, which marks
-  // it only if it lists it: its nearest listed row would be another chapter.
+  // Found among Download's rows even in Manage, which marks it only if it
+  // lists it: its nearest listed row would be another chapter.
   const here = readingChapter(rows, section);
   const hereIndex = here === null ? -1 : visible.findIndex((c) => c.id === here);
-  const list = useRef<FlatList<Chapter> | null>(null);
-  const sweepRef = sweep.list.ref;
-  const attach = useCallback((flat: FlatList<Chapter> | null) => { sweepRef(flat); list.current = flat; }, [sweepRef]);
-  /**
-   * The list opens at the row being read, as Contents does (#88): once, when
-   * its rows first appear, and never again, so switching to Manage downloads or
-   * to another voice leaves the list where the owner has it.
-   *
-   * Without `getItemLayout` the list will not scroll past the last row it has
-   * measured, which grows ten rows a batch, so a far row was never reached
-   * (ADR 0027, #88). Rows differ a little in height, so `layout` is a guess at
-   * every row's least height: it lets the list go straight to where the row
-   * should be, and once the rows there are laid out their measured places take
-   * over from it. So the row is asked for again whenever the content changes
-   * size, until the owner touches the list or it has had a moment to settle,
-   * counted from the list's first content rather than from the open: in the
-   * reader that came 1.4 s after it.
-   */
-  const opened = useRef(false);
-  const settling = useRef<{ id: string; until: number | null } | null>(null);
-  const shown = useRef(visible);
-  useEffect(() => { shown.current = visible; });
-  const settle = useCallback((content = 0) => {
-    const now = settling.current;
-    if (!now) return;
-    if (now.until === null && content > 0) now.until = Date.now() + SETTLE_MS;
-    const index = shown.current.findIndex((c) => c.id === now.id);
-    if (index < 0 || (now.until !== null && Date.now() > now.until)) { settling.current = null; return; }
-    list.current?.scrollToIndex({ index, animated: false });
-  }, []);
-  useEffect(() => {
-    if (opened.current || !visible.length) return;
-    opened.current = true;
-    if (hereIndex <= 0) return;
-    settling.current = { id: visible[hereIndex].id, until: null };
-    settle();
-  }, [visible, hereIndex, settle]);
-  const stopSettling = () => { settling.current = null; };
-  const { onLayout: sweepLayout, onContentSizeChange: sweepSize } = sweep.list;
-  const listLayout = useCallback((event: LayoutChangeEvent) => { sweepLayout(event); settle(); }, [sweepLayout, settle]);
-  const listSize = useCallback((width: number, height: number) => {
-    sweepSize(width, height);
-    settle(height);
-  }, [sweepSize, settle]);
+
+  // The header's Select all, whose press always reads the rows as they are now.
+  const everything = useRef<() => void>(() => {});
+  useEffect(() => { everything.current = () => toggle(eligible.map((c) => c.id)); });
+  const pressAll = useCallback(() => everything.current(), []);
+  const allLabel = eligible.length && chosen.length === eligible.length ? 'Deselect all' : 'Select all';
+  const noneEligible = !eligible.length;
+  useEffect(() => { onSelectAll({ label: allLabel, onPress: pressAll, disabled: noneEligible }); }, [allLabel, noneEligible, pressAll, onSelectAll]);
+  useEffect(() => () => onSelectAll(null), [onSelectAll]);
+
   const full = chapters.filter(textual).length;
   const completed = [...progress.values()].filter((p) => p.complete).length;
   const whole = !!plan && fullyPrepared(plan) && full > 0 && completed === full;
   const state = downloads.indexingState(document);
   const otherVoices = downloads.savedVoices(document).filter((v) => !downloads.sameVoice(v, choice) && downloads.occupied(document, v) > 0);
-  // Nothing saved for any voice and nothing under way: there is nothing to manage, so the link is not offered (#37).
-  const manageable = manage || downloads.occupied(document) > 0 || downloads.downloadTasks(document).some((t) => t.state !== 'done');
+  // Nothing saved for any voice and nothing under way: there is nothing to manage, so Manage is not offered (#37).
+  const manageable = downloads.occupied(document) > 0 || downloads.downloadTasks(document).some((t) => t.state !== 'done');
+  const status = task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length && whole) ? task : null;
   const act = () => {
     try {
       if (manage) Alert.alert('Delete downloaded audio?', 'The document and reading position will be kept.', [
@@ -173,94 +159,123 @@ export function DownloadContent({ document, title, voice, section, onVoice, onSt
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => {
         void downloads.removeDownloads(document).then(() => {
-          setSelected(new Set()); setManage(false); setManagedVoice(null); downloads.requestPlan(document, title);
+          setSelected(new Set()); onManage(false); downloads.requestPlan(document, title);
         }, (e) => Alert.alert('Could not delete audio', String(e)));
       } },
     ]);
-  return <View style={styles.content}>
-    <View style={styles.top}><Text style={styles.voice} numberOfLines={2}>Voice · {choice.label || 'Choose a voice in the player'}</Text>
-      <Pressable accessibilityRole="button" onPress={() => toggle(eligible.map((c) => c.id))} disabled={!eligible.length}>
-        <Text style={[styles.link, !eligible.length && { color: INK.quiet }]}>{eligible.length && chosen.length === eligible.length ? 'Deselect all' : 'Select all'}</Text>
-      </Pressable></View>
+
+  const chapterRow = (item: Chapter) => {
+    const children = chapters.some((c) => c.parent === item.id);
+    const group = descendants(chapters, item.id);
+    const ids = group.map((c) => c.id).filter((id) => eligibleIds.has(id));
+    const done = group.length > 0 && group.every((c) => progress.get(c.id)?.complete);
+    const picked = ids.length > 0 && ids.every((id) => selected.has(id));
+    const count = progress.get(item.id)?.count ?? 0;
+    const failed = !!task?.failed.includes(item.id);
+    const mark = children ? null : markers.get(item.id);
+    // Marked as Contents marks the row being read (#88), on both pages.
+    const current = item.id === here;
+    const name = item.title || 'Untitled chapter';
+    const label = `${name}${current ? ', being read' : ''}`;
+    const folded = collapsed.has(item.id);
+    const arrow = children ? <Pressable accessibilityRole="button" accessibilityLabel={`${folded ? 'Expand' : 'Collapse'} ${item.title}`} hitSlop={8}
+      onPress={() => setCollapsed((was) => { const next = new Set(was); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}
+      style={styles.arrow}>
+      <Icon name={folded ? 'next' : 'down'} color={INK.quiet} size={20} strokeWidth={2} />
+    </Pressable> : null;
+    const words = <>
+      <DrawerRowText emphasized={current || children} style={current && styles.current}>{name}</DrawerRowText>
+      {!done && (count || failed) ? <Text style={styles.count}>{failed ? 'Failed · ' : ''}{count} / {chapterTextCount(item)}</Text> : null}
+    </>;
+    if (mark?.kind === 'ring' && task) {
+      return <DrawerRow level={item.depth} marked={current} accessibilityLabel={label}
+        accessory={<>{arrow}<DownloadRing fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={() => downloads.toggleChapter(task, item.id)} /></>}>
+        {words}
+      </DrawerRow>;
+    }
+    const box = done && !manage ? <Icon name="check" color={INK.reading} size={22} />
+      : ids.length || !children ? <View style={[styles.circle, { borderColor: picked ? borders.reading : borders.quiet }, picked && styles.checked]}>
+        {picked ? <Icon name="check" color={INK.page} size={17} /> : null}
+      </View> : <View style={styles.column} />;
+    return <DrawerRow level={item.depth} marked={current} onPress={() => toggle(ids)} disabled={!ids.length}
+      accessibilityRole="checkbox" accessibilityLabel={`${label}${done ? ', downloaded' : ''}`} accessibilityState={{ checked: picked, disabled: !ids.length }}
+      accessory={<>{arrow}{box}</>}>
+      {words}
+    </DrawerRow>;
+  };
+
+  const { ref: sweepRef, ...sweepList } = sweep.list;
+  return <View style={styles.page}>
+    <View style={styles.lines}>
+      <Text style={styles.voice} numberOfLines={2}>Voice · {choice.label || 'Choose a voice in the player'}</Text>
+      {downloads.downloadError() ? <Text style={styles.error}>{downloads.downloadError()}</Text> : null}
+      {plan && !progressReady ? <Text style={styles.secondary}>Checking saved downloads…</Text> : null}
+      {plan ? <View style={styles.line}>
+        <Text style={[styles.secondary, styles.grow]}>{manage ? `${downloads.formatBytes(downloads.occupied(document, choice))} saved` : `${completed} chapters downloaded`}</Text>
+        {!manage && manageable ? <Pressable accessibilityRole="button" onPress={() => onManage(true)} hitSlop={8} style={styles.manage}>
+          <Text style={styles.link}>Manage downloads</Text><Icon name="next" color={INK.reading} size={16} strokeWidth={2} />
+        </Pressable> : null}
+      </View> : null}
+      {status ? <View style={styles.line}>
+        <Text style={[styles.secondary, styles.grow]}>{stateLine(status)}{status.error ? `\n${status.error}` : ''}</Text>
+        {status.state === 'done' ? status.failed.length ? <Pressable accessibilityRole="button" hitSlop={8} onPress={() => downloads.toggleTask(status)}>
+          <Text style={styles.link}>Retry failed</Text>
+        </Pressable> : null : <Pressable accessibilityRole="button" hitSlop={8} onPress={() => downloads.toggleTask(status)}>
+          <Text style={styles.link}>{downloads.goesOn(status) ? 'Pause all' : 'Resume all'}</Text>
+        </Pressable>}
+      </View> : null}
+    </View>
     {!plan ? <View style={styles.preparing}>
       {state?.state !== 'failed' ? <ActivityIndicator /> : null}
       <Text style={styles.secondary}>{state?.error ?? 'Loading contents…'}</Text>
       {state?.state === 'failed' ? <Pressable onPress={() => downloads.requestPlan(document, title)}><Text style={styles.link}>Try again</Text></Pressable> : null}
-    </View> : null}
-    {downloads.downloadError() ? <Text style={styles.error}>{downloads.downloadError()}</Text> : null}
-    {plan && !progressReady ? <Text style={styles.secondary}>Checking saved downloads…</Text> : null}
-    {plan ? <Text style={styles.secondary}>{manage ? `${downloads.formatBytes(downloads.occupied(document, choice))} saved` :
-      `${completed} chapters downloaded`}</Text> : null}
-    {task && task.chapters.length > 0 && !manage && task.state !== 'paused' && !(task.state === 'done' && !task.failed.length && whole) ? <View style={styles.top}>
-      <Text style={[styles.secondary, { flex: 1 }]}>{stateLine(task)}{task.error ? `\n${task.error}` : ''}</Text>
-      {task.state === 'done' && task.failed.length ? <Pressable accessibilityRole="button" onPress={() => downloads.toggleTask(task)}>
-        <Text style={styles.link}>Retry failed</Text>
-      </Pressable> : null}
-    </View> : null}
-    <GestureDetector gesture={sweep.gesture}><FlatList {...sweep.list} ref={attach} getItemLayout={layout} onLayout={listLayout} onContentSizeChange={listSize} onTouchStart={stopSettling} data={visible} style={styles.list} keyExtractor={(c) => c.id} initialNumToRender={14}
-      ListEmptyComponent={plan && !manage ? <Text style={[styles.secondary, styles.inset]}>No readable text in this document.</Text> : null}
-      renderItem={({ item }) => {
-        const children = chapters.some((c) => c.parent === item.id);
-        const group = descendants(chapters, item.id);
-        const ids = group.map((c) => c.id).filter((id) => eligibleIds.has(id));
-        const done = group.length > 0 && group.every((c) => progress.get(c.id)?.complete);
-        const picked = ids.length > 0 && ids.every((id) => selected.has(id));
-        const count = progress.get(item.id)?.count ?? 0;
-        const failed = !!task?.failed.includes(item.id);
-        const mark = children ? null : markers.get(item.id);
-        // Marked as Contents marks the row being read (#88), across the whole drawer.
-        const current = item.id === here;
-        const label = `${item.title || 'Untitled chapter'}${current ? ', being read' : ''}`;
-        const name = <Text style={[styles.title, children && styles.titleParent, current && styles.titleCurrent]} numberOfLines={2}
-          accessibilityLabel={label}>{item.title || 'Untitled chapter'}</Text>;
-        return <View style={current ? styles.current : null}><View style={[styles.row, { borderBottomColor: borders.line, paddingLeft: 4 + Math.min(item.depth, 4) * 15 }]}>
-          {children ? <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed.has(item.id) ? 'Expand' : 'Collapse'} ${item.title}`}
-            onPress={() => setCollapsed((was) => { const next = new Set(was); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} style={styles.collapse}>
-            <Icon name={collapsed.has(item.id) ? 'next' : 'down'} color={INK.quiet} size={18} />
-          </Pressable> : null}
-          {mark?.kind === 'ring' && task ? <View style={styles.chapter}><View style={{ flex: 1 }}>{name}</View>
-            <DownloadRing fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={() => downloads.toggleChapter(task, item.id)} />
-          </View> :
-          <Pressable accessibilityRole="checkbox" accessibilityLabel={`${label}${done ? ', downloaded' : ''}`}
-            accessibilityState={{ checked: picked, disabled: !ids.length }} disabled={!ids.length} onPress={() => toggle(ids)} style={styles.chapter}>
-            <View style={{ flex: 1 }}>{name}
-              {!done && (count || failed) ? <Text style={styles.secondary}>{failed ? 'Failed · ' : ''}{count} / {chapterTextCount(item)}</Text> : null}</View>
-            {done && !manage ? <Icon name="check" color={INK.reading} size={22} /> :
-              ids.length || !children ? <View style={[styles.circle, { borderColor: picked ? borders.reading : borders.quiet }, picked && styles.checked]}>{picked ? <Icon name="check" color={INK.page} size={17} /> : null}</View> : null}
-          </Pressable>}
-        </View></View>;
-      }} /></GestureDetector>
-    {otherVoices.length ? <View style={styles.other}>{otherVoices.map((v) => <Pressable key={`${v.provider}/${v.voice}`} accessibilityRole="button"
-      onPress={() => { setSelected(new Set()); stopSettling(); if (manage) setManagedVoice(v); else onVoice?.(v); }}><Text style={styles.link}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</Text></Pressable>)}</View> : null}
-    <View style={styles.footer}>
-      {manageable ? <View style={styles.top}>
-        <Pressable accessibilityRole="button" onPress={() => { setSelected(new Set()); stopSettling(); setManage(!manage); setManagedVoice(null); }}><Text style={styles.link}>{manage ? 'Back to downloads' : 'Manage downloads'}</Text></Pressable>
-        {manage ? downloads.occupied(document) > 0 ? <Pressable accessibilityRole="button" onPress={deleteEverything}>
-          <Text style={[styles.link, { color: INK.attention }]}>Delete all saved audio</Text>
-        </Pressable> : null :
-        // Where Manage downloads offers Delete all saved audio: the whole download, where a ring is one chapter (#56).
-        task && task.state !== 'done' ? <Pressable accessibilityRole="button" onPress={() => downloads.toggleTask(task)}>
-          <Text style={styles.link}>{downloads.goesOn(task) ? 'Pause all' : 'Resume all'}</Text>
-        </Pressable> : null}
-      </View> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={manage ? `Delete selected (${chosen.length})` : `Download selected (${chosen.length})`}
-        disabled={!progressReady || !downloads.downloadsReady() || !chosen.length || !choice.voice || !!downloads.downloadError()} onPress={act}
-        style={[styles.button, (!chosen.length || !choice.voice) && { opacity: 0.35 }]}>
-        <Text style={styles.buttonText}>{manage ? 'Delete selected' : 'Download selected'} ({chosen.length})</Text>
-      </Pressable>
-    </View>
+    </View> : <GestureDetector gesture={sweep.gesture}>
+      <DrawerList {...sweepList} listRef={sweepRef} data={visible} openAt={hereIndex > 0 ? hereIndex : null} style={styles.list}
+        keyExtractor={(c) => c.id} renderItem={({ item }) => chapterRow(item)}
+        ListEmptyComponent={!manage ? <Text style={[styles.secondary, styles.empty]}>No readable text in this document.</Text> : null} />
+    </GestureDetector>}
+    {otherVoices.map((v) => <DrawerRow key={`${v.provider}/${v.voice}`}
+      onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.(v); }}>
+      <DrawerRowText style={styles.action}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</DrawerRowText>
+    </DrawerRow>)}
+    {manage && downloads.occupied(document) > 0 ? <DrawerRow onPress={deleteEverything}>
+      <DrawerRowText style={styles.destructive}>Delete all saved audio</DrawerRowText>
+    </DrawerRow> : null}
+    <Pressable accessibilityRole="button" accessibilityLabel={manage ? `Delete selected (${chosen.length})` : `Download selected (${chosen.length})`}
+      disabled={!progressReady || !downloads.downloadsReady() || !chosen.length || !choice.voice || !!downloads.downloadError()} onPress={act}
+      style={[styles.button, (!chosen.length || !choice.voice) && styles.unready]}>
+      <Text style={styles.buttonText}>{manage ? 'Delete selected' : 'Download selected'} ({chosen.length})</Text>
+    </Pressable>
   </View>;
 }
+
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: SIDE, gap: 12, flexShrink: 1 }, inset: { paddingHorizontal: SIDE }, top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  voice: { ...TEXT.subhead, color: INK.text, flex: 1 }, link: { ...TEXT.subhead, color: INK.reading, paddingVertical: 8 },
-  secondary: { ...TEXT.footnote, color: INK.quiet }, error: { ...TEXT.footnote, color: INK.text },
-  preparing: { padding: 20, gap: 14, alignItems: 'center' }, list: { height: 330, flexGrow: 0, flexShrink: 1, marginHorizontal: -SIDE },
-  row: { minHeight: ROW, flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, marginHorizontal: SIDE },
-  current: { backgroundColor: INK.page }, titleCurrent: { color: INK.reading, fontWeight: TEXT_EMPHASIZED.body.fontWeight },
-  titleParent: { fontWeight: TEXT_EMPHASIZED.body.fontWeight },
-  chapter: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12, paddingVertical: 12 }, title: { ...TEXT.body, color: INK.text },
-  collapse: { width: 30, alignItems: 'center', justifyContent: 'center' }, circle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  // The whole drawer under the header, so the button stays at its bottom whatever the list holds.
+  page: { flex: 1 },
+  lines: { gap: 4, paddingBottom: 8, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
+  line: { alignItems: 'center', flexDirection: 'row', gap: 16 },
+  grow: { flex: 1 },
+  voice: { ...TEXT.subhead, color: INK.text },
+  secondary: { ...TEXT.footnote, color: INK.quiet },
+  error: { ...TEXT.footnote, color: INK.text },
+  link: { ...TEXT.subhead, color: INK.reading },
+  manage: { alignItems: 'center', flexDirection: 'row', gap: 2 },
+  preparing: { alignItems: 'center', flex: 1, gap: 14, padding: 20 },
+  // Fills what the lines and the button leave it, so the button is at the drawer's bottom.
+  list: { flexGrow: 1 },
+  empty: { paddingLeft: DRAWER.row.textInset, paddingTop: 12 },
+  current: { color: INK.reading },
+  count: { ...TEXT.footnote, color: INK.quiet },
+  arrow: { alignItems: 'center', height: 44, justifyContent: 'center', width: 24 },
+  circle: { alignItems: 'center', borderRadius: 12, borderWidth: 1.5, height: 24, justifyContent: 'center', width: 24 },
   checked: { backgroundColor: INK.reading },
-  footer: { gap: 6 }, button: { backgroundColor: INK.text, borderRadius: 24, alignItems: 'center', paddingVertical: 15 }, buttonText: { ...TEXT.headline, color: INK.page }, other: { gap: 4 },
+  column: { width: 24 },
+  action: { color: INK.reading },
+  destructive: { color: INK.attention },
+  button: {
+    alignItems: 'center', backgroundColor: INK.text, borderRadius: 24, marginHorizontal: DRAWER.row.inset, marginTop: 12,
+    paddingVertical: 15,
+  },
+  unready: { opacity: 0.35 },
+  buttonText: { ...TEXT.headline, color: INK.page },
 });

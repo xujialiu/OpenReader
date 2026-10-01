@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { READING_FONTS, stepFontSize, stepMargins, TEXT_ALIGNMENTS, type Appearance, type TextAlignment } from '../renderer/highlighter';
-import { ChoiceMenu, INK, useBorders, type Choice } from './controls';
+import { INK, type Choice } from './controls';
+import { Drawer, DrawerChevron, DrawerMenuRow, DrawerRow, DrawerRowText, DrawerRowValue, DrawerScroll, useDrawerColours } from './drawer';
+import { drawerRowText } from './drawer-list';
 import { Icon } from './icon';
-import { Sheet } from './sheet';
-import { TEXT } from './text-styles';
 
 /** What "follow the document" is called where the owner reads it: the book's own, not "the document font". */
 export const ORIGINAL_FONT = 'Original Book Font';
@@ -19,8 +19,12 @@ const ALIGNMENT_CHOICES: readonly Choice<TextAlignment>[] = TEXT_ALIGNMENTS.map(
   ...({ left: { label: 'Left', icon: 'text.alignleft' }, justify: { label: 'Justify', icon: 'text.justify' } } as const)[value],
 }));
 
-/** The row's height, which the menu is laid out at (`ChoiceMenu`). */
-const ROW_HEIGHT = 56;
+/**
+ * The phone's own stepper, copied: a 94 × 32 capsule of two 47-pt halves
+ * (notes, 2026-10-01 11:45, the `Form`'s Stepper row). Ours has the number
+ * between the halves (design 0030, #17), so it is as much wider as the number.
+ */
+const STEPPER = { height: 32, half: 47 } as const;
 
 /**
  * A row that steps a number along a ladder: its name, then minus, the number
@@ -36,45 +40,48 @@ function StepperRow<T extends number>({ label, name, value, step, onStep }: {
   step(value: T, direction: 1 | -1): T | null;
   onStep(next: T): void;
 }) {
+  const colours = useDrawerColours();
   const button = (direction: 1 | -1) => {
     const next = step(value, direction);
     const disabled = next === null;
     return <Pressable accessibilityRole="button" accessibilityLabel={`${direction < 0 ? 'Decrease' : 'Increase'} ${name}`}
-      accessibilityState={{ disabled }} disabled={disabled} style={[styles.step, disabled && { opacity: 0.3 }]}
+      accessibilityState={{ disabled }} disabled={disabled} hitSlop={{ top: 6, bottom: 6 }} style={[styles.step, disabled && styles.ended]}
       onPress={() => { if (next !== null) onStep(next); }}>
-      <Icon name={direction < 0 ? 'minus' : 'plus'} color={INK.text} size={26} />
+      <Icon name={direction < 0 ? 'minus' : 'plus'} color={INK.text} size={22} />
     </Pressable>;
   };
-  return <View style={styles.row}><Text style={styles.label}>{label}</Text><View style={styles.stepper}>
-    {button(-1)}<Text style={styles.size}>{value}</Text>{button(1)}
-  </View></View>;
+  return <DrawerRow accessory={<View style={[styles.stepper, { backgroundColor: colours.button }]}>
+    {button(-1)}<Text style={styles.number}>{value}</Text>{button(1)}
+  </View>}>
+    <DrawerRowText>{label}</DrawerRowText>
+  </DrawerRow>;
 }
 
+/**
+ * Appearance's rows, as the drawer's plain list (#117). Each change goes to
+ * the page behind as it is made, which the drawer leaves in view.
+ *
+ * A row is one entry of this list, so another kind of row, such as the
+ * highlight colours (#118), goes in as one more entry.
+ */
 export function AppearanceControls({ appearance, onChange, onFonts }: {
   appearance: Appearance; onChange(next: Appearance): void; onFonts(): void;
 }) {
   const chosen = READING_FONTS.find((font) => font.id === appearance.font)?.label ?? ORIGINAL_FONT;
-  return <View style={styles.content}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Font, ${chosen}`} onPress={onFonts} style={styles.row}>
-      <Text style={styles.label}>Font</Text>
-      <View style={styles.value}><Text style={styles.detail} numberOfLines={1}>{chosen}</Text><Icon name="next" color={INK.quiet} size={18} /></View>
-    </Pressable>
+  return <DrawerScroll>
+    <DrawerRow onPress={onFonts} accessibilityLabel={`Font, ${chosen}`}
+      accessory={<><DrawerRowValue>{chosen}</DrawerRowValue><DrawerChevron /></>}>
+      <DrawerRowText>Font</DrawerRowText>
+    </DrawerRow>
     <StepperRow label="Font Size" name="font size" value={appearance.size} step={stepFontSize}
       onStep={(size) => onChange({ ...appearance, size })} />
     {/* Above Alignment, where the owner put it (#84). */}
     <StepperRow label="Margins" name="margins" value={appearance.margins} step={stepMargins}
       onStep={(margins) => onChange({ ...appearance, margins })} />
-    <ChoiceMenu label="Alignment" choices={ALIGNMENT_CHOICES} chosen={appearance.textAlignment} height={ROW_HEIGHT}
-      onChoose={(textAlignment) => onChange({ ...appearance, textAlignment })}>
-      <View style={styles.row}>
-        <Text style={styles.label}>Alignment</Text>
-        <View style={styles.value}>
-          <Text style={styles.detail} numberOfLines={1}>{ALIGNMENT_CHOICES.find((choice) => choice.value === appearance.textAlignment)?.label}</Text>
-          <Icon name="menu" color={INK.quiet} size={18} />
-        </View>
-      </View>
-    </ChoiceMenu>
-  </View>;
+    {/* The system's own menu (ADR 0035), in the drawer's menu row, which is set in to its words so the drawer stays on screen while the menu is open (#117). */}
+    <DrawerMenuRow label="Alignment" choices={ALIGNMENT_CHOICES} chosen={appearance.textAlignment}
+      onChoose={(textAlignment) => onChange({ ...appearance, textAlignment })} />
+  </DrawerScroll>;
 }
 
 /**
@@ -88,45 +95,34 @@ export function AppearanceControls({ appearance, onChange, onFonts }: {
  */
 export function FontList({ appearance, onChange }: { appearance: Appearance; onChange(next: Appearance): void }) {
   const rows = [null, ...READING_FONTS.map((font) => font.id)] as const;
-  const borders = useBorders();
-  return <ScrollView style={styles.fonts}>
+  return <DrawerScroll>
     {rows.map((id) => {
       const font = READING_FONTS.find((one) => one.id === id);
       const chosen = appearance.font === id;
-      return <Pressable key={id ?? 'document'} accessibilityRole="button" accessibilityState={{ selected: chosen }}
-        accessibilityLabel={font?.label ?? ORIGINAL_FONT} onPress={() => onChange({ ...appearance, font: id })}
-        style={({ pressed }) => [styles.fontRow, { borderBottomColor: borders.line }, pressed && { opacity: 0.5 }]}>
-        <Text style={[styles.fontChoice, font?.preview ? { fontFamily: font.preview } : null]} numberOfLines={1}>
-          {font?.label ?? ORIGINAL_FONT}
-        </Text>
-        {chosen ? <Icon name="check" color={INK.reading} size={20} /> : null}
-      </Pressable>;
+      return <DrawerRow key={id ?? 'document'} accessibilityState={{ selected: chosen }} accessibilityLabel={font?.label ?? ORIGINAL_FONT}
+        onPress={() => onChange({ ...appearance, font: id })}
+        accessory={chosen ? <Icon name="check" color={INK.reading} size={20} strokeWidth={2.2} /> : null}>
+        <DrawerRowText style={font?.preview ? { fontFamily: font.preview } : null}>{font?.label ?? ORIGINAL_FONT}</DrawerRowText>
+      </DrawerRow>;
     })}
-  </ScrollView>;
+  </DrawerScroll>;
 }
 
+/** Appearance on its own, opened by the walkthrough harness (`appearsheet`); the owner reaches it through a Document's actions. */
 export function AppearanceSheet(props: { visible: boolean; onClose(): void; document: string; appearance: Appearance; onChange(next: Appearance): void }) {
   const [fonts, setFonts] = useState(false);
-  return <Sheet visible={props.visible} title={fonts ? 'Fonts' : 'Appearance'}
+  return <Drawer visible={props.visible} title={fonts ? 'Fonts' : 'Appearance'}
     onClose={() => { setFonts(false); props.onClose(); }} onBack={fonts ? () => setFonts(false) : undefined}>
     {fonts ? <FontList appearance={props.appearance} onChange={props.onChange} />
       : <AppearanceControls {...props} onFonts={() => setFonts(true)} />}
-  </Sheet>;
+  </Drawer>;
 }
 
 const styles = StyleSheet.create({
-  // The phone's Body for a row's label and for what it says, in the quiet ink,
-  // as on the settings pages (#99).
-  content: { paddingHorizontal: 20 },
-  row: { minHeight: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  label: { ...TEXT.body, color: INK.text },
-  value: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
-  detail: { ...TEXT.body, color: INK.quiet, flexShrink: 1 },
-  fonts: { flexGrow: 0, maxHeight: 420 },
-  fontRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: 12, paddingHorizontal: 20, borderBottomWidth: StyleSheet.hairlineWidth },
-  fontChoice: { ...TEXT.body, color: INK.text, flexShrink: 1 },
-  stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: INK.line, borderRadius: 30 },
-  step: { width: 62, height: 44, alignItems: 'center', justifyContent: 'center' },
-  size: { ...TEXT.body, color: INK.text, fontVariant: ['tabular-nums'], minWidth: 24, textAlign: 'center' },
+  // Over the row's padding, so the row stays 52 pt, as the phone's Stepper row is.
+  stepper: { alignItems: 'center', borderRadius: STEPPER.height / 2, flexDirection: 'row', height: STEPPER.height },
+  step: { alignItems: 'center', height: STEPPER.height, justifyContent: 'center', width: STEPPER.half },
+  ended: { opacity: 0.3 },
+  // The drawer's row, with the menu's host between its insets rather than across them.
+  number: { ...drawerRowText(false), color: INK.text, fontVariant: ['tabular-nums'], minWidth: 24, textAlign: 'center' },
 });

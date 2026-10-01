@@ -1,18 +1,21 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { readLocator, type DocumentId, type ReadingPosition } from '../core/document';
 import { spineIndexOf } from '../renderer';
 import { AppearanceControls, FontList } from './appearance-sheet';
-import { INK, useBorders } from './controls';
+import { INK } from './controls';
+import { Drawer, DrawerChevron, DrawerFooter, DrawerRow, DrawerRowText, DrawerScroll, type DrawerAction } from './drawer';
 import { DownloadContent } from './download-sheet';
-import { Icon } from './icon';
 import { useHeldReading } from './reading-host';
+import { RenameAlert } from './rename-alert';
 import { useShell } from './routes';
 import { PROVIDER_LABELS, selectVoice, settingsForDocument } from './settings';
 import { shareDocument } from './share-document';
-import { Sheet, SheetNote } from './sheet';
 import { knownVoice } from './voice-catalog';
-import { TEXT } from './text-styles';
+
+/** The drawer's pages, and the page each goes back to. The menu is the first, and goes back to nothing. */
+const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', download: 'menu', manage: 'download' } as const;
+type Page = keyof typeof BACK;
+const TITLES: Record<Exclude<Page, 'menu'>, string> = { appearance: 'Appearance', fonts: 'Fonts', download: 'Download', manage: 'Manage' };
 
 /**
  * A Document's actions, as one drawer wherever it is asked for.
@@ -34,11 +37,15 @@ import { TEXT } from './text-styles';
  * shares the book the title names. It is offered wherever the drawer is, since
  * the file is the same from the Library and from the reader. The drawer stays
  * open under the share sheet, so cancelling comes back to it; a failure is said
- * here, above the rows, because this is where the owner is looking.
+ * here, under the rows, because this is where the owner is looking.
+ *
+ * **Pages** (#117). The menu's rows are the drawer's plain list; a row that
+ * opens a page has a chevron. Every page has a back button to the page it was
+ * opened from (`BACK`), and a swipe down closes the drawer from any of them.
+ * Rename is not a page but the phone's alert over the menu (`RenameAlert`).
  */
 export function ReaderActions({ document, onClose, onDelete, appearance = false }: { document: DocumentId; onClose(): void; onDelete?(): void; appearance?: boolean }) {
   const { library, settings, setSettings } = useShell();
-  const borders = useBorders();
   const entry = library.entries.find((e) => e.id === document);
   const held = useHeldReading().current;
   /**
@@ -47,61 +54,53 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false 
    * agree; otherwise the section of the place it was left at.
    */
   const section = (held?.id === document ? held.section : null) ?? sectionOf(entry?.position ?? null);
-  const [page, setPage] = useState<'menu' | 'appearance' | 'rename' | 'download' | 'fonts'>('menu');
-  const [name, setName] = useState(entry?.title ?? '');
+  const [page, setPage] = useState<Page>('menu');
+  const [renaming, setRenaming] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [unshared, setUnshared] = useState<string | null>(null);
+  // Download's Select all, which only Download knows the rows for.
+  const [selectAll, setSelectAll] = useState<DrawerAction | null>(null);
   const current = settingsForDocument(settings, entry?.voice ?? null);
   const voice = { provider: current.provider, voice: current.voice, label: current.voice ? knownVoice(current)?.label ?? `${PROVIDER_LABELS[current.provider]} · ${current.voice}` : '' };
   if (!entry) return null;
-  const titles = { menu: entry.title, appearance: 'Appearance', rename: 'Rename', download: 'Download', fonts: 'Fonts' };
-  const rows: readonly ('appearance' | 'rename' | 'download')[] = appearance ? ['appearance', 'rename', 'download'] : ['rename', 'download'];
   const share = () => {
     setSharing(true);
     setUnshared(null);
     shareDocument(entry).catch((problem: unknown) => setUnshared(problem instanceof Error ? problem.message : String(problem))).finally(() => setSharing(false));
   };
-  // Only Fonts goes back, because only Fonts is a page inside a page. The three
-  // pages off the menu are dismissed rather than returned from, which is what
-  // the drag on the handle already does.
-  return <Sheet visible title={titles[page]} onClose={onClose} onBack={page === 'fonts' ? () => setPage('appearance') : undefined}
-    action={page === 'menu' ? { icon: 'share', label: 'Share', onPress: share, disabled: sharing } : undefined}>
-    {page === 'menu' && unshared ? <SheetNote attention>{unshared}</SheetNote> : null}
-    {page === 'menu' ? <View style={styles.menu}>
-      {rows.map((action) => <Pressable key={action} accessibilityRole="button" accessibilityLabel={titles[action]}
-        onPress={() => setPage(action)} style={({ pressed }) => [styles.row, { borderBottomColor: borders.line }, pressed && { opacity: 0.5 }]}>
-        <Icon name={action} color={INK.text} size={26} />
-        <Text style={styles.label}>{titles[action]}</Text>
-      </Pressable>)}
-      {onDelete ? <Pressable accessibilityRole="button" accessibilityLabel="Delete" onPress={onDelete}
-        style={({ pressed }) => [styles.row, styles.last, pressed && { opacity: 0.5 }]}>
-        <Icon name="trash" color={INK.attention} size={26} />
-        <Text style={[styles.label, { color: INK.attention }]}>Delete</Text>
-      </Pressable> : null}
-    </View> : null}
-    {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onFonts={() => setPage('fonts')}
-      onChange={(appearance) => setSettings((was) => ({ ...was, appearance }))} /> : null}
-    {page === 'fonts' ? <FontList appearance={settings.appearance} onChange={(appearance) => setSettings((was) => ({ ...was, appearance }))} /> : null}
-    {page === 'rename' ? <View style={styles.rename}>
-      <TextInput accessibilityLabel="Display name" value={name} onChangeText={setName} autoFocus selectTextOnFocus clearButtonMode="while-editing" style={styles.input} returnKeyType="done"
-        onSubmitEditing={() => { if (name.trim()) { library.rename(document, name); onClose(); } }} />
-      <View style={styles.buttons}><Pressable onPress={onClose}><Text style={styles.label}>Cancel</Text></Pressable>
-        <Pressable accessibilityRole="button" disabled={!name.trim()} onPress={() => { library.rename(document, name); onClose(); }}><Text style={[styles.label, { color: INK.reading, opacity: name.trim() ? 1 : 0.3 }]}>Save</Text></Pressable></View>
-    </View> : null}
-    {page === 'download' ? <DownloadContent document={document} title={entry.title} voice={voice} section={section}
+  const back = BACK[page];
+  const onAppearance = (next: typeof settings.appearance) => setSettings((was) => ({ ...was, appearance: next }));
+  const header = page === 'menu'
+    ? { titleLeft: true as const, title: entry.title, action: { icon: 'share' as const, label: 'Share', onPress: share, disabled: sharing } }
+    : { title: TITLES[page], onBack: back ? () => setPage(back) : undefined, action: (page === 'download' || page === 'manage') && selectAll ? selectAll : undefined };
+  return <Drawer visible onClose={onClose} {...header}>
+    {page === 'menu' ? <DrawerScroll>
+      {appearance ? <DrawerRow icon="appearance" onPress={() => setPage('appearance')} accessory={<DrawerChevron />}>
+        <DrawerRowText>Appearance</DrawerRowText>
+      </DrawerRow> : null}
+      <DrawerRow icon="rename" onPress={() => setRenaming(true)}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
+      <DrawerRow icon="download" onPress={() => setPage('download')} accessory={<DrawerChevron />}>
+        <DrawerRowText>Download</DrawerRowText>
+      </DrawerRow>
+      {onDelete ? <DrawerRow icon="trash" iconColour={INK.attention} onPress={onDelete}>
+        <DrawerRowText style={{ color: INK.attention }}>Delete</DrawerRowText>
+      </DrawerRow> : null}
+      {unshared ? <DrawerFooter attention>{unshared}</DrawerFooter> : null}
+    </DrawerScroll> : null}
+    {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onFonts={() => setPage('fonts')} onChange={onAppearance} /> : null}
+    {page === 'fonts' ? <FontList appearance={settings.appearance} onChange={onAppearance} /> : null}
+    {/* One element for both pages, so the selection and the list's place survive going to Manage and back. */}
+    {page === 'download' || page === 'manage' ? <DownloadContent document={document} title={entry.title} voice={voice} section={section}
+      manage={page === 'manage'} onManage={(open) => setPage(open ? 'manage' : 'download')} onSelectAll={setSelectAll}
       onStart={() => { if (!entry.voice) library.voiced(document, voice); }} onVoice={(next) => {
-      library.voiced(document, next); setSettings((was) => selectVoice(was, next.provider, next.voice));
-    }} /> : null}
-  </Sheet>;
+        library.voiced(document, next); setSettings((was) => selectVoice(was, next.provider, next.voice));
+      }} /> : null}
+    {renaming ? <RenameAlert name={entry.title} onCancel={() => setRenaming(false)}
+      onSave={(name) => { setRenaming(false); library.rename(document, name); onClose(); }} /> : null}
+  </Drawer>;
 }
 /** The spine item a stored Reading Position is in, read off its locator (`spineIndexOf`), or null for none. */
 function sectionOf(position: ReadingPosition | null): number | null {
   const cfi = position ? readLocator(position.locator, 'epub') : null;
   return cfi ? spineIndexOf(cfi) : null;
 }
-
-const styles = StyleSheet.create({
-  menu: { paddingHorizontal: 24 }, row: { flexDirection: 'row', alignItems: 'center', gap: 18, minHeight: 58, borderBottomWidth: StyleSheet.hairlineWidth },
-  last: { borderBottomWidth: 0 }, label: { ...TEXT.body, color: INK.text }, rename: { padding: 20, gap: 24 },
-  input: { ...TEXT.body, color: INK.text, backgroundColor: INK.page, borderRadius: 12, padding: 14 }, buttons: { flexDirection: 'row', justifyContent: 'space-between', padding: 8 },
-});
