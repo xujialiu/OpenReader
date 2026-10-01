@@ -17,16 +17,15 @@ describe("a drawer's list row, as Books draws its contents (#117)", () => {
   });
 
   it('is 62 pt with two lines, as Cultivation Online\'s Chapter 1005 is', () => {
-    expect(rowHeight(2)).toBeCloseTo(62, 9);
+    expect(rowHeight(2)).toBeCloseTo(62, 1);
   });
 
   it("is 112 pt with five lines, as Shadow Slave's Chapter 139 is", () => {
-    expect(rowHeight(5)).toBeCloseTo(112, 9);
+    expect(rowHeight(5)).toBeCloseTo(112, 1);
   });
 
-  it('sets its words at 15 pt on a 16.67-pt line pitch, regular, and semibold when emphasized', () => {
-    expect(drawerRowText(false)).toEqual({ fontSize: 15, fontWeight: '400', lineHeight: 15 * 10 / 9 });
-    expect(drawerRowText(false).lineHeight).toBeCloseTo(50 / 3, 9);
+  it('sets its words at 15 pt on a line pitch a hundredth under 16.67, regular, and semibold when emphasized', () => {
+    expect(drawerRowText(false)).toEqual({ fontSize: 15, fontWeight: '400', lineHeight: 16.66 });
     expect(drawerRowText(true).fontWeight).toBe('600');
   });
 

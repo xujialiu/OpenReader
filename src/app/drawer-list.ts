@@ -51,5 +51,10 @@ export const DRAWER_LIST = {
 export function drawerRowText(emphasized: boolean): { fontSize: number; fontWeight: (typeof TEXT)[TextStyleName]['fontWeight']; lineHeight: number } {
   const style = (emphasized ? TEXT_EMPHASIZED : TEXT)[DRAWER_LIST.text];
   const fontSize = style.fontSize ?? 0;
-  return { fontSize, fontWeight: style.fontWeight, lineHeight: fontSize * DRAWER_LIST.leading };
+  // A hundredth under the exact pitch. At 50/3 a title that wraps once was
+  // given its two lines' height and drew only the first, cut off at the
+  // right: twice the pitch came out a hair over the height the layout gave
+  // it, and the phone dropped the line that did not fit (Reverend Insanity's
+  // Chapter 198, notes 2026-10-01).
+  return { fontSize, fontWeight: style.fontWeight, lineHeight: Math.floor(fontSize * DRAWER_LIST.leading * 100) / 100 };
 }
