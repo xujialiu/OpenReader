@@ -893,7 +893,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     // after the section's Blocks, so nothing the app does with it can cost them.
     const bridge = code('reader-bridge.ts');
     pin(bridge, 'const counted = countPage(pages.current, message.sectionIndex, message.sizes);', 'reader-bridge.ts');
-    pin(bridge, "send({ kind: 'measured' });", 'reader-bridge.ts');
+    pin(bridge, "pages.current = new Map();\n          send({ kind: 'measured' });", 'reader-bridge.ts');
     const handed = bridge.indexOf('latest.current.onBodyTextSize?.(decided);');
     pin(bridge, 'latest.current.onBodyTextSize?.(decided);', 'reader-bridge.ts');
     expect(handed).toBeGreaterThan(bridge.indexOf('latest.current.onBlocks?.(next.blocks'));
@@ -930,7 +930,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     for (const build of ['commonjs', 'module']) {
       const view = readFileSync(new URL(`../../node_modules/@epubjs-react-native/core/lib/${build}/View.js`, import.meta.url).pathname, 'utf8');
       const where = `the installed @epubjs-react-native/core lib/${build}/View.js`;
-      pin(view, '  webviewDebuggingEnabled = false\n}) {', where);
+      pin(view, '  webviewDebuggingEnabled = false,\n', where);
       pin(view, 'webviewDebuggingEnabled: webviewDebuggingEnabled,', where);
     }
     const types = readFileSync(new URL('../../node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts', import.meta.url).pathname, 'utf8');
@@ -938,6 +938,28 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     for (const file of ['../../src/app/reading-view.tsx', '../../src/offline/indexer.tsx']) {
       pin(readFileSync(new URL(file, import.meta.url), 'utf8'), 'webviewDebuggingEnabled={DEBUG_MODE}', file.slice(6));
     }
+  });
+
+  it('opens the reader\'s page again when iOS ends its web content process, and only the page (#120)', () => {
+    // On the owner's iPhone iOS ended the page's process while the app was
+    // suspended (`JETSAM_REASON_MEMORY_LONGIDLE_EXIT`), and the reader came back
+    // blank: react-native-webview reports it only through
+    // `onContentProcessDidTerminate`, which the library did not pass on. So
+    // `patches/` adds it to View.js and `ReaderProps`, and the reading view
+    // remounts `<Reader>` by a key of its own, not the `ReadingView`, which would
+    // end the Reading and stop a voice that is playing.
+    for (const build of ['commonjs', 'module']) {
+      const view = readFileSync(new URL(`../../node_modules/@epubjs-react-native/core/lib/${build}/View.js`, import.meta.url).pathname, 'utf8');
+      const where = `the installed @epubjs-react-native/core lib/${build}/View.js`;
+      pin(view, '  onContentProcessDidTerminate\n}) {', where);
+      pin(view, 'onContentProcessDidTerminate: onContentProcessDidTerminate,', where);
+    }
+    const types = readFileSync(new URL('../../node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts', import.meta.url).pathname, 'utf8');
+    pin(types, 'onContentProcessDidTerminate?: () => void;', 'the installed @epubjs-react-native/core types.d.ts');
+    const view = readFileSync(new URL('../../src/app/reading-view.tsx', import.meta.url), 'utf8');
+    pin(view, 'key={page.generation}', 'reading-view.tsx');
+    pin(view, 'onContentProcessDidTerminate={onPageGone}', 'reading-view.tsx');
+    pin(view, 'const at = restartBridge() ?? shownAt ?? resumeAt;', 'reading-view.tsx');
   });
 
   it('leaves a long press on the page to WebKit, so no gesture of the library races text selection (#74)', () => {

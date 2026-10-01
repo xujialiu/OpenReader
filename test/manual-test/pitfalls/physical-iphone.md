@@ -97,3 +97,19 @@
 - **`devicectl device copy from` keeps file modification times.** A clip's `.audio` is written once, so its mtime is its save time, and a copy taken after a lock still shows when each clip was saved. `devicectl device info files` gives dates only to the minute.
 - **After `npm ci`, the first `pod install` still left FFmpeg out of the link** (2026-09-29, #82). The Release build failed with `Undefined symbols … _swr_init`, `_swr_get_out_samples` from `libRNAudioAPI.a(FFmpegDecoding.o)`; `Pods-OpenReader.release.xcconfig` had no `libavcodec`. A second `pod install` added it (0 → 1 match) and the build returned 0. The same fix as the #43 entry above: the first run fetches the xcframeworks, and only a run with them present registers them. After a fresh `npm ci`, run `pod install` twice, or grep the xcconfig for `libavcodec` before building.
 - **`devicectl` reaches the phone over Wi-Fi, pymobiledevice3 only over the cable** (2026-09-29, #82). With the cable out, `devicectl list devices` said `connected` and `test/manual-test/kit/debug-log.py` copied the Debug Log, while `pymobiledevice3 usbmux list` printed `[]` and `syslog collect`/`syslog live` failed with `Device not found: usbmux has no device matching udid`. A `syslog live` stream ends when the cable is pulled (`long-press-watch.py` printed `syslog stream ended` at 09:52 and stopped). For the system log, plug the cable in; the Debug Log itself needs no cable.
+- **`/tmp/pmd3-venv` can be gone** (2026-10-01 21:32, #120): `ls
+  /tmp/pmd3-venv/bin/pymobiledevice3` answered `No such file or directory`, as
+  `/tmp` does not keep it across restarts. Recreate it in the background at the
+  first command, as the item on `ResolutionImpossible` above says; it took about
+  two minutes and installed cleanly.
+- **A blank reader with the player still working: look for the page's process
+  first** (2026-10-01, #120). The Debug Log showed only that `[renderer]` lines
+  stopped and that `app active` came without the usual `[renderer] page visible`
+  before it. The answer was in the system log: `grep -E 'WebContent|6925'` for
+  the reader's WebContent pid (`[PID=N] WebProcessProxy` in OpenReader's lines)
+  found `memorystatus: killing_idle_process pid N [com.apple.WebKit.WebContent]
+  (long-idle-exit …)` while the app was suspended, and
+  `WebPageProxy::processDidTerminate … reason=Crash` at the next resume. A
+  `syslog collect --start-time` from just before the fault (442 MB for 1 h 50 min,
+  18 s over the cable) is enough; `debug-log.py --syslog` starts at the Debug
+  Log's first line, two days earlier here.
