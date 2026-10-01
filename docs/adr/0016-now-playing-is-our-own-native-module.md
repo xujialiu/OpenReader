@@ -119,12 +119,23 @@ sides are transparent; the owner chose the whole Cover over a square cut from it
 A Cover UIKit cannot decode falls back to the icon, as an unreadable Cover is no
 Cover in the Library.
 
-The icon is read with `UIImage(named:in:compatibleWith:)` by the bundle's own
-`CFBundleIconName`, with a light trait collection. The compiled asset catalog
-holds one 1024 px rendition per appearance — any, dark and tintable — and the
-owner chose the default whatever the phone's: the app cannot read the Home
-Screen's icon setting, and dark mode alone would only guess at it. The catalog's
-contents are in `notes/NOTES_2026-10-01.md`.
+**The icon is never loaded from the app icon set.** The compiled asset catalog
+holds a 1024 px `Icon Image` rendition of `ios.icon` per appearance, under the
+bundle's `CFBundleIconName`, and the first build loaded the default one with
+`UIImage(named: "OpenReader", in: .main, compatibleWith:)` and a light trait
+collection. That call does not return nil: it raises
+`NSInternalInconsistencyException` from `-[_UIImageCGImageContent
+initWithCGImageSource:CGImage:scale:]` (`_UIImageContent.m:742`), Swift cannot
+catch it, and the first `show` for a Document without a Cover threw in
+JavaScript and unmounted the reader (iOS 27.0 simulator, pinned under LLDB,
+2026-10-01; light and dark mode alike). So `plugins/with-now-playing-icon.ts`
+copies `assets/icon/icon.png` — the default appearance's white fill under the
+icon's two layers, written from `OpenReader.icon` — into the catalog as the
+plain image set `NowPlayingIcon`, which `UIImage(named:)` loads like any other,
+and the icon goes through the same squaring as a Cover. The owner chose the
+default appearance whatever the phone's: the app cannot read the Home Screen's
+icon setting, and dark mode alone would only guess at it. The measurements are
+in `notes/NOTES_2026-10-01.md`.
 
 **`MPMediaItemPropertyPlaybackDuration` is never written.** A book is synthesized
 a sentence at a time and only the sections the renderer has reported are even
