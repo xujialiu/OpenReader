@@ -16,6 +16,15 @@ import XCTest
 final class DownloadRingProbe: XCTestCase {
   let shortTitle = "A Short Test of Reading Aloud"
 
+  /// The drawer is the phone's sheet with no close button (#117): a swipe down
+  /// from its header puts it away. The drawer rests at the Drawer Height (50 %),
+  /// whose header sits at about half the screen's height.
+  func closeSheet(_ app: XCUIApplication) {
+    let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.52))
+    let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97))
+    top.press(forDuration: 0.15, thenDragTo: bottom)
+  }
+
   func capture(_ name: String, _ app: XCUIApplication) {
     let tree = XCTAttachment(string: app.debugDescription)
     tree.name = name + "-tree"; tree.lifetime = .keepAlways; add(tree)
@@ -87,10 +96,18 @@ final class DownloadRingProbe: XCTestCase {
     choose.tap()
     let heading = app.staticTexts.matching(NSPredicate(format: "label == 'Voice'")).firstMatch
     XCTAssertTrue(heading.waitForExistence(timeout: 5))
-    let anyVoice = app.buttons.matching(NSPredicate(format: "label CONTAINS ' - '")).firstMatch
-    XCTAssertTrue(anyVoice.waitForExistence(timeout: 15), "No Fish voice rows appeared")
-    anyVoice.tap()
-    app.buttons["Close Voice"].tap()
+    // A voice row is the drawer's full-width plain list row below the two menu
+    // rows (#117 batch 3); since the row stopped naming the provider and id,
+    // its label is the voice's name alone.
+    let anyVoice = app.buttons.matching(NSPredicate(format: "label != '' AND NOT label BEGINSWITH 'Provider' AND NOT label BEGINSWITH 'Language'"))
+      .allElementsBoundByIndex
+      .first { $0.frame.width > 300 && $0.frame.minY > 560 && $0.frame.maxY < 880 }
+    XCTAssertTrue(anyVoice != nil, "No Fish voice rows appeared")
+    anyVoice!.tap()
+    // The Voice drawer is the phone's sheet since #117: no close button, a
+    // swipe down puts it away.
+    closeSheet(app)
+    _ = until(5) { !app.buttons.matching(NSPredicate(format: "label CONTAINS ' - '")).firstMatch.exists }
     XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
   }
 
@@ -111,9 +128,11 @@ final class DownloadRingProbe: XCTestCase {
     XCTAssertTrue(app.staticTexts["0 chapters downloaded"].waitForExistence(timeout: 10))
     XCTAssertFalse(app.buttons["Manage downloads"].exists, "Manage downloads must not render with nothing saved and no download running")
     let firstRow = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter'")).firstMatch
-    let secondRow = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter'")).firstMatch
-    XCTAssertTrue(firstRow.waitForExistence(timeout: 3))
-    XCTAssertTrue(secondRow.exists)
+    let secondRow = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter' OR label == 'The Second Chapter, being read'")).firstMatch
+    // The sheet's rows mount a beat after its header and lines; three seconds
+    // has lost the race.
+    XCTAssertTrue(firstRow.waitForExistence(timeout: 15))
+    XCTAssertTrue(secondRow.waitForExistence(timeout: 15))
     capture("01-nothing-saved", app)
 
     // #56: no download, so nothing to pause.
@@ -165,7 +184,9 @@ final class DownloadRingProbe: XCTestCase {
     XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'saved'")).firstMatch.waitForExistence(timeout: 3))
     XCTAssertFalse(app.buttons["Resume all"].exists, "Manage downloads keeps Delete all saved audio in that place")
     capture("05-manage-paused", app)
-    app.buttons["Back to downloads"].tap()
+    // #117: Manage is a page of the drawer now; its back button reads Back from Manage.
+    XCTAssertTrue(app.buttons["Back from Manage"].waitForExistence(timeout: 3), "Manage has no back button")
+    app.buttons["Back from Manage"].tap()
 
     // #56 step 5: the first chapter's ring resumes it alone.
     try XCTUnwrap(ring(beside: "The First Chapter", app)).tap()
@@ -197,10 +218,11 @@ final class DownloadRingProbe: XCTestCase {
 
     // #37: Manage downloads after completion lists both chapters as checkboxes.
     app.buttons["Manage downloads"].tap()
-    XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter, downloaded'")).firstMatch.waitForExistence(timeout: 3))
-    XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter, downloaded'")).firstMatch.exists)
+    XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter, downloaded'")).firstMatch.waitForExistence(timeout: 15))
+    XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter, downloaded' OR label == 'The Second Chapter, being read, downloaded'")).firstMatch.waitForExistence(timeout: 15))
     capture("09-manage-complete", app)
-    app.buttons["Back to downloads"].tap()
+    XCTAssertTrue(app.buttons["Back from Manage"].waitForExistence(timeout: 3))
+    app.buttons["Back from Manage"].tap()
     // Leave the Download drawer open, finished, on the plain (non-Manage) view.
     XCTAssertTrue(app.staticTexts["2 chapters downloaded"].waitForExistence(timeout: 3))
     capture("10-final-left-open", app)
@@ -266,25 +288,26 @@ final class DownloadRingProbe: XCTestCase {
     app.buttons["Download"].tap()
     XCTAssertTrue(app.staticTexts["2 chapters downloaded"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter, downloaded'")).firstMatch.exists)
-    XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter, downloaded'")).firstMatch.exists)
+    XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter, downloaded' OR label == 'The Second Chapter, being read, downloaded'")).firstMatch.exists)
     capture("10-downloads-after-refactor", app)
 
     app.buttons["Manage downloads"].tap()
     XCTAssertTrue(app.staticTexts["0.4 MB saved"].waitForExistence(timeout: 3))
     let firstRow = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The First Chapter, downloaded'")).firstMatch
-    let secondRow = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter, downloaded'")).firstMatch
+    let secondRow = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'The Second Chapter, downloaded' OR label == 'The Second Chapter, being read, downloaded'")).firstMatch
     XCTAssertTrue(firstRow.exists)
     XCTAssertTrue(secondRow.exists)
     let listedRows = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS ', downloaded'"))
     XCTAssertEqual(listedRows.count, 2, "Manage should list exactly the two chapters, nothing else")
     capture("11-manage-after-refactor", app)
 
-    app.buttons["Back to downloads"].tap()
+    app.buttons["Back from Manage"].tap()
     XCTAssertTrue(app.staticTexts["2 chapters downloaded"].waitForExistence(timeout: 5))
     capture("12-back-to-downloads-after-refactor", app)
 
     // Settings version, then return to the Download drawer as the required final state.
-    app.buttons["Close Download"].tap()
+    // #117: the sheet has no close button; a swipe down from its header puts it away.
+    closeSheet(app)
     XCTAssertTrue(app.buttons["Back"].waitForExistence(timeout: 5))
     app.buttons["Back"].tap()
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 10))

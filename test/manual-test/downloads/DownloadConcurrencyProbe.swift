@@ -8,6 +8,14 @@ import XCTest
 /// Resume all/playback-interrupt/Manage-downloads-delete checks while several
 /// requests are genuinely out at once. Never leaves playback running.
 final class DownloadConcurrencyProbe: XCTestCase {
+
+  /// The drawer is the phone's sheet with no close button (#117): a swipe down
+  /// from its header puts it away. The drawer rests at the Drawer Height (50 %).
+  func closeSheet(_ app: XCUIApplication) {
+    let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.52))
+    let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97))
+    top.press(forDuration: 0.15, thenDragTo: bottom)
+  }
   // The Library named this entry after its file, "mvs-1-250", until this
   // suite's own first real open retitled it from the EPUB's own metadata —
   // the README's own documented pitfall ("The title `add` gives an entry
@@ -350,14 +358,14 @@ final class DownloadConcurrencyProbe: XCTestCase {
     capture("25-resumed-again", app)
 
     // A real, brief playback: the download yields (Interrupted), and resumes by itself.
-    app.buttons["Close Download"].tap()
+    closeSheet(app)
     XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
     let playStarted = Date()
     app.buttons["Play"].tap()
     openDownloadDrawer(app)
     let sawInterrupted = until(3.0) { app.staticTexts["Interrupted · continues when available"].exists }
     capture("26-interrupted-while-playing", app)
-    app.buttons["Close Download"].tap()
+    closeSheet(app)
     if app.buttons["Pause"].waitForExistence(timeout: 3) { app.buttons["Pause"].tap() }
     let playedFor = Date().timeIntervalSince(playStarted)
     print("PLAYBACK DURATION: \(playedFor) s; SAW INTERRUPTED WHILE PLAYING: \(sawInterrupted)")
@@ -386,10 +394,10 @@ final class DownloadConcurrencyProbe: XCTestCase {
     XCTAssertTrue(until(5) { !stillListed.firstMatch.exists }, "Chapter 103 should be unlisted in Manage once its audio is deleted")
     capture("30-chapter-103-deleted", app)
 
-    app.buttons["Back to downloads"].tap()
+    app.buttons["Back from Manage"].tap()
     XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'chapters downloaded'")).firstMatch.waitForExistence(timeout: 5))
     capture("31-final-left-open", app)
-    app.buttons["Close Download"].tap()
+    closeSheet(app)
     XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 5) || app.buttons["Play"].waitForExistence(timeout: 5), "Reader did not settle after closing Download")
   }
 
@@ -562,7 +570,7 @@ final class DownloadConcurrencyProbe: XCTestCase {
     capture("49-compatible-download-complete", app)
     XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Failed' OR label CONTAINS 'failed'")).firstMatch.exists, "A failure appeared during the OpenAI Compatible download")
 
-    app.buttons["Close Download"].tap()
+    closeSheet(app)
     XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 5) || app.buttons["Play"].waitForExistence(timeout: 5))
   }
 
@@ -691,7 +699,7 @@ final class DownloadConcurrencyProbe: XCTestCase {
     XCTAssertTrue(finishedOK, "Speechify download did not finish with no failure")
     capture("55-speechify-download-complete", app)
 
-    app.buttons["Close Download"].tap()
+    closeSheet(app)
     XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
     let playStarted = Date()
     app.buttons["Play"].tap()

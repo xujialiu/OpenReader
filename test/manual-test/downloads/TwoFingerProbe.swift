@@ -387,29 +387,33 @@ final class TwoFingerProbe: XCTestCase {
   func testDrawerSweeps() throws {
     let app = openDrawer()
     var rows = shownRows(app)
-    XCTAssertGreaterThanOrEqual(rows.count, 4, "Too few rows inside the list")
+    // Opened at the chapter being read, whose long title eats the 50 % drawer,
+    // as few as three rows show; the sweeps run over what is there.
+    XCTAssertGreaterThanOrEqual(rows.count, 3, "Too few rows inside the list")
     print("DRAWER shown rows: \(rows.map { $0.label })")
-    // A run: the first shown row to the fourth.
-    sweep(mid(rows[0]), mid(rows[3]), name: "run")
+    // A run: the first shown row to the last.
+    let last = rows.count - 1
+    sweep(mid(rows[0]), mid(rows[last]), name: "run")
     print("DRAWER run-0-3: \(chosenCount(app))")
     capture("drawer-run", app)
     // Back toward the start gives rows back: rows 0..3 then back to 1, from a clean start.
     let reopened = openDrawer()
     rows = shownRows(reopened)
-    sweep(mid(rows[0]), mid(rows[3]), seconds: 0.6, name: "out")
+    sweep(mid(rows[0]), mid(rows[rows.count - 1]), seconds: 0.6, name: "out")
     print("DRAWER after-out: \(chosenCount(reopened))")
     // A second sweep that begins on a selected row takes rows out, and gives back those it leaves on the way back.
-    let back = Fingers.line(mid(rows[0]), mid(rows[3]), start: 0, seconds: 0.6) + Fingers.line(mid(rows[3]), mid(rows[1]), start: 0.7, seconds: 0.5).dropFirst()
+    let lastNow = rows.count - 1
+    let back = Fingers.line(mid(rows[0]), mid(rows[lastNow]), start: 0, seconds: 0.6) + Fingers.line(mid(rows[lastNow]), mid(rows[1]), start: 0.7, seconds: 0.5).dropFirst()
     Fingers.play(Fingers.pair(Array(back), lift: 1.3), name: "from-selected", in: self)
     Thread.sleep(forTimeInterval: 0.8)
-    print("DRAWER from-selected-0-3-1: \(chosenCount(reopened))")
+    print("DRAWER from-selected-0-last-1: \(chosenCount(reopened))")
     capture("drawer-from-selected", reopened)
     // One finger carries on: two fingers over rows 0..1, then one lifts and the other goes on to row 3.
     let third = openDrawer()
     rows = shownRows(third)
     let spread: CGFloat = 36
     let together = Fingers.line(mid(rows[0]), mid(rows[1]), start: 0, seconds: 0.5)
-    let alone = Fingers.line(mid(rows[1]), mid(rows[3]), start: 0.7, seconds: 0.6).dropFirst()
+    let alone = Fingers.line(mid(rows[1]), mid(rows[rows.count - 1]), start: 0.7, seconds: 0.6).dropFirst()
     let left = Fingers.finger(together.map { (CGPoint(x: $0.0.x - spread / 2, y: $0.0.y), $0.1) }, lift: 0.6)
     let right = Fingers.finger((together + alone).map { (CGPoint(x: $0.0.x + spread / 2, y: $0.0.y), $0.1) }, lift: 1.5)
     Fingers.play([left, right], name: "one-goes-on", in: self)

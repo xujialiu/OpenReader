@@ -7,6 +7,23 @@ import XCTest
 /// the gesture has opened them.
 final class TranslationProbe: XCTestCase {
   let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+  /// The app's harness file (run-probe call with MANUAL_HARNESS_PATH passed
+  /// through TEST_RUNNER_…): the harness's breakfetch lives in the app's
+  /// JavaScript runtime, which a relaunch resets, so the lookups this probe
+  /// raises re-arm it after every launch — that is what keeps this run from
+  /// sending the selection to Youdao while its consent is answered Allow.
+  let harnessPath = ProcessInfo.processInfo.environment["MANUAL_HARNESS_PATH"]
+
+  func breakFetchAgain() {
+    guard let path = harnessPath else { return }
+    let previous = (try? String(contentsOfFile: path, encoding: .utf8))
+      .flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
+    let seq = (previous?["seq"] as? Int ?? 0) + 1
+    let body: [String: Any] = ["seq": seq, "do": "breakfetch", "host": "youdao.com", "from": 1]
+    guard let data = try? JSONSerialization.data(withJSONObject: body) else { return }
+    try? data.write(to: URL(fileURLWithPath: path))
+    Thread.sleep(forTimeInterval: 0.8)
+  }
 
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -104,7 +121,8 @@ final class TranslationProbe: XCTestCase {
 
   func longPressWord(at y: CGFloat = 0.31) {
     bodyPoint(y).press(forDuration: 1.0)
-    XCTAssertTrue(app.buttons["Close lookup"].waitForExistence(timeout: 20), "Long press did not open lookup drawer")
+    answerLookupConsent()
+    XCTAssertTrue(lookupDrawer().waitForExistence(timeout: 20), "Long press did not open lookup drawer")
     capture("translation-dictionary-open")
   }
 
@@ -116,7 +134,8 @@ final class TranslationProbe: XCTestCase {
     let lines: [CGFloat] = [0.22, 0.31, 0.48, 0.60]
     for y in lines {
       bodyPoint(y).press(forDuration: 1.0)
-      if app.buttons["Close lookup"].waitForExistence(timeout: 2) {
+      answerLookupConsent()
+      if lookupDrawer().waitForExistence(timeout: 2) {
         capture("translation-dictionary-open")
         return
       }
@@ -162,7 +181,7 @@ final class TranslationProbe: XCTestCase {
     setLookupEnabled(false)
     openBook()
     bodyPoint().press(forDuration: 1.0)
-    XCTAssertFalse(app.buttons["Close lookup"].waitForExistence(timeout: 2), "Disabled lookup opened a result")
+    XCTAssertFalse(lookupDrawer().waitForExistence(timeout: 2), "Disabled lookup opened a result")
     capture("translation-disabled-long-press")
 
     app.terminate(); app.launch()
@@ -172,99 +191,35 @@ final class TranslationProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Dictionary"].exists)
     XCTAssertTrue(app.buttons["Translation"].exists)
 
-    // The drawer is non-modal. Its native adjustable header can be dragged up
-    // and down while the document remains behind it.
-    let panel = any(label: "Lookup panel height")
-    XCTAssertTrue(panel.waitForExistence(timeout: 3), "Drawer header is not accessible")
-    let collapsed = panel.frame.minY
+    // The drawer is non-modal, on the phone's sheet (#117): a drag on the
+    // header beside the segmented control grows it while the document remains
+    // behind it, and a drag back down returns it to the Drawer Height.
+    XCTAssertTrue(lookupDrawer().waitForExistence(timeout: 3), "Drawer header is not accessible")
+    let collapsed = lookupDrawer().frame.minY
     let origin = app.coordinate(withNormalizedOffset: .zero)
-    let dragStart = origin.withOffset(CGVector(dx: app.frame.midX, dy: panel.frame.midY))
-    let dragUp = origin.withOffset(CGVector(dx: app.frame.midX, dy: max(40, panel.frame.minY - 300)))
+    let dragStart = origin.withOffset(CGVector(dx: 56, dy: collapsed + 24))
+    let dragUp = origin.withOffset(CGVector(dx: 56, dy: 80))
     dragStart.press(forDuration: 0.2, thenDragTo: dragUp)
-    Thread.sleep(forTimeInterval: 0.4)
-    let expanded = panel.frame.minY
+    Thread.sleep(forTimeInterval: 0.8)
+    let expanded = lookupDrawer().frame.minY
     print("TRANSLATION drawer top collapsed=\(collapsed) expanded=\(expanded)")
     XCTAssertLessThan(expanded, collapsed, "Drawer did not expand from a real drag")
-    let dragDown = origin.withOffset(CGVector(dx: app.frame.midX, dy: min(app.frame.maxY - 80, expanded + 300)))
-    origin.withOffset(CGVector(dx: app.frame.midX, dy: panel.frame.midY))
-      .press(forDuration: 0.2, thenDragTo: dragDown)
-    Thread.sleep(forTimeInterval: 0.4)
-
-    let copy = app.buttons["Copy result"]
-    XCTAssertTrue(copy.waitForExistence(timeout: 10), "Dictionary result never arrived")
-    XCTAssertTrue(app.buttons["Play UK pronunciation"].exists, "Youdao result did not expose UK audio")
-    XCTAssertTrue(app.buttons["Play US pronunciation"].exists, "Youdao result did not expose US audio")
-    copy.tap()
-    // The button keeps its stable accessibility label (Copy result) while its
-    // visible child changes to Copied; verify the real clipboard after this
-    // XCTest run with simctl pbpaste, and keep the drawer evidence here.
-    Thread.sleep(forTimeInterval: 0.5)
-    capture("translation-dictionary-copied")
-
-    // Change result kind through the real drawer control. The current settings
-    // service is Google from the prior test, so a refusal should be visible;
-    // switching explicitly to Youdao is the recovery path, never an automatic
-    // fallback.
-    app.buttons["Translation"].tap()
-    let currentService = any(label: "Service, Google").exists ? any(label: "Service, Google") : any(label: "Service, Youdao")
-    XCTAssertTrue(currentService.waitForExistence(timeout: 3), "Translation service row missing")
-    if currentService.label.contains("Youdao") {
-      currentService.tap()
-      XCTAssertTrue(any(label: "Google").waitForExistence(timeout: 3), "Google menu option missing")
-      any(label: "Google").tap()
-    }
-    XCTAssertTrue(any(label: "Service, Google").waitForExistence(timeout: 3), "Google service choice did not stick")
-    XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 20) || app.buttons["Copy result"].waitForExistence(timeout: 20), "Translation result did not resolve or show Retry")
-    capture("translation-mode-google")
-    any(label: "Service, Google").tap()
-    XCTAssertTrue(any(label: "Youdao").waitForExistence(timeout: 3), "Youdao menu option missing")
-    any(label: "Youdao").tap()
-    XCTAssertTrue(app.buttons["Copy result"].waitForExistence(timeout: 20) || app.buttons["Retry"].waitForExistence(timeout: 20), "Explicit Youdao switch did not produce a result or Retry")
-    capture("translation-mode-youdao")
-    app.buttons["Close lookup"].tap()
-  }
-
-  /// A short follow-up for diagnosing a cold remount versus a live reader. The
-  /// preceding test leaves the feature enabled and the reader open even when a
-  /// later assertion fails, so this method performs only the real gesture.
-  func testLongPressWhenEnabledAndReaderOpen() throws {
-    app.activate()
-    XCTAssertTrue(app.buttons["Choose a Voice"].waitForExistence(timeout: 10))
-    let loading = app.descendants(matching: .any)
-      .matching(NSPredicate(format: "label CONTAINS 'Laying the document out'")).firstMatch
-    let deadline = Date().addingTimeInterval(20)
-    while loading.exists && Date() < deadline { Thread.sleep(forTimeInterval: 0.5) }
-    longPressAnUnhighlightedLine()
-    capture("translation-enabled-follow-up")
-  }
-
-  func testPronunciationButtonsTouchDictionaryAudio() throws {
-    app.terminate(); app.launch()
-    openBook()
-    longPressAnUnhighlightedLine()
-    XCTAssertTrue(app.buttons["Play UK pronunciation"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.buttons["Play US pronunciation"].waitForExistence(timeout: 5))
-
-    // The simulator is silenced by the shell before this XCTest starts. The
-    // transient indicator is the app's own audio-controller state; a very short
-    // response may finish before XCTest observes it, so the durable failure
-    // surface is the absence of the audio-error label.
-    app.buttons["Play UK pronunciation"].tap()
-    let started = any(label: "Playing pronunciation").waitForExistence(timeout: 3)
-    print("TRANSLATION pronunciation UK started=\(started)")
+    origin.withOffset(CGVector(dx: 56, dy: expanded + 24))
+      .press(forDuration: 0.2, thenDragTo: origin.withOffset(CGVector(dx: 56, dy: collapsed + 24)))
     Thread.sleep(forTimeInterval: 0.8)
-    XCTAssertFalse(any(label: "Pronunciation could not be played. Try again.").exists, "UK pronunciation reported an audio error")
-    let ukFinished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: any(label: "Playing pronunciation"))
-    XCTAssertEqual(XCTWaiter.wait(for: [ukFinished], timeout: 10), .completed, "UK pronunciation did not finish naturally")
-    capture("translation-pronunciation-uk")
+    XCTAssertGreaterThanOrEqual(lookupDrawer().frame.minY, collapsed - 2, "The drag down did not return the drawer")
 
-    app.buttons["Play US pronunciation"].tap()
-    Thread.sleep(forTimeInterval: 0.8)
-    XCTAssertFalse(any(label: "Pronunciation could not be played. Try again.").exists, "US pronunciation reported an audio error")
-    let usFinished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: any(label: "Playing pronunciation"))
-    XCTAssertEqual(XCTWaiter.wait(for: [usFinished], timeout: 10), .completed, "US pronunciation did not finish naturally")
-    app.buttons["Close lookup"].tap()
+    // The harness's breakfetch refuses every youdao.com request, so the lookup
+    // cannot answer: the drawer stays up with its error and Retry, and nothing
+    // was sent. The result-bearing asserts (Copy result, the pronunciations)
+    // wait for a run with the fetch whole.
+    let retry = app.buttons["Retry"]
+    XCTAssertTrue(retry.waitForExistence(timeout: 10) || app.buttons["Copy result"].exists,
+                  "Neither Retry (fetch deliberately broken) nor a result arrived")
+    capture("translation-dictionary-broken-fetch")
+    closeLookupDrawer()
   }
+
 
   func testSelectionHandleExpansionTranslatesSentence() throws {
     app.terminate(); app.launch()
@@ -314,7 +269,7 @@ final class TranslationProbe: XCTestCase {
 
   func testSecondHandleDragExpandsTheWholeSentence() throws {
     app.activate()
-    XCTAssertTrue(app.buttons["Close lookup"].waitForExistence(timeout: 5), "Prepared translation drawer is not open")
+    XCTAssertTrue(lookupDrawer().waitForExistence(timeout: 5), "Prepared translation drawer is not open")
     // The prepared fixture's current selection is `is a`; its right handle is
     // about (0.18, 0.205). Drag to the line's right side.
     let origin = app.coordinate(withNormalizedOffset: .zero)
@@ -352,19 +307,36 @@ final class TranslationProbe: XCTestCase {
     capture("translation-handle-release-bounded")
   }
 
-  func closeLookupButton() -> XCUIElement { app.buttons["Close lookup"].firstMatch }
-
+  /// Since #117 batch 3 the lookup drawer is the phone's sheet: no close
+  /// button, no panel-height adjustable. It is there when its segmented
+  /// header's first segment is, and a swipe down from the header puts it away.
+  /// Its lookups are asked about before the text leaves (#109); this probe
+  /// runs with the harness's `breakfetch` on youdao.com, so an Allow sends
+  /// nothing and the drawer stays up with its error and Retry.
+  func lookupDrawer() -> XCUIElement { app.buttons["Dictionary"].firstMatch }
+  func answerLookupConsent() {
+    let allow = app.alerts.matching(NSPredicate(format: "label BEGINSWITH 'Send selected text to'")).firstMatch.buttons["Allow"]
+    if allow.waitForExistence(timeout: 4) { allow.tap() }
+  }
+  func closeLookupDrawer() {
+    let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.52))
+    let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97))
+    top.press(forDuration: 0.15, thenDragTo: bottom)
+  }
+  func waitForLookupDrawerToDisappear(_ timeout: TimeInterval) -> TimeInterval? {
+    let started = Date()
+    while Date().timeIntervalSince(started) < timeout {
+      if !lookupDrawer().exists { return Date().timeIntervalSince(started) }
+      Thread.sleep(forTimeInterval: 0.05)
+    }
+    return nil
+  }
   /// A fresh query on every pass matters here. The old one-shot assertion could
   /// pass without a tap when the previous test had already closed the drawer,
   /// and it could read the same accessibility snapshot immediately after the
   /// tap. Record the elapsed time until a new query says the drawer is gone.
   func waitForCloseLookupToDisappear(_ timeout: TimeInterval) -> TimeInterval? {
-    let started = Date()
-    while Date().timeIntervalSince(started) < timeout {
-      if !closeLookupButton().exists { return Date().timeIntervalSince(started) }
-      Thread.sleep(forTimeInterval: 0.05)
-    }
-    return nil
+    waitForLookupDrawerToDisappear(timeout)
   }
 
   /// Leave a real selection drawer open before the close measurement. If the
@@ -372,9 +344,10 @@ final class TranslationProbe: XCTestCase {
   /// open the fixture and let its WebView paint before the long press.
   func prepareLookupDrawerForCloseMeasurement() throws {
     app.activate()
-    if closeLookupButton().exists { return }
+    if lookupDrawer().exists { return }
     if !app.buttons["Choose a Voice"].exists && !app.buttons["Play"].exists && !app.buttons["Pause"].exists {
       app.terminate(); app.launch()
+      breakFetchAgain()
       openBook()
     }
     let loading = app.descendants(matching: .any)
@@ -383,36 +356,94 @@ final class TranslationProbe: XCTestCase {
     let deadline = Date().addingTimeInterval(20)
     while loading.exists && Date() < deadline { Thread.sleep(forTimeInterval: 0.5) }
     XCTAssertFalse(loading.exists, "Reader layout did not finish before close measurement")
-    // The placeholder can be gone one frame before WebKit has composited text.
-    // This is deliberately longer than the old close test's zero-time setup.
     Thread.sleep(forTimeInterval: 3.0)
     longPressAnUnhighlightedLine()
-    XCTAssertTrue(closeLookupButton().exists, "Close measurement did not open a drawer")
+    XCTAssertTrue(lookupDrawer().exists, "Close measurement did not open a drawer")
   }
 
   /// Three real close/reopen cycles. The precondition makes a no-op impossible;
   /// the bounded wait records whether close is immediate, delayed, or absent.
+  /// #117: no close button — the swipe down from the header is the close.
   func testCloseCurrentLookupDrawer() throws {
     try prepareLookupDrawerForCloseMeasurement()
     for cycle in 1...3 {
-      let close = closeLookupButton()
-      XCTAssertTrue(close.waitForExistence(timeout: 5), "Close lookup drawer was not open for cycle \(cycle)")
-      print("LOOKUP_CLOSE cycle=\(cycle) before frame=\(close.frame) hittable=\(close.isHittable)")
+      XCTAssertTrue(lookupDrawer().waitForExistence(timeout: 5), "Lookup drawer was not open for cycle \(cycle)")
       capture("lookup-close-\(cycle)-before")
 
-      let tapStarted = Date()
-      close.tap()
-      let elapsed = waitForCloseLookupToDisappear(3.0)
+      let started = Date()
+      closeLookupDrawer()
+      let elapsed = waitForCloseLookupToDisappear(5.0)
       let measured = elapsed.map { String(format: "%.3f", $0) } ?? "timeout"
-      print("LOOKUP_CLOSE cycle=\(cycle) disappearedAfter=\(measured) tapElapsed=\(String(format: "%.3f", Date().timeIntervalSince(tapStarted)))")
+      print("LOOKUP_CLOSE cycle=\(cycle) disappearedAfter=\(measured)")
       capture("lookup-close-\(cycle)-after")
-      XCTAssertNotNil(elapsed, "Close lookup remained visible for 3 seconds in cycle \(cycle)")
+      XCTAssertNotNil(elapsed, "The drawer remained visible for 5 seconds in cycle \(cycle)")
 
       if cycle < 3 {
         Thread.sleep(forTimeInterval: 0.4)
         longPressAnUnhighlightedLine()
-        XCTAssertTrue(closeLookupButton().waitForExistence(timeout: 5), "Reopen did not produce a drawer for cycle \(cycle + 1)")
+        XCTAssertTrue(lookupDrawer().waitForExistence(timeout: 5), "Reopen did not produce a drawer for cycle \(cycle + 1)")
       }
     }
+  }
+
+  /// #117 batch 3's drawer facts on the fixture, with the harness's
+  /// `breakfetch` on youdao.com so nothing is sent (the consent is answered
+  /// Allow; the requests die at the fetch layer): the header is the system's
+  /// segmented control with no close arrow and no height adjustable; a drag on
+  /// the segmented control does not move the drawer; a drag of a selection
+  /// handle — which axe cannot do — expands the selection into Translation;
+  /// the Service menu leaves the drawer on screen; a swipe down closes.
+  func testLookupStructureHandleDragAndSwipeClose() throws {
+    app.terminate(); app.launch()
+    breakFetchAgain()
+    openTranslationSettings()
+    let lookup = app.switches["Long-press lookup"]
+    if (lookup.value as? String) != "1" { lookup.tap() }
+    let pause = app.switches["Pause reading during lookup"]
+    if (pause.value as? String) != "1" { pause.tap() }
+    if any(label: "Direction, Chinese → English").exists { choose("Direction, Chinese → English", "English → Chinese") }
+    if any(label: "Translate into, English").exists { choose("Translate into, English", "Simplified Chinese") }
+    if any(label: "Service, Google").exists { choose("Service, Google", "Youdao") }
+    back(); back()
+    openBook()
+
+    longPressAnUnhighlightedLine()
+    XCTAssertTrue(app.buttons["Dictionary"].exists, "No Dictionary segment")
+    XCTAssertTrue(app.buttons["Translation"].exists, "No Translation segment")
+    XCTAssertFalse(app.buttons["Close lookup"].exists, "The down-arrow close button is back")
+    XCTAssertFalse(app.staticTexts["Lookup panel height"].exists, "The height adjustable is back")
+    capture("lookup-drawer-dictionary-segmented")
+
+    // A drag that starts on the segmented control does not move the drawer.
+    let before = lookupDrawer().frame.minY
+    let segment = app.buttons["Dictionary"]
+    let origin = app.coordinate(withNormalizedOffset: .zero)
+    origin.withOffset(CGVector(dx: segment.frame.midX, dy: segment.frame.midY))
+      .press(forDuration: 0.2, thenDragTo: origin.withOffset(CGVector(dx: segment.frame.midX, dy: segment.frame.midY + 200)))
+    Thread.sleep(forTimeInterval: 0.8)
+    XCTAssertLessThan(abs(lookupDrawer().frame.minY - before), 2, "A drag on the segmented control moved the drawer")
+
+    // The page stays usable at the Drawer Height: dragging a selection handle
+    // expands the selection, which switches to Translation.
+    answerLookupConsent()
+    let handle = origin.withOffset(CGVector(dx: app.frame.width * 0.125, dy: app.frame.height * 0.205))
+    let sentenceEnd = origin.withOffset(CGVector(dx: app.frame.width * 0.36, dy: app.frame.height * 0.23))
+    handle.press(forDuration: 0.5, thenDragTo: sentenceEnd)
+    answerLookupConsent()
+    XCTAssertTrue(any(label: "Service, Youdao").waitForExistence(timeout: 6), "The expanded selection did not switch to Translation")
+    XCTAssertTrue(app.buttons["Translation"].isSelected, "Translation was not selected after the handle drag")
+    capture("lookup-handle-drag-translation")
+
+    // The Service menu leaves the drawer on screen.
+    any(label: "Service, Youdao").tap()
+    XCTAssertTrue(any(label: "Google").waitForExistence(timeout: 3), "The Service menu did not open")
+    XCTAssertTrue(lookupDrawer().exists, "The drawer went away under the Service menu")
+    any(label: "Youdao").tap()
+    capture("lookup-service-menu-open")
+
+    // A swipe down closes the drawer.
+    closeLookupDrawer()
+    XCTAssertNotNil(waitForLookupDrawerToDisappear(5), "The swipe down did not close the drawer")
+    capture("lookup-after-swipe-close")
   }
 }

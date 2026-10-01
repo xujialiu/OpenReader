@@ -24,6 +24,16 @@ final class DownloadBesideReadingProbe: XCTestCase {
     let lines = ["Downloading…", "Preparing selected chapter…", "Queued", "Interrupted · continues when available", "Needs attention"]
     return lines.first { app.staticTexts[$0].exists } ?? "(none of the known lines)"
   }
+  /// The drawer is the phone's sheet since #117: it is open when its fixed
+  /// bottom button is, and a swipe down from its header puts it away.
+  func drawerIsOpen(_ timeout: TimeInterval) -> Bool {
+    app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected (' OR label BEGINSWITH 'Delete selected ('")).firstMatch.waitForExistence(timeout: timeout)
+  }
+  func closeSheet() {
+    let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.52))
+    let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97))
+    top.press(forDuration: 0.15, thenDragTo: bottom)
+  }
 
   /// Opens More actions › Download from the Reader.
   func testOpenDrawer() throws {
@@ -33,7 +43,7 @@ final class DownloadBesideReadingProbe: XCTestCase {
     app.buttons["More actions"].tap()
     XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 3))
     app.buttons["Download"].tap()
-    XCTAssertTrue(app.buttons["Close Download"].waitForExistence(timeout: 5), "The Download drawer did not open")
+    XCTAssertTrue(drawerIsOpen(5), "The Download drawer did not open")
     _ = app.staticTexts["Downloading…"].waitForExistence(timeout: 5)
     note("state-line", stateLine())
     capture("01-drawer-opened")
@@ -44,7 +54,7 @@ final class DownloadBesideReadingProbe: XCTestCase {
   /// then closes it.
   func testReadDrawer() throws {
     app.activate()
-    XCTAssertTrue(app.buttons["Close Download"].waitForExistence(timeout: 5), "The Download drawer is not open")
+    XCTAssertTrue(drawerIsOpen(5), "The Download drawer is not open")
     let first = stateLine()
     let pausing = labelled("Pause download").count, resuming = labelled("Resume download").count
     capture("02-drawer-a")
@@ -56,14 +66,14 @@ final class DownloadBesideReadingProbe: XCTestCase {
     XCTAssertNotEqual(second, "Interrupted · continues when available")
     XCTAssertTrue(["Downloading…", "Preparing selected chapter…"].contains(first), "State line: \(first)")
     XCTAssertGreaterThan(pausing, 0, "No ring reads Pause download")
-    app.buttons["Close Download"].tap()
+    closeSheet()
   }
 
   /// A ring's pause, then Pause all and Resume all, with the Reading paused.
   /// Leaves the download paused by Pause all and the drawer closed.
   func testRingThenPauseAllAndResumeAll() throws {
     app.activate()
-    XCTAssertTrue(app.buttons["Close Download"].waitForExistence(timeout: 5), "The Download drawer is not open")
+    XCTAssertTrue(drawerIsOpen(5), "The Download drawer is not open")
     let ring = labelled("Pause download").allElementsBoundByIndex.first { $0.isHittable }
     let found = try XCTUnwrap(ring, "No hittable ring reads Pause download")
     let place = found.frame
@@ -88,7 +98,7 @@ final class DownloadBesideReadingProbe: XCTestCase {
     labelled("Pause all").firstMatch.tap()
     XCTAssertTrue(labelled("Resume all").firstMatch.waitForExistence(timeout: 5))
     capture("07-paused-all-again")
-    app.buttons["Close Download"].tap()
+    closeSheet()
   }
 
   func until(_ timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
