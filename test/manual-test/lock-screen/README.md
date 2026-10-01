@@ -251,3 +251,33 @@ refused (sim volume, below) leaves the previous run's files the newest, and an
 unexamined `ls -t` copy then documents the wrong capture (caught here because
 the refused run's `Executed` line was missing from a grep-filtered output; see
 `../pitfalls/shell.md`).
+
+### Black bands beside the Cover (#119c, 2026-10-01)
+
+Same invocation, `artwork-sides.py` on the Cover capture. Since 2ad77c0 the
+tall Cover sits on an **opaque black** square (`NowPlayingPicture.squared`
+fills black first), so the bands read near-black and the light-band strip
+isolation fails honestly; the script now answers this case first — two
+near-black column clusters with a mostly non-black middle between them — and
+falls through to the two paths above for a square artwork. It cannot
+distinguish an opaque black fill from transparency onto a black surface; that
+is decided by the wallpaper beside the card **not** being black, which it
+prints. A pure-black Cover defeats the middle-picture test and fails honestly.
+
+Measured (same device, `1.0.0-beta8`, Debug over Metro 8119, the fake Kokoro
+on 8811): the card draws the 300×400 Cover **whole and centred** on a 1120 px
+(≈373 pt) black square — strip aspect 0.7527, gaps 139/138 px — and **both
+bands read (0, 0, 0)** at the top, middle and low of both sides, in **light
+and dark appearance alike**; the wallpaper beside the card reads (70, 76, 90)
+light and (58, 63, 77) dark — not black, so the bands are the artwork's own
+fill. The cover-less book still shows the icon filling its square edge to edge
+(edge columns light on 504/504 rows, corners (235, 235, 235)/(209, 209, 209)),
+no bands, and one session's RI → MVS → RI switch moves the card each time with
+no RedBox. The Dynamic Island stays unverifiable on this simulator (above);
+it and the card share the one artwork key.
+
+The probe refuses any `--expect-player` run while the simulator's own volume
+is not zero, **including a capture of an already-paused card that will play
+nothing** — re-run `silence.sh set UDID` right before such a run too; the
+volume had reset to 60 twice within a few minutes on this device with nothing
+playing.

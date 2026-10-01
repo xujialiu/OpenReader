@@ -26,6 +26,16 @@
 # A pure-white or pure-black Cover would also defeat the strip detection: check
 # the printed strip bounds against the screenshot before trusting the numbers.
 #
+# Since #119c the tall Cover sits on an OPAQUE BLACK square, so the bands read
+# near-black and the light-band path above cannot see them. First answer, then:
+# two near-black column clusters (the bands) with a mostly non-black middle (the
+# drawn picture) between them. The script reports the bands, the picture strip's
+# aspect and the wallpaper beside the card. It cannot distinguish an opaque black
+# fill from transparency onto a black surface — that is decided by the wallpaper
+# beside the card NOT being black, which it prints. A black Cover defeats the
+# middle-picture test and falls through to the older paths, which then fail
+# honestly (2026-10-01, #119c).
+#
 # A SQUARE artwork (the #119 icon case) has no strip to isolate: when no row
 # yields two light runs, the script checks the square's left and right edge
 # columns instead — if they are light on (almost) every row, the artwork's own
@@ -61,6 +71,68 @@ def dominant(im, box):
     return px[len(px) // 2]
 
 
+def black(p):
+    """Near-black: every channel under 30."""
+    return p[0] < 30 and p[1] < 30 and p[2] < 30
+
+
+def black_band_square(im, w, h):
+    """A tall picture centred on an opaque black square (#119c): two near-black
+    column clusters — the bands — with a mostly non-black middle between them.
+    Returns (left, right, top, bottom, strip_l, strip_r, left_band, right_band)
+    or None. The corner radius keeps a band column off-black on the rounded
+    corners, so the cluster test wants 75% black rows, not all."""
+    y0, y1 = int(h * 0.22), int(h * 0.68)
+    step = 6
+    rows = range(y0, y1, step)
+    n = len(rows)
+    cols = [x for x in range(0, w, 2)
+            if sum(1 for y in rows if black(im.getpixel((x, y)))) >= n * 0.75]
+    if not cols:
+        return None
+    clusters = []
+    for x in cols:
+        if clusters and x - clusters[-1][-1] <= 8:
+            clusters[-1].append(x)
+        else:
+            clusters.append([x])
+    big = [c for c in clusters if len(c) >= 30]
+    if len(big) < 2:
+        return None
+    left_band, right_band = big[0], big[-1]
+    left, right = left_band[0], right_band[-1]
+    if right - left < w * 0.6:
+        return None
+    mx0, mx1 = left_band[-1] + 20, right_band[0] - 20
+    if mx1 - mx0 < w * 0.3:
+        return None
+    total = mid_dark = 0
+    for y in rows:
+        for x in range(mx0, mx1, 8):
+            total += 1
+            if black(im.getpixel((x, y))):
+                mid_dark += 1
+    if mid_dark * 100 > total * 40:
+        return None
+    band_x = (left_band[0] + left_band[-1]) // 2
+    y_mid = (y0 + y1) // 2
+    top = y_mid
+    while top > 0 and black(im.getpixel((band_x, top - 1))):
+        top -= 2
+    bottom = y_mid
+    while bottom < h - 1 and black(im.getpixel((band_x, bottom + 1))):
+        bottom += 2
+    side = bottom - top
+    if side < w * 0.5:
+        return None
+    ym = (top + bottom) // 2
+    row = [im.getpixel((x, ym)) for x in range(left, right)]
+    nz = [i for i, p in enumerate(row) if not black(p)]
+    if not nz:
+        return None
+    return left, right, top, bottom, left + nz[0], left + nz[-1], left_band, right_band
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('screenshot')
@@ -69,6 +141,41 @@ def main() -> int:
 
     im = Image.open(args.screenshot).convert('RGB')
     w, h = im.size
+
+    # The opaque black square first (#119c): with black bands the light-run
+    # square finder below would take the drawn picture for the square.
+    bb = black_band_square(im, w, h)
+    if bb is not None:
+        left, right, top, bottom, strip_l, strip_r, left_band, right_band = bb
+        side = bottom - top
+        ym = (top + bottom) // 2
+        band = max(4 * THIRD, (left_band[-1] - left_band[0]) // 4)
+        samples = {
+            'square': {'left': left, 'right': right, 'top': top, 'bottom': bottom, 'side_px': side},
+            'picture_strip': {'left': strip_l, 'right': strip_r,
+                              'aspect': round((strip_r - strip_l) / side, 4),
+                              'gap_left': strip_l - left, 'gap_right': right - strip_r},
+            'left_band': dominant(im, (left_band[0] + band, top + side // 3, strip_l - band, bottom - side // 3)),
+            'right_band': dominant(im, (strip_r + band, top + side // 3, right_band[-1] - band, bottom - side // 3)),
+            'picture': dominant(im, (strip_l + band, top + side // 3, strip_r - band, bottom - side // 3)),
+            'wallpaper_left_of_card': dominant(im, (max(0, left - 12 * THIRD), top + side // 3, left - 2 * THIRD, bottom - side // 3)),
+        }
+        lr = tuple((a + b) // 2 for a, b in zip(samples['left_band'], samples['right_band']))
+        wp = samples['wallpaper_left_of_card']
+        samples['reading'] = (
+            f'opaque black square: bands {lr} (median of each band\'s middle third), picture strip aspect '
+            f'{samples["picture_strip"]["aspect"]} (gaps {samples["picture_strip"]["gap_left"]}/'
+            f'{samples["picture_strip"]["gap_right"]} px); wallpaper beside the card {wp} — '
+            f'not black, so the bands are the artwork\'s own black fill, not the wallpaper '
+            f'and not a material showing through'
+        )
+        if args.json:
+            print(json.dumps(samples, indent=1))
+        else:
+            for k in ('square', 'picture_strip', 'left_band', 'right_band', 'picture',
+                      'wallpaper_left_of_card', 'reading'):
+                print(f'{k}: {samples[k]}')
+        return 0
 
     # The artwork square: scan candidate rows in the upper-middle of the screen
     # for the longest run of "light" bounded left and right by darker wallpaper.
