@@ -42,6 +42,12 @@
  * their cards. Plain strings, because a SwiftUI modifier cannot take an
  * `INK` colour (a `DynamicColorIOS`), and borders take `useBorders()` for the
  * reason ADR 0046 gives.
+ *
+ * ## One at a time
+ *
+ * Every drawer, old (`sheet.tsx`) and new, and the lookup drawer, waits its
+ * turn through `useDrawerTurn` (`drawer-turns.ts`): asking for one while
+ * another is up closes that one first.
  */
 
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
@@ -49,12 +55,13 @@ import {
   environment, presentationBackground, presentationBackgroundInteraction, presentationDetents,
   presentationDragIndicator, tint,
 } from '@expo/ui/swift-ui/modifiers';
-import { useContext, type ReactNode } from 'react';
+import { useCallback, useContext, useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, useBorders } from './controls';
 import { drawerDetentHeight } from './drawer-height';
+import { createDrawerTurns } from './drawer-turns';
 import { Icon, type IconName } from './icon';
 import { useShell } from './routes';
 import { TEXT } from './text-styles';
@@ -119,6 +126,48 @@ export function useDrawerColours(): (typeof DRAWER.colours)[keyof typeof DRAWER.
   return { ...DRAWER.colours[scheme], scheme };
 }
 
+/** The app's one queue of drawers (`drawer-turns.ts`). */
+const DRAWER_TURNS = createDrawerTurns();
+
+/**
+ * A drawer's turn: whether it may be presented now, and what to call when its
+ * dismissal has finished (#117, Q43).
+ *
+ * `visible` is what its owner wants; `presented` is that, once every other
+ * drawer is down. `close` is the owner's `onClose`, which is how another
+ * drawer asking for its turn takes this one down. `dismissed` is the native
+ * dismissal's end (`BottomSheet`'s and `Modal`'s `onDismiss`); a drawer with
+ * no animation of its own (`animated: false`, the lookup drawer) is gone as
+ * soon as it is closed. A drawer swiped away reports its dismissal before its
+ * owner closes it, so it is gone at whichever of the two comes second.
+ */
+export function useDrawerTurn(visible: boolean, close: () => void, { animated = true }: { animated?: boolean } = {}): {
+  presented: boolean;
+  dismissed(): void;
+} {
+  const id = useId();
+  const closing = useRef(close);
+  const wanted = useRef(visible);
+  const down = useRef(false);
+  const up = useSyncExternalStore(DRAWER_TURNS.subscribe, () => DRAWER_TURNS.isUp(id));
+  useEffect(() => { closing.current = close; });
+  useEffect(() => { if (up) down.current = false; }, [up]);
+  useEffect(() => {
+    wanted.current = visible;
+    if (visible) DRAWER_TURNS.ask(id, () => closing.current());
+    else {
+      DRAWER_TURNS.leave(id);
+      if (!animated || down.current) DRAWER_TURNS.gone(id);
+    }
+  }, [visible, id, animated]);
+  useEffect(() => () => { DRAWER_TURNS.leave(id); DRAWER_TURNS.gone(id); }, [id]);
+  const dismissed = useCallback(() => {
+    down.current = true;
+    if (!wanted.current) DRAWER_TURNS.gone(id);
+  }, [id]);
+  return { presented: visible && up, dismissed };
+}
+
 /** The one button at the right end of a title on the left: a Document's Share (batch 2 of #117). */
 export interface DrawerAction {
   icon: IconName;
@@ -147,9 +196,11 @@ export function Drawer({ visible, title, onClose, onBack, action, children }: {
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const opening = { height: drawerDetentHeight(settings.drawerHeight, { width: window.width, height: window.height, bottomInset: insets.bottom }) };
+  const turn = useDrawerTurn(visible, onClose);
   return (
     <Host style={styles.host} colorScheme={colours.scheme}>
-      <BottomSheet isPresented={visible} onIsPresentedChange={(presented) => { if (!presented) onClose(); }}>
+      <BottomSheet isPresented={turn.presented} onDismiss={turn.dismissed}
+        onIsPresentedChange={(presented) => { if (!presented) onClose(); }}>
         <Group modifiers={[
           presentationDetents([opening, DRAWER.expanded]),
           presentationDragIndicator('visible'),

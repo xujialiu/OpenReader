@@ -4,6 +4,7 @@ import { ActivityIndicator, PanResponder, Pressable, ScrollView, StyleSheet, Tex
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { TranslationService } from '../translation/settings';
 import { INK, useBorders, ValueRow } from './controls';
+import { useDrawerTurn } from './drawer';
 import { Icon } from './icon';
 import { TRANSLATION_SERVICES } from './translation-screen';
 import type { LookupHandle } from './use-lookup';
@@ -18,6 +19,10 @@ export function LookupDrawer({ lookup, height, service, onService }: {
   const [fraction, setFraction] = useState(0.46);
   const [copyError, setCopyError] = useState(false);
   const [copied, setCopied] = useState(false);
+  // One drawer at a time (#117): a selection made while another drawer is up
+  // closes that one, and the lookup shows once it is down. Not animated: the
+  // lookup drawer is a view of the reader's own, gone as soon as it is closed.
+  const turn = useDrawerTurn(Boolean(lookup.selection), lookup.close, { animated: false });
   const startHeight = useRef(0);
   const current = useRef({ fraction, height, close: lookup.close });
   useEffect(() => { current.current = { fraction, height, close: lookup.close }; }, [fraction, height, lookup.close]);
@@ -35,7 +40,7 @@ export function LookupDrawer({ lookup, height, service, onService }: {
   // A new network result has not been copied, even if the preceding result was.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setCopied(false); setCopyError(false); }, [lookup.result]);
-  if (!lookup.selection) return null;
+  if (!lookup.selection || !turn.presented) return null;
   const copy = async () => {
     if (!lookup.result) return;
     try { await Clipboard.setStringAsync(lookup.result.text); setCopied(true); setCopyError(false); }

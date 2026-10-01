@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { INK, Note, useBorders } from './controls';
+import { useDrawerTurn } from './drawer';
 import { Icon, type IconName } from './icon';
 import { TEXT } from './text-styles';
 
@@ -15,7 +16,9 @@ export interface SheetAction {
 
 /**
  * The app's own drawer, for the drawers not yet moved to the phone's own sheet
- * (`drawer.tsx`, #117, ADR 0066). Contents has moved; the rest follow.
+ * (`drawer.tsx`, #117, ADR 0066). Contents has moved; the rest follow. It
+ * waits its turn with them (`useDrawerTurn`): one drawer at a time, because
+ * the phone will not present this one over a sheet that is up.
  *
  * Only the handle/title owns the drag; lists and steppers retain their gestures.
  *
@@ -40,6 +43,7 @@ export function Sheet({ visible, title, onClose, onBack, action, children, style
   style?: StyleProp<ViewStyle>;
 }) {
   const borders = useBorders();
+  const turn = useDrawerTurn(visible, onClose);
   const [y] = useState(() => new Animated.Value(0));
   useEffect(() => { if (visible) y.setValue(0); }, [visible, y]);
   const gesture = useMemo(() => PanResponder.create({
@@ -53,7 +57,7 @@ export function Sheet({ visible, title, onClose, onBack, action, children, style
     onPanResponderTerminate: () => Animated.spring(y, { toValue: 0, useNativeDriver: true }).start(),
   }), [y, onClose]);
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={turn.presented} transparent animationType="slide" onRequestClose={onClose} onDismiss={turn.dismissed}>
       <KeyboardAvoidingView style={styles.behind} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable style={styles.behind} onPress={onClose} accessibilityRole="button" accessibilityLabel={`Close ${title}`} />
       <Animated.View style={[styles.sheet, { borderTopColor: borders.line }, style, { transform: [{ translateY: y }] }]} onAccessibilityEscape={onClose}>
