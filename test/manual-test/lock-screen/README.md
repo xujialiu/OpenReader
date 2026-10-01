@@ -136,3 +136,72 @@ project the same way and passing
 fresh launch seeked back to the first sentence. It passed twice at 0.69 s
 between the taps on 2026-09-25; one earlier run at 0.82 s failed on a LogBox
 banner (Pitfalls, "A LogBox banner can appear with no `WARN`/`ERROR` line").
+
+### The Now Playing artwork on the card: a Cover whole on a square, and what fills its sides (#119, 2026-10-01)
+
+Prerequisites: two Documents — one with a Cover, one without (the owner's
+`~/Works/epub_books`: *Reverend Insanity 1-250* has a 300×400 Cover;
+*My Vampire System 1-250* has none) — and a Provider that answers at once: the
+fake Kokoro, `../player-and-reading-held/fake-kokoro.cjs PORT`, its log pointed
+somewhere session-local. The books go in through the harness the usual way
+(`Inbox` + `add`, above under **Real books**), then the Provider is two harness
+commands while the Reader is open — **both** are needed:
+
+```sh
+node test/manual-test/kit/hx.cjs UDID '{"do":"settings","patch":{"provider":"local","enabledProviders":["local"],"local":{"engine":"kokoro","baseURL":"http://127.0.0.1:PORT"},"voice":"af_bella","consent":["provider:local@http://127.0.0.1:PORT"]}}'
+node test/manual-test/kit/hx.cjs UDID '{"do":"voice","provider":"local","voice":"af_bella"}'
+```
+
+The `settings` patch alone is not enough: the reader reads the **Document's**
+voice (`settingsForDocument`), and without the `voice` command the next
+`{"do":"play"}` is refused in silence — the Debug Log's
+`[reading] play at utterance none, local ` names it: the voice after
+`local` is empty (see `../pitfalls/verification-runs.md`). `consent` holds the
+provider's recipient key (`provider:local@http://127.0.0.1:PORT`), which
+answers the first-send question without the alert.
+
+Then: `play`, press Home (`test/manual-test/kit/lock-device.sh UDID home`) so the app is
+backgrounded and playing, and capture the card:
+
+```sh
+bash test/manual-test/kit/silence.sh set UDID >/dev/null && bash test/manual-test/kit/silence.sh check UDID && \
+bash test/manual-test/kit/run-probe.sh LockScreenProbe UDID /tmp/openreader-artwork-01 --expect-player
+python3 artwork-sides.py /tmp/openreader-artwork-01/attachments-*/lock-screen_0_*.png
+```
+
+(`run-probe.sh` exports attachments under timestamped names; `manifest.json` in
+the same folder maps them. Reusing one output directory across runs is fine for
+the same probe and saves the rebuild.)
+
+Measured 2026-10-01 (iPhone 17 Pro player_top-119, iOS 27.0, 1.0.0-beta7,
+12a0694): the Cover book's card draws the 300×400 cover **whole**, centred on a
+1120 px (373 pt) square — strip aspect measured 0.7518 against the source's
+0.75, so nothing is cropped or stretched — and the side bands read a flat
+neutral **(238, 238, 238)** while the wallpaper beside the card is (69, 84, 99):
+the bands are the system's artwork material, not the wallpaper, not white, not
+black. Pausing keeps the picture; on a fresh start from the lock screen the
+card arrives already carrying the Cover (a 25 s `simctl io recordVideo` of the
+locked screen, frames at 4/s: no card → card with the Cover, nothing between).
+`artwork-sides.py` prints the square, the strip and the band colours, and
+says so in `reading:`; it needs a tall Cover (a square one has no bands), and
+it measures the card only.
+
+**The Dynamic Island cannot be verified on this simulator**: `simctl io
+screenshot`'s framebuffer on iOS 27.0 carries no island — no compact Now
+Playing while a reading verifiably plays in the background, and not even the
+sensor housing on the Home Screen (it appears on the locked screen). Control
+Centre opened with no tiles at all, no Now Playing widget. The card is the one
+observable surface; it and the island are filled by the same
+`MPMediaItemPropertyArtwork` key (ADR 0016), so they cannot differ. See
+`../pitfalls/simulators.md`.
+
+The cover-less book's expected icon could not be shown at all on this build:
+its first `show` throws —
+`UIImage(named:in:compatibleWith:)` of the app's own icon asset raises
+`*** Assertion failure in -[_UIImageCGImageContent initWithCGImageSource:CGImage:scale:], _UIImageContent.m:742`
+on iOS 27.0, the Expo boundary turns it into
+`Exception in HostFunction: <unknown>` at `src/now-playing/index.ts`'s
+`lockScreen().show(...)`, and the reader dies on a **Render Error** (RedBox),
+the document closes, and the lock screen is left with no card. Reproduced from
+a fresh launch, and again in dark mode; the native frames and the assertion are
+in the #119 report.
