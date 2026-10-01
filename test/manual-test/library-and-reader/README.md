@@ -201,3 +201,33 @@ The sheet's own actions (Save to Files, AirDrop) cannot be driven from here
 on the `Caches/share/` copy instead. On 2026-09-30 (iPhone 17, iOS 27.0) all
 five methods passed. The Debug Log showed `copied in 4–13 ms` for a 1 MB book
 and `sheet closed after 2589–3250 ms`.
+
+## The reader's web content process ended (#120, `webcontent-killed.sh`)
+
+With the Debug app connected to a Metro whose log is written to `METRO_LOG`,
+and a Document open in the Reader with its text on the page:
+
+```sh
+bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID METRO_LOG          # kill with the app in front
+bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID METRO_LOG --away   # in Settings during the kill, as on the phone
+```
+
+It asks the page with `kit/probes/page-alive.js`, `kill -9`s the device's one
+WebContent process (the `WebContentExtension` child of its `launchd_sim`), waits
+5 s (`--wait`), and asks again. PASS: epub.js is on the page with a displayed
+view taller than zero; FAIL: anything else, a missing answer included. Exit 0 /
+1, 2 when the page has no text before the kill or there is not exactly one
+WebContent process. It plays nothing and saves a screenshot to
+`/tmp/openreader-webcontent-killed.png`.
+
+On the phone (2026-10-01) iOS ended the process itself, with the app suspended
+(`JETSAM_REASON_MEMORY_LONGIDLE_EXIT`), and WebKit reported it on the next
+resume as `WebPageProxy::processDidTerminate … reason=Crash`; a `kill -9` is
+the same report. Measured 2026-10-01 22:03 on iPhone 17 (iOS 27.0), "My Vampire
+System 251-500": FAIL in 3 runs of 3 (twice in front, once `--away`), about 20 s
+each, the screenshot blank under the navigation bar and the player, Metro
+logging `WARN Webview Process Terminated`. Closing the Reader and opening the
+book again, with nothing playing, brought the text back.
+
+What it cannot prove: what an idle-exit while suspended does beyond the kill
+(the phone's wait was 85 minutes), or a Reading playing through it.
