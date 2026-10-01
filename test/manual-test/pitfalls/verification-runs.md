@@ -1,5 +1,35 @@
 # Merges, seeding and past verification runs
 
+## Verifying #115: Play in the middle of the transport row (2026-10-01)
+
+- **On a fresh install the collapse arrow seems dead, and so does every way
+  of pressing it.** A fresh Library has no Provider enabled, so the player
+  carries `No provider is enabled. Enable one in Settings to listen.`, and a
+  note keeps the player open (ADR 0048; `collapsed && notes.length === 0`).
+  The tester tried `ax.py touch`, `mobilebuildmcp_tap`, a raw `axe tap` and
+  the harness's `collapse`, and put the misses down to eaten taps; all of
+  them had landed. Fix: clear the note first, by enabling a Provider (below),
+  then collapse. The same rule caught `line-follow.cjs` (#71, further down).
+- **`{"do":"settings","patch":{"local":{"baseURL":…}}}` drops the local
+  engine, and Play then does nothing that reaches the fake server.** The
+  harness's patch is the shallow merge described under #71 batches 3 and 4
+  below: naming only `local.baseURL` replaces the whole `local` object, so
+  `engine` became `undefined`, the Voice sheet said `Unknown local engine:
+  undefined`, the `voice` command left the Voice empty, and three real Play
+  touches opened the sheet instead of asking `fake-kokoro.cjs` for a clip
+  (its log held only `GET /v1/models`). Fix: send the whole object,
+  `{"local":{"engine":"kokoro","baseURL":"http://127.0.0.1:8791"}}`, then
+  `{"do":"voice","provider":"local","voice":"af_bella"}` and
+  `{"enabledProviders":["local"]}`; `say` then logs `voice=af_bella` and
+  `ready=true`, and the first Play asks the consent question (#109).
+- **Restarting `fake-kokoro.cjs` with the PID its launch printed left the old
+  server running.** `FAKE_PID=$!` from a `nohup … &` in a `bash -c` named the
+  wrapper (88831), not the `node` holding port 8791 (88834); the kill missed,
+  the new server could not bind, and the 1.5 s `OPENREADER_FAKE_TTS_DELAY_MS`
+  it was started for never applied. Fix: stop whatever listens there,
+  `kill $(lsof -t -iTCP:8791 -sTCP:LISTEN)`, and read the same `lsof` back
+  before starting the next one.
+
 ## Verifying #113: the renderer log and the probe channel (2026-10-01)
 
 - **`{"do":"ask","provider":…}` puts no note on the player, even when the ask

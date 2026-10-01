@@ -476,3 +476,24 @@ describe('the Document’s name in the bar takes two lines before it is cut (#85
     pin(title, 'maxWidth: room', 'reader-title.tsx');
   });
 });
+
+describe('Play is in the middle of the player (#115)', () => {
+  /**
+   * The row spreads its buttons with equal gaps, so Play is in its middle only
+   * while as many buttons stand on each side of it and the two ends are as wide
+   * as each other. Contents at 44 against the speed's 58 put Play 7 points left
+   * of the player's centre, under a Voice name that is centred (#70).
+   */
+  it('stands between two ends of one width, in a row that spreads its buttons evenly', () => {
+    const player = code('player.tsx');
+    pin(player, "transport: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }", 'player.tsx');
+    pin(player, 'footTap: { width: TRANSPORT_END,', 'player.tsx');
+    pin(player, 'rateHost: { height: 44, width: TRANSPORT_END }', 'player.tsx');
+
+    const row = within(player, '<View style={styles.transport}>', '<SpeedBubble');
+    const [before, after] = row.split(' primary ');
+    expect(after).toBeDefined();
+    expect(before).toContain('styles.footTap');
+    expect(before.split('<Transport ').length).toBe(after.split('<Transport ').length + 1);
+  });
+});
