@@ -76,7 +76,6 @@ import {
   FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
   type AccessibilityRole, type AccessibilityState, type ColorValue, type FlatListProps, type StyleProp, type TextStyle,
 } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
@@ -270,17 +269,12 @@ export function Drawer({ visible, title, onClose, onBack, action, titleLeft, chi
           ignoreSafeArea({ regions: 'container', edges: 'bottom' }),
         ]}>
           <RNHostView>
-            {/*
-              * Gesture handler's root again, inside the sheet: the sheet is presented
-              * in a view controller of its own, out of reach of the app's root, as
-              * a `Modal` was. Download's two-finger sweep needs it (ADR 0045).
-              */}
-            <GestureHandlerRootView style={[styles.body, { paddingBottom: bottom }]} onAccessibilityEscape={onClose}>
+            <View style={[styles.body, { paddingBottom: bottom }]} onAccessibilityEscape={onClose}>
               <DrawerBottom value={bottom}>
                 <DrawerTitle title={title} onBack={onBack} action={action} titleLeft={!!titleLeft} />
                 {children}
               </DrawerBottom>
-            </GestureHandlerRootView>
+            </View>
           </RNHostView>
         </Group>
       </BottomSheet>
