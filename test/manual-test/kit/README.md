@@ -36,7 +36,10 @@ What every area uses:
   page (#117). `python3 test/manual-test/kit/drawer-edge.py SHOT.png [R G B]`;
   with a colour it also gives the first row in that colour. It cannot tell
   the Drawer Height from `large`: `ax.py UDID tree`'s `Sheet Grabber` value
-  (`Half screen`, `Expanded`) does. The header says what each offset is.
+  (`Half screen`, `Expanded`) usually does — but at 80–90 % the value can read
+  `Expanded` while the drawer is still at its custom detent, so past about
+  half the screen decide by the edge (62.0 pt is `large`). The header says
+  what each offset is.
 
 ## Read the accessibility tree, and touch what it lists
 

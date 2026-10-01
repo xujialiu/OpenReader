@@ -253,3 +253,5 @@
   same night had status lines in Metro while away. Fix: judge a background run by
   the Debug Log's `[renderer]` and `[app]` stamps, read after the app is back in
   front (which appends what was waiting), as `background-crossing.sh` does.
+
+- **`curl http://localhost:8081/reload` does not reload the native app on Expo CLI's Metro.** 2026-10-01 (#117 verification): the classic RN reload endpoint answered the React Native **web** index HTML (`<script src="/index.ts.bundle?platform=web…">`), the app on the simulator did not reload, and its drawer stayed up. To reload natively, press `r` in the Expo CLI's own terminal, or `xcrun simctl terminate` and `launch` the app (a cold remount — the drawer's JS state is lost either way). Probing a Fast Refresh without editing app source has no remaining route: an HMR update comes only from a file change.
