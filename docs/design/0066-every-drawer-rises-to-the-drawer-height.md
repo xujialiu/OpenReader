@@ -5,9 +5,9 @@ _The engineering half of this decision is
 It revises what decisions [0026](0026-a-coherent-reading-interface.md),
 [0027](0027-whole-document-offline-narration.md),
 [0042](0042-the-app-follows-the-phones-own-look.md) and
-[0051](0051-looking-up-words-and-translating-text.md) say about drawers, and
-carries the cards of [decision 0041](0041-one-look-for-settings-and-the-speed-control.md)
-into them._
+[0051](0051-looking-up-words-and-translating-text.md) say about drawers. The
+cards of [decision 0041](0041-one-look-for-settings-and-the-speed-control.md)
+stay on the Settings pages and do not come into the drawers._
 
 ## What the owner saw
 
@@ -32,7 +32,7 @@ word opens in. The phone moves it, rounds its corners and answers
 a swipe on it. The app fills it.
 
 They are alike, and in the phone's style. What a drawer is made of, its two
-heights, how far its cards stand in from the edge, how tall a row is, where a
+heights, how far its words stand in from the edge, how tall a row is, where a
 line between rows starts, and its colours, is set down once for the whole app
 and taken by every drawer from there. A new drawer, or a new row in an old one,
 is drawn to the same values without anyone choosing them again.
@@ -110,16 +110,30 @@ how the phone expects its own drawers to be put away.
 
 ## What is in a drawer
 
-Rows are grouped in rounded cards set in from the edges, like the app's own
-Settings pages and the phone's. Where the phone can draw a row itself, a font, a
-size, the margins, the alignment, a short menu, it does. Where it cannot, the
-chapters in Contents and in Download, the app draws the row to the phone's
-measured sizes, so the two kinds sit together without a seam.
+Rows sit straight on the drawer, one under another, as the chapters do in
+Apple Books' table of contents: no box around them, the words about a
+finger's width from each edge, and a thin line under every row, the last one
+included. A one-line row is the same height everywhere, and a title too long
+for one line is shown in full over as many lines as it needs, so a row grows
+rather than cutting its words short. The words are a little smaller than the
+app's body text, as Books sets them.
+
+The first version put the rows in rounded cards set in from the edges, like the
+app's Settings pages. The owner turned it down on the phone, beside Books: the
+card was a frame around the list for nothing, its inset and the card's own
+margin together pushed the words a third further from the edge than Books puts
+them, so fewer of them fitted on a line, and a long chapter title was cut off
+with an ellipsis. The Settings pages keep their cards; the drawers do not use
+them anywhere.
+
+Where the phone can draw a row itself, a font, a size, the margins, the
+alignment, a short menu, it does, to the same distances from the edge. Where it
+cannot, the app draws the row to the same values, so the two kinds sit together
+without a seam.
 
 The colours are the app's own, as everywhere else (decision 0042). In the light
-theme a drawer is the colour of a Settings page and its cards are the colour of
-a Settings card. In the dark theme it is one step lighter than the page, and its
-cards one step lighter again: a Settings page in the dark is the colour of the
+theme a drawer is the colour of a Settings page. In the dark theme it is one
+step lighter than the page: a Settings page in the dark is the colour of the
 book's own page, and a drawer that colour could not be told from the page it
 rose over. The phone's own dark drawers are lighter than the page for the same
 reason. The colours are solid. The drawer follows the app's Theme, not the
@@ -127,17 +141,17 @@ phone's. The phone's own controls in it take the app's amber.
 
 ## Drawer by drawer
 
-- **A book's actions.** Appearance, Rename and Download are one card, and a row
-  that opens a page carries an arrow at its right. Delete, which the Library
-  offers and the reader does not, is in red, in a card of its own.
+- **A book's actions.** Appearance, Rename and Download are rows of the list,
+  and a row that opens a page carries an arrow at its right. Delete, which the
+  Library offers and the reader does not, is in red, the last row.
 - **Rename** is no longer a page of the drawer. It is the phone's own small
   dialog with a field in it, rising over the drawer: Cancel goes back to the
   menu, Save renames the book and closes the drawer, and Save cannot be pressed
   while the name is blank. The owner asked for a dialog: a new name is one short
   answer, and the phone asks for one of those in a dialog, not on a page.
 - **Voice.** The rows of small buttons for the provider and the language become
-  two rows, Provider and Language, each opening a short menu, above a card of
-  the voices.
+  two rows, Provider and Language, each opening a short menu, above the list of
+  voices.
 - **Download.** Manage downloads becomes a page of its own, titled Manage, with
   the back button; the link that read Back to downloads goes. Select all, and
   Deselect all, move up into the drawer's top, on the right. Download selected
@@ -182,3 +196,6 @@ phone's. The phone's own controls in it take the app's amber.
   owner chose the app's own solid colours instead.
 - **Each drawer finding its own height.** That is what the app did, and it is
   why every drawer was a different size and grew with every row added to it.
+- **Rows in rounded cards, like the Settings pages.** Built first, and turned
+  down on the phone beside Books: a frame around the list, wider margins, fewer
+  words on a line, and long titles cut short.
