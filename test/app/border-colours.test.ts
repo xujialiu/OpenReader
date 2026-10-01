@@ -47,7 +47,9 @@ describe('#29: no border takes a dynamic colour', () => {
 
   it('finds the borders it checks, so a pattern that matches nothing cannot pass for a clean tree', () => {
     const found = files.flatMap((path) => borderColours(readFileSync(path, 'utf8')));
-    expect(found.length).toBeGreaterThanOrEqual(9);
+    // Fewer than there were: #117's drawers draw their lines as filled views, not borders.
+    // The player's outline and the drawer's round buttons' rim are borders still.
+    expect(found.length).toBeGreaterThanOrEqual(2);
   });
 
   it('fires on the spellings #29 was drawn with', () => {

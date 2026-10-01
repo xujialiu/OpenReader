@@ -72,7 +72,7 @@ import { useCallback, useContext, useEffect, useId, useRef, useSyncExternalStore
 import { Pressable, StyleSheet, Text, View, useWindowDimensions, type AccessibilityState, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
+import { ChoiceMenu, Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, type Choice } from './controls';
 import { drawerDetentHeight } from './drawer-height';
 import { DRAWER_LIST, drawerRowText } from './drawer-list';
 import { createDrawerTurns } from './drawer-turns';
@@ -207,9 +207,12 @@ export interface DrawerAction {
  */
 type DrawerHeader = { onBack?(): void; action?: never } | { action: DrawerAction; onBack?: never };
 
-export function Drawer({ visible, title, onClose, onBack, action, children }: {
+export function Drawer({ visible, title, heading, onClose, onBack, action, children }: {
   visible: boolean;
+  /** The centred title; with `heading`, the name the heading's control is given for VoiceOver. */
   title: string;
+  /** A control drawn where the centred title goes, in its place: the lookup drawer's Dictionary | Translation. */
+  heading?: ReactNode;
   /** Called when the drawer is swiped away, and by VoiceOver's escape. Not by a tap outside: there is none. */
   onClose(): void;
   children: ReactNode;
@@ -234,7 +237,7 @@ export function Drawer({ visible, title, onClose, onBack, action, children }: {
         ]}>
           <RNHostView>
             <View style={styles.body} onAccessibilityEscape={onClose}>
-              <DrawerTitle title={title} onBack={onBack} action={action} />
+              <DrawerTitle title={title} heading={heading} onBack={onBack} action={action} />
               {children}
             </View>
           </RNHostView>
@@ -244,7 +247,7 @@ export function Drawer({ visible, title, onClose, onBack, action, children }: {
   );
 }
 
-function DrawerTitle({ title, onBack, action }: { title: string; onBack?(): void; action?: DrawerAction }) {
+function DrawerTitle({ title, heading, onBack, action }: { title: string; heading?: ReactNode; onBack?(): void; action?: DrawerAction }) {
   if (action) {
     return (
       <View style={styles.header}>
@@ -257,7 +260,7 @@ function DrawerTitle({ title, onBack, action }: { title: string; onBack?(): void
     <View style={styles.header}>
       {/* Absolute and inset by a button on both sides, so the title is centred on the drawer rather than on what the back button leaves of it. */}
       <View style={styles.titleCentred}>
-        <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>
+        {heading ?? <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>}
       </View>
       {onBack ? <RoundButton icon="previous" label={`Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : null}
     </View>
@@ -329,6 +332,32 @@ export function DrawerSeparator() {
   return <View style={[styles.separator, { backgroundColor: colours.separator }]} />;
 }
 
+/**
+ * A row of the list that opens the system's short menu (`ChoiceMenu`, ADR
+ * 0035): its name, what it is set to, and the two chevrons iOS puts on such a
+ * row. One line, 52 pt, because the menu is laid out at the height it is given.
+ */
+export function DrawerMenuRow<T extends string | number>({ label, choices, chosen, onChoose }: {
+  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
+}) {
+  return (
+    <View style={styles.menuRow}>
+      <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} height={DRAWER.row.rowHeight}>
+        <View style={styles.menuWords}>
+          <Text style={[styles.rowText, styles.menuLabel]}>{label}</Text>
+          <View style={styles.menuValue}>
+            <Text style={[styles.rowText, styles.menuValueText]} numberOfLines={1}>
+              {choices.find((choice) => choice.value === chosen)?.label}
+            </Text>
+            <Icon name="menu" color={INK.secondary} size={18} />
+          </View>
+        </View>
+      </ChoiceMenu>
+      <DrawerSeparator />
+    </View>
+  );
+}
+
 /** The words under a list: the phone's footer text, set in as far as the rows' words are. */
 export function DrawerFooter({ children, attention }: { children: ReactNode; attention?: boolean }) {
   return <View style={styles.footer}><Footnote attention={attention}>{children}</Footnote></View>;
@@ -367,4 +396,11 @@ const styles = StyleSheet.create({
     position: 'absolute', right: DRAWER.row.inset,
   },
   footer: { marginTop: DRAWER.footerGap, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
+  // The menu's label spans the words, not the drawer: a label as wide as the
+  // drawer took the whole drawer off the screen while its menu was open.
+  menuRow: { height: DRAWER.row.rowHeight, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
+  menuWords: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
+  menuLabel: { flexShrink: 0 },
+  menuValue: { alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 4 },
+  menuValueText: { color: INK.secondary, flexShrink: 1 },
 });
