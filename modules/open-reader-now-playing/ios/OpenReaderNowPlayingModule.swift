@@ -286,11 +286,14 @@ enum NowPlayingPicture {
   /// thousand pixels and the largest square iOS draws is a fraction of that.
   static let side: CGFloat = 1024
 
+  /// The image set `plugins/with-now-playing-icon.ts` writes at prebuild.
+  static let iconName = "NowPlayingIcon"
+
   /// Nil only when neither a Cover nor the icon can be had; Now Playing then
   /// shows its own empty square, as it did before there was a picture at all.
   static func artwork(cover: String) -> MPMediaItemArtwork? {
     // A Cover UIKit cannot decode is no Cover, as it is in the Library.
-    guard let picture = coverImage(cover).flatMap(squared) ?? appIcon() else { return nil }
+    guard let picture = coverImage(cover).flatMap(squared) ?? appIcon().flatMap(squared) else { return nil }
     return MPMediaItemArtwork(boundsSize: picture.size) { _ in picture }
   }
 
@@ -299,7 +302,8 @@ enum NowPlayingPicture {
     return UIImage(contentsOfFile: url.path)
   }
 
-  /// The Cover whole, centred on a square whose sides are left transparent.
+  /// The picture whole, centred on a square whose sides are left transparent,
+  /// at one scale and at most `side` pixels whichever picture it is.
   ///
   /// A Cover is tall and the square is not, and the owner chose the whole Cover
   /// over a square cut out of it: a Cover is recognised by all of it, and its
@@ -321,22 +325,18 @@ enum NowPlayingPicture {
     }
   }
 
-  /// The app's icon, in its default appearance whatever the phone's.
+  /// The app's icon in its default appearance, whatever the phone's: the owner
+  /// chose it, because the app cannot read the Home Screen's own icon setting
+  /// and dark mode alone would only guess at it.
   ///
-  /// Read from the compiled asset catalog by the name the bundle's own
-  /// `CFBundleIconName` gives it, so it is the icon the Home Screen shows and
-  /// follows it if it is ever renamed. The catalog holds a 1024 px rendition for
-  /// each appearance — any, dark and tintable; `assetutil --info` on the
-  /// 2026-10-01 Release build — and the light trait collection picks the first.
-  /// The owner chose the default appearance: the app cannot read the Home
-  /// Screen's own icon setting, and dark mode alone would only guess at it.
+  /// **Never the app icon set itself.** `UIImage(named:)` given `ios.icon`'s
+  /// compiled name raises `NSInternalInconsistencyException` from
+  /// `_UIImageContent.m:742` instead of returning nil, Swift cannot catch it,
+  /// and the reader went down with it (#119; `plugins/with-now-playing-icon.ts`
+  /// has the measurement). This is a plain copy of the icon in an image set of
+  /// its own, which has one appearance and so needs no trait collection.
   private static func appIcon() -> UIImage? {
-    guard
-      let icons = Bundle.main.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any],
-      let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-      let name = primary["CFBundleIconName"] as? String
-    else { return nil }
-    return UIImage(named: name, in: .main, compatibleWith: UITraitCollection(userInterfaceStyle: .light))
+    UIImage(named: iconName)
   }
 }
 

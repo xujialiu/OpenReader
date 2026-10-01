@@ -179,7 +179,7 @@ describe('the picture in Now Playing\'s square (#119)', () => {
   });
 
   it('falls back to the icon for no Cover and for a Cover that cannot be decoded', () => {
-    expect(picture).toContain('coverImage(cover).flatMap(squared) ?? appIcon()');
+    expect(picture).toContain('coverImage(cover).flatMap(squared) ?? appIcon().flatMap(squared)');
   });
 
   it('keeps the whole Cover, on a square whose sides are transparent', () => {
@@ -188,9 +188,16 @@ describe('the picture in Now Playing\'s square (#119)', () => {
     expect(picture).toContain('(square - drawn.width) / 2, y: (square - drawn.height) / 2');
   });
 
-  it('reads the icon the Home Screen shows, in its default appearance', () => {
-    expect(picture).toContain('primary["CFBundleIconName"] as? String');
-    expect(picture).toContain('UIImage(named: name, in: .main, compatibleWith: UITraitCollection(userInterfaceStyle: .light))');
+  it('reads the icon from its own image set and never from the app icon set, which raises', () => {
+    // `UIImage(named:)` given ios.icon's compiled name raised
+    // NSInternalInconsistencyException (_UIImageContent.m:742) rather than
+    // returning nil, which Swift cannot catch: the reader's first `show` for a
+    // Document without a Cover took the whole screen down (#119).
+    expect(picture).toContain('static let iconName = "NowPlayingIcon"');
+    expect(picture).toContain('UIImage(named: iconName)');
+    expect(swift).not.toContain('CFBundleIconName');
+    expect(swift).not.toContain('CFBundleIcons');
+    expect(swift).not.toContain('UIImage(named: "OpenReader"');
   });
 
   it('shows nothing until the Cover is known, so a Cover never comes after the icon', () => {
