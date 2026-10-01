@@ -4,6 +4,8 @@ status: accepted
 
 # Explicit offline narration outlives the reader
 
+_[ADR 0066](0066-every-drawer-rises-to-the-drawer-height.md) revises the download view's layout below: Manage downloads is a page with a back button instead of the Manage downloads / Back to downloads link, Select all is in the header, Download selected is fixed at the bottom, and Pause all / Resume all is on the download's status line rather than opposite Manage downloads. The drawer's side inset (`SIDE`) and row heights are the drawer values of ADR 0066. What the rows, rings and tasks do is unchanged._
+
 The product agreement is [design 0027](../design/0027-whole-document-offline-narration.md). Ordinary playback remains memory-only; only explicitly selected download tasks persist audio. This extends ADR 0002's deferred whole-document preparation without introducing automatic disk caching of everything heard.
 
 ## One extraction and one synthesis identity

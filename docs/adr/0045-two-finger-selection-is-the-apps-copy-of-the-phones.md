@@ -6,6 +6,8 @@ status: accepted
 
 The product half is [design 0045](../design/0045-choosing-a-run-of-chapters-with-two-fingers.md); the issue is #57. The measurements are in `notes/NOTES_2026-09-24.md`, 02:15 to 03:13.
 
+_[ADR 0066](0066-every-drawer-rises-to-the-drawer-height.md) replaces the drawer's React Native `Modal` with `@expo/ui`'s SwiftUI `BottomSheet`, its React Native rows inside `RNHostView`. That the gesture-handler root at the app's root reaches the list was measured below for the `Modal` only; in the new drawer it is still to be measured._
+
 ## What was built
 
 The download drawer keeps its `FlatList`. A `Gesture.Pan().minPointers(2).minDistance(0).runOnJS(true)` from react-native-gesture-handler 2.32.0, which was already installed for the EPUB reader, is laid over it through a `GestureDetector`, and `App.tsx` now wraps the app in `GestureHandlerRootView`: there was none, and a detector without one throws in development. The drawer is a React Native `Modal`; on iOS the root view at the app's root was enough for the pan to reach JavaScript inside it, and no second one inside the `Modal` is needed (notes, 02:29).

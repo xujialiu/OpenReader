@@ -89,6 +89,9 @@ listed below.
 
 ## Where the app does not follow it yet
 
+_Revised in [decision 0066](0066-every-drawer-rises-to-the-drawer-height.md):
+the drawers are now the phone's own, in the app's colours._
+
 - **The drawers.** Voice, Contents, Appearance and Download rise in panels of
   the app's own. The phone has panels of its own that do the same, and they are
   not used yet.

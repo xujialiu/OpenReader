@@ -39,6 +39,10 @@ else. Every piece of text is one of them:
 - A larger style for the Library's empty state, and one for the word being
   looked up until that follows Appearance (below).
 
+_Since [decision 0066](0066-every-drawer-rises-to-the-drawer-height.md), Voice
+has no filter chips: the provider and the language are two rows, each opening a
+short menu._
+
 A row that is chosen or being read, such as the chapter being read in Contents,
 takes the same style in its heavier weight, as the phone does.
 

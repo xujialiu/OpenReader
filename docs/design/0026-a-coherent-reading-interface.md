@@ -191,6 +191,11 @@ The owner confirmed this interaction.
 _Speed is no longer a drawer; it opens in a bubble
 ([decision 0041](0041-one-look-for-settings-and-the-speed-control.md))._
 
+_Revised in [decision 0066](0066-every-drawer-rises-to-the-drawer-height.md):
+every drawer is now the phone's own, and a swipe down anywhere on it closes it.
+A tap outside no longer closes a drawer: at the Drawer Height it reaches the
+page behind._
+
 Voice, Speed, Contents and Appearance close when the owner drags down from the
 handle or the surrounding title area. A visible handle that does nothing was
 rejected because it promises an action the owner cannot perform. Tapping outside
