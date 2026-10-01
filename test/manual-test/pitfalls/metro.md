@@ -188,6 +188,7 @@
   answers `packager-status:running` after the call returns. It outlives the
   worktree too: stop it by PID when the worktree goes, or it joins the six that
   were still serving `.orca-worktree-trash` that morning.
+- **A tool call that times out takes a Metro it started with it.** 2026-10-01 (#117 batch 3): `(nohup npx expo start --port 8152 < /dev/null > LOG 2>&1 &)` in a call that then ran `simctl install` and timed out at 180 s left `LOG` at "Waiting on http://localhost:8152" and nothing listening (`curl /status` exit 7), so the app sat on a white screen. Start Metro in a call of its own that returns at once (`nohup … & disown`), and check `/status` in the next one.
 - **The `npm exec` of a Metro started that way may not answer 1 for its PPID,
   and that does not mean it will die with the session.**
   - Symptom (2026-09-28 05:59, #77): the tool call ran `cd TREE && nohup
