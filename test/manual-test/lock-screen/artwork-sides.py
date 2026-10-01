@@ -25,6 +25,12 @@
 # material's colour" is iOS's own compositing, which a screenshot cannot see.
 # A pure-white or pure-black Cover would also defeat the strip detection: check
 # the printed strip bounds against the screenshot before trusting the numbers.
+#
+# A SQUARE artwork (the #119 icon case) has no strip to isolate: when no row
+# yields two light runs, the script checks the square's left and right edge
+# columns instead — if they are light on (almost) every row, the artwork's own
+# background fills the square edge to edge and the answer is "no side bands",
+# with the four corners' colours sampled (2026-10-01, #119b).
 
 import argparse
 import json
@@ -109,8 +115,43 @@ def main() -> int:
                 strip_l, strip_r = l, r
                 break
     if strip_l is None:
-        print('could not isolate the drawn picture inside the square — is the artwork itself light?')
-        return 1
+        # No two-runs row anywhere: a square artwork fills the square with its
+        # own background. The edge columns decide: light on every row means the
+        # artwork itself reaches the edges — no side bands to question. The row
+        # range starts one corner radius in (side // 20): inside the rounded
+        # corners the edge columns read the wallpaper, not the artwork.
+        e1 = left + max(2 * THIRD, span // 128)
+        e2 = right - max(2 * THIRD, span // 128)
+        rows = range(top + max(THIRD, side // 20), bottom - max(THIRD, side // 20), 2)
+        light_rows = sum(
+            1 for y in rows
+            if sum(im.getpixel((e1, y))) > 400 and sum(im.getpixel((e2, y))) > 400
+        )
+        if light_rows * 100 < len(rows) * 99:
+            print('could not isolate the drawn picture inside the square — is the artwork itself light?')
+            return 1
+        inset = max(2 * THIRD, side // 25)
+        corners = {
+            'top_left': dominant(im, (left + inset, top + inset, left + 3 * inset, top + 3 * inset)),
+            'top_right': dominant(im, (right - 3 * inset, top + inset, right - inset, top + 3 * inset)),
+            'bottom_left': dominant(im, (left + inset, bottom - 3 * inset, left + 3 * inset, bottom - inset)),
+            'bottom_right': dominant(im, (right - 3 * inset, bottom - 3 * inset, right - inset, bottom - inset)),
+        }
+        samples = {
+            'square': {'left': left, 'right': right, 'top': top, 'bottom': bottom, 'side_px': side},
+            'corners': corners,
+            'reading': (
+                f'square artwork fills the square (side {side}px, edge columns light on '
+                f'{light_rows}/{len(rows)} rows): no side bands; '
+                f'corners {corners}'
+            ),
+        }
+        if args.json:
+            print(json.dumps(samples, indent=1))
+        else:
+            for k in ('square', 'corners', 'reading'):
+                print(f'{k}: {samples[k]}')
+        return 0
 
     band = max(4 * THIRD, (strip_l - left) // 3)
     samples = {
