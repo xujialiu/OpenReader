@@ -23,6 +23,12 @@ rather than from any library that holds it, so that two devices recognise the
 same document without a shared catalogue.
 _Avoid_: content id, hash, key, ISBN
 
+**Cover**:
+The picture a Document declares as its own cover, the one the Library shows
+beside its name. A Document that declares none has no Cover, even if its first
+page is a picture.
+_Avoid_: thumbnail, artwork, cover image
+
 **Contents**:
 A document's own list of its parts, as rows a reader can open — the volumes and
 chapters a book names for itself. A row may name a place that has no text on it.
@@ -323,6 +329,12 @@ The phone's own display of the Downloads going on while the app is not in
 front, one for all of them, on the Lock Screen and in the Dynamic Island. The
 phone draws it; it is not a notification, and OpenReader sends none.
 _Avoid_: banner, notification, progress bar, island
+
+**Now Playing**:
+The phone's own display of the Reading outside the app: on the Lock Screen, in
+the Dynamic Island and in Control Centre. The phone draws it from what the app
+tells it.
+_Avoid_: lock screen (for the whole of it), media controls, island
 
 ### The app on the owner's devices
 

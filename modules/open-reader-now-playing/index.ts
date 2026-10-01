@@ -28,6 +28,14 @@ export interface NowPlayingReading {
    * two lines saying the same thing is worse than one line and a blank.
    */
   chapter: string;
+  /**
+   * The Document's Cover as a `file://` URI, or the empty string when it has none.
+   *
+   * Without one the native side shows the app's icon in its default appearance,
+   * and it does the same for a file UIKit cannot decode: a Cover that cannot be
+   * read is no Cover (#119).
+   */
+  cover: string;
   playing: boolean;
   /**
    * The source node's **content position** in seconds (ADR 0012) — the same clock
