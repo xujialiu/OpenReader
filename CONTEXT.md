@@ -223,7 +223,7 @@ _Avoid_: machine id, device id, host name
 
 **Appearance**:
 How the text of a document is set: which font it is shown in, its font size,
-its margins and its text alignment. What a Word Lookup or Text Translation was
+its margins, its text alignment and its highlight colours. What a Word Lookup or Text Translation was
 asked about, and what it found, are set in the same font and font size, because
 they are read as part of the reading. The app's own words around them, its
 buttons, rows and notes, are not. It belongs to the owner rather than to a
@@ -250,8 +250,14 @@ one only. It is the owner's and never the document's; text a document centres
 or sets to the right is not body text, and keeps the place the document gave it.
 _Avoid_: alignment (on its own), justification, text-align, paragraph alignment
 
+**Highlight Colours**:
+The colour and opacity the sentence being read and the word being spoken are
+marked in. Part of Appearance, and the same under either theme.
+_Avoid_: highlight style, highlight theme, highlight scheme
+
 **Theme**:
-Whether the app is shown light or dark, including the document itself. It
+Whether the app is shown light or dark, including the document itself but not
+its highlight colours. It
 belongs to the owner rather than to a document and can defer to the phone's own
 setting, which is what it does until the owner says otherwise.
 _Avoid_: appearance, dark mode, night mode, colour scheme, skin
