@@ -25,9 +25,13 @@
  * changed — moving it here would mean leaving the book to adjust the voice
  * reading it.
  *
+ * The **Drawer Height** (#117, ADR 0066) is the second row of the theme's
+ * card: like the theme, it is how the app around the page looks, the same for
+ * every drawer and every book.
+ *
  * ## Why the theme's card has no header
  *
- * Its one row is called `Theme`, and a header saying `Theme` over it said the
+ * Its first row is called `Theme`, and a header saying `Theme` over it said the
  * same word twice (#48). It was never going to say `Appearance`: CONTEXT.md
  * gives that word to how a *document's* text is set, and a header using it for
  * the app's own light and dark would put two meanings on one term in the one
@@ -41,7 +45,7 @@ import { DEFAULT_BRACKET_PAIRS, validateBracketPairs } from '../core/speech-text
 import { Footnote, INK, SettingsGroup, SettingsPage, SwitchRow, TextRow, ValueRow, type Choice } from './controls';
 import { useShell } from './routes';
 import { TEXT } from './text-styles';
-import { LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLING_LABELS, SCROLLINGS, SENTENCE_PAUSES_MS, THEME_LABELS, THEME_SETTINGS, type Scrolling, type ThemeSetting } from './settings';
+import { DRAWER_HEIGHTS, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLING_LABELS, SCROLLINGS, SENTENCE_PAUSES_MS, THEME_LABELS, THEME_SETTINGS, type Scrolling, type ThemeSetting } from './settings';
 
 /**
  * The Theme menu (#33), in `THEME_SETTINGS`' order, each with the system's own
@@ -65,6 +69,9 @@ const SCROLLING_CHOICES: readonly Choice<Scrolling>[] = SCROLLINGS.map((value) =
 
 /** The Line Position menu (#71): the percentage alone, as the row's value shows it. */
 const LINE_POSITION_CHOICES: readonly Choice<number>[] = LINE_POSITIONS.map((value) => ({ value, label: `${value}%` }));
+
+/** The Drawer Height menu (#117): the percentage alone, as Line position's are. */
+const DRAWER_HEIGHT_CHOICES: readonly Choice<number>[] = DRAWER_HEIGHTS.map((value) => ({ value, label: `${value}%` }));
 
 /**
  * What a refused list of bracket pairs is called, in the owner's words.
@@ -105,6 +112,8 @@ export function GeneralScreen() {
       <SettingsGroup>
         <ValueRow label="Theme" choices={THEME_CHOICES} chosen={settings.theme}
           onChoose={(theme) => setSettings((was) => ({ ...was, theme }))} />
+        <ValueRow label="Drawer height" choices={DRAWER_HEIGHT_CHOICES} chosen={settings.drawerHeight}
+          onChoose={(drawerHeight) => setSettings((was) => ({ ...was, drawerHeight }))} />
       </SettingsGroup>
 
       {/* The pauses have a card of their own, above the brackets' and under the

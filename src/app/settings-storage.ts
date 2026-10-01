@@ -3,7 +3,7 @@ import { parseLookupSettings } from '../translation/settings';
 import { File, Paths } from 'expo-file-system';
 import { FONT_SIZES, MARGINS, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type Margin, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
 import { CONSENT_KEY } from './consent';
-import { DEFAULT_SETTINGS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLINGS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type DocumentVoice, type Scrolling } from './settings';
+import { DEFAULT_SETTINGS, DRAWER_HEIGHTS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLINGS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type DocumentVoice, type Scrolling } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -51,6 +51,11 @@ function readPause(value: unknown, offered: readonly number[], fallback: number)
 /** A Line Position General offers, or the middle, for the same reason (#71). Nothing is converted: the app is unreleased. */
 function readLinePosition(value: unknown): number {
   return LINE_POSITIONS.find((percent) => percent === value) ?? DEFAULT_SETTINGS.following.linePosition;
+}
+
+/** A Drawer Height General offers, or half the screen, for the same reason (#117). Nothing is converted: the app is unreleased. */
+function readDrawerHeight(value: unknown): number {
+  return DRAWER_HEIGHTS.find((percent) => percent === value) ?? DEFAULT_SETTINGS.drawerHeight;
 }
 
 /** A way of scrolling General offers, or By line, the default, for the same reason (#71). */
@@ -105,6 +110,7 @@ export function parseSettings(value: unknown): AppSettings {
       paragraphMs: readPause(pauses.paragraphMs, PARAGRAPH_PAUSES_MS, DEFAULT_SETTINGS.pauses.paragraphMs),
     },
     following: { scrolling: readScrolling(following.scrolling), linePosition: readLinePosition(following.linePosition) },
+    drawerHeight: readDrawerHeight(data.drawerHeight),
     sentencesAtOnce: readSentencesAtOnce(data.sentencesAtOnce),
     appearance: {
       font: readFont(appearance.font),
