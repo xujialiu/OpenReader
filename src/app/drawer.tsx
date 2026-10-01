@@ -72,7 +72,7 @@ import { useCallback, useContext, useEffect, useId, useRef, useSyncExternalStore
 import { Pressable, StyleSheet, Text, View, useWindowDimensions, type AccessibilityState, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
+import { ChoiceMenu, Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, type Choice } from './controls';
 import { drawerDetentHeight } from './drawer-height';
 import { DRAWER_LIST, drawerRowText } from './drawer-list';
 import { createDrawerTurns } from './drawer-turns';
@@ -329,6 +329,30 @@ export function DrawerSeparator() {
   return <View style={[styles.separator, { backgroundColor: colours.separator }]} />;
 }
 
+/**
+ * A row of the list that opens the system's short menu (`ChoiceMenu`, ADR
+ * 0035): its name, what it is set to, and the two chevrons iOS puts on such a
+ * row. One line, 52 pt, because the menu is laid out at the height it is given.
+ */
+export function DrawerMenuRow<T extends string | number>({ label, choices, chosen, onChoose }: {
+  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
+}) {
+  return (
+    <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} height={DRAWER.row.rowHeight}>
+      <View style={styles.menuRow}>
+        <Text style={[styles.rowText, styles.menuLabel]}>{label}</Text>
+        <View style={styles.menuValue}>
+          <Text style={[styles.rowText, styles.menuValueText]} numberOfLines={1}>
+            {choices.find((choice) => choice.value === chosen)?.label}
+          </Text>
+          <Icon name="menu" color={INK.secondary} size={18} />
+        </View>
+        <DrawerSeparator />
+      </View>
+    </ChoiceMenu>
+  );
+}
+
 /** The words under a list: the phone's footer text, set in as far as the rows' words are. */
 export function DrawerFooter({ children, attention }: { children: ReactNode; attention?: boolean }) {
   return <View style={styles.footer}><Footnote attention={attention}>{children}</Footnote></View>;
@@ -367,4 +391,11 @@ const styles = StyleSheet.create({
     position: 'absolute', right: DRAWER.row.inset,
   },
   footer: { marginTop: DRAWER.footerGap, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
+  menuRow: {
+    alignItems: 'center', flexDirection: 'row', gap: 12, height: DRAWER.row.rowHeight, justifyContent: 'space-between',
+    paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset,
+  },
+  menuLabel: { flexShrink: 0 },
+  menuValue: { alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 4 },
+  menuValueText: { color: INK.secondary, flexShrink: 1 },
 });
