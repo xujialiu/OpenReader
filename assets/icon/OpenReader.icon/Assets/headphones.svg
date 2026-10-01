@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <linearGradient id="headphones" x1="26" y1="18" x2="240" y2="233" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#5261ea"/>
-      <stop offset="1" stop-color="#3f4fd6"/>
+      <stop stop-color="#008ef1"/>
+      <stop offset="1" stop-color="#1961e5"/>
     </linearGradient>
   </defs>
-  <g transform="translate(512 512) scale(3.3684) translate(-133 -125.5)" fill="url(#headphones)" stroke="#3140b0" stroke-width="1">
+  <g transform="translate(512 512) scale(3.3684) translate(-133 -125.5)" fill="url(#headphones)" stroke="#1450b7" stroke-width="1">
     <path d="M26 146V125a107 107 0 0 1 214 0v21h-24v-21a83 83 0 0 0-166 0v21Z"/>
     <rect x="19" y="130" width="68" height="103" rx="28"/>
     <rect x="178" y="130" width="69" height="103" rx="28"/>

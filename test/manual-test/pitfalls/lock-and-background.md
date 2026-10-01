@@ -67,6 +67,18 @@
   set in Edit → Customize. To see an app's dark or tinted icon, choose it there
   by hand, or drive `com.apple.springboard` through XCTest as
   `DeviceLockProbe` does; the AXe route does not reach it.
+  - Measured again 2026-10-01 (#116, `iPhone 17 icon`, iOS 27.0): the route
+    gets one step further and then stops at the same place. `long_press` on the
+    icon's **own elementRef** (1.2 s) opens the icon's context menu
+    (Edit Home Screen / Remove App) — but a `mobilebuildmcp tap` on Edit Home
+    Screen does nothing (menu stays). An axe touch pair **does** open it:
+    `axe touch -x 340 -y 233 --down --up --delay 0.9` on the icon long-presses
+    it (0.2 s pairs act as a tap and launch the app), and the same pair on the
+    menu's Edit Home Screen row enters edit mode. The Edit pill still does not
+    answer: a 0.2 s pair on (69, 33) left edit mode — #83's symptom a third
+    time, now through axe as well — and a 0.9 s pair did nothing, edit mode
+    stayed, no menu. The Customize menu (the dark and tinted icon styles)
+    remains out of automation's reach.
 - **A swipe that closes Control Center can fail and leave it open, and the
   next Home press then closes Control Center instead of going Home.**
   Measured 2026-09-28 09:49 (final run, check 4 part F): `axe swipe` from
