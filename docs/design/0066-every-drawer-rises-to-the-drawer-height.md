@@ -28,7 +28,7 @@ to go into Appearance next, would have done exactly that.
 
 Every drawer in the app becomes the phone's own: Contents, Voice, Appearance and
 Fonts, a book's actions with Rename and Download, and the drawer a looked-up
-word opens in. The phone moves it, rounds it, gives it its grabber and answers
+word opens in. The phone moves it, rounds its corners and answers
 a swipe on it. The app fills it.
 
 They are alike, and in the phone's style. What a drawer is made of, its two
@@ -138,7 +138,7 @@ phone's own controls in it take the app's amber.
   on the page. Putting a drawer away is always a swipe down.
 - **A covered line stays covered.** At a tall Drawer Height a drawer can hide the
   line being read, and nothing moves it into view.
-- **What the phone draws, it draws its way.** The grabber, the corners, the
+- **What the phone draws, it draws its way.** The corners, the
   movement and the dimming are the phone's, and they change when the phone's
   look changes. The rows the app draws itself match the phone they were
   measured on, and fall behind if the phone changes them (decision 0042).
