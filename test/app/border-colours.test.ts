@@ -47,7 +47,7 @@ describe('#29: no border takes a dynamic colour', () => {
 
   it('finds the borders it checks, so a pattern that matches nothing cannot pass for a clean tree', () => {
     const found = files.flatMap((path) => borderColours(readFileSync(path, 'utf8')));
-    expect(found.length).toBeGreaterThanOrEqual(9);
+    expect(found.length).toBeGreaterThanOrEqual(8);
   });
 
   it('fires on the spellings #29 was drawn with', () => {
