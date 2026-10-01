@@ -58,13 +58,29 @@ Height, and a drawer at the Drawer Height closes.
 What does not fit scrolls inside the drawer. A drawer is never taller than its
 height because of what it holds.
 
+Contents opens at the chapter being read rather than at the top of the book, and
+the phone grows a drawer from its list only when the list is at its top. So a
+swipe up on the chapters scrolls them, and Contents is made full by dragging its
+title.
+
+## One drawer at a time
+
+Only one drawer is open at once, anywhere in the app. Because the page stays in
+use under a drawer, the buttons that open other drawers can still be pressed: the
+book's actions while Contents is open, say. Pressing one puts the open drawer
+away and brings up the one asked for. The phone shows only one of its drawers at
+a time, and the first version showed nothing at all, then left the button dead
+until the book was closed and opened again.
+
 ## The page behind stays in use
 
 At the Drawer Height the page above the drawer is not dimmed, and it still
 answers a touch. The owner can watch the page change as a font, a size or a
 margin is chosen, and when the highlight colours arrive they will be chosen
-against the very page they colour. The selection on the page stays within
-reach while the lookup drawer is open, as it was before.
+against the very page they colour. While the lookup drawer is at the Drawer
+Height, the selection on the page above it stays within reach. When it is full,
+the page cannot be touched, where the old lookup drawer's tallest height left a
+strip of the page in use.
 
 A full drawer covers almost all of the page, and the little that shows above it
 is dimmed, as the phone does, and does not answer a touch.
@@ -73,8 +89,9 @@ A tap outside a drawer no longer closes it. At the Drawer Height the tap goes to
 the page; above a full drawer it does nothing. A swipe down closes a drawer.
 
 The page does not move to make room for a drawer. When a drawer covers the line
-being read, it is left covering it, and swiping the drawer down shows the line
-again.
+being read, it is left covering it. The page is in use, so the owner can push it
+up to see the line, or swipe the drawer down; moving the page by itself whenever
+a drawer opened was more than this was worth.
 
 ## The top of a drawer
 
@@ -99,10 +116,14 @@ size, the margins, the alignment, a short menu, it does. Where it cannot, the
 chapters in Contents and in Download, the app draws the row to the phone's
 measured sizes, so the two kinds sit together without a seam.
 
-The colours are the app's own, as everywhere else (decision 0042): a drawer is
-the colour of a Settings page and its cards are the colour of a Settings card.
-They are solid. The drawer follows the app's Theme, not the phone's. The
-phone's own controls in it take the app's amber.
+The colours are the app's own, as everywhere else (decision 0042). In the light
+theme a drawer is the colour of a Settings page and its cards are the colour of
+a Settings card. In the dark theme it is one step lighter than the page, and its
+cards one step lighter again: a Settings page in the dark is the colour of the
+book's own page, and a drawer that colour could not be told from the page it
+rose over. The phone's own dark drawers are lighter than the page for the same
+reason. The colours are solid. The drawer follows the app's Theme, not the
+phone's. The phone's own controls in it take the app's amber.
 
 ## Drawer by drawer
 
@@ -112,7 +133,8 @@ phone's own controls in it take the app's amber.
 - **Rename** is no longer a page of the drawer. It is the phone's own small
   dialog with a field in it, rising over the drawer: Cancel goes back to the
   menu, Save renames the book and closes the drawer, and Save cannot be pressed
-  while the name is blank.
+  while the name is blank. The owner asked for a dialog: a new name is one short
+  answer, and the phone asks for one of those in a dialog, not on a page.
 - **Voice.** The rows of small buttons for the provider and the language become
   two rows, Provider and Language, each opening a short menu, above a card of
   the voices.
