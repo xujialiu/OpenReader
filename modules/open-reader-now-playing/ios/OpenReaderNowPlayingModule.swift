@@ -41,6 +41,7 @@
 
 import ExpoModulesCore
 import MediaPlayer
+import UIKit
 
 /// What the lock screen shows and what state it is in. One record, because these
 /// are written together: a state change with a stale position is a lock screen
@@ -54,6 +55,10 @@ struct NowPlayingReading: Record {
   /// Empty rather than a fallback to the title: two lines saying the same thing
   /// is worse than one line and a blank.
   @Field var chapter: String = ""
+
+  /// The Document's Cover as a `file://` URI, or empty when it has none — in
+  /// which case Now Playing shows the app's icon (#119). See `NowPlayingPicture`.
+  @Field var cover: String = ""
 
   @Field var playing: Bool = false
 
@@ -78,6 +83,19 @@ public final class OpenReaderNowPlayingModule: Module {
   /// wholesale, so there is nothing to read back and merge.
   private var reading = NowPlayingReading()
   private var shown = false
+
+  /// The Cover `artwork` was built from. Read and written on the calling thread,
+  /// in `show` and `teardown`, so that a Cover is decoded once per Document
+  /// rather than once per `show`.
+  private var pictured: String?
+
+  /// The picture Now Playing shows. Main queue only, like everything `publish`
+  /// reads that is MediaPlayer's.
+  ///
+  /// Built once per Cover and reused, never rebuilt in `publish`: `setPosition`
+  /// publishes once a second, and a new `MPMediaItemArtwork` each time would have
+  /// iOS ask for the picture again each time.
+  private var artwork: MPMediaItemArtwork?
 
   public func definition() -> ModuleDefinition {
     Name("OpenReaderNowPlaying")
@@ -104,9 +122,15 @@ public final class OpenReaderNowPlayingModule: Module {
       guard reading.rate > 0 else {
         throw NonPositiveRateException(reading.rate)
       }
+      // Decoded here, on the JavaScript thread that called, and only when the
+      // Cover changed; the main queue only swaps it in.
+      let changed = reading.cover != self.pictured
+      let artwork = changed ? NowPlayingPicture.artwork(cover: reading.cover) : nil
+      self.pictured = reading.cover
       self.reading = reading
       self.shown = true
       onMain {
+        if changed { self.artwork = artwork }
         self.register()
         self.publish()
       }
@@ -154,6 +178,11 @@ public final class OpenReaderNowPlayingModule: Module {
     ]
     if !reading.chapter.isEmpty {
       info[MPMediaItemPropertyArtist] = reading.chapter
+    }
+    // The one key behind the square in the Dynamic Island, on the Lock Screen and
+    // in Control Centre; without it iOS draws an empty grey square (#119).
+    if let artwork {
+      info[MPMediaItemPropertyArtwork] = artwork
     }
 
     // `MPMediaItemPropertyPlaybackDuration` is deliberately absent. A book is
@@ -218,9 +247,11 @@ public final class OpenReaderNowPlayingModule: Module {
 
   private func teardown() {
     shown = false
+    pictured = nil
     let held = targets
     targets = [:]
     onMain {
+      self.artwork = nil
       for (command, token) in held {
         command.removeTarget(token)
         command.isEnabled = false
@@ -242,6 +273,79 @@ private func onMain(_ body: @escaping () -> Void) {
     body()
   } else {
     DispatchQueue.main.async(execute: body)
+  }
+}
+
+/// What Now Playing shows in its square (#119): the Document's Cover, whole, or the
+/// app's icon when there is no Cover.
+///
+/// The same picture fills the Dynamic Island, the Lock Screen card and Control
+/// Centre. There is one key for all of them, so they cannot differ.
+enum NowPlayingPicture {
+  /// The longest side, in pixels, a Cover is kept at. Covers run to a few
+  /// thousand pixels and the largest square iOS draws is a fraction of that.
+  static let side: CGFloat = 1024
+
+  /// The image set `plugins/with-now-playing-icon.ts` writes at prebuild.
+  static let iconName = "NowPlayingIcon"
+
+  /// Nil only when neither a Cover nor the icon can be had; Now Playing then
+  /// shows its own empty square, as it did before there was a picture at all.
+  static func artwork(cover: String) -> MPMediaItemArtwork? {
+    // A Cover UIKit cannot decode is no Cover, as it is in the Library.
+    guard let picture = coverImage(cover).flatMap(squared) ?? appIcon().flatMap(squared) else { return nil }
+    return MPMediaItemArtwork(boundsSize: picture.size) { _ in picture }
+  }
+
+  private static func coverImage(_ cover: String) -> UIImage? {
+    guard !cover.isEmpty, let url = URL(string: cover), url.isFileURL else { return nil }
+    return UIImage(contentsOfFile: url.path)
+  }
+
+  /// The picture whole, centred on a black square, at one scale and at most
+  /// `side` pixels whichever picture it is.
+  ///
+  /// Black because the Dynamic Island is black, and one picture serves the
+  /// Island, the Lock Screen and Control Centre alike, so the owner chose black
+  /// for all of them. The sides were transparent first, and iOS does not show
+  /// what is behind a transparent picture: it fills it with a backdrop of its
+  /// own, white (255) in the Dynamic Island on the owner's iPhone and light grey
+  /// (238) on the simulator's Lock Screen card, light and dark mode alike (#119).
+  ///
+  /// A Cover is tall and the square is not, and the owner chose the whole Cover
+  /// over a square cut out of it: a Cover is recognised by all of it, and its
+  /// title is usually at the top, where a crop would take it. The Library shows
+  /// the whole Cover for the same reason.
+  private static func squared(_ cover: UIImage) -> UIImage? {
+    let width = cover.size.width * cover.scale
+    let height = cover.size.height * cover.scale
+    let longest = max(width, height)
+    guard longest > 0 else { return nil }
+    let square = min(longest, side)
+    let fit = square / longest
+    let drawn = CGSize(width: width * fit, height: height * fit)
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = 1
+    format.opaque = true
+    return UIGraphicsImageRenderer(size: CGSize(width: square, height: square), format: format).image { context in
+      UIColor.black.setFill()
+      context.fill(CGRect(x: 0, y: 0, width: square, height: square))
+      cover.draw(in: CGRect(origin: CGPoint(x: (square - drawn.width) / 2, y: (square - drawn.height) / 2), size: drawn))
+    }
+  }
+
+  /// The app's icon in its default appearance, whatever the phone's: the owner
+  /// chose it, because the app cannot read the Home Screen's own icon setting
+  /// and dark mode alone would only guess at it.
+  ///
+  /// **Never the app icon set itself.** `UIImage(named:)` given `ios.icon`'s
+  /// compiled name raises `NSInternalInconsistencyException` from
+  /// `_UIImageContent.m:742` instead of returning nil, Swift cannot catch it,
+  /// and the reader went down with it (#119; `plugins/with-now-playing-icon.ts`
+  /// has the measurement). This is a plain copy of the icon in an image set of
+  /// its own, which has one appearance and so needs no trait collection.
+  private static func appIcon() -> UIImage? {
+    UIImage(named: iconName)
   }
 }
 

@@ -226,6 +226,16 @@ const config: ExpoConfig = {
      */
     './plugins/with-continued-processing.ts',
 
+    /**
+     * #119. Copies assets/icon/icon.png into the asset catalog as the image set
+     * `NowPlayingIcon`, the picture Now Playing shows for a Document without a
+     * Cover. The icon `ios.icon` compiles cannot be loaded as a picture at all:
+     * UIKit raises rather than returning nil, and the plugin says where that was
+     * measured. No options, and the prebuild fails if the catalog or the PNG is
+     * not where it should be.
+     */
+    './plugins/with-now-playing-icon.ts',
+
     [
       'react-native-audio-api',
       {

@@ -151,3 +151,16 @@
   `reading-held.sh` already has the right shape: start xcodebuild in the
   background, watch the log for the suite's verdict, stop it two minutes
   after the verdict. For ad hoc runs: `nohup … &` and poll the log file.
+- **Filtering `run-probe.sh`'s output through `grep` swallows the runner's
+  refusal, and the next `ls -t` then documents the wrong capture** (2026-10-01,
+  #119b). `bash run-probe.sh … --expect-player 2>&1 | grep -E "Executed|TEST"`
+  printed nothing when the runner refused the run (sim volume back at 60), and
+  grep's exit status was never tested — the script went on, `ls -t` over the
+  shared output directory named the **previous** run's screenshot and
+  centre-button JSON as the newest, and those got copied and read as the new
+  run's result: a JSON that predates the pause by two seconds read as a
+  post-pause contradiction. Fix: read the probe output's tail (or grep with a
+  fallback that prints everything when nothing matched), test the exit status,
+  and copy attachments from the run's own `attachments-STAMP` directory —
+  `ls -td OUTPUT/attachments-* | head -1` only after the run's stamp is
+  confirmed in the output (`../lock-screen/README.md`, #119b).

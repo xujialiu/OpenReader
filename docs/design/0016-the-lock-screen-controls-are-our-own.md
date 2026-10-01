@@ -71,6 +71,44 @@ which is what the simulator and a Mac go by. Whether the free version would have
 shown "paused" over a speaking voice on a real phone was never tried there. The
 other two faults do not depend on it.
 
+## The picture beside the title
+
+Next to the book's title the phone keeps a square for a picture, on the lock
+screen, in the pill at the top of the screen and in the panel that slides down.
+It is the first thing the listener sees in the pill. For a long time the app sent
+nothing to put there, and the phone drew an empty grey square, which looks like a
+picture that failed to load.
+
+Now a book that has a cover shows its cover there: the same cover the Library
+shows beside the book's name. A cover is tall and the square is not, so the whole
+cover stands in the middle of the square with black either side. Cutting a
+square out of the cover would have filled the space, but it takes the top and
+the bottom, which is usually where the title is, and a cover is recognised by
+all of it. Leaving the shape to the phone was the third choice; no one had seen
+what it does with a tall picture, and what it does could change from one version
+of the phone to the next.
+
+The sides were left empty at first, in the hope that whatever was behind the
+picture would show through. It does not: the phone fills them itself, white in
+the pill at the top of the screen, which is black, and light grey on the lock
+screen. The same picture goes to every place the phone shows the reading, so
+the sides cannot be one colour in the pill and another on the lock screen. Black
+was chosen for all of them, because the pill is black. The cost is on the lock
+screen, where the cover now has two black bands beside it instead of light grey
+ones.
+
+A book without a cover shows the app's icon instead. Outside the app, the icon at
+least says whose reading this is. It is the icon in its usual colours, even when
+the Home Screen shows its dark or tinted version: the app cannot see which the
+listener chose there, and following the phone's dark mode would only be a guess.
+Inside the app nothing changes. A book without a cover keeps its book-shaped
+placeholder in the Library, where the app's icon on every such row would say
+nothing, since everything there is the app's.
+
+The picture is there from the moment the reading appears on the lock screen. The
+app waits the moment it takes to find the cover before it tells the phone
+anything, rather than show the icon and then swap it.
+
 ## What it costs
 
 Work of our own is ours to keep working. When the rules of the phone change,
