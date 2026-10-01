@@ -38,13 +38,23 @@
  * ## Colours
  *
  * The app's own, opaque, for the theme the shell resolved (`SchemeContext`),
- * not the phone's. In the light the sheet is the settings pages' grey and its
- * cards are their white cards. In the dark the settings page is the reader's
- * own near-black, and a drawer that colour had no edge against the page it
- * rises over, so the dark drawer is a step lighter, the settings card's grey,
- * and its cards a step lighter again (the owner's Q44). Plain strings per
+ * not the phone's. In the light the sheet is the settings pages' grey. In the
+ * dark the settings page is the reader's own near-black, and a drawer that
+ * colour had no edge against the page it rises over, so the dark drawer is a
+ * step lighter, the settings card's grey (the owner's Q44). Plain strings per
  * theme, because a SwiftUI modifier cannot take an `INK` colour (a
  * `DynamicColorIOS`) and a border must not (ADR 0046).
+ *
+ * ## A plain list, not cards
+ *
+ * Every drawer's rows sit straight on the drawer, inset as Apple Books inset
+ * its contents (`drawer-list.ts`), with a separator under each one: the owner
+ * turned down inset-grouped cards after batch 1 (#117, Q46). `DrawerRow`,
+ * `DrawerRowText`, `DrawerSeparator` and `DrawerFooter` draw it in React
+ * Native. A row the phone draws in a SwiftUI `List` takes the same numbers
+ * through `listRowInsets`: `DRAWER.row.padding` above and below,
+ * `DRAWER.row.textInset` before and `DRAWER.row.inset` after, so the two
+ * kinds of row line up.
  *
  * ## One at a time
  *
@@ -59,11 +69,12 @@ import {
   presentationDragIndicator, tint,
 } from '@expo/ui/swift-ui/modifiers';
 import { useCallback, useContext, useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions, type AccessibilityState, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
 import { drawerDetentHeight } from './drawer-height';
+import { DRAWER_LIST, drawerRowText } from './drawer-list';
 import { createDrawerTurns } from './drawer-turns';
 import { Icon, type IconName } from './icon';
 import { useShell } from './routes';
@@ -99,45 +110,39 @@ export const DRAWER = {
     back: { glyph: 32, stroke: 2, nudge: -1.5 },
     action: { glyph: 22, stroke: 1.8, nudge: 0 },
   },
-  /** An inset-grouped card: 16 from the screen's edges, ≈ 26 pt corners (measured 26.4 and 26.2). */
-  card: { margin: 16, radius: 26 },
-  /** A card's row: 52 pt with one line of Body, its words 16 in from the card's edge. */
-  row: { height: 52, inset: 16 },
-  /** The line between two rows: 1 pt, inset 16 inside the card at both ends. */
-  separator: { inset: 16, thickness: 1 },
-  /** Between one card and the next: measured 35. */
-  sectionGap: 35,
-  /** From a card to the footer text under it, as the settings pages have it (`controls.tsx`). */
+  /** A row of the drawer's plain list, as Books draws its contents: `drawer-list.ts`. The words' size is `row.text`. */
+  row: DRAWER_LIST,
+  /** From a list to the footer text under it, as the settings pages have it (`controls.tsx`). */
   footerGap: 8,
   /** Below the last thing in a drawer, above the home indicator's safe area. */
   bottom: 16,
   /**
-   * Per theme: the sheet (`page`), its cards, the line between two rows, the
-   * marked row (Contents' current one), the round buttons' rim, and the
-   * reading amber the phone's own controls are tinted with where it would use
-   * its blue (design 0042).
+   * Per theme: the sheet (`page`), the line under a row, the marked row
+   * (Contents' current one), the round buttons' fill and rim, and the reading
+   * amber the phone's own controls are tinted with where it would use its
+   * blue (design 0042).
    *
    * The light column is the settings pages' (`SETTINGS_SURFACE`, the
    * separator `INK.separator` draws there, `PALETTE.light.line`). The dark one
    * is the drawer's own (Q44): the sheet is the settings card's #1c1c21, one
-   * step above the reader's #111114, and the cards #2c2c32, one step above
-   * that. The settings pages' dark separator (#38383b) and line (#33333c)
-   * all but vanish on #2c2c32, so the separator and the mark are lifted with
-   * the card (notes, 2026-10-01 13:53).
+   * step above the reader's #111114. Its separator (#44444b) and mark
+   * (#3e3e47) were lifted for the #2c2c32 cards batch 1 had (notes,
+   * 2026-10-01 13:53); straight on #1c1c21 they stand further out, about as
+   * far as Books' separators do on its own dark grey.
    */
   colours: {
     light: {
-      page: SETTINGS_SURFACE.light.page, card: SETTINGS_SURFACE.light.card, separator: '#e8e8e8',
-      mark: PALETTE.light.line, rim: PALETTE.light.line, accent: PALETTE.light.reading,
+      page: SETTINGS_SURFACE.light.page, separator: '#e8e8e8', mark: PALETTE.light.line,
+      button: SETTINGS_SURFACE.light.card, rim: PALETTE.light.line, accent: PALETTE.light.reading,
     },
     dark: {
-      page: SETTINGS_SURFACE.dark.card, card: '#2c2c32', separator: '#44444b',
-      mark: '#3e3e47', rim: '#3e3e47', accent: PALETTE.dark.reading,
+      page: SETTINGS_SURFACE.dark.card, separator: '#44444b', mark: '#3e3e47',
+      button: '#2c2c32', rim: '#3e3e47', accent: PALETTE.dark.reading,
     },
   },
 } as const;
 
-/** `DRAWER.colours` for the theme on screen, as `useBorders()` reads it: plain strings, for a SwiftUI modifier, a card and a border alike. */
+/** `DRAWER.colours` for the theme on screen, as `useBorders()` reads it: plain strings, for a SwiftUI modifier, a row and a border alike. */
 export function useDrawerColours(): (typeof DRAWER.colours)[keyof typeof DRAWER.colours] & { scheme: keyof typeof DRAWER.colours } {
   const scheme = useContext(SchemeContext);
   if (!scheme) throw new Error('A drawer was drawn outside the shell, which is what says whether the theme on screen is light or dark.');
@@ -259,7 +264,7 @@ function DrawerTitle({ title, onBack, action }: { title: string; onBack?(): void
   );
 }
 
-/** The system's round header button: a 44-pt circle on the card colour, with a hairline rim. */
+/** The system's round header button: a 44-pt circle a step off the drawer's colour, with a hairline rim. */
 function RoundButton({ icon, label, onPress, disabled, drawn }: {
   icon: IconName; label: string; onPress(): void; disabled?: boolean;
   /** The icon's size, stroke and sideways nudge in the circle: `DRAWER.button.back` or `.action`. */
@@ -269,7 +274,7 @@ function RoundButton({ icon, label, onPress, disabled, drawn }: {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled }}
       disabled={disabled} onPress={onPress}
-      style={({ pressed }) => [styles.button, { backgroundColor: colours.card, borderColor: colours.rim },
+      style={({ pressed }) => [styles.button, { backgroundColor: colours.button, borderColor: colours.rim },
         (pressed || disabled) && styles.dimmed]}>
       <View style={{ transform: [{ translateX: drawn.nudge }] }}>
         <Icon name={icon} color={INK.text} size={drawn.glyph} strokeWidth={drawn.stroke} />
@@ -279,21 +284,52 @@ function RoundButton({ icon, label, onPress, disabled, drawn }: {
 }
 
 /**
- * An inset-grouped card on the drawer, in the card colour. Its rows are the
- * caller's: drawn to `DRAWER.row`, with `DrawerSeparator` between them.
+ * One row of a drawer's list, straight on the drawer: at least 52 pt, as tall
+ * as its words when they wrap, with its separator under it. `level` sets it in
+ * by `DRAWER.row.indent` per level of a nested list; `marked` gives it the
+ * mark's colour (Contents' current row). Without `onPress` it is not a button.
  */
-export function DrawerCard({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+export function DrawerRow({ children, onPress, marked, level = 0, disabled, accessibilityState }: {
+  children: ReactNode;
+  onPress?(): void;
+  marked?: boolean;
+  level?: number;
+  disabled?: boolean;
+  accessibilityState?: AccessibilityState;
+}) {
   const colours = useDrawerColours();
-  return <View style={[styles.card, { backgroundColor: colours.card }, style]}>{children}</View>;
+  return (
+    <Pressable
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityState={{ disabled: !!disabled, ...accessibilityState }}
+      onPress={onPress}
+      disabled={disabled || !onPress}
+      style={({ pressed }) => [
+        styles.row, { paddingLeft: DRAWER.row.textInset + level * DRAWER.row.indent },
+        marked && { backgroundColor: colours.mark }, pressed && styles.pressed,
+      ]}
+    >
+      {children}
+      <DrawerSeparator />
+    </Pressable>
+  );
 }
 
-/** The line under a card's row, inset as the phone's are. Drawn as a filled view, not a border (ADR 0046). */
+/**
+ * The words of a `DrawerRow`, in full however many lines they take. Emphasized
+ * is the row's emphasized weight, for the chapter being read and a heading.
+ */
+export function DrawerRowText({ children, emphasized = false, style }: { children: ReactNode; emphasized?: boolean; style?: StyleProp<TextStyle> }) {
+  return <Text style={[emphasized ? styles.rowTextEmphasized : styles.rowText, style]}>{children}</Text>;
+}
+
+/** The line under a row, inset as Books' are, the same at both ends. Drawn as a filled view, not a border (ADR 0046). */
 export function DrawerSeparator() {
   const colours = useDrawerColours();
   return <View style={[styles.separator, { backgroundColor: colours.separator }]} />;
 }
 
-/** The words under a card: the phone's footer text, set in from the card as far as its rows' words are. */
+/** The words under a list: the phone's footer text, set in as far as the rows' words are. */
 export function DrawerFooter({ children, attention }: { children: ReactNode; attention?: boolean }) {
   return <View style={styles.footer}><Footnote attention={attention}>{children}</Footnote></View>;
 }
@@ -319,10 +355,16 @@ const styles = StyleSheet.create({
     height: DRAWER.button.size, justifyContent: 'center', width: DRAWER.button.size,
   },
   dimmed: { opacity: 0.5 },
-  card: { borderCurve: 'continuous', borderRadius: DRAWER.card.radius, marginHorizontal: DRAWER.card.margin, overflow: 'hidden' },
-  separator: {
-    bottom: 0, height: DRAWER.separator.thickness, left: DRAWER.separator.inset,
-    position: 'absolute', right: DRAWER.separator.inset,
+  row: {
+    justifyContent: 'center', minHeight: DRAWER.row.rowHeight, paddingRight: DRAWER.row.inset,
+    paddingVertical: DRAWER.row.padding,
   },
-  footer: { marginTop: DRAWER.footerGap, paddingHorizontal: DRAWER.card.margin + DRAWER.row.inset },
+  pressed: { opacity: 0.65 },
+  rowText: { ...drawerRowText(false), color: INK.text },
+  rowTextEmphasized: { ...drawerRowText(true), color: INK.text },
+  separator: {
+    bottom: 0, height: DRAWER.row.separator, left: DRAWER.row.inset,
+    position: 'absolute', right: DRAWER.row.inset,
+  },
+  footer: { marginTop: DRAWER.footerGap, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
 });
