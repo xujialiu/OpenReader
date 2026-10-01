@@ -36,14 +36,21 @@
  * says so), and in 仙逆's 2,076 rows the drawer stood empty for 1.4 s before
  * its rows came. A FlatList draws only the rows in view.
  *
- * Given `initialScrollIndex` and no `getItemLayout`, the list draws the
- * current row and those after it first, measures them, and scrolls to the
- * current row (`VirtualizedList`'s `_maybeScrollToInitialScrollIndex`). The
- * rows before it are drawn later, as the owner scrolls up, at a height
- * estimated from the ones measured; `maintainVisibleContentPosition` keeps the
- * rows in view still when those estimates are corrected. A scroll asked for
- * before the row has been measured is reported to `onScrollToIndexFailed`,
- * which waits a frame and asks again.
+ * It opens in two steps (`ContentsList`). First its rows start at the
+ * current one, so that row is laid out at the top with nothing to estimate.
+ * Then the rows before it are put back in front, under
+ * `maintainVisibleContentPosition`, which holds the row in view where it was
+ * while the list grows above it; those rows are drawn as the owner scrolls up,
+ * at a height estimated from the ones measured, and corrected the same way.
+ * `initialScrollIndex` without `getItemLayout` was tried first: it scrolled
+ * to the row against rows above it estimated at nothing, and a drag up later
+ * left the list blank (notes, 2026-10-01).
+ *
+ * The phone undoes that hold while the drawer moves: with Shadow Slave's long
+ * Chapter 139 among the rows measured, the estimates are a few points out,
+ * and the current row ended 14 to 27 pt too high after a swipe up, or after
+ * opening. So until the owner scrolls the list, the current row is scrolled
+ * back to the top whenever the list is laid out again.
  *
  * A sectioned list with sticky headers would have given the volumes a
  * different behaviour from the chapters for no gain; volumes are rows here,
