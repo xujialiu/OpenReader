@@ -20,10 +20,10 @@ statement in ADRs [0035](0035-a-short-choice-is-the-systems-own-menu.md),
 [0059](0059-sharing-copies-the-file-under-its-library-name.md) that rests on
 the drawer being a React Native `Modal`._
 
-**Not yet recorded here.** The implementation is being built while this is
-written. Its module, component and setting names, the arithmetic of the custom
-detent and the top edge measured at each Drawer Height are left as "to be
-measured" below rather than guessed. The orchestrator fills them in.
+**Built in batches.** Batch 1 (`56a92b0`) is the drawer itself, the setting,
+Contents and one drawer at a time; batch 2 moves a Document's actions drawer and
+batch 3 Voice and Lookup. Until then those drawers stay on the old `Sheet`, and
+take part in the turns below.
 
 ## What was there
 
@@ -87,10 +87,40 @@ own at 0.46 and 0.88 of the reading view's height, dragged between 0.25 and 0.88
   cannot (Contents, the Download chapters) are React Native, drawn to the
   system values measured below: 52-pt rows, cards 16 pt from the edge,
   separators inset 16 pt.
-- **One module for every drawer value.** The two heights, the insets, row
-  heights, separators, radius and colours are defined once, and every drawer
-  takes them from there. Its name and contents are the implementation's: to be
-  recorded.
+- **One module for every drawer value.** `DRAWER` in `src/app/drawer.tsx`
+  holds the header metrics, the round button, the card's 16-pt inset and 26-pt
+  radius, the 52-pt row, the 16-pt separator inset, the 35-pt section gap, the
+  8-pt footer gap and the colours per scheme, as plain strings. `Drawer` is the
+  sheet with its header; `DrawerCard`, `DrawerSeparator` and `DrawerFooter` are
+  the shared parts. The detent arithmetic is `drawerDetentHeight` in
+  `src/app/drawer-height.ts`, apart so a test can import it. The setting is
+  `AppSettings.drawerHeight`, one of `DRAWER_HEIGHTS` = 40–90, read back as 50
+  when it is anything else, and not in `engineIdentity`.
+- **The Theme and the grabber.** The `Host` takes `colorScheme` and the sheet
+  `environment('colorScheme', …)` from the app's resolved Theme, and
+  `tint(…)` the reading accent as a plain string per scheme. Measured with
+  the app dark on a light phone and the reverse, the drawer drew the app's
+  colours both ways (notes 13:21). `presentationDragIndicator('visible')`
+  ships: the HIG asks for a grabber on a resizable sheet.
+- **One drawer at a time** (owner's Q43). Because the page stays live, a button
+  that opens another drawer can be pressed while one is up. SwiftUI presents
+  one sheet at a time: the first build presented nothing, and left the old
+  `Modal` drawer's state open, so ⋯ stayed dead until the reader was reopened
+  (notes 13:41). `src/app/drawer-turns.ts`'s `createDrawerTurns` is a pure
+  queue, tested in `test/app/drawer-turns.test.ts`. A drawer asking for its
+  turn while another holds it calls the holder's `onClose`, and is presented
+  only once the holder reports its dismissal. A dismissal reported twice, or
+  before the owner closed it, is ignored, since iOS does both. `useDrawerTurn`
+  in `drawer.tsx` hands each drawer its turn. The old `Sheet` and the lookup
+  drawer take part, in both directions.
+- **A dark drawer is a step lighter than the page** (owner's Q44). In the dark,
+  `SETTINGS_SURFACE.dark.page` is the reader's own `#111114`, and a drawer that
+  colour showed no edge but its grabber. So in the dark the drawer is
+  `#1c1c21`, its cards `#2c2c32`, the separator `#44444b`, and the current-row
+  mark and button rim `#3e3e47`, all in `DRAWER.colours`. Measured, the edge is
+  an 11-level step across the width, and the separator and mark are 24 and 18
+  levels above the card (notes 13:53). The light drawer is the Settings page,
+  `#f4f4f6`, with white cards.
 - **Per drawer.** Rename is the system's alert with a text field, over the
   drawer: Cancel returns to the menu, Save renames and closes, Save is disabled
   while the name is blank. Voice's provider and locale chips become two menu
@@ -122,16 +152,26 @@ height" (`presentationModifiers.d.ts:7`), while Apple's page does not say what
 it is a fraction of and its `CustomPresentationDetent` example works from
 `maxDetentValue`, "The height that the presentation appears in" (notes 11:19).
 
-**Still to be measured**, on the iOS 27 simulator at 402 × 874 pt:
+**Measured** on the iOS 27.0 simulator at 402 × 874 pt (notes 12:52, 13:21):
+a sheet at a custom `{ height }` detent **floats** as medium does, a card inset
+8 pt from the sides and bottom, everything in it scaled by (402 − 16) / 402 =
+0.960, whatever the `.d.ts` says of `presentationSizing`. And the header is
+wrong for it: the floating card is the scaled `value + safeAreaInsets.bottom`
+all the same. The first value, `f × H − 34` = 403, drew a card 420 pt tall
+with its top at 446.3 instead of 437. The card's top edge is at
+`H − 8 − 0.960 × (value + 34)`, so `drawerDetentHeight` hands the detent
+`(f × H − 8) / 0.960 − 34`. `{ fraction }` is not used.
 
-- whether a sheet at a custom `{ height }` detent is edge-attached or floating,
-  and whether a floating one is scaled as medium is (386/402 = 0.960). The
-  `.d.ts` says of `presentationSizing` that "in a compact size class (iPhone)
-  sheets remain edge-attached and detents drive the height"
-  (`presentationModifiers.d.ts:79`), but medium was measured floating;
-- the value the implementation hands the detent for a share `f`, and the top
-  edge measured at each of 40, 50, 60, 70, 80 and 90 %;
-- what `{ fraction }` is a fraction of, if the implementation uses it.
+| Drawer Height | wanted top edge | measured, light and dark |
+| --- | --- | --- |
+| 40 % | 524.4 | 524.67 |
+| 50 % | 437.0 | 437.0–437.33 |
+| 70 % (set from General's menu) | 262.2 | 262.33 |
+| 90 % | 87.4 | 87.33 |
+| `large` | 62.0 | 62.0, full width, edge-attached |
+
+Every one is within one pixel, 1/3 pt. `test/manual-test/kit/drawer-edge.py`
+finds the edge from the grabber, which works in the dark too.
 
 ## The measured sheet
 
@@ -199,16 +239,12 @@ selection while the note stays editable.
 
 ## Still to be measured or recorded
 
-- The custom detent's arithmetic and the top edge at each Drawer Height (above).
-- The implementation's names: the drawer module, the values module, the
-  setting and its row, and how the header, the back button and the Rename alert
-  are built.
-- Whether the probe's `presentationDragIndicator('visible')` is what ships.
-- How the sheet's SwiftUI controls are made to follow the app's Theme rather
-  than the phone's (ADR 0046 found React Native borders resolving against the
-  process's traits, not the view's).
-- The dark geometry, Dynamic Type sizes, VoiceOver and a physical phone; none
-  was measured (notes 11:58).
+- How the Rename alert is built (batch 2).
+- Dynamic Type sizes, VoiceOver and a physical phone; none was measured.
+- A queued drawer waits for the holder's dismissal with no timeout, so a
+  dismissal iOS never reports would leave it waiting. An unmounting old
+  `Sheet` releases its turn before UIKit has finished taking it down; Contents
+  presented every time regardless (notes 13:41).
 - Rows that now live inside `RNHostView` in a sheet, each of which ADR 0035,
   0045, 0051 or 0059 measured inside the old `Modal` or over the reader:
   - the Alignment and Theme menus (ADR 0035), now system pickers in a `Form`;
