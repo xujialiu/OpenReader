@@ -166,6 +166,11 @@ reported a masked value (test/manual-test/README.md, Pitfalls).
 
 ## A shared draggable header replaces decorative grips
 
+_Revised by [ADR 0066](0066-every-drawer-rises-to-the-drawer-height.md): `Sheet` is no
+longer a transparent `Modal` with its own backdrop, offset and `PanResponder`.
+Every drawer is `@expo/ui`'s SwiftUI `BottomSheet` at the Drawer Height's custom
+detent and `large`; the system drags it, and a tap outside does not close it._
+
 `Sheet` owns the transparent Modal, backdrop, animated vertical offset and
 PanResponder for the handle/title region. The list and stepper do not claim that
 gesture, so scrolling and holding speed buttons retain their existing behaviour.

@@ -7,6 +7,11 @@ status: accepted
 _The product argument is [design 0035](../design/0035-a-short-choice-opens-where-you-tapped.md).
 Issues #32 (Alignment) and #33 (Theme)._
 
+_[ADR 0066](0066-every-drawer-rises-to-the-drawer-height.md) replaces the drawer's
+React Native `Modal` with `@expo/ui`'s SwiftUI `BottomSheet`. "Inside the
+drawer's `Modal`" below was measured in the old drawer; the menus in the new one
+are still to be measured there._
+
 ## What was done
 
 `@expo/ui` `~57.0.19`, the version Expo SDK 57 pins (`npx expo install @expo/ui`),

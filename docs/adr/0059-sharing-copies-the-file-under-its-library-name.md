@@ -7,6 +7,11 @@ status: accepted
 _The product argument is [design 0059](../design/0059-a-book-can-be-shared-as-it-was-added.md).
 Issue #95. **Share** is in CONTEXT.md._
 
+_[ADR 0066](0066-every-drawer-rises-to-the-drawer-height.md) replaces the drawer's
+React Native `Modal` with `@expo/ui`'s SwiftUI `BottomSheet`. The share sheet
+rising over the drawer, and the drawer still open after it, were measured below
+for the `Modal` only; in the new drawer they are still to be measured._
+
 ## What was done
 
 - `src/app/reader-actions.tsx` passes `Sheet` an `action` on its `menu` page
