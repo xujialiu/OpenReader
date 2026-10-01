@@ -33,12 +33,12 @@ import { FlatList, Pressable, StyleSheet, Text } from 'react-native';
 
 import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
 
-import { INK, useBorders } from './controls';
-import { Sheet, SheetNote } from './sheet';
+import { INK } from './controls';
+import { Drawer, DRAWER, DrawerCard, DrawerFooter, DrawerSeparator } from './drawer';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
-/** One line per row, and the same height for every one of them: what makes the list open where it should. */
-const ROW_HEIGHT = 46;
+/** One line per row, and the same height for every one of them: what makes the list open where it should. The drawer's row (#117). */
+const ROW_HEIGHT = DRAWER.row.height;
 
 export interface ContentsSheetProps {
   visible: boolean;
@@ -65,56 +65,66 @@ export interface ContentsSheetProps {
   onGo(section: number): void;
 }
 
+/**
+ * On the phone's own sheet since #117 (ADR 0066): the rows are one
+ * inset-grouped card that scrolls inside itself, and what is said about them is
+ * the card's footer, under it, where it stays in view however far the list is
+ * scrolled. A footer at the end of 2,076 rows would never be read.
+ */
 export function ContentsSheet({ visible, onClose, contents, spineKnown, section, onGo }: ContentsSheetProps) {
   const here = useMemo(
     () => (section === null ? null : currentRow(contents, { sectionIndex: section })),
     [contents, section],
   );
+  const last = contents.rows.length - 1;
 
   return (
-    <Sheet visible={visible} title="Contents" onClose={onClose}>
+    <Drawer visible={visible} title="Contents" onClose={onClose}>
 
         {contents.rows.length === 0 ? (
-          <SheetNote>
+          <DrawerFooter>
             This book has no contents of its own. That is ordinary rather than a fault — some EPUBs carry none — and
             nothing else stops working: tapping a sentence still reads from there.
-          </SheetNote>
-        ) : null}
+          </DrawerFooter>
+        ) : (
+          <DrawerCard style={styles.card}>
+            <FlatList
+              data={contents.rows}
+              style={styles.list}
+              keyExtractor={(_, index) => String(index)}
+              getItemLayout={(_, index) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index })}
+              // Where the reading is, which is the whole point of the sheet. `undefined`
+              // rather than 0 when it is not known: 0 would be a claim that the reading is
+              // at the beginning of the book.
+              initialScrollIndex={here?.row}
+              initialNumToRender={24}
+              windowSize={7}
+              renderItem={({ item, index }) => (
+                <Row
+                  row={item}
+                  current={here?.row === index}
+                  separated={index < last}
+                  onPress={() => {
+                    if (item.target === null) return;
+                    onGo(item.target);
+                    onClose();
+                  }}
+                />
+              )}
+            />
+          </DrawerCard>
+        )}
 
         {contents.rows.length > 0 && contents.unreachable === contents.rows.length ? (
-          <SheetNote attention>
+          <DrawerFooter attention>
             {!spineKnown
               ? 'The list of this book’s own files has not arrived yet, so no row can be opened. It arrives as the document installs.'
               : 'None of these rows names a file in this book. The contents live in a different folder from the pages, which this app matches by name — so the list can be read but not followed.'}
-          </SheetNote>
+          </DrawerFooter>
         ) : null}
 
-        <FlatList
-          data={contents.rows}
-          style={styles.list}
-          keyExtractor={(_, index) => String(index)}
-          getItemLayout={(_, index) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index })}
-          // Where the reading is, which is the whole point of the sheet. `undefined`
-          // rather than 0 when it is not known: 0 would be a claim that the reading is
-          // at the beginning of the book.
-          initialScrollIndex={here?.row}
-          initialNumToRender={24}
-          windowSize={7}
-          renderItem={({ item, index }) => (
-            <Row
-              row={item}
-              current={here?.row === index}
-              onPress={() => {
-                if (item.target === null) return;
-                onGo(item.target);
-                onClose();
-              }}
-            />
-          )}
-        />
-
-        {here && here.precision !== 'exact' ? <SheetNote>{precisionLine(here.precision)}</SheetNote> : null}
-    </Sheet>
+        {here && here.precision !== 'exact' ? <DrawerFooter>{precisionLine(here.precision)}</DrawerFooter> : null}
+    </Drawer>
   );
 }
 
@@ -138,16 +148,15 @@ function precisionLine(precision: 'shared' | 'before'): string {
   return 'This page is not in the contents, so the nearest row before it is marked.';
 }
 
-function Row({ row, current, onPress }: { row: ContentsRow; current: boolean; onPress(): void }) {
+function Row({ row, current, separated, onPress }: { row: ContentsRow; current: boolean; separated: boolean; onPress(): void }) {
   const unreachable = row.target === null;
-  const borders = useBorders();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: current, disabled: unreachable }}
       onPress={onPress}
       disabled={unreachable}
-      style={({ pressed }) => [styles.row, { borderBottomColor: borders.line }, current && styles.rowCurrent, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.row, current && styles.rowCurrent, pressed && styles.pressed]}
     >
       <Text
         style={[
@@ -157,27 +166,29 @@ function Row({ row, current, onPress }: { row: ContentsRow; current: boolean; on
           unreachable && styles.rowUnreachable,
           // One indent per level. A book with volumes inside volumes indents the
           // inner ones, which is why this is arithmetic and not two styles.
-          row.depth > 0 ? { paddingLeft: 16 + row.depth * 16 } : null,
+          row.depth > 0 ? { paddingLeft: DRAWER.row.inset + row.depth * 16 } : null,
         ]}
         numberOfLines={1}
       >
         {row.label || '—'}
       </Text>
+      {separated ? <DrawerSeparator /> : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { flexGrow: 0, height: ROW_HEIGHT * 9 },
+  // The card is as tall as its rows, and no taller than the drawer leaves it;
+  // the list inside shrinks with it and scrolls.
+  card: { flexShrink: 1 },
+  list: { flexGrow: 0, flexShrink: 1 },
   pressed: { opacity: 0.65 },
-  row: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    height: ROW_HEIGHT,
-    justifyContent: 'center',
-  },
-  rowCurrent: { backgroundColor: INK.page },
+  row: { height: ROW_HEIGHT, justifyContent: 'center' },
+  // The line colour, where the old drawer took the page's: on a card, the
+  // drawer's own grey read as a hole in it.
+  rowCurrent: { backgroundColor: INK.line },
   rowHeading: TEXT.headline,
-  rowLabel: { ...TEXT.body, color: INK.text, paddingHorizontal: 16 },
+  rowLabel: { ...TEXT.body, color: INK.text, paddingHorizontal: DRAWER.row.inset },
   rowLabelCurrent: { color: INK.reading, fontWeight: TEXT_EMPHASIZED.body.fontWeight },
   rowUnreachable: { color: INK.quiet },
 });
