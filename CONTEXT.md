@@ -306,10 +306,17 @@ _Avoid_: clip, voice, offline narration
 ### On the screen
 
 **Drawer**:
-A surface that rises from the bottom of the screen over what the owner was
-looking at, holding the choices or the list that belong to it, and that goes
-away when dragged down or when the owner taps outside it.
+A surface that rises from the bottom of the screen to the drawer height, over
+part of what the owner was looking at, holding the choices or the list that
+belong to it. Pushed up, it reaches almost to the top of the screen; dragged
+down, it goes away. At the drawer height, what it does not cover stays in view
+and in use.
 _Avoid_: sheet, bottom sheet, modal, popup, panel
+
+**Drawer Height**:
+How much of the screen a drawer covers when it opens, measured from the bottom
+edge of the screen. The same for every drawer, and the owner's.
+_Avoid_: sheet height, detent, drawer size
 
 **Player**:
 The Reading's controls, floating over the bottom of the page in the reader: the
