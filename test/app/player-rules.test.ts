@@ -121,14 +121,18 @@ describe('the contents open at the chapter being read (ADR 0020)', () => {
    *
    * Measured on the device (01:05): 仙逆 resumed at spine item 4 and the list mounted
    * on 第1章 离乡, marked.
+   *
+   * Since #117 a title wraps in full, so rows are not one height and there is no
+   * `getItemLayout` to scroll by: the list starts at the current row and the rows
+   * above it are put back in front under `maintainVisibleContentPosition`.
    */
   it('mounts scrolled to the row the reading is in, and never to the first row', () => {
     const sheet = code('contents-sheet.tsx');
-    expect(sheet).toContain('initialScrollIndex={here?.row}');
+    expect(sheet).toContain('current={here?.row ?? null}');
+    expect(sheet).toContain('useState(() => current ?? 0)');
+    expect(sheet).toContain('rows.slice(from)');
+    expect(sheet).toContain('maintainVisibleContentPosition={{ minIndexForVisible: 0 }}');
     expect(sheet).not.toMatch(/initialScrollIndex=\{0\}/);
-    // Without a row height it cannot scroll to an index at all, and React Native
-    // drops the prop rather than saying so.
-    expect(sheet).toContain('getItemLayout=');
     expect(sheet).toContain('currentRow(contents, { sectionIndex: section })');
   });
 });
