@@ -137,7 +137,10 @@ step lighter than the page: a Settings page in the dark is the colour of the
 book's own page, and a drawer that colour could not be told from the page it
 rose over. The phone's own dark drawers are lighter than the page for the same
 reason. The colours are solid. The drawer follows the app's Theme, not the
-phone's. The phone's own controls in it take the app's amber.
+phone's. The app's own marks in it, a chosen row or a check, are amber. The
+phone's own controls and dialogs over a drawer keep the phone's colours. Given
+the app's amber, the phone drew Rename's Save button in amber whether or not
+it could be pressed, so a blank name looked as if it could be saved.
 
 ## Drawer by drawer
 
@@ -147,19 +150,33 @@ phone's. The phone's own controls in it take the app's amber.
 - **Rename** is no longer a page of the drawer. It is the phone's own small
   dialog with a field in it, rising over the drawer: Cancel goes back to the
   menu, Save renames the book and closes the drawer, and Save cannot be pressed
-  while the name is blank. The owner asked for a dialog: a new name is one short
-  answer, and the phone asks for one of those in a dialog, not on a page.
+  while the name is blank, which the phone shows by greying it. The owner asked
+  for a dialog: a new name is one short answer, and the phone asks for one of
+  those in a dialog, not on a page. The field starts with the current name and
+  the cursor at its end, not with the name selected. The phone's own dialog
+  will not select it, and the owner chose the phone's dialog over a copy of it
+  that could.
 - **Voice.** The rows of small buttons for the provider and the language become
   two rows, Provider and Language, each opening a short menu, above the list of
-  voices.
-- **Download.** Manage downloads becomes a page of its own, titled Manage, with
-  the back button; the link that read Back to downloads goes. Select all, and
+  voices. A menu row reaches only as far as its words: a menu over a row as
+  wide as the drawer took the whole drawer off the screen while it was open.
+  Appearance's Alignment is the same kind of row.
+- **Download** is laid out as Contents is, at the owner's word: the same rows,
+  titles in full, the same indent and the same mark for the chapter being read,
+  with each row's own circle, check or ring at its right. Manage downloads
+  becomes a page of its own, titled Manage, with the back button, reached from
+  the line that counts the chapters downloaded; the link that read Back to
+  downloads goes. Select all, and
   Deselect all, move up into the drawer's top, on the right. Download selected
   stays fixed at the bottom of the drawer whatever the list is scrolled to.
   Pause all, and Resume all, go on the line that says how the download is
   going.
 - **The lookup drawer** takes the same two heights. It used to have its own, just
-  under half of the page and nearly the whole of it.
+  under half of the page and nearly the whole of it. Its switch between
+  Dictionary and Translation is the phone's own two-part switch, centred where a
+  title goes, and its down-arrow close button goes. A drag that starts on the
+  switch does not move the drawer; a drag from the grabber or beside the switch
+  does.
 
 ## What it costs
 

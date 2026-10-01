@@ -20,10 +20,11 @@ statement in ADRs [0035](0035-a-short-choice-is-the-systems-own-menu.md),
 [0059](0059-sharing-copies-the-file-under-its-library-name.md) that rests on
 the drawer being a React Native `Modal`._
 
-**Built in batches.** Batch 1 (`56a92b0`) is the drawer itself, the setting,
-Contents and one drawer at a time; batch 2 moves a Document's actions drawer and
-batch 3 Voice and Lookup. Until then those drawers stay on the old `Sheet`, and
-take part in the turns below.
+**Built in batches.** Batch 1 (`56a92b0`, reworked as plain lists in `1a85077`)
+is the drawer itself, the setting, Contents and one drawer at a time. Batch 2
+(`fe11fb2`) moves a Document's actions drawer, and batch 3 (`068b5e8`) moves
+Voice and Lookup. With all three in, `src/app/sheet.tsx` was deleted
+(`0a2dcdb`).
 
 ## What was there
 
@@ -102,8 +103,17 @@ own at 0.46 and 0.88 of the reading view's height, dragged between 0.25 and 0.88
   indent. It sits apart so that a test can check it reproduces Books' 52-, 62-
   and 112-pt rows. The text size is one value, `DRAWER_LIST.text`: `'body'`
   would make the rows 17 pt. `Drawer` is the sheet with its header;
-  `DrawerRow`, `DrawerRowText`, `DrawerSeparator` and `DrawerFooter` are the
-  shared parts.
+  `DrawerRow`, `DrawerRowText`, `DrawerRowValue`, `DrawerChevron`,
+  `DrawerSeparator`, `DrawerFooter`, `DrawerMenuRow`, `DrawerScroll` (short
+  pages) and `DrawerList` (long lists, holding Contents' opening at a row) are
+  the shared parts. `DrawerBottom` takes the sheet's content down to its bottom
+  edge (`ignoreSafeArea` on the bottom): a list that ends the drawer runs on
+  under the home indicator with the inset as its own bottom padding, as Books'
+  does. Before that, every list stopped 50 pt above the edge: the body's
+  16-pt padding plus the 34-pt safe area that `RNHostView` left out (notes
+  20:30). The header takes `titleLeft` (a Document's actions menu), `onBack`,
+  an `action` (a round icon, or a word in a capsule such as Select all), and a
+  `heading`, a control drawn where the centred title goes (Lookup's).
 - **Line pitch.** `text-styles.ts`'s `onLinePitch` is its one exception to
   writing no line heights, and only drawer rows use it. At exactly 50/3 pt,
   Reverend Insanity's two-line titles got their 62-pt rows but drew only their
@@ -126,15 +136,20 @@ own at 0.46 and 0.88 of the reading view's height, dragged between 0.25 and 0.88
   pt too high after a swipe. So until the owner scrolls, the current row is put
   back at the top whenever the list is laid out again. 5 of 5 openings, swipes
   and grabber taps kept it at the top, at the long Chapter 139, deep in a
-  2,076-entry book and at its last section. The detent arithmetic is `drawerDetentHeight` in
+  2,076-entry book and at its last section.
+- **The setting.** The detent arithmetic is `drawerDetentHeight` in
   `src/app/drawer-height.ts`, apart so a test can import it. The setting is
   `AppSettings.drawerHeight`, one of `DRAWER_HEIGHTS` = 40–90, read back as 50
   when it is anything else, and not in `engineIdentity`.
 - **The Theme and the grabber.** The `Host` takes `colorScheme` and the sheet
-  `environment('colorScheme', …)` from the app's resolved Theme, and
-  `tint(…)` the reading accent as a plain string per scheme. Measured with
+  `environment('colorScheme', …)` from the app's resolved Theme. Measured with
   the app dark on a light phone and the reverse, the drawer drew the app's
-  colours both ways (notes 13:21). `presentationDragIndicator('visible')`
+  colours both ways (notes 13:21). **The sheet is not tinted** (owner's Q52).
+  Batch 1 gave it `tint(accent)`, and that reached the phone's alerts over a
+  drawer through UIKit's `tintColor`: iOS 27 then drew Rename's disabled Save
+  in the same amber as an enabled one, (178,106,0) both ways. Untinted, a
+  blank Save reads (64,64,68) in light and (157,157,160) in dark (notes 22:45).
+  The app's own marks keep the accent. `presentationDragIndicator('visible')`
   ships: the HIG asks for a grabber on a resizable sheet.
 - **One drawer at a time** (owner's Q43). Because the page stays live, a button
   that opens another drawer can be pressed while one is up. SwiftUI presents
@@ -145,8 +160,8 @@ own at 0.46 and 0.88 of the reading view's height, dragged between 0.25 and 0.88
   turn while another holds it calls the holder's `onClose`, and is presented
   only once the holder reports its dismissal. A dismissal reported twice, or
   before the owner closed it, is ignored, since iOS does both. `useDrawerTurn`
-  in `drawer.tsx` hands each drawer its turn. The old `Sheet` and the lookup
-  drawer take part, in both directions.
+  in `drawer.tsx` hands each drawer its turn. The lookup drawer takes part
+  too.
 - **A dark drawer is a step lighter than the page** (owner's Q44). In the dark,
   `SETTINGS_SURFACE.dark.page` is the reader's own `#111114`, and a drawer that
   colour showed no edge but its grabber. So in the dark the drawer is
@@ -157,15 +172,37 @@ own at 0.46 and 0.88 of the reading view's height, dragged between 0.25 and 0.88
   as far as Books' separators stand on its own dark grey (33) (notes 18:20).
   The light drawer is the Settings page, `#f4f4f6`, with separators `#e8e8e8`,
   12 levels darker: faint, but visible.
-- **Per drawer.** Rename is the system's alert with a text field, over the
-  drawer: Cancel returns to the menu, Save renames and closes, Save is disabled
-  while the name is blank. Voice's provider and locale chips become two menu
-  rows, Provider and Language. Download's "Manage downloads" / "Back to
-  downloads" link (`src/app/download-sheet.tsx:237`) becomes a page, Manage,
-  with a back button; Select all / Deselect all goes to the header's right;
-  Download selected is fixed at the bottom; Pause all / Resume all goes on the
-  download's status line. Lookup's 0.46 / 0.88 give way to the Drawer Height
-  and `large`.
+- **Per drawer.**
+  - **Rename** (`src/app/rename-alert.tsx`) is `@expo/ui`'s SwiftUI `Alert`
+    with a `TextField`, from a 1-pt `Host` inside the drawer, so it rises over
+    the drawer while the drawer keeps its height. React Native's
+    `Alert.prompt` cannot disable a button. Save carries
+    `disabled(!name.trim())`: Cancel returns to the menu, and Save renames and
+    closes. The field starts unselected with the cursor at its end, because
+    SwiftUI's alert ignores the `TextField`'s selection (owner's Q53, revising
+    Q25).
+  - **System menu rows.** A menu row (`DrawerMenuRow`, built on `ChoiceMenu`)
+    is set in to its words, about 353 pt. A menu host as wide as the drawer
+    took the whole drawer off the screen while the menu was open, at both
+    heights: a 392-pt label did and a 380-pt one did not (notes 20:40, 23:12).
+    Voice's Provider and Language and Appearance's Alignment are such rows.
+  - **Download** is laid out as Contents, on the shared `DrawerList`. Each
+    row's circle, check or ring sits in one column at its right. Manage is a
+    page reached from a "Manage downloads ›" link on the "N chapters
+    downloaded" line. Select all / Deselect all is the header's capsule
+    action. Download selected is fixed at the bottom. Pause all / Resume all is
+    on the status line.
+  - **Two-finger selection** (ADR 0045) works in the sheet without a
+    gesture-handler root of its own. Holding at the edge selects nothing at
+    90 % and at `large` when the two fingers start at about 1,000 pt/s: the
+    list's own scroll takes it, and the sheet does not move. At about 430 pt/s
+    it selected 48 chapters. Making one-finger scrolling wait on the two-finger
+    gesture would stall it, so this is left open (notes 22:58).
+  - **Lookup** is on `Drawer` with `heading`: the system's segmented control,
+    Dictionary | Translation, centred, 270 pt wide at the Drawer Height and 282
+    at `large`. Its own 0.46 / 0.88 view, pan handler, drawn switch and
+    down-arrow are gone. A drag that starts on the segmented control does not
+    move the sheet (notes 22:06).
 - **The page is not moved for a drawer.** The centring knows the player's inset
   and the bar's (`bridge.setInset`, `bridge.setBar`, ADR 0048); it is not told
   about a drawer, so a drawer that covers the line being read is left covering
@@ -275,11 +312,11 @@ selection while the note stays editable.
 
 ## Still to be measured or recorded
 
-- How the Rename alert is built (batch 2).
 - Dynamic Type sizes, VoiceOver and a physical phone; none was measured.
 - A queued drawer waits for the holder's dismissal with no timeout, so a
-  dismissal iOS never reports would leave it waiting. An unmounting old
-  `Sheet` releases its turn before UIKit has finished taking it down; Contents
+  dismissal iOS never reports would leave it waiting. In batch 1 an
+  unmounting old `Sheet` released its turn before UIKit had finished taking it
+  down; Contents
   presented every time regardless (notes 13:41).
 - Rows that now live inside `RNHostView` in a sheet, each of which ADR 0035,
   0045, 0051 or 0059 measured inside the old `Modal` or over the reader:
