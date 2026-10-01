@@ -49,6 +49,18 @@ const PLAYER_PADDING_TOP = 4;
 const PLAYER_PADDING_BOTTOM = 28;
 
 /**
+ * The width of each end of the transport row: Contents at the left, the speed at
+ * the right (#115).
+ *
+ * One number for both, because the row spreads its buttons with equal gaps, and
+ * Play is in its middle only while the two ends are as wide as each other. With
+ * Contents at 44 and the speed at 58, Play sat 7 points left of the player's
+ * centre, under a Voice name that is centred (#70). 58 is the speed's: `1.00×`
+ * needs it.
+ */
+const TRANSPORT_END = 58;
+
+/**
  * How a held stepper button repeats, and why it is not simply "fast".
  *
  * Every rate change re-sends the whole Word Timing array to the WebView, scaled by
@@ -499,7 +511,7 @@ const styles = StyleSheet.create({
   // measured in (onOpenHeight).
   controls: { gap: 6 },
   disabled: { opacity: 0.35 },
-  footTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  footTap: { width: TRANSPORT_END, height: 44, alignItems: 'center', justifyContent: 'center' },
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   // The box A or M sits in: as wide as the collapse arrow opposite (#70), and as
   // tall, so M's whole box is its 44-point target.
@@ -526,7 +538,7 @@ const styles = StyleSheet.create({
     right: 0,
   },
   pressed: { opacity: 0.65 },
-  rateHost: { height: 44, width: 58 },
+  rateHost: { height: 44, width: TRANSPORT_END },
   rateTap: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   // A step above the voice's 14 beside it; at 13 it was the smallest thing on
   // the row of 24-point icons it ends.
