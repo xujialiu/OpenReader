@@ -1,5 +1,8 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useState } from 'react';
+import { Pressable, Text } from 'react-native';
 import { OpenReader } from './src/app';
+import { SheetProbe } from './src/app/sheet-probe';
 
 /**
  * The reader, which is the whole app (`src/app/`).
@@ -16,7 +19,13 @@ import { OpenReader } from './src/app';
  * detector with no root above it throws.
  */
 export default function App() {
+  // THROWAWAY PROBE (not for merge): a temporary button that mounts the sheet probe.
+  const [probe, setProbe] = useState(false);
   return <GestureHandlerRootView style={{ flex: 1 }}>
     <OpenReader />
+    {__DEV__ && !probe && <Pressable accessibilityLabel="SHEET PROBE" onPress={() => setProbe(true)}
+      style={{ position: 'absolute', left: 8, top: 430, padding: 10, backgroundColor: '#FF00FF', borderRadius: 6 }}>
+      <Text style={{ color: 'white', fontWeight: '700' }}>SHEET PROBE</Text></Pressable>}
+    {__DEV__ && probe && <SheetProbe onExit={() => setProbe(false)} />}
   </GestureHandlerRootView>;
 }
