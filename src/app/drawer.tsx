@@ -65,13 +65,16 @@
 
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import {
-  environment, presentationBackground, presentationBackgroundInteraction, presentationDetents,
+  environment, ignoreSafeArea, presentationBackground, presentationBackgroundInteraction, presentationDetents,
   presentationDragIndicator, tint,
 } from '@expo/ui/swift-ui/modifiers';
-import { useCallback, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
-  Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
-  type AccessibilityRole, type AccessibilityState, type ColorValue, type StyleProp, type TextStyle,
+  createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
+  type ReactElement, type ReactNode,
+} from 'react';
+import {
+  FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
+  type AccessibilityRole, type AccessibilityState, type ColorValue, type FlatListProps, type StyleProp, type TextStyle,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -118,7 +121,12 @@ export const DRAWER = {
   row: DRAWER_LIST,
   /** From a list to the footer text under it, as the settings pages have it (`controls.tsx`). */
   footerGap: 8,
-  /** Below the last thing in a drawer, above the home indicator's safe area. */
+  /**
+   * Below the last thing in a drawer, above the home indicator's safe area.
+   * A list that ends the drawer runs on under both, to the sheet's bottom
+   * edge, as Books' contents do, and only its last row stops here
+   * (`DrawerList`, `DrawerScroll`).
+   */
   bottom: 16,
   /**
    * Per theme: the sheet (`page`), the line under a row, the marked row
@@ -152,6 +160,20 @@ export function useDrawerColours(): (typeof DRAWER.colours)[keyof typeof DRAWER.
   if (!scheme) throw new Error('A drawer was drawn outside the shell, which is what says whether the theme on screen is light or dark.');
   return { ...DRAWER.colours[scheme], scheme };
 }
+
+/**
+ * How far above the sheet's bottom edge a drawer's content ends: the home
+ * indicator's safe area and `DRAWER.bottom`. The sheet's content reaches the
+ * edge (`ignoreSafeArea`), and the drawer's body is padded by this, so words
+ * under a list stand clear of the home indicator. A list that ends the drawer
+ * runs on through the padding and pads its own content instead, so its rows
+ * reach the edge and its last row still scrolls clear.
+ *
+ * The first drawer stopped every list this far above the edge, and a drawer
+ * grown to full height showed a blank strip of 60 pt under its last row, where
+ * Books runs its rows on to the bottom of the screen (notes, 2026-10-01).
+ */
+const DrawerBottom = createContext<number>(DRAWER.bottom);
 
 /** The app's one queue of drawers (`drawer-turns.ts`). */
 const DRAWER_TURNS = createDrawerTurns();
@@ -232,6 +254,7 @@ export function Drawer({ visible, title, onClose, onBack, action, titleLeft, chi
   const insets = useSafeAreaInsets();
   const opening = { height: drawerDetentHeight(settings.drawerHeight, { width: window.width, height: window.height, bottomInset: insets.bottom }) };
   const turn = useDrawerTurn(visible, onClose);
+  const bottom = insets.bottom + DRAWER.bottom;
   return (
     <Host style={styles.host} colorScheme={colours.scheme}>
       <BottomSheet isPresented={turn.presented} onDismiss={turn.dismissed}
@@ -243,6 +266,8 @@ export function Drawer({ visible, title, onClose, onBack, action, titleLeft, chi
           presentationBackground(colours.page),
           environment('colorScheme', colours.scheme),
           tint(colours.accent),
+          // Down to the sheet's bottom edge, under the home indicator, so a list can run on to it (`DrawerBottom`).
+          ignoreSafeArea({ regions: 'container', edges: 'bottom' }),
         ]}>
           <RNHostView>
             {/*
@@ -250,9 +275,11 @@ export function Drawer({ visible, title, onClose, onBack, action, titleLeft, chi
               * in a view controller of its own, out of reach of the app's root, as
               * a `Modal` was. Download's two-finger sweep needs it (ADR 0045).
               */}
-            <GestureHandlerRootView style={styles.body} onAccessibilityEscape={onClose}>
-              <DrawerTitle title={title} onBack={onBack} action={action} titleLeft={!!titleLeft} />
-              {children}
+            <GestureHandlerRootView style={[styles.body, { paddingBottom: bottom }]} onAccessibilityEscape={onClose}>
+              <DrawerBottom value={bottom}>
+                <DrawerTitle title={title} onBack={onBack} action={action} titleLeft={!!titleLeft} />
+                {children}
+              </DrawerBottom>
             </GestureHandlerRootView>
           </RNHostView>
         </Group>
@@ -398,7 +425,88 @@ export function DrawerRowValue({ children }: { children: ReactNode }) {
  * last at a Drawer Height of 40 %.
  */
 export function DrawerScroll({ children }: { children: ReactNode }) {
-  return <ScrollView style={styles.scroll}>{children}</ScrollView>;
+  const bottom = useContext(DrawerBottom);
+  return <ScrollView style={[styles.scroll, { marginBottom: -bottom }]} contentContainerStyle={{ paddingBottom: bottom }}>{children}</ScrollView>;
+}
+
+/**
+ * A long list in a drawer: Contents' chapters, Download's. A `FlatList`, so
+ * that only the rows in view are drawn, with what both lists need of it.
+ *
+ * **It opens at a row** (`openAt`, #88), whose height, like every row's, is
+ * not known before it is laid out: titles wrap in full. So it opens in two
+ * steps. First its rows start at that one, so it is laid out at the top with
+ * nothing to estimate. Then the rows before it are put back in front, under
+ * `maintainVisibleContentPosition`, which holds the row where it was while the
+ * list grows above it; those rows are drawn as the owner scrolls up, at a
+ * height estimated from the ones measured, and corrected the same way.
+ * `initialScrollIndex` without `getItemLayout` was tried first: it scrolled to
+ * the row against rows above it estimated at nothing, and a drag up later left
+ * the list blank (notes, 2026-10-01 16:35).
+ *
+ * The phone undoes that hold while the drawer moves: with Shadow Slave's long
+ * Chapter 139 among the rows measured, the row ended 14 to 27 pt too high
+ * after a swipe up, or after opening. So until the owner touches the list, or
+ * its rows change in number under it, the row is scrolled back to the top
+ * whenever the list is laid out again.
+ *
+ * `renderItem` and `keyExtractor` are given each row's index in the whole of
+ * `data`, so a row keeps its key when the rows above it arrive.
+ *
+ * **It ends the drawer** (`ends`) when nothing is under it: then it runs on to
+ * the sheet's bottom edge, under the home indicator (`DrawerBottom`).
+ */
+export function DrawerList<T>({ data, openAt = null, ends = false, listRef, keyExtractor, renderItem, style, contentContainerStyle,
+  onContentSizeChange, onLayout, onScrollBeginDrag, onTouchStart, ...list }:
+  Omit<FlatListProps<T>, 'data' | 'keyExtractor' | 'renderItem'> & {
+    data: readonly T[];
+    /** The row to open at, as an index into `data`, or null for the top. Read once, when the list is mounted. */
+    openAt?: number | null;
+    ends?: boolean;
+    listRef?(list: FlatList<T> | null): void;
+    keyExtractor(item: T, index: number): string;
+    renderItem(row: { item: T; index: number }): ReactElement | null;
+  }) {
+  const bottom = useContext(DrawerBottom);
+  // The first row drawn: the one opened at, then, once that has been laid out at the top, the first.
+  const [from, setFrom] = useState(() => openAt ?? 0);
+  const shown = useMemo(() => (from > 0 ? data.slice(from) : data), [data, from]);
+  const flat = useRef<FlatList<T> | null>(null);
+  const holding = useRef(openAt !== null && openAt > 0);
+  // How many rows there were when the rows above came back; another number means they are other rows.
+  const rows = useRef<number | null>(null);
+  const frame = useRef<number | null>(null);
+  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
+  useEffect(() => { if (rows.current !== null && rows.current !== data.length) holding.current = false; }, [data.length]);
+  const anchor = () => {
+    if (!holding.current || from > 0 || openAt === null) return;
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    // A frame later, once the list has measured what changed.
+    frame.current = requestAnimationFrame(() => flat.current?.scrollToIndex({ index: openAt, animated: false }));
+  };
+  return (
+    <FlatList
+      initialNumToRender={16}
+      windowSize={7}
+      // The row is drawn by the time it is asked for; a row that is not yet is left where it is.
+      onScrollToIndexFailed={() => {}}
+      {...list}
+      ref={(next) => { flat.current = next; listRef?.(next); }}
+      data={shown}
+      style={[styles.list, style, ends && { marginBottom: -bottom }]}
+      contentContainerStyle={[contentContainerStyle, ends && { paddingBottom: bottom }]}
+      keyExtractor={(item, index) => keyExtractor(item, from + index)}
+      renderItem={({ item, index }) => renderItem({ item, index: from + index })}
+      maintainVisibleContentPosition={openAt !== null && openAt > 0 ? { minIndexForVisible: 0 } : undefined}
+      onContentSizeChange={(width, height) => {
+        onContentSizeChange?.(width, height);
+        if (from > 0) { rows.current = data.length; setFrom(0); } else anchor();
+      }}
+      onLayout={(event) => { onLayout?.(event); anchor(); }}
+      onScrollBeginDrag={(event) => { holding.current = false; onScrollBeginDrag?.(event); }}
+      onTouchStart={(event) => { holding.current = false; onTouchStart?.(event); }}
+    />
+  );
 }
 
 /**
@@ -423,7 +531,7 @@ export function DrawerFooter({ children, attention }: { children: ReactNode; att
 const styles = StyleSheet.create({
   // The sheet is presented from the window, not from here; the host only has to exist.
   host: { position: 'absolute', bottom: 0, right: 0, width: 1, height: 1 },
-  body: { flex: 1, paddingBottom: DRAWER.bottom },
+  body: { flex: 1 },
   header: {
     alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', gap: 12,
     marginBottom: DRAWER.header.gap, marginTop: DRAWER.header.top, minHeight: DRAWER.header.height,
@@ -451,6 +559,8 @@ const styles = StyleSheet.create({
   // The settings rows' chevron (`controls.tsx`): its ink ends at the words' right inset.
   chevron: { marginRight: -3 },
   scroll: { flexGrow: 0, flexShrink: 1 },
+  // As tall as its rows, and no taller than the drawer leaves it, so what is under a short list sits under its last row.
+  list: { flexGrow: 0, flexShrink: 1 },
   capsule: { paddingHorizontal: 16, width: undefined },
   capsuleText: { ...TEXT.body, color: INK.reading },
   pressed: { opacity: 0.65 },
