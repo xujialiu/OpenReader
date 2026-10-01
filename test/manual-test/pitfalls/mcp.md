@@ -114,3 +114,13 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 
 - **The DAP backend answers breakpoints, `thread list`, `thread select` and `thread backtrace`, but not expression evaluation** — `po (id)$x0`, `expr -l objc -O -- […]`, `register read` past the first command all fail with `Need an imageRef` (a bare `(null)` answer) or, for `expr`, an explicit `DAP backend does not support LLDB command evaluation. Set MOBILEBUILDMCP_DEBUGGER_BACKEND=lldb-cli`. That is enough to *locate* a throw — a breakpoint on `objc_exception_throw` plus the backtrace named the exact Swift line and the UIKit method that raised — but not to *read* the NSException's `reason`. The assertion text came from the simulator's own log instead: `xcrun simctl spawn UDID log show --predicate …` carries `*** Assertion failure in -[…], file:line` for every `NSAssert` even when the exception is caught and converted afterwards, so grep the log for `Assertion failure` rather than reaching for the debugger to read one.
 - **An attached debugger keeps `simctl terminate` from working, and `simctl launch` then hangs**: detach first (`debug_lldb_command` `detach`), terminate, then launch. A launch issued while the old process was still held timed out past 120 s with the device otherwise unresponsive to `simctl ui appearance` for minutes (it answered after the dust settled); nothing was broken, but every `simctl` call in that window queued behind it.
+- **On a device that had never allowed the fake Provider, neither `ax.py
+  alert-touch Allow` nor `axe touch --down --up --delay 0.3` closed the consent
+  alert** (2026-10-01 22:50–22:54, #120, `iPhone 17 bug-webcontent`). Each
+  answered with the point the tree gave, (275, 518), and the alert stayed up in
+  `ax.py alert` and in a screenshot 4 s later, three times. What worked instead,
+  without a touch: `hx.cjs UDID '{"do":"settings","patch":{"consent":["provider:local@http://127.0.0.1:PORT"]}}'`
+  (the yes as `settings.json` keeps it, voices-and-providers/consent.md), then
+  terminate and relaunch the app; the next Play asked nothing and the fake
+  logged its first synthesis request. Use it only where the consent itself is
+  not what is under test.

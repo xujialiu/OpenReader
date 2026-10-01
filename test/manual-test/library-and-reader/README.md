@@ -215,9 +215,11 @@ bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID MET
 It asks the page with `kit/probes/page-alive.js`, `kill -9`s the device's one
 WebContent process (the `WebContentExtension` child of its `launchd_sim`), waits
 5 s (`--wait`), and asks again. PASS: epub.js is on the page with a displayed
-view taller than zero; FAIL: anything else, a missing answer included. Exit 0 /
-1, 2 when the page has no text before the kill or there is not exactly one
-WebContent process. It plays nothing and saves a screenshot to
+view taller than zero and, when a sentence was highlighted before the kill (a
+harness `{"do":"seek","utterance":N}` paints one while paused), the same
+sentence highlighted after it; FAIL: anything else, a missing answer included.
+Exit 0 / 1, 2 when the page has no text before the kill or there is not exactly
+one WebContent process. It plays nothing and saves a screenshot to
 `/tmp/openreader-webcontent-killed.png`.
 
 On the phone (2026-10-01) iOS ended the process itself, with the app suspended
@@ -229,5 +231,18 @@ each, the screenshot blank under the navigation bar and the player, Metro
 logging `WARN Webview Process Terminated`. Closing the Reader and opening the
 book again, with nothing playing, brought the text back.
 
+After the fix (ADR 0067, `1.0.0-beta10`), 6 of 6 PASS at 22:44–23:02: four in
+front, two `--away`, one with nothing cued (the new page opened where the old
+one was), the others with the sought sentence highlighted again.
+
+A Reading playing through the kill is not in the script, because its sentence
+moves on. By hand, with `player-and-reading-held/fake-kokoro.cjs` as the
+Provider (setup in `place-and-following/background-crossing.md`), `silence.sh
+check && hx.cjs … '{"do":"play"}'`, then the same `kill -9`, `page-alive.js`
+8 s later, and a pause: on 2026-10-01 at 23:00:48 the Reading went on from
+Utterance 302 to 306 with no note, and the new page showed the sentence being
+spoken with its word highlighted. Four kills within a minute leave the page
+blank on purpose (ADR 0067, decision 6): reopen the book before the next run.
+
 What it cannot prove: what an idle-exit while suspended does beyond the kill
-(the phone's wait was 85 minutes), or a Reading playing through it.
+(the phone's wait was 85 minutes).

@@ -14,8 +14,9 @@
 # --wait S  seconds between the kill (or the return) and the check, default 5
 #
 # Prints PASS when the page-alive probe finds epub.js on the page with a
-# displayed view taller than zero, FAIL otherwise; exit 0 / 1, 2 for a setup
-# problem. Plays nothing. It cannot prove what the owner sees: the probe reads
+# displayed view taller than zero and, when a sentence was highlighted before
+# the kill (a Play, a tapped sentence, a harness `seek`), the same sentence
+# highlighted after it; FAIL otherwise; exit 0 / 1, 2 for a setup problem. Plays nothing. It cannot prove what the owner sees: the probe reads
 # the page's DOM, and a screenshot goes to /tmp/openreader-webcontent-killed.png.
 set -u
 U=${1:?SIMULATOR_UDID}
@@ -53,6 +54,8 @@ ask() {
   echo "(no answer in 10 s)"
 }
 alive() { echo "$1" | grep -q '"rendition":"object"' && echo "$1" | grep -Eq '"[0-9]+:d:[1-9][0-9]*"'; }
+# The highlighted sentence, as `section:openreader-utterance:its first 40 characters`.
+sentence() { echo "$1" | grep -o '"[0-9]*:openreader-utterance:[^"]*"' | head -1; }
 
 before=$(ask)
 echo "before: $before"
@@ -74,9 +77,22 @@ fi
 sleep "$WAIT"
 
 after=$(ask)
+lit=$(sentence "$before")
+if [ -n "$lit" ] && [ "$(sentence "$after")" != "$lit" ]; then
+  # The sentence is painted once the new page has reported its section, which
+  # can take a moment longer than the page itself.
+  sleep 5
+  after=$(ask)
+fi
 echo "after:  $after"
 echo "WebContent now: $(webcontent | tr '\n' ' ')"
 xcrun simctl io "$U" screenshot /tmp/openreader-webcontent-killed.png > /dev/null 2>&1
-if alive "$after"; then echo PASS; exit 0; fi
-echo "FAIL: the reader's page has no book on it after its web content process ended"
-exit 1
+if ! alive "$after"; then
+  echo "FAIL: the reader's page has no book on it after its web content process ended"
+  exit 1
+fi
+if [ -n "$lit" ] && [ "$(sentence "$after")" != "$lit" ]; then
+  echo "FAIL: the page is back, but $lit is not highlighted on it (now: $(sentence "$after"))"
+  exit 1
+fi
+echo PASS

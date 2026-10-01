@@ -9,6 +9,8 @@
 // rendition, book   typeof each global; 'undefined' means no book on this page
 // views     epub.js's views: spine index : d displayed : height
 // body      element count under <body>, and the page's height
+// lit       what each section's CSS highlights hold: name, then the first 40
+//           characters of its first range (the sentence painted, the word)
 /* global rendition, book */
 // eslint-disable-next-line no-unused-vars
 function probe() {
@@ -25,6 +27,17 @@ function probe() {
     if (typeof rendition !== 'undefined' && rendition.manager && rendition.manager.views) {
       out.views = rendition.manager.views._views.map(function (v) {
         return [v.section && v.section.index, v.displayed ? 'd' : '-', Math.round((v.element && v.element.offsetHeight) || 0)].join(':');
+      });
+      out.lit = [];
+      rendition.manager.views._views.forEach(function (v) {
+        let win = null;
+        try { win = v.contents && v.contents.window; } catch { /* a view without a live document */ }
+        if (!win || !win.CSS || !win.CSS.highlights) return;
+        win.CSS.highlights.forEach(function (highlight, name) {
+          let first = null;
+          highlight.forEach(function (range) { if (first === null) first = range; });
+          if (first) out.lit.push(v.section.index + ':' + name + ':' + String(first).slice(0, 40));
+        });
       });
     }
   } catch (e) {
