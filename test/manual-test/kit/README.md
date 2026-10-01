@@ -31,6 +31,12 @@ What every area uses:
   file's header (below, "Ask the app on the phone").
 - `ax.py`: the accessibility tree through AXe, and real touches on what it
   lists, the phone's own alert and the rows of a long list included (below).
+- `drawer-edge.py`: where a drawer's top edge is in a screenshot, from its
+  grabber, which works in the dark where the drawer's grey is the reader's
+  page (#117). `python3 test/manual-test/kit/drawer-edge.py SHOT.png [R G B]`;
+  with a colour it also gives the first row in that colour. It cannot tell
+  the Drawer Height from `large`: `ax.py UDID tree`'s `Sheet Grabber` value
+  (`Half screen`, `Expanded`) does. The header says what each offset is.
 
 ## Read the accessibility tree, and touch what it lists
 

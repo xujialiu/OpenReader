@@ -122,3 +122,13 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
   - The picker is a remote view: `axe describe-ui` does not list it, but XCUITest's `app.debugDescription` does (`sliderAlpha`, label `Opacity`).
   - `test/manual-test/settings/SheetColorProbe.swift` on the probe branch (`e09da7c`) shows it.
 - **A row of a sheet at medium can lie below the screen while the tree lists it.** The `Highlight` row's frame read y 868.6 on an 874-pt screen, and a tap there landed on nothing. Take the sheet to large first: a tap on `Sheet Grabber` toggles it.
+
+## The app's drawer on the phone's own sheet (#117, 2026-10-01, iOS 27.0)
+
+- **An `axe drag` up on a drawer's list scrolled the list and left the drawer where it was.**
+  - Symptom: on Contents at the Drawer Height, `axe drag --start-y 700 --end-y 300` answered success and `Sheet Grabber` still read `Half screen`; the list had moved from Chapter 25 to Chapter 39.
+  - Cause: iOS grows a sheet from a swipe on its scroll view only when that scroll view is at its top, and Contents opens scrolled to the current row.
+  - Fix: drag from the drawer's header (`--start-y` on its title, about 38 pt below the top edge) to move the drawer; drag on the list to scroll it. Read `Sheet Grabber`'s value (`Half screen` / `Expanded`) after every drag, with `kit/ax.py UDID tree`.
+- **Frames inside a drawer at the Drawer Height are 0.96 of their size.** The drawer floats there, scaled by (402 − 16) / 402, and the tree reports screen points: Contents' 52-pt rows read `355x50` at the Drawer Height and `370x52` at `large`. Measure a drawer's own sizes at `large`.
+- **In the dark a drawer's edge cannot be found by colour.** The drawer's grey (`#111114`) is the reader's dark page, so a scan for the first row in the drawer's colour starts on the page. Find the grabber instead: `kit/drawer-edge.py SHOT.png`.
+- **A drawer showed its list where it had last been scrolled, once, right after a Fast Refresh.** On reopening Contents at 13:09 the list began at Chapter 34, where an earlier drag had left it, rather than at the current row. That was the first opening after `git checkout` of `contents-sheet.tsx` reloaded the bundle. Three later runs, two of them with the same drags, opened at the current row. If it happens, relaunch the app before calling it a fault.
