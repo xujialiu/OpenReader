@@ -29,11 +29,12 @@ margin unless the Document declares it `!important`.
 ## The setting
 
 `Appearance.margins` is a `Margin`, one of `MARGINS = [8, 12, …, 48]` (steps of
-4), and `DEFAULT_APPEARANCE.margins` is 16. `stepMargins` moves one step and
+4), and `DEFAULT_APPEARANCE.margins` is 16 (24 since 2026-10-01, at the owner's
+word; a saved value on the ladder is kept). `stepMargins` moves one step and
 answers null at either end, which the drawer shows as a disabled button, the
 same shape as `FONT_SIZES` and `stepFontSize`. It is per app like the rest of
 Appearance, stored in `settings.json`, and not synced. `settings-storage.ts`'s
-`readMargins` reads a missing or unknown value as 16, so a file written before
+`readMargins` reads a missing or unknown value as the default (then 16), so a file written before
 #84 reads the way a new install starts; nothing is migrated, because the app
 has not been released.
 

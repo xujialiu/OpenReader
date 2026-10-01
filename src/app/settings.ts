@@ -458,9 +458,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   local: { engine: LOCAL_ENGINES[0].id, baseURL: LOCAL_ENGINES[0].defaultBaseURL },
   voice: '',
   rate: 1.5,
-  // 16px, which is what every current Document's body text already is, and each
+  // 26px with 24-point Margins, the owner's choice of 2026-10-01, and each
   // Document's own font until the owner picks one (`highlighter.ts`'s
-  // `Appearance`, ADR 0030).
+  // `DEFAULT_APPEARANCE`, ADR 0030).
   appearance: DEFAULT_APPEARANCE,
   // Follow the system, which is the only default that is not a guess about the
   // room the owner is in.

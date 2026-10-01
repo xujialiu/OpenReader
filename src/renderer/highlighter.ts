@@ -279,11 +279,15 @@ export interface Appearance {
 }
 
 /**
- * 16px, the Document's own font, 16-point Margins and justified body text,
- * which is what a Document is read as until the owner says otherwise. 16 is
- * the phone's own distance from the edge to its back button.
+ * 26px, the Document's own font, 24-point Margins and justified body text,
+ * which is what a Document is read as until the owner says otherwise. The
+ * owner chose 26 and 24 on 2026-10-01, from reading at them on the iPhone; the
+ * first defaults were 16 and 16, the size every Document already set and the
+ * phone's own distance from the edge to its back button. A size or margin
+ * already saved is kept: these are only what a new install, or a settings file
+ * without them, starts at.
  */
-export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 16, margins: 16, textAlignment: 'justify' };
+export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 26, margins: 24, textAlignment: 'justify' };
 
 /** A quarter to four times, whatever the two numbers were: a measurement gone wrong must not make a book unreadable. */
 const MIN_PERCENT = 25;

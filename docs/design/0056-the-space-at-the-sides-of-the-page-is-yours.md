@@ -20,6 +20,9 @@ number, and a plus. Each tap moves both sides of the text by four points, from
 16, about half of what it was, which is also how far the phone keeps its own
 back button from the edge of the screen.
 
+_Changed on 2026-10-01: a new install starts at 24, the margins the owner
+reads at. Margins already chosen are kept._
+
 ## The same number of points on every screen
 
 The old strip was a share of the screen's width, so it grew on a bigger

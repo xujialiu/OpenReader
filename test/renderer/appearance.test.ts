@@ -60,19 +60,18 @@ describe('Font Size', () => {
  * a stylesheet the owner's choices build.
  */
 describe('Appearance as a stylesheet', () => {
-  it('starts every Document at 16 with 16-point Margins and its body text justified, and states each like any other choice', () => {
-    // 16px is what every current Document's body text already is (none of them
-    // sets a size of its own), so the default changes nothing anyone has seen.
-    // The font still starts on the Document's own; the alignment does not
-    // (ADR 0034) — the owner reads justified text unless they say otherwise.
-    // Nor do the Margins (#84): 16 points a side, where the renderer's own
-    // twelfth of the width was about 33.5 on a 402-point phone.
-    expect(DEFAULT_APPEARANCE).toEqual({ font: null, size: 16, margins: 16, textAlignment: 'justify' });
+  it('starts every Document at 26 with 24-point Margins and its body text justified, and states each like any other choice', () => {
+    // 26 and 24 are what the owner reads at on the iPhone (2026-10-01); the first
+    // defaults were 16 and 16. A Document whose body text is 16px is shown at
+    // 162.5%. The font still starts on the Document's own; the alignment does
+    // not (ADR 0034) — the owner reads justified text unless they say otherwise.
+    // Nor do the Margins (#84).
+    expect(DEFAULT_APPEARANCE).toEqual({ font: null, size: 26, margins: 24, textAlignment: 'justify' });
     expect(appearanceCss(DEFAULT_APPEARANCE, 16)).toBe(
-      'html, body, body * { -webkit-text-size-adjust: 100% !important; }\n' +
-        'html, body, body * { text-size-adjust: 100% !important; }\n' +
+      'html, body, body * { -webkit-text-size-adjust: 162.5% !important; }\n' +
+        'html, body, body * { text-size-adjust: 162.5% !important; }\n' +
         aligned('justify') +
-        margined(16),
+        margined(24),
     );
   });
 
@@ -86,7 +85,7 @@ describe('Appearance as a stylesheet', () => {
       'html, body, body * { -webkit-text-size-adjust: 150% !important; }\n' +
         'html, body, body * { text-size-adjust: 150% !important; }\n' +
         aligned('justify') +
-        margined(16),
+        margined(24),
     );
     // A Document that sets its body text at 12px is brought to the owner's 16,
     // rather than kept smaller than every other Document.
@@ -293,12 +292,12 @@ describe('Margins', () => {
     expect(rule?.startsWith('body { ')).toBe(true);
   });
 
-  it('reads Margins it does not know as 16, rather than writing them into a rule', () => {
+  it('reads Margins it does not know as the default, 24, rather than writing them into a rule', () => {
     // A number on the ladder is all that can reach the stylesheet. The cast is
     // what a settings file from another build would do.
     for (const margins of [0, 4, 15, 50, -8, Number.NaN, '16', '8px; } body { display: none } p {', null, undefined] as never[]) {
       const css = appearanceCss({ ...DEFAULT_APPEARANCE, margins }, 16);
-      expect(css).toContain(margined(16));
+      expect(css).toContain(margined(24));
       expect(css).not.toContain('display');
       expect(css.match(/padding-left/g)).toHaveLength(1);
     }
