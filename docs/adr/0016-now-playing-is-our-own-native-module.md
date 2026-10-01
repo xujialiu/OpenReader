@@ -81,7 +81,8 @@ buttons on the lock screen of a book reader.
 `play`, `pause` and `togglePlayPause`, sets `isEnabled = false` on the other
 seven, writes both rate keys and sets `playbackState` from the caller's own
 value. Its JavaScript surface is three calls and one event: `show(reading)`,
-`setPosition(seconds)`, `hide()`, and `remoteCommand`.
+`setPosition(seconds)`, `hide()`, and `remoteCommand`. Since #119 it also writes
+the artwork; see below.
 
 **On a real iPhone, whether the lock screen shows the reading as playing is not
 what this module writes.** Measured 2026-09-25 on an iPhone 16 Pro, iOS 27.0
@@ -95,6 +96,35 @@ simulator follows the explicit value instead, which is why it never showed this.
 What the device follows is whether the app is sending audio out, so the owner's
 pause now suspends the `AudioContext` and Play resumes it (ADR 0012); the rate
 and `playbackState` are still written, and the simulator and macOS read them.
+
+## The picture is the Cover, or the app's icon (#119)
+
+`MPMediaItemPropertyArtwork` is the square to the left of the title on the Lock
+Screen, in the Dynamic Island's compact view and in Control Centre; one key fills
+all of them. Until #119 it was never written, and iOS drew an empty grey square in
+its place (the owner's iPhone, 2026-10-01 14:26 and 14:29).
+
+The reader passes the open Document's Cover as the record's `cover` field: the
+`file://` URI `src/app/document-cover.ts` caches for the Library, or the empty
+string when the Document declares none. `useNowPlaying` shows nothing while that
+lookup is still running (`undefined`, as against `null` for none), so a Document
+with a Cover never shows the icon first.
+
+`NowPlayingPicture` builds the artwork once per Cover, in `show` on the
+JavaScript thread, and the main queue only swaps it in. `publish` never builds
+one: `setPosition` publishes once a second, and a new `MPMediaItemArtwork` each
+time would have iOS ask for the picture each time. A Cover is drawn whole and
+centred on a square at most 1024 px a side, with `opaque = false` so that the
+sides are transparent; the owner chose the whole Cover over a square cut from it.
+A Cover UIKit cannot decode falls back to the icon, as an unreadable Cover is no
+Cover in the Library.
+
+The icon is read with `UIImage(named:in:compatibleWith:)` by the bundle's own
+`CFBundleIconName`, with a light trait collection. The compiled asset catalog
+holds one 1024 px rendition per appearance — any, dark and tintable — and the
+owner chose the default whatever the phone's: the app cannot read the Home
+Screen's icon setting, and dark mode alone would only guess at it. The catalog's
+contents are in `notes/NOTES_2026-10-01.md`.
 
 **`MPMediaItemPropertyPlaybackDuration` is never written.** A book is synthesized
 a sentence at a time and only the sections the renderer has reported are even

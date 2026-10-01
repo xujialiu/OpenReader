@@ -125,6 +125,15 @@ export interface NowPlaying {
   title: string;
   /** The part of the book being read, from `chapterOf`, or the empty string when nothing can honestly name it. */
   chapter: string;
+  /**
+   * The Document's Cover as a file URI, `null` when it has none, and `undefined`
+   * while that is still being found out.
+   *
+   * Nothing is shown while it is `undefined`: Now Playing shows the app's icon
+   * for a Document without a Cover, so showing before the answer would flash the
+   * icon in front of a Cover (#119).
+   */
+  cover: string | null | undefined;
   playing: boolean;
   /** The owner's reading speed, which is also the rate iOS extrapolates the elapsed time at. */
   rate: number;
@@ -156,7 +165,7 @@ export interface NowPlaying {
  * the life of the screen, because a listener torn down and rebuilt on every state
  * change is a window in which a press is dropped.
  */
-export function useNowPlaying({ title, chapter, playing, rate, live, onIntent }: NowPlaying): void {
+export function useNowPlaying({ title, chapter, cover, playing, rate, live, onIntent }: NowPlaying): void {
   /**
    * The current state, for the subscription that was registered once. A handler
    * that closed over `playing` would resolve a toggle against whatever was true
@@ -179,10 +188,10 @@ export function useNowPlaying({ title, chapter, playing, rate, live, onIntent }:
   }, []);
 
   useEffect(() => {
-    if (!live) return;
-    lockScreen().show({ title, chapter, playing, rate, position: pushed });
+    if (!live || cover === undefined) return;
+    lockScreen().show({ title, chapter, cover: cover ?? '', playing, rate, position: pushed });
     shown = true;
-  }, [title, chapter, playing, rate, live]);
+  }, [title, chapter, cover, playing, rate, live]);
 
   /**
    * The Reading ending gives the lock screen back (#68: going back to the

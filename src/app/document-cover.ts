@@ -33,15 +33,23 @@ function coverOf(entry: Pick<LibraryEntry, 'id' | 'format'>): string | null {
   } finally { handle.close(); }
 }
 
-export function useDocumentCover(entry: LibraryEntry): string | null {
-  const [cover, setCover] = useState<string | null>(null);
-  const { id, format } = entry;
+/**
+ * The Document's Cover as a file URI, `null` when it has none, and `undefined`
+ * until that is known. The Library draws its placeholder for both of the last two;
+ * Now Playing waits through `undefined`, so a Document with a Cover never shows
+ * the app's icon first (#119). A Cover that cannot be read is no Cover.
+ */
+export function useDocumentCover({ id, format }: Pick<LibraryEntry, 'id' | 'format'>): string | null | undefined {
+  const [found, setFound] = useState<{ id: string; cover: string | null } | null>(null);
   useEffect(() => {
     // Only mounted list rows are read, after the list has had a chance to paint.
     const timer = setTimeout(() => {
-      try { setCover(coverOf({ id, format })); } catch { setCover(null); }
+      let cover: string | null;
+      try { cover = coverOf({ id, format }); } catch { cover = null; }
+      setFound({ id, cover });
     }, 0);
     return () => clearTimeout(timer);
   }, [id, format]); // Position writes do not re-read the archive.
-  return cover;
+  // Another Document's answer is not this one's.
+  return found?.id === id ? found.cover : undefined;
 }

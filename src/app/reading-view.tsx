@@ -54,6 +54,7 @@ import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
 import { ContentsSheet } from './contents-sheet';
 import { INK } from './controls';
 import type { OpenDocument } from './document';
+import { useDocumentCover } from './document-cover';
 import { Player } from './player';
 import { useReaderFileSystem } from './reader-file-system';
 import { useShell } from './routes';
@@ -453,11 +454,12 @@ export function ReadingView({
   /**
    * The lock screen, Control Centre and the headphone remote (ADR 0016).
    *
-   * Four things it is told, and each one is the value this screen already has:
-   * the Document's own title, the part of the book being read, whether the
-   * reading is running, and the speed — which is also the rate iOS extrapolates
-   * the elapsed time at between the once-a-second pushes `use-reading.ts` makes
-   * from the clock.
+   * Five things it is told, and each one is the value this screen already has:
+   * the Document's own title, the part of the book being read, its Cover — the
+   * one the Library shows, or none, for which Now Playing shows the app's icon
+   * (#119) — whether the reading is running, and the speed, which is also the
+   * rate iOS extrapolates the elapsed time at between the once-a-second pushes
+   * `use-reading.ts` makes from the clock.
    *
    * `live` is `status.utterance !== null` and not `status.playing`: an app is the
    * system's now-playing app for as long as it holds an active audio session, so
@@ -468,9 +470,11 @@ export function ReadingView({
    * `play` is `reading.play` and `pause` is the one above, which is the same
    * handler the button calls. Nothing here is a second transport.
    */
+  const cover = useDocumentCover(document.identity);
   useNowPlaying({
     title: document.title,
     chapter: chapterOf(contents, status.section),
+    cover,
     playing: status.playing,
     rate: settings.rate,
     live: status.utterance !== null,

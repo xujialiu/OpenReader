@@ -159,6 +159,49 @@ describe('one clock, two readers (ADR 0012)', () => {
   });
 });
 
+describe('the picture in Now Playing\'s square (#119)', () => {
+  // Every one of these fails as the empty grey square the owner reported, or as
+  // the icon where a Cover belongs: nothing throws and nothing is logged.
+  const picture = swift.slice(swift.indexOf('enum NowPlayingPicture'), swift.indexOf('private final class EmptyTitleException'));
+
+  it('writes the artwork key, which is the whole of the square', () => {
+    expect(body('publish')).toContain('info[MPMediaItemPropertyArtwork] = artwork');
+  });
+
+  it('builds the artwork once per Cover and never in publish, which runs once a second', () => {
+    expect(body('publish')).not.toContain('MPMediaItemArtwork(');
+    expect(swift).toContain('let changed = reading.cover != self.pictured');
+    expect(swift).toContain('let artwork = changed ? NowPlayingPicture.artwork(cover: reading.cover) : nil');
+    expect(swift).toContain('if changed { self.artwork = artwork }');
+    // And a Reading that ends forgets it, so the next Document\'s is built afresh.
+    expect(body('teardown')).toContain('pictured = nil');
+    expect(body('teardown')).toContain('self.artwork = nil');
+  });
+
+  it('falls back to the icon for no Cover and for a Cover that cannot be decoded', () => {
+    expect(picture).toContain('coverImage(cover).flatMap(squared) ?? appIcon()');
+  });
+
+  it('keeps the whole Cover, on a square whose sides are transparent', () => {
+    expect(picture).toContain('format.opaque = false');
+    expect(picture).toContain('let square = min(longest, side)');
+    expect(picture).toContain('(square - drawn.width) / 2, y: (square - drawn.height) / 2');
+  });
+
+  it('reads the icon the Home Screen shows, in its default appearance', () => {
+    expect(picture).toContain('primary["CFBundleIconName"] as? String');
+    expect(picture).toContain('UIImage(named: name, in: .main, compatibleWith: UITraitCollection(userInterfaceStyle: .light))');
+  });
+
+  it('shows nothing until the Cover is known, so a Cover never comes after the icon', () => {
+    const hook = code('src/now-playing/index.ts');
+    expect(hook).toContain('if (!live || cover === undefined) return;');
+    expect(hook).toContain("cover: cover ?? ''");
+    expect(code('src/app/document-cover.ts')).toContain('return found?.id === id ? found.cover : undefined;');
+    expect(code('src/app/reading-view.tsx')).toContain('const cover = useDocumentCover(document.identity);');
+  });
+});
+
 describe('one pause, one path', () => {
   it('gives the lock screen the same pause the on-screen button gets', () => {
     // The player's pause re-opens the player. A remote pause that did not would
