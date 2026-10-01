@@ -3,6 +3,10 @@
 _The engineering half of this decision is
 [ADR 0041](../adr/0041-settings-rows-and-the-speed-popover.md). Issue #48._
 
+_[Design 0066](0066-every-drawer-rises-to-the-drawer-height.md) carries these
+cards into every drawer: a drawer is the colour of a settings page, and its
+cards the colour of a settings card._
+
 ## What the owner saw
 
 Settings was drawn four different ways, a tap apart. Its front page and the list

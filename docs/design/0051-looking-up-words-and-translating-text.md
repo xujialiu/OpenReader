@@ -18,6 +18,8 @@ The initial word selection opens dictionary meanings; expanding the selection de
 
 Results appear in a drawer rising from the bottom of the screen, initially leaving part of the document visible. The owner can expand it for longer definitions or translations. Word lookup and text translation share that surface. A small floating bubble beside the word was turned down in favor of space for longer results.
 
+_Revised in [decision 0066](0066-every-drawer-rises-to-the-drawer-height.md): the result drawer is the phone's own, like every other drawer, and rests at the owner's Drawer Height or nearly full rather than at its own two heights._
+
 The drawer follows the phone's own look wherever possible and uses the app's existing light and dark colors. It earns its space with definitions and translations, rather than explanatory captions or repeated notices. This is the same native-first rule as the rest of the app, not a separate visual style for translation.
 
 Dictionary results show the word, phonetics, part of speech, meanings and examples where the service supplies them. A pronunciation playback control is retained when pronunciation audio is available. Translation results show the translated text. Results retain their source, copying and the necessary switching controls. Favorites and lookup history are excluded from the first version.

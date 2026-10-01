@@ -8,6 +8,8 @@ The action is described as downloading the whole document's audio. Preparing tha
 
 ## Choose chapters or the whole document
 
+_Revised in [decision 0066](0066-every-drawer-rises-to-the-drawer-height.md): Manage downloads is a page of its own, titled Manage, with a back button, and the link back to the downloads goes. Select all is in the drawer's top, on the right, Download selected stays fixed at the bottom, and Pause all and Resume all are on the line that says how the download is going rather than below the list._
+
 Download opens a drawer listing chapter names with selection controls on the right. Select all sits at the upper right; Download selected stays at the bottom. Downloaded chapters carry a completion check, and nothing beside it: the check is the word. Selecting all offers the original whole-document preparation, while selecting individual chapters lets the owner prepare only what they need.
 
 The chapter list appears from the document's existing contents before its body is prepared for speech. Opening this drawer does not start reading through the entire document. Only Download selected starts that work: prepare a selected chapter and download its audio, then move to the next, the chapters after it being prepared while it downloads. Someone choosing chapter 103 must not wait for chapters 1 through 102 to be prepared first. Preparation status stays in this view alongside the selectable list. Waiting for the whole document before showing any choices was rejected because it makes a small selection in a long book unnecessarily slow.
@@ -39,6 +41,8 @@ Playback uses saved audio for the selected voice when available and otherwise pl
 Saved audio remains playable when its provider is disabled or its credentials are removed. Configuration is required only when missing audio must be generated.
 
 ## Reader actions and appearance
+
+_Revised in [decision 0066](0066-every-drawer-rises-to-the-drawer-height.md): the actions are one card, a row that opens a page has an arrow, and Delete is red in a card of its own. Rename is the phone's own dialog over the drawer rather than a page of it, and Appearance, Fonts and Download each have a back button to the page before._
 
 The reader's upper appearance button becomes an ellipsis. It opens a drawer containing three actions in order: Appearance with an Aa symbol, Rename with a pencil icon, and Download with a download icon.
 
