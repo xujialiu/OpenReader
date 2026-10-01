@@ -338,18 +338,20 @@ export function DrawerMenuRow<T extends string | number>({ label, choices, chose
   label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
 }) {
   return (
-    <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} height={DRAWER.row.rowHeight}>
-      <View style={styles.menuRow}>
-        <Text style={[styles.rowText, styles.menuLabel]}>{label}</Text>
-        <View style={styles.menuValue}>
-          <Text style={[styles.rowText, styles.menuValueText]} numberOfLines={1}>
-            {choices.find((choice) => choice.value === chosen)?.label}
-          </Text>
-          <Icon name="menu" color={INK.secondary} size={18} />
+    <View style={styles.menuRow}>
+      <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} height={DRAWER.row.rowHeight}>
+        <View style={styles.menuWords}>
+          <Text style={[styles.rowText, styles.menuLabel]}>{label}</Text>
+          <View style={styles.menuValue}>
+            <Text style={[styles.rowText, styles.menuValueText]} numberOfLines={1}>
+              {choices.find((choice) => choice.value === chosen)?.label}
+            </Text>
+            <Icon name="menu" color={INK.secondary} size={18} />
+          </View>
         </View>
-        <DrawerSeparator />
-      </View>
-    </ChoiceMenu>
+      </ChoiceMenu>
+      <DrawerSeparator />
+    </View>
   );
 }
 
@@ -391,10 +393,10 @@ const styles = StyleSheet.create({
     position: 'absolute', right: DRAWER.row.inset,
   },
   footer: { marginTop: DRAWER.footerGap, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
-  menuRow: {
-    alignItems: 'center', flexDirection: 'row', gap: 12, height: DRAWER.row.rowHeight, justifyContent: 'space-between',
-    paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset,
-  },
+  // The menu's label spans the words, not the drawer: a label as wide as the
+  // drawer took the whole drawer off the screen while its menu was open.
+  menuRow: { height: DRAWER.row.rowHeight, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
+  menuWords: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
   menuLabel: { flexShrink: 0 },
   menuValue: { alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 4 },
   menuValueText: { color: INK.secondary, flexShrink: 1 },
