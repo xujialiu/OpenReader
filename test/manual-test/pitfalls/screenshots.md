@@ -966,3 +966,26 @@
 - **The alert is in the accessibility tree before it is on the screenshot.** `ConsentProbe` read the alert's title and buttons (`app.alerts.firstMatch.exists`) and its `XCUIScreen.main.screenshot()` taken at that moment showed the lookup drawer and a spinner and no alert. Wait about 1.2 s after the alert exists before capturing (the probe now does). A `simctl io screenshot` taken 3 s after an `axe touch` on Play showed it fully drawn.
 - **A probe that waits for "an alert or the drawer" returns on the drawer.** The lookup drawer opens the moment the selection is made and the alert follows a moment later (`use-lookup.ts` asks after reading the Microsoft key), so `testLookupAllow` failed once with `it raised drawer` while the alert was already up behind the assertion, and left it up. Wait for the alert for a few seconds first and take "the drawer alone" as the answer only when none comes (`ConsentProbe.longPressUntilSomethingAnswers`).
 - **The Liquid Glass alert draws Don't Allow as a grey capsule on the left and Allow as a blue capsule with bold white text on the right, and the buttons move with the title.** A one-line title put them at y 518 (points), a two-line title (`Send selected text to the Free Dictionary API?`) at 508. Crop the screenshot around the alert instead of reading it at full size: it is 1206×2622 and the alert is a 320×194 pt card (960×580 px).
+
+## Sampling an app icon from a Home Screen screenshot (#116, 2026-10-01)
+
+- **Anchor the icon's box on its glyph's saturated pixels, never on a
+  near-white bounding box.** Measured on `iPhone 17 icon` (iOS 27.0): picking
+  "the white squircle" with `r,g,b > 235` in a region around the icon returned
+  a 240 px-wide box that also held the icon's white **label text** below it and
+  wallpaper highlights, so the mapped sample points landed outside the icon and
+  the right ear cup read `#fcfcfd`. The Liquid Glass squircle's own white is
+  also shaded below 225 over a beige wallpaper, so white-run scans miss it too.
+  The glyph is the stable anchor: the headphones' blue pixels form a box
+  0.75 of the icon wide, centred (`NOTES_2026-09-29.md` 17:20), so
+  `icon_width = glyph_extent * 4 / 3` and `icon_x0 = glyph_left - icon_width /
+  8`; map an SVG sample point through the layers' transform
+  (`(p - (133, 125.5)) * 3.3684 + (512, 512)`, then `* icon_width / 1024`) and
+  take a small patch median. So measured, the Home Screen icon's ear cups read
+  within 2 units of the `ictool` references.
+- **`simctl io screenshot` on this device carries `sRGB IEC61966-2.1`
+  (`sips -g profile`), not Display P3.** The P3 caveat and the convert-with-
+  its-own-profile rule (`NOTES_2026-10-01.md` 10:57) are about `ictool
+  --export-image` PNGs; a Home Screen screenshot sampled as-is matched the
+  sRGB references within a few units. Check the profile before converting
+  anyway — `sips --matchTo .../sRGB.icc` on an already-sRGB file is harmless.

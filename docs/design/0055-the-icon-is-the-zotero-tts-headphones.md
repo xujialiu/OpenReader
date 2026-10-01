@@ -1,7 +1,8 @@
 # The icon is the Zotero-TTS headphones, on white and on black
 
 _A product decision with no engineering half: the technical facts sit beside the
-icon's own settings and in the engineering log for 2026-09-29. Issue #83._
+icon's own settings and in the engineering logs for 2026-09-29 and 2026-10-01.
+Issues #83 and #116._
 
 ## What changed
 
@@ -10,12 +11,13 @@ with: a blue "A" on a blueprint grid. Nothing in it said OpenReader, and
 nothing tied it to the Zotero-TTS plugin it keeps a place in step with.
 
 The icon is now the Zotero-TTS plugin's own picture, a pair of headphones with
-three bars of a sound wave between them, in new colours: indigo headphones and
-an amber wave. The shape is left exactly as it is, so the phone app and the
+three bars of a sound wave between them, in new colours: blue headphones and
+an orange wave. The shape is left exactly as it is, so the phone app and the
 desktop plugin read as one family. The colours are new, so the two are not
-mistaken for each other: Zotero-TTS is red and yellow. Both colours come from
-the app itself. Amber is the colour it reads with, and indigo is the colour of
-the spoken word on a dark page.
+mistaken for each other: Zotero-TTS is red and yellow. Both colours are the
+phone's own: the blue is the App Store's and the orange is Books', so on a
+Home Screen of Apple's apps the icon looks like one of them. The blue deepens
+towards the bottom, as the App Store's does.
 
 ## A version for each way the Home Screen is set
 
@@ -26,13 +28,13 @@ default, dark, clear or tinted. OpenReader's icon has a version for each:
 - **Dark**: the same headphones on black.
 - **Tinted and clear**: the phone paints every icon in one colour the owner
   picks. OpenReader gives it light grey headphones and a white wave, the wave
-  the brighter of the two, as amber is brighter than indigo in the default
+  the brighter of the two, as orange is brighter than blue in the default
   version.
 
 The icon uses the phone's glass look, with highlights and shadows the phone
 draws itself. The headphones are drawn solid rather than see-through. See-through,
-on white, they turned lavender and were no longer the indigo that had been
-chosen. A phone too old for the glass look shows a flat picture of the same
+on white, the indigo they first had turned lavender and was no longer the
+colour that had been chosen. A phone too old for the glass look shows a flat picture of the same
 icon, in its default, dark and tinted versions.
 
 ## Dark follows the Home Screen, not the app
@@ -89,6 +91,15 @@ The owner chose from previews, over several rounds:
 - **An icon that follows the app's Theme.** The only way to swap an app's icon
   while it runs puts up a notice from the phone every time it happens, so every
   change of Theme would have come with one.
+- **Indigo and amber**, the icon's colours from 2026-09-29 to 2026-10-01. Both
+  came from the app: amber is the colour it reads with, and indigo the colour
+  of the spoken word on a dark page. Beside Apple's apps on the Home Screen
+  the owner wanted the phone's own blue and orange instead.
+- **Mail's blue and Notes' yellow**, previewed beside the App Store's blue and
+  Books' orange. Mail's blue is brighter and the same from top to bottom, where
+  the App Store's deepens as the indigo did. Notes' yellow was hardly different
+  from the amber it would have replaced, while Books' orange stands out against
+  the blue.
 - **Headphones 0.80 of the icon's width**, as big as the Fitness rings and the
   template's outer circle. Fuller, but the ear cups would have crossed the
   template's square.
