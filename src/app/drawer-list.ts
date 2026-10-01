@@ -45,6 +45,10 @@ export const DRAWER_LIST = {
   indent: 16,
   /** The line under a row: 1 pt, as the phone's measured 3 px. */
   separator: 1,
+  /** A row's icon before its words (a Document's actions menu), drawn at the size the old menu drew it less two, to sit in a 52-pt row. */
+  icon: 24,
+  /** Between a row's icon, its words and what stands at its right. */
+  gap: 16,
 } as const;
 
 /** The words of a drawer's row: its size, its weight, and its line pitch. Emphasized is the chapter being read, and a heading. */

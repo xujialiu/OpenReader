@@ -68,8 +68,12 @@ import {
   environment, presentationBackground, presentationBackgroundInteraction, presentationDetents,
   presentationDragIndicator, tint,
 } from '@expo/ui/swift-ui/modifiers';
-import { useCallback, useContext, useEffect, useId, useRef, useSyncExternalStore, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions, type AccessibilityState, type StyleProp, type TextStyle } from 'react-native';
+import { useCallback, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import {
+  Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
+  type AccessibilityRole, type AccessibilityState, type ColorValue, type StyleProp, type TextStyle,
+} from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
@@ -191,10 +195,14 @@ export function useDrawerTurn(visible: boolean, close: () => void, { animated = 
   return { presented: visible && up, dismissed };
 }
 
-/** The one button at the right end of a title on the left: a Document's Share (batch 2 of #117). */
+/**
+ * The one button at the right end of the header. With an `icon` it is a round
+ * button showing only the icon, `label` being what VoiceOver says: a
+ * Document's Share. Without one it is a capsule with `label` in it: Download's
+ * Select all, as the phone puts a word in a toolbar.
+ */
 export interface DrawerAction {
-  icon: IconName;
-  /** What VoiceOver says. The button shows no words. */
+  icon?: IconName;
   label: string;
   onPress(): void;
   disabled?: boolean;
@@ -202,12 +210,16 @@ export interface DrawerAction {
 
 /**
  * The header's two forms. Centred, with a back button on its left when the
- * page was reached from another page of the same drawer; or the title on the
- * left and one action on its right, which is a Document's actions menu.
+ * page was reached from another page of the same drawer, and an action on its
+ * right when the page has one; or, `titleLeft`, the title on the left in up to
+ * two lines and one action on its right, which is a Document's actions menu
+ * (design 0057).
  */
-type DrawerHeader = { onBack?(): void; action?: never } | { action: DrawerAction; onBack?: never };
+type DrawerHeader =
+  | { titleLeft?: false; onBack?(): void; action?: DrawerAction }
+  | { titleLeft: true; action: DrawerAction; onBack?: never };
 
-export function Drawer({ visible, title, onClose, onBack, action, children }: {
+export function Drawer({ visible, title, onClose, onBack, action, titleLeft, children }: {
   visible: boolean;
   title: string;
   /** Called when the drawer is swiped away, and by VoiceOver's escape. Not by a tap outside: there is none. */
@@ -233,10 +245,15 @@ export function Drawer({ visible, title, onClose, onBack, action, children }: {
           tint(colours.accent),
         ]}>
           <RNHostView>
-            <View style={styles.body} onAccessibilityEscape={onClose}>
-              <DrawerTitle title={title} onBack={onBack} action={action} />
+            {/*
+              * Gesture handler's root again, inside the sheet: the sheet is presented
+              * in a view controller of its own, out of reach of the app's root, as
+              * a `Modal` was. Download's two-finger sweep needs it (ADR 0045).
+              */}
+            <GestureHandlerRootView style={styles.body} onAccessibilityEscape={onClose}>
+              <DrawerTitle title={title} onBack={onBack} action={action} titleLeft={!!titleLeft} />
               {children}
-            </View>
+            </GestureHandlerRootView>
           </RNHostView>
         </Group>
       </BottomSheet>
@@ -244,23 +261,45 @@ export function Drawer({ visible, title, onClose, onBack, action, children }: {
   );
 }
 
-function DrawerTitle({ title, onBack, action }: { title: string; onBack?(): void; action?: DrawerAction }) {
-  if (action) {
+function DrawerTitle({ title, onBack, action, titleLeft }: { title: string; onBack?(): void; action?: DrawerAction; titleLeft: boolean }) {
+  // How far in the centred title is kept on both sides: past the wider of the two ends, so it is centred on the drawer.
+  const [actionWidth, setActionWidth] = useState(0);
+  if (titleLeft && action) {
     return (
       <View style={styles.header}>
         <Text style={[styles.title, styles.titleLeading]} accessibilityRole="header" numberOfLines={2}>{title}</Text>
-        <RoundButton icon={action.icon} label={action.label} onPress={action.onPress} disabled={action.disabled} drawn={DRAWER.button.action} />
+        <HeaderAction action={action} />
       </View>
     );
   }
+  const clear = DRAWER.button.side + Math.max(onBack ? DRAWER.button.size : 0, action ? actionWidth : 0, DRAWER.button.size);
   return (
     <View style={styles.header}>
-      {/* Absolute and inset by a button on both sides, so the title is centred on the drawer rather than on what the back button leaves of it. */}
-      <View style={styles.titleCentred}>
+      {/* Absolute, so the title is centred on the drawer rather than on what the buttons leave of it. */}
+      <View style={[styles.titleCentred, { left: clear, right: clear }]}>
         <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>
       </View>
-      {onBack ? <RoundButton icon="previous" label={`Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : null}
+      {onBack ? <RoundButton icon="previous" label={`Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : <View />}
+      {action ? <View onLayout={(event) => setActionWidth(event.nativeEvent.layout.width)}><HeaderAction action={action} /></View> : null}
     </View>
+  );
+}
+
+function HeaderAction({ action }: { action: DrawerAction }) {
+  return action.icon
+    ? <RoundButton icon={action.icon} label={action.label} onPress={action.onPress} disabled={action.disabled} drawn={DRAWER.button.action} />
+    : <CapsuleButton label={action.label} onPress={action.onPress} disabled={action.disabled} />;
+}
+
+/** A word in the header's right end, in the round button's capsule: the phone's toolbar draws a word as it draws an icon. */
+function CapsuleButton({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) {
+  const colours = useDrawerColours();
+  return (
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
+      style={({ pressed }) => [styles.button, styles.capsule, { backgroundColor: colours.button, borderColor: colours.rim },
+        (pressed || disabled) && styles.dimmed]}>
+      <Text style={styles.capsuleText} numberOfLines={1}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -287,32 +326,79 @@ function RoundButton({ icon, label, onPress, disabled, drawn }: {
  * One row of a drawer's list, straight on the drawer: at least 52 pt, as tall
  * as its words when they wrap, with its separator under it. `level` sets it in
  * by `DRAWER.row.indent` per level of a nested list; `marked` gives it the
- * mark's colour (Contents' current row). Without `onPress` it is not a button.
+ * mark's colour (Contents' current row). `icon` stands before the words, and
+ * `accessory` after them at the right: a value, a chevron, a check, a control.
+ * An accessory taller than a line is drawn over the row's padding rather than
+ * growing it, so a one-line row stays 52 pt.
+ *
+ * Without `onPress` it is a plain view, not a button, so it can be what a
+ * system menu draws (`ChoiceMenu`) or hold buttons of its own.
  */
-export function DrawerRow({ children, onPress, marked, level = 0, disabled, accessibilityState }: {
+export function DrawerRow({ children, onPress, marked, level = 0, disabled, icon, iconColour, accessory, accessibilityRole, accessibilityLabel, accessibilityState }: {
   children: ReactNode;
   onPress?(): void;
   marked?: boolean;
   level?: number;
   disabled?: boolean;
+  icon?: IconName;
+  /** The icon's colour, when it is not the words': Delete's red. */
+  iconColour?: ColorValue;
+  accessory?: ReactNode;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityLabel?: string;
   accessibilityState?: AccessibilityState;
 }) {
   const colours = useDrawerColours();
+  const line = (
+    <>
+      <View style={styles.rowLine}>
+        {icon ? <View style={styles.rowIcon}><Icon name={icon} color={iconColour ?? INK.text} size={DRAWER.row.icon} /></View> : null}
+        <View style={styles.rowWords}>{children}</View>
+        {accessory ? <View style={styles.rowAccessory}>{accessory}</View> : null}
+      </View>
+      <DrawerSeparator />
+    </>
+  );
+  const inset = { paddingLeft: DRAWER.row.textInset + level * DRAWER.row.indent };
+  if (!onPress) {
+    return (
+      <View accessibilityRole={accessibilityRole} accessibilityLabel={accessibilityLabel} accessibilityState={accessibilityState}
+        style={[styles.row, inset, marked && { backgroundColor: colours.mark }]}>
+        {line}
+      </View>
+    );
+  }
   return (
     <Pressable
-      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityRole={accessibilityRole ?? 'button'}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled, ...accessibilityState }}
       onPress={onPress}
-      disabled={disabled || !onPress}
-      style={({ pressed }) => [
-        styles.row, { paddingLeft: DRAWER.row.textInset + level * DRAWER.row.indent },
-        marked && { backgroundColor: colours.mark }, pressed && styles.pressed,
-      ]}
+      disabled={disabled}
+      style={({ pressed }) => [styles.row, inset, marked && { backgroundColor: colours.mark }, pressed && styles.pressed]}
     >
-      {children}
-      <DrawerSeparator />
+      {line}
     </Pressable>
   );
+}
+
+/** At a row's right: the row opens a page. The settings pages' chevron, in the phone's tertiary grey. */
+export function DrawerChevron() {
+  return <View style={styles.chevron}><Icon name="next" color={INK.tertiary} size={22} strokeWidth={2} /></View>;
+}
+
+/** At a row's right: what the row is set to now, as the phone writes a row's value, in its secondary grey. */
+export function DrawerRowValue({ children }: { children: ReactNode }) {
+  return <Text style={styles.rowValue} numberOfLines={1}>{children}</Text>;
+}
+
+/**
+ * What a short page of a drawer scrolls in: as tall as its rows, and no
+ * taller than the drawer leaves it, so a page of seven fonts still reaches its
+ * last at a Drawer Height of 40 %.
+ */
+export function DrawerScroll({ children }: { children: ReactNode }) {
+  return <ScrollView style={styles.scroll}>{children}</ScrollView>;
 }
 
 /**
@@ -344,10 +430,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: DRAWER.button.side,
   },
   title: { ...TEXT.headline, color: INK.text },
-  titleCentred: {
-    bottom: 0, justifyContent: 'center', left: DRAWER.button.side + DRAWER.button.size, position: 'absolute',
-    right: DRAWER.button.side + DRAWER.button.size, top: 0,
-  },
+  titleCentred: { bottom: 0, justifyContent: 'center', position: 'absolute', top: 0 },
   titleCentredText: { textAlign: 'center' },
   titleLeading: { flex: 1 },
   button: {
@@ -359,6 +442,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center', minHeight: DRAWER.row.rowHeight, paddingRight: DRAWER.row.inset,
     paddingVertical: DRAWER.row.padding,
   },
+  rowLine: { alignItems: 'center', flexDirection: 'row', gap: DRAWER.row.gap },
+  rowIcon: { marginVertical: -DRAWER.row.padding },
+  rowWords: { flex: 1 },
+  // Over the row's padding, up to the row's edges, rather than growing it.
+  rowAccessory: { alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: DRAWER.row.gap / 2, marginVertical: -DRAWER.row.padding },
+  rowValue: { ...drawerRowText(false), color: INK.secondary, flexShrink: 1 },
+  // The settings rows' chevron (`controls.tsx`): its ink ends at the words' right inset.
+  chevron: { marginRight: -3 },
+  scroll: { flexGrow: 0, flexShrink: 1 },
+  capsule: { paddingHorizontal: 16, width: undefined },
+  capsuleText: { ...TEXT.body, color: INK.reading },
   pressed: { opacity: 0.65 },
   rowText: { ...drawerRowText(false), color: INK.text },
   rowTextEmphasized: { ...drawerRowText(true), color: INK.text },
