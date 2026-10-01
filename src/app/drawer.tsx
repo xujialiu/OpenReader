@@ -78,10 +78,16 @@ export const DRAWER = {
   /**
    * The round button at either end of the header, copied from the system's
    * pushed-page back button (`/tmp/sheet-probe/14-…-pushed.png`): a 44-pt
-   * circle 16 from the screen's edge, its chevron 11 × 18.7 pt and 1.5 pt
-   * left of the circle's centre.
+   * circle 16 from the screen's edge and from the sheet's top. The back
+   * chevron measured 11 × 18.7 pt, 1.5 pt left of the circle's centre; the
+   * action's icon is drawn at the size the system's close X is, about 17 pt
+   * of glyph.
    */
-  button: { size: 44, side: 16, glyph: 32, stroke: 1.6, nudge: -1.5 },
+  button: {
+    size: 44, side: 16,
+    back: { glyph: 32, stroke: 2, nudge: -1.5 },
+    action: { glyph: 22, stroke: 1.8, nudge: 0 },
+  },
   /** An inset-grouped card: 16 from the screen's edges, ≈ 26 pt corners (measured 26.4 and 26.2). */
   card: { margin: 16, radius: 26 },
   /** A card's row: 52 pt with one line of Body, its words 16 in from the card's edge. */
@@ -168,7 +174,7 @@ function DrawerTitle({ title, onBack, action }: { title: string; onBack?(): void
     return (
       <View style={styles.header}>
         <Text style={[styles.title, styles.titleLeading]} accessibilityRole="header" numberOfLines={2}>{title}</Text>
-        <RoundButton icon={action.icon} label={action.label} onPress={action.onPress} disabled={action.disabled} />
+        <RoundButton icon={action.icon} label={action.label} onPress={action.onPress} disabled={action.disabled} drawn={DRAWER.button.action} />
       </View>
     );
   }
@@ -178,14 +184,16 @@ function DrawerTitle({ title, onBack, action }: { title: string; onBack?(): void
       <View style={styles.titleCentred}>
         <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>
       </View>
-      {onBack ? <RoundButton icon="previous" label={`Back from ${title}`} onPress={onBack} nudge={DRAWER.button.nudge} /> : null}
+      {onBack ? <RoundButton icon="previous" label={`Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : null}
     </View>
   );
 }
 
 /** The system's round header button: a 44-pt circle on the card colour, with a hairline rim. */
-function RoundButton({ icon, label, onPress, disabled, nudge = 0 }: {
-  icon: IconName; label: string; onPress(): void; disabled?: boolean; nudge?: number;
+function RoundButton({ icon, label, onPress, disabled, drawn }: {
+  icon: IconName; label: string; onPress(): void; disabled?: boolean;
+  /** The icon's size, stroke and sideways nudge in the circle: `DRAWER.button.back` or `.action`. */
+  drawn: { glyph: number; stroke: number; nudge: number };
 }) {
   const colours = useDrawerColours();
   const borders = useBorders();
@@ -194,8 +202,8 @@ function RoundButton({ icon, label, onPress, disabled, nudge = 0 }: {
       disabled={disabled} onPress={onPress}
       style={({ pressed }) => [styles.button, { backgroundColor: colours.card, borderColor: borders.line },
         (pressed || disabled) && styles.dimmed]}>
-      <View style={{ transform: [{ translateX: nudge }] }}>
-        <Icon name={icon} color={INK.text} size={DRAWER.button.glyph} strokeWidth={DRAWER.button.stroke} />
+      <View style={{ transform: [{ translateX: drawn.nudge }] }}>
+        <Icon name={icon} color={INK.text} size={drawn.glyph} strokeWidth={drawn.stroke} />
       </View>
     </Pressable>
   );
