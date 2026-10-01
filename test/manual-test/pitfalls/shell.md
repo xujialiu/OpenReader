@@ -112,6 +112,10 @@
   the banner with its own close button at its right end, never its body
   (`ReadingHeldProbe.clearLogBox`), before every tap near the bottom of the
   screen. After a run that hit it, check Metro's log for `Launching DevTools`.
+  Met again 2026-10-01 (#109) by two `axe touch`es meant for Play: Metro logged
+  `Launching DevTools...` twice and then received no more `HX` lines for the
+  rest of the run (the app stayed connected; the Debug Log kept every answer).
+  See [mcp.md](mcp.md), "A system alert and a masked field".
 - **Metro stopped receiving the app's console lines, and harness commands still
   ran.** On 2026-09-25 at 23:41:54, right after a Reading was ended, the Metro
   log stopped: no `HX` lines through a 118 s probe run and a `shelf` command,

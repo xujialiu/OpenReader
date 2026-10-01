@@ -42,6 +42,7 @@ import { hasSavedVoice, inventoryReady, offlineProvider } from '../offline/runti
 import type { ProviderId } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
 import { debugLog } from '../debug/debug-log';
+import { consent, isDeclined } from './consent';
 import { lockScreenPosition } from '../now-playing';
 import {
   createPlaybackEngine,
@@ -495,6 +496,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const resumeLostRef = useRef<string | null>(null);
 
   const report = useCallback((problem: unknown) => {
+    // A Provider the owner just refused (#109): the engine has stopped where it
+    // was, which is all there is to show.
+    if (isDeclined(problem)) return;
     setStatus((was) => ({ ...was, note: describe(problem) }));
   }, []);
 
@@ -1353,6 +1357,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       return;
     }
     debugLog('reading', `play at utterance ${atRef.current ?? 'none'}, ${settings.provider} ${settings.voice}`);
+    // A press of Play is the owner asking again: a Provider refused earlier is
+    // asked about again rather than refused in silence (#109).
+    consent.again();
     bridgeRef.current?.resumeFollowing();
     if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
       playIntent.current = false;
@@ -1490,6 +1497,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
 
   const chooseVoice = useCallback((provider: ProviderId, voice: string, selected: () => void) => {
     if (playIntent.current && pendingChoice.current?.provider === provider && pendingChoice.current.voice === voice) return;
+    // Choosing a Voice is asking for it: a Provider refused earlier is asked about again (#109).
+    consent.again();
     const request = ++switchRequest.current;
     pendingChoice.current = null;
     let engine = engineRef.current;
@@ -1508,7 +1517,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     const failed = (error: unknown) => {
       if (request !== switchRequest.current) return;
       pendingChoice.current = null;
-      setStatus((was) => ({ ...was, pendingVoice: null, voiceError: describe(error) }));
+      // Refused (#109): the reading goes on in the old Voice, and there is nothing to explain.
+      setStatus((was) => ({ ...was, pendingVoice: null, voiceError: isDeclined(error) ? null : describe(error) }));
     };
     void (async () => {
       engine ??= await buildingRef.current;

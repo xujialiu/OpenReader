@@ -8,6 +8,7 @@ import { lookup, type LookupResult } from '../translation/services';
 import { createPronunciationController } from '../translation/pronunciation';
 import { playPronunciation } from '../translation/pronunciation-audio';
 import type { LookupMode, LookupSettings } from '../translation/settings';
+import { consent, lookupRecipient } from './consent';
 
 export interface LookupSelection { text: string; mode: LookupMode; selecting: boolean; attempt: number }
 export function useLookup(settings: LookupSettings, reading: {
@@ -85,6 +86,17 @@ export function useLookup(settings: LookupSettings, reading: {
         if (saved.outcome === 'found') microsoftKey = saved.secret;
       }
       if (!live) return;
+      // Asked before the selection leaves the phone (#109, ADR 0064). Each lookup
+      // is the owner asking, so an earlier no is asked about again. A no sends
+      // nothing and closes the lookup, as its own close button does.
+      const recipient = lookupRecipient({ ...settings, mode: selection.mode }, microsoftKey !== undefined);
+      consent.again(recipient.key);
+      if (!(await consent.ensure(recipient))) {
+        debugLog('lookup', `${asked}: not allowed to reach ${recipient.name}`);
+        if (live) close();
+        return;
+      }
+      if (!live) return;
       const answer = await lookup({ ...settings, ...selection, microsoftKey }, {
         fetch: loggedFetch('lookup', selection.mode, (url, init) => fetch(url, init)), signal: abort.signal,
       });
@@ -95,7 +107,7 @@ export function useLookup(settings: LookupSettings, reading: {
       if (live) setError(failure instanceof Error ? failure.message : 'The request failed. Try again.');
     }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; abort.abort(); };
-  }, [selection, settings, pronunciation]);
+  }, [selection, settings, pronunciation, close]);
 
   const mode = (next: LookupMode) => setSelection((was) => was ? { ...was, mode: next, selecting: false } : null);
   const retry = () => setSelection((was) => was ? { ...was, selecting: false, attempt: was.attempt + 1 } : null);

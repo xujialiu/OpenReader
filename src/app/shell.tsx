@@ -1,4 +1,5 @@
 import { TranslationScreen } from './translation-screen';
+import { AcknowledgementScreen, AcknowledgementsScreen } from './acknowledgements-screen';
 /**
  * The screens of ADR 0019, and the one way back from each of them.
  *
@@ -51,6 +52,8 @@ import { ProvidersScreen } from './providers-screen';
 import { ReaderScreen } from './reader-screen';
 import { navigationRef, ShellContext, type RootStackParamList, type Shell } from './routes';
 import { ReadingHost } from './reading-host';
+import { configureConsent } from './consent';
+import { askWithAlert } from './consent-alert';
 import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
@@ -104,6 +107,17 @@ export function OpenReader() {
     });
     return () => subscription.remove();
   }, [sync]);
+  /**
+   * The consent gate (#109, ADR 0064): the question is the phone's own alert,
+   * and a yes is kept in these settings, on this device. Configured before the
+   * downloads start, because a download left queued from before may be about
+   * to send.
+   */
+  useEffect(() => configureConsent({
+    kept: (key) => settingsRef.current.consent.includes(key),
+    keep: (key) => setSettings((was) => was.consent.includes(key) ? was : { ...was, consent: [...was.consent, key] }),
+    ask: askWithAlert,
+  }), [setSettings]);
   useEffect(() => { configureDownloads(settings); }, [settings]);
   useEffect(() => startDownloads(), []);
   // The Debug Log names the Documents a continued task's Live Activity covers as the Library does (ADR 0053, #93).
@@ -344,6 +358,9 @@ export function OpenReader() {
               {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
               <Stack.Screen name="Provider" component={ProviderScreen} options={settingsScreen} />
               <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings', ...settingsScreen }} />
+              <Stack.Screen name="Acknowledgements" component={AcknowledgementsScreen} options={{ title: 'Acknowledgements', headerBackTitle: 'Settings', ...settingsScreen }} />
+              {/* Its title is the component's name and is set by the screen, as the Provider screen sets its own. */}
+              <Stack.Screen name="Acknowledgement" component={AcknowledgementScreen} options={settingsScreen} />
             </Stack.Navigator>
           </NavigationContainer>
           </ReadingHost>

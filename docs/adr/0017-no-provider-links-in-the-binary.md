@@ -36,7 +36,22 @@ app.
 Combined with having no in-app purchase at all (ADR 0002), which removes any
 second paid path a reviewer could compare against, this is the whole posture.
 
-## What is deliberately deferred
+## The one link: the project's own pages (#110)
+
+The rule was "nothing in `src/` opens a URL" (`test/app/no-outgoing-links.test.ts`).
+#110 narrowed it by one module, because guideline 5.1.1(i) requires the privacy
+policy to be reachable inside the app, and the policy is a page on the project's
+own site: GitHub Pages, published from `site/` by `.github/workflows/pages.yml`.
+
+`src/app/own-site.ts` opens `https://xujialiu.github.io/OpenReader/privacy.html`
+from a row at the foot of the Settings front page. The test allows `openURL` in
+that module and nowhere else. The only address the module may name is the
+site's, and its one call must open the policy's constant. A Provider's signup,
+pricing or key console is still unreachable from the binary. The line the
+rejection drew was a route to a Provider's paid signup, and a page of our own
+that names none is not one.
+
+## What was deferred, and is now built (#109)
 
 Guideline 5.1.2(i), amended in late 2025 to name third-party AI explicitly,
 requires disclosing what data goes to a third party and obtaining permission
@@ -44,7 +59,7 @@ requires disclosing what data goes to a third party and obtaining permission
 putting it only in a privacy policy is not sufficient. A per-provider consent
 sheet, shown before the first request, is therefore required to ship.
 
-It is not built yet, because while the app is used only by its author the consent
-is being asked of the person granting it. It is one check on the synthesis path
-and can be added when it is needed. This is a deferral with a known price, not an
-oversight.
+It was deferred while the app was used only by its author, when the consent
+would have been asked of the person granting it. It is built now. There is one
+gate in front of every send, a Provider's synthesis and a lookup service alike,
+asked once per recipient in the phone's own alert: ADR 0064.

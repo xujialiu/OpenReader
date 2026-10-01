@@ -14,7 +14,6 @@ import { SynthesisError } from "../core/providers/errors";
 import type {
   ProviderId,
   SynthesisResult,
-  TTSProvider,
 } from "../core/providers/types";
 import { withTimeout } from "../core/timeout";
 import { readGatewayHeaders, readProviderKey } from "../keys/store";
@@ -23,6 +22,7 @@ import {
   toStored,
   type StoredClip,
 } from "../playback/clip-cache";
+import type { ClipProvider } from "../playback/clips";
 import {
   headersAreOffered,
   keepWarm,
@@ -50,6 +50,7 @@ import {
   type ContinuedNative,
   type ContinuedShown,
 } from "./continued-processing";
+import { consent, declinedSentence, providerRecipient, type Recipient } from "../app/consent";
 import { cutText, debugLog, describeProblem, shortId } from "../debug/debug-log";
 import { DEBUG_MODE } from "../debug/mode";
 import { offlineRepository } from "./database";
@@ -349,6 +350,89 @@ async function savedClip(
   }
 }
 /**
+ * What sending one sentence to `voice`'s Provider needs, read at the moment it
+ * is needed: a network, the credentials, and everything `readiness` asks for.
+ * Throws whatever stands in the way, as the `SynthesisError` a Reading or a
+ * download reports.
+ *
+ * Shared by `synthesize`, which then sends, and `ensureConsent`, which only
+ * asks (#109). So the two can never disagree about whether a sentence would go
+ * out, or about whom it would go to.
+ */
+async function sendable(voice: OfflineVoice, current: AppSettings) {
+  if (!online) throw new SynthesisError("network", "No network connection");
+  const keyResult = keyIsOffered(voice.provider)
+    ? await readProviderKey(voice.provider)
+    : null;
+  const headers = headersAreOffered(voice.provider)
+    ? await readGatewayHeaders(voice.provider)
+    : null;
+  if (keyResult?.outcome === "refused" || headers?.outcome === "refused")
+    throw new SynthesisError(
+      "auth",
+      "Credentials could not be read. Unlock the device and continue.",
+    );
+  const configured = {
+    ...current,
+    provider: voice.provider,
+    voice: voice.voice,
+  };
+  const found = keyResult?.outcome === "found";
+  const ready = readiness(configured, found);
+  if (!ready.ready)
+    throw new SynthesisError(
+      "no-key",
+      readinessSentence(voice.provider, ready.missing),
+    );
+  return {
+    configured,
+    credentials: {
+      key: keyResult?.outcome === "found" ? keyResult.secret : "",
+      headers: headers?.outcome === "found" ? headers.secret : "",
+    },
+    recipient: providerRecipient(configured, voice.provider, found),
+  };
+}
+/**
+ * The owner's answer for one of a Reading's sentences, taken before the
+ * engine's clock starts rather than inside it (#109, ADR 0064; `ClipProvider`
+ * in `clips.ts`).
+ *
+ * Measured on the simulator on 2026-09-30, with the question asked only inside
+ * `synthesize`: the clip fetcher's 60 s clock ran while the alert was up. At
+ * 60.09 s the player said "no audio within 60s" under the still-open alert, and
+ * the Reading paused.
+ *
+ * It asks exactly when `synthesize` would. The recipient must not be allowed
+ * already, and this sentence's audio must not be on the phone, saved or in
+ * memory. Nothing else may stand in the way either (`sendable`): when
+ * something does, `synthesize` refuses the sentence for that reason, and asks
+ * nothing. It sends nothing itself. The gate in `synthesize` stays the
+ * guarantee, and after this it answers at once.
+ *
+ * The allowed case costs nothing: the recipient's key needs no credential, so
+ * a Provider already allowed reads neither the Keychain nor the store here.
+ */
+async function ensureConsent(
+  document: string,
+  voice: OfflineVoice,
+  text: string,
+  current: AppSettings,
+): Promise<void> {
+  const configured = { ...current, provider: voice.provider, voice: voice.voice };
+  if (consent.allows(providerRecipient(configured, voice.provider, false).key)) return;
+  if (await memory.match(keyOf(document, voice, text))) return;
+  if (await savedClip(document, voice, text)) return;
+  let recipient: Recipient;
+  try {
+    ({ recipient } = await sendable(voice, current));
+  } catch {
+    return;
+  }
+  if (!(await consent.ensure(recipient)))
+    throw new SynthesisError("declined", declinedSentence(recipient));
+}
+/**
  * Credentials are read only on a miss, so saved audio works without a key or enabled provider.
  *
  * Saved audio sends nothing, so while a downloaded chapter plays, the Provider's
@@ -379,33 +463,17 @@ async function synthesize(
     flight = (async () => {
       const cached = await memory.match(key);
       if (cached) return cached.clip;
-      if (!online) throw new SynthesisError("network", "No network connection");
-      const keyResult = keyIsOffered(voice.provider)
-        ? await readProviderKey(voice.provider)
-        : null;
-      const headers = headersAreOffered(voice.provider)
-        ? await readGatewayHeaders(voice.provider)
-        : null;
-      if (keyResult?.outcome === "refused" || headers?.outcome === "refused")
-        throw new SynthesisError(
-          "auth",
-          "Credentials could not be read. Unlock the device and continue.",
-        );
-      const configured = {
-        ...current,
-        provider: voice.provider,
-        voice: voice.voice,
-      };
-      const ready = readiness(configured, keyResult?.outcome === "found");
-      if (!ready.ready)
-        throw new SynthesisError(
-          "no-key",
-          readinessSentence(voice.provider, ready.missing),
-        );
-      const configuration = providerSettings(configured, {
-        key: keyResult?.outcome === "found" ? keyResult.secret : "",
-        headers: headers?.outcome === "found" ? headers.secret : "",
-      });
+      const { configured, credentials, recipient } = await sendable(voice, current);
+      // Asked here, once the request could go out and before anything is built
+      // or sent (#109, ADR 0064). A Reading and a download both send from here,
+      // Azure's WebSocket included, so this is the one question on the way out.
+      // A refusal sends nothing: the Reading stops where it is and says nothing,
+      // and a download stops for it (`scheduler.ts`). A Reading's question has
+      // usually been asked already, by `ensureConsent`, before the engine's clock
+      // started, and then this answers at once.
+      if (!(await consent.ensure(recipient)))
+        throw new SynthesisError("declined", declinedSentence(recipient));
+      const configuration = providerSettings(configured, credentials);
       // Speechify queues its own requests, so a download's number has to
       // reach its queue as well as the scheduler (#64), and so does whose
       // request it is: a Reading's goes ahead of a download's still waiting
@@ -463,24 +531,23 @@ function clipFacts(result: SynthesisResult): string {
 export function offlineProvider(
   document: string,
   current: AppSettings,
-): TTSProvider {
+): ClipProvider {
+  const voiceOf = (voice: string): OfflineVoice => ({
+    provider: current.provider,
+    voice,
+    label: voice,
+  });
   return {
     id: current.provider,
     capabilities: {
       wordTimestamps: ["azure", "fish", "speechify", "local"].includes(current.provider),
     },
     listVoices: async () => [],
+    // Before the clip fetcher's clock (#109): the owner's answer is not timed.
+    ensureConsent: (text, options) =>
+      ensureConsent(document, voiceOf(options.voice), text, current),
     synthesize: (text, options) =>
-      synthesize(
-        document,
-        {
-          provider: current.provider,
-          voice: options.voice,
-          label: options.voice,
-        },
-        text,
-        current,
-      ),
+      synthesize(document, voiceOf(options.voice), text, current),
   };
 }
 
@@ -880,6 +947,31 @@ export function setReadingPlays(plays: boolean): void {
     if (task.state === "interrupted") task.state = "queued";
   fire(persist().then(kick));
 }
+/**
+ * A download the owner started from the Download drawer (#109, ADR 0064). The
+ * Provider is asked about before a task exists, so "Don't Allow" leaves nothing
+ * behind. The press is the owner asking again, so an earlier no does not stand
+ * in for the answer. Resolves true once the chapters are queued.
+ */
+export async function startDownload(
+  document: string,
+  voice: OfflineVoice,
+  chapters: string[],
+): Promise<boolean> {
+  if (!chapters.length || !settings) return false;
+  const found = keyIsOffered(voice.provider)
+    ? (await readProviderKey(voice.provider)).outcome === "found"
+    : false;
+  const recipient = providerRecipient(
+    { ...settings, provider: voice.provider, voice: voice.voice },
+    voice.provider,
+    found,
+  );
+  consent.again(recipient.key);
+  if (!(await consent.ensure(recipient))) return false;
+  enqueue(document, voice, chapters);
+  return true;
+}
 export function enqueue(
   document: string,
   voice: OfflineVoice,
@@ -928,6 +1020,9 @@ export const goesOn = (task: DownloadTask) =>
 export function toggleTask(task: DownloadTask): void {
   if (goesOn(task)) pausing.pauseAll(task);
   else {
+    // Resume all, or Retry failed: the owner asking again, so a Provider they
+    // refused is asked about again as the download reaches it (#109).
+    consent.again();
     pausing.resumeAll(task);
     continueAway();
   }
@@ -938,7 +1033,10 @@ export function toggleChapter(task: DownloadTask, chapter: string): void {
   const resumes =
     !pausing.GOES_ON.includes(task.state) || pausing.isPaused(task, chapter);
   pausing.tapChapter(task, chapter, completeIn(task));
-  if (resumes) continueAway();
+  if (resumes) {
+    consent.again();
+    continueAway();
+  }
   fire(persist().then(kick));
 }
 export async function deleteDownloaded(

@@ -22,7 +22,11 @@ press — attribute before quoting.
 - `fake-kokoro.cjs` — serves `GET /v1/audio/voices` and
   `POST /dev/captioned_speech` (2.5 s of silent PCM + word timestamps), logs
   every request to `$OPENREADER_FAKE_TTS_LOG` (default
-  `/tmp/openreader-issue86/fake-tts.log`). The app plays silence at volume 0;
+  `/tmp/openreader-issue86/fake-tts.log`). Since #109 it also answers
+  `GET /v1/models` and OpenAI's `POST /v1/audio/speech`, ends each synthesis
+  line with `route=` and `auth=present|absent`, and waits
+  `$OPENREADER_FAKE_TTS_DELAY_MS` before answering
+  (`../voices-and-providers/consent.md`). The app plays silence at volume 0;
   the 2.5 s clips leave old audio that a debounced press would have let keep
   sounding.
 - `Tap86Probe.swift` — the real touches: a page tap while playing and while

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { ExportedConfig, ExportedConfigWithProps, InfoPlist } from 'expo/config-plugins';
 import { describe, expect, it } from 'vitest';
@@ -70,8 +70,25 @@ describe('ADR 0012: playback keeps going with the screen locked', () => {
     expect(plugin('react-native-audio-api')?.disableFFmpeg).toBe(false);
   });
 
-  it('asks for no microphone, because OpenReader records nothing', () => {
-    expect(plugin('react-native-audio-api')).not.toHaveProperty('iosMicrophonePermission');
+  it('carries the microphone purpose string App Store Connect requires of the library (#108)', () => {
+    // AudioSessionManager.mm in react-native-audio-api calls
+    // requestRecordPermission. A binary that references it without
+    // NSMicrophoneUsageDescription is rejected (ITMS-90683), called or not.
+    expect(plugin('react-native-audio-api')?.iosMicrophonePermission).toEqual(expect.any(String));
+  });
+
+  it('never asks for the microphone, because OpenReader records nothing (#108)', () => {
+    // iOS shows the string above only when something asks. Nothing in src/
+    // requests recording permission or records, and a `playback` session
+    // never prompts for the microphone.
+    const root = new URL('../src/', import.meta.url);
+    const sources = (readdirSync(root, { recursive: true }) as string[]).filter((path) => /\.tsx?$/.test(path));
+    expect(sources.length).toBeGreaterThan(0);
+    for (const path of sources) {
+      const text = readFileSync(new URL(path, root), 'utf8');
+      expect(text, `src/${path}`).not.toMatch(/RecordingPermissions|AudioRecorder/);
+      for (const [call] of text.matchAll(/setAudioSessionOptions\(\{[^}]*\}/g)) expect(call, `src/${path}`).toMatch(/iosCategory: 'playback'/);
+    }
   });
 });
 
@@ -113,27 +130,41 @@ describe('ADR 0001: ios/ and android/ are generated, never committed', () => {
   });
 });
 
-/** Whether dotted version `a` comes after `b`, compared part by part. */
-function isLater(a: string, b: string): boolean {
-  const [x, y] = [a, b].map((version) => version.split('.').map(Number));
-  const at = x!.findIndex((part, i) => part !== y![i]);
-  return at >= 0 && x![at]! > y![at]!;
-}
-
 describe('AGENTS.md: every app change carries a beta version', () => {
-  it('keeps one released version in app.config.ts and package.json, in a form iOS accepts', () => {
+  it('uploads a build as the version it leads to, the same in app.config.ts and package.json, in a form iOS accepts (#108)', () => {
     // app.config.ts's becomes CFBundleShortVersionString: integers and dots,
-    // never the beta suffix (ITMS-90060). Nothing but this reconciles the two.
+    // never the beta suffix (ITMS-90060). It is APP_VERSION without the beta,
+    // because a released version takes no more uploads (ITMS-90186), so a beta
+    // labelled with the last release would be refused.
     expect(config.version).toBe(manifest.version);
     expect(config.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(config.version).toBe(APP_VERSION.replace(/-beta[1-9]\d*$/, ''));
   });
 
-  it('shows in Settings either that version or a beta of a later one', () => {
+  it('shows in Settings that version, or a beta of it', () => {
     const shown = /^(\d+\.\d+\.\d+)(?:-beta([1-9]\d*))?$/.exec(APP_VERSION);
     expect(shown, `${APP_VERSION} is neither X.Y.Z nor X.Y.Z-betaN`).not.toBeNull();
-    const [, base, beta] = shown!;
-    if (beta === undefined) expect(base).toBe(manifest.version);
-    else expect(isLater(base!, manifest.version), `${base} is not after ${manifest.version}`).toBe(true);
+    expect(shown![1]).toBe(manifest.version);
+  });
+});
+
+describe('#108: a fresh prebuild is one App Store Connect accepts', () => {
+  it('ships for iPhone only', () => {
+    // An iPad runs it in compatibility mode, in portrait, the tested layout.
+    // With iPad support, the iPad app allowed all four orientations, untested.
+    expect(config.ios?.supportsTablet).toBe(false);
+  });
+
+  it('declares no non-exempt encryption, so no upload waits on the export-compliance question', () => {
+    expect(config.ios?.config?.usesNonExemptEncryption).toBe(false);
+  });
+
+  it('gives CFBundleVersion as a whole number, raised by one for each upload', () => {
+    expect(config.ios?.buildNumber).toMatch(/^[1-9]\d*$/);
+  });
+
+  it('names the signing team, so a fresh ios/ signs without Xcode', () => {
+    expect(config.ios?.appleTeamId).toMatch(/^[A-Z0-9]{10}$/);
   });
 });
 

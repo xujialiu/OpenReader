@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createMemoryCache } from '../../src/core/memory-cache';
 import { SynthesisError } from '../../src/core/providers/errors';
 import type { SynthesisResult, TTSProvider } from '../../src/core/providers/types';
-import { clipCacheKey, type StoredClip } from '../../src/playback/clip-cache';
-import { createClipFetcher, prepareClip, silence } from '../../src/playback/clips';
+import { clipCacheKey, toStored, type StoredClip } from '../../src/playback/clip-cache';
+import { createClipFetcher, prepareClip, silence, type ClipProvider } from '../../src/playback/clips';
 
 /**
  * Where the owner's money is spent, so it is where the promises about spending
@@ -245,5 +245,112 @@ describe('createClipFetcher', () => {
       await createClipFetcher({ provider, voice: 'ava', cache: cache(), brackets }).fetch(0, '<Log in>', true);
       expect(asked).toEqual(['<Log in>']);
     }
+  });
+});
+
+/**
+ * #109, ADR 0064: a Provider may have to hear from the owner before it is sent
+ * anything, as the runtime's does. That wait is the owner's and not the
+ * Provider's, so it comes before the clock above starts, however long it takes.
+ * A no rejects without sending, and once the owner has answered yes the clock
+ * bounds the Provider as it always has.
+ */
+describe('createClipFetcher, when the Provider has to hear from the owner first (#109)', () => {
+  /** A Provider whose `ensureConsent` waits for the test's answer, recording each text it was asked about. */
+  function gated(synthesize: (text: string) => Promise<SynthesisResult> = async () => pcm(24)) {
+    const { provider, asked: sent } = fakeProvider(synthesize);
+    const answers: ((yes: boolean) => void)[] = [];
+    const ensureConsent = vi.fn((_text: string, _options: { voice: string }) => new Promise<void>((resolve, reject) => {
+      answers.push((yes) => (yes ? resolve() : reject(new SynthesisError('declined', 'Speechify was not allowed to receive this document\'s text.'))));
+    }));
+    const gatedProvider: ClipProvider = { ...provider, ensureConsent };
+    return { provider: gatedProvider, sent, ensureConsent, answer: (yes: boolean) => answers.shift()!(yes) };
+  }
+  /** Longer than every clock below: 5 ms. */
+  const longer = () => new Promise((resolve) => setTimeout(resolve, 40));
+  function watch<T>(promise: Promise<T>) {
+    const seen: { state: 'pending' | 'resolved' | 'rejected'; value?: unknown } = { state: 'pending' };
+    promise.then((value) => { seen.state = 'resolved'; seen.value = value; }, (error: unknown) => { seen.state = 'rejected'; seen.value = error; });
+    return seen;
+  }
+
+  it('waits for the owner outside its clock and sends nothing meanwhile, then sends the Speech Text', async () => {
+    const g = gated();
+    const fetcher = createClipFetcher({ provider: g.provider, voice: 'ava', cache: cache(), timeoutMs: 5, brackets: { strip: true, pairs: '<>' } });
+    const clip = watch(fetcher.fetch(0, 'Hello <there>.', true));
+    await longer();
+    expect(clip.state).toBe('pending');
+    expect(g.sent).toEqual([]);
+    expect(g.ensureConsent).toHaveBeenCalledWith('Hello there.', { voice: 'ava' });
+    g.answer(true);
+    await vi.waitFor(() => expect(clip.state).toBe('resolved'));
+    expect(g.sent).toEqual(['Hello there.']);
+  });
+
+  it('rejects with the refusal and sends nothing', async () => {
+    const g = gated();
+    const fetcher = createClipFetcher({ provider: g.provider, voice: 'ava', cache: cache(), timeoutMs: 5 });
+    const clip = fetcher.fetch(0, 'Hello.', true);
+    await longer();
+    g.answer(false);
+    await expect(clip).rejects.toMatchObject({ kind: 'declined' });
+    expect(g.sent).toEqual([]);
+  });
+
+  it('starts the clock at the answer, so a Provider that then stops answering still fails rather than hangs', async () => {
+    const g = gated(() => new Promise<SynthesisResult>(() => {}));
+    const fetcher = createClipFetcher({ provider: g.provider, voice: 'ava', cache: cache(), timeoutMs: 5 });
+    const clip = fetcher.fetch(0, 'Hello.', true);
+    await longer();
+    g.answer(true);
+    await expect(clip).rejects.toMatchObject({ kind: 'network', message: 'speechify: no audio within 0s' });
+    expect(g.sent).toEqual(['Hello.']);
+  });
+
+  it('asks once for the same text however many Utterances want it', async () => {
+    const g = gated();
+    const fetcher = createClipFetcher({ provider: g.provider, voice: 'ava', cache: cache(), timeoutMs: 5 });
+    const both = Promise.all([fetcher.fetch(0, 'Again.', true), fetcher.fetch(9, 'Again.', true)]);
+    await longer();
+    expect(g.ensureConsent).toHaveBeenCalledTimes(1);
+    g.answer(true);
+    expect((await both).map((clip) => clip.utterance)).toEqual([0, 9]);
+    expect(g.sent).toEqual(['Again.']);
+  });
+
+  it('asks nothing for a Clip that needs no Provider: text that is not Speakable, and one already cached', async () => {
+    const g = gated();
+    const kept = cache();
+    await kept.put(clipCacheKey('speechify', 'ava', 'Cached.'), toStored(pcm(24)));
+    const fetcher = createClipFetcher({ provider: g.provider, voice: 'ava', cache: kept, timeoutMs: 5 });
+    expect((await fetcher.fetch(0, '* * *', false)).audio).toBe('silence');
+    expect((await fetcher.fetch(1, 'Cached.', true)).audio).toBe('samples');
+    expect(g.ensureConsent).not.toHaveBeenCalled();
+    expect(g.sent).toEqual([]);
+  });
+
+  it('says when a Clip no longer waits on the owner: at once without a Provider, at the answer otherwise, and never on a no', async () => {
+    const g = gated();
+    const kept = cache();
+    await kept.put(clipCacheKey('speechify', 'ava', 'Cached.'), toStored(pcm(24)));
+    const fetcher = createClipFetcher({ provider: g.provider, voice: 'ava', cache: kept, timeoutMs: 5 });
+    const cleared: number[] = [];
+    await fetcher.fetch(0, '* * *', false, () => cleared.push(0));
+    await fetcher.fetch(1, 'Cached.', true, () => cleared.push(1));
+    expect(cleared).toEqual([0, 1]);
+
+    const allowed = fetcher.fetch(2, 'Allowed.', true, () => cleared.push(2));
+    await longer();
+    expect(cleared).toEqual([0, 1]);
+    g.answer(true);
+    await allowed;
+    expect(cleared).toEqual([0, 1, 2]);
+
+    const refused = fetcher.fetch(3, 'Refused.', true, () => cleared.push(3));
+    await longer();
+    g.answer(false);
+    await expect(refused).rejects.toMatchObject({ kind: 'declined' });
+    await longer();
+    expect(cleared).toEqual([0, 1, 2]);
   });
 });

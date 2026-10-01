@@ -307,6 +307,13 @@ export interface AppSettings {
    * the address and the username are frozen — the way a Provider is enabled.
    */
   sync: SyncSettings;
+  /**
+   * The services the owner has let receive text (#109, ADR 0064), one key per
+   * recipient as `src/app/consent.ts` names them. On this device only, like
+   * every setting here, and never migrated: each device asks for itself. The
+   * consent gate is the only reader and the only writer.
+   */
+  consent: readonly string[];
 }
 
 export interface SyncSettings {
@@ -472,6 +479,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Off, with nothing filled in: sync starts the moment the owner names a
   // folder and turns it on, and not before (issue #20).
   sync: { url: '', username: '', enabled: false },
+  // Nothing yet: each service is asked about the first time it would receive text (#109).
+  consent: [],
 };
 
 /**

@@ -960,3 +960,9 @@
   instead (binarise the central band, IoU): the measured pair agreed to a 1 px
   vertical offset (IoU 0.80 raw, 0.94 shifted, identical pixel counts), which
   is antialiasing, not a moved title. See `library-and-reader/bar-title.md`.
+
+## A system alert (#109, 2026-09-30)
+
+- **The alert is in the accessibility tree before it is on the screenshot.** `ConsentProbe` read the alert's title and buttons (`app.alerts.firstMatch.exists`) and its `XCUIScreen.main.screenshot()` taken at that moment showed the lookup drawer and a spinner and no alert. Wait about 1.2 s after the alert exists before capturing (the probe now does). A `simctl io screenshot` taken 3 s after an `axe touch` on Play showed it fully drawn.
+- **A probe that waits for "an alert or the drawer" returns on the drawer.** The lookup drawer opens the moment the selection is made and the alert follows a moment later (`use-lookup.ts` asks after reading the Microsoft key), so `testLookupAllow` failed once with `it raised drawer` while the alert was already up behind the assertion, and left it up. Wait for the alert for a few seconds first and take "the drawer alone" as the answer only when none comes (`ConsentProbe.longPressUntilSomethingAnswers`).
+- **The Liquid Glass alert draws Don't Allow as a grey capsule on the left and Allow as a blue capsule with bold white text on the right, and the buttons move with the title.** A one-line title put them at y 518 (points), a two-line title (`Send selected text to the Free Dictionary API?`) at 508. Crop the screenshot around the alert instead of reading it at full size: it is 1206×2622 and the alert is a 320×194 pt card (960×580 px).

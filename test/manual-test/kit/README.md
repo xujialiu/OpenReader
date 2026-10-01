@@ -29,6 +29,31 @@ What every area uses:
   the Debug Log lines that answered it; `probes/`: the `js` probes it sends.
   When to use them is `docs/debug-on-iphone.md`; their flags are in each
   file's header (below, "Ask the app on the phone").
+- `ax.py`: the accessibility tree through AXe, and real touches on what it
+  lists, the phone's own alert and the rows of a long list included (below).
+
+## Read the accessibility tree, and touch what it lists
+
+```sh
+python3 test/manual-test/kit/ax.py UDID tree              # role | label | value | x,y WxH, every element with text
+python3 test/manual-test/kit/ax.py UDID find LABEL        # centre x y of the first element with that exact label
+python3 test/manual-test/kit/ax.py UDID touch LABEL        # a 0.2 s touch pair on it; prints the point and the time after
+python3 test/manual-test/kit/ax.py UDID alert              # the phone's alert (an AXSheet): title, message, buttons; exit 1 if none
+python3 test/manual-test/kit/ax.py UDID alert-touch LABEL  # a button of the alert only
+python3 test/manual-test/kit/ax.py UDID scroll-touch LABEL # swipe a long list until the row rests on screen, then touch it
+python3 test/manual-test/kit/ax.py UDID scroll-to LABEL    # the same, without the touch
+```
+
+It uses the AXe inside mobilebuildmcp (`AXE` names another; unset, the newest
+under `~/.npm/_npx`). A touch is a down/up pair in one call with a 0.2 s delay,
+which is what an alert's Allow, a sheet's rows and the player's buttons answer
+(`../pitfalls/mcp.md`); it does not start a long press on the reader's WebView,
+and a press of 2 s on a `selectable` Text is `axe touch … --delay 2.0` by hand.
+A long `ScrollView` lists all its rows in the tree, the off-screen ones with
+frames beyond the screen, so one `tree` answers how many rows there are and in
+which order. It plays nothing and does not touch the volume. Used by
+`settings/acknowledgements-check.py` and
+`voices-and-providers/consent-hold.sh`.
 
 ## Run an XCTest probe
 

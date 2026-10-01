@@ -76,9 +76,29 @@ export function silence(utterance: number, ms: number = UNSPEAKABLE_MS): Prepare
   return { utterance, audio: 'silence', seconds: Math.max(0, ms) / 1000, words: null };
 }
 
+/**
+ * A Provider as the engine is given one: any Provider, and optionally a step
+ * that has to come before it is sent anything (#109, ADR 0064).
+ *
+ * The runtime's Provider (`offlineProvider`) has one. Before a sentence first
+ * goes to a recipient the owner has not allowed, it asks the owner, and the
+ * owner may take as long as they like to answer. That wait is theirs, not the
+ * Provider's, so the fetcher takes it before its clock starts. The step only
+ * brings the question forward: the runtime's own gate still refuses anything
+ * that reaches `synthesize` without a yes.
+ */
+export interface ClipProvider extends TTSProvider {
+  /**
+   * Resolves once `text` may be sent: at once when nothing has to be asked,
+   * and after the owner's answer when something does. Rejects with the
+   * refusal. It is not timed.
+   */
+  ensureConsent?(text: string, options: { voice: string }): Promise<void>;
+}
+
 export interface ClipFetcherDeps {
   /** The Provider, already configured with its key by whatever built it (ADR 0002: a key arrives as a setting, never as a side effect). */
-  provider: TTSProvider;
+  provider: ClipProvider;
   /** The Voice, which is per document (ADR 0010). */
   voice: string;
   /** Where Clips are kept. Memory only (ADR 0002); `createMemoryCache` is the only implementation. */
@@ -98,8 +118,16 @@ export interface ClipFetcherDeps {
 }
 
 export interface ClipFetcher {
-  /** The Clip for one Utterance, from the cache if it is there and from the Provider if it is not. Rejects with a `SynthesisError`. */
-  fetch(utterance: number, text: string, speakable: boolean): Promise<PreparedClip>;
+  /**
+   * The Clip for one Utterance, from the cache if it is there and from the
+   * Provider if it is not. Rejects with a `SynthesisError`.
+   *
+   * `cleared` is called once nothing about this Clip waits on the owner any
+   * more. That is at once for a Clip that needs no Provider, and after the
+   * Provider's `ensureConsent` otherwise. It is never called when that step
+   * refuses. A voice switch starts its deadline from it (`engine.ts`).
+   */
+  fetch(utterance: number, text: string, speakable: boolean, cleared?: () => void): Promise<PreparedClip>;
 }
 
 /** The plugin's number, and for its reason: a Provider that has not answered in a minute is not going to. */
@@ -127,8 +155,12 @@ export function createClipFetcher(deps: ClipFetcherDeps): ClipFetcher {
    * interleaving at that `await` both miss and both start a synthesis. So the
    * job that goes into this map is the cache read *and* the synthesis, and it
    * goes in before either runs.
+   *
+   * The owner's answer (`ClipProvider`) is part of the job for the same reason.
+   * Everyone who wants the text waits on one question, and `cleared` is when
+   * that wait is over, for each of them.
    */
-  const inFlight = new Map<string, Promise<SynthesisResult>>();
+  const inFlight = new Map<string, { cleared: Promise<void>; result: Promise<SynthesisResult> }>();
 
   async function synthesize(key: string, text: string): Promise<SynthesisResult> {
     const controller = deps.newAbortController?.() ?? new AbortController();
@@ -144,10 +176,13 @@ export function createClipFetcher(deps: ClipFetcherDeps): ClipFetcher {
   }
 
   return {
-    fetch(utterance, text, speakable) {
+    fetch(utterance, text, speakable, cleared) {
       // Never sent to a Provider, so never cached and never keyed: there is no
-      // reply to remember (CONTEXT.md, **Speakable**).
-      if (!speakable) return Promise.resolve(silence(utterance));
+      // reply to remember (CONTEXT.md, **Speakable**). Nothing to ask, either.
+      if (!speakable) {
+        cleared?.();
+        return Promise.resolve(silence(utterance));
+      }
 
       /**
        * The two forms of one Utterance (CONTEXT.md, **Speech Text**). `removed`
@@ -176,16 +211,36 @@ export function createClipFetcher(deps: ClipFetcherDeps): ClipFetcher {
       const key = clipCacheKey(deps.provider.id, deps.voice, speech);
       let job = inFlight.get(key);
       if (!job) {
-        job = (async () => {
+        let clear!: () => void;
+        const through = new Promise<void>((resolve) => { clear = resolve; });
+        const result = (async () => {
           const hit = await cache.match(key);
-          return hit ? hit.clip : synthesize(key, speech);
+          if (hit) {
+            clear();
+            return hit.clip;
+          }
+          /**
+           * **Before the clock, not inside it** (#109, ADR 0064). The Provider
+           * may have to hear from the owner first, and the owner may leave the
+           * question on screen for as long as they like. Timed as part of the
+           * synthesis, a question left for a minute read as a Provider that had
+           * stopped answering: the Reading paused under the still-open alert and
+           * said "no audio within 60s", measured on the simulator on
+           * 2026-09-30. From the answer on, the clock bounds the Provider as it
+           * always has.
+           */
+          await deps.provider.ensureConsent?.(speech, { voice: deps.voice });
+          clear();
+          return synthesize(key, speech);
         })();
+        job = { cleared: through, result };
         inFlight.set(key, job);
         // Cleared on settle, so a failure is asked again rather than remembered
         // as one. The `catch` is for this side chain only; the caller below still
         // sees the rejection.
-        void job.catch(() => {}).finally(() => inFlight.delete(key));
+        void result.catch(() => {}).finally(() => inFlight.delete(key));
       }
+      if (cleared) void job.cleared.then(cleared);
       /**
        * Each caller prepares its own Clip: one synthesis, two Utterances — and
        * it is also why the offsets are restored *here* rather than inside
@@ -194,7 +249,7 @@ export function createClipFetcher(deps: ClipFetcherDeps): ClipFetcher {
        * belongs to this Utterance's own text. Restoring per caller is what
        * keeps those two facts from being confused.
        */
-      return job.then((result) => prepareClip(utterance, restore(result, removed)));
+      return job.result.then((result) => prepareClip(utterance, restore(result, removed)));
     },
   };
 }

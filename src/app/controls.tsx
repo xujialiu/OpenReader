@@ -467,6 +467,15 @@ export function ActionRow({ label, onPress, disabled }: { label: string; onPress
 }
 
 /**
+ * Text that is the card's content rather than a row of it: a licence (#111).
+ * Set as the phone's own legal pages set theirs, small and in the text colour,
+ * with a row's inset on every side, and selectable, so a notice can be copied.
+ */
+export function ProseRow({ children }: { children: string }) {
+  return <Text selectable style={styles.prose}>{children}</Text>;
+}
+
+/**
  * A line under a settings card: an explanation, a result, a refusal, the
  * version. The phone's footer text, 13 on 16 in its secondary grey, or the
  * attention colour for something the owner has to act on.
@@ -635,6 +644,7 @@ const styles = StyleSheet.create({
   fieldInput: { ...TEXT.body, alignSelf: 'stretch', color: INK.text, flex: 1, minWidth: 0, paddingVertical: 12 },
   textRow: { ...TEXT.body, color: INK.text, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 12 },
   actionLabel: { ...TEXT.body, color: INK.reading },
+  prose: { ...TEXT.footnote, color: INK.text, paddingHorizontal: SETTINGS.inset, paddingVertical: 12 },
   menuRow: { flex: 1 },
   locked: { opacity: 0.5 },
 });
