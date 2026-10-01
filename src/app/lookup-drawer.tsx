@@ -1,13 +1,21 @@
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState } from 'react';
+import { Host, Picker, Text as SwiftText } from '@expo/ui/swift-ui';
+import { pickerStyle, tag } from '@expo/ui/swift-ui/modifiers';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { TranslationService } from '../translation/settings';
+import type { LookupMode, TranslationService } from '../translation/settings';
 import { INK } from './controls';
 import { DRAWER, Drawer, DrawerMenuRow } from './drawer';
 import { Icon } from './icon';
 import { TRANSLATION_SERVICES } from './translation-screen';
 import type { LookupHandle } from './use-lookup';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
+
+/** The kinds of result, in the order the header's segments show them. */
+const LOOKUP_MODES: readonly { mode: LookupMode; label: string }[] = [
+  { mode: 'dictionary', label: 'Dictionary' },
+  { mode: 'translation', label: 'Translation' },
+];
 
 /**
  * The result of a Word Lookup or a Text Translation, on the shared drawer
@@ -21,14 +29,31 @@ import { TEXT, TEXT_EMPHASIZED } from './text-styles';
  * down-arrow that did that is gone. Its turn among the drawers is the
  * `Drawer`'s, so a selection made while another drawer is up closes that one
  * first.
+ *
+ * Its header is the system's segmented control, Dictionary | Translation,
+ * centred where a title goes (the owner's Q51), in place of the switch the
+ * app drew under a title. "Lookup" is what VoiceOver calls the control.
  */
 export function LookupDrawer({ lookup, service, onService }: {
   lookup: LookupHandle; service: TranslationService; onService(service: TranslationService): void;
 }) {
   return (
-    <Drawer visible={Boolean(lookup.selection)} title="Lookup" onClose={() => lookup.close()}>
+    <Drawer visible={Boolean(lookup.selection)} title="Lookup" onClose={() => lookup.close()}
+      heading={<LookupModes mode={lookup.selection?.mode ?? 'dictionary'} onMode={lookup.mode} />}>
       {lookup.selection ? <LookupResult lookup={lookup} service={service} onService={onService} /> : null}
     </Drawer>
+  );
+}
+
+/** Dictionary | Translation, the phone's own segmented control, as wide as the header leaves it. */
+function LookupModes({ mode, onMode }: { mode: LookupMode; onMode(mode: LookupMode): void }) {
+  return (
+    <Host matchContents={{ vertical: true }} style={styles.modes}>
+      <Picker label="Lookup" selection={mode} onSelectionChange={(next) => onMode(next as LookupMode)}
+        modifiers={[pickerStyle('segmented')]}>
+        {LOOKUP_MODES.map((one) => <SwiftText key={one.mode} modifiers={[tag(one.mode)]}>{one.label}</SwiftText>)}
+      </Picker>
+    </Host>
   );
 }
 
@@ -48,13 +73,6 @@ function LookupResult({ lookup, service, onService }: {
     catch { setCopyError(true); }
   };
   return <View testID="lookup-drawer" style={styles.drawer}>
-    <View style={styles.modes}>
-      {(['dictionary', 'translation'] as const).map((mode) => <Pressable key={mode} accessibilityRole="button"
-        accessibilityState={{ selected: selection.mode === mode }} onPress={() => { setCopied(false); lookup.mode(mode); }}
-        style={[styles.mode, selection.mode === mode && styles.chosen]}>
-        <Text style={styles.modeText}>{mode === 'dictionary' ? 'Dictionary' : 'Translation'}</Text>
-      </Pressable>)}
-    </View>
     {selection.mode === 'translation' ? <DrawerMenuRow label="Service" choices={TRANSLATION_SERVICES} chosen={service}
       onChoose={(next) => { setCopied(false); onService(next); }} /> : null}
     <ScrollView style={styles.scroll} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
@@ -84,9 +102,7 @@ function LookupResult({ lookup, service, onService }: {
 }
 const styles = StyleSheet.create({
   drawer: { flex: 1 },
-  modes: { flexDirection: 'row', backgroundColor: INK.line, borderRadius: 9, padding: 2, marginLeft: DRAWER.row.textInset, marginRight: DRAWER.row.inset },
-  mode: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 7 },
-  chosen: { backgroundColor: INK.card }, modeText: { ...TEXT_EMPHASIZED.subhead, color: INK.text },
+  modes: { alignSelf: 'stretch' },
   scroll: { flex: 1 },
   // Set in as far as a row's words, so the result lines up with the Service row above it.
   body: { paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset, paddingTop: 8, paddingBottom: 16, gap: 12 },
