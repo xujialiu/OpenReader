@@ -204,13 +204,18 @@ and `sheet closed after 2589–3250 ms`.
 
 ## The reader's web content process ended (#120, `webcontent-killed.sh`)
 
-With the Debug app connected to a Metro whose log is written to `METRO_LOG`,
-and a Document open in the Reader with its text on the page:
+With a Debug Mode app and a Document open in the Reader with its text on the
+page:
 
 ```sh
-bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID METRO_LOG          # kill with the app in front
-bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID METRO_LOG --away   # in Settings during the kill, as on the phone
+bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID          # kill with the app in front
+bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID --away   # in Settings during the kill, as on the phone
 ```
+
+It reads the probe's answers from the app's own Debug Log (`[probe]` lines),
+not Metro's log: on 2026-10-01 Metro 8160's log stopped at 23:03:52 while the
+app stayed connected, and the first version, which read Metro's log, answered
+`before: (no answer in 10 s)` three times (pitfalls/metro.md).
 
 It asks the page with `kit/probes/page-alive.js`, `kill -9`s the device's one
 WebContent process (the `WebContentExtension` child of its `launchd_sim`), waits

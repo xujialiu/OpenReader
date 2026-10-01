@@ -5,10 +5,13 @@
 # came back. Here `kill -9` ends it the same way WebKit sees it: the app's
 # WebPageProxy reports `processDidTerminate: reason=Crash`.
 #
-#   bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID METRO_LOG [--away] [--wait S]
+#   bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID [--away] [--wait S]
 #
-# Needs: the Debug app on SIMULATOR_UDID connected to the Metro writing
-# METRO_LOG, with a Document open in the Reader and its text on the page.
+# Needs: a Debug Mode app on SIMULATOR_UDID (`-debug` in Settings' version),
+# with a Document open in the Reader and its text on the page. The probe's
+# answers are read from the app's own Debug Log (`[probe]` lines), not from
+# Metro's log, which can stop receiving the app's lines while the app stays
+# connected (pitfalls/metro.md).
 # --away    leave the app for Settings before the kill and come back after it,
 #           as on the phone (the app suspended while the process ends)
 # --wait S  seconds between the kill (or the return) and the check, default 5
@@ -20,8 +23,7 @@
 # the page's DOM, and a screenshot goes to /tmp/openreader-webcontent-killed.png.
 set -u
 U=${1:?SIMULATOR_UDID}
-LOG=${2:?METRO_LOG}
-shift 2
+shift
 AWAY=0
 WAIT=5
 while [ $# -gt 0 ]; do
@@ -40,18 +42,22 @@ launchd=$(ps -axo pid,command | awk -v u="$U" '/launchd_sim/ && index($0, u) { p
 [ -n "$launchd" ] || { echo "no launchd_sim for $U (is it booted?)" >&2; exit 2; }
 webcontent() { ps -axo pid,ppid,command | awk -v p="$launchd" '$2 == p && /WebContent/ { print $1 }'; }
 
-# One probe; its answer is the first `HX PROBE {"href"` line after the send.
+LOGDIR="$(xcrun simctl get_app_container "$U" top.xujialiu.openreader data)/Library/Application Support/debug-log"
+[ -d "$LOGDIR" ] || { echo "no Debug Log at $LOGDIR (is this a Debug Mode build?)" >&2; exit 2; }
+debuglog() { cat "$LOGDIR"/debug-log-*.txt 2>/dev/null; }
+
+# One probe; its answer is the first `[probe] {"href"` line after the send.
 ask() {
   local before
-  before=$(wc -l < "$LOG")
+  before=$(debuglog | wc -l)
   node "$HERE/hx.cjs" "$U" '{}' --code-file "$PROBE" > /dev/null
-  for _ in $(seq 1 20); do
+  for _ in $(seq 1 24); do
     sleep 0.5
     local line
-    line=$(tail -n +$((before + 1)) "$LOG" | grep -m1 'HX PROBE {"href"')
-    if [ -n "$line" ]; then echo "${line#*HX PROBE }"; return 0; fi
+    line=$(debuglog | tail -n +$((before + 1)) | grep -m1 '\[probe\] {"href"')
+    if [ -n "$line" ]; then echo "${line#*\[probe\] }"; return 0; fi
   done
-  echo "(no answer in 10 s)"
+  echo "(no answer in 12 s)"
 }
 alive() { echo "$1" | grep -q '"rendition":"object"' && echo "$1" | grep -Eq '"[0-9]+:d:[1-9][0-9]*"'; }
 # The highlighted sentence, as `section:openreader-utterance:its first 40 characters`.
