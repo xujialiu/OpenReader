@@ -14,6 +14,9 @@ export interface SheetAction {
 }
 
 /**
+ * The app's own drawer, for the drawers not yet moved to the phone's own sheet
+ * (`drawer.tsx`, #117, ADR 0066). Contents has moved; the rest follow.
+ *
  * Only the handle/title owns the drag; lists and steppers retain their gestures.
  *
  * `onBack` turns the header into a page header: a round back button on the left

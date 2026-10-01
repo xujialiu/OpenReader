@@ -62,7 +62,8 @@ import { TEXT } from './text-styles';
 /**
  * Every value a drawer is drawn to (#117), measured on the phone's own sheet
  * on an iOS 27.0 iPhone 17 simulator (notes, 2026-10-01 11:35 and 11:45, at
- * `large`, where nothing is scaled).
+ * `large`, where nothing is scaled). The height it opens at is worked out in
+ * `drawer-height.ts`, where a test can reach the arithmetic.
  */
 export const DRAWER = {
   /** The height a drawer can be swiped up to, above the Drawer Height: the phone's own full height. */
