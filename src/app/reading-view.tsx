@@ -675,8 +675,8 @@ export function ReadingView({
         onOpenHeight={reading.bridge.setOpenPlayer}
       /> : null}
 
-      {lookup.selection && size ? <LookupDrawer lookup={lookup} height={size.height} service={settings.lookup.service}
-        onService={(service) => setSettings((was) => ({ ...was, lookup: { ...was.lookup, service } }))} /> : null}
+      <LookupDrawer lookup={lookup} service={settings.lookup.service}
+        onService={(service) => setSettings((was) => ({ ...was, lookup: { ...was.lookup, service } }))} />
 
       <ContentsSheet
         visible={contentsOpen}
