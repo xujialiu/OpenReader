@@ -43,6 +43,14 @@
   answer from a Debug Mode app now reads the `[probe]`/`HX` lines from the app's
   own Debug Log in the simulator's data container
   (`Library/Application Support/debug-log/`), as `webcontent-killed.sh` does.
+  Restarting the app alone did **not** bring the log back (measured 23:29–23:31
+  the same night: the relaunched app bundled 1473 modules from the same Metro
+  and appeared in its `/json/list`, and still no `HX` line reached the file);
+  terminating the app, restarting Metro itself (a fresh `npx expo start --port
+  8160`, stdout a regular file) and relaunching the app did — the next harness
+  command answered in the new log at once. When a stopped log matters and the
+  answers cannot move to the Debug Log, budget a Metro restart, not just
+  a relaunch.
 - **A bundle made without an `EXPO_PUBLIC_` variable keeps the value of the bundle made before it** (2026-09-29, #82). `npx expo export:embed` without `--reset-cache`, run in turn with and without `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1`, printed `var DEBUG_MODE = true;` in both bundles. Cause: babel-preset-expo writes the value into the file's transformed code, and Metro's cache key is the file and the transformer's configuration, not the environment. The Xcode phase passes `--reset-cache`, but Expo drops it when `CI` is set, and the second bundle again came out `true`. Fix, in place since: `metro.config.js` puts every `EXPO_PUBLIC_` value under `transformer`, which Metro hashes into the key; each value then has cached files of its own (ADR 0054). Check a bundle with `grep -o "var DEBUG_MODE = [a-z]*;" main.jsbundle`.
 - **The Xcode bundle phase's `--reset-cache` clears `os.tmpdir()/metro-cache`, which every Metro on the machine shares.** To keep a proof build from clearing another agent's running Metro's cache, point `TMPDIR` at a directory of the build's own in `ios/.xcode.env.local` (gitignored), which the phase sources: `export TMPDIR=/tmp/NAME/`. Measured 2026-09-29: the phase then wrote its cache there.
 - **The bundle is stale or broken after `npm ci` or a new patch.** `node_modules` was replaced under a running Metro. Restart it with `--clear` and check the bundle as above.
