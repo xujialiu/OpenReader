@@ -2,7 +2,13 @@
 
 ## Waiting for delegated agents
 
-Until a delegated agent returns, the main agent must wait patiently for its completion notification or use a long blocking wait. Do not repeatedly check agent status, turn short wait timeouts into a polling loop, or send repeated waiting-only updates. An ordinary timeout is not a reason to inspect status or interrupt the agent; continue waiting for its result. Resume dependent work only after the result arrives or the owner changes the task.
+Until a delegated agent returns, the main agent must wait patiently for its completion notification or use a long blocking wait. Outside the check-ins below, do not repeatedly check agent status, turn short wait timeouts into a polling loop, or send repeated waiting-only updates. An ordinary timeout is not a reason to inspect status or interrupt the agent; continue waiting for its result. Resume dependent work only after the result arrives or the owner changes the task.
+
+**Check in every 50 minutes a delegated agent is still running**, with a short report to the owner. There are two reasons. The main agent's prompt cache expires after an hour, so a longer silence makes its next turn reread everything. And an agent that has died sends no notification, so without a check-in the main agent waits for nothing.
+
+- **Arm it at dispatch.** In pi, call `bg_wait({ id: <the run or workflow id>, nonBlocking: true, timeoutMs: 3000000 })` straight after the `subagent` call; it wakes the session at 50 minutes. Other harnesses use their own timer.
+- **At the wake, look once.** Take one `status` look at the run. Report in a few lines what it is working on, when it last acted, and whether it is alive. Then arm the next 50 minutes.
+- **A dead or stuck run is a failed run.** Report its exact failure and its worktree's state before any retry.
 
 ## A delegated agent's worktree
 
