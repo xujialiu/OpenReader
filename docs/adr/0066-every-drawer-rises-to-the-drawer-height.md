@@ -69,10 +69,10 @@ own at 0.46 and 0.88 of the reading view's height, dragged between 0.25 and 0.88
   Height the page is undimmed and live; at `large` it is dimmed and takes no
   touches. With background interaction on, a tap on the page does not dismiss
   the sheet, so a tap outside never closes a drawer. A swipe down does.
-- **The background.** `presentationBackground` with `SETTINGS_SURFACE[scheme].page`
-  (`src/app/controls.tsx:114`), and the cards in `SETTINGS_SURFACE[scheme].card`:
-  the drawer is a Settings page in the app's own palette, opaque, rather than
-  the system's glass. It follows the app's Theme, not the phone's. System
+- **The background.** `presentationBackground` with `DRAWER.colours[scheme].page`:
+  in light the Settings page's `#f4f4f6` (`SETTINGS_SURFACE`,
+  `src/app/controls.tsx`), in dark `#1c1c21` (below). The drawer is in the app's
+  own palette, opaque, rather than the system's glass. It follows the app's Theme, not the phone's. System
   controls in it take the app's accent. `presentationBackground` "Paints the
   entire sheet chrome including the drag-indicator zone and home-indicator
   safe-area inset" (`presentationModifiers.d.ts:53`).
@@ -82,17 +82,51 @@ own at 0.46 and 0.88 of the reading view's height, dragged between 0.25 and 0.88
   right (ADR 0059). A page reached from another page in the same drawer has a
   round back button (‹) on its left, copied from the system's. There is no close
   (X).
-- **The content.** Inset grouped cards. Rows the system can draw (Font, Font
-  Size, Margins, Alignment, pickers) are SwiftUI controls in a `Form`. Rows it
-  cannot (Contents, the Download chapters) are React Native, drawn to the
-  system values measured below: 52-pt rows, cards 16 pt from the edge,
-  separators inset 16 pt.
+- **The content is a plain list, in Apple Books' measurements** (owner's
+  Q46–Q48, after rejecting batch 1's inset grouped cards on the phone; #117's
+  last comment). Rows sit straight on the drawer. Separators run 25.0–377.0 pt
+  on a 402-pt screen, under every row, the last included. The words start at
+  24 pt, so their ink lines up with Books' 24.7. A one-line row is 52 pt, and a
+  longer one is its lines at a 16.66-pt pitch plus 14.33 pt above and below.
+  Titles wrap in full, with no line limit. The words are Subhead, 15 pt, in the
+  regular weight; the current row is semibold amber on its mark. Measured
+  against Books' screenshots on the owner's phone (notes 18:20), every distance
+  is within 1 pt. The cards, with their 16-pt inset, 26-pt radius and Form-like
+  rows, are gone. Rows the system can draw take the same insets through
+  `listRowInsets`.
 - **One module for every drawer value.** `DRAWER` in `src/app/drawer.tsx`
-  holds the header metrics, the round button, the card's 16-pt inset and 26-pt
-  radius, the 52-pt row, the 16-pt separator inset, the 35-pt section gap, the
-  8-pt footer gap and the colours per scheme, as plain strings. `Drawer` is the
-  sheet with its header; `DrawerCard`, `DrawerSeparator` and `DrawerFooter` are
-  the shared parts. The detent arithmetic is `drawerDetentHeight` in
+  holds the header metrics, the round button, the 8-pt footer gap and the
+  colours per scheme, as plain strings. `DRAWER.row` is `DRAWER_LIST` in
+  `src/app/drawer-list.ts`: the 25-pt inset, the 24-pt text inset, the 52-pt
+  row, the 43/3-pt padding, the text style, the leading of 10/9 and the 16-pt
+  indent. It sits apart so that a test can check it reproduces Books' 52-, 62-
+  and 112-pt rows. The text size is one value, `DRAWER_LIST.text`: `'body'`
+  would make the rows 17 pt. `Drawer` is the sheet with its header;
+  `DrawerRow`, `DrawerRowText`, `DrawerSeparator` and `DrawerFooter` are the
+  shared parts.
+- **Line pitch.** `text-styles.ts`'s `onLinePitch` is its one exception to
+  writing no line heights, and only drawer rows use it. At exactly 50/3 pt,
+  Reverend Insanity's two-line titles got their 62-pt rows but drew only their
+  first line, cut off. At 16.66 pt, a hundredth less, every title draws whole
+  (notes 18:20).
+- **Contents is still a React Native `FlatList`**, now with rows of different
+  heights, so `getItemLayout` and `initialScrollIndex` are gone (notes 16:35).
+  - The phone's SwiftUI `List` through `@expo/ui` 57 ignored `scrollPosition`
+    and stayed at the first row.
+  - A SwiftUI `ScrollView` with a `LazyVStack` opened at the row. But
+    `@expo/ui` creates every row up front, so with 2,076 rows the drawer rose
+    empty and its rows came 1.45 s after the tap.
+  - A `FlatList` given the start row but no heights opened at the row, then
+    went blank when scrolled up.
+
+  What is built opens in two steps. It first shows the rows from the current
+  one down, then puts the earlier rows back above while
+  `maintainVisibleContentPosition` holds the current row in place. iOS loses
+  that hold while the sheet moves: in Shadow Slave the current row ended 13–27
+  pt too high after a swipe. So until the owner scrolls, the current row is put
+  back at the top whenever the list is laid out again. 5 of 5 openings, swipes
+  and grabber taps kept it at the top, at the long Chapter 139, deep in a
+  2,076-entry book and at its last section. The detent arithmetic is `drawerDetentHeight` in
   `src/app/drawer-height.ts`, apart so a test can import it. The setting is
   `AppSettings.drawerHeight`, one of `DRAWER_HEIGHTS` = 40–90, read back as 50
   when it is anything else, and not in `engineIdentity`.
@@ -116,11 +150,13 @@ own at 0.46 and 0.88 of the reading view's height, dragged between 0.25 and 0.88
 - **A dark drawer is a step lighter than the page** (owner's Q44). In the dark,
   `SETTINGS_SURFACE.dark.page` is the reader's own `#111114`, and a drawer that
   colour showed no edge but its grabber. So in the dark the drawer is
-  `#1c1c21`, its cards `#2c2c32`, the separator `#44444b`, and the current-row
-  mark and button rim `#3e3e47`, all in `DRAWER.colours`. Measured, the edge is
-  an 11-level step across the width, and the separator and mark are 24 and 18
-  levels above the card (notes 13:53). The light drawer is the Settings page,
-  `#f4f4f6`, with white cards.
+  `#1c1c21`, the separator `#44444b`, the current-row mark and button rim
+  `#3e3e47`, and the round button's fill `#2c2c32`, all in `DRAWER.colours`.
+  Measured, the edge is an 11-level step across the width (notes 13:53).
+  Straight on `#1c1c21`, the separator stands 40 levels out and the mark 34,
+  as far as Books' separators stand on its own dark grey (33) (notes 18:20).
+  The light drawer is the Settings page, `#f4f4f6`, with separators `#e8e8e8`,
+  12 levels darker: faint, but visible.
 - **Per drawer.** Rename is the system's alert with a text field, over the
   drawer: Cancel returns to the menu, Save renames and closes, Save is disabled
   while the name is blank. Voice's provider and locale chips become two menu
