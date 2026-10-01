@@ -6,8 +6,8 @@
  * drag indicator and its two heights; the app draws what is on it, to the
  * phone's own measurements (design 0042). Everything a drawer is drawn to is
  * in `DRAWER` below, and every drawer takes it from there, so two drawers
- * cannot end up a few points apart. The drawers not moved yet still use
- * `sheet.tsx`.
+ * cannot end up a few points apart. Every drawer in the app is one of these;
+ * the old `Modal` drawer, `sheet.tsx`, is gone (#117).
  *
  * ## Two heights
  *
@@ -64,7 +64,7 @@
  *
  * ## One at a time
  *
- * Every drawer, old (`sheet.tsx`) and new, and the lookup drawer, waits its
+ * Every drawer, the lookup drawer included, waits its
  * turn through `useDrawerTurn` (`drawer-turns.ts`): asking for one while
  * another is up closes that one first.
  */

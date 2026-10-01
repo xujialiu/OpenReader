@@ -12,8 +12,8 @@
  * So every drawer asks here for its turn. A drawer asked for while another
  * is up closes that one (calls its `close`, which is its owner's `onClose`)
  * and waits; it is presented once the other's dismissal has finished
- * (`gone`). The new drawers (`drawer.tsx`), the old ones (`sheet.tsx`) and
- * the lookup drawer all take part, through `useDrawerTurn`.
+ * (`gone`). Every drawer (`drawer.tsx`), the lookup drawer included, takes
+ * part through `useDrawerTurn`.
  *
  * Pure, so that a test can drive it: no React, no platform.
  */

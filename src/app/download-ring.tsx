@@ -26,7 +26,7 @@ const ROUND = 2 * Math.PI * RADIUS;
 export function DownloadRing({ fraction, spinning, halted, onPress }: {
   fraction: number; spinning: boolean; halted: boolean; onPress(): void;
 }) {
-  // Held in state rather than a ref, as `sheet.tsx` does, so nothing reads a ref during render.
+  // Held in state rather than a ref, so nothing reads a ref during render.
   const [turn] = useState(() => new Animated.Value(0));
   useEffect(() => {
     if (!spinning) return;
