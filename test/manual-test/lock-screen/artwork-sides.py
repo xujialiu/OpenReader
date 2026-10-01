@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+# Sample the Now Playing artwork's square on a LockScreenProbe screenshot (#119):
+# where the picture sits inside the square, and what colour the side bands are —
+# the question "does iOS draw a tall Cover's transparent sides as transparent,
+# black, white, or its own material" is answered from these numbers.
+#
+#   python3 test/manual-test/lock-screen/artwork-sides.py SCREENSHOT.png [--json]
+#
+# SCREENSHOT.png is the lock-screen_N attachment a `run-probe.sh LockScreenProbe
+# … --expect-player` run exports (the script finds the card itself; it takes no
+# geometry). The screenshot is 3× (1206×2622 on the 402×874 pt devices).
+#
+# What it does: scans rows for the artwork square (the large, near-uniform,
+# lighter-than-wallpaper rounded rect in the upper half), measures the drawn
+# picture's strip inside it by scanning a row where the picture is darker than
+# the side bands, then samples the left band, the right band and the picture.
+# Prints each sample's RGB and a short reading (band vs wallpaper, vs white,
+# vs black, vs the picture).
+#
+# What it cannot prove: that the bands are *transparent* rather than an opaque
+# colour that happens to match the system's artwork material. Transparent is
+# established by the bands matching the material that sits behind the artwork
+# (light grey in light mode) and differing from the wallpaper beside the card;
+# the distinction between "transparent over a material" and "painted with the
+# material's colour" is iOS's own compositing, which a screenshot cannot see.
+# A pure-white or pure-black Cover would also defeat the strip detection: check
+# the printed strip bounds against the screenshot before trusting the numbers.
+
+import argparse
+import json
+import sys
+
+from PIL import Image
+
+THIRD = 3  # screenshots are 3×
+
+
+def row_light_edges(im, y, thresh=400, step=2):
+    """x positions where a row crosses the light/dark threshold."""
+    w = im.size[0]
+    out, prev = [], None
+    for x in range(0, w, step):
+        p = im.getpixel((x, y))
+        light = sum(p[:3]) > thresh
+        if prev is not None and light != prev:
+            out.append(x)
+        prev = light
+    return out
+
+
+def dominant(im, box):
+    """Median colour of a box, per channel."""
+    raw = im.crop(box).tobytes()
+    px = sorted((raw[i], raw[i + 1], raw[i + 2]) for i in range(0, len(raw), 3))
+    return px[len(px) // 2]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument('screenshot')
+    ap.add_argument('--json', action='store_true')
+    args = ap.parse_args()
+
+    im = Image.open(args.screenshot).convert('RGB')
+    w, h = im.size
+
+    # The artwork square: scan candidate rows in the upper-middle of the screen
+    # for the longest run of "light" bounded left and right by darker wallpaper.
+    best = None
+    for y in range(int(h * 0.2), int(h * 0.65), 8):
+        edges = row_light_edges(im, y)
+        for i in range(0, len(edges) - 1, 2):
+            left, right = edges[i], edges[i + 1]
+            span = right - left
+            if span > w * 0.6 and (best is None or span > best[2]):
+                best = (y, left, span, right)
+    if best is None:
+        print('no artwork square found — is this a lock screen with a card?')
+        return 1
+    y_mid, left, span, right = best
+    # Walk the square's vertical extent from the middle row, at a column over
+    # the **side band** (a sixteenth of the span in from the card's left edge —
+    # a 3:4 cover's band is 12.5 % wide, and anything deeper lands on the
+    # picture): the centre column is the drawn picture, which can be dark
+    # anywhere. A square artwork has no bands and the walk stops at its own
+    # first dark pixel — the strip isolation then fails below, which is honest:
+    # a square artwork has no side-band question.
+    band_x = left + max(2 * THIRD, span // 16)
+    top = y_mid
+    while top > 0 and sum(im.getpixel((band_x, top - 1))) > 400:
+        top -= 2
+    bottom = y_mid
+    while bottom < h - 1 and sum(im.getpixel((band_x, bottom + 1))) > 400:
+        bottom += 2
+    side = bottom - top
+
+    # The drawn picture's strip: a row in the lower half (covers usually put
+    # dark art low) where the picture is darker than the side bands: exactly two
+    # light runs inside the square (the bands), and the dark gap between them is
+    # the picture.
+    strip_l = strip_r = None
+    for y in range(top + side // 2, bottom - 8, 4):
+        e = row_light_edges(im, y, thresh=400)
+        runs = [(e[i], e[i + 1]) for i in range(0, len(e) - 1, 2)
+                if e[i] >= left - 4 and e[i + 1] <= right + 4]
+        if len(runs) == 2:
+            l, r = runs[0][1], runs[1][0]
+            if 0.3 < (r - l) / span < 0.95:
+                strip_l, strip_r = l, r
+                break
+    if strip_l is None:
+        print('could not isolate the drawn picture inside the square — is the artwork itself light?')
+        return 1
+
+    band = max(4 * THIRD, (strip_l - left) // 3)
+    samples = {
+        'square': {'left': left, 'right': right, 'top': top, 'bottom': bottom, 'side_px': side},
+        'picture_strip': {'left': strip_l, 'right': strip_r,
+                          'aspect': round((strip_r - strip_l) / side, 4)},
+        'left_band': dominant(im, (left + band, top + side // 3, strip_l - band, bottom - side // 3)),
+        'right_band': dominant(im, (strip_r + band, top + side // 3, right - band, bottom - side // 3)),
+        'picture': dominant(im, (strip_l + band, top + side // 3, strip_r - band, bottom - side // 3)),
+        'wallpaper_left_of_card': dominant(im, (max(0, left - 12 * THIRD), top + side // 3, left - 2 * THIRD, bottom - side // 3)),
+    }
+    lr = tuple((a + b) // 2 for a, b in zip(samples['left_band'], samples['right_band']))
+    samples['bands_mean_rgb'] = lr
+    wp = samples['wallpaper_left_of_card']
+    neutral = max(lr) - min(lr) <= 4
+    samples['reading'] = (
+        f"bands {'neutral ' if neutral else ''}{lr}; wallpaper beside the card {wp}; "
+        f"bands are {'much lighter than the wallpaper (a system material shows through, not the wallpaper)' if sum(lr) > sum(wp) + 120 else 'close to the wallpaper (transparency may reach it)'}; "
+        f"pure white is (255,255,255), the island's black (0,0,0)"
+    )
+
+    if args.json:
+        print(json.dumps(samples, indent=1))
+    else:
+        for k in ('square', 'picture_strip', 'left_band', 'right_band', 'picture',
+                  'wallpaper_left_of_card', 'bands_mean_rgb', 'reading'):
+            print(f'{k}: {samples[k]}')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
