@@ -531,3 +531,67 @@ plus harness sequences for the failure-note and dark-theme checks.
 - **Symptom:** testing the share button's missing-file note, the kept `library/sha256-*.epub` was moved out and `ls` confirmed the directory empty; one probe relaunch later the file was back (its original birth time — an APFS clone), the share sheet rose, and the "missing file" assertion failed.
 - **Cause:** the walkthrough harness polls `Documents/harness.json` from `seenRef = -1` at every launch, so whatever command is still in the file runs again. This tree's file still held `{"seq":1,"do":"add","file":"…"}`; the Debug Log shows `[hx] added sha256:…` one second after each `[launch]` line (02:28:37, 02:29:43, 02:31:22, 02:33:36), and `library.add` re-copies the file from `Documents/Inbox` (`add` uses `move: false`, so the Inbox copy survives as a permanent re-adding source). The relaunch had silently undone the fixture change.
 - **Fix:** before any test that removes or changes container files across a relaunch, overwrite `harness.json` with a harmless high-seq command, e.g. `printf '{"seq":9999,"do":"shelf"}' > "$CONT/Documents/harness.json"`. Check the Debug Log's `[hx]` lines when a fixture refuses to stay as you left it.
+
+## Verifying #105: a place kept while playing, taken when the reading stops (2026-09-30)
+
+Simulator `iPhone 17 issue105b` (AF2B8F6C-7B2E-40B2-BE63-03AD93F2331E,
+iOS 27.0, created for this run), Debug build from this worktree at the fix
+commit `cab15f3` (APP_VERSION 0.0.2-beta70), JS from this tree's Metro on
+port 8100, narration through the owner's Kokoro gateway (voice af_bella,
+headers typed by `ProviderHeaders105Probe`), sync pointed at the local stub
+`stub-105.py` on 127.0.0.1:8899, fixture `issue105-fixture.ts`
+(`Issue 105 Fixture`, `sha256:d96e1571…`): chapter one holds the long phone
+sentence A (Utterance 1, ~26 s spoken at 1.50×), `Phone old continuation.`
+(2), `Desktop new sentence.` (3 = B), `Desktop new continuation.` (4).
+
+**Main scenario, real touches (Scenario105Probe, 22:24).** Phone resumed at A
+paused; Library = A (Stamp 1790776852047, iPhone-ioldisho); the stub served
+B with a newer Stamp (device `desktop-105`) and held Play's GET 4 s. Play at
+22:24:27.9 → `play at utterance 1` at 22:24:30.0 (the two-second bound); the
+released download adopted B at 22:24:32.1 ("1 places taken, nothing
+uploaded") — kept by the playing Reading. Pause at 22:24:36.3, while A was
+still being spoken: `pause at utterance 1`, and the kept place was taken —
+`[hx]` reads `utterance=3`, the highlight band sits on "Desktop new
+sentence." in the screenshot while paused, the Library file holds the
+desktop Stamp (1790778234917, desktop-105), and no PUT happened at all
+("nothing uploaded" twice). Play again → `play at utterance 3` (the reading
+starts at B, "0 places taken, nothing uploaded"), played through B's
+continuation and paused; the pause uploaded the phone's then-sentence
+("A short second chapter the scenario never renders.", device
+iPhone-ioldisho) — a later sentence, never A's continuation.
+
+**Control, real touches (22:56 and 23:46).** Same setup; speech passed into
+the sentence after A before stopping: the adoption was kept mid-play
+("1 places taken" at +4 s), the reading played on — no seek to B anywhere in
+the log — and the phone's own next sentence was written above the desktop's
+place ("Phone old continuation.", Stamp 1790783206549, iPhone-ioldisho, at
+23:46:46). The next sync moment uploaded exactly that item (PUT #78/#79:
+`exact='Phone old continuation.' device=iPhone-ioldisho`), and B appears in
+no upload. In both control attempts the reading reached the document's end
+before the probe's Pause tap (end 22:56:48, tap 22:56:56; end 23:46:53, tap
+23:46:58). So the stop was the engine's own at the end of the book, and the
+cursor stayed on Utterance 6, not B's 3. The control's upload was captured
+as the written place's next-moment upload rather than the pause poke; the
+kept-place-let-go behaviour is the run's own.
+
+**Every XCTest run, as its `test.log` says it** (checked by the implementing
+agent against the Debug Log):
+
+| run | method | result | where it came from |
+| --- | --- | --- | --- |
+| 21:08 | ProviderHeaders105Probe | 1 failure | the probe's own predicate; the gateway answered 200 |
+| 21:23 | SavePassword105Probe | skipped | no alert up |
+| 21:26 | SavePassword105Probe | 0 failures | |
+| 22:09 | testPlayPauseWithHeldDownload | 1 failure | no `Play` in the tree; no handler call |
+| 22:23 | testPlayPauseWithHeldDownload | 0 failures | the main scenario |
+| 22:26 | testPlayFromAdoptedPlaceThenPause | 0 failures | the second half |
+| 22:29, 22:40 | testPlayFromAdoptedPlaceThenPause | 2 failures each | Play hit point `{-1, -1}`; no `play` in the Debug Log |
+| 22:54 | testPlayPauseWithHeldDownload | 2 failures | Pause after the end of the book |
+| 23:02, 23:15, 23:29 | testPlayPauseWithHeldDownload | 2, 3, 3 failures | Play hit point `{-1, -1}`; no `play` in the Debug Log |
+| 23:46 | testPlayPauseWithHeldDownload | 2 failures | Pause after the end of the book |
+
+**Not established here:** the pause from the lock screen / Now Playing (item
+3 of the plan) — the engine-self-stop path was exercised repeatedly (every
+overshoot) and behaved as the pause does each time, but no lock-screen press
+was made. What the run cannot prove: nothing about real devices, drift, or
+the desktop plugin's writer.

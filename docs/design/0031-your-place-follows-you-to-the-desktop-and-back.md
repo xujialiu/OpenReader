@@ -77,8 +77,11 @@ page have moved to the desktop's sentence — quietly, because the moved highlig
 is the message. Press play and the phone checks once more first, for at most two
 seconds, then reads from the newest place. When the desktop's place is in a part
 of the book the phone has not laid out yet, play waits for that part rather than
-starting anywhere else. While the book is playing nothing moves it; a place that
-arrives late is simply outranked by the one the phone is writing as it reads.
+starting anywhere else. While the book is playing nothing moves it. A place that
+arrives late is outranked by the one the phone writes once it reads on. When the
+owner pauses before the phone has read past the sentence it started on, the phone
+has nothing newer, and the late place wins then, as it would have if it had
+arrived while paused.
 
 **What was turned down.** The earlier rule, that once the owner had pressed play
 the book's place was theirs until they closed it, was kept for playing and
@@ -93,6 +96,14 @@ and it was turned down. The owner heard the old sentence instead of the
 desktop's, and reading on from it wrote the old place over the desktop's newer
 one, on both devices, so the place reached at the desktop had to be found again
 by hand. A few seconds of waiting for the page is the price.
+
+Forgetting a place that arrived during the first sentence, once the book was
+playing, was turned down in September 2026 for the same reason. Before that
+change, the owner could press play, wait out a slow server, and pause at once.
+Pressing play again read the phone's old sentence while the phone's own list
+of books already held the desktop's place, and reading on wrote over the
+desktop's progress. The price of the fix is that the highlight can jump to the
+other device's sentence at the moment the owner pauses.
 
 **The phone speaks up more often than the desktop.** It tells the folder when it
 opens, when it comes to the front, when a book is opened or added, the moment a

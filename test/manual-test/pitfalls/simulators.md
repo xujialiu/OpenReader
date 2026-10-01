@@ -179,6 +179,52 @@
   OpenReader). Everything the container path is used for (harness.json,
   catalog.sqlite, Inbox) works from that path.
 
+- **`sim_volume` resets to 60 while other sessions' simulators are booted,
+  minutes after every set.** 2026-09-30 (#105, three simulators booted, three
+  sessions): `silence.sh set` read back 0, and 40-90 s later the volume was 60
+  again — four times in an hour, each coinciding with
+  `data/var/run/com.apple.coresimulator.audio.plist` and the device's
+  `var/run/simulatoraudio/` being rewritten (once with the whole `var/run`
+  recreated at 21:13 while the app stayed up). The app sets no volume (no
+  `outputVolume` writer in the repo), so the writer is CoreSimulator's audio
+  layer churning for the other sessions' boots. Consequence: a `set` at setup
+  time proves nothing by play time. Fix: `set && check && play` in one shell,
+  and `check` again inside any tool that plays (the kit's scripts already do).
+  Never trust a silence check older than the minute.
+
+## The #106 run's additions (2026-09-30, freshly created iPhone 17, iOS 27.0)
+
+- **A first Debug build from a fresh `expo prebuild` crashed at dyld, before
+  any JavaScript.** `Library not loaded: @rpath/React.framework/React`,
+  referenced by the app's `ExpoModulesWorklets.framework` — the precompiled
+  Expo modules were built against a different React configuration.
+  `docs/install-on-simulator.md` names this fix for the JS-time crash variant;
+  the dyld variant is the same fix: `cd ios && EXPO_USE_PRECOMPILED_MODULES=0
+  pod install`, then rebuild. The rebuilt app launched and connected normally.
+- **The first `simctl launch` of a freshly installed app can fail with
+  NSPOSIXErrorDomain code=3 ("No such process").** A plain retry launched.
+- **Synthetic input silently stopped reaching the app, repeatedly.** axe taps
+  (`--tap-style physical`, standalone and in one `batch` session), XCUITest
+  element taps and raw `XCUICoordinate` taps all answered "completed" while
+  the app registered nothing — no navigation, no sync request in the helper
+  server's log, no Debug Log line. It worked for minutes, died mid-run, came
+  back after a reboot, and died again; on the retry after the next reboot it
+  was fast and reliable (a 1.6 s Play→Back gap), on the run after that the
+  same two taps landed 5.7 s apart. Never reason from the tool's success
+  line: verify every tap by an app-side fact (a sync request in the delaying
+  server's log is the fastest one for a Play press), and re-run the whole
+  timed step when a gap comes out too wide instead of trusting the run.
+- **An XCUITest tap aimed at the reader's Play landed ~54 pt high, on
+  "Choose a Voice"** — the Voice sheet opened mid-run while the log showed
+  `Tap "Play" Button` succeeding. `app.buttons["Play"]` resolved a ghost (the
+  parked reader's reparented controls; a count query showed 1). Raw
+  `XCUICoordinate` taps at the frames `axe describe-ui` reports for the live
+  screen are the dependable form; print the matched counts so a ghost shows.
+- **The volume reset to 60 every few minutes for an hour**, not only in the
+  known first-boot window (`sim_output_device_uid` BuiltInSpeakerDevice, no
+  AirPods event). Only `set` immediately before each `check`/play held; two
+  runs were refused by the check and simply rescheduled after a `set`.
+
 ## A fresh prebuild, and volume resets through an evening (#108–#110, 2026-09-30)
 
 - **A Debug app built from a fresh `expo prebuild` + `pod install` starts, and is gone before it reaches Metro; the fix is two steps, in this order, before the first build.**

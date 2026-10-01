@@ -259,13 +259,17 @@ export interface Reading {
    *
    * Paused or not yet started, the newest place wins — the highlight and the
    * page go to that sentence through the same seek a tapped word takes, and
-   * pressing Play reads from it. Playing, nothing moves: the reading here is
-   * newer than anything that could arrive, and being dragged somewhere else
-   * mid-sentence is the failure design 0020 keeps out of the player. Returns
-   * whether the place was taken; a place whose section has not rendered yet
-   * is held and tried on every report, like the one the book opened with, and a
-   * Play pressed meanwhile waits for it (#54). The place already held is taken
-   * once, however many times it is passed.
+   * pressing Play reads from it. Playing, nothing moves: being dragged
+   * somewhere else mid-sentence is the failure design 0020 keeps out of the
+   * player. The place is kept instead and settled when the reading stops
+   * (#105): taken then if the reading still has no place of its own (speech
+   * still on the sentence it resumed at, nothing tapped, skipped or chosen),
+   * and let go otherwise, because the place the phone writes as it reads is
+   * the newer one. Returns whether the place was taken; a place whose section
+   * has not rendered yet is held and tried on every report, like the one the
+   * book opened with, and a Play pressed meanwhile waits for it (#54). The
+   * place already held, or already being read, is taken once, however many
+   * times it is passed.
    */
   resumeAt(place: ReadingPlace): boolean;
 }
@@ -326,6 +330,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   const pendingChoice = useRef<{ provider: ProviderId; voice: string } | null>(null);
   const retainedIdentity = useRef<string | null>(null);
   const bridgeRef = useRef<ReaderBridge | null>(null);
+  /** The Reading has ended: the view unmounted, and a late `play` or `resumeAt` does nothing (#106, the unmount effect). */
+  const endedRef = useRef(false);
   /** Being built: a second press of play must not build a second engine and a second audio session. */
   const buildingRef = useRef<Promise<PlaybackEngine | null> | null>(null);
   /** The Utterances the engine holds. Its indices are what every cue and every correction is about. */
@@ -459,6 +465,24 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * engine saying it is paused is not the owner taking the press back.
    */
   const awaitingPlaceRef = useRef(false);
+  /**
+   * A place from another device that arrived while the reading played, kept
+   * for the moment it stops (#105).
+   *
+   * Declining it and keeping nothing assumed the phone would outrank it by
+   * writing its own place as it read on (ADR 0031). It does not when the owner
+   * pauses before speech reaches another sentence: the sentence a resume landed
+   * on is never written (`resumedAtRef`). So the Library held the newer place
+   * while the reading stayed on the older one. The next Play's sync had nothing
+   * new to adopt, and reading on wrote the older sentence's continuation over
+   * the newer place, on every device. Measured on 2026-09-30 with Play's sync
+   * held past its two seconds (notes/NOTES_2026-09-30.md, 19:13).
+   *
+   * Settled by the effect after `readingPosition`, whichever way the reading
+   * stops. Let go at once when the owner points the reading somewhere
+   * (`seekTo`, `followRow`).
+   */
+  const lateRef = useRef<ReadingPlace | null>(null);
   /**
    * The sentence to show if the resume is given up on, from the last attempt
    * that failed.
@@ -750,6 +774,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // the bookmark is done asking. The resume's own call clears the ref first, so
     // this is a no-op on that path.
     abandonResume();
+    // So is a place from another device kept while the reading plays (#105).
+    lateRef.current = null;
     const at = Math.min(list.length - 1, Math.max(0, Math.trunc(utterance)));
     atRef.current = at;
     // Pointed somewhere, so wherever the cursor is next is a place to write —
@@ -827,6 +853,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    * moved it, and says why.
    */
   const followRow = useCallback((section: number, onward: boolean) => {
+    // The owner has pointed the reading, perhaps before the cursor can move: a
+    // place kept from another device while it plays is let go now (#105).
+    lateRef.current = null;
     const target = readingFromRow(
       loadedRef.current,
       blocksRef.current,
@@ -1003,9 +1032,44 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     abandonResume();
   }, [abandonResume]);
 
+  /**
+   * The sentence at an Utterance, written as a place (ADR 0008): the Block's
+   * CFI and the Utterance's own characters quoted out of the Block's text.
+   * `readingPosition` is this at the cursor, when the cursor is a place to
+   * write, and says why each half is what it is.
+   */
+  const placeAt = useCallback((at: number): ReadingPlace | null => {
+    const utterance = loadedRef.current[at];
+    const span = utterance?.spans[0];
+    if (!span) return null;
+    const block = blocksRef.current[span.block];
+    if (!block) return null;
+    // Assertion-stripped: the one spelling the Positions File allows, and the
+    // one the renderer compares by (`canonicalCfi`). The Block keeps epub.js's
+    // own spelling for its own `display`.
+    return readingPlaceAt(createLocator('epub', canonicalCfi(block.cfi)), block.text, span.start, span.end);
+  }, []);
+
   const resumeAt = useCallback(
     (place: ReadingPlace): boolean => {
-      if (playIntent.current) return false;
+      // An ended Reading has no page to take a place on, and keeps none (#106,
+      // `endedRef`).
+      if (endedRef.current) return false;
+      // Already being read: Play took the place from its own sync and started,
+      // and the arrival effect passes the same adoption on the render after
+      // (#105). Taken, and nothing moves. Landing it again would seek the
+      // sentence back to its start, and keeping it would do that at the pause.
+      const at = atRef.current;
+      const here = resumeRef.current === null && at !== null ? placeAt(at) : null;
+      if (here && samePlace(here, place, 'epub')) {
+        lateRef.current = null;
+        return true;
+      }
+      if (playIntent.current) {
+        lateRef.current = place;
+        return false;
+      }
+      lateRef.current = null;
       // Already held: one arrival is passed twice — Play passes on what its own
       // sync adopted, and the adopted-place effect passes the same arrival on the
       // next render (#54). Its section has been asked for already, or is being
@@ -1027,7 +1091,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       stopWaitingIfArrived();
       return true;
     },
-    [tryResume, revealPendingPlace, stopWaitingIfArrived],
+    [tryResume, revealPendingPlace, stopWaitingIfArrived, placeAt],
   );
 
   /** The Blocks of every section rendered so far, as Utterances — for the renderer, which draws them, and for the engine, which speaks them. */
@@ -1286,6 +1350,10 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [settings, hasKey, clock, report, ranOutOfText, document, sectionOf]);
 
   const play = useCallback(() => {
+    if (endedRef.current) {
+      debugLog('reading', 'play after the reading ended: ignored');
+      return;
+    }
     debugLog('reading', `play at utterance ${atRef.current ?? 'none'}, ${settings.provider} ${settings.voice}`);
     // A press of Play is the owner asking again: a Provider refused earlier is
     // asked about again rather than refused in silence (#109).
@@ -1619,7 +1687,25 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     retainedIdentity.current = null;
     disposeEngine();
   }, [identity, settings, disposeEngine]);
-  useEffect(() => disposeEngine, [disposeEngine]);
+  /**
+   * The Reading ends here, when the view unmounts (ADR 0049), and nothing
+   * starts it again (#106). A callback can outlive the view: `reading-view.tsx`'s
+   * `play` waits for its sync before it calls `play`, and the owner can leave
+   * while it is still paused, open another Document or delete this one
+   * meanwhile. The generation above cannot stop that call, because it takes the
+   * generation the disposal has already moved on to, and it built a new engine,
+   * loaded and played it, with nothing left to pause or dispose it (measured
+   * 2026-09-30). So `play`, the one path that builds an engine, and `resumeAt`
+   * do nothing once this is set. Not `disposeEngine` itself: that also runs for
+   * a Voice, a Provider or a credential changed while the Reading lasts.
+   */
+  useEffect(() => {
+    endedRef.current = false;
+    return () => {
+      endedRef.current = true;
+      disposeEngine();
+    };
+  }, [disposeEngine]);
 
   /**
    * The Utterance being spoken, written down as a place in the document.
@@ -1654,16 +1740,29 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     // A Contents row's choice in a book with no place yet is where the first Play
     // starts, not a place to keep (#52).
     if (unreadRef.current) return null;
-    const utterance = loadedRef.current[at];
-    const span = utterance?.spans[0];
-    if (!span) return null;
-    const block = blocksRef.current[span.block];
-    if (!block) return null;
-    // Assertion-stripped: the one spelling the Positions File allows, and the
-    // one the renderer compares by (`canonicalCfi`). The Block keeps epub.js's
-    // own spelling for its own `display`.
-    return readingPlaceAt(createLocator('epub', canonicalCfi(block.cfi)), block.text, span.start, span.end);
-  }, []);
+    return placeAt(at);
+  }, [placeAt]);
+
+  /**
+   * The reading has stopped, with a place from another device kept while it
+   * played (#105). It stops by a pause, from the player or the lock screen, by
+   * the headphones coming out, or at the end of the book.
+   *
+   * Taken when the reading has no place of its own to write: the Library
+   * already holds the kept place, and while paused the newest place wins
+   * (ADR 0031). Let go when it has one. Speech reached another sentence after
+   * the place arrived, or the owner moved the reading, and the pause writes
+   * that place above the kept one (`reading-view.tsx`). From an effect, after
+   * the render that shows the stop, so nothing is sought from inside the
+   * engine's own state callback.
+   */
+  const stopped = !status.playing;
+  useEffect(() => {
+    if (!stopped) return;
+    const late = lateRef.current;
+    lateRef.current = null;
+    if (late && readingPosition() === null) resumeAt(late);
+  }, [stopped, readingPosition, resumeAt]);
 
   return { bridge, status, opened, play, pause, chooseVoice, seekTo: pointAt, skip, returnToReading, goToSection, readingPosition, resumeAt };
 }

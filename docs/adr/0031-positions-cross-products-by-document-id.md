@@ -203,11 +203,34 @@ now: **while paused, the newest place wins.** A newer adopted position moves
 the cursor and the page to that sentence through the resume machinery, with no
 sentence of explanation (design 0026 removed successful-resume messages; the
 moved highlight is the signal); pressing Play while paused first syncs for at
-most two seconds and resumes from the newest place, and a sync slower than that
-plays from the local place and is not applied later, because ten seconds into
-the reading the phone's own stamp is the newest anyway. While playing nothing
-moves. Before the owner has acted, an arriving place still takes over the
-resume, as ADR 0019 allows.
+most two seconds and resumes from the newest place. A sync slower than that
+plays from the local place and moves nothing while the reading plays. While
+playing nothing moves. What that run adopts is kept by the Reading and
+settled when the reading stops (#105, below). Before the owner has acted, an
+arriving place still takes over the resume, as ADR 0019 allows.
+
+The rule used to be that a late adoption is not applied at all, "because ten
+seconds into the reading the phone's own stamp is the newest anyway". That
+holds only once the phone has written a place. It had not written one when the
+owner paused before speech left the sentence the reading resumed at, because
+`readingPosition()` answers null there (`resumedAtRef`) and nothing is
+stamped. The Library then held the other device's place while the Reading
+stayed on the older sentence. The next Play's sync found the Library equal to
+the file and adopted nothing, and Play offers only what its own run adopted.
+So the older sentence was read again, and its continuation was stamped above
+the newer place and uploaded (`notes/NOTES_2026-09-30.md`, 19:13: cursor 0
+instead of 2, `Phone old continuation.` on the server). Now `resumeAt` keeps a
+place it declines while playing. The effect that sees the reading stop, by a
+pause, the lock screen, the headphones or the end of the book, takes that place
+if `readingPosition()` is still null. Otherwise it lets the place go: speech
+reached another sentence, or the owner tapped or skipped, and the pause writes
+that sentence above the kept place. A Contents row that only browses while
+the reading plays (#107) moves neither the reading nor the kept place. One that
+chooses where a reading with no sentence yet starts (#86) lets it go at once,
+before its chapter reports and moves the cursor. And a place
+the cursor is already on is taken without a seek. Otherwise Play taking an
+adoption, followed by the arrival effect passing the same place on after
+playback starts, would re-seek the sentence at the next pause.
 
 Pressing Play did not do that until #54 (2026-09-24), for two reasons measured
 at the unit seams (`notes/NOTES_2026-09-24.md`, 01:43), either enough alone.

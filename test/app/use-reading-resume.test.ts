@@ -64,6 +64,7 @@ const engines = vi.hoisted(() => {
       extend() { engine.calls.push('extend'); },
       play() { engine.calls.push('play'); },
       pause() { engine.pauses++; engine.calls.push('pause'); },
+      silence() { engine.calls.push('silence'); },
       seek(utterance: number) { engine.seeks.push(utterance); engine.calls.push(`seek:${utterance}`); },
       setRate() {},
       switchVoice() {},
@@ -1126,6 +1127,164 @@ describe('Play with a newer place still on its way (#54)', () => {
 });
 
 /**
+ * A place taken from another device while the reading plays (#105): Play's sync
+ * ran past its two seconds, the reading started from the phone's own sentence,
+ * and the download finished while that sentence was being spoken. Nothing moves
+ * a playing reading, so the arrival is declined — and was lost: paused before
+ * speech reached another sentence, the phone had written nothing to outrank it,
+ * the Library held the newer place, and the next Play read the old sentence
+ * again and wrote its continuation over the newer place. Measured on 2026-09-30
+ * with the real `useSync`, `useLibrary` and ReadingView's callbacks: cursor 0
+ * instead of 2, and `Phone old continuation.` uploaded.
+ *
+ * The Reading keeps the place and settles it when it stops: taken, when the
+ * phone still has no place of its own, and let go once speech or the owner has
+ * moved the reading, which then writes the newer place itself.
+ */
+describe('a place that arrives while the reading plays (#105)', () => {
+  const READY: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
+  /** One rendered section holding both places, so nothing has to be waited for. */
+  const PAGE = blocks(0, ['Phone old sentence.', 'Phone old continuation.', 'Desktop new sentence.', 'Desktop new continuation.']);
+  const phonePlace = readingPlaceAt(createLocator('epub', 'epubcfi(/6/2!/4/2)'), PAGE[0].text, 0, PAGE[0].text.length);
+  const newerPlace = readingPlaceAt(createLocator('epub', 'epubcfi(/6/2!/4/6)'), PAGE[2].text, 0, PAGE[2].text.length);
+  const cue = (utterance: number) => ({ utterance, words: null, duration: 1, rate: 1 });
+
+  /** Resumed at the phone's own sentence and reading it, when the newer place arrives and is declined. */
+  async function arrivingWhilePlaying() {
+    const m = mount({ settings: READY, resume: phonePlace });
+    await m.up();
+    await m.report(PAGE, 0);
+    expect(m.reading.status.utterance).toBe(0);
+    await m.press((reading) => reading.play());
+    const engine = engines.built[0];
+    await m.press(() => engine.deps.clock.onClip(cue(0)));
+    // The arrival effect passing on what the late sync adopted: playing, nothing moves.
+    let taken = true;
+    await act(async () => { taken = m.reading.resumeAt(newerPlace); });
+    expect(taken).toBe(false);
+    expect(m.reading.status.utterance).toBe(0);
+    engine.calls.length = 0;
+    return { m, engine };
+  }
+
+  it('takes it when the reading pauses on the sentence it resumed at, and the next Play reads from it', async () => {
+    const { m, engine } = await arrivingWhilePlaying();
+    await m.press((reading) => reading.pause());
+    expect(m.reading.status.playing).toBe(false);
+    expect(m.reading.status.utterance).toBe(2);
+    // Landed: the stored position already is that sentence, with the other device's Stamp.
+    expect(m.reading.readingPosition()).toBeNull();
+
+    await m.press((reading) => reading.play());
+    expect(engine.calls).toEqual(['pause', 'seek:2', 'play']);
+    // Reading on writes the newer place's continuation, not the phone's.
+    await m.press(() => engine.deps.clock.onClip(cue(3)));
+    expect(m.reading.readingPosition()?.anchor.exact).toBe('Desktop new continuation.');
+    await m.down();
+  });
+
+  it('takes it when the engine stops by itself, as it does when the headphones come out', async () => {
+    const { m, engine } = await arrivingWhilePlaying();
+    await m.press(() => engine.deps.onState!({ playing: false, buffering: false }));
+    expect(m.reading.status.playing).toBe(false);
+    expect(m.reading.status.utterance).toBe(2);
+    expect(engine.calls).toEqual(['seek:2']);
+    await m.down();
+  });
+
+  it('asks for the section of a kept place that has not rendered, when the reading stops', async () => {
+    const phoneOne = readingPlaceAt(createLocator('epub', 'epubcfi(/6/2!/4/4)'), CHAPTER_ONE[1].text, 0, CHAPTER_ONE[1].text.length);
+    const m = mount({ settings: READY, resume: phoneOne });
+    await m.up();
+    await m.report(CHAPTER_ONE, 0);
+    await m.press((reading) => reading.play());
+    await m.press(() => engines.built[0].deps.clock.onClip(cue(1)));
+    await act(async () => { m.reading.resumeAt(desktopPlace); });
+    expect(bridge.goTo).not.toHaveBeenCalled();
+
+    await m.press((reading) => reading.pause());
+    expect(bridge.goTo).toHaveBeenCalledWith('epubcfi(/6/6!/4/4)');
+    // Pending: the stored position already is that place, so nothing is written over it.
+    expect(m.reading.readingPosition()).toBeNull();
+    const BOTH = [...CHAPTER_ONE, ...CHAPTER_THREE];
+    await m.report(BOTH, 2);
+    expect(m.reading.status.utterance).toBe(segmentDocument(BOTH, 'en').findIndex((one) => one.text === 'The sentence the desktop stopped on.'));
+    await m.down();
+  });
+
+  it('lets it go once speech has reached another sentence: the place the phone writes is the newer one', async () => {
+    const { m, engine } = await arrivingWhilePlaying();
+    await m.press(() => engine.deps.clock.onClip(cue(1)));
+    await m.press((reading) => reading.pause());
+    expect(m.reading.status.utterance).toBe(1);
+    expect(engine.calls).toEqual(['pause']);
+    expect(m.reading.readingPosition()?.anchor.exact).toBe('Phone old continuation.');
+    await m.down();
+  });
+
+  it('lets it go when the owner skipped while it played', async () => {
+    const { m, engine } = await arrivingWhilePlaying();
+    await m.press((reading) => reading.skip('next-sentence'));
+    await m.press((reading) => reading.pause());
+    expect(m.reading.status.utterance).toBe(1);
+    expect(engine.calls).toEqual(['seek:1', 'pause']);
+    await m.down();
+  });
+
+  it('keeps it through a Contents row that only browses while it plays (#107), and takes it at the pause', async () => {
+    const { m, engine } = await arrivingWhilePlaying();
+    await m.press((reading) => reading.goToSection(1));
+    // Browsing: the page moves and the voice goes on with its sentence, so the
+    // reading still has no place of its own.
+    expect(bridge.browse).toHaveBeenCalledWith(1);
+    expect(engine.calls).toEqual([]);
+    await m.press((reading) => reading.pause());
+    expect(m.reading.status.utterance).toBe(2);
+    await m.down();
+  });
+
+  it('lets it go when a Contents row chooses where a reading with no sentence yet starts (#86)', async () => {
+    const m = mount({ settings: READY });
+    await m.up();
+    // Play before anything has reported: the reading plays, looking for text, with no sentence.
+    await m.press((reading) => reading.play());
+    expect(m.reading.status.playing).toBe(true);
+    let taken = true;
+    await act(async () => { taken = m.reading.resumeAt(newerPlace); });
+    expect(taken).toBe(false);
+    await m.press((reading) => reading.goToSection(1));
+    await m.press((reading) => reading.pause());
+    // Taken, the place would have asked the renderer for its section.
+    expect(bridge.goTo).not.toHaveBeenCalled();
+    await m.down();
+  });
+
+  it('takes a place the reading is already on without moving it, so a pause after Play took it re-seeks nothing', async () => {
+    const m = mount({ settings: READY, resume: phonePlace });
+    await m.up();
+    await m.report(PAGE, 0);
+    // What `reading-view.tsx`'s `play` does once its sync has adopted the place in time.
+    await m.press((reading) => {
+      reading.resumeAt(newerPlace);
+      reading.play();
+    });
+    const engine = engines.built[0];
+    expect(engine.loads).toEqual([{ length: 4, from: 2, quiet: false }]);
+    await m.press(() => engine.deps.clock.onClip(cue(2)));
+    // The arrival effect passes the same adoption on, the render after the reading started.
+    let taken = false;
+    await act(async () => { taken = m.reading.resumeAt(newerPlace); });
+    expect(taken).toBe(true);
+    engine.calls.length = 0;
+    // Paused mid-sentence, the next Play goes on from there rather than from its start.
+    await m.press((reading) => reading.pause());
+    await m.press((reading) => reading.play());
+    expect(engine.calls).toEqual(['pause', 'play']);
+    await m.down();
+  });
+});
+
+/**
  * Reopening a book whose place was taken from another device earlier in the
  * session (#55). `reader-screen.tsx` used to hand that adoption over again at
  * mount, and `resumeAt` with the very place the book opens with asked the
@@ -1174,6 +1333,56 @@ describe('a Provider the owner did not allow (#109)', () => {
     // is that no clock runs while the owner is asked, not that the note is hidden.
     await act(async () => { engine.deps.onError(new SynthesisError('network', 'local: no audio within 60s')); });
     expect(m.reading.status.note).toBe('local: no audio within 60s');
+    await m.down();
+  });
+});
+
+/**
+ * A Play that arrives after the Reading has ended (#106). `reading-view.tsx`'s
+ * `play` waits for its sync before it calls `reading.play()`, and the Reading can
+ * end meanwhile: the owner goes back to the Library while it is still paused,
+ * opens another Document or deletes this one (#68), and the view unmounts.
+ * Measured on 2026-09-30: the late call built a new engine for the unmounted
+ * Reading and loaded and played it, where nothing could pause or dispose it.
+ * Here the callbacks are held from the last render, as that continuation holds them.
+ */
+describe('a Play held past the end of its Reading (#106)', () => {
+  const READY: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
+
+  /** Mounted with one sentence rendered and a ready Provider, no engine built yet: the callbacks of its last render, and the harness. */
+  async function heldThenEnded() {
+    const m = mount({ settings: READY });
+    await m.up();
+    await m.report(blocks(0, ['One sentence is enough.']), 0);
+    const held = m.reading;
+    await m.down();
+    return held;
+  }
+
+  it('builds no engine once the view has unmounted', async () => {
+    const { play } = await heldThenEnded();
+    await act(async () => {
+      play();
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+    expect(engines.built.map((engine) => engine.calls)).toEqual([]);
+  });
+
+  it('takes no place from its sync once the view has unmounted, and asks the renderer for nothing', async () => {
+    const { resumeAt } = await heldThenEnded();
+    let taken = true;
+    await act(async () => { taken = resumeAt(desktopPlace); });
+    expect(taken).toBe(false);
+    expect(bridge.goTo).not.toHaveBeenCalled();
+  });
+
+  it('still plays when it arrives while the Reading lasts (control)', async () => {
+    const m = mount({ settings: READY });
+    await m.up();
+    await m.report(blocks(0, ['One sentence is enough.']), 0);
+    const { play } = m.reading;
+    await m.press(() => play());
+    expect(engines.built.map((engine) => engine.calls)).toEqual([['load:0', 'play']]);
     await m.down();
   });
 });
