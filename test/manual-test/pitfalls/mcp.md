@@ -109,3 +109,16 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 - **A 1.2 s press on a `<Text selectable>` raised no callout; 2.0 s raised `Copy`, which the tree lists.** `axe touch -x 200 -y 520 --down --up --delay 1.2` on OpenSSL's licence left the pasteboard empty and showed nothing (one try); `--delay 2.0` showed a `Copy` callout 33 pt above the press, `ax.py find Copy` answered `204.0 483.0`, and a touch pair on it put the whole text on the pasteboard (10,140 characters, equal to the data; FFmpeg's 30,849 too). Seed the pasteboard before copying (`printf x | xcrun simctl pbcopy UDID`) so an earlier copy cannot pass for this one.
 - **A 450 pt `axe swipe --duration 0.8` moved a long page 1,873 pt.** The page keeps its momentum after the finger lifts. To bring a row of a 132-row list on screen, read its frame back after every swipe and touch only when two reads 0.7 s apart agree (`kit/ax.py scroll-touch LABEL`, `scroll-to LABEL`). For a licence page, `--duration 0.25` from y 780 to 120, repeated with `--post-delay 1.5`, reached the end of a 4,772 pt page in twelve flings after the first swipe and of a 15,941 pt one in eighteen (the text's `y` 132 → −15,264); read the text's frame to know when the end is on screen.
 - **The LogBox banner came back 4.75 minutes after a relaunch**, at 02:17:35 (`Cannot connect to Expo CLI … localhost:8101`), and sat over the bottom of a licence page and, had there been a Reading, over Play (see "A system alert and a masked field" above). Its × at (369, 812) dismissed it. `ax.py UDID tree | grep -i debugger` says whether one is up; `consent-hold.sh` refuses to start while one is.
+
+## A SwiftUI sheet and its ColorPicker (2026-10-01, `@expo/ui` BottomSheet probe, iOS 27.0)
+
+- **`axe swipe` did not move a SwiftUI sheet; `axe drag` did.**
+  - Symptom: `axe swipe --start-y 500 --end-y 860 --duration 0.4` on a `BottomSheet` at medium answered success, and the sheet stayed.
+  - Fix: `axe drag --start-x 201 --start-y 480 --end-x 201 --end-y 840 --duration 0.3` dismissed it at once. The same `drag` upward grows it to large.
+  - Verify by the app's own log (`onIsPresentedChange`, the detent's `onSelectionChange`), not by the tool's success line.
+- **No AXe or mobilebuildmcp tap opens a SwiftUI `ColorPicker`'s well; an XCTest tap does.**
+  - Symptom: `axe touch --down --up` on the well, `axe tap --tap-style physical`, and `mobilebuildmcp` `tap` on the row's element all opened nothing. This was on the page and inside a sheet alike, while a Stepper beside it answered `axe` touches.
+  - Fix: `XCUICoordinate.tap()` on the well, at about 0.96 of the row's width, opened the system picker every time. `press(forDuration:thenDragTo:)` from the opacity slider's thumb moved it, and `adjust(toNormalizedSliderPosition:)` set it.
+  - The picker is a remote view: `axe describe-ui` does not list it, but XCUITest's `app.debugDescription` does (`sliderAlpha`, label `Opacity`).
+  - `test/manual-test/settings/SheetColorProbe.swift` on the probe branch (`e09da7c`) shows it.
+- **A row of a sheet at medium can lie below the screen while the tree lists it.** The `Highlight` row's frame read y 868.6 on an 874-pt screen, and a tap there landed on nothing. Take the sheet to large first: a tap on `Sheet Grabber` toggles it.
