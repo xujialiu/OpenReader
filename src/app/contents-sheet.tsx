@@ -34,7 +34,7 @@ import { FlatList, Pressable, StyleSheet, Text } from 'react-native';
 import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
 
 import { INK } from './controls';
-import { Drawer, DRAWER, DrawerCard, DrawerFooter, DrawerSeparator } from './drawer';
+import { Drawer, DRAWER, DrawerCard, DrawerFooter, DrawerSeparator, useDrawerColours } from './drawer';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /** One line per row, and the same height for every one of them: what makes the list open where it should. The drawer's row (#117). */
@@ -150,13 +150,16 @@ function precisionLine(precision: 'shared' | 'before'): string {
 
 function Row({ row, current, separated, onPress }: { row: ContentsRow; current: boolean; separated: boolean; onPress(): void }) {
   const unreachable = row.target === null;
+  const colours = useDrawerColours();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected: current, disabled: unreachable }}
       onPress={onPress}
       disabled={unreachable}
-      style={({ pressed }) => [styles.row, current && styles.rowCurrent, pressed && styles.pressed]}
+      // The drawer's mark colour, where the old drawer took the page's: on a
+      // card, the drawer's own grey read as a hole in it.
+      style={({ pressed }) => [styles.row, current && { backgroundColor: colours.mark }, pressed && styles.pressed]}
     >
       <Text
         style={[
@@ -184,9 +187,6 @@ const styles = StyleSheet.create({
   list: { flexGrow: 0, flexShrink: 1 },
   pressed: { opacity: 0.65 },
   row: { height: ROW_HEIGHT, justifyContent: 'center' },
-  // The line colour, where the old drawer took the page's: on a card, the
-  // drawer's own grey read as a hole in it.
-  rowCurrent: { backgroundColor: INK.line },
   rowHeading: TEXT.headline,
   rowLabel: { ...TEXT.body, color: INK.text, paddingHorizontal: DRAWER.row.inset },
   rowLabelCurrent: { color: INK.reading, fontWeight: TEXT_EMPHASIZED.body.fontWeight },

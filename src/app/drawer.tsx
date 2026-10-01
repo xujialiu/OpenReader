@@ -38,10 +38,13 @@
  * ## Colours
  *
  * The app's own, opaque, for the theme the shell resolved (`SchemeContext`),
- * not the phone's: the sheet is the settings pages' grey and its cards are
- * their cards. Plain strings, because a SwiftUI modifier cannot take an
- * `INK` colour (a `DynamicColorIOS`), and borders take `useBorders()` for the
- * reason ADR 0046 gives.
+ * not the phone's. In the light the sheet is the settings pages' grey and its
+ * cards are their white cards. In the dark the settings page is the reader's
+ * own near-black, and a drawer that colour had no edge against the page it
+ * rises over, so the dark drawer is a step lighter, the settings card's grey,
+ * and its cards a step lighter again (the owner's Q44). Plain strings per
+ * theme, because a SwiftUI modifier cannot take an `INK` colour (a
+ * `DynamicColorIOS`) and a border must not (ADR 0046).
  *
  * ## One at a time
  *
@@ -59,7 +62,7 @@ import { useCallback, useContext, useEffect, useId, useRef, useSyncExternalStore
 import { Pressable, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, useBorders } from './controls';
+import { Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
 import { drawerDetentHeight } from './drawer-height';
 import { createDrawerTurns } from './drawer-turns';
 import { Icon, type IconName } from './icon';
@@ -109,17 +112,32 @@ export const DRAWER = {
   /** Below the last thing in a drawer, above the home indicator's safe area. */
   bottom: 16,
   /**
-   * The sheet and its cards, per theme: the settings pages' two surfaces
-   * (`SETTINGS_SURFACE`), and the reading amber the phone's own controls are
-   * tinted with where it would use its blue (design 0042).
+   * Per theme: the sheet (`page`), its cards, the line between two rows, the
+   * marked row (Contents' current one), the round buttons' rim, and the
+   * reading amber the phone's own controls are tinted with where it would use
+   * its blue (design 0042).
+   *
+   * The light column is the settings pages' (`SETTINGS_SURFACE`, the
+   * separator `INK.separator` draws there, `PALETTE.light.line`). The dark one
+   * is the drawer's own (Q44): the sheet is the settings card's #1c1c21, one
+   * step above the reader's #111114, and the cards #2c2c32, one step above
+   * that. The settings pages' dark separator (#38383b) and line (#33333c)
+   * all but vanish on #2c2c32, so the separator and the mark are lifted with
+   * the card (notes, 2026-10-01 13:53).
    */
   colours: {
-    light: { page: SETTINGS_SURFACE.light.page, card: SETTINGS_SURFACE.light.card, accent: PALETTE.light.reading },
-    dark: { page: SETTINGS_SURFACE.dark.page, card: SETTINGS_SURFACE.dark.card, accent: PALETTE.dark.reading },
+    light: {
+      page: SETTINGS_SURFACE.light.page, card: SETTINGS_SURFACE.light.card, separator: '#e8e8e8',
+      mark: PALETTE.light.line, rim: PALETTE.light.line, accent: PALETTE.light.reading,
+    },
+    dark: {
+      page: SETTINGS_SURFACE.dark.card, card: '#2c2c32', separator: '#44444b',
+      mark: '#3e3e47', rim: '#3e3e47', accent: PALETTE.dark.reading,
+    },
   },
 } as const;
 
-/** The theme on screen, as `useBorders()` reads it, for the colours a SwiftUI modifier and a card take. */
+/** `DRAWER.colours` for the theme on screen, as `useBorders()` reads it: plain strings, for a SwiftUI modifier, a card and a border alike. */
 export function useDrawerColours(): (typeof DRAWER.colours)[keyof typeof DRAWER.colours] & { scheme: keyof typeof DRAWER.colours } {
   const scheme = useContext(SchemeContext);
   if (!scheme) throw new Error('A drawer was drawn outside the shell, which is what says whether the theme on screen is light or dark.');
@@ -248,11 +266,10 @@ function RoundButton({ icon, label, onPress, disabled, drawn }: {
   drawn: { glyph: number; stroke: number; nudge: number };
 }) {
   const colours = useDrawerColours();
-  const borders = useBorders();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled }}
       disabled={disabled} onPress={onPress}
-      style={({ pressed }) => [styles.button, { backgroundColor: colours.card, borderColor: borders.line },
+      style={({ pressed }) => [styles.button, { backgroundColor: colours.card, borderColor: colours.rim },
         (pressed || disabled) && styles.dimmed]}>
       <View style={{ transform: [{ translateX: drawn.nudge }] }}>
         <Icon name={icon} color={INK.text} size={drawn.glyph} strokeWidth={drawn.stroke} />
@@ -272,7 +289,8 @@ export function DrawerCard({ children, style }: { children: ReactNode; style?: S
 
 /** The line under a card's row, inset as the phone's are. Drawn as a filled view, not a border (ADR 0046). */
 export function DrawerSeparator() {
-  return <View style={styles.separator} />;
+  const colours = useDrawerColours();
+  return <View style={[styles.separator, { backgroundColor: colours.separator }]} />;
 }
 
 /** The words under a card: the phone's footer text, set in from the card as far as its rows' words are. */
@@ -303,7 +321,7 @@ const styles = StyleSheet.create({
   dimmed: { opacity: 0.5 },
   card: { borderCurve: 'continuous', borderRadius: DRAWER.card.radius, marginHorizontal: DRAWER.card.margin, overflow: 'hidden' },
   separator: {
-    backgroundColor: INK.separator, bottom: 0, height: DRAWER.separator.thickness, left: DRAWER.separator.inset,
+    bottom: 0, height: DRAWER.separator.thickness, left: DRAWER.separator.inset,
     position: 'absolute', right: DRAWER.separator.inset,
   },
   footer: { marginTop: DRAWER.footerGap, paddingHorizontal: DRAWER.card.margin + DRAWER.row.inset },
