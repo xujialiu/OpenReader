@@ -287,6 +287,15 @@ export interface AppSettings {
    */
   following: FollowingSettings;
   /**
+   * The **Drawer Height** (CONTEXT.md, #117, ADR 0066): how much of the
+   * screen a drawer covers when it opens, in percent of the whole screen's
+   * height measured from its bottom edge, one of `DRAWER_HEIGHTS`. The same
+   * for every drawer, and per device like every setting here, because a phone
+   * and a tablet leave different amounts of page above it. Not in
+   * `engineIdentity`: no Clip depends on it.
+   */
+  drawerHeight: number;
+  /**
    * How many of a chapter's sentences a download asks each Provider for at
    * once (#64): the provider's own page, **Sentences at once**. Per Provider
    * because the limit is the service's — Fish Audio states five for an account
@@ -357,6 +366,14 @@ export const SCROLLING_LABELS: Readonly<Record<Scrolling, string>> = {
  * 23:00). Nothing above 80 %: the line would sit on the player's edge.
  */
 export const LINE_POSITIONS: readonly number[] = [20, 30, 40, 50, 60, 70, 80];
+
+/**
+ * The Drawer Heights General offers (#117), in percent of the screen's
+ * height: two fifths to nine tenths, a tenth at a time. Half is the default,
+ * as the owner chose. Swiping a drawer up still takes it to the phone's own
+ * full height, so 90 % is a drawer that opens nearly there.
+ */
+export const DRAWER_HEIGHTS: readonly number[] = [40, 50, 60, 70, 80, 90];
 
 /**
  * What the owner chose in General, which is one more thing than the app can
@@ -475,6 +492,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // what can be seen, which is where the page held the sentence being spoken
   // before either was a setting (#71).
   following: { scrolling: 'line', linePosition: 50 },
+  // Half the screen, which the owner chose (#117).
+  drawerHeight: 50,
   sentencesAtOnce: DEFAULT_SENTENCES_AT_ONCE,
   // Off, with nothing filled in: sync starts the moment the owner names a
   // folder and turns it on, and not before (issue #20).

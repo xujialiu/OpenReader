@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, LINE_POSITIONS, SCROLLING_LABELS, SCROLLINGS, SENTENCES_AT_ONCE, selectVoice } from '../../src/app/settings';
+import { DEFAULT_SETTINGS, DRAWER_HEIGHTS, engineIdentity, LINE_POSITIONS, SCROLLING_LABELS, SCROLLINGS, SENTENCES_AT_ONCE, selectVoice } from '../../src/app/settings';
 import { parseSettings, readSettings, writeSettings } from '../../src/app/settings-storage';
 import { saveProviderEdit, flushProviderEdits } from '../../src/app/provider-edits';
 const disk = vi.hoisted(() => new Map<string, string>());
@@ -49,6 +49,25 @@ describe('local settings persistence', () => {
     for (const linePosition of [0.3, '30', 10, 90, 55, null]) {
       expect(parseSettings({ version: 1, settings: { following: { linePosition } } }).following.linePosition).toBe(50);
     }
+  });
+  it('offers the Drawer Height from 40 to 90 % a tenth at a time, and starts at half (#117)', () => {
+    expect(DRAWER_HEIGHTS).toEqual([40, 50, 60, 70, 80, 90]);
+    expect(DEFAULT_SETTINGS.drawerHeight).toBe(50);
+  });
+  it('keeps the Drawer Height across a reload, and reads a file without one as half (#117)', () => {
+    writeSettings({ ...DEFAULT_SETTINGS, drawerHeight: 70 });
+    expect(readSettings().drawerHeight).toBe(70);
+    expect(parseSettings({ version: 1, settings: {} }).drawerHeight).toBe(50);
+  });
+  it('reads a Drawer Height General does not offer as half rather than keeping it (#117)', () => {
+    // A value the menu cannot show as chosen would leave the row saying nothing:
+    // a share written as 0.4, a string, one past either end and one between steps.
+    for (const drawerHeight of [0.4, '40', 30, 100, 55, null]) {
+      expect(parseSettings({ version: 1, settings: { drawerHeight } }).drawerHeight).toBe(50);
+    }
+  });
+  it('does not rebuild the engine for a Drawer Height (#117)', () => {
+    expect(engineIdentity({ ...DEFAULT_SETTINGS, drawerHeight: 90 })).toBe(engineIdentity(DEFAULT_SETTINGS));
   });
   it('offers By line and Continuous, in that order, and starts By line (#71)', () => {
     expect(SCROLLINGS).toEqual(['line', 'continuous']);
