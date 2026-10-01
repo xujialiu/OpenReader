@@ -21,6 +21,8 @@ import type { TextStyle } from 'react-native';
  * 13-point footer on a 16-point line (notes, 2026-09-23 17:18), about the
  * font's own line height of 15.5. Text left without a line height gets the
  * font's own, as the phone's does (design 0042: measured, not written down).
+ * The one exception is a drawer's list row, on Apple Books' measured pitch
+ * (`onLinePitch`, #117).
  */
 const HIG = {
   title2: { size: 22, weight: '400', emphasized: '700' },
@@ -76,4 +78,19 @@ const BAR_TITLE_SCALE = { min: 1, max: 1.235 } as const;
 export function barTitle(fontScale: number): Readonly<Pick<TextStyle, 'fontSize' | 'fontWeight'>> {
   const scale = Math.min(BAR_TITLE_SCALE.max, Math.max(BAR_TITLE_SCALE.min, fontScale));
   return { fontSize: Math.round(HIG.headline.size * scale), fontWeight: HIG.headline.weight };
+}
+
+/**
+ * A style on a line pitch of its own, `share` of its size: a drawer's list
+ * rows, on Apple Books' 16.67 pt for 15 (#117, `drawer-list.ts`), the one
+ * place the app's words are not left on the font's own line.
+ *
+ * A hundredth under the exact pitch. At 50/3 a title that wraps once was
+ * given its two lines' height and drew only the first, cut off at the right:
+ * twice the pitch came out a hair over the height the layout gave it, and the
+ * phone dropped the line that did not fit (Reverend Insanity's Chapter 198,
+ * notes 2026-10-01).
+ */
+export function onLinePitch(style: Readonly<Pick<TextStyle, 'fontSize' | 'fontWeight'>>, share: number): Readonly<Pick<TextStyle, 'fontSize' | 'fontWeight' | 'lineHeight'>> {
+  return { ...style, lineHeight: Math.floor((style.fontSize ?? 0) * share * 100) / 100 };
 }

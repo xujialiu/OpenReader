@@ -8,7 +8,7 @@ import { DRAWER_LIST, drawerRowText } from '../../src/app/drawer-list';
  * `padding` above and below, and never less than 52 pt, separator included.
  */
 function rowHeight(lines: number): number {
-  return Math.max(DRAWER_LIST.rowHeight, lines * drawerRowText(false).lineHeight + 2 * DRAWER_LIST.padding);
+  return Math.max(DRAWER_LIST.rowHeight, lines * (drawerRowText(false).lineHeight ?? 0) + 2 * DRAWER_LIST.padding);
 }
 
 describe("a drawer's list row, as Books draws its contents (#117)", () => {

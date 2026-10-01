@@ -22,7 +22,7 @@
  *   amber.
  */
 
-import { TEXT, TEXT_EMPHASIZED, type TextStyleName } from './text-styles';
+import { onLinePitch, TEXT, TEXT_EMPHASIZED, type TextStyleName } from './text-styles';
 
 export const DRAWER_LIST = {
   /** From the screen's edges to both ends of a row's separator, and to the right end of its words. */
@@ -48,13 +48,6 @@ export const DRAWER_LIST = {
 } as const;
 
 /** The words of a drawer's row: its size, its weight, and its line pitch. Emphasized is the chapter being read, and a heading. */
-export function drawerRowText(emphasized: boolean): { fontSize: number; fontWeight: (typeof TEXT)[TextStyleName]['fontWeight']; lineHeight: number } {
-  const style = (emphasized ? TEXT_EMPHASIZED : TEXT)[DRAWER_LIST.text];
-  const fontSize = style.fontSize ?? 0;
-  // A hundredth under the exact pitch. At 50/3 a title that wraps once was
-  // given its two lines' height and drew only the first, cut off at the
-  // right: twice the pitch came out a hair over the height the layout gave
-  // it, and the phone dropped the line that did not fit (Reverend Insanity's
-  // Chapter 198, notes 2026-10-01).
-  return { fontSize, fontWeight: style.fontWeight, lineHeight: Math.floor(fontSize * DRAWER_LIST.leading * 100) / 100 };
+export function drawerRowText(emphasized: boolean): ReturnType<typeof onLinePitch> {
+  return onLinePitch((emphasized ? TEXT_EMPHASIZED : TEXT)[DRAWER_LIST.text], DRAWER_LIST.leading);
 }
