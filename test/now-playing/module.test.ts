@@ -182,8 +182,13 @@ describe('the picture in Now Playing\'s square (#119)', () => {
     expect(picture).toContain('coverImage(cover).flatMap(squared) ?? appIcon().flatMap(squared)');
   });
 
-  it('keeps the whole Cover, on a square whose sides are transparent', () => {
-    expect(picture).toContain('format.opaque = false');
+  it('keeps the whole Cover, on a square whose sides are black', () => {
+    // Transparent sides are filled by iOS with a backdrop of its own: white in
+    // the Dynamic Island, light grey on the Lock Screen. The owner chose black,
+    // the Island's own colour, for every place the one picture is shown.
+    expect(picture).toContain('format.opaque = true');
+    expect(picture).toContain('UIColor.black.setFill()');
+    expect(picture.indexOf('context.fill(')).toBeLessThan(picture.indexOf('cover.draw('));
     expect(picture).toContain('let square = min(longest, side)');
     expect(picture).toContain('(square - drawn.width) / 2, y: (square - drawn.height) / 2');
   });

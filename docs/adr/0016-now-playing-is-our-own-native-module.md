@@ -114,8 +114,19 @@ with a Cover never shows the icon first.
 JavaScript thread, and the main queue only swaps it in. `publish` never builds
 one: `setPosition` publishes once a second, and a new `MPMediaItemArtwork` each
 time would have iOS ask for the picture each time. A Cover is drawn whole and
-centred on a square at most 1024 px a side, with `opaque = false` so that the
-sides are transparent; the owner chose the whole Cover over a square cut from it.
+centred on a black square at most 1024 px a side; the owner chose the whole
+Cover over a square cut from it.
+
+The sides were transparent at first (`opaque = false`), and iOS does not show
+what is behind a transparent artwork: it fills it with a backdrop of its own.
+The Dynamic Island's compact view on the owner's iPhone 16 Pro drew both side
+bands pure white, (255, 255, 255), against the Island's black; the simulator's
+Lock Screen card drew them (238, 238, 238) in light and dark mode alike, not the
+wallpaper. The one artwork serves every place, and whether iOS asks a
+`requestHandler` for a different size per place was not measured, so a
+size-dependent picture was not attempted. The owner chose black everywhere,
+the Island's own colour: the square is drawn `opaque = true` and filled black
+before the Cover is drawn on it.
 A Cover UIKit cannot decode falls back to the icon, as an unreadable Cover is no
 Cover in the Library.
 

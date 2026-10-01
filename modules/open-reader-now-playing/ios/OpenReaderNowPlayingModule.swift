@@ -302,8 +302,15 @@ enum NowPlayingPicture {
     return UIImage(contentsOfFile: url.path)
   }
 
-  /// The picture whole, centred on a square whose sides are left transparent,
-  /// at one scale and at most `side` pixels whichever picture it is.
+  /// The picture whole, centred on a black square, at one scale and at most
+  /// `side` pixels whichever picture it is.
+  ///
+  /// Black because the Dynamic Island is black, and one picture serves the
+  /// Island, the Lock Screen and Control Centre alike, so the owner chose black
+  /// for all of them. The sides were transparent first, and iOS does not show
+  /// what is behind a transparent picture: it fills it with a backdrop of its
+  /// own, white (255) in the Dynamic Island on the owner's iPhone and light grey
+  /// (238) on the simulator's Lock Screen card, light and dark mode alike (#119).
   ///
   /// A Cover is tall and the square is not, and the owner chose the whole Cover
   /// over a square cut out of it: a Cover is recognised by all of it, and its
@@ -319,8 +326,10 @@ enum NowPlayingPicture {
     let drawn = CGSize(width: width * fit, height: height * fit)
     let format = UIGraphicsImageRendererFormat()
     format.scale = 1
-    format.opaque = false
-    return UIGraphicsImageRenderer(size: CGSize(width: square, height: square), format: format).image { _ in
+    format.opaque = true
+    return UIGraphicsImageRenderer(size: CGSize(width: square, height: square), format: format).image { context in
+      UIColor.black.setFill()
+      context.fill(CGRect(x: 0, y: 0, width: square, height: square))
       cover.draw(in: CGRect(origin: CGPoint(x: (square - drawn.width) / 2, y: (square - drawn.height) / 2), size: drawn))
     }
   }

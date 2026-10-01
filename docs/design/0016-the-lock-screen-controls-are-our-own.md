@@ -81,12 +81,21 @@ picture that failed to load.
 
 Now a book that has a cover shows its cover there: the same cover the Library
 shows beside the book's name. A cover is tall and the square is not, so the whole
-cover stands in the middle of the square with the space either side left clear.
-Cutting a square out of the cover would have filled the space, but it takes the
-top and the bottom, which is usually where the title is, and a cover is
-recognised by all of it. Leaving the shape to the phone was the third choice; no
-one had seen what it does with a tall picture, and what it does could change from
-one version of the phone to the next.
+cover stands in the middle of the square with black either side. Cutting a
+square out of the cover would have filled the space, but it takes the top and
+the bottom, which is usually where the title is, and a cover is recognised by
+all of it. Leaving the shape to the phone was the third choice; no one had seen
+what it does with a tall picture, and what it does could change from one version
+of the phone to the next.
+
+The sides were left empty at first, in the hope that whatever was behind the
+picture would show through. It does not: the phone fills them itself, white in
+the pill at the top of the screen, which is black, and light grey on the lock
+screen. The same picture goes to every place the phone shows the reading, so
+the sides cannot be one colour in the pill and another on the lock screen. Black
+was chosen for all of them, because the pill is black. The cost is on the lock
+screen, where the cover now has two black bands beside it instead of light grey
+ones.
 
 A book without a cover shows the app's icon instead. Outside the app, the icon at
 least says whose reading this is. It is the icon in its usual colours, even when
