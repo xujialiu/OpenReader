@@ -205,3 +205,49 @@ on iOS 27.0, the Expo boundary turns it into
 the document closes, and the lock screen is left with no card. Reproduced from
 a fresh launch, and again in dark mode; the native frames and the assertion are
 in the #119 report.
+
+### The icon after the fix, dark mode, switching, and pausing (#119b, 2026-10-01)
+
+Re-verified on `7ec9f52`: the Swift no longer reads the app icon set; the
+config plugin copies `assets/icon/icon.png` into the catalog as the image set
+`NowPlayingIcon` (check the delivered app with `xcrun assetutil --info
+APP/Assets.car | grep -A8 NowPlayingIcon` — one 1024×1024 rendition, scale 1).
+The same invocation as above, with the cover-less book playing:
+
+```sh
+bash test/manual-test/kit/run-probe.sh LockScreenProbe UDID /tmp/openreader-artwork-02 --expect-player
+python3 artwork-sides.py /tmp/openreader-artwork-02/attachments-*/lock-screen_0_*.png
+```
+
+For a square artwork the script no longer stops at the missing strip: it
+checks the square's edge columns (one corner radius in — inside the rounded
+corners they read the wallpaper) and, when they are light on every row, reports
+`square artwork fills the square …: no side bands` with the four corners'
+colours, and exits 0. A row that keeps a dark edge column still fails honestly.
+
+Measured (iPhone 17 Pro player_top-119, iOS 27.0, 1.0.0-beta7, Debug over
+Metro 8119, the fake Kokoro on 8811): the cover-less book's card draws the
+icon — white background, blue headphones, orange wave — **sharp, filling the
+1120 px (373 pt) square edge to edge, no side bands** (edge columns light on
+504/504 rows); corners (235, 235, 235) at the top and (209, 209, 209) at the
+bottom — the icon's white over the card material's own vertical gradient, R=G=B
+throughout; ~23 % of the square's samples are the headphones' blue, ~5 % the
+wave's orange. **In dark appearance the card still shows the white default
+icon** — same square, same corners, 22.8 %/5.1 % — `UIImage(named:)` without a
+collection loads the Any/light rendition, as the issue chose. The Cover book in
+dark mode reads side bands of **(238, 238, 238) — the same light artwork
+material as light mode** — over a dark wallpaper beside the card (56, 59, 71):
+iOS does not darken the artwork's transparent sides; the card surface below
+darkens, the artwork material does not. Switching books in one app session (no
+relaunch), Reverend Insanity → My Vampire System → back, each Document's first
+`play` moves the card to its picture (icon ↔ Cover, strip aspect 0.7518 both
+times the Cover shows), and after a pause the card keeps the Cover with the
+centre button's label `Play` — pausing does not blank or swap the picture.
+
+Take each run's attachments from **its own** `attachments-STAMP` directory —
+`ls -td OUTPUT/attachments-* | head -1` after confirming the run's stamp in the
+probe output — not `ls -t` across the whole output directory: a run the runner
+refused (sim volume, below) leaves the previous run's files the newest, and an
+unexamined `ls -t` copy then documents the wrong capture (caught here because
+the refused run's `Executed` line was missing from a grep-filtered output; see
+`../pitfalls/shell.md`).
