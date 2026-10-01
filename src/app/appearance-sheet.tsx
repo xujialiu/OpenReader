@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { READING_FONTS, stepFontSize, stepMargins, TEXT_ALIGNMENTS, type Appearance, type TextAlignment } from '../renderer/highlighter';
 import { ChoiceMenu, INK, type Choice } from './controls';
-import { DRAWER, Drawer, DrawerChevron, DrawerRow, DrawerRowText, DrawerRowValue, DrawerScroll, useDrawerColours } from './drawer';
+import { DRAWER, Drawer, DrawerChevron, DrawerRow, DrawerRowText, DrawerRowValue, DrawerScroll, DrawerSeparator, useDrawerColours } from './drawer';
 import { drawerRowText } from './drawer-list';
 import { Icon } from './icon';
 
@@ -79,13 +79,22 @@ export function AppearanceControls({ appearance, onChange, onFonts }: {
     {/* Above Alignment, where the owner put it (#84). */}
     <StepperRow label="Margins" name="margins" value={appearance.margins} step={stepMargins}
       onStep={(margins) => onChange({ ...appearance, margins })} />
-    {/* The system's own menu over a row it only draws (ADR 0035). */}
-    <ChoiceMenu label="Alignment" choices={ALIGNMENT_CHOICES} chosen={appearance.textAlignment} height={DRAWER.row.rowHeight}
-      onChoose={(textAlignment) => onChange({ ...appearance, textAlignment })}>
-      <DrawerRow accessory={<><DrawerRowValue>{alignment}</DrawerRowValue><Icon name="menu" color={INK.secondary} size={18} /></>}>
-        <DrawerRowText>Alignment</DrawerRowText>
-      </DrawerRow>
-    </ChoiceMenu>
+    {/*
+      * The system's own menu over a row it only draws (ADR 0035), set in to the
+      * row's words. A menu whose label is as wide as the drawer took the whole
+      * drawer off the screen while it was open, at either height: a 392-pt label
+      * did and a 380-pt one did not (#117, batch 3). Set in, it is 353.
+      */}
+    <View style={styles.menuRow}>
+      <ChoiceMenu label="Alignment" choices={ALIGNMENT_CHOICES} chosen={appearance.textAlignment} height={DRAWER.row.rowHeight}
+        onChoose={(textAlignment) => onChange({ ...appearance, textAlignment })}>
+        <View style={styles.menuLine}>
+          <View style={styles.menuWords}><DrawerRowText>Alignment</DrawerRowText></View>
+          <DrawerRowValue>{alignment}</DrawerRowValue><Icon name="menu" color={INK.secondary} size={18} />
+        </View>
+      </ChoiceMenu>
+      <DrawerSeparator />
+    </View>
   </DrawerScroll>;
 }
 
@@ -128,5 +137,9 @@ const styles = StyleSheet.create({
   stepper: { alignItems: 'center', borderRadius: STEPPER.height / 2, flexDirection: 'row', height: STEPPER.height },
   step: { alignItems: 'center', height: STEPPER.height, justifyContent: 'center', width: STEPPER.half },
   ended: { opacity: 0.3 },
+  // The drawer's row, with the menu's host between its insets rather than across them.
+  menuRow: { paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
+  menuLine: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: DRAWER.row.gap / 2 },
+  menuWords: { flex: 1 },
   number: { ...drawerRowText(false), color: INK.text, fontVariant: ['tabular-nums'], minWidth: 24, textAlign: 'center' },
 });
