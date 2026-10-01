@@ -18,9 +18,12 @@ import { SchemeContext } from './controls';
  *
  * Mounted only while it is up, inside the drawer, so the phone presents it
  * from the drawer's sheet, over it, and the drawer stays where it was. The
- * field starts with the current name and the caret after it: SwiftUI's alert
- * makes its own field from the `TextField` and does not take its selection
- * (measured on iOS 27.0, notes 2026-10-01).
+ * field starts with the current name and the caret after it, not with the
+ * name selected: SwiftUI's alert makes a field of its own from the
+ * `TextField` and does not take a `selection`, and `@expo/ui` offers no other
+ * way to reach it (measured on iOS 27.0, notes 2026-10-01 22:20). The owner
+ * accepted that rather than leave the phone's alert for one drawn by the app
+ * (#117, Q53).
  */
 export function RenameAlert({ name, onCancel, onSave }: { name: string; onCancel(): void; onSave(name: string): void }) {
   const scheme = useContext(SchemeContext) ?? undefined;

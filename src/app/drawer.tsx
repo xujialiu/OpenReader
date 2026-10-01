@@ -45,6 +45,12 @@
  * theme, because a SwiftUI modifier cannot take an `INK` colour (a
  * `DynamicColorIOS`) and a border must not (ADR 0046).
  *
+ * The sheet is not tinted. A tint on it reaches, through UIKit, the phone's
+ * alerts raised over the drawer (Rename, Download's confirmations), and a
+ * tinted alert draws a disabled button in the tint, so a blank Rename's Save
+ * looked as ready as Cancel (notes, 2026-10-01 22:20; the owner's Q52). The
+ * alerts keep the phone's own colours; what the app draws keeps its amber.
+ *
  * ## A plain list, not cards
  *
  * Every drawer's rows sit straight on the drawer, inset as Apple Books inset
@@ -66,7 +72,7 @@
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import {
   environment, ignoreSafeArea, presentationBackground, presentationBackgroundInteraction, presentationDetents,
-  presentationDragIndicator, tint,
+  presentationDragIndicator,
 } from '@expo/ui/swift-ui/modifiers';
 import {
   createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
@@ -129,9 +135,7 @@ export const DRAWER = {
   bottom: 16,
   /**
    * Per theme: the sheet (`page`), the line under a row, the marked row
-   * (Contents' current one), the round buttons' fill and rim, and the reading
-   * amber the phone's own controls are tinted with where it would use its
-   * blue (design 0042).
+   * (Contents' current one), and the round buttons' fill and rim.
    *
    * The light column is the settings pages' (`SETTINGS_SURFACE`, the
    * separator `INK.separator` draws there, `PALETTE.light.line`). The dark one
@@ -144,11 +148,11 @@ export const DRAWER = {
   colours: {
     light: {
       page: SETTINGS_SURFACE.light.page, separator: '#e8e8e8', mark: PALETTE.light.line,
-      button: SETTINGS_SURFACE.light.card, rim: PALETTE.light.line, accent: PALETTE.light.reading,
+      button: SETTINGS_SURFACE.light.card, rim: PALETTE.light.line,
     },
     dark: {
       page: SETTINGS_SURFACE.dark.card, separator: '#44444b', mark: '#3e3e47',
-      button: '#2c2c32', rim: '#3e3e47', accent: PALETTE.dark.reading,
+      button: '#2c2c32', rim: '#3e3e47',
     },
   },
 } as const;
@@ -264,7 +268,6 @@ export function Drawer({ visible, title, onClose, onBack, action, titleLeft, chi
           presentationBackgroundInteraction({ type: 'enabledUpThrough', detent: opening }),
           presentationBackground(colours.page),
           environment('colorScheme', colours.scheme),
-          tint(colours.accent),
           // Down to the sheet's bottom edge, under the home indicator, so a list can run on to it (`DrawerBottom`).
           ignoreSafeArea({ regions: 'container', edges: 'bottom' }),
         ]}>
