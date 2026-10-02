@@ -4,7 +4,7 @@ import { Host, Picker, Text as SwiftText } from '@expo/ui/swift-ui';
 import { pickerStyle, tag } from '@expo/ui/swift-ui/modifiers';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { LookupMode, TranslationService } from '../translation/settings';
-import { INK } from './controls';
+import { INK, useAccent } from './controls';
 import { DRAWER, Drawer, DrawerMenuRow } from './drawer';
 import { Icon } from './icon';
 import { TRANSLATION_SERVICES } from './translation-screen';
@@ -60,6 +60,8 @@ function LookupModes({ mode, onMode }: { mode: LookupMode; onMode(mode: LookupMo
 function LookupResult({ lookup, service, onService }: {
   lookup: LookupHandle; service: TranslationService; onService(service: TranslationService): void;
 }) {
+  const accent = useAccent();
+  const action = [styles.action, { color: accent.reading }];
   const [copyError, setCopyError] = useState(false);
   const [copied, setCopied] = useState(false);
   // A new network result has not been copied, even if the preceding result was.
@@ -81,17 +83,17 @@ function LookupResult({ lookup, service, onService }: {
       {lookup.result?.pronunciations.length ? <View style={styles.audioRow}>
         {lookup.result.pronunciations.map((audio) => <Pressable key={audio.url} accessibilityRole="button" accessibilityLabel={`Play ${audio.label} pronunciation`}
           onPress={() => lookup.pronounce(audio.url)} style={styles.audio}>
-          <Icon name="play" color={INK.reading} size={18} /><Text style={styles.action}>{audio.label}</Text>
+          <Icon name="play" color={accent.reading} size={18} /><Text style={action}>{audio.label}</Text>
         </Pressable>)}
-        {lookup.pronouncing ? <ActivityIndicator color={INK.reading} size="small" accessibilityLabel="Playing pronunciation" /> : null}
+        {lookup.pronouncing ? <ActivityIndicator color={accent.reading} size="small" accessibilityLabel="Playing pronunciation" /> : null}
       </View> : null}
-      {lookup.loading || selection.selecting ? <ActivityIndicator style={styles.loading} color={INK.reading} accessibilityLabel="Looking up selection" /> : null}
-      {lookup.error ? <View><Text style={styles.error}>{lookup.error}</Text><Pressable accessibilityRole="button" onPress={lookup.retry} style={styles.retry}><Text style={styles.action}>Retry</Text></Pressable></View> : null}
+      {lookup.loading || selection.selecting ? <ActivityIndicator style={styles.loading} color={accent.reading} accessibilityLabel="Looking up selection" /> : null}
+      {lookup.error ? <View><Text style={styles.error}>{lookup.error}</Text><Pressable accessibilityRole="button" onPress={lookup.retry} style={styles.retry}><Text style={action}>Retry</Text></Pressable></View> : null}
       {lookup.result ? <>
         <Text selectable style={styles.definition}>{lookup.result.text}</Text>
         <View style={styles.footer}><Text style={styles.source}>{lookup.result.source}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Copy result" onPress={() => { void copy(); }} style={styles.copy}>
-            <Text style={styles.action}>{copied ? 'Copied' : 'Copy'}</Text>
+            <Text style={action}>{copied ? 'Copied' : 'Copy'}</Text>
           </Pressable>
         </View>
       </> : null}
@@ -110,7 +112,7 @@ const styles = StyleSheet.create({
   word: { ...TEXT_EMPHASIZED.title2, color: INK.text },
   definition: { ...TEXT.body, color: INK.text },
   phonetic: { ...TEXT.subhead, color: INK.quiet }, source: { ...TEXT.footnote, color: INK.quiet },
-  action: { ...TEXT.body, color: INK.reading },
+  action: { ...TEXT.body },
   error: { ...TEXT.subhead, color: INK.attention },
   audioRow: { flexDirection: 'row', alignItems: 'center', gap: 20 }, audio: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

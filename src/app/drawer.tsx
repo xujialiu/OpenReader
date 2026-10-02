@@ -49,7 +49,10 @@
  * alerts raised over the drawer (Rename, Download's confirmations), and a
  * tinted alert draws a disabled button in the tint, so a blank Rename's Save
  * looked as ready as Cancel (notes, 2026-10-01 22:20; the owner's Q52). The
- * alerts keep the phone's own colours; what the app draws keeps its amber.
+ * alerts keep the phone's own colours; what the app draws keeps its accent,
+ * the word's Highlight Colour (`useAccent()`, #118): a step further from it
+ * on the marked row and the header's capsule (`onMark`), which stand a step
+ * off the sheet.
  *
  * ## A plain list, not cards
  *
@@ -84,7 +87,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChoiceMenu, Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, type Choice } from './controls';
+import { ChoiceMenu, Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, useAccent, type Choice } from './controls';
 import { drawerDetentHeight } from './drawer-height';
 import { DRAWER_LIST, drawerRowText } from './drawer-list';
 import { createDrawerTurns } from './drawer-turns';
@@ -144,6 +147,10 @@ export const DRAWER = {
    * (#3e3e47) were lifted for the #2c2c32 cards batch 1 had (notes,
    * 2026-10-01 13:53); straight on #1c1c21 they stand further out, about as
    * far as Books' separators do on its own dark grey.
+   *
+   * The accent is not here: it is the owner's (`useAccent()`, #118).
+   * `accent.ts` repeats `page`, `mark` and `button` as the surfaces it is held
+   * to 4.5:1 on (`ACCENT_SURFACES`, `MARK_SURFACES`, checked by its test).
    */
   colours: {
     light: {
@@ -321,11 +328,12 @@ function HeaderAction({ action }: { action: DrawerAction }) {
 /** A word in the header's right end, in the round button's capsule: the phone's toolbar draws a word as it draws an icon. */
 function CapsuleButton({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) {
   const colours = useDrawerColours();
+  const accent = useAccent();
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
       style={({ pressed }) => [styles.button, styles.capsule, { backgroundColor: colours.button, borderColor: colours.rim },
         (pressed || disabled) && styles.dimmed]}>
-      <Text style={styles.capsuleText} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.capsuleText, { color: accent.onMark }]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }
@@ -588,7 +596,7 @@ const styles = StyleSheet.create({
   // As tall as its rows, and no taller than the drawer leaves it, so what is under a short list sits under its last row.
   list: { flexGrow: 0, flexShrink: 1 },
   capsule: { paddingHorizontal: 16, width: undefined },
-  capsuleText: { ...TEXT.body, color: INK.reading },
+  capsuleText: { ...TEXT.body },
   pressed: { opacity: 0.65 },
   rowText: { ...drawerRowText(false), color: INK.text },
   rowTextEmphasized: { ...drawerRowText(true), color: INK.text },

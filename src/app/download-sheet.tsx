@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 import { GestureDetector } from 'react-native-gesture-handler';
 import { chapterTextCount, descendants, fullyPrepared, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
-import { INK, useBorders } from './controls';
+import { INK, useAccent, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
 import { listedInManage, marker, readingChapter, type Marker } from './download-rows';
 import { DRAWER, DrawerList, DrawerRow, DrawerRowText, type DrawerAction } from './drawer';
@@ -58,6 +58,8 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
 }) {
   downloads.useDownloads();
   const borders = useBorders();
+  const accent = useAccent();
+  const link = [styles.link, { color: accent.reading }];
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [managedVoice, setManagedVoice] = useState<OfflineVoice | null>(null);
@@ -175,6 +177,8 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
     const mark = children ? null : markers.get(item.id);
     // Marked as Contents marks the row being read (#88), on both pages.
     const current = item.id === here;
+    // The accent a step further on the marked row, which is a step off the drawer (`accent.ts`).
+    const ink = current ? accent.onMark : accent.reading;
     const name = item.title || 'Untitled chapter';
     const label = `${name}${current ? ', being read' : ''}`;
     const folded = collapsed.has(item.id);
@@ -184,17 +188,17 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
       <Icon name={folded ? 'next' : 'down'} color={INK.quiet} size={20} strokeWidth={2} />
     </Pressable> : null;
     const words = <>
-      <DrawerRowText emphasized={current || children} style={current && styles.current}>{name}</DrawerRowText>
+      <DrawerRowText emphasized={current || children} style={current && { color: ink }}>{name}</DrawerRowText>
       {!done && (count || failed) ? <Text style={styles.count}>{failed ? 'Failed · ' : ''}{count} / {chapterTextCount(item)}</Text> : null}
     </>;
     if (mark?.kind === 'ring' && task) {
       return <DrawerRow level={item.depth} marked={current} accessibilityLabel={label}
-        accessory={<>{arrow}<DownloadRing fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={() => downloads.toggleChapter(task, item.id)} /></>}>
+        accessory={<>{arrow}<DownloadRing colour={ink} fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={() => downloads.toggleChapter(task, item.id)} /></>}>
         {words}
       </DrawerRow>;
     }
-    const box = done && !manage ? <Icon name="check" color={INK.reading} size={22} />
-      : ids.length || !children ? <View style={[styles.circle, { borderColor: picked ? borders.reading : borders.quiet }, picked && styles.checked]}>
+    const box = done && !manage ? <Icon name="check" color={ink} size={22} />
+      : ids.length || !children ? <View style={[styles.circle, { borderColor: picked ? ink : borders.quiet }, picked && { backgroundColor: ink }]}>
         {picked ? <Icon name="check" color={INK.page} size={17} /> : null}
       </View> : <View style={styles.column} />;
     return <DrawerRow level={item.depth} marked={current} onPress={() => toggle(ids)} disabled={!ids.length}
@@ -213,22 +217,22 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
       {plan ? <View style={styles.line}>
         <Text style={[styles.secondary, styles.grow]}>{manage ? `${downloads.formatBytes(downloads.occupied(document, choice))} saved` : `${completed} chapters downloaded`}</Text>
         {!manage && manageable ? <Pressable accessibilityRole="button" onPress={() => onManage(true)} hitSlop={8} style={styles.manage}>
-          <Text style={styles.link}>Manage downloads</Text><Icon name="next" color={INK.reading} size={16} strokeWidth={2} />
+          <Text style={link}>Manage downloads</Text><Icon name="next" color={accent.reading} size={16} strokeWidth={2} />
         </Pressable> : null}
       </View> : null}
       {status ? <View style={styles.line}>
         <Text style={[styles.secondary, styles.grow]}>{stateLine(status)}{status.error ? `\n${status.error}` : ''}</Text>
         {status.state === 'done' ? status.failed.length ? <Pressable accessibilityRole="button" hitSlop={8} onPress={() => downloads.toggleTask(status)}>
-          <Text style={styles.link}>Retry failed</Text>
+          <Text style={link}>Retry failed</Text>
         </Pressable> : null : <Pressable accessibilityRole="button" hitSlop={8} onPress={() => downloads.toggleTask(status)}>
-          <Text style={styles.link}>{downloads.goesOn(status) ? 'Pause all' : 'Resume all'}</Text>
+          <Text style={link}>{downloads.goesOn(status) ? 'Pause all' : 'Resume all'}</Text>
         </Pressable>}
       </View> : null}
     </View>
     {!plan ? <View style={styles.preparing}>
       {state?.state !== 'failed' ? <ActivityIndicator /> : null}
       <Text style={styles.secondary}>{state?.error ?? 'Loading contents…'}</Text>
-      {state?.state === 'failed' ? <Pressable onPress={() => downloads.requestPlan(document, title)}><Text style={styles.link}>Try again</Text></Pressable> : null}
+      {state?.state === 'failed' ? <Pressable onPress={() => downloads.requestPlan(document, title)}><Text style={link}>Try again</Text></Pressable> : null}
     </View> : <GestureDetector gesture={sweep.gesture}>
       <DrawerList {...sweepList} listRef={sweepRef} data={visible} openAt={hereIndex > 0 ? hereIndex : null} style={styles.list}
         keyExtractor={(c) => c.id} renderItem={({ item }) => chapterRow(item)}
@@ -236,7 +240,7 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
     </GestureDetector>}
     {otherVoices.map((v) => <DrawerRow key={`${v.provider}/${v.voice}`}
       onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.(v); }}>
-      <DrawerRowText style={styles.action}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</DrawerRowText>
+      <DrawerRowText style={{ color: accent.reading }}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</DrawerRowText>
     </DrawerRow>)}
     {manage && downloads.occupied(document) > 0 ? <DrawerRow onPress={deleteEverything}>
       <DrawerRowText style={styles.destructive}>Delete all saved audio</DrawerRowText>
@@ -258,19 +262,16 @@ const styles = StyleSheet.create({
   voice: { ...TEXT.subhead, color: INK.text },
   secondary: { ...TEXT.footnote, color: INK.quiet },
   error: { ...TEXT.footnote, color: INK.text },
-  link: { ...TEXT.subhead, color: INK.reading },
+  link: { ...TEXT.subhead },
   manage: { alignItems: 'center', flexDirection: 'row', gap: 2 },
   preparing: { alignItems: 'center', flex: 1, gap: 14, padding: 20 },
   // Fills what the lines and the button leave it, so the button is at the drawer's bottom.
   list: { flexGrow: 1 },
   empty: { paddingLeft: DRAWER.row.textInset, paddingTop: 12 },
-  current: { color: INK.reading },
   count: { ...TEXT.footnote, color: INK.quiet },
   arrow: { alignItems: 'center', height: 44, justifyContent: 'center', width: 24 },
   circle: { alignItems: 'center', borderRadius: 12, borderWidth: 1.5, height: 24, justifyContent: 'center', width: 24 },
-  checked: { backgroundColor: INK.reading },
   column: { width: 24 },
-  action: { color: INK.reading },
   destructive: { color: INK.attention },
   button: {
     alignItems: 'center', backgroundColor: INK.text, borderRadius: 24, marginHorizontal: DRAWER.row.inset, marginTop: 12,

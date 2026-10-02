@@ -50,7 +50,7 @@ import { StyleSheet } from 'react-native';
 
 import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
 
-import { INK } from './controls';
+import { INK, useAccent } from './controls';
 import { Drawer, DrawerFooter, DrawerList, DrawerRow, DrawerRowText } from './drawer';
 
 export interface ContentsSheetProps {
@@ -148,13 +148,14 @@ function precisionLine(precision: 'shared' | 'before'): string {
 
 function Row({ row, current, onPress }: { row: ContentsRow; current: boolean; onPress(): void }) {
   const unreachable = row.target === null;
+  const accent = useAccent();
   return (
     // One level in per level of nesting. A book with volumes inside volumes sets
     // the inner ones in further, which is why this is arithmetic and not two styles.
     <DrawerRow onPress={onPress} disabled={unreachable} marked={current} level={row.depth}
       accessibilityState={{ selected: current, disabled: unreachable }}>
       <DrawerRowText emphasized={current || row.heading}
-        style={[current && styles.current, unreachable && styles.unreachable]}>
+        style={[current && { color: accent.onMark }, unreachable && styles.unreachable]}>
         {row.label || '—'}
       </DrawerRowText>
     </DrawerRow>
@@ -162,6 +163,5 @@ function Row({ row, current, onPress }: { row: ContentsRow; current: boolean; on
 }
 
 const styles = StyleSheet.create({
-  current: { color: INK.reading },
   unreachable: { color: INK.quiet },
 });

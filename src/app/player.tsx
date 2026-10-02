@@ -36,7 +36,7 @@ import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react
 
 import { MAX_STEPPER_RATE, MIN_STEPPER_RATE, snapRate, stepRate } from '../playback';
 
-import { INK, useBorders } from './controls';
+import { INK, useAccent, useBorders } from './controls';
 import { Icon, type IconName } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { SkipTarget } from './use-reading';
@@ -288,8 +288,10 @@ export function Player({
 
 /**
  * A or M (#71, ADR 0050), drawn as Zotero-TTS's player draws it: one letter in a
- * small rounded block, A on a quarter-strength wash of the reading colour and M
- * on nothing, in the player's text colour, with no animation.
+ * small rounded block, A on the spoken word's own mark and M on nothing, in the
+ * player's text colour, with no animation. The mark is the word's Highlight
+ * Colour at the word's opacity (#118, owner's Q5 = A), as the page paints it;
+ * at an opacity of 0 the A stands on nothing, as the word does.
  *
  * **A is a mark, not a button.** It has no press at all, so a tap on it lands on
  * this plain box and does nothing, and a screen reader reads it as text: the
@@ -298,8 +300,9 @@ export function Player({
  * starting it (#53).
  */
 function FollowingMark({ following, onReturn }: { following: boolean; onReturn(): void }) {
+  const accent = useAccent();
   const mark = (
-    <View style={[styles.mark, following && styles.markFollowing]}>
+    <View style={[styles.mark, following && { backgroundColor: accent.following }]}>
       <Text style={styles.markLetter}>{following ? 'A' : 'M'}</Text>
     </View>
   );
@@ -519,7 +522,6 @@ const styles = StyleSheet.create({
   // Zotero-TTS's block, measured out of its player.css: 27 by 26, corners of 4,
   // the letter at 13 in the system font (#71).
   mark: { alignItems: 'center', borderRadius: 4, height: 26, justifyContent: 'center', width: 27 },
-  markFollowing: { backgroundColor: INK.readingWash },
   markLetter: { ...TEXT_EMPHASIZED.footnote, color: INK.text },
   note: { ...TEXT.caption1, color: INK.quiet },
   noteAttention: { color: INK.attention },

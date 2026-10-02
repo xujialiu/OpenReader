@@ -43,7 +43,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Appearance, AppState, useColorScheme, useWindowDimensions } from 'react-native';
 
 
-import { PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
+import { readingAccent } from './accent';
+import { AccentContext, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
 import { GeneralScreen } from './general-screen';
 import { LibraryScreen } from './library-screen';
 import { useHandedOverDocuments, type HandedOverFile } from './opened-document';
@@ -262,6 +263,9 @@ export function OpenReader() {
    * so an owner who chose Light keeps it whatever the phone does at sunset.
    */
   const scheme = resolveTheme(settings.theme, useColorScheme());
+  /** The reading accent for that theme, from the word's Highlight Colour (`useAccent()`, #118): a new colour reaches every screen with the change. */
+  const highlight = settings.appearance.highlight;
+  const accent = useMemo(() => readingAccent(highlight, scheme), [highlight, scheme]);
   /** The phone's text size, which the bars' titles follow as far as the phone's own do (#100). */
   const { fontScale } = useWindowDimensions();
   const navigationTheme = useMemo(() => {
@@ -303,6 +307,7 @@ export function OpenReader() {
     <ShellContext.Provider value={shell}>
       {/* The same answer the header and the status bar take, for the borders (`useBorders`, #29). */}
       <SchemeContext.Provider value={scheme}>
+      <AccentContext.Provider value={accent}>
         <DownloadIndexer />
         {/*
          * `ReaderProvider` is `@epubjs-react-native/core`'s own context and has to
@@ -367,6 +372,7 @@ export function OpenReader() {
           </PortalProvider>
           </SafeAreaProvider>
         </ReaderProvider>
+      </AccentContext.Provider>
       </SchemeContext.Provider>
     </ShellContext.Provider>
   );

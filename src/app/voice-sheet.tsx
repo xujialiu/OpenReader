@@ -39,7 +39,7 @@ import { FlatList, StyleSheet, View } from 'react-native';
 
 import type { ProviderId } from '../core/providers/types';
 
-import { INK } from './controls';
+import { INK, useAccent } from './controls';
 import { Drawer, DrawerFooter, DrawerMenuRow, DrawerRow, DrawerRowText } from './drawer';
 import { Icon } from './icon';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
@@ -80,6 +80,7 @@ export function VoiceSheet({ visible, onClose, ...props }: VoiceSheetProps) {
  * Providers that wrapped and a row of locales that scrolled sideways.
  */
 function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSheetProps, 'visible' | 'onClose'>) {
+  const accent = useAccent();
   /** Which Provider's Voices are being looked at. The one in use, until another is chosen. */
   const [looking, setLooking] = useState<ProviderId>(lists.enabled?.includes(settings.provider) ? settings.provider : lists.enabled?.[0] ?? settings.provider);
   /** Which locale is open. Null means none has been chosen yet, and the Voice in use decides. */
@@ -164,7 +165,7 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
               return (
                 <DrawerRow onPress={() => onChoose(looking, voice.id)} accessibilityState={{ selected: chosen, busy: loading }}>
                   <View style={styles.voice}>
-                    <DrawerRowText style={[styles.voiceLabel, chosen && styles.chosen]}>{voice.label}</DrawerRowText>
+                    <DrawerRowText style={[styles.voiceLabel, chosen && { color: accent.reading }]}>{voice.label}</DrawerRowText>
                     {loading ? <LoadingSpinner /> : chosen ? <Icon name="check" color={INK.text} size={20} /> : null}
                   </View>
                 </DrawerRow>
@@ -189,5 +190,4 @@ const styles = StyleSheet.create({
   voices: { flexGrow: 0, flexShrink: 1 },
   voice: { alignItems: 'center', flexDirection: 'row', gap: 12 },
   voiceLabel: { flex: 1 },
-  chosen: { color: INK.reading },
 });
