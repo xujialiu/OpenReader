@@ -1433,6 +1433,17 @@ ${constants}
     put(installed.word, []);
   }
 
+  /* The Blocks the sentence and the word cover now, repainted whole without
+     changing either: what a change of their colours needs, since a stylesheet
+     alone does not make WebKit repaint a custom highlight (#118). */
+  function repaintHighlighted() {
+    if (!installed) return;
+    var touched = [];
+    installed.utterance.forEach(function (range) { touched.push(owners.get(range)); });
+    installed.word.forEach(function (range) { touched.push(owners.get(range)); });
+    repaintBlocks(touched);
+  }
+
   function partAt(live, offset, atEnd) {
     var parts = live.parts;
     for (var i = 0; i < parts.length; i++) {
@@ -2855,6 +2866,11 @@ ${EPUB_GUARDS_SOURCE}
       if (typeof message.css !== 'string') return;
       CSS_TEXT = message.css;
       restyle();
+      /* A new ::highlight() rule restyles nothing WebKit repaints: the marks kept
+         the old colours on the iOS 27.0 simulator until something else repainted
+         them (#118, notes 2026-10-02). So the Blocks they cover are repainted
+         whole, as put() does for a mark that moves (ADR 0038). */
+      repaintHighlighted();
       return;
     }
     if (message.kind === 'clear') {

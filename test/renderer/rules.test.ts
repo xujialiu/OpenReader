@@ -1085,7 +1085,7 @@ describe('the Highlight Colours reach an open book, and the page stays where it 
     const branch = program.slice(from, to);
     const calls: string[] = [];
     const run = vm.runInNewContext(
-      `(function (message, calls) { var CSS_TEXT = 'before'; function restyle() { calls.push('restyle'); } function settle() { calls.push('settle'); } function place() { calls.push('place'); } function bring() { calls.push('bring'); } (function () { ${branch} })(); return CSS_TEXT; })`,
+      `(function (message, calls) { var CSS_TEXT = 'before'; function restyle() { calls.push('restyle'); } function settle() { calls.push('settle'); } function place() { calls.push('place'); } function bring() { calls.push('bring'); } function repaintHighlighted() { calls.push('repaintHighlighted'); } (function () { ${branch} })(); return CSS_TEXT; })`,
     );
     return { css: run(message, calls) as string, calls };
   }
@@ -1100,10 +1100,17 @@ describe('the Highlight Colours reach an open book, and the page stays where it 
     pin(fn(program, 'ensureStyle'), 'var wanted = CSS_TEXT + THEME + APPEARANCE;', 'highlighter.ts, function ensureStyle');
   });
 
-  it('restyles every section for a colour change, and does NOT re-centre', () => {
+  it('restyles every section for a colour change, repaints the marks it covers, and does NOT re-centre', () => {
+    // The stylesheet alone left the marks in their old colours on the iOS 27.0
+    // simulator until something else repainted them (#118 verification).
     const css = highlightCss(HIGHLIGHT_PRESETS.amber);
     const run = runHighlightBranch({ kind: 'highlight', css });
-    expect(run).toEqual({ css, calls: ['restyle'] });
+    expect(run).toEqual({ css, calls: ['restyle', 'repaintHighlighted'] });
+    // And the repaint is put()'s own (ADR 0038): the Blocks of the ranges now in
+    // the two highlights, through repaintBlocks, changing neither highlight.
+    const repaint = fn(program, 'repaintHighlighted');
+    pin(repaint, 'repaintBlocks(touched);', 'highlighter.ts, function repaintHighlighted');
+    expect(repaint).not.toMatch(/\.add\(|\.delete\(|\.clear\(/);
   });
 
   it('drops a message without CSS rather than installing an empty sheet without SELECTABLE', () => {
