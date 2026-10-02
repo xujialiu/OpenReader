@@ -8,15 +8,16 @@ import { DownloadContent } from './download-sheet';
 import { HighlightPage } from './highlight-section';
 import { useHeldReading } from './reading-host';
 import { RenameAlert } from './rename-alert';
+import { MoveContent } from './folder-actions';
 import { useShell } from './routes';
 import { PROVIDER_LABELS, selectVoice, settingsForDocument } from './settings';
 import { shareDocument } from './share-document';
 import { knownVoice } from './voice-catalog';
 
 /** The drawer's pages, and the page each goes back to. The menu is the first, and goes back to nothing. */
-const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', highlight: 'appearance', download: 'menu', manage: 'download' } as const;
+const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', highlight: 'appearance', download: 'menu', manage: 'download', move: 'menu' } as const;
 type Page = keyof typeof BACK;
-const TITLES: Record<Exclude<Page, 'menu'>, string> = { appearance: 'Appearance', fonts: 'Fonts', highlight: 'Highlight', download: 'Download', manage: 'Manage' };
+const TITLES: Record<Exclude<Page, 'menu'>, string> = { appearance: 'Appearance', fonts: 'Fonts', highlight: 'Highlight', download: 'Download', manage: 'Manage', move: 'Move to…' };
 
 /**
  * A Document's actions, as one drawer wherever it is asked for.
@@ -45,7 +46,7 @@ const TITLES: Record<Exclude<Page, 'menu'>, string> = { appearance: 'Appearance'
  * opened from (`BACK`), and a swipe down closes the drawer from any of them.
  * Rename is not a page but the phone's alert over the menu (`RenameAlert`).
  */
-export function ReaderActions({ document, onClose, onDelete, appearance = false }: { document: DocumentId; onClose(): void; onDelete?(): void; appearance?: boolean }) {
+export function ReaderActions({ document, onClose, onDelete, appearance = false, movable = false }: { document: DocumentId; onClose(): void; onDelete?(): void; appearance?: boolean; movable?: boolean }) {
   const { library, settings, setSettings } = useShell();
   const entry = library.entries.find((e) => e.id === document);
   const held = useHeldReading().current;
@@ -80,6 +81,9 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false 
         <DrawerRowText>Appearance</DrawerRowText>
       </DrawerRow> : null}
       <DrawerRow icon="rename" onPress={() => setRenaming(true)}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
+      {movable ? <DrawerRow icon="folder" onPress={() => setPage('move')} accessory={<DrawerChevron />}>
+        <DrawerRowText>Move to…</DrawerRowText>
+      </DrawerRow> : null}
       <DrawerRow icon="download" onPress={() => setPage('download')} accessory={<DrawerChevron />}>
         <DrawerRowText>Download</DrawerRowText>
       </DrawerRow>
@@ -88,6 +92,7 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false 
       </DrawerRow> : null}
       {unshared ? <DrawerFooter attention>{unshared}</DrawerFooter> : null}
     </DrawerScroll> : null}
+    {page === 'move' ? <MoveContent target={{ kind: 'document', id: document }} onMoved={onClose} /> : null}
     {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onFonts={() => setPage('fonts')}
       onHighlight={() => setPage('highlight')} onChange={onAppearance} /> : null}
     {page === 'fonts' ? <FontList appearance={settings.appearance} onChange={onAppearance} /> : null}

@@ -156,6 +156,11 @@ It holds what the owner put there and nothing else — it is not browsable for
 documents the owner does not have, and removing an entry leaves the file alone.
 _Avoid_: shelf, catalogue, collection, bookshelf, recents
 
+**Folder**:
+A named place within the Library containing Documents and other Folders. Each
+Document and Folder belongs to exactly one parent Folder or to the Library root.
+_Avoid_: collection, tag, category, directory
+
 **Share**:
 Handing a copy of one document's file, under the name the Library shows for
 it, to another app or person through the phone's own share sheet. Only the file

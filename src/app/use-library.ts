@@ -23,7 +23,9 @@
  */
 
 import type { File } from 'expo-file-system';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { FolderId, FolderSnapshot, FolderStore } from '../core/folders';
+import { openFolderStore } from './folder-storage';
 
 import { APP_NAME } from '../../app-name';
 import { nextStamp, stampPlace, type DocumentId, type LibraryEntry, type ReadingPlace, type VoiceChoice } from '../core/document';
@@ -50,7 +52,9 @@ export interface Library {
    */
   note: string | null;
   /** Read a file, name it by its bytes, and put it in the Library. */
-  add(source: File, options: { move: boolean }): Promise<LibraryEntry>;
+  add(source: File, options: { move: boolean; folder?: FolderId | null }): Promise<{ entry: LibraryEntry; duplicate: boolean }>;
+  folders: FolderStore;
+  folderSnapshot: FolderSnapshot;
   /** This Document is being opened: its Stamp moves to now, which is what puts it at the top of the list. */
   opened(id: DocumentId): void;
   /** What the document turned out to call itself, once epub.js has read its metadata. Ignored when it is empty or unchanged. */
@@ -122,6 +126,9 @@ const byNewestFirst = (a: LibraryEntry, b: LibraryEntry): number => b.stamp.at -
 const NOTHING_READ: LoadedLibrary = { entries: [], problems: [], ignored: [], frozen: false, note: null };
 
 export function useLibrary(): Library {
+  const [folders] = useState(openFolderStore);
+  const folderSnapshot = useSyncExternalStore(folders.subscribe, folders.getSnapshot);
+  const readyRef = useRef(false);
   const [entries, setEntries] = useState<readonly LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState<string | null>(null);
@@ -164,17 +171,21 @@ export function useLibrary(): Library {
     } catch (problem) {
       setNote(`The Library could not be opened: ${describe(problem)}`);
     } finally {
+      readyRef.current = true;
       setLoading(false);
     }
   }, []);
 
   /** Change the entries and write the file, in that order and never one without the other. */
-  const commit = useCallback((change: (was: readonly LibraryEntry[]) => readonly LibraryEntry[]) => {
+  const commit = useCallback((change: (was: readonly LibraryEntry[]) => readonly LibraryEntry[], durable = false) => {
     const next = [...change(entriesRef.current)].sort(byNewestFirst);
+    // Import/deletion may drive another durable store. Never tell it an entry
+    // changed if the Library could not be written.
+    if (durable) writeLibrary(next, loadedRef.current);
     entriesRef.current = next;
     setEntries(next);
     try {
-      writeLibrary(next, loadedRef.current);
+      if (!durable) writeLibrary(next, loadedRef.current);
       setNote(null);
     } catch (problem) {
       setNote(`${describe(problem)} The Library on screen and the file on disk have stopped agreeing.`);
@@ -184,23 +195,32 @@ export function useLibrary(): Library {
   const stamp = useCallback(() => ({ at: Date.now(), device: deviceRef.current }), []);
 
   const add = useCallback(
-    async (source: File, options: { move: boolean }): Promise<LibraryEntry> => {
+    async (source: File, options: { move: boolean; folder?: FolderId | null }): Promise<{ entry: LibraryEntry; duplicate: boolean }> => {
+      if (!readyRef.current) throw new Error('The Library is still loading. Try again.');
+      folders.writable();
+      const destination = options.folder === undefined ? folders.getSnapshot().tree.current : options.folder;
       const added = await addDocument(source, options);
+      folders.writable();
       /**
        * The same book added twice from two places is one entry (ADR 0019), and
        * the one it is is the one already in the Library: its Reading Position, its
        * Voice and the title epub.js gave it are each worth more than a second
-       * reading of the same file name. Only the Stamp moves, which is what
-       * brings it back to the top.
+       * reading of the same file name. A duplicate now asks before opening;
+       * cancelling that alert must not move the entry or its Stamp (#121).
        */
       const existing = entriesRef.current.find((one) => one.id === added.identity.id);
-      const entry: LibraryEntry = existing
-        ? { ...existing, stamp: stamp() }
-        : { ...added.identity, title: added.title, position: null, voice: null, stamp: stamp() };
-      commit((was) => (existing ? was.map((one) => (one.id === entry.id ? entry : one)) : [...was, entry]));
-      return entry;
+      if (existing) return { entry: existing, duplicate: true };
+      const entry: LibraryEntry = { ...added.identity, title: added.title, position: null, voice: null, stamp: stamp() };
+      // If its destination disappeared while the source was read, use root.
+      // Membership is saved first: an interrupted import may leave an unused
+      // mapping, but can never expose a successfully imported book in the wrong folder.
+      const tree = folders.getSnapshot().tree;
+      const parent = destination !== null && !tree.folders.some((folder) => folder.id === destination) ? null : destination;
+      folders.place(entry.id, parent);
+      commit((was) => [...was, entry], true);
+      return { entry, duplicate: false };
     },
-    [commit, stamp],
+    [commit, stamp, folders],
   );
 
   const change = useCallback(
@@ -276,8 +296,8 @@ export function useLibrary(): Library {
       change(id, (entry) => ({ ...entry, title: title.trim(), stamp: stamp() }));
     }
   }, [change, stamp]);
-  const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id)), [commit]);
-  return { entries, loading, note, add, opened, retitled, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
+  const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id), true), [commit]);
+  return { folders, folderSnapshot, entries, loading, note, add, opened, retitled, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
 }
 
 /**

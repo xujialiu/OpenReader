@@ -24,7 +24,7 @@ function code(name: string): string {
 describe("a Document's actions drawer (#117)", () => {
   it('goes back from every page to its parent: Fonts and Highlight to Appearance, Manage to Download, the rest to the menu', () => {
     pin(code('reader-actions.tsx'),
-      "const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', highlight: 'appearance', download: 'menu', manage: 'download' } as const;",
+      "const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', highlight: 'appearance', download: 'menu', manage: 'download', move: 'menu' } as const;",
       'reader-actions.tsx BACK');
   });
 

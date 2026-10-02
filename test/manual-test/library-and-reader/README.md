@@ -251,3 +251,97 @@ blank on purpose (ADR 0067, decision 6): reopen the book before the next run.
 
 What it cannot prove: what an idle-exit while suspended does beyond the kill
 (the phone's wait was 85 minutes).
+
+## Exact native name input (#123)
+
+[Input integrity](input-integrity.md) gives the checked native-alert replacement
+helper, real duplicate/warning/persisted-name loop, and versioned baseline
+reproduction. It records the measured reproduction of the beta16 truncated-name
+save (a rapid uninstrumented loop created `Fictio`; the 16:03:26.088 submit
+probe caught draft `Fictio` against native `Fiction`), the beta18 submit-path
+fix and its verification, the separately diagnosed automation-only replacement
+append, and the failed XCTest activation attempts.
+
+## Folders, moves and the duplicate alert (#121, design 0069)
+
+Verified 2026-10-02 on commit 5b4bf61 (`1.0.0-beta13`), iPhone 17 (iOS 27.0)
+simulator, a Debug build of that tree with its own Metro (`-RCT_jsLocation` on
+every launch). Everything was driven by `kit/ax.py` real touches, pixel taps on
+the picker derived from screenshots, and screenshots in
+`/tmp/folder-tester-artifacts/` (this run's raw evidence, outside the
+repository). Nothing played.
+
+Staging pickable files: the document picker is a remote view whose rows AXe
+cannot see (pitfalls/mcp.md), so seed Files' local storage the way
+`downloads/two-finger.sh stage` does — launch Files once, then copy fixtures
+into the `group.com.apple.FileProvider.LocalStorage` container under
+`File Provider Storage/Staged`. The picker's Browse › On My iPhone then lists
+them, remembers the folder it was last in, and hands the file over on a tap.
+
+What was measured, all with real touches: the Add drawer's two rows; creation
+in the browsed folder and the owner left in the list; blank and same-name
+(including letter case) creation and rename refused with Save/Create disabled;
+Cancel leaving everything as it was; entering and returning through
+Library → Novels → Fiction with the title and back control following;
+document and folder moves through the Move drawer's full-path footer
+(`Library → Novels → Paper`), `Move here` disabled while the destination is
+the source; a folder's own subtree absent from its move destinations; moving a
+folder onto an existing sibling name refused with the drawer footer
+"A folder with this name already exists here. Rename it first." and nothing
+moved; a same-named folder allowed in a different parent; the duplicate import
+alert naming the existing title and its full path
+(`Location: Library → Novels → Fiction`), Cancel leaving the list and
+Open existing document opening the reader, whose back returns to the folder; a
+new file imported while inside a folder landing in that folder (checked on
+screen and in `library-folders.json` through the harness `file` command); the
+delete confirmation's exact counts ("3 documents and 2 subfolders") and
+downloads warning, Cancel keeping everything, Delete removing the whole
+subtree and their memberships; a relaunch reopening the remembered folder; and
+a `current` pointing at a removed folder falling back to the Library root.
+
+Known gap in the alert's affordance, found by this run: the validation message
+(`RenameAlert`'s `Alert.Message`, e.g. "A folder with this name already exists
+here. Rename it first.") never renders on iOS 27.0 — the button greys out but
+no text appears (screenshot `04-collision-case-insensitive.png`). Refusal
+still holds; the document rename never passes `validate`, so #117 never
+exercised this path.
+
+What it cannot prove: a handover arriving from another app (Files › Share →
+OpenReader) was not driven — the share sheet is beyond the accessibility tools
+(pitfalls/mcp.md); the picker import exercises the same `importDocument` and
+`library.add` destination logic, and the walkthrough harness's `add` command
+(`library.add` alone) never raises the duplicate alert by design. Moving a folder whose subtree contains the browsing location,
+and a failed disk write during a move or delete, are covered by unit tests
+(`test/core/folders.test.ts`, `test/app/library-folders.test.ts`), not here.
+
+Beta16 (commit 6873200, 2026-10-02): the beta13 limitation above is closed with
+real audio. A `file://` URL handed over with `xcrun simctl openurl` (an external
+handover event, not a share-sheet touch — the app declares EPUB) imported into
+the remembered folder AND opened the document; resending it raised "Document
+already exists" with the quoted title and `Location: Library → Fiction`, and
+Cancel kept one copy while Open existing document opened the original. Deleting
+folder Fiction — whose document carried a real chapter download made against
+the local fake TTS (`player-and-reading-held/fake-kokoro.cjs`, 24 clips /
+301,848 bytes 'ready' on disk under `Documents/offline-narration-v2/`) — removed
+that document's clip directory and catalog rows entirely, while the unrelated
+root document's own download (19 clips) survived untouched on disk. The
+confirmation dialog named the counts and the downloaded-audio warning
+(b16-09 screenshot). Recipe note for the audio half: the fake provider needs
+BOTH harness patches — settings (`provider`/`local`/`consent`) and, with the
+document open, `{"do":"voice","provider":"local","voice":"af_bella"}` — before
+the Download drawer's button enables; a settings-only voice leaves "Download
+selected (N)" disabled (`enabled: false` in `axe describe-ui`) with no visible
+reason. The beta16 alert flow itself: submit-then-warn — Create/Save stays
+enabled on a colliding name, submitting presents a complete RN system alert
+(`Name unavailable`, quoted name + explanation, Cancel / Back to editing);
+Cancel mutates nothing; Back to editing re-presents the editor with the native
+field text exactly as typed (draft survives), and editing then saves. Blank
+still disables. The old pre-submit disabled-on-collision is gone by design.
+
+Beta14 retest (commit 8058591, same day): the persistent `Alert.Message` slot
+did not change what iOS 27.0 draws — with a colliding name typed, Save/Create
+greys and no message appears, in the tree and in the screenshot
+(`/tmp/folder-tester-artifacts/b14-01-conflict-message.png`). Creation with a
+fresh name still works with the always-present slot. The 84-point rows, the
+`Empty`/count second line and the layered blue Folder artwork were visible at
+once in the same run.
