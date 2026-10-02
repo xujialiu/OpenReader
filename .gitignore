@@ -46,8 +46,9 @@ yarn-error.*
 /.secrets
 __pycache__/
 
-# Local browser automation artifacts
+# Local automation configuration and artifacts
 /.playwright-mcp/
+/.mobilebuildmcp/
 
 # Sub-worktrees an agent creates for other agents (AGENTS.md, "Sub-worktrees")
 /.worktrees/
