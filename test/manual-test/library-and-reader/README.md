@@ -252,6 +252,16 @@ blank on purpose (ADR 0067, decision 6): reopen the book before the next run.
 What it cannot prove: what an idle-exit while suspended does beyond the kill
 (the phone's wait was 85 minutes).
 
+## Exact native name input (#123)
+
+[Input integrity](input-integrity.md) gives the checked native-alert replacement
+helper, real duplicate/warning/persisted-name loop, and versioned baseline
+reproduction. It records the measured reproduction of the beta16 truncated-name
+save (a rapid uninstrumented loop created `Fictio`; the 16:03:26.088 submit
+probe caught draft `Fictio` against native `Fiction`), the beta18 submit-path
+fix and its verification, the separately diagnosed automation-only replacement
+append, and the failed XCTest activation attempts.
+
 ## Folders, moves and the duplicate alert (#121, design 0069)
 
 Verified 2026-10-02 on commit 5b4bf61 (`1.0.0-beta13`), iPhone 17 (iOS 27.0)
