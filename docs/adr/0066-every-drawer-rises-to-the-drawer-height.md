@@ -8,8 +8,8 @@ _The product argument is [design 0066](../design/0066-every-drawer-rises-to-the-
 Issue #117; the plan is the owner's comment there of 2026-10-01. **Drawer** and
 **Drawer Height** are in CONTEXT.md. The facts are in `notes/NOTES_2026-10-01.md`,
 11:19 to 11:58, from Apple's documentation, the iOS 27 SDK header, the HIG's
-Sheets page, `@expo/ui` 57.0.19's sources and a throwaway probe (`e09da7c` on
-`xujialiu/highlight--sheet-probe`, `src/app/sheet-probe.tsx`; screenshots in
+Sheets page, `@expo/ui` 57.0.19's sources and a throwaway probe (`e09da7c`,
+kept in history by an `-s ours` merge, `src/app/sheet-probe.tsx`; screenshots in
 `/tmp/sheet-probe/`). It revises the `Sheet` of
 [ADR 0026](0026-a-coherent-reading-interface.md) ("A shared draggable header
 replaces decorative grips"), the lookup drawer of
@@ -20,7 +20,9 @@ statement in ADRs [0035](0035-a-short-choice-is-the-systems-own-menu.md),
 [0059](0059-sharing-copies-the-file-under-its-library-name.md) that rests on
 the drawer being a React Native `Modal`._
 
-**Built in batches.** Batch 1 (`56a92b0`, reworked as plain lists in `1a85077`)
+**Accepted** by the owner on the iPhone, batch 1 on `1.0.0-beta9` and batches 2
+and 3 on `1.0.0-beta11` (2026-10-02), with Manage reached from the "N chapters
+downloaded" line as built. **Built in batches.** Batch 1 (`56a92b0`, reworked as plain lists in `1a85077`)
 is the drawer itself, the setting, Contents and one drawer at a time. Batch 2
 (`fe11fb2`) moves a Document's actions drawer, and batch 3 (`068b5e8`) moves
 Voice and Lookup. With all three in, `src/app/sheet.tsx` was deleted
