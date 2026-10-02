@@ -2,6 +2,15 @@
 
 ## Typing, environment and silence
 
+- **A fresh native input read can precede the Debug Log's disk flush.** #123's
+  first diagnostic loop read the correct native text but no JS events on disk;
+  the tagged change/render events appeared later. `debug-log.ts` batches writes
+  for up to 2 seconds. Poll for a timestamp-scoped event with a bounded deadline
+  when comparing JS and native input; matching an earlier cycle's same text can
+  falsely claim a new submit occurred. The corrected loop scopes each action by
+  time and separately waits for the warning's actual controls. Neither mistake
+  is evidence of missing app input, and a sleep is not an input repair.
+
 - **`typeText` with a long value kills a settings screen.**
   - Symptom: a red box, `Render Error — Maximum update depth exceeded`, and the
     next query answers `No matches found for Descendants matching type
@@ -198,9 +207,12 @@
   lone `h` into a WebDAV address field; a retried `--stdin` run produced
   `ios106-sync/ios06-snc/`; `mobilebuildmcp type_text` (34 characters sent)
   turned `127.0.0.1:8722` into `127.0.0.1:722`. No character class is safe.
-  Fix: verify the field's value in a fresh `describe-ui` after every type and
-  retype (type_text `replaceExisting`) until it is exact — the second attempt
-  has landed exactly every time so far. Budget two or three tries per field.
+  Historical workaround: verify the field's value in a fresh `describe-ui`
+  and retry; the second attempt landed in that run. This did not establish the
+  cause. For native name alerts, #123 subsequently reproduced `replaceExisting`
+  appending instead: use [the checked input recipe](../library-and-reader/input-integrity.md)
+  and preserve failed attempts, rather than treating a successful retry as proof
+  of automation-only failure.
 - **`xcrun simctl pbcopy` exits 0 and the pasteboard stays empty.** `simctl
   pbpaste` read back nothing after a successful `pbcopy`, and a Cmd+V
   (`axe key-combo --modifiers 227 --key 25`) pasted nothing. The clipboard

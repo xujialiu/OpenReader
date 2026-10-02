@@ -29,6 +29,9 @@ What every area uses:
   the Debug Log lines that answered it; `probes/`: the `js` probes it sends.
   When to use them is `docs/debug-on-iphone.md`; their flags are in each
   file's header (below, "Ask the app on the phone").
+- `alert-input.py`: checked clear/type/readback for one native name-alert field;
+  [input-integrity recipe](../library-and-reader/input-integrity.md) gives its
+  invocation, artifact contract and separate submit/persistence assertions.
 - `ax.py`: the accessibility tree through AXe, and real touches on what it
   lists, the phone's own alert and the rows of a long list included (below).
 - `drawer-edge.py`: where a drawer's top edge is in a screenshot, from its
