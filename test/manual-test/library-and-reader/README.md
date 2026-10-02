@@ -300,12 +300,33 @@ What it cannot prove: a handover arriving from another app (Files › Share →
 OpenReader) was not driven — the share sheet is beyond the accessibility tools
 (pitfalls/mcp.md); the picker import exercises the same `importDocument` and
 `library.add` destination logic, and the walkthrough harness's `add` command
-(`library.add` alone) never raises the duplicate alert by design. Deleting a
-folder whose documents carry downloaded audio ran with an empty download
-store: the counts and the warning text were checked, the audio deletion
-itself was not. Moving a folder whose subtree contains the browsing location,
+(`library.add` alone) never raises the duplicate alert by design. Moving a folder whose subtree contains the browsing location,
 and a failed disk write during a move or delete, are covered by unit tests
 (`test/core/folders.test.ts`, `test/app/library-folders.test.ts`), not here.
+
+Beta16 (commit 6873200, 2026-10-02): the beta13 limitation above is closed with
+real audio. A `file://` URL handed over with `xcrun simctl openurl` (an external
+handover event, not a share-sheet touch — the app declares EPUB) imported into
+the remembered folder AND opened the document; resending it raised "Document
+already exists" with the quoted title and `Location: Library → Fiction`, and
+Cancel kept one copy while Open existing document opened the original. Deleting
+folder Fiction — whose document carried a real chapter download made against
+the local fake TTS (`player-and-reading-held/fake-kokoro.cjs`, 24 clips /
+301,848 bytes 'ready' on disk under `Documents/offline-narration-v2/`) — removed
+that document's clip directory and catalog rows entirely, while the unrelated
+root document's own download (19 clips) survived untouched on disk. The
+confirmation dialog named the counts and the downloaded-audio warning
+(b16-09 screenshot). Recipe note for the audio half: the fake provider needs
+BOTH harness patches — settings (`provider`/`local`/`consent`) and, with the
+document open, `{"do":"voice","provider":"local","voice":"af_bella"}` — before
+the Download drawer's button enables; a settings-only voice leaves "Download
+selected (N)" disabled (`enabled: false` in `axe describe-ui`) with no visible
+reason. The beta16 alert flow itself: submit-then-warn — Create/Save stays
+enabled on a colliding name, submitting presents a complete RN system alert
+(`Name unavailable`, quoted name + explanation, Cancel / Back to editing);
+Cancel mutates nothing; Back to editing re-presents the editor with the native
+field text exactly as typed (draft survives), and editing then saves. Blank
+still disables. The old pre-submit disabled-on-collision is gone by design.
 
 Beta14 retest (commit 8058591, same day): the persistent `Alert.Message` slot
 did not change what iOS 27.0 draws — with a colliding name typed, Save/Create
