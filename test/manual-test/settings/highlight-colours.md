@@ -57,3 +57,47 @@ covers the sample. A temporary `console.log` in the well's `onSelectionChange`
 counts the changes in Metro's log (notes, 2026-10-02 10:38: 66 in 1.93 s).
 Relaunch the app after adding or removing it: a Fast Refresh with the drawer up
 cuts the well off from the app.
+
+## The page's composites, the accent, and #118's strip (`comp.py`, `sample.py`, `strip118.py`, `accent.js`, `AccentLookupProbe.swift`)
+
+The 2026-10-02 verification of the merged #118 added four tools beside the probe:
+
+- `comp.py SHOT PAGE SENTENCE WORD [x0 y0 x1 y1]` classifies a screenshot's
+  pixels (points) into page / sentence-composite / word-composite and prints
+  each class's share and mean colour, the bands' extents, and whether the word
+  band sits inside the sentence band. It measured all four preset composites
+  exact against the model's arithmetic (Blue `#d6d6dd`/`#7b87de` on white,
+  `#1c1d26`/`#354098` on `#111114`; Amber `#fff2c7`/`#ffc44c`,
+  `#453810`/`#b87d06`). It cannot prove where a colour came from — only that
+  the screen holds it.
+- `sample.py SHOT X0 Y0 X1 Y1 [EXPECT TOL]` prints a small rect's most common
+  colours and, with an expectation, the share within tolerance and the closest
+  pixel. This is how every accent spot was read (checks, links, rows,
+  capsules, circles, the Lookup drawer's actions). Glyph antialiasing means
+  only the purest pixels match exactly; judge by the closest colour and its
+  share, not by coverage alone.
+- `strip118.py SHOT WORD_RGB LINE_PX [TOL]` is `scrolling-and-theme/`'s
+  leading-strip detector re-coloured for #118 (the old one is hardcoded to the
+  dark page's retired `rgba(255,176,0,0.85)`). **It counts the player's A as a
+  match** — the A is deliberately the word mark's composite now (Q5 = A) — so
+  bound it to the text area above the player (crop, or read only y < ~700 pt
+  on a 402 × 874 phone) before calling a RED.
+- `accent.js WORD SCHEME` ports `src/app/accent.ts`'s pure arithmetic and
+  prints the expected `reading`/`onMark` for any word colour — the ADR's table
+  for the presets, and the expectation for a custom pick.
+- `AccentLookupProbe.swift` runs through `run-probe.sh` like any probe:
+  `testGeneralLinkBracket` turns General's interlock switch over an invalid
+  `bracketPairs` (patch `{"bracketPairs":"((("}` first — the link only exists
+  while the check refuses) and photographs the reset link; `testLookupAccents`
+  long-presses the page open and photographs the Lookup drawer (it asserts
+  `Choose a Voice` first: an `xcodebuild` run can relaunch the app —
+  `../pitfalls/mcp.md`); `testPickCustomWord` opens the Word well and taps the
+  grid's saturated row (read the saved hex back with `saysettings`, then
+  `accent.js` for the expectation).
+
+What these cannot prove: `comp.py`/`sample.py` read still screenshots — a
+colour that arrives late (the stale-paint finding below) looks correct once
+anything else has repainted the page, so every live-repaint claim needs the
+screenshot taken before any other interaction. And the Lookup drawer's spinner
+was only caught under a consent alert's scrim, which darkens it; its exact
+accent was not measured unscreened.

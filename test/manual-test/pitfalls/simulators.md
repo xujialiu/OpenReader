@@ -263,3 +263,10 @@
   finished (`exit 0`). Nothing was wrong with the app or the device. Run them in
   the background and poll, rather than under a short tool timeout that reads as
   a hang.
+
+## A killed `recordVideo` holds the host recorder until a reboot (#118, 2026-10-02)
+
+- **Every later `simctl io recordVideo` answers "Host recording is already in progress" after a recorder process was killed, and only rebooting the simulator clears it.**
+  - Symptom: the first recording was stopped with `pkill` (SIGTERM, then `-9`); its output file stayed 0 bytes and every later `recordVideo` on that device — including fresh ones under new names — failed with `Error Domain=NSPOSIXErrorDomain Code=16 "Resource busy" … Host recording is already in progress`, once even 30 s later. `pgrep recordVideo` showed nothing left to kill.
+  - Cause: the recording session lives in the simulator's host services, not in the `simctl` client; killing the client without the finaliser leaves the session claimed.
+  - Fix: stop recordings with `kill -INT` (the screenshots.md bullet above) and verify the file is non-empty before relying on the capture. If the busy error is already there, reboot the simulator (then re-silence it and expect the first post-boot XCTest run's first tap to open nothing — the #118 well bullet below), or do without video: `frame-gaps.py` needs a recording, and there is no substitute for it.
