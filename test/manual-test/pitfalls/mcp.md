@@ -139,6 +139,11 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
   - Cause not isolated; a handler from before the refresh is the likely receiver. The same family as "A Fast Refresh of `drawer.tsx` with a drawer up" in the next section.
   - Fix: after editing a file the drawer draws, terminate and relaunch the app with `-RCT_jsLocation`, open the drawer again, and only then measure.
 
+## The Appearance drawer's preset tiles at the Drawer Height (#118 re-verify, 2026-10-02, iOS 27.0)
+
+- **At the Drawer Height the Amber/Blue preset tiles lie below the fold, and no drag brings them up without growing the sheet.** The tree put both tiles at y 888.7 on an 874-pt screen — ~15 pt past the bottom — while the marked line sat fully above the drawer's edge. A 30-pt `axe drag` up on the drawer's content changed nothing (every frame identical); a 210-pt drag took the drawer to `large` (the list was at its top, so the sheet took the pan, the #117 rule). Dragging back down by the header returned the Drawer Height but reset the list to its top: the tiles were below the fold again. A preset-tile tap 'with the drawer at the Drawer Height' is therefore impossible; do what the #118 verification did — tap the grabber to `large`, real-touch the tile (Amber {20.7, 532.3} 67×37, Blue {94.0, 532.3} at `large`), tap the grabber back, and measure the marks at the Drawer Height, where the page above the drawer shows them.
+- **`comp.py`'s sentence class catches glyph antialiasing when the crop spans running text.** With the box over a whole page region, text-edge pixels pass within its tolerance of the light sentence composite and the band read rows=190 over 314 pt instead of 93 over 62 pt. Bind the box to the highlight band itself (read the band's rows first with a tight tolerance, then re-run `comp.py` inside it); the word band and the pixel shares stay reliable either way.
+
 ## The app's drawer on the phone's own sheet (#117, 2026-10-01, iOS 27.0)
 
 - **An `axe drag` up on a drawer's list scrolled the list and left the drawer where it was.**
