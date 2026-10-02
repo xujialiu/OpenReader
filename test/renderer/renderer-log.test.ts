@@ -305,10 +305,10 @@ function realRenderAhead(world: ReturnType<typeof page>, sweep = () => {}, repor
 
 describe('the program says nothing of this without Debug Mode (#113)', () => {
   it('is spliced in only when the program is built for Debug Mode', () => {
-    const plain = highlighterSource(undefined, undefined, 'light', null);
-    expect(highlighterSource(undefined, undefined, 'light', null, false)).toBe(plain);
+    const plain = highlighterSource(undefined, 'light', null);
+    expect(highlighterSource(undefined, 'light', null, false)).toBe(plain);
     for (const absent of ['installRendererLog', RENDERER_MESSAGE, 'rlog', "message.kind === 'snapshot'"]) expect(plain).not.toContain(absent);
-    const debug = highlighterSource(undefined, undefined, 'light', null, true);
+    const debug = highlighterSource(undefined, 'light', null, true);
     pin(debug, 'function installRendererLog(env) {', 'the Debug Mode program');
     pin(debug, 'var RENDERER = ' + JSON.stringify(RENDERER_MESSAGE) + ';', 'the Debug Mode program');
     pin(debug, '  renderAhead = rendererLog.traceRenderAhead(renderAhead);', 'the Debug Mode program');

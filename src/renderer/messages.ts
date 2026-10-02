@@ -565,6 +565,22 @@ export interface ThemeMessage {
 }
 
 /**
+ * The owner's **Highlight Colours** (#118), as the stylesheet the WebView
+ * installs: `highlightCss`, which begins with the selectability the highlight
+ * needs and then marks the sentence and the word in the owner's colours.
+ *
+ * Finished CSS, for the reason the Appearance and theme messages carry it, and
+ * its own message for the reason the theme has one: the colours are part of
+ * Appearance, but a colour change moves not one character, so it is a repaint
+ * and not a re-centre.
+ */
+export interface HighlightColoursMessage {
+  kind: 'highlight';
+  /** `highlightCss` of the owner's Highlight Colours: SELECTABLE, then the two `::highlight()` rules. */
+  css: string;
+}
+
+/**
  * The navigation bar over the top of the scroll container (#67, ADR 0048).
  *
  * The bar floats over the page as the player does, so that hiding it with the
@@ -615,7 +631,8 @@ export type HighlightMessage =
   | BarMessage
   | AppearanceMessage
   | MeasuredMessage
-  | ThemeMessage;
+  | ThemeMessage
+  | HighlightColoursMessage;
 
 
 export const SELECTION_MESSAGE = 'openreader:selection';

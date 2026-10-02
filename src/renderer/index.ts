@@ -27,13 +27,11 @@ export {
 export {
   appearanceCss,
   DEFAULT_APPEARANCE,
-  DEFAULT_HIGHLIGHT,
   READING_FONTS,
   themeCss,
   UTTERANCE_HIGHLIGHT,
   WORD_HIGHLIGHT,
   type Appearance,
-  type HighlightStyles,
   type ReadingFont,
   type ReadingScheme,
 } from './highlighter';
@@ -51,6 +49,7 @@ export {
   type BrowseMessage,
   type CorrectMessage,
   type DocumentMessage,
+  type HighlightColoursMessage,
   type HighlightMessage,
   type InsetMessage,
   type MeasuredMessage,
