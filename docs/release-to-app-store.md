@@ -50,7 +50,10 @@ The owner set these on 2026-09-30.
 - **Store setup saved on 2026-10-03**
   - Free; 174 countries/regions, excluding China mainland. Apple says future territories are included automatically.
   - Apple silicon Mac and Apple Vision Pro availability disabled and checked after navigating back.
-  - Privacy policy URL saved. Other User Content data type saved, but its setup is incomplete and the privacy label is **not published**.
+  - Privacy policy updated and deployed; the privacy label is published: Other User Content and User ID, both linked to identity, neither for tracking. Content is declared for App Functionality and Other Purposes (provider content/model improvement); identifiers for App Functionality.
+  - Three genuine 1320 × 2868 screenshots uploaded and verified after reload: Library, fixed Contents, Settings. The 6.5-inch set automatically uses the 6.9-inch assets. These do not claim to show successful playback.
+  - Books category, content-rights declaration, calculated 4+ age rating and non-trader status saved. Reviewer contact is saved only in App Store Connect. No sign-in is required; manual release is selected.
+  - Review instructions saved with a private-key placeholder. The owner must replace it in App Store Connect before submission; do not submit a placeholder. Secure simulator input/playback diagnosis continues separately.
 - **Web pages**, from `site/` through `.github/workflows/pages.yml`:
   - Support URL: https://xujialiu.github.io/OpenReader/
   - Privacy Policy URL: https://xujialiu.github.io/OpenReader/privacy.html
@@ -128,12 +131,12 @@ The owner set these on 2026-09-30.
 
 The decisions are the owner's from 2026-09-30. Items marked "draft" still need the owner's approval.
 
-- **App Privacy.** Declare **Other User Content**:
-  - used for App Functionality;
-  - not linked to the user's identity;
-  - not used for tracking.
+- **App Privacy.** Published on 2026-10-03 after the owner delegated remaining decisions:
+  - **Other User Content**: App Functionality and Other Purposes;
+  - **User ID**: App Functionality;
+  - both linked to identity; neither used for tracking.
 
-  **Reassessment required (#124, 2026-10-03): do not publish this earlier draft unchanged.**
+  **This supersedes the earlier not-linked draft (#124).**
   Apple's [definition of linked data](https://developer.apple.com/app-store/app-privacy-details/)
   includes linkage by third-party partners through an account, not just an
   OpenReader account. Requests authenticate with the user's own service key.
@@ -147,9 +150,13 @@ The decisions are the owner's from 2026-09-30. Items marked "draft" still need t
   [Speechify's general policy](https://speechify.com/privacy/) covers stored user
   content and account association, but an API-specific no-retention commitment
   has not been verified. Do not apply website advertising/cookie provisions
-  to API calls without evidence. Final linkage, data types and purposes need
-  owner confirmation based on applicable API practices; “nothing else is
-  collected” and “not linked” are not established by this investigation.
+  to API calls without evidence. Account credentials justify the User ID
+  disclosure; text and credentials are treated as linked rather than claiming
+  anonymization. Content/model improvement permitted by provider terms is
+  disclosed under Other Purposes. The app does not send ad identifiers or
+  implement cross-app advertising tracking. The public policy distinguishes
+  developer behavior from independent provider behavior; future changes to
+  provider practices require reassessment.
 - **Age rating**, in the new questionnaire: answer None or No throughout, because the app supplies no content of its own. Expect 4+. The owner confirms.
 - **Pricing and Availability**
   - Free.
@@ -158,9 +165,9 @@ The decisions are the owner's from 2026-09-30. Items marked "draft" still need t
 - **EU Digital Services Act:** non-trader. The owner sets it from the banner on the Apps page. Revisit it if the app ever charges money.
 - **Export compliance:** nothing to answer, because `ITSAppUsesNonExemptEncryption = NO` is in the build.
 - **Content rights:** the owner answers. The app shows documents the person adds themselves, and ships none.
-- **Category:** Books (draft).
+- **Category:** Books (saved).
 - **Copyright:** 2026 Xujia Liu.
-- **Release after approval:** manual or automatic. The owner decides at submission.
+- **Release after approval:** manual (saved after the owner delegated this choice).
 - **Screenshots**
   - 6.9-inch, 1320 × 2868, from an iPhone 17 Pro Max simulator, 3 to 10 of them. iPhone only, so no iPad set.
   - Set the status bar with `xcrun simctl status_bar <udid> override --time 9:41`.
@@ -183,8 +190,9 @@ To test:
 1. In Safari, download a public-domain EPUB, for example
    https://www.gutenberg.org/ebooks/1342.epub3.images (Pride and Prejudice).
    In the Files app, share it to OpenReader (or long-press > Share > OpenReader).
-2. In OpenReader: Settings > Providers > Fish Audio. Turn on "Enabled" and paste
-   this test key into "API key": <KEY>
+2. In OpenReader: Settings > Providers > Fish Audio. Keep "Enabled" off and paste
+   this test key into "API key": <KEY>. Then turn "Enabled" on and confirm
+   "Connection successful". Fields are locked while the provider is enabled.
 3. Open the book, open the voice list in the player, and choose a Fish Audio voice.
 4. Press Play. The first time, the app asks before sending the document's text to
    Fish Audio: choose Allow. Each word is highlighted as it is spoken.
