@@ -45,7 +45,7 @@ The owner set these on 2026-09-30.
   - Uploaded 2026-10-03 at 00:42 CST from `main` commit `9cf0a86`, after the EPUB 3 Contents correction (#125).
   - Clean prebuild; archive/export each returned 0; pre-Hermes bundle verified `DEBUG_MODE = false`. All 2,325 tests, TypeScript and ESLint passed.
   - Independent simulator verification exercised three different section-start destinations in the unchanged Gutenberg sample on Release 1.0.0 (3). It did not cover playback or an established paused Reading Position; do not substitute it for the fresh-install review walkthrough below.
-  - App Store Connect initially showed Processing. Build 2 remains attached to the version until build 3 is processed and selected. No review submission yet (#124).
+  - App Store Connect completed processing and shows Ready to Submit. Build 3 replaced build 2 in the 1.0.0 version record; reloading confirmed build 3 and a disabled Save button. This is not App Review approval; no review submission yet (#124).
   - Annotated `build-2` and `build-3` exist locally; neither has been pushed. No `v1.0.0` tag yet.
 - **Store setup saved on 2026-10-03**
   - Free; 174 countries/regions, excluding China mainland. Apple says future territories are included automatically.
