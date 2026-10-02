@@ -1,5 +1,10 @@
 # The simulator MCP servers
 
+## Fresh simulator delivery from pi (2026-10-02)
+
+- `build_run_sim` exceeded the MCP client's 60-second request timeout while its `xcodebuild` continued. Do not start a competing build: wait for that exact process to exit, then run an incremental `xcodebuild` directly with a longer command timeout and require exit 0 before installing.
+- On a newly created iPhone 17 / iOS 27.0, `bootstatus -b` completed but `simctl install` hung for over four minutes, and `get_app_container` also timed out. The cause was not isolated. Stopping the owned install process and shutting down/booting only that simulator restored installation; re-silencing, installing and launching then succeeded, with the app connected to this checkout's Metro. The first subsequent `snapshot_ui` still timed out creating its remote automation session; a `simctl` screenshot confirmed Library, not interaction coverage.
+
 ## Remote automation unavailable during #123 diagnosis (2026-10-02)
 
 On the existing iPhone 17 / iOS 27.0 simulator, AXe `describe-ui` and
