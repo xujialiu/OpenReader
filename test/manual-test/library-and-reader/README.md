@@ -306,3 +306,11 @@ store: the counts and the warning text were checked, the audio deletion
 itself was not. Moving a folder whose subtree contains the browsing location,
 and a failed disk write during a move or delete, are covered by unit tests
 (`test/core/folders.test.ts`, `test/app/library-folders.test.ts`), not here.
+
+Beta14 retest (commit 8058591, same day): the persistent `Alert.Message` slot
+did not change what iOS 27.0 draws — with a colliding name typed, Save/Create
+greys and no message appears, in the tree and in the screenshot
+(`/tmp/folder-tester-artifacts/b14-01-conflict-message.png`). Creation with a
+fresh name still works with the always-present slot. The 84-point rows, the
+`Empty`/count second line and the layered blue Folder artwork were visible at
+once in the same run.
