@@ -15,4 +15,4 @@
  * A release drops the suffix here. The first beta of the next version moves
  * `package.json` to its numbers.
  */
-export const APP_VERSION = '1.0.0-beta11';
+export const APP_VERSION = '1.0.0-beta12';
