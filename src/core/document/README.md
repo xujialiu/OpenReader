@@ -272,13 +272,13 @@ package document — `book.spine`'s `href`, which `highlighter.ts` already reads
 at a time in `adopt`. Measured on the owner's book: 2,077 of them, 50,812 UTF-8
 bytes as a JSON array, once per document.
 
-The matching is by string, which is worth stating because it is the one thing that
-could quietly fail: epub.js resolves **neither** the navigation's hrefs nor the
-spine's against anything, and they are relative to different files. In the owner's
-book `OEBPS/toc.ncx` sits beside `OEBPS/content.opf` and the two spellings are
-byte-identical. A book whose navigation lives in another directory resolves
-**every** row to null — all of them, not one of them, which is why the count is on
-the result.
+The matching keeps the complete path, not merely the filename. NCX hrefs arrive
+raw, relative to the NCX file; a separately located NCX can remain unmatched.
+The bundled renderer instead roots EPUB 3 navigation hrefs at the package directory,
+so the lookup also registers a leading-slash alias for each package-relative spine
+href (#125). For example, `/Text/chapter.xhtml` matches `Text/chapter.xhtml`,
+never `Other/chapter.xhtml`. The first match wins and encoding variants remain
+supported. Unmatched rows are counted without guessing why their paths differ.
 
 ## Open, and blocking
 

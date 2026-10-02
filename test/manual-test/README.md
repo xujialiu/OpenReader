@@ -119,3 +119,20 @@ recipe goes.
 - [Sync](sync/README.md): Sync: the Sync screen, the switch, and places crossing devices (#20).
 - [Native audio queue (#63)](native-audio/README.md): Native queue position versus actual rendered audio (#63); Output-driven audio/position prototype (#63, validation only); Production output-driven queue (#63).
 - [The kit](kit/README.md): Read the accessibility tree and touch what it lists (`ax.py`); Run an XCTest probe; Read runtime warnings or evaluate a targeted expression; Inspect, stop or briefly exercise the reading handler; Pull the Debug Log off the phone (#82, `debug-log.py`); Ask the app on the phone (`phone-hx.cjs`, `debug-log-timeline.py`, `probes/`).
+
+### #125 Release verification tooling (2026-10-03)
+
+- `mobilebuildmcp build_sim` returned `MCP request timed out after 60000ms`
+  while its `xcodebuild` was still running. This was a transport deadline,
+  not a failed build: the retained raw log ended `BUILD SUCCEEDED`. Wait for
+  that exact PID with a bounded foreground poll before retrying; the subsequent
+  incremental build also succeeded. Never launch a competing build on timeout.
+- A Contents list swipe and list drag at the half-height sheet left the same
+  rows visible. Expanding using the exposed sheet grabber, then dragging the
+  list, moved from early chapters to XVIII–XXXV. This gesture variation isolates
+  the automation/sheet interaction; it is not evidence of unreachable rows.
+- A delayed reuse of an MCP ref returned `SNAPSHOT_EXPIRED` before dispatch.
+  Refreshing `snapshot_ui` and repeating the touch down/up (0.2 s) succeeded.
+- An ad hoc EPUB inspection imported unavailable Python `lxml`; use standard
+  library `zipfile` and `xml.etree.ElementTree` instead. No book conversion or
+  modification is needed to compare section-start text with screenshots.

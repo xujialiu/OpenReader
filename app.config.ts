@@ -113,7 +113,7 @@ const config: ExpoConfig = {
      * before each upload. It reaches the app only through a prebuild. It is a
      * literal rather than computed, so git records which build went up.
      */
-    buildNumber: '2',
+    buildNumber: '3',
 
     config: {
       /**

@@ -40,6 +40,28 @@ const ranges = (contents: Contents): [number, number][] => contents.sections.map
 /** The reading, in the only currency the contents can use — the shape `ReportedBlock` already has. */
 const reading = (sectionIndex: number) => ({ sectionIndex });
 
+describe('EPUB 3 navigation from the bundled renderer (#125)', () => {
+  it('matches the leading slash added by navItem without discarding directories', () => {
+    const href = '1306980130634175271_1342-h-0.htm.xhtml';
+    const navigation = [
+      { id: 'chapter1', href: `/${href}#pgepubid00022`, label: 'Chapter I.' },
+      { id: 'nested', href: '/Text/chapter.xhtml#start', label: 'Nested' },
+      { id: 'wrong', href: '/Other/chapter.xhtml', label: 'Different file' },
+    ];
+    const result = contentsOf(navigation, ['wrap0000.xhtml', href, 'Text/chapter.xhtml']);
+    expect(targets(result)).toEqual([1, 2, null]);
+    expect(result.unreachable).toBe(1);
+    expect(result.rows[0].href).toBe(`/${href}#pgepubid00022`);
+  });
+
+  it('keeps encoded names and the first matching spine item', () => {
+    const result = contentsOf([
+      { id: 'encoded', href: '/Text/a%20b.xhtml#start', label: 'Chapter' },
+    ], ['Text/a b.xhtml', 'Text/a b.xhtml']);
+    expect(targets(result)).toEqual([0]);
+  });
+});
+
 describe("the owner's book, flattened", () => {
   const book = contentsOf(XIANNI_NAVIGATION, XIANNI_SPINE);
 
