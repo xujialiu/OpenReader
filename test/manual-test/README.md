@@ -136,3 +136,29 @@ recipe goes.
 - An ad hoc EPUB inspection imported unavailable Python `lxml`; use standard
   library `zipfile` and `xml.etree.ElementTree` instead. No book conversion or
   modification is needed to compare section-start text with screenshots.
+
+### Release-check credential input diagnosis (2026-10-03)
+
+- Credential edits autosave to Keychain, **not** `Documents/settings.json`.
+  An absent settings file on fresh defaults says nothing about key entry.
+  Configure while the provider is disabled; enabling tests the connection and
+  locks the field. Do not infer an invalid source key from incomplete input.
+- AXe can report successful typing while delivering no text. On build 3 / iOS
+  27.0, the benign one-step stdin batch `type S` left the focused field empty;
+  adding `sleep 1` **inside the same batch** produced exact `S`. A sleep after
+  a separate AXe process did not repair lost input. This isolates the short
+  HID-session lifetime, not Keychain persistence. A fast whole-string attempt
+  also remounted as `Senti`, not `Sentinel123`; its precise truncation boundary
+  was not instrumented. One stdin batch with one character per `type` step,
+  `sleep 0.2` between characters and final `sleep 1` yielded exact
+  `Sentinel123` both immediately and after leaving/reopening the provider page.
+  The same masked-input path then passed a real local-test connection check.
+  Keep secrets out of arguments, files, stdout, trees and XCTest activity logs;
+  construct stdin in memory, suppress command output, and clear the clipboard.
+- Files picker rows remain invisible to the app's AX tree. Coordinate units
+  matter: AXe `touch` uses points, `tap` uses screenshot pixels. Sending pixel
+  coordinates to `touch` caused no-op selections; the correct point-space touch
+  imported the original EPUB. An immediate screenshot can precede navigation.
+- Silence checks caught volume 60 twice after earlier zero readings, blocking
+  Play as intended. Recheck immediately before each playback; no silence result
+  is valid for an entire session.
