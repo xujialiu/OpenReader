@@ -108,3 +108,23 @@ a clean relaunch, five more (`beta18-create`), an eight-second settled round
 (`beta18-edit`) all passed, the persisted store unchanged except the intended
 rename. Raw artifacts and every failed attempt are indexed in
 `/tmp/openreader-input-repair/REPORT.md` and `FINAL-REPORT.md`.
+
+## Independent acceptance (2026-10-02)
+
+The GLM ios-tester verified the integrated beta18 tree (`12dcbe7`) on the same
+owned iPhone 17 / iOS 27 simulator, with the actual bundle containing `text.get()`.
+Three rename/collision/back/edit/save/restore rounds, five rapid Create/cancel
+rounds, and one eight-second-settled round exited 0. Per-round disk snapshots
+preserved the folder identity and exact name. Blank Create stayed disabled;
+Cancel left storage unchanged. A Document rename, which has no duplicate
+validator, also changed and restored both its row and `display-names.json`.
+
+The first invocation failed because its artifact directory already existed.
+A later helper clear failed closed while all AXe text injection was unresponsive;
+a clean app relaunch restored input, after which the three-round run passed.
+Both failures remain in the evidence, not counted as passing rounds. This does
+not establish why the simulator input channel stopped responding or why the
+original React draft lagged. The app fix removes reliance on that draft at
+submission; the helper detects input failures rather than silently retrying.
+Raw independent logs: `/tmp/input123-independent/`. The parent checked all run
+exit codes and retained the failed run before accepting #123.
