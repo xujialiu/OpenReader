@@ -4,6 +4,7 @@ import {
   DEFAULT_HIGHLIGHT_COLOURS,
   fromPicker,
   HIGHLIGHT_PRESETS,
+  HIGHLIGHT_PRESET_ORDER,
   presetOf,
   readHighlightColours,
   rgba,
@@ -11,15 +12,16 @@ import {
 } from '../../src/renderer/highlight-colours';
 
 describe('Highlight Colours (#118)', () => {
-  it('offers the two looks the app has had, Blue at amber\'s opacities, and starts on Blue', () => {
+  it('offers Blue first at the owner’s 60%/50%, keeps Amber and starts on Blue', () => {
     expect(HIGHLIGHT_PRESETS.amber).toEqual({ sentence: { color: '#ffc400', opacity: 22 }, word: { color: '#ffa800', opacity: 62 } });
-    expect(HIGHLIGHT_PRESETS.blue).toEqual({ sentence: { color: '#434665', opacity: 22 }, word: { color: '#4456de', opacity: 62 } });
+    expect(HIGHLIGHT_PRESETS.blue).toEqual({ sentence: { color: '#434665', opacity: 60 }, word: { color: '#4456de', opacity: 50 } });
+    expect(HIGHLIGHT_PRESET_ORDER).toEqual(['blue', 'amber']);
     expect(DEFAULT_HIGHLIGHT_COLOURS).toEqual(HIGHLIGHT_PRESETS.blue);
   });
 
   it('paints a level as rgba, its opacity a fraction', () => {
     expect(rgba(HIGHLIGHT_PRESETS.amber.sentence)).toBe('rgba(255, 196, 0, 0.22)');
-    expect(rgba(HIGHLIGHT_PRESETS.blue.word)).toBe('rgba(68, 86, 222, 0.62)');
+    expect(rgba(HIGHLIGHT_PRESETS.blue.word)).toBe('rgba(68, 86, 222, 0.5)');
     expect(rgba({ color: '#000000', opacity: 0 })).toBe('rgba(0, 0, 0, 0)');
   });
 
@@ -30,6 +32,19 @@ describe('Highlight Colours (#118)', () => {
     expect(fromPicker('red')).toBeNull();
     expect(toPicker({ color: '#4456de', opacity: 62 })).toBe('#4456de9e');
     expect(fromPicker(toPicker({ color: '#ffc400', opacity: 22 }))).toEqual({ color: '#ffc400', opacity: 22 });
+  });
+
+  it('keeps every whole opacity through the native RGBA bridge, including invisible and opaque', () => {
+    for (let opacity = 0; opacity <= 100; opacity++) {
+      const level = { color: '#4456de', opacity };
+      expect(fromPicker(toPicker(level))).toEqual(level);
+    }
+  });
+
+  it('keeps saved original Blue unchanged rather than silently adopting the revised preset', () => {
+    const original = { sentence: { color: '#434665', opacity: 22 }, word: { color: '#4456de', opacity: 62 } };
+    expect(readHighlightColours(original)).toEqual(original);
+    expect(presetOf(original)).toBeNull();
   });
 
   it('names a preset only when all four values are it', () => {

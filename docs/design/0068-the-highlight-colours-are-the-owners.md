@@ -52,8 +52,10 @@ The two looks the app has had are offered above the owner's own choices, so that
 going back to either is one tap:
 
 - **Amber**, the light page's mark as it was.
-- **Blue**, the dark page's two colours, now at amber's strengths instead of
-  solid, so that the two presets differ only in colour.
+- **Blue**, the dark page's two colours, with the sentence at 60% strength and
+  the word at 50%, chosen by the owner in the revised Highlight page (#122).
+  Blue is offered first, followed by Amber. A previously saved choice keeps its
+  exact colours and strengths; updating a preset does not change it silently.
 
 **Blue is the default**, for a new install and for an owner who had never
 chosen, because it is the only one of the two whose spoken word stays readable
@@ -72,24 +74,33 @@ its own page in the same drawer, just as Font does; Back returns to Appearance.
 The drawer still leaves the document above it in view and in use at the drawer
 height (decision 0066), and a change reaches the document at once.
 
-At the top is a **short sample sentence**, on the page's own colours and in the
-chosen reading font, with a word marked over the marked sentence. It prefers
-one line and never occupies more than two; the sample is shortened rather than
-its letters made smaller. It works while reading is paused, without starting
-speech. Both marks stay visible throughout editing, including when the controls
-below need to scroll.
+At the top is a **one-line sample**, on the page's own colours and in the chosen
+reading font. It contains an unmarked sentence and a marked sentence, with one
+word marked more strongly within it: "Rain fell. Birds sang." The sample is
+shortened at larger text sizes rather than its letters made smaller. It works
+while reading is paused, without starting speech.
 
-Below it, the phone's **Sentence | Word** control switches which mark is being
-edited, without moving the sample or opening another page. Colour and strength
-are adjusted inline, using the phone's sliders. Red, green and blue together
-can reach any colour; strength runs from nothing to solid. No new window covers
-the sample. Changes are applied and kept as they are made; Back is not Cancel.
+The two small preset tiles sit **below the preview**, Blue then Amber, set to
+the left. Each shows "Aa" as the spoken word would look on the page. The tile
+whose four values match the current choice has a ring in its word's colour.
+Neither is named on screen; VoiceOver reads Blue and Amber. They remain
+shortcuts for both marks, not just the one currently being edited.
 
-The two small preset tiles remain on this page, Amber then Blue, about a fifth
-of the width and set to the left. Each shows "Aa" as the spoken word would look
-on the page. The tile whose four values match the current choice has a ring in
-its word's colour. Neither is named on screen; VoiceOver reads Amber and Blue.
-They remain shortcuts for both marks, not just the one currently being edited.
+Below them, the phone's **Sentence | Word** control switches the mark being
+edited. The phone's complete **Grid, Spectrum and Sliders** colour choices and
+its strength slider sit underneath, on the same page. There is no Colors title,
+and no eyedropper: the owner dropped it rather than keep a nonworking button
+in the desired position. All colours and strengths remain available through
+the palette.
+
+The preview, presets and editing target stay in view while the palette scrolls
+below them at a smaller drawer height. No new window covers the sample.
+Changes are applied and kept as they are made; Back is not Cancel.
+
+_The owner rejected the intermediate red/green/blue-only editor: choosing a
+colour by numbers was too abstract, and presets below those controls were
+not visible. The native-palette prototype was approved, with the refinements
+above, on 2026-10-02 (#122)._
 
 Choosing a colour or a strength that matches neither preset takes the ring off
 both tiles. Nothing is lost: the tiles are a quick way to two choices, not a
@@ -140,10 +151,11 @@ strength at nothing, the A shows no mark either.
   phone's own.
 - **No names on the tiles.** The tiles show only "Aa" and a ring, so on the
   screen the two presets are told apart by their colour alone.
-- **Sliders rather than the complete colour picker.** Keeping the sample visible
-  takes priority over the phone's grid, spectrum and eyedropper. All colours
-  remain available, but mixing red, green and blue takes more adjustment than
-  pointing at a spectrum. The two presets remain the quick choices.
+- **Room for a real palette.** A complete colour grid is taller than a compact
+  editor. At a smaller drawer height its controls need scrolling, while the
+  preview and presets stay visible. Expanding the drawer gives it more room.
+- **No eyedropper.** The owner chose to leave it out. Picking from the grid or
+  spectrum remains possible; sampling a colour elsewhere is not offered.
 
 ## Turned down
 
@@ -161,6 +173,9 @@ strength at nothing, the A shows no mark either.
   been simpler to draw, but the owner could not have matched the desktop
   plugin, which takes any colour, or the mark they find comfortable. The two
   presets give the quick taps; the picker gives everything else.
+- **Red, green and blue sliders as the only way to choose a colour.** The owner
+  tried this and rejected it as too abstract. A palette lets a colour be chosen
+  by seeing it, not by mixing numbers.
 - **A picker covering the sample.** Closing it to judge a colour, then reopening
   it to adjust again, defeats the purpose of the preview. The owner chose
   always-visible feedback over keeping the complete picker.

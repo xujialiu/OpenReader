@@ -28,34 +28,30 @@ export interface HighlightColours {
 }
 
 /**
- * The two looks the app has had, offered above the owner's own choice
- * (owner's Q2, Q4, Q7).
- *
- * **Amber** is the light page's mark before #118: `rgba(255,196,0,0.22)` and
- * `rgba(255,168,0,0.62)`. **Blue** is the dark page's, `#434665` and `#4456de`
- * (#69), at amber's opacities: opaque, its sentence put black letters on a
- * light page at 2.3:1, and the two themes now share one mark.
+ * The two quick choices. #122 puts Blue first and sets its sentence to 60%
+ * and word to 50%, as the owner chose in the native-palette prototype.
+ * Amber keeps the light page's original colours and opacities.
  *
  * Their names are what VoiceOver says; the drawer shows only their samples.
  */
 export const HIGHLIGHT_PRESETS = {
-  blue: { sentence: { color: '#434665', opacity: 22 }, word: { color: '#4456de', opacity: 62 } },
+  blue: { sentence: { color: '#434665', opacity: 60 }, word: { color: '#4456de', opacity: 50 } },
   amber: { sentence: { color: '#ffc400', opacity: 22 }, word: { color: '#ffa800', opacity: 62 } },
 } as const satisfies Record<string, HighlightColours>;
 
 /** A preset's id. */
 export type HighlightPreset = keyof typeof HIGHLIGHT_PRESETS;
 
-/** The presets in the order the drawer offers them: Amber, the app's first look, then Blue. */
-export const HIGHLIGHT_PRESET_ORDER: readonly HighlightPreset[] = ['amber', 'blue'];
+/** Blue first, then Amber (owner's #122 prototype acceptance). */
+export const HIGHLIGHT_PRESET_ORDER: readonly HighlightPreset[] = ['blue', 'amber'];
 
 /** What VoiceOver calls each preset. */
 export const HIGHLIGHT_PRESET_LABELS: Readonly<Record<HighlightPreset, string>> = { amber: 'Amber', blue: 'Blue' };
 
 /**
- * Blue, for a new install and for a settings file written before #118 (owner's
- * Q4): the only one of the two whose spoken word stays readable on both pages,
- * 6.4:1 on white and 7.2:1 on the dark page, where amber's is 2.82:1.
+ * Blue for a new install and missing settings. Already-saved choices, including
+ * the original Blue at 22%/62%, remain unchanged; a preset is a shortcut, not
+ * a stored mode that silently changes when its definition changes.
  */
 export const DEFAULT_HIGHLIGHT_COLOURS: HighlightColours = HIGHLIGHT_PRESETS.blue;
 

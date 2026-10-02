@@ -83,7 +83,7 @@ describe('the reading accent (#118)', () => {
 
   it('washes the player\'s A in the word\'s colour at the word\'s opacity, the same in both themes', () => {
     for (const scheme of SCHEMES) {
-      expect(readingAccent(HIGHLIGHT_PRESETS.blue, scheme).following).toBe('rgba(68, 86, 222, 0.62)');
+      expect(readingAccent(HIGHLIGHT_PRESETS.blue, scheme).following).toBe('rgba(68, 86, 222, 0.5)');
       expect(readingAccent(HIGHLIGHT_PRESETS.amber, scheme).following).toBe('rgba(255, 168, 0, 0.62)');
       expect(readingAccent(wordIn('#4456de', 0), scheme).following).toBe('rgba(68, 86, 222, 0)');
     }

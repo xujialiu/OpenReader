@@ -322,8 +322,8 @@ describe('Highlight Colours as a stylesheet', () => {
 
   it('marks the sentence and the word in Blue, the default, at its opacities', () => {
     expect(highlightRules(DEFAULT_HIGHLIGHT_COLOURS)).toEqual([
-      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(67, 70, 101, 0.22); }',
-      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0.62); }',
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(67, 70, 101, 0.6); }',
+      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0.5); }',
     ]);
     expect(DEFAULT_HIGHLIGHT_COLOURS).toEqual(HIGHLIGHT_PRESETS.blue);
   });
@@ -348,15 +348,15 @@ describe('Highlight Colours as a stylesheet', () => {
     );
   });
 
-  it('composites Blue to what the simulator measures, on the white page and the dark one', () => {
+  it('composites the revised Blue preset on the white page and the dark one', () => {
     // The word paints over the sentence (registered second), and both over the
     // page. These are the colours a screenshot of a highlighted word should hold.
     const blue = HIGHLIGHT_PRESETS.blue;
     const sentenceRgb: [number, number, number] = [67, 70, 101];
     const wordRgb: [number, number, number] = [68, 86, 222];
     for (const [page, sentence, word] of [
-      [[255, 255, 255], '#d6d6dd', '#7b87de'],
-      [[0x11, 0x11, 0x14], '#1c1d26', '#354098'],
+      [[255, 255, 255], '#8e90a3', '#6973c0'],
+      [[0x11, 0x11, 0x14], '#2f3145', '#3a4391'],
     ] as const) {
       const underWord = over(sentenceRgb, blue.sentence.opacity / 100, [...page]);
       expect(hex(underWord)).toBe(sentence);
@@ -390,7 +390,7 @@ describe('Highlight Colours as a stylesheet', () => {
     }
     // What does not read as a colour is the default's; what does, is kept.
     expect(highlightCss({ sentence: { color: '#4456DE', opacity: Number.NaN }, word: { color: '#4456de80', opacity: -40 } } as never)).toContain(
-      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0.22); }',
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0.6); }',
     );
   });
 });

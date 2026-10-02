@@ -10,7 +10,7 @@ import { HIGHLIGHT_PRESETS } from '../../src/renderer/highlight-colours';
  */
 describe("the Highlight section's sample of the page (#118)", () => {
   it('lays a level over the page at its opacity', () => {
-    expect(paintOver('#ffffff', HIGHLIGHT_PRESETS.blue.word)).toBe('#8b96eb');
+    expect(paintOver('#ffffff', HIGHLIGHT_PRESETS.blue.word)).toBe('#a2abef');
     expect(paintOver('#111114', { color: '#ffffff', opacity: 50 })).toBe('#88888a');
   });
 

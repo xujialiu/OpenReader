@@ -86,7 +86,10 @@ tests all read it. `test/renderer/highlight-colours.test.ts` covers it.
 
 ## The presets, and Blue by default
 
-`HIGHLIGHT_PRESETS`, offered in `HIGHLIGHT_PRESET_ORDER` (Amber, then Blue), read
+_Original #118 values and measurements below. #122 revises Blue to 60%/50%
+and puts it first; the accepted native-palette revision is recorded below._
+
+`HIGHLIGHT_PRESETS`, originally offered in `HIGHLIGHT_PRESET_ORDER` (Amber, then Blue), read
 by VoiceOver from `HIGHLIGHT_PRESET_LABELS` (owner's Q2 and Q7):
 
 | preset | sentence | word |
@@ -259,39 +262,66 @@ The owner replaced the section with one disclosure row below Alignment.
 does. The standalone `AppearanceSheet` used by the walkthrough has the same
 navigation. Dismissing and reopening starts outside the editor, as before.
 
-`HighlightPage` in `src/app/highlight-section.tsx` keeps a short sample,
-"Read this **word.**", and a SwiftUI segmented `Picker` outside `DrawerScroll`.
-The preview uses the existing `sentencePaint` / `wordPaint` arithmetic and
-reading font at Body size, with `numberOfLines={2}` and no font shrinking.
-Both marks stay painted when the editing target switches. Only the controls
-below scroll; the preview cannot scroll off with them.
+The first implementation (`4e6a7b1`, beta17) used inline RGB/opacity sliders.
+The owner rejected it: RGB was too abstract and the presets were hidden below
+it. That editor and its helper were removed, not retained as another mode.
 
-Expo UI 57.0.19's `ColorPicker` exposes selection, label and opacity support,
-not an inline presentation. Its presenting well cannot meet the owner's
-always-visible-preview requirement. Instead the page uses native SwiftUI
-`Slider`s for red, green and blue (0–255) and opacity (0–100), step 1. Hosts
-stretch to the row width and match their content vertically, because Slider
-has no intrinsic width (Expo SDK 57 Slider documentation). The system draws
-the sliders and the Sentence / Word segmented control. Switching targets
-remounts the sliders so an in-progress native thumb is not reused for another
-mark. The two preset tiles follow the sliders and still replace both marks.
+### Accepted native-palette prototype
 
-`src/app/highlight-editor.ts` changes only the requested channel of the
-requested mark, retaining its other channels and opacity and the other mark.
-It clamps and rounds finite events, ignores non-finite ones and returns the
-original object for an unchanged value. Tests cover every byte and whole
-percentage, both targets, successive edits and restoration of a preset.
+Primary source: `xujialiu/highlight-2--palette-prototype`, `dd3ed65` then
+`332179a`, with its recipe and Swift source under `test/manual-test/settings/`.
+A separate UIKit app established public child-controller containment of
+`UIColorPickerViewController` on iOS 27.0, plus real Grid, Spectrum and opacity
+touches while a fixed sample remained visible. The owner accepted the layout,
+then explicitly removed the proposed upper-right eyedropper rather than ship
+its nonworking prototype button.
 
-Every change goes through the existing Appearance callback immediately; there
-is no draft or Save/Cancel state. Storage, renderer repaint and accent
-calculation are unchanged. The trade-off is losing the complete picker's
-grid, spectrum and eyedropper, not any sRGB colour or opacity. No new native
-module or third-party picker is introduced.
+Setting `title = ""` removes Colors. On iOS 27, additionally setting
+`supportsEyedropper = false` removes the entire system header, without private
+subview manipulation or clipping offsets. That property is public from iOS 26;
+on older supported systems UIKit does not expose hiding its eyedropper. The
+availability guard preserves compatibility; the headerless layout is verified
+on iOS 27, not a promise about older OS versions.
 
-Sources: [SDK 57 Slider](https://docs.expo.dev/versions/v57.0.0/sdk/ui/swift-ui/slider/),
+### Production boundary
+
+`HighlightPage` owns a one-line preview, the Blue/Amber Aa tiles immediately
+below it, then the native Sentence / Word segmented control. These sit outside
+`DrawerScroll`. The sample uses the existing `sentencePaint` / `wordPaint`
+arithmetic, chosen font at Body size, and `numberOfLines={1}`. It reads
+"Rain fell. Birds **sang**.", with the first sentence unmarked; at larger font
+scales or narrower widths the words shorten to "Go. We **run**." The font is
+never shrunk. Both marks stay visible regardless of the editing target.
+
+`modules/open-reader-palette/` is a local Expo view, containing only UIKit's
+palette. Its view attaches the picker to the nearest responder-chain view
+controller with `addChild` / `didMove`, and detaches it and its delegate when
+removed from the window. It sets the native view's frame to its bounds. The
+palette gets enough height for its grid, opacity and saved swatches; only that
+area scrolls when the drawer is shorter. No second modal or private API is used.
+
+Each native event includes an incrementing count and `#rrggbbaa`. JavaScript
+acknowledges the count together with the controlled value; native selection
+props older than the last event are ignored so a delayed React render cannot
+rewind a drag. A target switch remounts the native picker and acknowledgement
+state together. `UIColor.getRed` handles greys without treating white/alpha
+components as RGB. The existing `fromPicker` / `toPicker` conversions keep
+whole-percent storage and both 0 and 100. A change takes the existing Appearance
+callback immediately; persistence, live renderer repaint and accent derivation
+are not replaced.
+
+### Revised Blue preset
+
+Blue is now first, `#434665` at 60% for Sentence and `#4456de` at 50% for Word.
+Amber is unchanged. Defaults for absent settings follow Blue, but saved 22%/62%
+Blue remains exactly that choice and matches neither current preset. There is
+no migration that silently changes saved colours. Tests pin both the new
+preset and preservation of the old values.
+
+Sources: [Expo native view tutorial](https://docs.expo.dev/modules/native-view-tutorial/),
 [SDK 57 Picker](https://docs.expo.dev/versions/v57.0.0/sdk/ui/swift-ui/picker/),
-`node_modules/@expo/ui/src/swift-ui/ColorPicker/index.tsx` and
-`node_modules/@expo/ui/ios/SliderView.swift` (57.0.19).
+[UIColorPickerViewController](https://developer.apple.com/documentation/uikit/uicolorpickerviewcontroller),
+and the installed iOS 27 public `UIColorPickerViewController.h`.
 
 ## Alternatives
 
