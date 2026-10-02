@@ -21,8 +21,7 @@ import { accessibilityAddTraits, accessibilityElement, accessibilityLabel, menuO
 import { Children, createContext, isValidElement, useContext, useMemo, useState, type ReactNode } from 'react';
 import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
-import { DEFAULT_HIGHLIGHT_COLOURS } from '../renderer/highlight-colours';
-import { readingAccent, type ReadingAccent } from './accent';
+import { type ReadingAccent } from './accent';
 import { Icon, type IconName } from './icon';
 import { NameText } from './name-text';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
@@ -167,9 +166,6 @@ export function useAccent(): ReadingAccent {
   return accent;
 }
 
-/** The interim `INK.reading`: Blue's accent, the default, until `appearance-sheet.tsx` reads `useAccent()`. */
-const INTERIM_READING = { light: readingAccent(DEFAULT_HIGHLIGHT_COLOURS, 'light').reading, dark: readingAccent(DEFAULT_HIGHLIGHT_COLOURS, 'dark').reading };
-
 /** The app's colours, each one both of `PALETTE`'s. */
 export const INK = {
   page: ink(PALETTE.light.page, PALETTE.dark.page),
@@ -177,12 +173,6 @@ export const INK = {
   line: ink(PALETTE.light.line, PALETTE.dark.line),
   text: ink(PALETTE.light.text, PALETTE.dark.text),
   quiet: ink(QUIET.light, QUIET.dark),
-  /**
-   * Blue's reading accent, whatever the owner's Highlight Colours: kept only
-   * for `appearance-sheet.tsx`'s check until it reads `useAccent()` (#118), and
-   * then removed. Everything else takes `useAccent()`.
-   */
-  reading: ink(INTERIM_READING.light, INTERIM_READING.dark),
   /** Something the owner has to act on: a missing key, a server that did not answer. Not an alarm. */
   attention: ink('#8a2f18', '#f08c6e'),
   /** A settings page, behind its cards (`SETTINGS_SURFACE`). */

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { READING_FONTS, stepFontSize, stepMargins, TEXT_ALIGNMENTS, type Appearance, type TextAlignment } from '../renderer/highlighter';
-import { INK, type Choice } from './controls';
+import { INK, useAccent, type Choice } from './controls';
 import { Drawer, DrawerChevron, DrawerMenuRow, DrawerRow, DrawerRowText, DrawerRowValue, DrawerScroll, useDrawerColours } from './drawer';
 import { drawerRowText } from './drawer-list';
 import { HighlightSection } from './highlight-section';
@@ -100,13 +100,14 @@ export function AppearanceControls({ appearance, onChange, onFonts }: {
  */
 export function FontList({ appearance, onChange }: { appearance: Appearance; onChange(next: Appearance): void }) {
   const rows = [null, ...READING_FONTS.map((font) => font.id)] as const;
+  const accent = useAccent();
   return <DrawerScroll>
     {rows.map((id) => {
       const font = READING_FONTS.find((one) => one.id === id);
       const chosen = appearance.font === id;
       return <DrawerRow key={id ?? 'document'} accessibilityState={{ selected: chosen }} accessibilityLabel={font?.label ?? ORIGINAL_FONT}
         onPress={() => onChange({ ...appearance, font: id })}
-        accessory={chosen ? <Icon name="check" color={INK.reading} size={20} strokeWidth={2.2} /> : null}>
+        accessory={chosen ? <Icon name="check" color={accent.reading} size={20} strokeWidth={2.2} /> : null}>
         <DrawerRowText style={font?.preview ? { fontFamily: font.preview } : null}>{font?.label ?? ORIGINAL_FONT}</DrawerRowText>
       </DrawerRow>;
     })}
