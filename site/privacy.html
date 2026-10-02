@@ -9,7 +9,7 @@
 <body>
 <main>
 <h1>OpenReader Privacy Policy</h1>
-<p class="muted">Last updated 30 September 2026</p>
+<p class="muted">Last updated 3 October 2026</p>
 
 <p>OpenReader reads EPUB documents aloud with a speech service you choose. It has no account, no server of its own, no analytics and no advertising. The developer receives none of your data.</p>
 
@@ -32,7 +32,9 @@
 <li>Speechify</li>
 <li>A server you run yourself, at the address you enter (OpenAI-compatible or Kokoro-FastAPI)</li>
 </ul>
-<p>Each service handles what it receives under its own privacy policy and terms, through the account the key belongs to. OpenReader has no arrangement with any of them and does not control what they keep.</p>
+<p>Each service handles what it receives under its own privacy policy and terms, through the account the key belongs to. Your API key identifies that service account, so requests and submitted text can be associated with it. OpenReader has no arrangement with these services and does not control what they keep.</p>
+<p>Retention and other uses vary by service and account settings. OpenAI's speech API has abuse-monitoring retention by default; Fish Audio offers zero retention only for eligible services when enabled. Providers' terms may also permit using content to improve their services or models. Microsoft states that its real-time text-to-speech service does not store synthesis text or output audio. Do not assume that an arbitrary provider or server deletes text immediately after speaking it.</p>
+<p>See <a href="https://platform.openai.com/docs/guides/your-data">OpenAI data controls</a>, <a href="https://fish.audio/privacy/">Fish Audio privacy</a> and <a href="https://fish.audio/enterprise-terms/">Customer Agreement</a>, <a href="https://learn.microsoft.com/en-us/azure/foundry/responsible-ai/speech-service/text-to-speech/data-privacy-security">Microsoft's speech data policy</a>, and <a href="https://speechify.com/privacy/">Speechify privacy</a> for the terms applicable to the service you choose.</p>
 
 <h3>Word Lookup &amp; Translation</h3>
 <p>When you look up or translate a selection, OpenReader sends only the selected text to the service you chose: Youdao, Google Translate, the Free Dictionary API (dictionaryapi.dev), or Microsoft Translator with your own key. A word's pronunciation is played from Youdao, or from the recording the Free Dictionary API links to. Nothing else from the document is sent, and no history of lookups is kept.</p>
@@ -45,8 +47,8 @@
 
 <h2>What OpenReader does not do</h2>
 <ul>
-<li>No analytics, crash reporting, advertising or tracking of any kind.</li>
-<li>Nothing is sent to the developer, sold or shared for any other purpose.</li>
+<li>OpenReader includes no analytics, crash-reporting or advertising SDK, and does not track you across other apps or websites.</li>
+<li>The developer receives none of your documents, credentials or usage data, and does not sell them. Services you choose handle requests under their own terms as described above.</li>
 <li>It does not use your location, contacts, photos, camera or microphone.</li>
 </ul>
 
@@ -54,7 +56,7 @@
 <p>Deleting OpenReader deletes the documents, audio, positions and settings stored in it. iOS can keep Keychain items after an app is deleted, so remove your API keys in OpenReader's Providers settings first if you want them gone. The positions file on your WebDAV server is yours to delete there.</p>
 
 <h2>Children</h2>
-<p>OpenReader is not directed at children, and it collects no personal data from anyone.</p>
+<p>OpenReader is not directed at children. The speech and lookup services you choose may impose their own minimum ages and account requirements.</p>
 
 <h2>Changes</h2>
 <p>If this policy changes, the new version will be posted on this page with a new date.</p>
