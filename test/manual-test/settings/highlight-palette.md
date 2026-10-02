@@ -62,6 +62,40 @@ fast `axe swipe` fling is what scrolls the palette's area (`../pitfalls/mcp.md`)
   `Go. We run.` — still one line, letters never shrunk, both marks on it.
 - Settings' version line read `1.0.0-beta19-debug` on the screen.
 
+## Final evidence audit (2026-10-02, 17:05)
+
+Exact 0% was also verified through the native OPACITY number field: tap its
+value, delete the digits, enter `0`, confirm. `61-exact0.png` shows the sentence
+mark gone while the word remains marked; `61c-oprow.png` shows 0%. The Debug
+Log at 16:59:37 retains sentence `#434665` with opacity 0. Restoring Blue at
+17:00:44 restores sentence 60% and word 50%. Coordinate slider drags alone had
+only reached 4–8%; they are not evidence of exact zero.
+
+Artifacts are in `/tmp/hl2-shots/`; `65-parent-final.png` is the final parent
+check after Back and re-entry, with Grid selected at the top of the scroll
+area, Blue ringed, normal text size and the drawer expanded. Only the palette
+scrolls, so scrolling down can partially clip its tab row; re-entry resets it.
+The full saved-colour swatch is reached by scrolling slightly down. The app is
+actual OpenReader beta19, not the separately installed prototype. Metro 8087
+serves the parent worktree. No audio was played.
+
+The beta17 RGB probe's failed run was initially misreported as aborted without
+an Executed line. The raw `/tmp/hl2-probe/test-20261002-153159.log` instead has
+an assertion at line 79 (`Optional(67)` did not change), followed by
+`Executed 1 test, with 1 failure (0 unexpected) in 55.142 (55.150) seconds`.
+The earlier beta17 track-inspection run logged `Executed 1 test, with 0
+failures (0 unexpected) in 9.724 (9.727) seconds`. Neither is verification of
+beta19: the native-palette interactions above used real coordinate gestures
+and screenshot/state checks, not that retired XCTest.
+
+Separately, the subagent runner marked its completed-report runs failed with
+`Agent 'ios-tester' requested unavailable child tools: mcp.` This is a harness
+allowlist problem, not the old XCTest assertion (the child's explanation
+conflated them). The parent inspected the runner status, raw test lines,
+final screenshots and active Metro cwd before accepting the native-palette
+evidence. `/tmp/hl2-pod-install-2.log` and `/tmp/hl2-build2.log` belong to the
+new native module build; `/tmp/highlight-122-native-unit.log` has 2263 passes.
+
 ## What this cannot prove
 
 Per-frame continuity (the burst is 450 ms apart), the exact byte UIKit rounds
