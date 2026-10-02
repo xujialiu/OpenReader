@@ -21,6 +21,8 @@ import { accessibilityAddTraits, accessibilityElement, accessibilityLabel, menuO
 import { Children, createContext, isValidElement, useContext, useMemo, useState, type ReactNode } from 'react';
 import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import type { ColorValue } from 'react-native';
+import { DEFAULT_HIGHLIGHT_COLOURS } from '../renderer/highlight-colours';
+import { readingAccent, type ReadingAccent } from './accent';
 import { Icon, type IconName } from './icon';
 import { NameText } from './name-text';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
@@ -59,10 +61,9 @@ import { TEXT, TEXT_EMPHASIZED } from './text-styles';
  * than black and the text is not pure white, because an unrelieved #000/#fff pair
  * is what makes a long reading tiring — `#111114` and `#e6e6ea` are the same pair
  * `themeCss` paints the document with, so the page and the app around it are one
- * surface. The amber is lightened for dark, where the light one reads as brown.
- * It is the highlighter's colour only on a light page: a dark page marks the
- * spoken words in blue, because amber cannot carry light letters (`themeCss`,
- * #69), and the accent here stayed amber (design 0042).
+ * surface. The accent is not here: it follows the owner's Highlight Colours
+ * (`useAccent()`, #118), and is held to 4.5:1 on `page` and `panel`, whose
+ * values `accent.ts` repeats (`ACCENT_SURFACES`, checked by its test).
  */
 export const PALETTE = {
   light: {
@@ -70,22 +71,14 @@ export const PALETTE = {
     panel: '#f4f4f6',
     line: '#dcdce2',
     text: '#16161a',
-    reading: '#b26a00',
   },
   dark: {
     page: '#111114',
     panel: '#1c1c21',
     line: '#33333c',
     text: '#e6e6ea',
-    reading: '#f0a828',
   },
 } as const;
-
-/** A `PALETTE` colour at `alpha`, so that a wash of it is that colour and not a second copy of it. */
-function wash(hex: string, alpha: number): string {
-  const rgb = parseInt(hex.slice(1), 16);
-  return `rgba(${(rgb >> 16) & 255},${(rgb >> 8) & 255},${rgb & 255},${alpha})`;
-}
 
 function ink(light: string, dark: string): ColorValue {
   if (Platform.OS !== 'ios') {
@@ -132,8 +125,8 @@ const QUIET = { light: '#5d5d68', dark: '#9d9daa' } as const;
  * `src/app/` to this table, read through `useBorders()`.
  */
 export const BORDER = {
-  light: { line: PALETTE.light.line, text: PALETTE.light.text, reading: PALETTE.light.reading, quiet: QUIET.light },
-  dark: { line: PALETTE.dark.line, text: PALETTE.dark.text, reading: PALETTE.dark.reading, quiet: QUIET.dark },
+  light: { line: PALETTE.light.line, text: PALETTE.light.text, quiet: QUIET.light },
+  dark: { line: PALETTE.dark.line, text: PALETTE.dark.text, quiet: QUIET.dark },
 } as const;
 
 /** The theme on screen, resolved once by the shell (`resolveTheme`, ADR 0022) and read by `useBorders()`. */
@@ -153,6 +146,30 @@ export function useBorders(): (typeof BORDER)[keyof typeof BORDER] {
   return BORDER[scheme];
 }
 
+/** The reading accent for the theme on screen, worked out once by the shell from the owner's Highlight Colours, and read by `useAccent()`. */
+export const AccentContext = createContext<ReadingAccent | null>(null);
+
+/**
+ * The reading accent (`accent.ts`, #118): the word's Highlight Colour, its hue
+ * kept and darkened or lightened just enough to read at 4.5:1 on the surface
+ * under it, for a check, the current row, a link, the download ring and a
+ * drawer's action; and the wash under the player's A.
+ *
+ * Plain strings for the theme on screen, as `useBorders()` gives them, and not
+ * an `INK` colour: an `INK` colour is made once, when this file loads, and the
+ * accent changes whenever the owner changes the word's colour. They serve a
+ * border as well as text (ADR 0046). Throws outside the shell, as
+ * `useBorders()` does.
+ */
+export function useAccent(): ReadingAccent {
+  const accent = useContext(AccentContext);
+  if (!accent) throw new Error('useAccent() was called outside the shell, which is what knows the Highlight Colours and the theme on screen.');
+  return accent;
+}
+
+/** The interim `INK.reading`: Blue's accent, the default, until `appearance-sheet.tsx` reads `useAccent()`. */
+const INTERIM_READING = { light: readingAccent(DEFAULT_HIGHLIGHT_COLOURS, 'light').reading, dark: readingAccent(DEFAULT_HIGHLIGHT_COLOURS, 'dark').reading };
+
 /** The app's colours, each one both of `PALETTE`'s. */
 export const INK = {
   page: ink(PALETTE.light.page, PALETTE.dark.page),
@@ -160,14 +177,12 @@ export const INK = {
   line: ink(PALETTE.light.line, PALETTE.dark.line),
   text: ink(PALETTE.light.text, PALETTE.dark.text),
   quiet: ink(QUIET.light, QUIET.dark),
-  /** The reading colour, the same amber the highlighter paints with on a light page (`highlighter.ts`); a dark page's highlight is blue (#69). */
-  reading: ink(PALETTE.light.reading, PALETTE.dark.reading),
   /**
-   * The reading colour at a quarter of its strength, the wash under the player's
-   * A (#71): Zotero-TTS draws its A on its accent mixed 24 % into transparent,
-   * and this is the same mix of the accent here.
+   * Blue's reading accent, whatever the owner's Highlight Colours: kept only
+   * for `appearance-sheet.tsx`'s check until it reads `useAccent()` (#118), and
+   * then removed. Everything else takes `useAccent()`.
    */
-  readingWash: ink(wash(PALETTE.light.reading, 0.24), wash(PALETTE.dark.reading, 0.24)),
+  reading: ink(INTERIM_READING.light, INTERIM_READING.dark),
   /** Something the owner has to act on: a missing key, a server that did not answer. Not an alarm. */
   attention: ink('#8a2f18', '#f08c6e'),
   /** A settings page, behind its cards (`SETTINGS_SURFACE`). */
@@ -345,8 +360,8 @@ export function SwitchRow({ label, value, onChange, disabled, note, accessibilit
  * `value` is a fact, in the quiet ink where the phone puts a row's current value
  * (`2 enabled`, `On`), and is left out rather than filled with a description of
  * what is behind the row. `checked` is the Providers list's mark for an enabled
- * Provider (design 0026), in the reading amber where the phone would use its own
- * blue (design 0042).
+ * Provider (design 0026), in the reading accent where the phone would use its
+ * own blue (design 0042, `useAccent()`).
  *
  * The same row as every other settings row on purpose. The Providers list and
  * the front page of Settings used to be two different full-width rows a tap
@@ -355,13 +370,14 @@ export function SwitchRow({ label, value, onChange, disabled, note, accessibilit
 export function NavigationRow({ label, value, checked, onPress, accessibilityLabel }: {
   label: string; value?: string; checked?: boolean; onPress(): void; accessibilityLabel?: string;
 }) {
+  const accent = useAccent();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress}
       style={({ pressed }) => [styles.settingRow, pressed && styles.rowPressed]}>
       <Text style={styles.settingLabel} numberOfLines={1}>{label}</Text>
       <View style={styles.settingValue}>
         {value ? <Text style={styles.settingDetail} numberOfLines={1}>{value}</Text> : null}
-        {checked ? <Icon name="check" color={INK.reading} size={20} strokeWidth={2.2} /> : null}
+        {checked ? <Icon name="check" color={accent.reading} size={20} strokeWidth={2.2} /> : null}
         <View style={styles.chevron}><Icon name="next" color={INK.tertiary} size={22} strokeWidth={2} /></View>
       </View>
     </Pressable>
@@ -451,17 +467,18 @@ export function TextRow({ label, value, onChangeText, placeholder, editable = tr
 }
 
 /**
- * An action as a row of its card (`Test connection`), in the reading amber
- * where the phone would use its own blue (design 0042).
+ * An action as a row of its card (`Test connection`), in the reading accent
+ * where the phone would use its own blue (design 0042, `useAccent()`).
  *
  * While it cannot be pressed it keeps its words and dims. What is happening is
  * said once, under the switch (`SwitchRow`'s `note`), and not again here.
  */
 export function ActionRow({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) {
+  const accent = useAccent();
   return (
     <Pressable accessibilityRole="button" onPress={onPress} disabled={disabled}
       style={({ pressed }) => [styles.settingRow, pressed && styles.rowPressed]}>
-      <Text style={[styles.actionLabel, disabled && styles.locked]}>{label}</Text>
+      <Text style={[styles.actionLabel, { color: accent.reading }, disabled && styles.locked]}>{label}</Text>
     </Pressable>
   );
 }
@@ -643,7 +660,7 @@ const styles = StyleSheet.create({
   // As tall as the row, so the whole of the row right of the name is the input.
   fieldInput: { ...TEXT.body, alignSelf: 'stretch', color: INK.text, flex: 1, minWidth: 0, paddingVertical: 12 },
   textRow: { ...TEXT.body, color: INK.text, minHeight: SETTINGS.rowHeight, paddingHorizontal: SETTINGS.inset, paddingVertical: 12 },
-  actionLabel: { ...TEXT.body, color: INK.reading },
+  actionLabel: { ...TEXT.body },
   prose: { ...TEXT.footnote, color: INK.text, paddingHorizontal: SETTINGS.inset, paddingVertical: 12 },
   menuRow: { flex: 1 },
   locked: { opacity: 0.5 },

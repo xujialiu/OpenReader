@@ -19,7 +19,7 @@
  *   app's 15-pt semibold draws it 589 and 42. Subhead, the phone's own 15-pt
  *   style, is the nearest; the line pitch is Books'. The weight is the app's
  *   own (Q48): regular, and the chapter being read semibold in the reading
- *   amber.
+ *   accent (`useAccent()`, #118).
  */
 
 import { onLinePitch, TEXT, TEXT_EMPHASIZED, type TextStyleName } from './text-styles';

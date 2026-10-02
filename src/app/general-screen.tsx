@@ -42,7 +42,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { DEFAULT_BRACKET_PAIRS, validateBracketPairs } from '../core/speech-text';
-import { Footnote, INK, SettingsGroup, SettingsPage, SwitchRow, TextRow, ValueRow, type Choice } from './controls';
+import { Footnote, SettingsGroup, SettingsPage, SwitchRow, TextRow, useAccent, ValueRow, type Choice } from './controls';
 import { useShell } from './routes';
 import { TEXT } from './text-styles';
 import { DRAWER_HEIGHTS, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLING_LABELS, SCROLLINGS, SENTENCE_PAUSES_MS, THEME_LABELS, THEME_SETTINGS, type Scrolling, type ThemeSetting } from './settings';
@@ -90,6 +90,7 @@ function bracketProblem(value: string): string | null {
 
 export function GeneralScreen() {
   const { settings, setSettings } = useShell();
+  const accent = useAccent();
   const [problem, setProblem] = useState<string | null>(null);
 
   /**
@@ -154,7 +155,7 @@ export function GeneralScreen() {
           {problem ? <Pressable accessibilityRole="button" onPress={() => {
             setProblem(null);
             setSettings((was) => ({ ...was, bracketPairs: DEFAULT_BRACKET_PAIRS, stripBrackets: true }));
-          }}><Text style={styles.link}>Use {DEFAULT_BRACKET_PAIRS} instead</Text></Pressable> : null}
+          }}><Text style={[styles.link, { color: accent.reading }]}>Use {DEFAULT_BRACKET_PAIRS} instead</Text></Pressable> : null}
           <Footnote>Chapters already downloaded keep the audio they were saved with until they are downloaded again.</Footnote>
         </>}
       >
@@ -175,5 +176,5 @@ export function GeneralScreen() {
 }
 
 const styles = StyleSheet.create({
-  link: { ...TEXT.footnote, color: INK.reading, paddingVertical: 6 },
+  link: { ...TEXT.footnote, paddingVertical: 6 },
 });

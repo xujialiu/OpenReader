@@ -11,7 +11,8 @@ const ROUND = 2 * Math.PI * RADIUS;
  * The App Store's download ring, in the column the selection circle uses so the
  * two line up (design 0027, "Choose chapters or the whole document").
  *
- * A thin track in the line colour; an arc in the reading colour that fills
+ * A thin track in the line colour; an arc in `colour`, the reading accent
+ * (`useAccent()`, the stricter `onMark` on the chapter being read), that fills
  * clockwise from twelve o'clock, which is where the HIG's circular indicator
  * starts; a quarter arc that turns while `spinning`, for the moment the chapter's
  * text is still being counted and there is no fraction. The glyph in the middle
@@ -23,8 +24,8 @@ const ROUND = 2 * Math.PI * RADIUS;
  * rotation of that layer, and turning the whole ring would turn the square with
  * it (ADR 0027).
  */
-export function DownloadRing({ fraction, spinning, halted, onPress }: {
-  fraction: number; spinning: boolean; halted: boolean; onPress(): void;
+export function DownloadRing({ colour, fraction, spinning, halted, onPress }: {
+  colour: string; fraction: number; spinning: boolean; halted: boolean; onPress(): void;
 }) {
   // Held in state rather than a ref, so nothing reads a ref during render.
   const [turn] = useState(() => new Animated.Value(0));
@@ -38,11 +39,11 @@ export function DownloadRing({ fraction, spinning, halted, onPress }: {
   return <Pressable accessibilityRole="button" accessibilityLabel={halted ? 'Resume download' : 'Pause download'} hitSlop={12} onPress={onPress} style={styles.ring}>
     <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">
       <Circle cx={12} cy={12} r={RADIUS} stroke={INK.line} strokeWidth={2} />
-      {halted ? <Path d="M10 8.3 15.6 12 10 15.7Z" fill={INK.reading} /> : <Rect x={9} y={9} width={6} height={6} rx={1} fill={INK.reading} />}
+      {halted ? <Path d="M10 8.3 15.6 12 10 15.7Z" fill={colour} /> : <Rect x={9} y={9} width={6} height={6} rx={1} fill={colour} />}
     </Svg>
     <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }] }]}>
       <Svg width={SIZE} height={SIZE} viewBox="0 0 24 24" fill="none">
-        <Circle cx={12} cy={12} r={RADIUS} stroke={INK.reading} strokeWidth={2} strokeDasharray={`${arc} ${ROUND}`} transform="rotate(-90 12 12)" />
+        <Circle cx={12} cy={12} r={RADIUS} stroke={colour} strokeWidth={2} strokeDasharray={`${arc} ${ROUND}`} transform="rotate(-90 12 12)" />
       </Svg>
     </Animated.View>
   </Pressable>;
