@@ -15,12 +15,11 @@ ADR 0022, [ADR 0041](0041-settings-rows-and-the-speed-popover.md)'s rows and
 [ADR 0066](0066-every-drawer-rises-to-the-drawer-height.md)'s current row are
 drawn in._
 
-**Built in parallel lanes** (the plan's table). The model is `7e303fb`. The
-page (`src/renderer/`), the accent (`src/app/controls.tsx`, a new accent module
-and its users) and the Appearance section (`src/app/appearance-sheet.tsx` and a
-new section file) are being built now. Their commits, names and measurements
-are listed under "To be recorded" below and are not written here until they are
-merged. The owner has not yet accepted the result on the iPhone.
+**Built in parallel lanes** (the plan's table), merged into
+`xujialiu/highlight`: the model `7e303fb`, the page `e57ee0c`, the accent
+`9da5b84`–`fca3656`, the Appearance section `ef51ce7`–`20eada8`, and the
+interim accent removed in `054b298`. The owner's acceptance on the iPhone is
+still to come.
 
 ## What was there
 
@@ -148,57 +147,103 @@ outside sRGB is clamped. An answer equal to the last one is not sent (notes
   `selection` resets `previousHex` before the `onChange` that compares against
   it.
 
-## To be recorded when the lanes merge
+## The page
 
-What the other lanes are building now. Each item is a fact this ADR needs, and
-none of it is written above until it is merged:
+- **One stylesheet, the owner's colours in it.** `highlightCss` builds the two
+  `::highlight()` rules from `appearance.highlight` with the model's `rgba()`,
+  after `SELECTABLE`, which stays first and unchanged. `themeCss` declares the
+  dark page and its text and no highlight rule: `DARK_UTTERANCE`,
+  `DARK_WORD`, `DEFAULT_HIGHLIGHT` and `HighlightStyles` are gone, and
+  `highlighterSource` takes the Appearance first (`e57ee0c`).
+- **A `'highlight'` message.** A change to the colours alone reaches an open
+  Document as its own message (`src/renderer/messages.ts`), which swaps the
+  stylesheet in every section without moving the page, as the theme does. The
+  appearance message would have settled the page back on the spoken line while
+  the owner browsed elsewhere. `setAppearance` sends it when only the colours
+  changed, and the appearance message as well when anything else did. It is
+  sent again when the program installs, if the colours changed since it was
+  built. A message without CSS is dropped, so it can never remove
+  `SELECTABLE`. The two `Highlight`s are never re-registered, so the word stays
+  painted over the sentence.
+- **Tests.** `test/renderer/appearance.test.ts` ("Highlight Colours as a
+  stylesheet") pins the CSS for Blue and Amber and for opacity 0, and checks
+  that a malformed setting yields only `SELECTABLE` and the two
+  `background-color` rules. `test/renderer/rules.test.ts` checks that dark
+  declares no highlight and no `color`, and runs the page's own `'highlight'`
+  handler.
 
-- **The page** (lane R, `src/renderer/`):
-  - how the owner's colours reach the two `::highlight()` rules: which part
-    of the one stylesheet carries them (`CSS_TEXT`, `THEME` or `APPEARANCE`),
-    and so whether ADR 0022's "it declares a font and a size and never a
-    colour" still holds;
-  - that `DEFAULT_HIGHLIGHT` and `themeCss`'s two overrides
-    (`DARK_UTTERANCE`, `DARK_WORD`) are gone, with the commit;
-  - which message carries a change to an open Document, and whether it
-    restyles without a settle, as the theme does;
-  - the tests that pin the emitted rules and the `user-select` guard.
-- **The accent** (lane A, `src/app/controls.tsx` and a new module):
-  - the derivation's name and its arithmetic: how the hue is kept, how far it
-    is darkened in light and lightened in dark, and whether a colour already
-    at 4.5:1 is left alone;
-  - which surfaces it is measured against. The inputs are in notes 10:06:
-    Blue's `#4456de` is 5.78:1 on `#ffffff`, 5.26 on `#f4f4f6`, 3.26 on
-    `#111114` and 2.93 on `#1c1c21`. Amber's `#ffa800` is 1.93, 1.76, 9.74 and
-    8.77;
-  - the hook or context that replaces the module-scope `INK.reading`,
-    `INK.readingWash` and `BORDER.reading`, and how a change reaches screens
-    that used to repaint with no render;
-  - the A (Q5 = A): the word's colour at the word's opacity, in place of
-    `readingWash`;
-  - the unit tests' extreme colours, and the contrast each reaches;
-  - the revised comments in `controls.tsx` (the `PALETTE` and `INK.reading`
-    notes that say the accent stayed amber).
-- **The Appearance section** (lane U, `appearance-sheet.tsx` and a new file):
-  - the components' names;
-  - the sample sentence's font and colours, the interface font for Original
-    Book Font;
-  - the tiles' size and ring, their VoiceOver labels and how they are reached;
-  - the `ColorPicker` rows' hosting and size inside the drawer's
-    `RNHostView`;
-  - what was measured on the simulator.
-- **On the simulator, before the owner's acceptance** (the plan's
-  verification):
-  - both presets in both themes;
-  - a custom colour and opacity through the picker, live on the page;
-  - opacity 0;
-  - the preset ring;
-  - the A;
-  - the accent in a drawer and in Settings;
-  - whether a grey from the picker's grid comes back with the right green.
-    `colorToHex` reads `components[1]` as green whenever there is more than
-    one component, so a grey-space `CGColor`, which has two (white and alpha),
-    would answer its alpha there (notes 10:07).
+## The accent
+
+- **`src/app/accent.ts`, pure.** `readingAccent(highlight, scheme)` keeps the
+  word colour's hue and mixes it towards black (light) or white (dark) only as
+  far as 4.5:1 needs; a colour already there is left alone. It gives three
+  values:
+  - `reading`, held to light `#ffffff` / `#f4f4f6` and dark `#111114` /
+    `#1c1c21`;
+  - `onMark`, a stricter shade of the same hue for text on the drawer's marked
+    row and round-button fill (light `#dcdce2` / `#ffffff`, dark `#3e3e47` /
+    `#2c2c32`). At `reading` Blue there was 4.23:1 light and 2.83:1 dark;
+  - `following`, the word colour at the word's opacity, for the player's A
+    (Q5 = A).
+
+| word | theme | `reading` | `onMark` |
+| --- | --- | --- | --- |
+| Blue | light | `#4456de` (kept), 5.26 | `#4152d5`, 4.53 |
+| Blue | dark | `#6c7be5`, 4.53 | `#9ba5ed`, 4.53 |
+| Amber | light | `#9a6500`, 4.51 | `#865800`, 4.51 |
+| Amber | dark | `#ffa800` (kept), 8.77 | `#ffa800` (kept), 5.47 |
+
+  The lowest ratio across each set of surfaces (notes 10:15). White, black,
+  pure yellow and `#0a1a3a` reach at least 4.50 in both themes
+  (`test/app/accent.test.ts`, 18 tests).
+- **Plumbing.** The shell works the accent out from
+  `settings.appearance.highlight` and the theme and passes it in
+  `AccentContext`; screens read `useAccent()` in `controls.tsx`, which throws
+  outside the shell as `useBorders()` does. The values are plain strings, so a
+  border can take them (ADR 0046). `PALETTE.*.reading`, `BORDER.reading`,
+  `INK.readingWash`, `wash()` and, after the merge, `INK.reading` are gone.
+- **`onMark` is used** for the current row's text in Contents, for the
+  whole of Download's current chapter row (text, check, selection circle, ring)
+  and for the header capsule's text (Select all). Everything else that was
+  amber takes `reading`.
+
+## The Appearance section
+
+- **`src/app/highlight-section.tsx`**, under Alignment as rows of the drawer's
+  plain list, with its arithmetic in `src/app/highlight-paint.ts`
+  (`test/app/highlight-paint.test.ts`):
+  - **"Highlight"** in the settings pages' header style.
+  - **A sample**: "The rain had stopped by morning. She opened the **window**
+    and listened to the birds." It is set on the page's own colours (white
+    with black text, or `#111114` with `#e6e6ea`) and in the Appearance font,
+    or the interface font for Original Book Font and System. The second
+    sentence is marked, and "window" is marked over it.
+  - **Tiles** for Amber and Blue, 60 × 30 pt, so five tiles and their gaps
+    would fill the row, as in the owner's reference image (62–63 × 30.5 pt
+    there). Each shows "Aa" as the word would look on the page. The one in
+    force has a 2-pt ring in its word colour, 1.5 pt off the tile. A tap sets
+    all four values. VoiceOver reads "Amber" or "Blue" with the selected state.
+  - **Sentence and Word** rows, each with the phone's own `ColorPicker`
+    (`supportsOpacity`) in a host only as big as its 28-pt well, so the drawer
+    stays on screen when the picker opens over it. Each change goes through
+    `fromPicker` into `appearance.highlight` and is saved as it happens.
+- **Measured on the simulator** (notes 10:38). The tiles' colours match the
+  arithmetic within a level: Amber on the dark page (165,111,8) against
+  (164.6,111.1,9.1). The picker opened over the drawer, which stayed at its
+  height. A Word opacity drag gave 66 changes in 1.93 s. A Sentence at 0 %
+  saved `{"color":"#ffc400","opacity":0}`.
+- **At the Drawer Height of 50 %**, the header and sample show, and the tiles
+  and wells are below the screen; a swipe up takes the drawer to `large`,
+  where the whole section fits.
+- **Greys.** `colorToHex` in `@expo/ui`'s `ColorPickerView.swift` reads
+  `components[1]` as green whenever there is more than one component, so a
+  grey-space `CGColor` (white, alpha) would answer its alpha there (notes
+  10:07). Tried three ways on the simulator, it never did: the grid's
+  mid-grey cell at 62 % answered `#9999999E`, a stored `#808080` with its
+  slider dragged to 0 answered `#808080` throughout, and the black swatch
+  answered black (notes 10:56). The path is real but was not reached.
+- **The wells take an XCTest tap, not AXe** (`HighlightWellProbe`,
+  `test/manual-test/settings/highlight-colours.md`).
 
 ## Alternatives
 
