@@ -18,8 +18,9 @@ drawn in._
 **Built in parallel lanes** (the plan's table), merged into
 `xujialiu/highlight`: the model `7e303fb`, the page `e57ee0c`, the accent
 `9da5b84`–`fca3656`, the Appearance section `ef51ce7`–`20eada8`, and the
-interim accent removed in `054b298`. The owner's acceptance on the iPhone is
-still to come.
+interim accent removed in `054b298`, and the live repaint fixed in `3e5a949`.
+Accepted by the owner on the iPhone on `1.0.0-beta12` (2026-10-02), with the
+presets as built.
 
 ## What was there
 
