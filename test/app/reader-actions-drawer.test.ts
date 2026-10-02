@@ -35,7 +35,7 @@ describe("a Document's actions drawer (#117)", () => {
 
   it('cannot save a blank name: Save is disabled while it is blank, which Alert.prompt cannot do', () => {
     const alert = code('rename-alert.tsx');
-    pin(alert, 'modifiers={[disabled(!typed.trim() || !!problem)]}', 'rename-alert.tsx Save');
+    pin(alert, 'modifiers={[disabled(!typed.trim())]}', 'rename-alert.tsx Save');
     expect(alert).not.toMatch(/Alert\.prompt/);
   });
 

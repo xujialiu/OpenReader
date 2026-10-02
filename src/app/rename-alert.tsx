@@ -1,7 +1,7 @@
 import { Alert, Button, Host, Text, TextField, useNativeState } from '@expo/ui/swift-ui';
 import { disabled } from '@expo/ui/swift-ui/modifiers';
 import { useContext, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Alert as SystemAlert, StyleSheet } from 'react-native';
 
 import { SchemeContext } from './controls';
 
@@ -32,18 +32,30 @@ export function RenameAlert({ name, onCancel, onSave, title = 'Rename', saveLabe
   const scheme = useContext(SchemeContext) ?? undefined;
   const text = useNativeState(name);
   const [typed, setTyped] = useState(name);
-  const problem = validate?.(typed) ?? null;
+  const [editing, setEditing] = useState(true);
+  const submit = () => {
+    if (!typed.trim()) return;
+    const problem = validate?.(typed);
+    if (!problem) { onSave(typed); return; }
+    // iOS 27 did not redraw an already-presented alert's message (#121).
+    // Present the explanation complete, in the system's separate alert. The
+    // editor stays mounted so both its native text binding and draft survive.
+    setEditing(false);
+    SystemAlert.alert('Name unavailable', `“${typed.trim()}”\n${problem}`, [
+      { text: 'Cancel', style: 'cancel', onPress: onCancel },
+      { text: 'Back to editing', onPress: () => setEditing(true) },
+    ], { cancelable: false });
+  };
   return (
     <Host style={styles.host} colorScheme={scheme}>
-      <Alert title={title} message={problem && typed.trim() ? problem : ''} isPresented onIsPresentedChange={() => {}}>
+      <Alert title={title} isPresented={editing} onIsPresentedChange={() => {}}>
         {/* An alert hangs from a view; this one shows nothing. */}
         <Alert.Trigger><Text> </Text></Alert.Trigger>
         <Alert.Actions>
           <TextField text={text} autoFocus placeholder="Name" onTextChange={setTyped} />
           <Button label="Cancel" role="cancel" onPress={onCancel} />
-          <Button label={saveLabel} onPress={() => onSave(typed)} modifiers={[disabled(!typed.trim() || !!problem)]} />
+          <Button label={saveLabel} onPress={submit} modifiers={[disabled(!typed.trim())]} />
         </Alert.Actions>
-        {/* Validation uses the direct native message prop; the Expo child-slot message was invisible on iOS 27 (#121). */}
       </Alert>
     </Host>
   );

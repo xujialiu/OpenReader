@@ -30,7 +30,7 @@ A duplicate import shows an alert explaining that the Document already exists, g
 
 Each location lists its immediate child Folders first, sorted by name, followed by its immediate Documents in the existing most-recently-used order. Descendants appear only after entering their containing Folder. Manual ordering is not included.
 
-Creation and renaming use the phone's text-input alert, with confirmation and cancellation. Moving uses a Drawer that shows the destination's full path and only its child Folders; the owner navigates up or down and confirms with `Move here`. Dismissing it does not move anything.
+Creation and renaming use the phone's text-input alert, with confirmation and cancellation. A blank name cannot be submitted. A duplicate name can be submitted, but is refused in a separate system warning explaining the conflict; Back to editing restores the entered name, and Cancel leaves everything unchanged. The owner chose this submit-time warning over moving the editor into a Drawer after live validation messages proved invisible on the tested phone interface. Moving uses a Drawer that shows the destination's full path and only its child Folders; the owner navigates up or down and confirms with `Move here`. Dismissing it does not move anything.
 
 Moving a Folder into a location with an existing same-named Folder is refused with a request to rename it first. Folders are never merged or overwritten automatically.
 
