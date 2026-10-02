@@ -123,6 +123,22 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
   - `test/manual-test/settings/SheetColorProbe.swift` on the probe branch (`e09da7c`) shows it.
 - **A row of a sheet at medium can lie below the screen while the tree lists it.** The `Highlight` row's frame read y 868.6 on an 874-pt screen, and a tap there landed on nothing. Take the sheet to large first: a tap on `Sheet Grabber` toggles it.
 
+## Appearance's Sentence and Word wells (#118, 2026-10-02, iOS 27.0)
+
+`settings/HighlightWellProbe.swift`, on the Appearance drawer at `large` (`settings/highlight-colours.md`).
+
+- **The first XCTest tap on a well opened nothing, once.**
+  - Symptom: the first run's coordinate tap at the `Word` well's centre (349,647.7 28 × 28) left no picker; 2.5 s later the tree had no `Opacity` slider. Every later run's same tap opened it at once, in light and dark.
+  - Cause not found. It was the first XCTest touch on a device booted minutes before.
+  - Fix: the probe looks for the slider after the tap and, when there is none, presses the well for 0.2 s.
+- **A press beside the opacity slider's thumb moves nothing.**
+  - Symptom: `press(forDuration:thenDragTo:)` from 0.62 of the slider's width, with the thumb at 34 %, left it at 34 % and logged no change.
+  - Fix: start the drag at the slider's own value (`slider.value`, `"34%"` → 0.34 of its width).
+- **After a Fast Refresh with the drawer up, the well's changes did not reach the app.**
+  - Symptom: with `highlight-section.tsx` edited while the drawer was up, the Word slider moved from 34 % to 60 % and the well's value changed, while the well's `onSelectionChange` logged nothing and `saysettings` still read 34. After a relaunch, the drawer opened with the word at 60 %.
+  - Cause not isolated; a handler from before the refresh is the likely receiver. The same family as "A Fast Refresh of `drawer.tsx` with a drawer up" in the next section.
+  - Fix: after editing a file the drawer draws, terminate and relaunch the app with `-RCT_jsLocation`, open the drawer again, and only then measure.
+
 ## The app's drawer on the phone's own sheet (#117, 2026-10-01, iOS 27.0)
 
 - **An `axe drag` up on a drawer's list scrolled the list and left the drawer where it was.**

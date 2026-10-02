@@ -27,6 +27,10 @@ that names the script or probe you are about to run.
   text edges at 8/16/32/48 in both themes via `kit/ink.py`, persistence across
   a relaunch, and the re-centre that keeps the highlighted sentence at the
   Line Position.
+- [highlight-colours.md](highlight-colours.md) (#118): Appearance's
+  Highlight section, its preset tiles and ring, and the Sentence and Word
+  wells opened, moved to 0 % and dragged live through XCTest, with the drawer
+  back in place after the picker. `HighlightWellProbe.swift`.
 - [general-and-fonts.md](general-and-fonts.md): General's Theme menu and bracket
   switch, Manage downloads' Delete all saved audio (always cancelled), the
   Fonts page, which fonts this system has, a font change on the reading page,
