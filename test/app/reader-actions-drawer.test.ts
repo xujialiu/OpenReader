@@ -24,7 +24,7 @@ function code(name: string): string {
 describe("a Document's actions drawer (#117)", () => {
   it('goes back from every page to the page it was opened from: Fonts to Appearance, Manage to Download, the rest to the menu', () => {
     pin(code('reader-actions.tsx'),
-      "const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', download: 'menu', manage: 'download' } as const;",
+      "const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', download: 'menu', manage: 'download', move: 'menu' } as const;",
       'reader-actions.tsx BACK');
   });
 
@@ -35,7 +35,7 @@ describe("a Document's actions drawer (#117)", () => {
 
   it('cannot save a blank name: Save is disabled while it is blank, which Alert.prompt cannot do', () => {
     const alert = code('rename-alert.tsx');
-    pin(alert, 'modifiers={[disabled(!typed.trim())]}', 'rename-alert.tsx Save');
+    pin(alert, 'modifiers={[disabled(!typed.trim() || !!problem)]}', 'rename-alert.tsx Save');
     expect(alert).not.toMatch(/Alert\.prompt/);
   });
 

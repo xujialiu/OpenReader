@@ -589,12 +589,12 @@ export function HeaderButton({ label, icon, title, onPress, disabled }: {
  * 0060). The row's label is set rather than read off its words, so VoiceOver
  * says the whole name, and says it once.
  */
-export function DocumentRow({ title, progress, cover, onPress, onLongPress, onActions }: {
-  title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void; onActions(): void;
+export function DocumentRow({ title, progress, cover, onPress, onLongPress, onActions, disabled }: {
+  title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void; onActions(): void; disabled?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   return <View>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${title}, ${progress}`} onPress={onPress} onLongPress={onLongPress}
+    <Pressable accessibilityRole="button" accessibilityLabel={`${title}, ${progress}`} onPress={onPress} onLongPress={onLongPress} disabled={disabled} accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}>
       <View style={styles.cover} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {cover && failed !== cover ? <Image source={{ uri: cover }} style={styles.coverImage}
@@ -605,9 +605,21 @@ export function DocumentRow({ title, progress, cover, onPress, onLongPress, onAc
         <Text style={styles.rowProgress} numberOfLines={1}>{progress}</Text>
       </View>
     </Pressable>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${title}`} onPress={onActions} style={styles.documentActions}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${title}`} onPress={onActions} disabled={disabled} accessibilityState={{ disabled: !!disabled }} style={styles.documentActions}>
       <Icon name="more" color={INK.quiet} size={DOCUMENT_ACTIONS.icon} />
     </Pressable>
+  </View>;
+}
+
+export function FolderRow({ title, onPress, onActions, disabled }: { title: string; onPress(): void; onActions(): void; disabled?: boolean }) {
+  return <View>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Folder, ${title}`} disabled={disabled} accessibilityState={{ disabled: !!disabled }}
+      onPress={onPress} onLongPress={onActions} style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}>
+      <View style={{ width: 56, alignItems: 'center' }}><Icon name="folder" color={INK.quiet} size={28} /></View>
+      <View style={styles.documentWords}><NameText name={title} lines={2} style={styles.documentTitle} /></View>
+    </Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Actions for folder ${title}`} disabled={disabled} accessibilityState={{ disabled: !!disabled }}
+      onPress={onActions} style={styles.documentActions}><Icon name="more" color={INK.quiet} size={DOCUMENT_ACTIONS.icon} /></Pressable>
   </View>;
 }
 

@@ -251,7 +251,7 @@ type DrawerHeader =
   | { titleLeft?: false; onBack?(): void; action?: DrawerAction }
   | { titleLeft: true; action: DrawerAction; onBack?: never };
 
-export function Drawer({ visible, title, heading, onClose, onBack, action, titleLeft, children }: {
+export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, action, titleLeft, children }: {
   visible: boolean;
   /** The centred title; with `heading`, the name the heading's control is given for VoiceOver. */
   title: string;
@@ -259,6 +259,8 @@ export function Drawer({ visible, title, heading, onClose, onBack, action, title
   heading?: ReactNode;
   /** Called when the drawer is swiped away, and by VoiceOver's escape. Not by a tap outside: there is none. */
   onClose(): void;
+  /** Native dismissal finished: a system picker can now be presented without racing this sheet. */
+  onDismiss?(): void;
   children: ReactNode;
 } & DrawerHeader) {
   const { settings } = useShell();
@@ -270,7 +272,7 @@ export function Drawer({ visible, title, heading, onClose, onBack, action, title
   const bottom = insets.bottom + DRAWER.bottom;
   return (
     <Host style={styles.host} colorScheme={colours.scheme}>
-      <BottomSheet isPresented={turn.presented} onDismiss={turn.dismissed}
+      <BottomSheet isPresented={turn.presented} onDismiss={() => { turn.dismissed(); onDismiss?.(); }}
         onIsPresentedChange={(presented) => { if (!presented) onClose(); }}>
         <Group modifiers={[
           presentationDetents([opening, DRAWER.expanded]),

@@ -12,6 +12,7 @@ const paths = {
   nextParagraph: 'm5 6 6 6-6 6 M12 6l6 6-6 6',
   down: 'm6 9 6 6 6-6',
   plus: 'M12 5v14 M5 12h14',
+  folder: 'M3 7V5h7l2 3h9v12H3V7Z',
   minus: 'M5 12h14',
   download: 'M12 3v12 m-5-5 5 5 5-5 M4 16v5h16v-5',
   rename: 'm15 4 5 5 M4 20l5-1L21 7l-5-5L4 14v6Z',
