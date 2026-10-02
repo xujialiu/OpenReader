@@ -1,5 +1,23 @@
 # The simulator MCP servers
 
+## Remote automation unavailable during #123 diagnosis (2026-10-02)
+
+On the existing iPhone 17 / iOS 27.0 simulator, AXe `describe-ui` and
+mobilebuildmcp 2.7.1 `snapshot-ui` repeatedly returned `Timed out creating the
+simulator remote automation session`. The target's `testmanagerd` changed from
+`xpcproxy_sim` to a running process without restoring automation. A narrow
+XCTest probe compiled but never reached `Test Case` startup; the per-test timeout
+did not bound that startup stall. Bounded attempts, including one authorized
+target-only shutdown/boot, did not resolve it. Stop the owned test process and
+preserve logs rather than treating an unstarted suite as input-test evidence or
+repeatedly restarting shared services. No cause or working fix was established.
+
+After that recovery, `simctl boot` reported `launchd failed to respond`;
+`bootstatus -b` subsequently completed. Volume reset to 60 after launch despite
+an earlier zero readback, and the kit correctly refused the next test; a fresh
+`silence.sh set` allowed startup but did not solve automation. No audio was
+played. These are setup failures, separate from the beta16 wrong-name symptom.
+
 Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 
 - **XcodeBuildMCP is now `mobilebuildmcp`, and reads only the new names.** The docs site and `claude mcp add` snippets still say `xcodebuildmcp`, `.xcodebuildmcp/config.yaml` and `XCODEBUILDMCP_SENTRY_DISABLED`. The 2.7.1 package reads `.mobilebuildmcp/config.yaml` and `MOBILEBUILDMCP_SENTRY_DISABLED` (checked by grepping its `build/`); a `.xcodebuildmcp/` file is silently ignored. The `xcodebuildmcp` npm name stopped at 2.7.0 in July.

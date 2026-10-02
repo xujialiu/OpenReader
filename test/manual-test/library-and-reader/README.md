@@ -252,6 +252,38 @@ blank on purpose (ADR 0067, decision 6): reopen the book before the next run.
 What it cannot prove: what an idle-exit while suspended does beyond the kill
 (the phone's wait was 85 minutes).
 
+## Input-integrity diagnosis (#123, incomplete)
+
+`InputIntegrityProbe` is a starting reproduction, **not a validated input helper
+or a passing regression test**. It reuses `RenameProbe`'s right-edge focus and
+native-value check. Start in a disposable test Library with no drawer open:
+
+```sh
+bash test/manual-test/kit/silence.sh set SIMULATOR_UDID
+bash test/manual-test/kit/run-probe.sh InputIntegrityProbe SIMULATOR_UDID NEW_OUTPUT_DIR \
+  -only-testing:testCreateExactNames -collect-test-diagnostics never \
+  -maximum-test-execution-time-allowance 60 -test-timeouts-enabled YES
+```
+
+It activates the installed app without changing its Metro URL, creates five
+uniquely named folders through real input, records intended/native text before
+submit, and requires the exact Library row afterward. A mismatch stops the test
+without typing again; successful folders remain for inspection. Never run on an
+owner's Library. The runner accepts the device and artifact directory explicitly.
+The XCTest method timeout does not bound test-runner startup: bound the host
+process separately if startup hangs.
+
+On 2026-10-02 the probe compiled, but neither attempt started a test case:
+AXe and mobilebuildmcp could not create their remote automation session, and
+XCTest stalled after building, including after one target-only reboot. Both
+XCTest attempts were stopped; **zero tests executed is not a pass**. Source-level
+assertions are not observed outcomes. This probe still lacks JS draft/submit
+and persisted-file assertions, replacement/prefilled-name cases and duplicate
+warning/reopen cycles; extend it only after automation is restored. The original
+beta16 trace shows native `Fiction` before submission but resulting `Fictio` more
+than eight seconds after typing returned. This is not evidence of an instant-tap
+race, nor is a passing retry evidence that the app is correct.
+
 ## Folders, moves and the duplicate alert (#121, design 0069)
 
 Verified 2026-10-02 on commit 5b4bf61 (`1.0.0-beta13`), iPhone 17 (iOS 27.0)
