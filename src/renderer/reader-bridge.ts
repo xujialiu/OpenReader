@@ -40,14 +40,13 @@ import { BAKED_LINE_POSITION, BAKED_SCROLLING } from './glide';
 import { correctMessage, speakMessage, utteranceAt } from './cursor';
 import {
   appearanceCss,
-  DEFAULT_HIGHLIGHT,
   DEFAULT_APPEARANCE,
   highlightCall,
+  highlightCss,
   highlighterSource,
   READER_THEME,
   themeCss,
   type Appearance,
-  type HighlightStyles,
   type ReadingScheme,
 } from './highlighter';
 import {
@@ -170,16 +169,12 @@ export interface ReaderBridgeOptions {
    */
   follow?: boolean;
   /**
-   * How the two Highlight Levels are painted. Fixed at mount: the highlighter is
-   * installed once, so changing this afterwards changes nothing.
-   */
-  styles?: HighlightStyles;
-  /**
-   * How the document's text is set (ADR 0019), as the book opens.
+   * How the document's text is set (ADR 0019), as the book opens, and the
+   * Highlight Colours it is marked in (#118).
    *
-   * Fixed at mount for the same reason as `styles` and with one difference that
-   * matters: this one **does** change while the book is open, and it changes
-   * through `setAppearance` rather than through this. What this value is for is
+   * Fixed at mount, because the highlighter is installed once, and it **does**
+   * change while the book is open: through `setAppearance` rather than through
+   * this. What this value is for is
    * the first paint — a book opened with an override already chosen is laid out
    * that way rather than reflowing once the first message arrives.
    */
@@ -329,6 +324,8 @@ export interface ReaderBridge {
    *
    * The WebView restyles every rendered section and then **re-centres** the
    * Utterance being spoken, because a change that reflows the text moves it.
+   * A change of the Highlight Colours alone (#118) is sent as its own message
+   * and is not re-centred, as `setTheme` is not: a colour moves no character.
    */
   setAppearance(appearance: Appearance): void;
   /**
@@ -684,7 +681,15 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
 
   const setAppearance = useCallback(
     (next: Appearance) => {
+      const previous = appearance.current;
       appearance.current = next;
+      const colours = highlightCss(next.highlight);
+      if (colours !== highlightCss(previous.highlight)) {
+        send({ kind: 'highlight', css: colours });
+        // The Highlight Colours alone (#118) are a repaint, as the theme is: a
+        // colour moves no character, so the page is not placed again.
+        if (appearanceCss(next, bodyTextSize.current) === appearanceCss(previous, bodyTextSize.current)) return;
+      }
       send({ kind: 'appearance', css: appearanceCss(next, bodyTextSize.current) });
     },
     [send],
@@ -802,6 +807,9 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         if (scheme.current !== installedScheme.current) {
           send({ kind: 'theme', css: themeCss(scheme.current) });
         }
+        if (highlightCss(appearance.current.highlight) !== highlightCss(installed.current.highlight)) {
+          send({ kind: 'highlight', css: highlightCss(appearance.current.highlight) });
+        }
         // A new program follows the reading and lets a finger move the page; the
         // player is told the first, and the program the collapsed player it missed.
         latest.current.onFollowing?.(true);
@@ -860,7 +868,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   /**
    * The program, built once.
    *
-   * Deliberately not rebuilt when `styles` or `appearance` change: the WebView
+   * Deliberately not rebuilt when `appearance` changes: the WebView
    * evaluates `injectedJavascript` at page load and the program's first line
    * refuses a second installation, so a new string would be a new prop that
    * changes nothing on the device — a false sense that a setting had been applied
@@ -869,7 +877,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    */
   const injectedJavascript = useMemo(
     () =>
-      highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null, DEBUG_MODE),
+      highlighterSource(options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null, DEBUG_MODE),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );

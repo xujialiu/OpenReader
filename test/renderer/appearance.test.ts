@@ -10,11 +10,12 @@ import {
   stepMargins,
   highlightCss,
   READING_FONTS,
-  DEFAULT_HIGHLIGHT,
   TEXT_ALIGNMENTS,
+  UTTERANCE_HIGHLIGHT,
+  WORD_HIGHLIGHT,
 } from '../../src/renderer/highlighter';
 import { pin } from '../structural';
-import { DEFAULT_HIGHLIGHT_COLOURS } from '../../src/renderer/highlight-colours';
+import { DEFAULT_HIGHLIGHT_COLOURS, HIGHLIGHT_PRESETS, type HighlightColours } from '../../src/renderer/highlight-colours';
 
 /** The one alignment rule, as `appearanceCss` writes it, for the value given. */
 const aligned = (value: 'start' | 'justify') =>
@@ -145,7 +146,7 @@ describe('Appearance as a stylesheet', () => {
     // marker was answered by that line and the standard property — the one iOS
     // Safari honours — could be deleted with this rule still green. The exhaustive
     // form of this is in `rules.test.ts`.
-    pin(highlightCss(DEFAULT_HIGHLIGHT), '\n  user-select: text !important;', 'the stylesheet highlightCss builds');
+    pin(highlightCss(DEFAULT_HIGHLIGHT_COLOURS), '\n  user-select: text !important;', 'the stylesheet highlightCss builds');
   });
 
   it('builds nothing at all from a font it does not know, rather than a rule out of the name', () => {
@@ -302,5 +303,94 @@ describe('Margins', () => {
       expect(css).not.toContain('display');
       expect(css.match(/padding-left/g)).toHaveLength(1);
     }
+  });
+});
+
+/**
+ * The owner's **Highlight Colours** (CONTEXT.md, #118) as the page's stylesheet:
+ * `highlightCss`, the same under either theme.
+ */
+describe('Highlight Colours as a stylesheet', () => {
+  /** The two `::highlight()` rules of the sheet, without `SELECTABLE`. */
+  const highlightRules = (colours: HighlightColours) =>
+    highlightCss(colours).split('\n').filter((line) => line.startsWith('::highlight('));
+
+  /** `top` at `alpha` over the opaque `under`, per channel, as WebKit composites a background. */
+  const over = (top: [number, number, number], alpha: number, under: [number, number, number]) =>
+    top.map((channel, i) => channel * alpha + under[i] * (1 - alpha)) as [number, number, number];
+  const hex = (rgb: [number, number, number]) => '#' + rgb.map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('');
+
+  it('marks the sentence and the word in Blue, the default, at its opacities', () => {
+    expect(highlightRules(DEFAULT_HIGHLIGHT_COLOURS)).toEqual([
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(67, 70, 101, 0.22); }',
+      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0.62); }',
+    ]);
+    expect(DEFAULT_HIGHLIGHT_COLOURS).toEqual(HIGHLIGHT_PRESETS.blue);
+  });
+
+  it('marks them in Amber exactly as the light page did before #118', () => {
+    expect(highlightRules(HIGHLIGHT_PRESETS.amber)).toEqual([
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(255, 196, 0, 0.22); }',
+      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(255, 168, 0, 0.62); }',
+    ]);
+  });
+
+  it('writes an opacity of 0 as a transparent rule rather than leaving the rule out', () => {
+    // A word at 0 is a reading marked by the sentence alone (owner's Q11). The
+    // rule stays, so the sheet has the same shape whatever the owner chose.
+    const colours = { sentence: { color: '#434665', opacity: 0 }, word: { color: '#4456de', opacity: 0 } };
+    expect(highlightRules(colours)).toEqual([
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(67, 70, 101, 0); }',
+      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0); }',
+    ]);
+    expect(highlightRules({ ...colours, word: { color: '#ffffff', opacity: 100 } })[1]).toBe(
+      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(255, 255, 255, 1); }',
+    );
+  });
+
+  it('composites Blue to what the simulator measures, on the white page and the dark one', () => {
+    // The word paints over the sentence (registered second), and both over the
+    // page. These are the colours a screenshot of a highlighted word should hold.
+    const blue = HIGHLIGHT_PRESETS.blue;
+    const sentenceRgb: [number, number, number] = [67, 70, 101];
+    const wordRgb: [number, number, number] = [68, 86, 222];
+    for (const [page, sentence, word] of [
+      [[255, 255, 255], '#d6d6dd', '#7b87de'],
+      [[0x11, 0x11, 0x14], '#1c1d26', '#354098'],
+    ] as const) {
+      const underWord = over(sentenceRgb, blue.sentence.opacity / 100, [...page]);
+      expect(hex(underWord)).toBe(sentence);
+      expect(hex(over(wordRgb, blue.word.opacity / 100, underWord))).toBe(word);
+    }
+  });
+
+  it('begins with the selectability the highlight needs, and declares nothing else, whatever it is given', () => {
+    // A settings file from another build, or one written by hand, must not be
+    // able to put a declaration of its own into the page: the colours are read
+    // through the model, and `rgba` writes only numbers.
+    const hostile = [
+      DEFAULT_HIGHLIGHT_COLOURS,
+      HIGHLIGHT_PRESETS.amber,
+      { sentence: { color: '#ffc400; } body { user-select: none } x {', opacity: 22 }, word: { color: 'red', opacity: '62); user-select: none; (' } },
+      { sentence: { color: '#4456DE', opacity: Number.NaN }, word: { color: '#4456de80', opacity: -40 } },
+      { sentence: null, word: 'user-select: none' },
+      null,
+      'body { user-select: none }',
+    ] as never[];
+    const selectable = highlightCss(DEFAULT_HIGHLIGHT_COLOURS).slice(0, highlightCss(DEFAULT_HIGHLIGHT_COLOURS).indexOf('}') + 2);
+    for (const colours of hostile) {
+      const css = highlightCss(colours);
+      expect(css.startsWith(selectable)).toBe(true);
+      const rest = css.slice(selectable.length);
+      expect(rest).not.toMatch(/user-select|touch-callout|display/);
+      expect(rest.split('\n').filter(Boolean)).toHaveLength(2);
+      for (const rule of rest.split('\n').filter(Boolean)) {
+        expect(rule).toMatch(/^::highlight\(openreader-(utterance|word)\) \{ background-color: rgba\(\d{1,3}, \d{1,3}, \d{1,3}, (0|1|0\.\d+)\); \}$/);
+      }
+    }
+    // What does not read as a colour is the default's; what does, is kept.
+    expect(highlightCss({ sentence: { color: '#4456DE', opacity: Number.NaN }, word: { color: '#4456de80', opacity: -40 } } as never)).toContain(
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0.22); }',
+    );
   });
 });

@@ -102,7 +102,7 @@ import { BAKED_LINE_POSITION, BAKED_SCROLLING, GLIDE_SOURCE } from './glide';
 import type { HighlightMessage } from './messages';
 import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, PROBLEM_MESSAGE, RENDERER_MESSAGE, TAP_MESSAGE, SELECTION_MESSAGE } from './messages';
 import { EPUB_GUARDS_SOURCE } from './epub-guards';
-import { DEFAULT_HIGHLIGHT_COLOURS, type HighlightColours } from './highlight-colours';
+import { DEFAULT_HIGHLIGHT_COLOURS, readHighlightColours, rgba, type HighlightColours } from './highlight-colours';
 import { RENDERER_LOG_SOURCE } from './renderer-log';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
@@ -111,25 +111,6 @@ export const WORD_HIGHLIGHT = 'openreader-word';
 
 /** The name the program installs itself under. Both halves have to agree on it, so it is written once. */
 export const HIGHLIGHTER = '__openReaderHighlighter';
-
-/**
- * How the two levels are painted.
- *
- * CSS declarations, not an object, because `::highlight()` accepts only a handful
- * of properties — `color`, `background-color`, `text-decoration`, `text-shadow`,
- * `-webkit-text-stroke` — and a structured type would imply the rest work.
- */
-export interface HighlightStyles {
-  /** Declarations for `::highlight(openreader-utterance)`: the sentence being read. */
-  utterance: string;
-  /** Declarations for `::highlight(openreader-word)`: the word being spoken. Absent Word Timings, this is never painted. */
-  word: string;
-}
-
-export const DEFAULT_HIGHLIGHT: HighlightStyles = {
-  utterance: 'background-color: rgba(255, 196, 0, 0.22);',
-  word: 'background-color: rgba(255, 168, 0, 0.62);',
-};
 
 /**
  * The fonts **Appearance** offers, as the owner reads them and as CSS names
@@ -394,9 +375,6 @@ export type ReadingScheme = 'light' | 'dark';
 /** The page under a dark theme. Near-black rather than black, and a text that is not pure white: an unrelieved #000/#fff pair is what makes a long reading tiring. */
 const DARK_PAGE = '#111114';
 const DARK_TEXT = '#e6e6ea';
-/** The sentence and the word being spoken, on a dark page: blue, so the word keeps `DARK_TEXT` and stays readable (`themeCss`, #69). */
-const DARK_UTTERANCE = '#434665';
-const DARK_WORD = '#4456de';
 
 /**
  * The theme as CSS for the document, or the empty string under a light theme.
@@ -408,7 +386,7 @@ const DARK_WORD = '#4456de';
  * own dark design, keeps it, exactly as the Appearance sheet's "follow the
  * document" does.
  *
- * Two rules and two highlight overrides, and it cannot produce a third: there is
+ * Two rules, and it cannot produce a third: there is
  * no value here that comes from anything the owner typed — the argument is one of
  * two words — so, as with `appearanceCss`, **nothing here can declare
  * `user-select`**, which silently stops `::highlight()` from painting. That is
@@ -425,29 +403,19 @@ const DARK_WORD = '#4456de';
  * and a book that uses colour to *mean* something loses that meaning, because
  * every colour it set becomes one colour. Both are in `docs/design/0022`.
  *
- * The two `::highlight()` rules come last so they beat the ones baked into
- * `highlightCss`, which are tuned for a light page. **Under dark they are blue,
- * not amber, and the word's letters keep the page's own `DARK_TEXT`** (#69): no
- * `color` is declared, so the spoken word is the same light text as every other
- * word, marked rather than recoloured. Amber cannot carry light letters: it is a
- * bright colour, so `#e6e6ea` on the old word amber (0.85 over the sentence tint)
- * measured 1.85:1 and pure white 2.31:1, which is why the letters used to be set
- * to the page colour — and an amber dark enough to reach 4.5:1 is brown. Blue is
- * seen as dark while it stays vivid: `DARK_WORD` measures 4.65:1 against
- * `DARK_TEXT`, about what Speechify's dark page gets from white on its own blue,
- * 4.63:1 (sampled from the owner's screenshot, notes 2026-09-25);
- * `DARK_UTTERANCE` is Speechify's own sentence colour, 7.33:1.
- * Both are opaque because the page under them is one colour, so a tint would buy
- * nothing and would make the measured contrast depend on what it is laid over.
- * The light theme keeps its amber, and so does the app's accent (design 0042).
+ * **No `::highlight()` rule, and that is #118.** The sentence and the word are
+ * marked in the owner's Highlight Colours under either theme (`highlightCss`),
+ * the same colours on both pages, so the dark page no longer overrides them with
+ * its own blue (#69's `#434665` and `#4456de` are now the Blue preset, at
+ * amber's opacities). The word's letters still keep the page's own `DARK_TEXT`:
+ * `highlightCss` declares no `color`, so the spoken word is marked rather than
+ * recoloured.
  */
 export function themeCss(scheme: ReadingScheme): string {
   if (scheme !== 'dark') return '';
   return (
     'html, body { background-color: ' + DARK_PAGE + ' !important; color: ' + DARK_TEXT + ' !important; }\n' +
-    'body * { color: ' + DARK_TEXT + ' !important; background-color: transparent !important; }\n' +
-    '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: ' + DARK_UTTERANCE + '; }\n' +
-    '::highlight(' + WORD_HIGHLIGHT + ') { background-color: ' + DARK_WORD + '; }\n'
+    'body * { color: ' + DARK_TEXT + ' !important; background-color: transparent !important; }\n'
   );
 }
 
@@ -517,12 +485,27 @@ const SELECTABLE =
   '  -webkit-touch-callout: none !important;\n' +
   '}\n';
 
-/** The stylesheet the program installs in each rendered section. The Utterance rule comes first so that the word, registered second, paints over it. */
-export function highlightCss(styles: HighlightStyles): string {
+/**
+ * The stylesheet the program installs in each rendered section: `SELECTABLE`,
+ * then the owner's **Highlight Colours** (#118), the same under either theme.
+ *
+ * Each level is one `background-color`, its colour at its opacity through
+ * `rgba()` (`highlight-colours.ts`). The colours are read through
+ * `readHighlightColours` first and `rgba` writes only numbers, so nothing a
+ * settings file holds can become a declaration of its own, and in particular
+ * nothing here can declare `user-select`. No `color` is declared, so the spoken
+ * word keeps the page's own letters under either theme (#69).
+ *
+ * The word paints over the sentence because it is registered second
+ * (`registryFor`), not because of the order of these rules; at 0 it is a
+ * reading marked by the sentence alone.
+ */
+export function highlightCss(colours: HighlightColours): string {
+  const { sentence, word } = readHighlightColours(colours);
   return (
     SELECTABLE +
-    '::highlight(' + UTTERANCE_HIGHLIGHT + ') { ' + styles.utterance + ' }\n' +
-    '::highlight(' + WORD_HIGHLIGHT + ') { ' + styles.word + ' }\n'
+    '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: ' + rgba(sentence) + '; }\n' +
+    '::highlight(' + WORD_HIGHLIGHT + ') { background-color: ' + rgba(word) + '; }\n'
   );
 }
 
@@ -557,7 +540,6 @@ export function highlightCall(message: HighlightMessage): string {
  * handler and a book that reports ready twice would otherwise get two loops.
  */
 export function highlighterSource(
-  styles: HighlightStyles = DEFAULT_HIGHLIGHT,
   appearance: Appearance = DEFAULT_APPEARANCE,
   scheme: ReadingScheme = 'light',
   /**
@@ -583,7 +565,10 @@ export function highlighterSource(
     'var SELECTION = ' + JSON.stringify(SELECTION_MESSAGE) + ';\n' +
     'var FOLLOWING = ' + JSON.stringify(FOLLOWING_STATE_MESSAGE) + ';\n' +
     'var PROBLEM = ' + JSON.stringify(PROBLEM_MESSAGE) + ';\n' +
-    'var CSS_TEXT = ' + JSON.stringify(highlightCss(styles)) + ';\n' +
+    /* SELECTABLE and the Highlight Colours (#118). A `var` the 'highlight'
+       message reassigns, as APPEARANCE below is, and baked in so a book opens
+       marked in the owner's colours. */
+    'var CSS_TEXT = ' + JSON.stringify(highlightCss(appearance.highlight)) + ';\n' +
     /* The one that changes while the document is open, which is why it is a `var`
        the Appearance message reassigns rather than another constant. The owner's
        choice is baked in here as well as sent, so a book opened with an override
@@ -1027,10 +1012,11 @@ ${constants}
       style.id = STYLE_ID;
       (doc.head || doc.documentElement).appendChild(style);
     }
-    /* Three strings and still one element. THEME sits between them so that its
-       ::highlight() overrides beat the ones in CSS_TEXT, which are tuned for a
-       light page, while the owner's Appearance — which declares neither a colour
-       nor a highlight — stays the last word on the font and the size. */
+    /* Three strings and still one element: SELECTABLE and the owner's Highlight
+       Colours, the theme's page, and the owner's Appearance, which declares
+       neither a colour nor a highlight and stays the last word on the font and
+       the size. No highlight rule is in THEME any more (#118): the owner's
+       colours are the same under either theme. */
     var wanted = CSS_TEXT + THEME + APPEARANCE;
     if (style.textContent !== wanted) style.textContent = wanted;
   }
@@ -2853,6 +2839,21 @@ ${EPUB_GUARDS_SOURCE}
          the sentence being spoken is exactly where it was. This is the 'inset'
          case, not the font case. */
       THEME = typeof message.css === 'string' ? message.css : '';
+      restyle();
+      return;
+    }
+    if (message.kind === 'highlight') {
+      /* The owner's Highlight Colours, from the Appearance drawer (#118). Finished
+         CSS again: \`highlightCss\` builds it, SELECTABLE first, from colours
+         read through the model, so it cannot declare \`user-select: none\`. A
+         message that is not a string is dropped rather than read as empty,
+         which would take SELECTABLE with it and stop the highlight painting.
+
+         Nothing is re-centred, as for the theme: a colour moves no character.
+         The two Highlight objects stay registered, so the word stays painted
+         over the sentence. */
+      if (typeof message.css !== 'string') return;
+      CSS_TEXT = message.css;
       restyle();
       return;
     }

@@ -1,4 +1,4 @@
-import { DEFAULT_HIGHLIGHT_COLOURS } from '../../src/renderer/highlight-colours';
+import { DEFAULT_HIGHLIGHT_COLOURS, HIGHLIGHT_PRESETS } from '../../src/renderer/highlight-colours';
 import { readdirSync, readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -9,7 +9,6 @@ import { GLIDE_SOURCE } from '../../src/renderer/glide';
 import {
   appearanceCss,
   DEFAULT_APPEARANCE,
-  DEFAULT_HIGHLIGHT,
   HIGHLIGHTER,
   highlightCall,
   READER_THEME,
@@ -330,7 +329,7 @@ describe('never highlight by mutating the DOM, and never check whether you can (
 
     // And the rules those two names paint through. The stylesheet is built on this
     // side of the bridge, so the argument is a value a test can read.
-    const css = highlightCss(DEFAULT_HIGHLIGHT);
+    const css = highlightCss(DEFAULT_HIGHLIGHT_COLOURS);
     pin(css, '::highlight(' + UTTERANCE_HIGHLIGHT + ') {', 'the stylesheet highlightCss builds');
     pin(css, '::highlight(' + WORD_HIGHLIGHT + ') {', 'the stylesheet highlightCss builds');
   });
@@ -454,7 +453,7 @@ describe('the two halves stay in separate files (README.md)', () => {
     // A missing bracket would first appear as a book that renders and never
     // highlights, on a device, with no error anywhere.
     expect(() => new vm.Script(highlighterSource(), { filename: 'highlighter.js' })).not.toThrow();
-    expect(() => new vm.Script(highlighterSource(undefined, undefined, 'dark', null), { filename: 'measuring.js' })).not.toThrow();
+    expect(() => new vm.Script(highlighterSource(undefined, 'dark', null), { filename: 'measuring.js' })).not.toThrow();
     expect(() => new vm.Script(highlightCall({ kind: 'clear' }), { filename: 'call.js' })).not.toThrow();
   });
 
@@ -552,7 +551,7 @@ describe('the highlight actually paints', () => {
      * highlight needs has exactly these three declarations, in this order, and
      * anything added, removed or renamed in it fails.
      */
-    const css = highlightCss(DEFAULT_HIGHLIGHT);
+    const css = highlightCss(DEFAULT_HIGHLIGHT_COLOURS);
     const selectable = css.slice(0, css.indexOf('}') + 1);
     expect(selectable.split('\n')).toEqual([
       'html, body, body * {',
@@ -849,7 +848,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     expect(bridge).toContain("send({ kind: 'appearance', css: appearanceCss(next, bodyTextSize.current) })");
     // Built once, from the first render's options, and never rebuilt.
     expect(bridge).toContain(
-      "highlighterSource(options.styles ?? DEFAULT_HIGHLIGHT, options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null, DEBUG_MODE)",
+      "highlighterSource(options.appearance ?? DEFAULT_APPEARANCE, options.scheme ?? 'light', options.bodyTextSize ?? null, DEBUG_MODE)",
     );
     // The theme is the same message-not-a-rebuild, and it is the same trap.
     expect(bridge).toContain("send({ kind: 'theme', css: themeCss(next) })");
@@ -860,12 +859,12 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     // A Document measured before opens at the owner's size on its first paint,
     // and is not measured again (ADR 0030).
     const chosen = { font: 'georgia', size: 20, margins: 24, textAlignment: 'left', highlight: DEFAULT_HIGHLIGHT_COLOURS } as const;
-    const measured = highlighterSource(undefined, chosen, 'light', 12);
+    const measured = highlighterSource(chosen, 'light', 12);
     pin(measured, 'var APPEARANCE = ' + JSON.stringify(appearanceCss(chosen, 12)) + ';', 'a measured Document');
     pin(measured, 'var MEASURE = false;', 'a measured Document');
     // One never measured opens as if its body text were 16 — which is what every
     // current Document's is — and is measured.
-    const unknown = highlighterSource(undefined, undefined, 'light', null);
+    const unknown = highlighterSource(undefined, 'light', null);
     pin(unknown, 'var APPEARANCE = ' + JSON.stringify(appearanceCss(DEFAULT_APPEARANCE, 16)) + ';', 'an unmeasured Document');
     pin(unknown, 'var MEASURE = true;', 'an unmeasured Document');
     // The download indexer's program lays nothing out for the owner to read.
@@ -980,7 +979,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     // would scroll the page under the reader for a repaint — which is the defect
     // the `inset` message exists to avoid.
     const program = code('highlighter.ts');
-    const branch = program.slice(program.indexOf("message.kind === 'theme'"), program.indexOf("message.kind === 'clear'"));
+    const branch = program.slice(program.indexOf("message.kind === 'theme'"), program.indexOf("message.kind === 'highlight'"));
     expect(branch).toContain('restyle();');
     expect(branch).not.toContain('settle(');
     expect(branch).not.toMatch(/place(Once)?\(|bring\(/);
@@ -995,7 +994,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
       const css = themeCss(scheme);
       expect(css).not.toContain('user-select');
       for (const line of css.split('\n').filter(Boolean)) {
-        expect({ scheme, line, ok: /^(html, body|body \*|::highlight\()/.test(line) }).toEqual({ scheme, line, ok: true });
+        expect({ scheme, line, ok: /^(html, body|body \*) /.test(line) }).toEqual({ scheme, line, ok: true });
       }
     }
     // Light leaves the document's own colours alone: it is the absence of a demand.
@@ -1006,22 +1005,20 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     expect(themeCss('dark')).toContain('background-color: transparent !important');
   });
 
-  it('marks the spoken word in blue under dark and leaves its letters the page text (#69)', () => {
-    // Amber cannot carry the page's light letters: `#e6e6ea` on the old word amber
-    // measured 1.85:1, so the letters were set to the page colour and the spoken
-    // word was the one dark word on the page. Blue carries them at 4.65:1, so the
-    // highlight rules must declare no `color` at all — any value there recolours
-    // the word the owner is following.
-    const highlights = themeCss('dark').split('\n').filter((line) => line.startsWith('::highlight('));
-    expect(highlights).toEqual([
-      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: #434665; }',
-      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: #4456de; }',
-    ]);
+  it('leaves the highlight to the owner under dark, and the word its letters (#69, #118)', () => {
+    // The dark page used to override both levels with its own blue. The owner's
+    // Highlight Colours are the same under either theme, so the theme declares
+    // no ::highlight() rule at all, and the one stylesheet that does declares no
+    // `color`: any value there recolours the word the owner is following.
+    expect(themeCss('dark')).not.toContain('::highlight(');
+    expect(themeCss('dark')).not.toMatch(/#434665|#4456de/);
+    const highlights = highlightCss(DEFAULT_HIGHLIGHT_COLOURS).split('\n').filter((line) => line.startsWith('::highlight('));
+    expect(highlights).toHaveLength(2);
     for (const line of highlights) expect(line).not.toMatch(/(^|[\s;{])color:/);
   });
 
   it('bakes the theme into the program too, so a book opens dark rather than flashing white', () => {
-    expect(highlighterSource(undefined, undefined, 'dark')).toContain('var THEME = ' + JSON.stringify(themeCss('dark')));
+    expect(highlighterSource(undefined, 'dark')).toContain('var THEME = ' + JSON.stringify(themeCss('dark')));
     expect(highlighterSource()).toContain('var THEME = "";');
   });
 
@@ -1053,6 +1050,73 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
     for (const perWord of ['tick', 'showWord', 'showAt', 'start']) {
       expect({ perWord, scrolls: /nudge|scrollBy|settle|place(Once)?\(/.test(fn(program, perWord)) }).toEqual({ perWord, scrolls: false });
     }
+  });
+});
+
+describe('the Highlight Colours reach an open book, and the page stays where it is (#118)', () => {
+  const program = highlighterSource();
+
+  /** The program's own 'highlight' branch, run over a stand-in for what it touches. */
+  function runHighlightBranch(message: unknown) {
+    const from = program.indexOf("if (message.kind === 'highlight') {");
+    const to = program.indexOf("if (message.kind === 'clear') {");
+    const branch = program.slice(from, to);
+    const calls: string[] = [];
+    const run = vm.runInNewContext(
+      `(function (message, calls) { var CSS_TEXT = 'before'; function restyle() { calls.push('restyle'); } function settle() { calls.push('settle'); } function place() { calls.push('place'); } function bring() { calls.push('bring'); } (function () { ${branch} })(); return CSS_TEXT; })`,
+    );
+    return { css: run(message, calls) as string, calls };
+  }
+
+  it('is the program\u2019s own CSS_TEXT, baked from the Appearance it opens with', () => {
+    // A book opens marked in the owner's colours, rather than in Blue until a
+    // message lands.
+    const amber = { ...DEFAULT_APPEARANCE, highlight: HIGHLIGHT_PRESETS.amber };
+    pin(highlighterSource(amber), 'var CSS_TEXT = ' + JSON.stringify(highlightCss(HIGHLIGHT_PRESETS.amber)) + ';', 'an Amber program');
+    pin(program, 'var CSS_TEXT = ' + JSON.stringify(highlightCss(DEFAULT_HIGHLIGHT_COLOURS)) + ';', 'the default program');
+    // And CSS_TEXT is in the one stylesheet ensureStyle writes into every section.
+    pin(fn(program, 'ensureStyle'), 'var wanted = CSS_TEXT + THEME + APPEARANCE;', 'highlighter.ts, function ensureStyle');
+  });
+
+  it('restyles every section for a colour change, and does NOT re-centre', () => {
+    const css = highlightCss(HIGHLIGHT_PRESETS.amber);
+    const run = runHighlightBranch({ kind: 'highlight', css });
+    expect(run).toEqual({ css, calls: ['restyle'] });
+  });
+
+  it('drops a message without CSS rather than installing an empty sheet without SELECTABLE', () => {
+    for (const css of [undefined, null, 42, {}]) {
+      expect(runHighlightBranch({ kind: 'highlight', css })).toEqual({ css: 'before', calls: [] });
+    }
+  });
+
+  it('is sent from setAppearance as its own message, and the Appearance only when the layout changed too', () => {
+    const bridge = code('reader-bridge.ts');
+    const set = bridge.slice(bridge.indexOf('const setAppearance = useCallback('), bridge.indexOf('const setTheme = useCallback('));
+    pin(set, 'const colours = highlightCss(next.highlight);', 'reader-bridge.ts, setAppearance');
+    pin(set, 'if (colours !== highlightCss(previous.highlight)) {', 'reader-bridge.ts, setAppearance');
+    pin(set, "send({ kind: 'highlight', css: colours });", 'reader-bridge.ts, setAppearance');
+    // A colour alone stops before the 'appearance' message, whose settle loop
+    // would re-centre the page for a repaint.
+    pin(set, 'if (appearanceCss(next, bodyTextSize.current) === appearanceCss(previous, bodyTextSize.current)) return;', 'reader-bridge.ts, setAppearance');
+    expect(set.indexOf("send({ kind: 'highlight'")).toBeLessThan(set.indexOf("send({ kind: 'appearance'"));
+  });
+
+  it('is sent again when the program installs, if the owner changed it since the program was built', () => {
+    const bridge = code('reader-bridge.ts');
+    const document = bridge.slice(bridge.indexOf('message.type === DOCUMENT_MESSAGE'));
+    const branch = document.slice(0, document.indexOf('return;'));
+    pin(branch, 'if (highlightCss(appearance.current.highlight) !== highlightCss(installed.current.highlight)) {', 'reader-bridge.ts, the document message');
+    pin(branch, "send({ kind: 'highlight', css: highlightCss(appearance.current.highlight) });", 'reader-bridge.ts, the document message');
+  });
+
+  it('keeps the word over the sentence, because nothing re-registers the two highlights', () => {
+    // Registration order is paint order: the word is set second in registryFor,
+    // and the 'highlight' branch touches the stylesheet and nothing else.
+    const registry = fn(program, 'registryFor');
+    expect(registry.indexOf('CSS.highlights.set(UTTERANCE, utterance)')).toBeLessThan(registry.indexOf('CSS.highlights.set(WORD, word)'));
+    const branch = program.slice(program.indexOf("if (message.kind === 'highlight') {"), program.indexOf("if (message.kind === 'clear') {"));
+    expect(branch).not.toMatch(/CSS\.highlights|new win\.Highlight|registryFor/);
   });
 });
 
