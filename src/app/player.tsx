@@ -32,7 +32,7 @@
 
 import { Host, Popover, RNHostView } from '@expo/ui/swift-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 
 import { MAX_STEPPER_RATE, MIN_STEPPER_RATE, snapRate, stepRate } from '../playback';
 
@@ -43,6 +43,7 @@ import type { SkipTarget } from './use-reading';
 import { LoadingSpinner } from './loading-spinner';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
+import { playerLayout } from './player-layout';
 
 /** The open player's padding above and below its rows: part of the height the Line Position is measured above (`onOpenHeight`). */
 const PLAYER_PADDING_TOP = 4;
@@ -187,7 +188,10 @@ export function Player({
   onHeight,
   onOpenHeight,
 }: PlayerProps) {
+  const { width, height, fontScale } = useWindowDimensions();
+  const layout = playerLayout(width, fontScale);
   const [speedOpen, setSpeedOpen] = useState(false);
+  useEffect(() => setSpeedOpen(false), [fontScale, width]);
   const closeSpeed = useCallback(() => setSpeedOpen(false), []);
   /**
    * Play or pause, and nothing else.
@@ -222,6 +226,13 @@ export function Player({
     [onOpenHeight],
   );
 
+  const voice = <View style={styles.voiceSlot}>
+    <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
+      style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
+      <Text style={styles.voiceLabel}>{voiceLine(settings, voiceInUse)}</Text>
+    </Pressable>
+  </View>;
+
   if (collapsed && notes.length === 0) {
     return (
       // `box-none` so the strip the button sits in does not eat taps on the text
@@ -235,6 +246,7 @@ export function Player({
 
   return (
     <View style={[styles.player, { borderColor: borders.line }]} onLayout={measure}>
+      <ScrollView key={fontScale} style={{ maxHeight: height * 0.75 }} contentContainerStyle={{ gap: 6 }}>
       {notes.map((note) => (
         <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>{note.said}</Text>
       ))}
@@ -246,34 +258,40 @@ export function Player({
           {/* As wide as the collapse arrow, so the name is centred on the whole
               player rather than on what the arrow leaves (#70), and holding A or
               M (#71). */}
-          <FollowingMark following={following} onReturn={onReturn} />
+          <FollowingMark following={following} onReturn={onReturn} size={layout.headEnd} />
           {/* Only the name opens the Voices: its button hugs the text, and a tap
               beside it lands on this plain box and does nothing. */}
-          <View style={styles.voiceSlot}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
-              style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
-              <Text style={styles.voiceLabel} numberOfLines={1}>{voiceLine(settings, voiceInUse)}</Text>
-            </Pressable>
-          </View>
+          {!layout.split ? voice : null}
           <Pressable accessibilityRole="button" accessibilityLabel="Collapse the player"
-            onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, pressed && styles.pressed]}>
+            onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, { width: layout.headEnd, height: layout.headEnd }, pressed && styles.pressed]}>
             <Icon name="down" color={INK.quiet} size={20} />
           </Pressable>
         </View>
+        {layout.split ? voice : null}
 
         <View style={styles.transport}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
-            style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}>
+          {!layout.split ? <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
+            style={({ pressed }) => [styles.footTap, { width: layout.endWidth }, pressed && styles.pressed]}>
             <Icon name="contents" color={INK.text} />
-          </Pressable>
+          </Pressable> : null}
           <Transport icon="previousParagraph" label="Previous paragraph" onPress={() => onSkip('previous-paragraph')} disabled={!enabled} />
           <Transport icon="previous" label="Previous sentence" onPress={() => onSkip('previous-sentence')} disabled={!enabled} />
           <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
           <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
           <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
-          <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen} />
+          {!layout.split ? <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen}
+            width={layout.endWidth} height={layout.rateHeight} /> : null}
         </View>
+        {layout.split ? <View style={styles.transport}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
+            style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}>
+            <Icon name="contents" color={INK.text} />
+          </Pressable>
+          <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen}
+            width={layout.endWidth} height={layout.rateHeight} />
+        </View> : null}
       </View>
+      </ScrollView>
       {/* A tap outside the phone's bubble closes it, and without this it also
           pressed whatever React Native button it landed on: measured, a tap on
           Contents closed the bubble and opened the contents too (notes,
@@ -299,7 +317,7 @@ export function Player({
  * whole 44-point box, and it brings the page back to the reading without
  * starting it (#53).
  */
-function FollowingMark({ following, onReturn }: { following: boolean; onReturn(): void }) {
+function FollowingMark({ following, onReturn, size }: { following: boolean; onReturn(): void; size: number }) {
   const accent = useAccent();
   const mark = (
     <View style={[styles.mark, following && { backgroundColor: accent.following }]}>
@@ -308,14 +326,14 @@ function FollowingMark({ following, onReturn }: { following: boolean; onReturn()
   );
   if (following) {
     return (
-      <View style={styles.headEnd} accessible accessibilityRole="text" accessibilityLabel="Following the reading">
+      <View style={[styles.headEnd, { width: size, minHeight: size }]} accessible accessibilityRole="text" accessibilityLabel="Following the reading">
         {mark}
       </View>
     );
   }
   return (
     <Pressable accessibilityRole="button" accessibilityLabel="Return to the reading" onPress={onReturn}
-      style={({ pressed }) => [styles.headEnd, pressed && styles.pressed]}>
+      style={({ pressed }) => [styles.headEnd, { width: size, minHeight: size }, pressed && styles.pressed]}>
       {mark}
     </Pressable>
   );
@@ -370,12 +388,14 @@ function Transport({
  *
  * `Host` is the size the label's tap target always was; the label fills it.
  */
-function SpeedBubble({ rate, onRate, open, onOpen }: {
-  rate: number; onRate(next: number): void; open: boolean; onOpen(open: boolean): void;
+function SpeedBubble({ rate, onRate, open, onOpen, width, height }: {
+  rate: number; onRate(next: number): void; open: boolean; onOpen(open: boolean): void; width: number; height: number;
 }) {
   const shown = snapRate(rate).toFixed(2);
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const bubbleWidth = Math.min(windowWidth - 48, Math.max(196, Math.ceil(64 * fontScale + 132)));
   return (
-    <Host style={styles.rateHost}>
+    <Host style={{ width, height }}>
       <Popover isPresented={open} onIsPresentedChange={onOpen} attachmentAnchor="top" arrowEdge="bottom">
         <Popover.Trigger>
           <RNHostView>
@@ -387,7 +407,7 @@ function SpeedBubble({ rate, onRate, open, onOpen }: {
         </Popover.Trigger>
         <Popover.Content>
           <RNHostView matchContents>
-            <View style={styles.bubble} accessibilityLabel="Playback speed">
+            <View style={[styles.bubble, { width: bubbleWidth }]} accessibilityLabel="Playback speed">
               <Speed rate={rate} onRate={onRate} />
             </View>
           </RNHostView>
@@ -518,10 +538,10 @@ const styles = StyleSheet.create({
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   // The box A or M sits in: as wide as the collapse arrow opposite (#70), and as
   // tall, so M's whole box is its 44-point target.
-  headEnd: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
+  headEnd: { alignItems: 'center', justifyContent: 'center' },
   // Zotero-TTS's block, measured out of its player.css: 27 by 26, corners of 4,
   // the letter at 13 in the system font (#71).
-  mark: { alignItems: 'center', borderRadius: 4, height: 26, justifyContent: 'center', width: 27 },
+  mark: { alignItems: 'center', borderRadius: 4, minHeight: 26, justifyContent: 'center', minWidth: 27, padding: 4 },
   markLetter: { ...TEXT_EMPHASIZED.footnote, color: INK.text },
   note: { ...TEXT.caption1, color: INK.quiet },
   noteAttention: { color: INK.attention },
@@ -540,19 +560,18 @@ const styles = StyleSheet.create({
     right: 0,
   },
   pressed: { opacity: 0.65 },
-  rateHost: { height: 44, width: TRANSPORT_END },
   rateTap: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   // A step above the voice's 14 beside it; at 13 it was the smallest thing on
   // the row of 24-point icons it ends.
   rateLabel: { ...TEXT_EMPHASIZED.subhead, color: INK.text, fontVariant: ['tabular-nums'] },
   bubble: { paddingHorizontal: 14, paddingVertical: 12 },
   rate: { ...TEXT.headline, color: INK.text, fontVariant: ['tabular-nums'], minWidth: 64, textAlign: 'center' },
-  speed: { alignItems: 'center', flexDirection: 'row', gap: 16 },
+  speed: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16 },
   // Filled rather than outlined, the player's family of round buttons, at 36 with
   // `hitSlop` making up the 44-point target.
   step: { alignItems: 'center', backgroundColor: INK.line, borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
   transport: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   voice: { alignItems: 'center', justifyContent: 'center', maxWidth: '100%', minHeight: 44, minWidth: 44 },
-  voiceLabel: { ...TEXT.subhead, color: INK.text },
-  voiceSlot: { alignItems: 'center', flex: 1 },
+  voiceLabel: { ...TEXT.subhead, color: INK.text, textAlign: 'center' },
+  voiceSlot: { alignItems: 'center', flexShrink: 1, flexGrow: 1 },
 });

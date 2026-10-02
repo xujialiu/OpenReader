@@ -1938,7 +1938,7 @@ describe('A or M, and M bringing the page back (#71, #53, ADR 0050)', () => {
     expect(a).not.toMatch(/onPress|Pressable/);
     pin(mark, 'accessibilityLabel="Return to the reading" onPress={onReturn}', 'player.tsx, FollowingMark');
     // In the slot beside the Voice name, and only in the open player.
-    pin(player, '<FollowingMark following={following} onReturn={onReturn} />', 'player.tsx, the head row');
+    pin(player, '<FollowingMark following={following} onReturn={onReturn} size={layout.headEnd} />', 'player.tsx, the head row');
     const folded = player.indexOf('if (collapsed && notes.length === 0) {');
     expect(player.slice(folded, player.indexOf('\n  return (', folded))).not.toContain('FollowingMark');
   });

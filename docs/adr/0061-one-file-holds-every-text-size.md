@@ -113,6 +113,52 @@ the card was not measured again.
   measured here.
 - The titles above pages are the exception: they follow the phone's own rule,
   measured (`barTitle`, above).
-- At `accessibility-extra-extra-extra-large` (3.571×) the player's text
-  overflows its controls: the speed read `1 !` and the A/M letter was cut
-  (notes, 2026-09-30 12:15).
+- The original `accessibility-extra-extra-extra-large` (3.571×) player overflow
+  (speed `1 !`, clipped A/M; notes, 2026-09-30 12:15) is addressed by the
+  layout work below; final physical-device acceptance remains the owner's.
+
+## Content-sized rows and a reflowing player (#62, #114, #101, #102)
+
+`RowWords` shares the settings/menu/navigation label and value layout. Yoga
+wraps the value below the label when they do not fit together; either can wrap
+in full at the available width. Accessories occupy their own column. There is
+no character-count heuristic, font-size cap or list-only ellipsis.
+
+`ChoiceMenu` measures its noninteractive label in ordinary React Native layout,
+then gives that height to its absolutely overlaid native Host. The measurement
+copy has no accessibility elements or touch handling; the menu is the one
+accessible button. This costs a second, invisible rendering of a pure label,
+so children must remain noninteractive and free of side effects. It avoids a
+circular measurement: the previous RNHostView filled a fixed-height SwiftUI
+parent, so measuring inside it would measure the imposed height. A fontScale
+change remounts the label's layout boundary, not the screen or reading state.
+The same boundary serves General, Translation and drawer menu rows.
+
+The exact SDK 57 [Host](https://docs.expo.dev/versions/v57.0.0/sdk/ui/swift-ui/host.md)
+and [RNHostView](https://docs.expo.dev/versions/v57.0.0/sdk/ui/swift-ui/rnhostview.md)
+document content sizing, but qualify it by intrinsic sizes and parent proposals.
+This change does not assume that making both hosts match contents resolves a
+full-width label's size.
+
+`playerLayout` grows the speed target with fontScale and keeps the compact
+transport's two ends equal. When those ends and the five transport controls
+cannot fit, Contents and speed take another row and the Voice gets the full
+width. A/M sizes to its letters. Player content scrolls if it exceeds 75% of
+the window, keeping long notes reachable rather than extending off-screen.
+Only the player's content boundary remounts on a text-size change; the Reading
+and document remain mounted. The player remains an absolute overlay.
+
+On 2026-10-02, iPhone 17 / iOS 27.0 simulator: the pre-change General screenshot
+failed the visible-text check for `Pause between paragraphs` at XXL. After the
+change the whole label and `2000 ms` were visible, and the menu's ten values
+remained accessible in order and selectable by touch. At maximum accessibility
+size the speed's full `1.50×` and A were visible, with a full-width Voice row.
+Screenshots and OCR are simulator evidence, not proof of physical rendering.
+`test/manual-test/settings/dynamic-type.md` separates those checks from the
+owner's final acceptance.
+
+The #102 Library failure was not reproduced in the initial foreground or
+background/re-entry check. The current shared LibraryRow already uses
+`useWindowDimensions().fontScale` to update its height (introduced by #121).
+No speculative Library layout change is made; live transitions and progress
+visibility remain required regression and owner-acceptance checks.

@@ -300,13 +300,10 @@ export function ValueRow<T extends string | number>({ label, choices, chosen, on
   label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
 }) {
   return (
-    <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} height={SETTINGS.rowHeight}>
+    <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose}>
       <View style={styles.settingRow}>
-        <Text style={styles.settingLabel}>{label}</Text>
-        <View style={styles.settingValue}>
-          <Text style={styles.settingDetail} numberOfLines={1}>{choices.find((choice) => choice.value === chosen)?.label}</Text>
-          <Icon name="menu" color={INK.secondary} size={18} />
-        </View>
+        <RowWords label={label} value={choices.find((choice) => choice.value === chosen)?.label} />
+        <Icon name="menu" color={INK.secondary} size={18} />
       </View>
     </ChoiceMenu>
   );
@@ -363,12 +360,12 @@ export function NavigationRow({ label, value, checked, onPress, accessibilityLab
   label: string; value?: string; checked?: boolean; onPress(): void; accessibilityLabel?: string;
 }) {
   const accent = useAccent();
+  const { fontScale } = useWindowDimensions();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress}
+    <Pressable key={fontScale} accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress}
       style={({ pressed }) => [styles.settingRow, pressed && styles.rowPressed]}>
-      <Text style={styles.settingLabel} numberOfLines={1}>{label}</Text>
+      <RowWords label={label} value={value} />
       <View style={styles.settingValue}>
-        {value ? <Text style={styles.settingDetail} numberOfLines={1}>{value}</Text> : null}
         {checked ? <Icon name="check" color={accent.reading} size={20} strokeWidth={2.2} /> : null}
         <View style={styles.chevron}><Icon name="next" color={INK.tertiary} size={22} strokeWidth={2} /></View>
       </View>
@@ -512,9 +509,9 @@ export interface Choice<T extends string | number> {
  * own menu, with the one in force checked (ADR 0035).
  *
  * `children` is the row as it is drawn, and it is only drawn: the menu owns the
- * tap, so nothing inside it may be a `Pressable`. `height` is the row's, because
- * the menu is laid out by SwiftUI and takes the size it is given rather than
- * one worked out from what is inside it.
+ * tap, so nothing inside it may be a `Pressable` or have side effects. Its
+ * noninteractive measurement copy supplies SwiftUI's proposed height rather
+ * than using a fixed row height. Only the native menu is accessible.
  *
  * `menuOrder('fixed')`: a menu opened near the bottom of the screen opens
  * upward, and SwiftUI then lists its items in reverse unless told not to.
@@ -524,12 +521,20 @@ export interface Choice<T extends string | number> {
  * replaces them starts with no traits at all — measured, XCTest saw it as an
  * `Other` until `isButton` was added back.
  */
-export function ChoiceMenu<T extends string | number>({ label, choices, chosen, onChoose, height, children }: {
-  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void; height: number; children: ReactNode;
+export function ChoiceMenu<T extends string | number>({ label, choices, chosen, onChoose, children }: {
+  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void; children: ReactNode;
 }) {
   const current = choices.find((choice) => choice.value === chosen)?.label ?? '';
+  const { fontScale } = useWindowDimensions();
+  const [height, setHeight] = useState<number>(SETTINGS.rowHeight);
   return (
-    <Host style={{ height, alignSelf: 'stretch' }}>
+    <View key={fontScale}>
+      {/* Measure in ordinary RN layout, outside SwiftUI's proposed height.
+          This noninteractive copy gives the native menu exactly the same size
+          as its visible label, including wrapped text and live size changes. */}
+      <View style={{ opacity: 0 }} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+        onLayout={(event) => setHeight(event.nativeEvent.layout.height)}>{children}</View>
+      <Host style={[StyleSheet.absoluteFill, { height }]}>
       <Menu
         label={<RNHostView><View style={styles.menuRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{children}</View></RNHostView>}
         modifiers={[menuOrder('fixed'), accessibilityElement('ignore'), accessibilityLabel(`${label}, ${current}`), accessibilityAddTraits(['isButton'])]}
@@ -539,8 +544,18 @@ export function ChoiceMenu<T extends string | number>({ label, choices, chosen, 
             onIsOnChange={() => onChoose(choice.value)} />
         ))}
       </Menu>
-    </Host>
+      </Host>
+    </View>
   );
+}
+
+/** Name and value share one line when they fit, otherwise wrap in reading order.
+ * The accessory has its own column, so neither words nor units run under it. */
+export function RowWords({ label, value }: { label: string; value?: string }) {
+  return <View style={styles.rowWords}>
+    <Text style={[styles.settingLabel, styles.completeWord]}>{label}</Text>
+    {value ? <Text style={[styles.settingDetail, styles.completeWord]}>{value}</Text> : null}
+  </View>;
 }
 
 /** Something the owner should read: what is missing, or what a server said. Never an alert — the reading carries on around it. */
@@ -661,7 +676,9 @@ const styles = StyleSheet.create({
   rowPressed: { backgroundColor: INK.line },
   settingLabel: { ...TEXT.body, color: INK.text, flexShrink: 1 },
   settingDetail: { ...TEXT.body, color: INK.secondary, flexShrink: 1 },
-  settingValue: { alignItems: 'center', flexDirection: 'row', gap: 4, flexShrink: 1 },
+  settingValue: { alignItems: 'center', flexDirection: 'row', gap: 4 },
+  rowWords: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: 12, rowGap: 4 },
+  completeWord: { maxWidth: '100%' },
   // The glyph's own box leaves room on its right; pulled in so the chevron's
   // stroke ends where the phone's does, about 21 points from the card's edge.
   chevron: { marginRight: -3 },
