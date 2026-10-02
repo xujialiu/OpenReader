@@ -27,6 +27,10 @@ that names the script or probe you are about to run.
   text edges at 8/16/32/48 in both themes via `kit/ink.py`, persistence across
   a relaunch, and the re-centre that keeps the highlighted sentence at the
   Line Position.
+- [highlight-palette.md](highlight-palette.md) (#122): Highlight's own page —
+  the pinned sample, presets, Sentence | Word and the embedded native colour
+  palette — by real touches and AXe coordinates, with the no-loop drag, the
+  fling-to-scroll rule and the sample's short form at accessibility sizes.
 - [highlight-colours.md](highlight-colours.md) (#118): Appearance's
   Highlight section, its preset tiles and ring, and the Sentence and Word
   wells opened, moved to 0 % and dragged live through XCTest, with the drawer
