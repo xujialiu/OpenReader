@@ -1,7 +1,7 @@
 /**
  * The **Highlight Colours** (CONTEXT.md): the colour and opacity the sentence
  * being read and the word being spoken are marked in (#118, design and ADR
- * 0067). Part of Appearance, and the same under either theme.
+ * 0068). Part of Appearance, and the same under either theme.
  *
  * Here and not in `highlighter.ts` because the app's Appearance drawer, its
  * accent (`src/app/`) and the page's stylesheet all read it, and a test must

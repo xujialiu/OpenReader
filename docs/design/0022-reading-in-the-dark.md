@@ -59,7 +59,7 @@ built for and costs the ones it was not.
 
 ## The highlight is repainted for dark rather than left
 
-_Revised in [decision 0067](0067-the-highlight-colours-are-the-owners.md): the
+_Revised in [decision 0068](0068-the-highlight-colours-are-the-owners.md): the
 mark is no longer repainted for dark. The owner chooses one colour and one
 strength for the sentence and for the word, and they are the same on both
 pages. The blue below is now the Blue preset, at amber's strengths rather than

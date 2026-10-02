@@ -131,7 +131,7 @@ alignment, a short menu, it does, to the same distances from the edge. Where it
 cannot, the app draws the row to the same values, so the two kinds sit together
 without a seam.
 
-_Revised in [decision 0067](0067-the-highlight-colours-are-the-owners.md): the
+_Revised in [decision 0068](0068-the-highlight-colours-are-the-owners.md): the
 app's own marks in a drawer, said below to be amber, follow the colour of the
 spoken word's mark._
 

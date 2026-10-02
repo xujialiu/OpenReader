@@ -4,7 +4,7 @@ status: accepted
 
 # The Highlight Colours are a colour and a whole percent per level, stored as Zotero-TTS stores them, painted in both themes, with the accent taken from the word's
 
-_The product argument is [design 0067](../design/0067-the-highlight-colours-are-the-owners.md).
+_The product argument is [design 0068](../design/0068-the-highlight-colours-are-the-owners.md).
 Issue #118; the plan is the owner's comment there, decided on 2026-10-01 (Q1–Q17,
 with Q5 = A, Q6 = B and Q8 = A). **Highlight Colours** is in CONTEXT.md, as
 part of **Appearance**. The facts are in `notes/NOTES_2026-10-02.md`, 10:04 to
@@ -116,7 +116,7 @@ repaints nothing, and `#e6e6ea` on `#111114`.
 
 Blue's word on the dark page is lighter at 62 % than the opaque `#4456de` was,
 so its letters rise from 4.65:1 to 7.2:1. Its sentence sinks from 2.07:1 against
-the page, opaque, to 1.12:1. Design 0067 counts that as a cost. Amber's
+the page, opaque, to 1.12:1. Design 0068 counts that as a cost. Amber's
 2.82:1 on the dark page is the case design 0022 turned away from, and it is
 allowed because the owner chooses the colours. Nothing recolours the word's
 letters: the `::highlight()` rules declare `background-color` only.

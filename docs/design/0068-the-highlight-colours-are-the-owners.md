@@ -1,7 +1,7 @@
 # The Highlight Colours are the owner's, the same in light and dark
 
 _The engineering half of this decision is
-[ADR 0067](../adr/0067-the-highlight-colours-are-the-owners.md). Issue #118; the
+[ADR 0068](../adr/0068-the-highlight-colours-are-the-owners.md). Issue #118; the
 owner's decisions are in the plan comment there, of 2026-10-01. It revises what
 decisions [0022](0022-reading-in-the-dark.md),
 [0027](0027-whole-document-offline-narration.md),

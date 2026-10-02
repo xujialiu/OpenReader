@@ -7,7 +7,7 @@ _[Design 0066](0066-every-drawer-rises-to-the-drawer-height.md) carries these
 cards into every drawer: a drawer is the colour of a settings page, and its
 cards the colour of a settings card._
 
-_Revised in [decision 0067](0067-the-highlight-colours-are-the-owners.md): the
+_Revised in [decision 0068](0068-the-highlight-colours-are-the-owners.md): the
 amber below, of the Privacy Policy link and of an action such as Test
 connection, is now the colour of the spoken word's mark, made just dark or
 light enough to be read._

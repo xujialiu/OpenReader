@@ -253,7 +253,7 @@ export const OWN_ALIGNMENTS = ['center', 'right', 'end', '-webkit-center', '-web
  * **Nor do the Margins** (ADR 0056): the space at each side of the page is the
  * owner's from the first page, and a Document's own indents come on top of it.
  *
- * **Nor do the Highlight Colours** (#118, ADR 0067): the colour and opacity
+ * **Nor do the Highlight Colours** (#118, ADR 0068): the colour and opacity
  * the sentence being read and the word being spoken are marked in, the same
  * under either theme (`highlight-colours.ts`).
  */

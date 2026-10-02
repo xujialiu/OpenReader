@@ -43,7 +43,7 @@ listed below.
 
 ## What stays the app's own
 
-_Revised in [decision 0067](0067-the-highlight-colours-are-the-owners.md): the
+_Revised in [decision 0068](0068-the-highlight-colours-are-the-owners.md): the
 amber below is now the colour the owner chose for the spoken word's mark, made
 just dark or light enough to be read on what it is drawn on. The mark is the
 same on a light and a dark page, so the page's mark and the app's checks are one
