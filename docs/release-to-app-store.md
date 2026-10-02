@@ -45,15 +45,16 @@ The owner set these on 2026-09-30.
   - Uploaded 2026-10-03 at 00:42 CST from `main` commit `9cf0a86`, after the EPUB 3 Contents correction (#125).
   - Clean prebuild; archive/export each returned 0; pre-Hermes bundle verified `DEBUG_MODE = false`. All 2,325 tests, TypeScript and ESLint passed.
   - Independent simulator verification exercised three different section-start destinations in the unchanged Gutenberg sample on Release 1.0.0 (3). It did not cover playback or an established paused Reading Position; do not substitute it for the fresh-install review walkthrough below.
-  - App Store Connect completed processing and shows Ready to Submit. Build 3 replaced build 2 in the 1.0.0 version record; reloading confirmed build 3 and a disabled Save button. This is not App Review approval; no review submission yet (#124).
-  - Annotated `build-2` and `build-3` exist locally; neither has been pushed. No `v1.0.0` tag yet.
+  - Submitted to App Review on 2026-10-03 at approximately 01:45 CST. App Store Connect confirmed “1 Item Submitted” and **Waiting for Review**. This is not approval or a public release; manual release remains selected (#124).
+  - The owner explicitly instructed submission without waiting for the separate ios-tester input investigation. Full fresh-install playback acceptance remains unverified; an actual app defect found there must be assessed for withdrawal before approval/release.
+  - Annotated `build-2`, `build-3` and `v1.0.0` exist locally; tags have not been pushed. The submission/release tag points to build 3's source commit, not later documentation commits.
 - **Store setup saved on 2026-10-03**
   - Free; 174 countries/regions, excluding China mainland. Apple says future territories are included automatically.
   - Apple silicon Mac and Apple Vision Pro availability disabled and checked after navigating back.
   - Privacy policy updated and deployed; the privacy label is published: Other User Content and User ID, both linked to identity, neither for tracking. Content is declared for App Functionality and Other Purposes (provider content/model improvement); identifiers for App Functionality.
   - Three genuine 1320 × 2868 screenshots uploaded and verified after reload: Library, fixed Contents, Settings. The 6.5-inch set automatically uses the 6.9-inch assets. These do not claim to show successful playback.
   - Books category, content-rights declaration, calculated 4+ age rating and non-trader status saved. Reviewer contact is saved only in App Store Connect. No sign-in is required; manual release is selected.
-  - Review instructions saved with a private-key placeholder. The owner must replace it in App Store Connect before submission; do not submit a placeholder. Secure simulator input/playback diagnosis continues separately.
+  - The owner privately replaced the review-key placeholder in App Store Connect and confirmed completion. Before submission, a boolean-only check confirmed the placeholder was absent; no key was output or committed. Secure simulator input/playback diagnosis continues separately in `.worktrees/ios-tester` on `main--ios-release-check`.
 - **Web pages**, from `site/` through `.github/workflows/pages.yml`:
   - Support URL: https://xujialiu.github.io/OpenReader/
   - Privacy Policy URL: https://xujialiu.github.io/OpenReader/privacy.html
