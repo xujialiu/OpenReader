@@ -19,12 +19,14 @@
 import { Host, Menu, RNHostView, Toggle, type ToggleProps } from '@expo/ui/swift-ui';
 import { accessibilityAddTraits, accessibilityElement, accessibilityLabel, menuOrder } from '@expo/ui/swift-ui/modifiers';
 import { Children, createContext, isValidElement, useContext, useMemo, useState, type ReactNode } from 'react';
-import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import type { ColorValue } from 'react-native';
 import { DEFAULT_HIGHLIGHT_COLOURS } from '../renderer/highlight-colours';
 import { readingAccent, type ReadingAccent } from './accent';
 import { Icon, type IconName } from './icon';
 import { NameText } from './name-text';
+import { FolderArtwork } from './folder-artwork';
+import { LIBRARY_ROW, libraryRowHeight } from './library-row-layout';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /**
@@ -593,33 +595,41 @@ export function DocumentRow({ title, progress, cover, onPress, onLongPress, onAc
   title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void; onActions(): void; disabled?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  return <View>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${title}, ${progress}`} onPress={onPress} onLongPress={onLongPress} disabled={disabled} accessibilityState={{ disabled: !!disabled }}
-      style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}>
-      <View style={styles.cover} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        {cover && failed !== cover ? <Image source={{ uri: cover }} style={styles.coverImage}
-          resizeMode="contain" onError={() => setFailed(cover)} /> : <Icon name="book" color={INK.quiet} size={28} />}
-      </View>
-      <View style={styles.documentWords}>
-        <NameText name={title} lines={2} style={styles.documentTitle} />
-        <Text style={styles.rowProgress} numberOfLines={1}>{progress}</Text>
-      </View>
-    </Pressable>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Actions for ${title}`} onPress={onActions} disabled={disabled} accessibilityState={{ disabled: !!disabled }} style={styles.documentActions}>
-      <Icon name="more" color={INK.quiet} size={DOCUMENT_ACTIONS.icon} />
-    </Pressable>
-  </View>;
+  return <LibraryRow title={title} summary={progress} label={`${title}, ${progress}`} actionsLabel={`Actions for ${title}`}
+    onPress={onPress} onLongPress={onLongPress} onActions={onActions} disabled={disabled}
+    illustration={<View style={styles.cover}>
+      {cover && failed !== cover ? <Image source={{ uri: cover }} style={styles.coverImage}
+        resizeMode="contain" onError={() => setFailed(cover)} /> : <Icon name="book" color={INK.quiet} size={28} />}
+    </View>} />;
 }
 
-export function FolderRow({ title, onPress, onActions, disabled }: { title: string; onPress(): void; onActions(): void; disabled?: boolean }) {
+export function FolderRow({ title, summary, onPress, onActions, disabled }: {
+  title: string; summary: string; onPress(): void; onActions(): void; disabled?: boolean;
+}) {
+  return <LibraryRow title={title} summary={summary} label={`Folder, ${title}, ${summary}`} actionsLabel={`Actions for folder ${title}`}
+    onPress={onPress} onLongPress={onActions} onActions={onActions} disabled={disabled} illustration={<FolderArtwork />} />;
+}
+
+/** One layout for both kinds: shared height, illustration column, title, second line and action hit target. */
+function LibraryRow({ title, summary, label, actionsLabel, illustration, onPress, onLongPress, onActions, disabled }: {
+  title: string; summary: string; label: string; actionsLabel: string; illustration: ReactNode;
+  onPress(): void; onLongPress?(): void; onActions(): void; disabled?: boolean;
+}) {
+  const { fontScale } = useWindowDimensions();
   return <View>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Folder, ${title}`} disabled={disabled} accessibilityState={{ disabled: !!disabled }}
-      onPress={onPress} onLongPress={onActions} style={({ pressed }) => [styles.documentRow, pressed && styles.pressed]}>
-      <View style={{ width: 56, alignItems: 'center' }}><Icon name="folder" color={INK.quiet} size={28} /></View>
-      <View style={styles.documentWords}><NameText name={title} lines={2} style={styles.documentTitle} /></View>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} onLongPress={onLongPress}
+      disabled={disabled} accessibilityState={{ disabled: !!disabled }}
+      style={({ pressed }) => [styles.documentRow, { height: libraryRowHeight(fontScale) }, pressed && styles.pressed]}>
+      <View style={styles.illustration} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{illustration}</View>
+      <View style={styles.documentWords}>
+        <NameText name={title} lines={2} style={styles.documentTitle} />
+        <Text style={styles.rowProgress} numberOfLines={1}>{summary}</Text>
+      </View>
     </Pressable>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Actions for folder ${title}`} disabled={disabled} accessibilityState={{ disabled: !!disabled }}
-      onPress={onActions} style={styles.documentActions}><Icon name="more" color={INK.quiet} size={DOCUMENT_ACTIONS.icon} /></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={actionsLabel} onPress={onActions} disabled={disabled}
+      accessibilityState={{ disabled: !!disabled }} style={styles.documentActions}>
+      <Icon name="more" color={INK.quiet} size={DOCUMENT_ACTIONS.icon} />
+    </Pressable>
   </View>;
 }
 
@@ -637,9 +647,10 @@ const styles = StyleSheet.create({
   noteAttention: { color: INK.attention },
   pressed: { opacity: 0.65 },
   headerTap: { alignItems: 'center', justifyContent: 'center', minWidth: 44, minHeight: 44 },
-  documentRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: DOCUMENT_ROW_PADDING, paddingVertical: 14 },
+  documentRow: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingHorizontal: DOCUMENT_ROW_PADDING, paddingVertical: 10 },
   documentActions: { position: 'absolute', right: DOCUMENT_ACTIONS.right, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: DOCUMENT_ACTIONS.padding },
-  cover: { width: 56, height: 80, borderRadius: 5, backgroundColor: INK.panel, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  illustration: { width: LIBRARY_ROW.illustrationWidth, alignItems: 'center', justifyContent: 'center' },
+  cover: { ...LIBRARY_ROW.cover, borderRadius: 5, backgroundColor: INK.panel, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   coverImage: { width: '100%', height: '100%' },
   documentWords: { flex: 1, gap: 7, marginRight: DOCUMENT_ACTIONS.right + 2 * DOCUMENT_ACTIONS.padding + DOCUMENT_ACTIONS.icon - DOCUMENT_ROW_PADDING },
   // A size under Headline, which the drawer's title and the bar's keep: the

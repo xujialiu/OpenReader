@@ -3,13 +3,14 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 
 import { asDocumentId, type LibraryEntry } from '../core/document';
-import { childFolders, folderAt, folderSubtree, type Folder, type FolderId } from '../core/folders';
+import { childFolders, directFolderCounts, folderAt, folderSubtree, type Folder, type FolderId } from '../core/folders';
 import { DocumentRow, FolderRow, HeaderButton, INK, Note } from './controls';
 import { pickDocument } from './document';
 import { useDocumentCover } from './document-cover';
 import { AddDrawer, confirmFolderDeletion, FolderActions } from './folder-actions';
 import { importDocument } from './import-document';
 import { documentFile } from './library';
+import { folderSummary } from './library-row-layout';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
 import { NO_PROVIDER_SENTENCE } from './settings';
@@ -116,6 +117,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     }
     return found;
   }, [library.entries]);
+  const counts = useMemo(() => directFolderCounts(tree, library.entries.map((entry) => entry.id)), [tree, library.entries]);
   const rows: Row[] = [
     ...childFolders(tree, tree.current).map((folder): Row => ({ kind: 'folder', folder })),
     ...library.entries.filter((entry) => (tree.documents[entry.id] ?? null) === tree.current).map((entry): Row => ({ kind: 'document', entry })),
@@ -127,7 +129,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
       data={rows}
       keyExtractor={(row) => row.kind === 'folder' ? `folder:${row.folder.id}` : row.entry.id}
       renderItem={({ item }) => item.kind === 'folder'
-        ? <FolderRow title={item.folder.name} disabled={busy} onPress={() => visit(item.folder.id)} onActions={() => setFolderActions(item.folder.id)} />
+        ? <FolderRow title={item.folder.name} summary={folderSummary(counts.get(item.folder.id)?.documents ?? 0, counts.get(item.folder.id)?.folders ?? 0)} disabled={busy} onPress={() => visit(item.folder.id)} onActions={() => setFolderActions(item.folder.id)} />
         : <LibraryDocument entry={item.entry} present={present.has(item.entry.id)} disabled={busy}
           onPress={() => navigation.navigate('Reader', { id: item.entry.id })} onActions={() => setActions(item.entry)} />}
       ListHeaderComponent={problem || library.note || busy ? <View style={styles.banner}>

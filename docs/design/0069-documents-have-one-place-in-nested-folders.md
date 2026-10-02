@@ -42,6 +42,16 @@ When this feature first arrives, all existing Documents remain at the Library ro
 
 After the owner confirms deletion, any Reading or Download belonging to a contained Document is stopped before that Document is removed. Unrelated Reading and Downloads are unaffected. The warning explains this impact when applicable. Failures are reported explicitly, and content that could not be deleted is not presented as successfully removed. This version has no trash or recovery feature.
 
+## Visual refinement after simulator review
+
+The owner found that the shorter Folder rows interrupt the Library's visual rhythm. Folder and Document rows must have the same height. The Folder illustration also needs more detail than the initial outline; the owner's reference is Apple's Files list, with a layered blue folder and uniformly spaced folder and file rows.
+
+The owner chose a layered blue Folder illustration close to Files: a top tab, back layer, light paper edges and a subtle gradient. It occupies the same illustration area as a Document Cover without being stretched to the Cover's shape. Small Folder action icons in Drawers remain simple.
+
+A Folder's second line shows counts of its directly contained Documents and child Folders, excluding deeper descendants; an empty Folder says `Empty`. No date is shown.
+
+After comparing both previews, the owner chose the more compact layout (B): Folder and Document rows share one height, Covers become smaller, and the text stays the same size. More entries fit on screen, at the cost of less prominent Covers. Keeping the larger Document rows was turned down because Folder rows would then have too much empty space. Both row kinds grow together for larger system text. Existing folder behavior remains as agreed above.
+
 ## Design review
 
-The owner accepted all individual choices above and confirmed the complete scope for implementation on 2026-10-02 (#121).
+The owner accepted all individual choices above and confirmed the complete original scope for implementation on 2026-10-02 (#121). After simulator review, the owner approved fixing the missing duplicate-name explanation, repairing the tester configuration and completing the remaining verification, and requested the visual refinement described above.
