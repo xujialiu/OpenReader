@@ -7,6 +7,16 @@ status: accepted
 _The product argument — what the owner sees, what loses, and what it costs — is
 `docs/design/0022-reading-in-the-dark.md`._
 
+_Revised by [ADR 0067](0067-the-highlight-colours-are-the-owners.md) (#118):
+both themes paint the owner's Highlight Colours, so `themeCss('dark')`'s two
+`::highlight()` overrides below, `#434665` and `#4456de` opaque, are dropped.
+Those two colours are now the Blue preset, at 22 % and 62 %, and the default.
+The contrasts below are for the opaque marks; ADR 0067 gives Blue's at its
+opacities. Where the owner's colours enter the one stylesheet, and so whether
+`APPEARANCE` still "declares a font and a size and never a colour", is ADR
+0067's to record. `INK.reading` no longer stays amber: the accent follows the
+word's colour._
+
 `Settings → General` holds one setting: **light, dark, or follow the system**,
 defaulting to follow. It reaches three places, and each of them takes it
 differently.

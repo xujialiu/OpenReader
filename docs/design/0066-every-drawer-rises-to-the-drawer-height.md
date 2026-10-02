@@ -131,6 +131,10 @@ alignment, a short menu, it does, to the same distances from the edge. Where it
 cannot, the app draws the row to the same values, so the two kinds sit together
 without a seam.
 
+_Revised in [decision 0067](0067-the-highlight-colours-are-the-owners.md): the
+app's own marks in a drawer, said below to be amber, follow the colour of the
+spoken word's mark._
+
 The colours are the app's own, as everywhere else (decision 0042). In the light
 theme a drawer is the colour of a Settings page. In the dark theme it is one
 step lighter than the page: a Settings page in the dark is the colour of the

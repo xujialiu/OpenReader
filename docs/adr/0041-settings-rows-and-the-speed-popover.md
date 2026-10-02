@@ -8,6 +8,10 @@ _The product argument is [design 0041](../design/0041-one-look-for-settings-and-
 under the principle of [design 0042](../design/0042-the-app-follows-the-phones-own-look.md).
 Issue #48._
 
+_Revised by [ADR 0067](0067-the-highlight-colours-are-the-owners.md) (#118):
+`NavigationRow`'s check and `ActionRow` are drawn in the accent derived from the
+word's Highlight Colour, no longer in amber._
+
 ## What was done
 
 ### The settings screens
