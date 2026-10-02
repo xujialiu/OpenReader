@@ -41,11 +41,19 @@ The owner set these on 2026-09-30.
 - **Build 0.0.1 (1)**
   - Uploaded 2026-09-30 at 22:29 CST. Processing ended "Complete", with no ITMS error and no Missing Compliance.
   - It tested the pipeline only, before #109 and the version rule. Never submit it.
+- **Build 1.0.0 (4)**
+  - Uploaded to TestFlight on 2026-10-03 at 03:07 CST from clean, synchronized `main` commit `98809b5`. Xcode reported `Upload succeeded` and `EXPORT SUCCEEDED`; Apple processing completion has not yet been checked.
+  - Includes the owner-accepted softer Blue/Amber presets (#126). Saved personal choices are unchanged; selecting a preset applies its new colours.
+  - Clean prebuild; 2,331 tests, TypeScript and ESLint passed; archive/export returned 0. Archive metadata confirms 1.0.0 (4), iPhone-only, background audio and exempt encryption. The archive's JavaScript has `DEBUG_MODE = false` and all four revised colour constants.
+  - The owner reports withdrawing build 3 from review and chose to retain 1.0.0 for the replacement. This upload does **not** submit build 4 to App Review. Manual release remains the intended policy.
+  - Visual acceptance used a script-rendered comparison, not simulator screenshots. The native tester failed before startup because selected MCP tools did not register. No native interaction pass is claimed for this change.
+  - A separate development-signed Release with Debug Mode enabled was installed over the owner's iPhone app before upload; CLI launch was blocked by the phone being locked. This is not the uploaded binary.
+  - Annotated `build-4` is local only. Existing `v1.0.0` still points to build 3; it was not moved or pushed by this TestFlight-only upload.
 - **Build 1.0.0 (3)**
   - Uploaded 2026-10-03 at 00:42 CST from `main` commit `9cf0a86`, after the EPUB 3 Contents correction (#125).
   - Clean prebuild; archive/export each returned 0; pre-Hermes bundle verified `DEBUG_MODE = false`. All 2,325 tests, TypeScript and ESLint passed.
   - Independent simulator verification exercised three different section-start destinations in the unchanged Gutenberg sample on Release 1.0.0 (3). It did not cover playback or an established paused Reading Position; do not substitute it for the fresh-install review walkthrough below.
-  - Submitted to App Review on 2026-10-03 at approximately 01:45 CST. App Store Connect confirmed “1 Item Submitted” and **Waiting for Review**. This is not approval or a public release; manual release remains selected (#124).
+  - Submitted to App Review on 2026-10-03 at approximately 01:45 CST. App Store Connect confirmed “1 Item Submitted” and **Waiting for Review**. This was not approval or a public release; manual release remained selected (#124). The owner subsequently reported withdrawing this submission before requesting build 4.
   - The owner explicitly instructed submission without waiting for the separate ios-tester input investigation. Full fresh-install playback acceptance remains unverified; an actual app defect found there must be assessed for withdrawal before approval/release.
   - Annotated `build-2`, `build-3` and `v1.0.0` exist locally; tags have not been pushed. The submission/release tag points to build 3's source commit, not later documentation commits.
 - **Store setup saved on 2026-10-03**
