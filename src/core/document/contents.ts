@@ -15,16 +15,14 @@
  * `View.js:258-268`), as a tree of `{ id, href, label, parent?, subitems }`. Two
  * things about that shape are measured rather than assumed, and both are traps:
  *
- * - **`href` is the raw `src` of the `toc.ncx` `<content>` element**, or the raw
- *   `href` of a navigation document's `<a>`. epub.js resolves neither against
- *   anything. So it is relative to the file the navigation came from, and the
- *   spine's hrefs are relative to the package document. In the owner's book those
- *   are the same directory (`OEBPS/toc.ncx` beside `OEBPS/content.opf`) and the
- *   two spellings are byte-identical — which is why matching them as strings
- *   works, and why it is stated here instead of being discovered later. A book
- *   whose navigation lives in a different directory resolves **every** row to
- *   `null`, which is why `unreachable` is on the result: all-or-nothing is a fact
- *   a caller can act on, where one silently dead row is not.
+ * - **The two navigation formats arrive differently.** NCX `src` is raw,
+ *   relative to the NCX file. The bundled EPUB 3 `navItem` instead joins each
+ *   href to the navigation path, rooted at the package directory, adding `/`
+ *   even when the navigation and package are siblings (#125). The spine's hrefs
+ *   are package-relative. The lookup registers both spellings, not a basename
+ *   or suffix guess: `Other/chapter.xhtml` must not match `Text/chapter.xhtml`.
+ *   NCX in another directory still needs its own base to resolve correctly;
+ *   `unreachable` reports unmatched rows rather than quietly choosing a file.
  * - **`id` is not always a string.** epub.js's `ncxItem` computes it as
  *   `getAttribute('id') || false`, so a `navPoint` with no `id` yields the boolean
  *   `false`; a navigation document's `navItem` falls back to the href, so two
@@ -56,7 +54,7 @@
 export interface NavigationEntry {
   /** Whatever the document called it. `false` for an `ncx` `navPoint` with no `id` — hence the runtime check, not the type. */
   id: string;
-  /** The raw `src`/`href`, relative to the navigation file and possibly carrying a fragment. */
+  /** NCX's raw `src`, or EPUB 3's package-rooted href, possibly carrying a fragment. */
   href: string;
   /** The label as the document wrote it, untrimmed. */
   label: string;
@@ -240,7 +238,14 @@ function labelOf(label: unknown): string {
 function spineLookup(spine: readonly string[]): Map<string, number> {
   const byHref = new Map<string, number>();
   const put = (href: string, index: number): void => {
-    if (href !== '' && !byHref.has(href)) byHref.set(href, index);
+    if (href === '') return;
+    if (!byHref.has(href)) byHref.set(href, index);
+    // EPUB 3 navItem's tocPath.join roots a package-relative path (#125).
+    // Never alias an external URL or remove directory components.
+    if (!href.startsWith('/') && !/^[a-z][a-z\d+.-]*:/i.test(href)) {
+      const rooted = '/' + href;
+      if (!byHref.has(rooted)) byHref.set(rooted, index);
+    }
   };
   for (let index = 0; index < spine.length; index++) {
     const href = spine[index];

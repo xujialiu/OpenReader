@@ -2720,10 +2720,10 @@ ${EPUB_GUARDS_SOURCE}
      to is a spine index. \`adopt\` already reads one of these per section, so this
      is the same accessor in a loop rather than a new mechanism.
 
-     Unmodified — not resolved, not decoded, not trimmed. epub.js resolves neither
-     the navigation's hrefs nor the spine's against anything, and
-     \`core/document/contents.ts\` matches the two as strings; a spelling tidied here
-     would match neither side. A spine item that will not resolve contributes the
+     Unmodified — not resolved, not decoded, not trimmed. These are package-relative
+     manifest hrefs. \`core/document/contents.ts\` also registers the package-rooted
+     aliases that the bundled renderer produces for EPUB 3 navigation (#125);
+     NCX navigation still arrives as raw hrefs. A spine item that will not resolve contributes the
      empty string, which that lookup ignores, rather than shortening the array and
      shifting every index after it. */
   function spineHrefs() {

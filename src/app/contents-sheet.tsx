@@ -117,7 +117,7 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
           <DrawerFooter attention>
             {!spineKnown
               ? 'The list of this book’s own files has not arrived yet, so no row can be opened. It arrives as the document installs.'
-              : 'None of these rows names a file in this book. The contents live in a different folder from the pages, which this app matches by name — so the list can be read but not followed.'}
+              : 'None of these rows could be matched to a page in this book. The list can be read but not followed.'}
           </DrawerFooter>
         ) : null}
 

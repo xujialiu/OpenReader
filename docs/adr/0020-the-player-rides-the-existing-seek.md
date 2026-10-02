@@ -443,6 +443,24 @@ and loses the whole book over one malformed escape. A book whose navigation live
 in another directory therefore resolves **every** row to null rather than one, which
 is a state to report rather than a list of rows that quietly do nothing.
 
+### EPUB 3 path spelling correction (#125, 2026-10-03)
+
+The raw-href measurement above describes NCX, not the current bundled EPUB 3
+parser. Running `@epubjs-react-native/core`'s bundled epub.js against Gutenberg
+1342 (`1342.epub3.images`, SHA-256
+`d401ad6b118e84d01b8dd1a3d034fd41784feb14c50f1f7a0fc17f3263fa8e9f`)
+produced `/1306980130634175271_1342-h-0.htm.xhtml#pgepubid00022` from
+`navItem`'s `tocPath.join`, while the spine href lacks the leading slash.
+The navigation, NCX and package are all in `OEBPS/`; the original archive's
+links resolve correctly. The app's unmatched-path message did not establish
+that the navigation was in a different folder.
+
+The lookup now registers a leading-slash alias for each relative spine spelling,
+including encoding variants, while retaining the first-match rule. It neither
+strips directory components nor aliases external URLs. NCX base resolution and
+fragment-level navigation remain outside this correction. The failure message
+reports an unmatched list without asserting an unmeasured cause.
+
 ### Where the reading is, and the granularity that is actually available
 
 Of the three ways the reading can be named — a Block id, a CFI, a spine index —
