@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RenameAlert } from '../../src/app/rename-alert';
 
 const warning = vi.hoisted(() => vi.fn());
+const native = vi.hoisted(() => ({ value: '', get() { return this.value; } }));
 vi.mock('react-native', () => ({ StyleSheet: { create: (styles: unknown) => styles }, Alert: { alert: warning } }));
 vi.mock('../../src/app/controls', () => ({ SchemeContext: createContext(null) }));
 vi.mock('@expo/ui/swift-ui/modifiers', () => ({ disabled: (value: boolean) => ({ disabled: value }) }));
@@ -12,10 +13,10 @@ vi.mock('@expo/ui/swift-ui', () => {
     return createElement(name, props, children);
   };
   return { Alert: Object.assign(host('Alert'), { Trigger: host('Trigger'), Actions: host('Actions') }),
-    Button: host('Button'), Host: host('Host'), Text: host('Text'), TextField: host('TextField'), useNativeState: (name: string) => name };
+    Button: host('Button'), Host: host('Host'), Text: host('Text'), TextField: host('TextField'), useNativeState: () => native };
 });
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-beforeEach(() => warning.mockReset());
+beforeEach(() => { warning.mockReset(); native.value = ''; });
 
 async function editor() {
   let view!: ReactTestRenderer;
@@ -28,12 +29,42 @@ async function editor() {
   return { view, onSave, onCancel,
     alert: () => view.root.findAll((node) => String(node.type) === 'Alert')[0],
     save: () => view.root.findAll((node) => String(node.type) === 'Button' && node.props.label === 'Create')[0],
-    type: (name: string) => act(async () => view.root.findAll((node) => String(node.type) === 'TextField')[0].props.onTextChange(name)),
+    type: (name: string) => act(async () => {
+      native.value = name;
+      view.root.findAll((node) => String(node.type) === 'TextField')[0].props.onTextChange(name);
+    }),
     unmount: () => act(async () => view.unmount()),
   };
 }
 
 describe('submit-time folder name validation (#121)', () => {
+  it('saves the native field when the JS draft missed its final character (#123)', async () => {
+    const e = await editor();
+    await e.type('Fictio');
+    native.value = 'Fiction';
+    await act(async () => e.save().props.onPress());
+    expect(e.onSave).toHaveBeenCalledExactlyOnceWith('Fiction');
+    await e.unmount();
+  });
+  it('validates and quotes native text even through an older submit callback (#123)', async () => {
+    const e = await editor();
+    await e.type('Wor');
+    const submit = e.save().props.onPress;
+    native.value = 'Work';
+    await act(async () => submit());
+    expect(e.onSave).not.toHaveBeenCalled();
+    expect(warning.mock.calls[0][1]).toContain('“Work”');
+    await e.unmount();
+  });
+  it('does not save a native blank even when the JS draft is nonblank (#123)', async () => {
+    const e = await editor();
+    await e.type('Old');
+    native.value = '  ';
+    await act(async () => e.save().props.onPress());
+    expect(e.onSave).not.toHaveBeenCalled();
+    expect(warning).not.toHaveBeenCalled();
+    await e.unmount();
+  });
   it('keeps blank disabled, but allows submitting a collision so its complete warning can be shown', async () => {
     const e = await editor();
     expect(e.save().props.modifiers).toEqual([{ disabled: true }]);

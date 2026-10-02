@@ -34,14 +34,17 @@ export function RenameAlert({ name, onCancel, onSave, title = 'Rename', saveLabe
   const [typed, setTyped] = useState(name);
   const [editing, setEditing] = useState(true);
   const submit = () => {
-    if (!typed.trim()) return;
-    const problem = validate?.(typed);
-    if (!problem) { onSave(typed); return; }
+    // The native binding can be ahead of onTextChange's React draft even after
+    // typing settles (#123). Validate and save what the editor actually holds.
+    const submitted = text.get();
+    if (!submitted.trim()) return;
+    const problem = validate?.(submitted);
+    if (!problem) { onSave(submitted); return; }
     // iOS 27 did not redraw an already-presented alert's message (#121).
     // Present the explanation complete, in the system's separate alert. The
     // editor stays mounted so both its native text binding and draft survive.
     setEditing(false);
-    SystemAlert.alert('Name unavailable', `“${typed.trim()}”\n${problem}`, [
+    SystemAlert.alert('Name unavailable', `“${submitted.trim()}”\n${problem}`, [
       { text: 'Cancel', style: 'cancel', onPress: onCancel },
       { text: 'Back to editing', onPress: () => setEditing(true) },
     ], { cancelable: false });
