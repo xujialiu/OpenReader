@@ -40,6 +40,19 @@ export function folderSubtree(tree: FolderTree, id: FolderId): Set<FolderId> {
   }
   return ids;
 }
+/** Count only immediate children that still exist in the Library; unused import/removal memberships do not count. */
+export function directFolderCounts(tree: FolderTree, documents: readonly string[]): Map<FolderId, { documents: number; folders: number }> {
+  const counts = new Map(tree.folders.map((folder) => [folder.id, { documents: 0, folders: 0 }]));
+  for (const folder of tree.folders) {
+    const count = folder.parent === null ? undefined : counts.get(folder.parent);
+    if (count) count.folders++;
+  }
+  for (const document of documents) {
+    const count = counts.get(tree.documents[document]);
+    if (count) count.documents++;
+  }
+  return counts;
+}
 const nameKey = (name: string) => name.normalize('NFC').toLowerCase();
 export function folderNameProblem(tree: FolderTree, name: string, parent: FolderId | null, except?: FolderId): string | null {
   if (!name.trim()) return 'Enter a folder name.';

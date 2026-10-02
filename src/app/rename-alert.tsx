@@ -43,7 +43,8 @@ export function RenameAlert({ name, onCancel, onSave, title = 'Rename', saveLabe
           <Button label="Cancel" role="cancel" onPress={onCancel} />
           <Button label={saveLabel} onPress={() => onSave(typed)} modifiers={[disabled(!typed.trim() || !!problem)]} />
         </Alert.Actions>
-        {problem && typed.trim() ? <Alert.Message><Text>{problem}</Text></Alert.Message> : null}
+        {/* Keep the message slot present while the alert is up; typing updates its Text, not the alert's child slots. */}
+        <Alert.Message><Text>{problem && typed.trim() ? problem : ''}</Text></Alert.Message>
       </Alert>
     </Host>
   );
