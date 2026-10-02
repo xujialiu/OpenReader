@@ -67,3 +67,33 @@ A screenshot taken during reader opening still showed Library; wait for the
 reader's stable controls before capturing. Development LogBox banners can cover
 the speed target; dismiss them before touch checks, preserve their warnings,
 and do not confuse a covered target with a failed popover.
+
+Measured 2026-10-02 verifying 8a279c0 (beta20) on `iPhone 17 fix`:
+
+- **A wrap breaks the OCR's contiguous string.** At `accessibility-large` and
+  above the ConcurrentQueue row wraps — the single long word breaks mid-word
+  (`ConcurrentQue ue`) and at `accessibility-large` the row's chevron lands
+  between the OCR'd licence tokens. The visible-text FAILs this way even when
+  every glyph is on screen; the eight such frames were each read from the
+  screenshot and are full text, which the contract (wrap/stack, not
+  ellipsize/shrink) accepts. Keep the failure and judge from the screenshot;
+  do not loosen the expected string to make it pass.
+- **Icon-only controls cannot satisfy an OCR assertion on their accessibility
+  label.** The transport's Play is a glyph, so `visible-text … 'Play'` fails on
+  a correct player. Assert on rendered text (the speed value, the Voice row)
+  and read the buttons' geometry and touches from `ax.py tree` instead.
+- **`scroll-to` can leave a very tall row below the fold.** At AX XXXL it put
+  Translate into's top at y≈748 with a 314 pt row, so the OCR saw only
+  `Simplified` before the screen edge. Check the row's frame from the tree, or
+  follow with a swipe, before the screenshot; the reshoot then passes.
+- **One stale-scale Library frame after Back from the reader (unreproduced,
+  keep for the owner's physical check).** After minutes in the reader at
+  AX XXXL with the Appearance drawer opened, expanded and dismissed, setting
+  `large` and tapping Back 2 s later showed the Library at the old scale:
+  300 pt rows, the two-line-clipped title ellipsized (`Cultivatio / n Online…`),
+  persisting ~100 s until a background/foreground re-laid it out — after which
+  AX XXXL itself rendered the full two-line title. Two directed repros (open
+  book, change size in the reader, Back; and the exact AX XXXL → large mirror)
+  both rendered correctly at the new scale. Artifacts
+  `/tmp/openreader-library-large-before-bg.png` (the stale frame) and
+  `/tmp/openreader-library-axxxl-after-bg.png` (the correct one).
