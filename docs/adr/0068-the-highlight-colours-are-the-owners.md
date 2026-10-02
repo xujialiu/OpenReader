@@ -353,8 +353,11 @@ rounded at each step), and `contrast` from the accent module:
 These are calculations for the app's reference page/text colours, not a claim
 about every publisher stylesheet or visual acceptance. Tests pin the composites
 and require at least 4.5:1 for text on both levels in both themes. Native screenshots
-and owner acceptance remain separate from arithmetic. The implementation is
-1.0.1-beta1 and does not replace the submitted 1.0.0(3).
+and owner acceptance remain separate from arithmetic. The owner accepted the
+script-rendered comparison, withdrew review of 1.0.0(3), and chose to retain
+1.0.0 for the replacement candidate, build 4. The initial 1.0.1-beta1 development
+label is therefore retired before first publication. Native interaction testing
+was not completed in this round; the tester failed at MCP startup.
 
 ## Alternatives
 

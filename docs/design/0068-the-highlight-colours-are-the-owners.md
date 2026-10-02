@@ -58,7 +58,8 @@ The owner requested gentler versions of both on 2026-10-03 (#126): the previous
 Blue sentence was too heavy on a light page, and the same choices should work
 on a dark page too. Both now leave the letters readable on either page. Blue
 stays first and remains the default for a new install or an owner who had never
-chosen. The four light/dark examples still need the owner's visual acceptance.
+chosen. The owner accepted the four script-rendered light/dark examples; this
+acceptance judges the colours, not their behaviour on the phone.
 
 A previously saved choice keeps its exact colours and strengths. Updating a
 preset does not change it silently; tapping a preset again applies its new look.
