@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, DRAWER_HEIGHTS, engineIdentity, LINE_POSITIONS, SCROLLING_LABELS, SCROLLINGS, SENTENCES_AT_ONCE, selectVoice } from '../../src/app/settings';
 import { parseSettings, readSettings, writeSettings } from '../../src/app/settings-storage';
 import { saveProviderEdit, flushProviderEdits } from '../../src/app/provider-edits';
+import { DEFAULT_HIGHLIGHT_COLOURS, HIGHLIGHT_PRESETS } from '../../src/renderer/highlight-colours';
 const disk = vi.hoisted(() => new Map<string, string>());
 vi.mock('expo-file-system', () => ({ Paths: { document: 'test' }, File: class {
   constructor(_directory: string, private name: string) {}
@@ -18,7 +19,7 @@ describe('local settings persistence', () => {
   });
   it('roundtrips enablement, voice history, sources and appearance across reloads', () => {
     const settings = selectVoice({ ...DEFAULT_SETTINGS, enabledProviders: ['fish', 'azure'], azure: { region: 'East Asia' },
-      appearance: { font: 'helvetica', size: 20, margins: 28, textAlignment: 'left' }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
+      appearance: { font: 'helvetica', size: 20, margins: 28, textAlignment: 'left', highlight: HIGHLIGHT_PRESETS.amber }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
     writeSettings(settings);
     expect(readSettings()).toEqual(settings);
   });
@@ -111,9 +112,9 @@ describe('local settings persistence', () => {
     // The app has not been released, so a percentage saved by the previous build is
     // not converted: it is dropped and the owner starts at the default, 26 (#17).
     expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', size: 20 } } }).appearance)
-      .toEqual({ font: 'georgia', size: 20, margins: 24, textAlignment: 'justify' });
+      .toEqual({ font: 'georgia', size: 20, margins: 24, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
     expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', scale: 150 } } }).appearance)
-      .toEqual({ font: 'georgia', size: 26, margins: 24, textAlignment: 'justify' });
+      .toEqual({ font: 'georgia', size: 26, margins: 24, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
     for (const size of [25, 17.5, '18', 0, -1, null]) {
       expect(parseSettings({ version: 1, settings: { appearance: { size } } }).appearance.size).toBe(26);
     }
@@ -142,6 +143,11 @@ describe('local settings persistence', () => {
       expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance.margins).toBe(24);
     }
     expect(parseSettings({}).appearance.margins).toBe(24);
+  });
+  it('keeps the Highlight Colours with the Appearance, Blue for a file written before #118', () => {
+    expect(parseSettings({ version: 1, settings: {} }).appearance.highlight).toEqual(DEFAULT_HIGHLIGHT_COLOURS);
+    expect(parseSettings({ version: 1, settings: { appearance: { highlight: HIGHLIGHT_PRESETS.amber } } }).appearance.highlight)
+      .toEqual(HIGHLIGHT_PRESETS.amber);
   });
   it('defaults missing sources to official only and rejects unknown enabled ids', () => {
     expect(parseSettings({ version: 1, settings: { sync: { url: 'https://dav.example/or', username: 'ann', enabled: true } } }).sync)

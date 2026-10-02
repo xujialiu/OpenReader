@@ -14,6 +14,7 @@ import {
   TEXT_ALIGNMENTS,
 } from '../../src/renderer/highlighter';
 import { pin } from '../structural';
+import { DEFAULT_HIGHLIGHT_COLOURS } from '../../src/renderer/highlight-colours';
 
 /** The one alignment rule, as `appearanceCss` writes it, for the value given. */
 const aligned = (value: 'start' | 'justify') =>
@@ -66,7 +67,7 @@ describe('Appearance as a stylesheet', () => {
     // 162.5%. The font still starts on the Document's own; the alignment does
     // not (ADR 0034) — the owner reads justified text unless they say otherwise.
     // Nor do the Margins (#84).
-    expect(DEFAULT_APPEARANCE).toEqual({ font: null, size: 26, margins: 24, textAlignment: 'justify' });
+    expect(DEFAULT_APPEARANCE).toEqual({ font: null, size: 26, margins: 24, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
     expect(appearanceCss(DEFAULT_APPEARANCE, 16)).toBe(
       'html, body, body * { -webkit-text-size-adjust: 162.5% !important; }\n' +
         'html, body, body * { text-size-adjust: 162.5% !important; }\n' +
@@ -114,7 +115,7 @@ describe('Appearance as a stylesheet', () => {
         for (const margins of MARGINS) {
           for (const textAlignment of TEXT_ALIGNMENTS) {
             for (const bodyTextSize of [16, 12, 10, 20, 32, 4, 100, Number.NaN]) {
-              const css = appearanceCss({ font, size, margins, textAlignment }, bodyTextSize);
+              const css = appearanceCss({ font, size, margins, textAlignment, highlight: DEFAULT_HIGHLIGHT_COLOURS }, bodyTextSize);
               expect(css).not.toMatch(/user-select|touch-callout|::highlight/);
               // And only the properties there are, each in a rule of its own, the
               // alignment exactly one of its two rules and the Margins one of theirs.
@@ -219,7 +220,7 @@ describe('Text Alignment', () => {
     expect(appearanceCss({ ...DEFAULT_APPEARANCE, textAlignment: 'left' }, 16)).toContain(aligned('start'));
     // One rule either way, and after the font's, so the font rule above it is
     // unchanged by the choice.
-    const css = appearanceCss({ font: 'georgia', size: 16, margins: 16, textAlignment: 'left' }, 16);
+    const css = appearanceCss({ font: 'georgia', size: 16, margins: 16, textAlignment: 'left', highlight: DEFAULT_HIGHLIGHT_COLOURS }, 16);
     expect(css.match(/text-align:/g)).toHaveLength(1);
     expect(css.indexOf('text-align:')).toBeGreaterThan(css.indexOf('font-family:'));
   });

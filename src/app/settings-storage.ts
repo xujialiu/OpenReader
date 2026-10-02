@@ -2,6 +2,7 @@ import { parseLookupSettings } from '../translation/settings';
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
 import { FONT_SIZES, MARGINS, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type Margin, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
+import { readHighlightColours } from '../renderer/highlight-colours';
 import { CONSENT_KEY } from './consent';
 import { DEFAULT_SETTINGS, DRAWER_HEIGHTS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLINGS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type DocumentVoice, type Scrolling } from './settings';
 
@@ -117,6 +118,9 @@ export function parseSettings(value: unknown): AppSettings {
       size: readSize(appearance.size),
       margins: readMargins(appearance.margins),
       textAlignment: readTextAlignment(appearance.textAlignment),
+      // Blue for a file written before #118, and each level's colour and
+      // opacity read on their own, so a half-written one keeps what it has.
+      highlight: readHighlightColours(appearance.highlight),
     },
     // The switch is read as written: it was turned on after a check passed,
     // and the next launch syncs without checking again (issue #20).

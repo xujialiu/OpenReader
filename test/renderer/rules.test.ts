@@ -1,3 +1,4 @@
+import { DEFAULT_HIGHLIGHT_COLOURS } from '../../src/renderer/highlight-colours';
 import { readdirSync, readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
@@ -858,7 +859,7 @@ describe('Appearance reaches an open book, and the reading stays in the middle (
   it('bakes the owner’s choice into the program as well, against the Document’s own body text', () => {
     // A Document measured before opens at the owner's size on its first paint,
     // and is not measured again (ADR 0030).
-    const chosen = { font: 'georgia', size: 20, margins: 24, textAlignment: 'left' } as const;
+    const chosen = { font: 'georgia', size: 20, margins: 24, textAlignment: 'left', highlight: DEFAULT_HIGHLIGHT_COLOURS } as const;
     const measured = highlighterSource(undefined, chosen, 'light', 12);
     pin(measured, 'var APPEARANCE = ' + JSON.stringify(appearanceCss(chosen, 12)) + ';', 'a measured Document');
     pin(measured, 'var MEASURE = false;', 'a measured Document');

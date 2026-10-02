@@ -102,6 +102,7 @@ import { BAKED_LINE_POSITION, BAKED_SCROLLING, GLIDE_SOURCE } from './glide';
 import type { HighlightMessage } from './messages';
 import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, PROBLEM_MESSAGE, RENDERER_MESSAGE, TAP_MESSAGE, SELECTION_MESSAGE } from './messages';
 import { EPUB_GUARDS_SOURCE } from './epub-guards';
+import { DEFAULT_HIGHLIGHT_COLOURS, type HighlightColours } from './highlight-colours';
 import { RENDERER_LOG_SOURCE } from './renderer-log';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
@@ -270,12 +271,17 @@ export const OWN_ALIGNMENTS = ['center', 'right', 'end', '-webkit-center', '-web
  *
  * **Nor do the Margins** (ADR 0056): the space at each side of the page is the
  * owner's from the first page, and a Document's own indents come on top of it.
+ *
+ * **Nor do the Highlight Colours** (#118, ADR 0067): the colour and opacity
+ * the sentence being read and the word being spoken are marked in, the same
+ * under either theme (`highlight-colours.ts`).
  */
 export interface Appearance {
   font: ReadingFont | null;
   size: FontSize;
   margins: Margin;
   textAlignment: TextAlignment;
+  highlight: HighlightColours;
 }
 
 /**
@@ -285,9 +291,9 @@ export interface Appearance {
  * first defaults were 16 and 16, the size every Document already set and the
  * phone's own distance from the edge to its back button. A size or margin
  * already saved is kept: these are only what a new install, or a settings file
- * without them, starts at.
+ * without them, starts at. The Highlight Colours start on Blue (owner's Q4).
  */
-export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 26, margins: 24, textAlignment: 'justify' };
+export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 26, margins: 24, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS };
 
 /** A quarter to four times, whatever the two numbers were: a measurement gone wrong must not make a book unreadable. */
 const MIN_PERCENT = 25;
