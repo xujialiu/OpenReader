@@ -47,6 +47,7 @@ import { readingAccent } from './accent';
 import { AccentContext, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
 import { GeneralScreen } from './general-screen';
 import { LibraryScreen } from './library-screen';
+import { importDocument } from './import-document';
 import { useHandedOverDocuments, type HandedOverFile } from './opened-document';
 import { ProviderScreen } from './provider-screen';
 import { ProvidersScreen } from './providers-screen';
@@ -154,7 +155,7 @@ export function OpenReader() {
     const what = String(command.do);
     if (what === 'add') {
       void library.add(new HxFile(HxPaths.document, 'Inbox', String(command.file)), { move: false }).then(
-        (entry) => hlog(`added ${entry.id} "${entry.title}"`),
+        ({ entry }) => hlog(`added ${entry.id} "${entry.title}"`),
         (problem: unknown) => hlog(`add refused: ${String(problem)}`),
       );
       return;
@@ -239,22 +240,32 @@ export function OpenReader() {
    * Reader is already on screen does not stack a second copy of a 34 MB document
    * — the route params are compared and the screen already there is kept.
    */
-  const arrived = useCallback(
-    (handed: HandedOverFile) => {
-      void library
-        .add(handed.file, { move: handed.move })
-        .then((entry) => {
-          // A book the desktop has read opens at the desktop's place (issue #20).
-          sync.poke('add');
-          if (navigationRef.isReady()) navigationRef.navigate('Reader', { id: entry.id });
-        })
-        .catch((problem: unknown) => {
-          library.report(`That document could not be opened: ${problem instanceof Error ? problem.message : String(problem)}`);
-        });
-    },
-    [library, sync],
-  );
+  const pendingFiles = useRef<HandedOverFile[]>([]);
+  const importing = useRef(false);
+  const [arrival, setArrival] = useState(0);
+  const [navigationReady, setNavigationReady] = useState(false);
+  const arrived = useCallback((handed: HandedOverFile) => {
+    pendingFiles.current.push(handed);
+    setArrival((n) => n + 1);
+  }, []);
   useHandedOverDocuments(arrived);
+  // A cold launch must finish loading the Library before duplicate detection,
+  // and finish mounting navigation before an imported book can be opened.
+  useEffect(() => {
+    if (!navigationReady || library.loading || library.folderSnapshot.busy || importing.current) return;
+    const handed = pendingFiles.current.shift();
+    if (!handed) return;
+    importing.current = true;
+    void importDocument(library, handed.file, { move: handed.move }, (id) => {
+      sync.poke('add');
+      navigationRef.navigate('Reader', { id });
+    }).catch((problem: unknown) => {
+      library.report(`That document could not be opened: ${problem instanceof Error ? problem.message : String(problem)}`);
+    }).finally(() => {
+      importing.current = false;
+      setArrival((n) => n + 1);
+    });
+  }, [arrival, library, navigationReady, sync]);
 
   /**
    * The theme, resolved once for the whole app (ADR 0022).
@@ -333,7 +344,7 @@ export function OpenReader() {
           <SafeAreaProvider>
           <PortalProvider>
           <ReadingHost>
-          <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+          <NavigationContainer ref={navigationRef} theme={navigationTheme} onReady={() => setNavigationReady(true)}>
             <Stack.Navigator
               initialRouteName="Library"
               screenOptions={{

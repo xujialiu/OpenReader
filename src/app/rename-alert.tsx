@@ -1,7 +1,7 @@
 import { Alert, Button, Host, Text, TextField, useNativeState } from '@expo/ui/swift-ui';
 import { disabled } from '@expo/ui/swift-ui/modifiers';
 import { useContext, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Alert as SystemAlert, StyleSheet } from 'react-native';
 
 import { SchemeContext } from './controls';
 
@@ -25,19 +25,36 @@ import { SchemeContext } from './controls';
  * accepted that rather than leave the phone's alert for one drawn by the app
  * (#117, Q53).
  */
-export function RenameAlert({ name, onCancel, onSave }: { name: string; onCancel(): void; onSave(name: string): void }) {
+export function RenameAlert({ name, onCancel, onSave, title = 'Rename', saveLabel = 'Save', validate }: {
+  name: string; onCancel(): void; onSave(name: string): void;
+  title?: string; saveLabel?: string; validate?(name: string): string | null;
+}) {
   const scheme = useContext(SchemeContext) ?? undefined;
   const text = useNativeState(name);
   const [typed, setTyped] = useState(name);
+  const [editing, setEditing] = useState(true);
+  const submit = () => {
+    if (!typed.trim()) return;
+    const problem = validate?.(typed);
+    if (!problem) { onSave(typed); return; }
+    // iOS 27 did not redraw an already-presented alert's message (#121).
+    // Present the explanation complete, in the system's separate alert. The
+    // editor stays mounted so both its native text binding and draft survive.
+    setEditing(false);
+    SystemAlert.alert('Name unavailable', `“${typed.trim()}”\n${problem}`, [
+      { text: 'Cancel', style: 'cancel', onPress: onCancel },
+      { text: 'Back to editing', onPress: () => setEditing(true) },
+    ], { cancelable: false });
+  };
   return (
     <Host style={styles.host} colorScheme={scheme}>
-      <Alert title="Rename" isPresented onIsPresentedChange={() => {}}>
+      <Alert title={title} isPresented={editing} onIsPresentedChange={() => {}}>
         {/* An alert hangs from a view; this one shows nothing. */}
         <Alert.Trigger><Text> </Text></Alert.Trigger>
         <Alert.Actions>
           <TextField text={text} autoFocus placeholder="Name" onTextChange={setTyped} />
           <Button label="Cancel" role="cancel" onPress={onCancel} />
-          <Button label="Save" onPress={() => onSave(typed)} modifiers={[disabled(!typed.trim())]} />
+          <Button label={saveLabel} onPress={submit} modifiers={[disabled(!typed.trim())]} />
         </Alert.Actions>
       </Alert>
     </Host>
