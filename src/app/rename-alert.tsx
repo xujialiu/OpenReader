@@ -35,7 +35,7 @@ export function RenameAlert({ name, onCancel, onSave, title = 'Rename', saveLabe
   const problem = validate?.(typed) ?? null;
   return (
     <Host style={styles.host} colorScheme={scheme}>
-      <Alert title={title} isPresented onIsPresentedChange={() => {}}>
+      <Alert title={title} message={problem && typed.trim() ? problem : ''} isPresented onIsPresentedChange={() => {}}>
         {/* An alert hangs from a view; this one shows nothing. */}
         <Alert.Trigger><Text> </Text></Alert.Trigger>
         <Alert.Actions>
@@ -43,8 +43,7 @@ export function RenameAlert({ name, onCancel, onSave, title = 'Rename', saveLabe
           <Button label="Cancel" role="cancel" onPress={onCancel} />
           <Button label={saveLabel} onPress={() => onSave(typed)} modifiers={[disabled(!typed.trim() || !!problem)]} />
         </Alert.Actions>
-        {/* Keep the message slot present while the alert is up; typing updates its Text, not the alert's child slots. */}
-        <Alert.Message><Text>{problem && typed.trim() ? problem : ''}</Text></Alert.Message>
+        {/* Validation uses the direct native message prop; the Expo child-slot message was invisible on iOS 27 (#121). */}
       </Alert>
     </Host>
   );
