@@ -41,6 +41,16 @@ The owner set these on 2026-09-30.
 - **Build 0.0.1 (1)**
   - Uploaded 2026-09-30 at 22:29 CST. Processing ended "Complete", with no ITMS error and no Missing Compliance.
   - It tested the pipeline only, before #109 and the version rule. Never submit it.
+- **Build 1.0.0 (3)**
+  - Uploaded 2026-10-03 at 00:42 CST from `main` commit `9cf0a86`, after the EPUB 3 Contents correction (#125).
+  - Clean prebuild; archive/export each returned 0; pre-Hermes bundle verified `DEBUG_MODE = false`. All 2,325 tests, TypeScript and ESLint passed.
+  - Independent simulator verification exercised three different section-start destinations in the unchanged Gutenberg sample on Release 1.0.0 (3). It did not cover playback or an established paused Reading Position; do not substitute it for the fresh-install review walkthrough below.
+  - App Store Connect initially showed Processing. Build 2 remains attached to the version until build 3 is processed and selected. No review submission yet (#124).
+  - Annotated `build-2` and `build-3` exist locally; neither has been pushed. No `v1.0.0` tag yet.
+- **Store setup saved on 2026-10-03**
+  - Free; 174 countries/regions, excluding China mainland. Apple says future territories are included automatically.
+  - Apple silicon Mac and Apple Vision Pro availability disabled and checked after navigating back.
+  - Privacy policy URL saved. Other User Content data type saved, but its setup is incomplete and the privacy label is **not published**.
 - **Web pages**, from `site/` through `.github/workflows/pages.yml`:
   - Support URL: https://xujialiu.github.io/OpenReader/
   - Privacy Policy URL: https://xujialiu.github.io/OpenReader/privacy.html
@@ -123,7 +133,23 @@ The decisions are the owner's from 2026-09-30. Items marked "draft" still need t
   - not linked to the user's identity;
   - not used for tracking.
 
-  Nothing else is collected. The label then matches the consent alert (#109) and the privacy policy.
+  **Reassessment required (#124, 2026-10-03): do not publish this earlier draft unchanged.**
+  Apple's [definition of linked data](https://developer.apple.com/app-store/app-privacy-details/)
+  includes linkage by third-party partners through an account, not just an
+  OpenReader account. Requests authenticate with the user's own service key.
+  [OpenAI's data controls](https://platform.openai.com/docs/guides/your-data)
+  list 30-day abuse-monitoring retention for `/v1/audio/speech`; zero retention
+  is not the default for every account. [Fish Audio's policy](https://fish.audio/privacy/)
+  permits content retention; its [Customer Agreement §4.4](https://fish.audio/enterprise-terms/)
+  describes optional, eligible Zero Data Retention, not a universal guarantee.
+  Conversely, [Azure's real-time TTS policy](https://learn.microsoft.com/en-us/azure/foundry/responsible-ai/speech-service/text-to-speech/data-privacy-security)
+  says it does not store synthesis text or output. Provider behavior differs.
+  [Speechify's general policy](https://speechify.com/privacy/) covers stored user
+  content and account association, but an API-specific no-retention commitment
+  has not been verified. Do not apply website advertising/cookie provisions
+  to API calls without evidence. Final linkage, data types and purposes need
+  owner confirmation based on applicable API practices; “nothing else is
+  collected” and “not linked” are not established by this investigation.
 - **Age rating**, in the new questionnaire: answer None or No throughout, because the app supplies no content of its own. Expect 4+. The owner confirms.
 - **Pricing and Availability**
   - Free.
