@@ -4,6 +4,7 @@ import { READING_FONTS, stepFontSize, stepMargins, TEXT_ALIGNMENTS, type Appeara
 import { INK, type Choice } from './controls';
 import { Drawer, DrawerChevron, DrawerMenuRow, DrawerRow, DrawerRowText, DrawerRowValue, DrawerScroll, useDrawerColours } from './drawer';
 import { drawerRowText } from './drawer-list';
+import { HighlightSection } from './highlight-section';
 import { Icon } from './icon';
 
 /** What "follow the document" is called where the owner reads it: the book's own, not "the document font". */
@@ -61,8 +62,11 @@ function StepperRow<T extends number>({ label, name, value, step, onStep }: {
  * Appearance's rows, as the drawer's plain list (#117). Each change goes to
  * the page behind as it is made, which the drawer leaves in view.
  *
- * A row is one entry of this list, so another kind of row, such as the
- * highlight colours (#118), goes in as one more entry.
+ * A row is one entry of this list, so another kind of row goes in as one more
+ * entry, as the Highlight Colours do under Alignment (#118,
+ * `highlight-section.tsx`). With them the page is taller than a drawer at the
+ * Drawer Height: a swipe up takes the drawer to its full height, where the
+ * page fits on a 402 × 874 phone, and the page scrolls where it does not.
  */
 export function AppearanceControls({ appearance, onChange, onFonts }: {
   appearance: Appearance; onChange(next: Appearance): void; onFonts(): void;
@@ -81,6 +85,7 @@ export function AppearanceControls({ appearance, onChange, onFonts }: {
     {/* The system's own menu (ADR 0035), in the drawer's menu row, which is set in to its words so the drawer stays on screen while the menu is open (#117). */}
     <DrawerMenuRow label="Alignment" choices={ALIGNMENT_CHOICES} chosen={appearance.textAlignment}
       onChoose={(textAlignment) => onChange({ ...appearance, textAlignment })} />
+    <HighlightSection appearance={appearance} onChange={onChange} />
   </DrawerScroll>;
 }
 
