@@ -274,7 +274,7 @@ export interface Appearance {
  * already saved is kept: these are only what a new install, or a settings file
  * without them, starts at. The Highlight Colours start on Blue (owner's Q4).
  */
-export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 26, margins: 24, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS };
+export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 24, margins: 28, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS };
 
 /** A quarter to four times, whatever the two numbers were: a measurement gone wrong must not make a book unreadable. */
 const MIN_PERCENT = 25;

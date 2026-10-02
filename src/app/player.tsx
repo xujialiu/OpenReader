@@ -191,7 +191,14 @@ export function Player({
   const { width, height, fontScale } = useWindowDimensions();
   const layout = playerLayout(width, fontScale);
   const [speedOpen, setSpeedOpen] = useState(false);
-  useEffect(() => setSpeedOpen(false), [fontScale, width]);
+  const [speedGeometry, setSpeedGeometry] = useState({ fontScale, width });
+  // Close before children commit against a moved popover anchor, not in an
+  // effect after that commit. Remembering the dimensions also keeps it closed
+  // when the owner returns to the previous text size or width (#124).
+  if (speedGeometry.fontScale !== fontScale || speedGeometry.width !== width) {
+    setSpeedGeometry({ fontScale, width });
+    setSpeedOpen(false);
+  }
   const closeSpeed = useCallback(() => setSpeedOpen(false), []);
   /**
    * Play or pause, and nothing else.

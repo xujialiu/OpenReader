@@ -22,8 +22,8 @@ Document the owner has already shows, so nothing on the page changes until the
 row is touched. The choice is kept on this device when the app is closed, and
 it works the same on an iPad as on an iPhone.
 
-_Changed on 2026-10-01: a new install starts at 26, the size the owner reads
-at. A size already chosen is kept._
+_Changed on 2026-10-02: the owner chose 24 for a new install, replacing the
+26 chosen on 2026-10-01. A size already chosen is kept._
 
 Everything else in a Document keeps its proportion to the body text. Headings
 stay larger than it and notes stay smaller than it, and that includes the small
