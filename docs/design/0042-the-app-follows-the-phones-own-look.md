@@ -43,6 +43,12 @@ listed below.
 
 ## What stays the app's own
 
+_Revised in [decision 0067](0067-the-highlight-colours-are-the-owners.md): the
+amber below is now the colour the owner chose for the spoken word's mark, made
+just dark or light enough to be read on what it is drawn on. The mark is the
+same on a light and a dark page, so the page's mark and the app's checks are one
+colour in both themes._
+
 - **The colours.** The app keeps its own near-black and off-white, the ones the
   page is set in, rather than the phone's pure black and white. The page being
   read and the app around it are one surface, and an unrelieved black and white

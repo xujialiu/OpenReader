@@ -20,6 +20,11 @@ statement in ADRs [0035](0035-a-short-choice-is-the-systems-own-menu.md),
 [0059](0059-sharing-copies-the-file-under-its-library-name.md) that rests on
 the drawer being a React Native `Modal`._
 
+_Revised by [ADR 0067](0067-the-highlight-colours-are-the-owners.md) (#118):
+the accent the current row and the app's marks are drawn in is no longer amber
+but derived from the word's Highlight Colour. The tinted-sheet measurement below,
+Save drawn in (178,106,0), stands as measured._
+
 **Accepted** by the owner on the iPhone, batch 1 on `1.0.0-beta9` and batches 2
 and 3 on `1.0.0-beta11` (2026-10-02), with Manage reached from the "N chapters
 downloaded" line as built. **Built in batches.** Batch 1 (`56a92b0`, reworked as plain lists in `1a85077`)

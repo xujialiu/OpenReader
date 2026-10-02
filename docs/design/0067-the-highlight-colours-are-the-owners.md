@@ -1,0 +1,163 @@
+# The Highlight Colours are the owner's, the same in light and dark
+
+_The engineering half of this decision is
+[ADR 0067](../adr/0067-the-highlight-colours-are-the-owners.md). Issue #118; the
+owner's decisions are in the plan comment there, of 2026-10-01. It revises what
+decisions [0022](0022-reading-in-the-dark.md),
+[0027](0027-whole-document-offline-narration.md),
+[0041](0041-one-look-for-settings-and-the-speed-control.md),
+[0042](0042-the-app-follows-the-phones-own-look.md) and
+[0066](0066-every-drawer-rises-to-the-drawer-height.md) say about the mark on a
+dark page and about the app's amber._
+
+## What the owner saw
+
+The marks that follow the voice were fixed. Two marks are drawn: a pale one over
+the sentence being read, and a stronger one over the word being spoken. On a
+light page the sentence was a pale amber and the word a deeper amber. On a dark
+page both were solid blues: a muted blue-grey for the sentence and a vivid blue
+for the word (decision 0022). Nothing in the app let the owner change either
+pair.
+
+So switching the Theme changed the colour of the reading although the owner had
+chosen neither colour. A mark that suited the owner's eyes on one page could not
+be carried to the other, and a mark that did not suit them could not be changed.
+
+Everything else the app marks as live was amber in both themes: a check, the
+chapter being read in Contents and Download, a link, an action on a settings
+page, the ring of a chapter being downloaded. So was the faint wash behind the
+small **A** in the player that says the page is following the voice. In the
+dark, the page said "this is being read" in blue while the A beside it, which
+stands for that very word, and every other mark around the page said "this is
+chosen" in amber.
+
+The desktop Zotero-TTS plugin already lets its owner choose a colour and a
+strength for each of the two marks.
+
+## The owner chooses both marks, once for both pages
+
+The sentence's mark and the word's mark are each a colour and a strength, and
+both are the owner's. A strength runs from nothing to solid, and nothing is
+allowed: a word at nothing leaves the reading marked by its sentence alone, and
+a sentence at nothing leaves only the word.
+
+The choice is the same under the light and the dark Theme. Changing the Theme
+changes the page and the app around it, never the colour of the reading. The
+choice is part of Appearance, so it belongs to the owner rather than to a book,
+and one choice marks every book.
+
+## The two looks the app had become presets
+
+The two looks the app has had are offered above the owner's own choices, so that
+going back to either is one tap:
+
+- **Amber**, the light page's mark as it was.
+- **Blue**, the dark page's two colours, now at amber's strengths instead of
+  solid, so that the two presets differ only in colour.
+
+**Blue is the default**, for a new install and for an owner who had never
+chosen, because it is the only one of the two whose spoken word stays readable
+on both pages. Black letters on Blue's word on a white page read more clearly
+than the app asks of its own words, and the light letters of a dark page read
+better on it than they did on the old solid blue. Amber is a bright colour,
+and the dark page's light letters on Amber's word are hard to read.
+
+## Where the choice is made
+
+The choices sit in Appearance, below Alignment, under a header called Highlight.
+Appearance's drawer leaves the page above it in view and in use (decision 0066),
+so a mark is chosen against the very page it colours, and a change reaches the
+open book at once, as a font or a size does.
+
+From the top:
+
+- **A sample sentence**, on the page's own colours and in the font the book is
+  read in, with one of its words marked over the marked sentence in the current
+  choice, so the two marks can be judged together even while nothing on the
+  page above is being read.
+- **Two small tiles**, Amber then Blue, each about a fifth of the drawer's width
+  and set to the left. Each shows "Aa" as the spoken word would look on the
+  page: the word's mark on the page's colour, in the page's letters. The tile
+  whose four values, both colours and both strengths, are exactly the current
+  choice has a ring around it in the word's colour. Neither tile is named on the
+  screen; VoiceOver reads them as Amber and Blue.
+- **A Sentence row and a Word row**, each ending in the phone's own colour well.
+  Tapping it opens the phone's own colour picker, the one every app gets, with
+  its grid, its spectrum, its sliders and its own strength slider at the
+  bottom. The strength is set there and nowhere else.
+
+Choosing a colour or a strength that matches neither preset takes the ring off
+both tiles. Nothing is lost: the tiles are a quick way to two choices, not a
+mode the app is in.
+
+## The app's accent follows the word's colour
+
+Where the phone would draw a check, a link or an action in its own blue, the app
+drew it in amber, the colour its mark was painted in, so that one colour meant
+"this is live" everywhere (decision 0042). It still does, and that colour is now
+the owner's: **everything the app drew in amber follows the colour of the word's
+mark**. That is the checks, the chapter being read in Contents and in Download,
+the links, the actions on the settings pages, the ring of a download, and the
+drawers' own marks.
+
+The word's colour as it is would not always be readable as a check or as the
+words of a link. Pale yellow on a white page cannot be read, and a deep blue on
+the dark page reads poorly. So the app keeps the colour's hue and makes it darker
+on a light surface, or lighter on a dark one, **only as far as it must to be read
+clearly against what it is drawn on**, and no further. A colour that can already
+be read is left as it is. With Blue, the default, the accent on a light page is
+the word's own blue.
+
+**The player's A takes the word's own mark**: the word's colour at the word's
+strength, exactly as the spoken word is marked on the page. The A stands for
+the word the page is following, so it now looks like that word. With the word's
+strength at nothing, the A shows no mark either.
+
+## What it costs
+
+- **Amber on a dark page is hard to read, and the app allows it.** The dark
+  page's light letters on Amber's bright word mark are dim against it, far below
+  what the app asks of its own words. This is what decision 0022 turned away
+  from, and it comes back the moment the owner chooses Amber in the dark. It is
+  accepted because what the page is painted with is now the owner's to choose,
+  and Blue, the default, does not have the problem. The same is true of any
+  colour the owner picks: the app does not stop a choice that is hard to read.
+- **A weaker sentence mark on the dark page.** Blue at amber's strength is a
+  faint tint on the near-black page, barely set apart from it, where the old
+  solid blue-grey stood out clearly. On the light page it is a pale blue-grey,
+  a little plainer than the pale amber was. An owner who wants it stronger
+  raises it.
+- **The accent is no longer one fixed amber.** The checks and links change
+  whenever the word's colour does, and are a different shade on the light and
+  the dark page. A colour chosen for the page can sit oddly on the app around
+  it: a red word makes every check look like a warning, and a grey one makes
+  them look switched off. By default the app's accent is now blue, close to the
+  phone's own.
+- **No names on the tiles.** The tiles show only "Aa" and a ring, so on the
+  screen the two presets are told apart by their colour alone.
+- **The phone's picker, as it comes.** It is the phone's, with the phone's own
+  layout, which the app cannot shape. Its strength is a slider, so an exact value
+  is reached by dragging rather than by stepping.
+
+## Turned down
+
+- **Separate colours for each Theme.** The owner would have chosen four colours
+  and four strengths instead of two of each, and switching the Theme would still
+  have changed the colour of the reading. That is the problem this decision
+  exists to remove.
+- **Recolouring the word's letters when they would be hard to read.** The app
+  could have set the spoken word in dark letters whenever its mark was too
+  bright for the page's light ones. That is what the first dark page did, and the
+  owner turned it down then (decision 0022): the one word being followed became
+  the only dark word on a light-lettered page, and looked like a word that had
+  changed colour rather than the same text marked.
+- **A fixed palette of swatches only.** A handful of colours to tap would have
+  been simpler to draw, but the owner could not have matched the desktop
+  plugin, which takes any colour, or the mark they find comfortable. The two
+  presets give the quick taps; the picker gives everything else.
+- **A separate strength stepper beside each colour.** It would have put a
+  second control on each row and said the strength twice, once in the stepper
+  and once in the picker's own slider. The phone's picker already holds both.
+- **The accent staying amber.** The A would have kept saying "following" in a
+  colour other than the word it stands for, and with Blue as the default every
+  page would have been marked in blue inside an app whose every check was amber.

@@ -59,6 +59,13 @@ built for and costs the ones it was not.
 
 ## The highlight is repainted for dark rather than left
 
+_Revised in [decision 0067](0067-the-highlight-colours-are-the-owners.md): the
+mark is no longer repainted for dark. The owner chooses one colour and one
+strength for the sentence and for the word, and they are the same on both
+pages. The blue below is now the Blue preset, at amber's strengths rather than
+solid, and it is the default on both pages. The checks and actions around the
+book follow the word's colour rather than staying amber._
+
 The mark that follows the voice is the reason the app exists, so it does not get
 to be an afterthought of the theme. Its colour on a light page is tuned to be
 visible against black text on white; the same colour against light text on a
