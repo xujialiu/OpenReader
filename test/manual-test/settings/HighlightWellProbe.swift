@@ -73,6 +73,43 @@ final class HighlightWellProbe: XCTestCase {
     }
   }
 
+  /// A grey from the grid's top row, the sixth cell (mid grey), at the well's opacity, then the opacity moved:
+  /// what the well reports for a grey, read in Metro's log from a temporary `console.log` (notes, 2026-10-02).
+  func testGreyFromGrid() throws {
+    let well = openWell("Word")
+    let before = title.frame
+    // The picker over a drawer at `large` on a 402 × 874 phone: the grid's grey row is at y 362, its sixth cell at x 187.
+    let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+    origin.withOffset(CGVector(dx: 187, dy: 362)).tap()
+    Thread.sleep(forTimeInterval: 1.5)
+    shot("grey-picked")
+    let slider = opacity()
+    slider.adjust(toNormalizedSliderPosition: 0.5)
+    Thread.sleep(forTimeInterval: 1)
+    say("grey opacity after adjust \(String(describing: slider.value))")
+    shot("grey-opacity-50")
+    closePicker("grey", titleBefore: before)
+    say("grey well after \(String(describing: well.value))")
+  }
+
+  /// The picker's black swatch, under the grid, then the opacity moved: the system's black may be a grey colour.
+  func testBlackSwatch() throws {
+    let well = openWell("Word")
+    let before = title.frame
+    let origin = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+    origin.withOffset(CGVector(dx: 130.5, dy: 773)).tap()
+    Thread.sleep(forTimeInterval: 1.5)
+    shot("black-picked")
+    let slider = opacity()
+    say("black opacity after the swatch \(String(describing: slider.value))")
+    slider.adjust(toNormalizedSliderPosition: 0.5)
+    Thread.sleep(forTimeInterval: 1)
+    say("black opacity after adjust \(String(describing: slider.value))")
+    shot("black-opacity-50")
+    closePicker("black", titleBefore: before)
+    say("black well after \(String(describing: well.value))")
+  }
+
   /// Sentence's opacity set to 0 by the slider's own adjustment.
   func testSentenceOpacityToZero() throws {
     let well = openWell("Sentence")

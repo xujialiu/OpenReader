@@ -43,6 +43,10 @@ bash test/manual-test/kit/run-probe.sh HighlightWellProbe UDID /tmp/hl-ui/probe 
   it was. Screenshots: `word-picker`, `word-after-drag`, `word-after-close`.
 - `testSentenceOpacityToZero` opens the Sentence well and sets its opacity to
   0 % with `adjust(toNormalizedSliderPosition: 0)`.
+- `testGreyFromGrid` and `testBlackSwatch` open the Word well, pick the grid's
+  mid grey or the black swatch by the picker's position on a 402 × 874 phone
+  (at `large`), and move the opacity: whether a grey comes back as a grey
+  (notes, 2026-10-02 10:56). Read the strings from a temporary `console.log`.
 
 The `HIGHLIGHTWELL` lines in the run's `test-STAMP.log` carry the wells'
 frames and values, the slider's value before and after, and the title's frame

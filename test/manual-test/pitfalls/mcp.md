@@ -128,9 +128,9 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 `settings/HighlightWellProbe.swift`, on the Appearance drawer at `large` (`settings/highlight-colours.md`).
 
 - **The first XCTest tap on a well opened nothing, once.**
-  - Symptom: the first run's coordinate tap at the `Word` well's centre (349,647.7 28 × 28) left no picker; 2.5 s later the tree had no `Opacity` slider. Every later run's same tap opened it at once, in light and dark.
-  - Cause not found. It was the first XCTest touch on a device booted minutes before.
-  - Fix: the probe looks for the slider after the tap and, when there is none, presses the well for 0.2 s.
+  - Symptom: the first run's coordinate tap at the `Word` well's centre (349,647.7 28 × 28) left no picker; 2.5 s later the tree had no `Opacity` slider. Every later run's same tap opened it at once, in light and dark. On a second new device (10:51) the first run's tap and the 0.2-s press after it both opened nothing, and the second run's tap opened it.
+  - Cause not found. Both times it was the first XCTest run on a device booted minutes before.
+  - Fix: run the probe again. It also presses the well for 0.2 s when its tap shows no slider, which has not yet been seen to help.
 - **A press beside the opacity slider's thumb moves nothing.**
   - Symptom: `press(forDuration:thenDragTo:)` from 0.62 of the slider's width, with the thumb at 34 %, left it at 34 % and logged no change.
   - Fix: start the drag at the slider's own value (`slider.value`, `"34%"` → 0.34 of its width).
