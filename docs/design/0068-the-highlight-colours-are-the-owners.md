@@ -51,18 +51,17 @@ and one choice marks every book.
 The two looks the app has had are offered above the owner's own choices, so that
 going back to either is one tap:
 
-- **Amber**, the light page's mark as it was.
-- **Blue**, the dark page's two colours, with the sentence at 60% strength and
-  the word at 50%, chosen by the owner in the revised Highlight page (#122).
-  Blue is offered first, followed by Amber. A previously saved choice keeps its
-  exact colours and strengths; updating a preset does not change it silently.
+- **Blue**, a soft blue-purple sentence with a stronger blue word.
+- **Amber**, a pale warm sentence with a deeper golden word.
 
-**Blue is the default**, for a new install and for an owner who had never
-chosen, because it is the only one of the two whose spoken word stays readable
-on both pages. Black letters on Blue's word on a white page read more clearly
-than the app asks of its own words, and the light letters of a dark page read
-better on it than they did on the old solid blue. Amber is a bright colour,
-and the dark page's light letters on Amber's word are hard to read.
+The owner requested gentler versions of both on 2026-10-03 (#126): the previous
+Blue sentence was too heavy on a light page, and the same choices should work
+on a dark page too. Both now leave the letters readable on either page. Blue
+stays first and remains the default for a new install or an owner who had never
+chosen. The four light/dark examples still need the owner's visual acceptance.
+
+A previously saved choice keeps its exact colours and strengths. Updating a
+preset does not change it silently; tapping a preset again applies its new look.
 
 ## Where the choice is made
 
@@ -121,8 +120,8 @@ words of a link. Pale yellow on a white page cannot be read, and a deep blue on
 the dark page reads poorly. So the app keeps the colour's hue and makes it darker
 on a light surface, or lighter on a dark one, **only as far as it must to be read
 clearly against what it is drawn on**, and no further. A colour that can already
-be read is left as it is. With Blue, the default, the accent on a light page is
-the word's own blue.
+be read is left as it is. With the softer Blue, the accent on a light page is
+a little darker than the word's own blue.
 
 **The player's A takes the word's own mark**: the word's colour at the word's
 strength, exactly as the spoken word is marked on the page. The A stands for
@@ -131,18 +130,13 @@ strength at nothing, the A shows no mark either.
 
 ## What it costs
 
-- **Amber on a dark page is hard to read, and the app allows it.** The dark
-  page's light letters on Amber's bright word mark are dim against it, far below
-  what the app asks of its own words. This is what decision 0022 turned away
-  from, and it comes back the moment the owner chooses Amber in the dark. It is
-  accepted because what the page is painted with is now the owner's to choose,
-  and Blue, the default, does not have the problem. The same is true of any
-  colour the owner picks: the app does not stop a choice that is hard to read.
-- **A weaker sentence mark on the dark page.** Blue at amber's strength is a
-  faint tint on the near-black page, barely set apart from it, where the old
-  solid blue-grey stood out clearly. On the light page it is a pale blue-grey,
-  a little plainer than the pale amber was. An owner who wants it stronger
-  raises it.
+- **Personal choices can still be hard to read.** The former Amber was too
+  bright behind the dark page's light letters. The softer preset avoids that,
+  but the app does not silently change a saved choice or stop the owner from
+  choosing a stronger mark.
+- **Quieter sentence marks.** Both presets give up the old solid blue-grey's
+  prominence on a dark page to avoid a heavy band behind a light page's words.
+  An owner who wants a stronger sentence raises it.
 - **The accent is no longer one fixed amber.** The checks and links change
   whenever the word's colour does, and are a different shade on the light and
   the dark page. A colour chosen for the page can sit oddly on the app around

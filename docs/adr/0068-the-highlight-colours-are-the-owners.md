@@ -181,6 +181,10 @@ outside sRGB is clamped. An answer equal to the last one is not sent (notes
 
 ## The accent
 
+_The measured table below records the original #118 presets. #126 changes the
+preset inputs, not this accent algorithm; current expectations are pinned in
+`test/app/accent.test.ts`._
+
 - **`src/app/accent.ts`, pure.** `readingAccent(highlight, scheme)` keeps the
   word colour's hue and mixes it towards black (light) or white (dark) only as
   far as 4.5:1 needs; a colour already there is left alone. It gives three
@@ -310,9 +314,9 @@ whole-percent storage and both 0 and 100. A change takes the existing Appearance
 callback immediately; persistence, live renderer repaint and accent derivation
 are not replaced.
 
-### Revised Blue preset
+### Revised Blue preset (#122; superseded by #126 below)
 
-Blue is now first, `#434665` at 60% for Sentence and `#4456de` at 50% for Word.
+Blue became first, `#434665` at 60% for Sentence and `#4456de` at 50% for Word.
 Amber is unchanged. Defaults for absent settings follow Blue, but saved 22%/62%
 Blue remains exactly that choice and matches neither current preset. There is
 no migration that silently changes saved colours. Tests pin both the new
@@ -322,6 +326,35 @@ Sources: [Expo native view tutorial](https://docs.expo.dev/modules/native-view-t
 [SDK 57 Picker](https://docs.expo.dev/versions/v57.0.0/sdk/ui/swift-ui/picker/),
 [UIColorPickerViewController](https://developer.apple.com/documentation/uikit/uicolorpickerviewcontroller),
 and the installed iOS 27 public `UIColorPickerViewController.h`.
+
+## Balanced shared presets (#126, 2026-10-03)
+
+The owner requested gentler Blue and Amber variants and four light/dark screenshots.
+Only the preset constants change; IDs, order, palette, theme-independent storage,
+background-only CSS and accent derivation stay the same. Saved original Blue,
+#122 Blue and original Amber are regression-tested as unchanged, not migrated.
+Selecting a preset explicitly applies the revised values.
+
+| preset | sentence | word |
+| --- | --- | --- |
+| Blue | `#5965a8` at 22% | `#5c73e6` at 44% |
+| Amber | `#e4ad38` at 18% | `#d99324` at 38% |
+
+Calculated with `sentencePaint`, then `wordPaint` (word over sentence over page,
+rounded at each step), and `contrast` from the accent module:
+
+| preset | theme | sentence composite | word composite | text/sentence | text/word |
+| --- | --- | --- | --- | --- | --- |
+| Blue | light | `#daddec` | `#a3aee9` | 15.53:1 | 9.79:1 |
+| Blue | dark | `#212335` | `#3b4683` | 12.44:1 | 7.06:1 |
+| Amber | light | `#faf0db` | `#edcd95` | 18.55:1 | 13.77:1 |
+| Amber | dark | `#372d1a` | `#75541e` | 10.87:1 | 5.54:1 |
+
+These are calculations for the app's reference page/text colours, not a claim
+about every publisher stylesheet or visual acceptance. Tests pin the composites
+and require at least 4.5:1 for text on both levels in both themes. Native screenshots
+and owner acceptance remain separate from arithmetic. The implementation is
+1.0.1-beta1 and does not replace the submitted 1.0.0(3).
 
 ## Alternatives
 

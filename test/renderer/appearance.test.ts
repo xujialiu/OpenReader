@@ -322,16 +322,16 @@ describe('Highlight Colours as a stylesheet', () => {
 
   it('marks the sentence and the word in Blue, the default, at its opacities', () => {
     expect(highlightRules(DEFAULT_HIGHLIGHT_COLOURS)).toEqual([
-      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(67, 70, 101, 0.6); }',
-      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0.5); }',
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(89, 101, 168, 0.22); }',
+      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(92, 115, 230, 0.44); }',
     ]);
     expect(DEFAULT_HIGHLIGHT_COLOURS).toEqual(HIGHLIGHT_PRESETS.blue);
   });
 
-  it('marks them in Amber exactly as the light page did before #118', () => {
+  it('marks them in the softened Amber shared by both themes', () => {
     expect(highlightRules(HIGHLIGHT_PRESETS.amber)).toEqual([
-      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(255, 196, 0, 0.22); }',
-      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(255, 168, 0, 0.62); }',
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(228, 173, 56, 0.18); }',
+      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(217, 147, 36, 0.38); }',
     ]);
   });
 
@@ -352,11 +352,11 @@ describe('Highlight Colours as a stylesheet', () => {
     // The word paints over the sentence (registered second), and both over the
     // page. These are the colours a screenshot of a highlighted word should hold.
     const blue = HIGHLIGHT_PRESETS.blue;
-    const sentenceRgb: [number, number, number] = [67, 70, 101];
-    const wordRgb: [number, number, number] = [68, 86, 222];
+    const sentenceRgb: [number, number, number] = [89, 101, 168];
+    const wordRgb: [number, number, number] = [92, 115, 230];
     for (const [page, sentence, word] of [
-      [[255, 255, 255], '#8e90a3', '#6973c0'],
-      [[0x11, 0x11, 0x14], '#2f3145', '#3a4391'],
+      [[255, 255, 255], '#daddec', '#a3aee9'],
+      [[0x11, 0x11, 0x14], '#212335', '#3b4683'],
     ] as const) {
       const underWord = over(sentenceRgb, blue.sentence.opacity / 100, [...page]);
       expect(hex(underWord)).toBe(sentence);
@@ -390,7 +390,7 @@ describe('Highlight Colours as a stylesheet', () => {
     }
     // What does not read as a colour is the default's; what does, is kept.
     expect(highlightCss({ sentence: { color: '#4456DE', opacity: Number.NaN }, word: { color: '#4456de80', opacity: -40 } } as never)).toContain(
-      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0.6); }',
+      '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(68, 86, 222, 0.22); }',
     );
   });
 });

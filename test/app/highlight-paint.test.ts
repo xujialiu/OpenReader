@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { contrast } from '../../src/app/accent';
 import { HIGHLIGHT_PAGE, paintOver, sentencePaint, wordPaint } from '../../src/app/highlight-paint';
 import { HIGHLIGHT_PRESETS } from '../../src/renderer/highlight-colours';
 
@@ -10,7 +11,7 @@ import { HIGHLIGHT_PRESETS } from '../../src/renderer/highlight-colours';
  */
 describe("the Highlight section's sample of the page (#118)", () => {
   it('lays a level over the page at its opacity', () => {
-    expect(paintOver('#ffffff', HIGHLIGHT_PRESETS.blue.word)).toBe('#a2abef');
+    expect(paintOver('#ffffff', HIGHLIGHT_PRESETS.blue.word)).toBe('#b7c1f4');
     expect(paintOver('#111114', { color: '#ffffff', opacity: 50 })).toBe('#88888a');
   });
 
@@ -25,6 +26,20 @@ describe("the Highlight section's sample of the page (#118)", () => {
       expect(sentencePaint(page, colours)).toBe(paintOver(page, colours.sentence));
       expect(wordPaint(page, colours)).toBe(paintOver(paintOver(page, colours.sentence), colours.word));
     }
+  });
+
+  it.each([
+    ['blue', 'light', '#daddec', '#a3aee9'],
+    ['blue', 'dark', '#212335', '#3b4683'],
+    ['amber', 'light', '#faf0db', '#edcd95'],
+    ['amber', 'dark', '#372d1a', '#75541e'],
+  ] as const)('%s on %s keeps text readable on both nested marks (#126)', (preset, scheme, sentence, word) => {
+    const { page, text } = HIGHLIGHT_PAGE[scheme];
+    const colours = HIGHLIGHT_PRESETS[preset];
+    expect(sentencePaint(page, colours)).toBe(sentence);
+    expect(wordPaint(page, colours)).toBe(word);
+    expect(contrast(text, sentence)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(text, word)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('is the reader\'s own page: white with black text, and #111114 with #e6e6ea', () => {
