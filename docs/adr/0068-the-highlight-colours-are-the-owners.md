@@ -125,7 +125,10 @@ letters: the `::highlight()` rules declare `background-color` only.
 opacities, are that preset's (owner's Q12). The drawer rings that tile and no
 other.
 
-## The picker's `#RRGGBBAA` round trip
+## The original picker's `#RRGGBBAA` round trip
+
+_The wells were replaced by inline sliders in #122 (below). These are the
+original picker findings; the conversion helpers and their tests remain._
 
 The Sentence and Word wells are `@expo/ui`'s SwiftUI `ColorPicker` with
 `supportsOpacity`, the phone's own picker, whose opacity slider is the level's
@@ -208,7 +211,10 @@ outside sRGB is clamped. An answer equal to the last one is not sent (notes
   and for the header capsule's text (Select all). Everything else that was
   amber takes `reading`.
 
-## The Appearance section
+## The original Appearance section
+
+_Replaced by the Highlight page in #122 (below); the original measurements
+are retained here._
 
 - **`src/app/highlight-section.tsx`**, under Alignment as rows of the drawer's
   plain list, with its arithmetic in `src/app/highlight-paint.ts`
@@ -245,6 +251,47 @@ outside sRGB is clamped. An answer equal to the last one is not sent (notes
   answered black (notes 10:56). The path is real but was not reached.
 - **The wells take an XCTest tap, not AXe** (`HighlightWellProbe`,
   `test/manual-test/settings/highlight-colours.md`).
+
+## Highlight as its own page (#122, 2026-10-02)
+
+The owner replaced the section with one disclosure row below Alignment.
+`reader-actions.tsx` maps `highlight` back to `appearance`, just as `fonts`
+does. The standalone `AppearanceSheet` used by the walkthrough has the same
+navigation. Dismissing and reopening starts outside the editor, as before.
+
+`HighlightPage` in `src/app/highlight-section.tsx` keeps a short sample,
+"Read this **word.**", and a SwiftUI segmented `Picker` outside `DrawerScroll`.
+The preview uses the existing `sentencePaint` / `wordPaint` arithmetic and
+reading font at Body size, with `numberOfLines={2}` and no font shrinking.
+Both marks stay painted when the editing target switches. Only the controls
+below scroll; the preview cannot scroll off with them.
+
+Expo UI 57.0.19's `ColorPicker` exposes selection, label and opacity support,
+not an inline presentation. Its presenting well cannot meet the owner's
+always-visible-preview requirement. Instead the page uses native SwiftUI
+`Slider`s for red, green and blue (0–255) and opacity (0–100), step 1. Hosts
+stretch to the row width and match their content vertically, because Slider
+has no intrinsic width (Expo SDK 57 Slider documentation). The system draws
+the sliders and the Sentence / Word segmented control. Switching targets
+remounts the sliders so an in-progress native thumb is not reused for another
+mark. The two preset tiles follow the sliders and still replace both marks.
+
+`src/app/highlight-editor.ts` changes only the requested channel of the
+requested mark, retaining its other channels and opacity and the other mark.
+It clamps and rounds finite events, ignores non-finite ones and returns the
+original object for an unchanged value. Tests cover every byte and whole
+percentage, both targets, successive edits and restoration of a preset.
+
+Every change goes through the existing Appearance callback immediately; there
+is no draft or Save/Cancel state. Storage, renderer repaint and accent
+calculation are unchanged. The trade-off is losing the complete picker's
+grid, spectrum and eyedropper, not any sRGB colour or opacity. No new native
+module or third-party picker is introduced.
+
+Sources: [SDK 57 Slider](https://docs.expo.dev/versions/v57.0.0/sdk/ui/swift-ui/slider/),
+[SDK 57 Picker](https://docs.expo.dev/versions/v57.0.0/sdk/ui/swift-ui/picker/),
+`node_modules/@expo/ui/src/swift-ui/ColorPicker/index.tsx` and
+`node_modules/@expo/ui/ios/SliderView.swift` (57.0.19).
 
 ## Alternatives
 

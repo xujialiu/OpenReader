@@ -5,6 +5,7 @@ import { AppearanceControls, FontList } from './appearance-sheet';
 import { INK } from './controls';
 import { Drawer, DrawerChevron, DrawerFooter, DrawerRow, DrawerRowText, DrawerScroll, type DrawerAction } from './drawer';
 import { DownloadContent } from './download-sheet';
+import { HighlightPage } from './highlight-section';
 import { useHeldReading } from './reading-host';
 import { RenameAlert } from './rename-alert';
 import { useShell } from './routes';
@@ -13,9 +14,9 @@ import { shareDocument } from './share-document';
 import { knownVoice } from './voice-catalog';
 
 /** The drawer's pages, and the page each goes back to. The menu is the first, and goes back to nothing. */
-const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', download: 'menu', manage: 'download' } as const;
+const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', highlight: 'appearance', download: 'menu', manage: 'download' } as const;
 type Page = keyof typeof BACK;
-const TITLES: Record<Exclude<Page, 'menu'>, string> = { appearance: 'Appearance', fonts: 'Fonts', download: 'Download', manage: 'Manage' };
+const TITLES: Record<Exclude<Page, 'menu'>, string> = { appearance: 'Appearance', fonts: 'Fonts', highlight: 'Highlight', download: 'Download', manage: 'Manage' };
 
 /**
  * A Document's actions, as one drawer wherever it is asked for.
@@ -87,8 +88,10 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false 
       </DrawerRow> : null}
       {unshared ? <DrawerFooter attention>{unshared}</DrawerFooter> : null}
     </DrawerScroll> : null}
-    {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onFonts={() => setPage('fonts')} onChange={onAppearance} /> : null}
+    {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onFonts={() => setPage('fonts')}
+      onHighlight={() => setPage('highlight')} onChange={onAppearance} /> : null}
     {page === 'fonts' ? <FontList appearance={settings.appearance} onChange={onAppearance} /> : null}
+    {page === 'highlight' ? <HighlightPage appearance={settings.appearance} onChange={onAppearance} /> : null}
     {/* One element for both pages, so the selection and the list's place survive going to Manage and back. */}
     {page === 'download' || page === 'manage' ? <DownloadContent document={document} title={entry.title} voice={voice} section={section}
       manage={page === 'manage'} onManage={(open) => setPage(open ? 'manage' : 'download')} onSelectAll={setSelectAll}

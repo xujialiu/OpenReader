@@ -64,27 +64,32 @@ and the dark page's light letters on Amber's word are hard to read.
 
 ## Where the choice is made
 
-The choices sit in Appearance, below Alignment, under a header called Highlight.
-Appearance's drawer leaves the page above it in view and in use (decision 0066),
-so a mark is chosen against the very page it colours, and a change reaches the
-open book at once, as a font or a size does.
+_Revised with the owner on 2026-10-02, #122: the original section crowded
+Appearance, and its colour picker covered the sample just when it was needed._
 
-From the top:
+Appearance has one **Highlight** row below Alignment, with a chevron. It opens
+its own page in the same drawer, just as Font does; Back returns to Appearance.
+The drawer still leaves the document above it in view and in use at the drawer
+height (decision 0066), and a change reaches the document at once.
 
-- **A sample sentence**, on the page's own colours and in the font the book is
-  read in, with one of its words marked over the marked sentence in the current
-  choice, so the two marks can be judged together even while nothing on the
-  page above is being read.
-- **Two small tiles**, Amber then Blue, each about a fifth of the drawer's width
-  and set to the left. Each shows "Aa" as the spoken word would look on the
-  page: the word's mark on the page's colour, in the page's letters. The tile
-  whose four values, both colours and both strengths, are exactly the current
-  choice has a ring around it in the word's colour. Neither tile is named on the
-  screen; VoiceOver reads them as Amber and Blue.
-- **A Sentence row and a Word row**, each ending in the phone's own colour well.
-  Tapping it opens the phone's own colour picker, the one every app gets, with
-  its grid, its spectrum, its sliders and its own strength slider at the
-  bottom. The strength is set there and nowhere else.
+At the top is a **short sample sentence**, on the page's own colours and in the
+chosen reading font, with a word marked over the marked sentence. It prefers
+one line and never occupies more than two; the sample is shortened rather than
+its letters made smaller. It works while reading is paused, without starting
+speech. Both marks stay visible throughout editing, including when the controls
+below need to scroll.
+
+Below it, the phone's **Sentence | Word** control switches which mark is being
+edited, without moving the sample or opening another page. Colour and strength
+are adjusted inline, using the phone's sliders. Red, green and blue together
+can reach any colour; strength runs from nothing to solid. No new window covers
+the sample. Changes are applied and kept as they are made; Back is not Cancel.
+
+The two small preset tiles remain on this page, Amber then Blue, about a fifth
+of the width and set to the left. Each shows "Aa" as the spoken word would look
+on the page. The tile whose four values match the current choice has a ring in
+its word's colour. Neither is named on screen; VoiceOver reads Amber and Blue.
+They remain shortcuts for both marks, not just the one currently being edited.
 
 Choosing a colour or a strength that matches neither preset takes the ring off
 both tiles. Nothing is lost: the tiles are a quick way to two choices, not a
@@ -135,9 +140,10 @@ strength at nothing, the A shows no mark either.
   phone's own.
 - **No names on the tiles.** The tiles show only "Aa" and a ring, so on the
   screen the two presets are told apart by their colour alone.
-- **The phone's picker, as it comes.** It is the phone's, with the phone's own
-  layout, which the app cannot shape. Its strength is a slider, so an exact value
-  is reached by dragging rather than by stepping.
+- **Sliders rather than the complete colour picker.** Keeping the sample visible
+  takes priority over the phone's grid, spectrum and eyedropper. All colours
+  remain available, but mixing red, green and blue takes more adjustment than
+  pointing at a spectrum. The two presets remain the quick choices.
 
 ## Turned down
 
@@ -155,9 +161,13 @@ strength at nothing, the A shows no mark either.
   been simpler to draw, but the owner could not have matched the desktop
   plugin, which takes any colour, or the mark they find comfortable. The two
   presets give the quick taps; the picker gives everything else.
-- **A separate strength stepper beside each colour.** It would have put a
-  second control on each row and said the strength twice, once in the stepper
-  and once in the picker's own slider. The phone's picker already holds both.
+- **A picker covering the sample.** Closing it to judge a colour, then reopening
+  it to adjust again, defeats the purpose of the preview. The owner chose
+  always-visible feedback over keeping the complete picker.
+- **Separate Sentence and Word editing pages.** They could each repeat the
+  sample, but switching between the marks would require going back and in again.
+- **A separate strength stepper beside each colour.** Strength is already
+  adjusted by one slider; another control would duplicate it.
 - **The accent staying amber.** The A would have kept saying "following" in a
   colour other than the word it stands for, and with Blue as the default every
   page would have been marked in blue inside an app whose every check was amber.

@@ -4,7 +4,7 @@ import { READING_FONTS, stepFontSize, stepMargins, TEXT_ALIGNMENTS, type Appeara
 import { INK, useAccent, type Choice } from './controls';
 import { Drawer, DrawerChevron, DrawerMenuRow, DrawerRow, DrawerRowText, DrawerRowValue, DrawerScroll, useDrawerColours } from './drawer';
 import { drawerRowText } from './drawer-list';
-import { HighlightSection } from './highlight-section';
+import { HighlightPage } from './highlight-section';
 import { Icon } from './icon';
 
 /** What "follow the document" is called where the owner reads it: the book's own, not "the document font". */
@@ -62,14 +62,11 @@ function StepperRow<T extends number>({ label, name, value, step, onStep }: {
  * Appearance's rows, as the drawer's plain list (#117). Each change goes to
  * the page behind as it is made, which the drawer leaves in view.
  *
- * A row is one entry of this list, so another kind of row goes in as one more
- * entry, as the Highlight Colours do under Alignment (#118,
- * `highlight-section.tsx`). With them the page is taller than a drawer at the
- * Drawer Height: a swipe up takes the drawer to its full height, where the
- * page fits on a 402 × 874 phone, and the page scrolls where it does not.
+ * Highlight opens its own page, like Font (#122), instead of crowding the
+ * list with its preview and editor.
  */
-export function AppearanceControls({ appearance, onChange, onFonts }: {
-  appearance: Appearance; onChange(next: Appearance): void; onFonts(): void;
+export function AppearanceControls({ appearance, onChange, onFonts, onHighlight }: {
+  appearance: Appearance; onChange(next: Appearance): void; onFonts(): void; onHighlight(): void;
 }) {
   const chosen = READING_FONTS.find((font) => font.id === appearance.font)?.label ?? ORIGINAL_FONT;
   return <DrawerScroll>
@@ -85,7 +82,9 @@ export function AppearanceControls({ appearance, onChange, onFonts }: {
     {/* The system's own menu (ADR 0035), in the drawer's menu row, which is set in to its words so the drawer stays on screen while the menu is open (#117). */}
     <DrawerMenuRow label="Alignment" choices={ALIGNMENT_CHOICES} chosen={appearance.textAlignment}
       onChoose={(textAlignment) => onChange({ ...appearance, textAlignment })} />
-    <HighlightSection appearance={appearance} onChange={onChange} />
+    <DrawerRow onPress={onHighlight} accessory={<DrawerChevron />}>
+      <DrawerRowText>Highlight</DrawerRowText>
+    </DrawerRow>
   </DrawerScroll>;
 }
 
@@ -116,11 +115,13 @@ export function FontList({ appearance, onChange }: { appearance: Appearance; onC
 
 /** Appearance on its own, opened by the walkthrough harness (`appearsheet`); the owner reaches it through a Document's actions. */
 export function AppearanceSheet(props: { visible: boolean; onClose(): void; document: string; appearance: Appearance; onChange(next: Appearance): void }) {
-  const [fonts, setFonts] = useState(false);
-  return <Drawer visible={props.visible} title={fonts ? 'Fonts' : 'Appearance'}
-    onClose={() => { setFonts(false); props.onClose(); }} onBack={fonts ? () => setFonts(false) : undefined}>
-    {fonts ? <FontList appearance={props.appearance} onChange={props.onChange} />
-      : <AppearanceControls {...props} onFonts={() => setFonts(true)} />}
+  const [page, setPage] = useState<'appearance' | 'fonts' | 'highlight'>('appearance');
+  const titles = { appearance: 'Appearance', fonts: 'Fonts', highlight: 'Highlight' };
+  return <Drawer visible={props.visible} title={titles[page]}
+    onClose={() => { setPage('appearance'); props.onClose(); }} onBack={page !== 'appearance' ? () => setPage('appearance') : undefined}>
+    {page === 'fonts' ? <FontList appearance={props.appearance} onChange={props.onChange} />
+      : page === 'highlight' ? <HighlightPage appearance={props.appearance} onChange={props.onChange} />
+      : <AppearanceControls {...props} onFonts={() => setPage('fonts')} onHighlight={() => setPage('highlight')} />}
   </Drawer>;
 }
 
