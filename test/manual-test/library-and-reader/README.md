@@ -201,3 +201,53 @@ The sheet's own actions (Save to Files, AirDrop) cannot be driven from here
 on the `Caches/share/` copy instead. On 2026-09-30 (iPhone 17, iOS 27.0) all
 five methods passed. The Debug Log showed `copied in 4–13 ms` for a 1 MB book
 and `sheet closed after 2589–3250 ms`.
+
+## The reader's web content process ended (#120, `webcontent-killed.sh`)
+
+With a Debug Mode app and a Document open in the Reader with its text on the
+page:
+
+```sh
+bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID          # kill with the app in front
+bash test/manual-test/library-and-reader/webcontent-killed.sh SIMULATOR_UDID --away   # in Settings during the kill, as on the phone
+```
+
+It reads the probe's answers from the app's own Debug Log (`[probe]` lines),
+not Metro's log: on 2026-10-01 Metro 8160's log stopped at 23:03:52 while the
+app stayed connected, and the first version, which read Metro's log, answered
+`before: (no answer in 10 s)` three times (pitfalls/metro.md).
+
+It asks the page with `kit/probes/page-alive.js`, `kill -9`s the device's one
+WebContent process (the `WebContentExtension` child of its `launchd_sim`), waits
+5 s (`--wait`), and asks again. PASS: epub.js is on the page with a displayed
+view taller than zero and, when a sentence was highlighted before the kill (a
+harness `{"do":"seek","utterance":N}` paints one while paused), the same
+sentence highlighted after it; FAIL: anything else, a missing answer included.
+Exit 0 / 1, 2 when the page has no text before the kill or there is not exactly
+one WebContent process. It plays nothing and saves a screenshot to
+`/tmp/openreader-webcontent-killed.png`.
+
+On the phone (2026-10-01) iOS ended the process itself, with the app suspended
+(`JETSAM_REASON_MEMORY_LONGIDLE_EXIT`), and WebKit reported it on the next
+resume as `WebPageProxy::processDidTerminate … reason=Crash`; a `kill -9` is
+the same report. Measured 2026-10-01 22:03 on iPhone 17 (iOS 27.0), "My Vampire
+System 251-500": FAIL in 3 runs of 3 (twice in front, once `--away`), about 20 s
+each, the screenshot blank under the navigation bar and the player, Metro
+logging `WARN Webview Process Terminated`. Closing the Reader and opening the
+book again, with nothing playing, brought the text back.
+
+After the fix (ADR 0067, `1.0.0-beta10`), 6 of 6 PASS at 22:44–23:02: four in
+front, two `--away`, one with nothing cued (the new page opened where the old
+one was), the others with the sought sentence highlighted again.
+
+A Reading playing through the kill is not in the script, because its sentence
+moves on. By hand, with `player-and-reading-held/fake-kokoro.cjs` as the
+Provider (setup in `place-and-following/background-crossing.md`), `silence.sh
+check && hx.cjs … '{"do":"play"}'`, then the same `kill -9`, `page-alive.js`
+8 s later, and a pause: on 2026-10-01 at 23:00:48 the Reading went on from
+Utterance 302 to 306 with no note, and the new page showed the sentence being
+spoken with its word highlighted. Four kills within a minute leave the page
+blank on purpose (ADR 0067, decision 6): reopen the book before the next run.
+
+What it cannot prove: what an idle-exit while suspended does beyond the kill
+(the phone's wait was 85 minutes).

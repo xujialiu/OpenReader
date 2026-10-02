@@ -246,6 +246,12 @@ node test/manual-test/kit/phone-hx.cjs IPHONE_UDID '{"do":"navstate"}'
 node test/manual-test/kit/phone-hx.cjs IPHONE_UDID '{}' --code-file test/manual-test/kit/probes/renderer-state.js
 ```
 
+`probes/page-alive.js` asks whether the page is still the one the Reader
+opened: when it was created (`performance.timeOrigin`), whether epub.js's
+`rendition` and `book` exist, its views, and what each section's CSS
+highlights hold (`lit`: the sentence painted and the word). For a blank reader
+whose `[renderer]` lines have stopped (#120).
+
 Measured on the owner's iPhone (iOS 27.0.1, `0.0.2-beta73` with Debug Mode)
 on 2026-10-01, with the Reader open and the app in the foreground:
 `navstate` answered at 02:09:50 and `renderer-state.js` at 02:10:18, both inside

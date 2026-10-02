@@ -1,23 +1,25 @@
 diff --git a/node_modules/@epubjs-react-native/core/lib/commonjs/View.js b/node_modules/@epubjs-react-native/core/lib/commonjs/View.js
-index 0de0fef..acc0605 100644
+index 0de0fef..1cd5d0b 100644
 --- a/node_modules/@epubjs-react-native/core/lib/commonjs/View.js
 +++ b/node_modules/@epubjs-react-native/core/lib/commonjs/View.js
-@@ -72,7 +72,8 @@ function View({
+@@ -72,7 +72,9 @@ function View({
    waitForLocationsReady = false,
    keepScrollOffsetOnLocationChange,
    flow,
 -  onChangeSection = () => {}
 +  onChangeSection = () => {},
-+  webviewDebuggingEnabled = false
++  webviewDebuggingEnabled = false,
++  onContentProcessDidTerminate
  }) {
    const {
      registerBook,
-@@ -417,6 +418,8 @@ function View({
+@@ -417,6 +419,9 @@ function View({
        uri: templateUri
      },
      showsVerticalScrollIndicator: false,
 +    contentMode: "mobile",
 +    webviewDebuggingEnabled: webviewDebuggingEnabled,
++    onContentProcessDidTerminate: onContentProcessDidTerminate,
      javaScriptEnabled: true,
      originWhitelist: ['*'],
      scrollEnabled: false,
@@ -65,25 +67,27 @@ index 6399d97..7ceb72b 100644
      style: {
        width,
 diff --git a/node_modules/@epubjs-react-native/core/lib/module/View.js b/node_modules/@epubjs-react-native/core/lib/module/View.js
-index 63f3c24..c637c9b 100644
+index 63f3c24..d23dce0 100644
 --- a/node_modules/@epubjs-react-native/core/lib/module/View.js
 +++ b/node_modules/@epubjs-react-native/core/lib/module/View.js
-@@ -63,7 +63,8 @@ export function View({
+@@ -63,7 +63,9 @@ export function View({
    waitForLocationsReady = false,
    keepScrollOffsetOnLocationChange,
    flow,
 -  onChangeSection = () => {}
 +  onChangeSection = () => {},
-+  webviewDebuggingEnabled = false
++  webviewDebuggingEnabled = false,
++  onContentProcessDidTerminate
  }) {
    const {
      registerBook,
-@@ -408,6 +409,8 @@ export function View({
+@@ -408,6 +410,9 @@ export function View({
        uri: templateUri
      },
      showsVerticalScrollIndicator: false,
 +    contentMode: "mobile",
 +    webviewDebuggingEnabled: webviewDebuggingEnabled,
++    onContentProcessDidTerminate: onContentProcessDidTerminate,
      javaScriptEnabled: true,
      originWhitelist: ['*'],
      scrollEnabled: false,
@@ -131,10 +135,10 @@ index 4aea733..9272f9c 100644
      style: {
        width,
 diff --git a/node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts b/node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts
-index e8a0a79..a60e8ec 100644
+index e8a0a79..d3f99f4 100644
 --- a/node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts
 +++ b/node_modules/@epubjs-react-native/core/lib/typescript/types.d.ts
-@@ -423,6 +423,12 @@ export interface ReaderProps {
+@@ -423,6 +423,18 @@ export interface ReaderProps {
       * Default is 1600
       */
      charactersPerLocation?: number;
@@ -144,6 +148,12 @@ index e8a0a79..a60e8ec 100644
 +     * Default is false
 +     */
 +    webviewDebuggingEnabled?: boolean;
++    /**
++     * Passed to the WebView: iOS ended the web content process that draws the
++     * book (memory, or a long idle while the app was suspended), and the page is
++     * now empty. Nothing reloads it by itself.
++     */
++    onContentProcessDidTerminate?: () => void;
  }
  export {};
  //# sourceMappingURL=types.d.ts.map

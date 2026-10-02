@@ -255,3 +255,11 @@
   - Fix: verify Now Playing artwork on the **Lock Screen card** (`LockScreenProbe`), which the framebuffer does carry, and treat the island as unverifiable on the simulator rather than as an app defect. The card and the island are filled by the one `MPMediaItemPropertyArtwork` key (ADR 0016), so the card's answer is the only one there is to give.
 
 - **`sim_volume` reset to 60 three times in one hour on a freshly created device (#119 run, 2026-10-01)** — the #109-round-2 case above recurs with much shorter gaps: resets ~35 s, ~2 min and ~5 min after a `set` were each caught by the chained `set && check && …` in front of the next play or probe, twice while nothing was playing. The fix is the same, and it is worth the repetition: a bare `check` is not a set; chain a fresh `set` in front of every single play, probe and recording, all run long.
+- **`simctl install`, `io screenshot` and `get_app_container` can each take
+  minutes on a new device while the Mac is loaded** (2026-10-01 21:45, #120).
+  A device created and booted that minute, with three other simulators booted
+  and load averages of 150–170, held `simctl install` of a copied Debug `.app`
+  for more than five minutes, and a screenshot for about 90 s; both then
+  finished (`exit 0`). Nothing was wrong with the app or the device. Run them in
+  the background and poll, rather than under a short tool timeout that reads as
+  a hang.

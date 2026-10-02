@@ -47,6 +47,7 @@ import { AppState, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-
 
 import { readLocator, type ReadingPlace, type ReadingPosition } from '../core/document';
 import { contentsOf, type NavigationEntry } from '../core/document/contents';
+import { cutText, debugLog } from '../debug/debug-log';
 import { DEBUG_MODE } from '../debug/mode';
 import { chapterOf, useNowPlaying } from '../now-playing';
 import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
@@ -81,6 +82,15 @@ import { hasSavedVoice, inventoryReady, inventoryError, requestInventory, useDow
  * ordinary way out loses nothing at all.
  */
 const POSITION_INTERVAL_MS = 10_000;
+
+/**
+ * How many times the page may be opened again within `PAGE_RESTART_WINDOW_MS`
+ * after its web content process ended (#120). One more, and the page is left
+ * as it is: a page that ends its process every time it opens would otherwise
+ * be reopened for ever, at the cost of a book read in and laid out each time.
+ */
+const PAGE_RESTARTS = 3;
+const PAGE_RESTART_WINDOW_MS = 60_000;
 
 export interface ReadingViewProps {
   /** The held Reading can live above the navigator while its page is hidden. */
@@ -255,7 +265,7 @@ export function ReadingView({
    * from the document message.
    */
   // WALKTHROUGH-HARNESS: `injectJavascript` is the harness's only probe into the WebView.
-  const { getMeta, toc, injectJavascript } = useReader();
+  const { getMeta, toc, injectJavascript, currentLocation } = useReader();
   /**
    * `readLocator` rather than reaching into the position: a `Locator` is opaque
    * by construction (ADR 0007) and this is its one door — it hands back the CFI
@@ -302,6 +312,35 @@ export function ReadingView({
     if (width < 1 || height < 1) return;
     setSize((was) => (was && was.width === width && was.height === height ? was : { width, height }));
   }, []);
+
+  /**
+   * The page, and how many times it has been opened again (#120).
+   *
+   * iOS can end the web content process that draws the book: memory, or a long
+   * idle while the app is suspended (on the owner's phone, 13 minutes after a
+   * pause, `JETSAM_REASON_MEMORY_LONGIDLE_EXIT`). The WebView is then empty and
+   * nothing fills it again, while the Reading, which lives here and not in the
+   * page, is untouched. So only `<Reader>` is mounted again, by its key, and the
+   * Reading carries on: a voice that was playing keeps playing. The new page
+   * opens at the sentence the bridge last cued (`restart()`), else where the old
+   * page was, else where the book opened; the bridge paints the sentence once the
+   * new page has reported it.
+   */
+  const [page, setPage] = useState<{ generation: number; at: string | null }>({ generation: 0, at: null });
+  const restarts = useRef<number[]>([]);
+  const restartBridge = reading.bridge.restart;
+  const shownAt = currentLocation?.start?.cfi ?? null;
+  const onPageGone = useCallback(() => {
+    const now = Date.now();
+    restarts.current = [...restarts.current.filter((at) => now - at < PAGE_RESTART_WINDOW_MS), now];
+    if (restarts.current.length > PAGE_RESTARTS) {
+      debugLog('renderer', `the page's web content process ended, ${restarts.current.length} times in a minute: the page is not opened again`);
+      return;
+    }
+    const at = restartBridge() ?? shownAt ?? resumeAt;
+    debugLog('renderer', `the page's web content process ended; the page opens again at ${at ? cutText(at) : 'the start of the book'}`);
+    setPage((was) => ({ generation: was.generation + 1, at }));
+  }, [restartBridge, shownAt, resumeAt]);
 
   /**
    * epub.js has displayed the book, so its metadata is in and the highlighter has
@@ -633,12 +672,14 @@ export function ReadingView({
       <View style={styles.document} onLayout={measure}>
         {size ? (
           <Reader
+            key={page.generation}
             src={document.base64}
             fileSystem={fileSystem}
             width={size.width}
             height={size.height}
             onReady={onReady}
-            initialLocation={resumeAt ?? undefined}
+            initialLocation={(page.generation > 0 ? page.at : resumeAt) ?? undefined}
+            onContentProcessDidTerminate={onPageGone}
             onDisplayError={setDisplayError}
             renderLoadingFileComponent={() => <Waiting words={`Reading ${document.title}…`} />}
             renderOpeningBookComponent={() => <Waiting words="Laying the document out…" />}

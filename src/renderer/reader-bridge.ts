@@ -60,6 +60,7 @@ import {
   SELECTION_MESSAGE,
   type SelectionMessage,
   type CharactersBySize,
+  type CorrectMessage,
   type FollowingMessage,
   type HighlightMessage,
   type ProblemMessage,
@@ -406,6 +407,20 @@ export interface ReaderBridge {
    */
   snapshot(why: string): void;
   /**
+   * The page's web content process has ended, and a new page is about to be
+   * mounted in its place (#120). Returns where it should open: the CFI of the
+   * first Block of the sentence last cued, or null when no sentence has been.
+   *
+   * The new page knows none of the Blocks the Reading was built from. So from
+   * here the sentence the Reading is on, its cue, its last correction and a
+   * pause's hold, is kept rather than sent, until the new page reports the
+   * section that holds it; then it is painted once, and revealed. A Reading that
+   * moved on into another section meanwhile has that section displayed first.
+   * The Blocks themselves are not cleared: the new page reports the same ones,
+   * which changes nothing, so the Utterances and the engine carry on.
+   */
+  restart(): string | null;
+  /**
    * Spread onto `<Reader>`. `injectedJavascript` installs the highlighter once,
    * from the library's own `onReady`; `onWebViewMessage` receives what the
    * highlighter posts back.
@@ -460,6 +475,12 @@ function asMessage(event: unknown): WebViewMessage | null {
   return event as WebViewMessage;
 }
 
+/** The Block a cued sentence starts in, as this app has it: its section and its CFI (#120). */
+function firstBlock(index: BlockIndex, message: SpeakMessage): ReportedBlock | null {
+  const id = message.utteranceRanges[0]?.block;
+  return id === undefined ? null : index.blocks.find((block) => block.id === id) ?? null;
+}
+
 /** A height in points, or zero for anything that is not a positive number. */
 function pointsOrZero(points: number): number {
   return Number.isFinite(points) && points > 0 ? points : 0;
@@ -504,6 +525,20 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   const blocks = useRef<BlockIndex>(EMPTY_BLOCKS);
   /** The Clip the WebView is showing, so a correction can be matched against it and clamped to its duration. */
   const cued = useRef<SpeakMessage | null>(null);
+  /**
+   * What a new page needs to show the sentence the old one showed (#120): the
+   * last correction for the cue, and whether the reading is paused on it.
+   */
+  const corrected = useRef<CorrectMessage | null>(null);
+  const holding = useRef(false);
+  /**
+   * After `restart()`, the section the new page has to report before the
+   * sentence is painted on it, or null when nothing is waiting; and the sections
+   * the new page has reported since. Every message about the sentence waits
+   * while this is set.
+   */
+  const awaiting = useRef<number | null>(null);
+  const reportedSince = useRef<Set<number>>(new Set());
   /**
    * How many spine items the document has, from the message the program posts as
    * it installs. Zero until it arrives, which it does before any section reports.
@@ -587,15 +622,19 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
           recover: latest.current.follow !== false && options?.recover === true,
         });
         cued.current = message;
+        corrected.current = null;
+        holding.current = false;
         // Null means the reading and the document are out of step — an Utterance
         // the renderer does not have, or one whose Blocks are not reported. The
         // last highlight is left alone rather than replaced with a guess.
-        if (message) send(message);
+        if (message && awaiting.current === null) send(message);
       },
       /** One correction, about once a second. This is the only position that crosses the bridge. */
       onPosition(correction: PositionCorrection) {
         const message = correctMessage(correction, cued.current);
-        if (message) send(message);
+        if (!message) return;
+        corrected.current = message;
+        if (awaiting.current === null) send(message);
       },
     }),
     [send],
@@ -618,11 +657,14 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         { reveal: latest.current.follow !== false && options?.reveal !== false },
       );
       if (!message) return;
-      if (options?.reveal !== false) send({ kind: 'lookup', releaseBrowsing: true });
       // `cued` so that a correction still arriving for the Utterance that *was*
       // playing is recognised as stale and dropped, rather than repainting the
       // sentence the owner has just skipped away from.
       cued.current = message;
+      corrected.current = null;
+      holding.current = false;
+      if (awaiting.current !== null) return;
+      if (options?.reveal !== false) send({ kind: 'lookup', releaseBrowsing: true });
       send(message);
     },
     [send],
@@ -704,16 +746,22 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   const hold = useCallback((options?: { stop?: boolean }) => {
+    holding.current = true;
+    if (awaiting.current !== null) return;
     send(options?.stop ? { kind: 'hold', stop: true } : { kind: 'hold' });
   }, [send]);
 
   const clear = useCallback(() => {
     cued.current = null;
+    corrected.current = null;
+    holding.current = false;
     send({ kind: 'clear' });
   }, [send]);
 
   const returnToReading = useCallback(
     (utterance: number | null) => {
+      // A new page is on its way (#120), and it reveals the reading itself.
+      if (awaiting.current !== null) return;
       if (utterance === null || cued.current?.utterance === utterance) {
         send({ kind: 'return' });
         return;
@@ -773,6 +821,41 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [send],
   );
 
+  const restart = useCallback((): string | null => {
+    reportedSince.current = new Set();
+    const block = cued.current ? firstBlock(blocks.current, cued.current) : null;
+    awaiting.current = block ? block.sectionIndex : null;
+    return block ? block.cfi : null;
+  }, []);
+
+  /**
+   * After `restart()`, at every section the new page reports: the sentence is
+   * painted again once the page has reported the section it starts in, and
+   * revealed, with its last correction and a pause's hold, so the page shows
+   * what the old one did. A Reading that has moved on into a section the new
+   * page has not reported has that section displayed, once, and waits for it.
+   */
+  const paintAgain = useCallback(() => {
+    const message = cued.current;
+    const block = message ? firstBlock(blocks.current, message) : null;
+    if (!message || !block) {
+      awaiting.current = null;
+      return;
+    }
+    if (!reportedSince.current.has(block.sectionIndex)) {
+      if (awaiting.current !== block.sectionIndex) {
+        awaiting.current = block.sectionIndex;
+        debugLog('renderer', `the app asks epub.js to display ${cutText(block.cfi)} (the reading moved on while the page reopened)`);
+        goToLocation(block.cfi);
+      }
+      return;
+    }
+    awaiting.current = null;
+    send({ ...message, reveal: true });
+    if (corrected.current?.utterance === message.utterance) send(corrected.current);
+    if (holding.current) send({ kind: 'hold' });
+  }, [send, goToLocation]);
+
   const onWebViewMessage = useCallback(
     (event: unknown) => {
       const message = asMessage(event);
@@ -810,6 +893,9 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         if (highlightCss(appearance.current.highlight) !== highlightCss(installed.current.highlight)) {
           send({ kind: 'highlight', css: highlightCss(appearance.current.highlight) });
         }
+        // A program installed again after its page was lost (#120) would count
+        // every section's characters again, for a size already decided.
+        if (bodyTextSize.current !== null && installedBodyTextSize.current === null) send({ kind: 'measured' });
         // A new program follows the reading and lets a finger move the page; the
         // player is told the first, and the program the collapsed player it missed.
         latest.current.onFollowing?.(true);
@@ -858,11 +944,13 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
           spine: spine.current,
         });
       }
+      reportedSince.current.add(message.sectionIndex);
+      if (awaiting.current !== null) paintAgain();
       // After the Blocks, which the reading cannot do without: keeping the size
       // for the next open is the app's business, and nothing it does can cost them.
       if (decided !== null) latest.current.onBodyTextSize?.(decided);
     },
-    [send],
+    [send, paintAgain],
   );
 
   /**
@@ -898,7 +986,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, snapshot, readerProps }),
-    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, snapshot, readerProps],
+    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, snapshot, restart, readerProps }),
+    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, snapshot, restart, readerProps],
   );
 }
