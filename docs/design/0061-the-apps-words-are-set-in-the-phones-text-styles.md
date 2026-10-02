@@ -71,6 +71,36 @@ translation the lookup finds, are read as part of the reading, so they will
 follow Appearance too, not these styles (issue #98). The lookup drawer's own
 buttons and notes stay in the app's styles.
 
+## Larger text must remain usable
+
+The owner extended this decision to settings lists, Acknowledgements, the player
+and the Library (issues #62, #114, #101 and #102). This is the agreed target,
+not a claim that those faults have already been repaired.
+
+Every text size the phone offers is supported, including the largest
+accessibility sizes. Changing the size while the app is running must update
+its layout in both directions without requiring a restart.
+
+The owner accepts the result on their own iPhone. Simulator checks are useful
+for finding regressions, but cannot establish that the phone displays the
+result correctly. The finished changes are installed on the owner's phone
+for that final check.
+
+In settings lists and Acknowledgements, the whole name and current value must
+be readable in the list, including units and the complete licence expression.
+A row may become taller, wrap, or put its value below its name. It must not
+shrink its words to undo the owner's larger-text choice, or require opening
+another page just to read what the row says. The cost is fewer rows visible
+at once and more scrolling; completeness wins over compactness here.
+
+At the largest sizes, the player's controls grow or rearrange so that their
+labels remain directly readable. The owner accepts that the expanded player
+may cover more of the page; it remains collapsible, and expanding or collapsing
+it must not make the document's text jump. Keeping compact buttons whose labels
+can only be read enlarged on a long press was rejected: reading a control
+should not require an extra action. The lookup result's use of Appearance
+remains a separate issue.
+
 ## Turned down
 
 - **A smaller list of the app's own.** Fewer sizes would have been easier to

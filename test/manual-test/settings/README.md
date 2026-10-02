@@ -3,6 +3,9 @@
 Each recipe is its own file. Read the one for what you are testing, or the one
 that names the script or probe you are about to run.
 
+- [dynamic-type.md](dynamic-type.md) (#62, #114, #101, #102): complete row text,
+  live size sweeps, player reflow, Library progress, and physical acceptance.
+  `dynamic-type.sh`, `visible-text.swift`.
 - [settings-design.md](settings-design.md) (#48, design 0042): OpenReader's
   Settings pages against the phone's own, in both appearances, and the rule
   that locks a provider's or Sync's fields while it is on, by real touches.

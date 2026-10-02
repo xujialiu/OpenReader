@@ -6,8 +6,9 @@ accessibility tree, compared with the data it is built from.
   python3 test/manual-test/settings/acknowledgements-check.py UDID list
   python3 test/manual-test/settings/acknowledgements-check.py UDID licence [--pasteboard]
 
-list      the Acknowledgements page is open: every row (a 362×53 Button whose
-          label is `name, licence`) equals the data's entries, in order. A
+list      the Acknowledgements page is open: every row (a Button whose
+          label contains `name, licence`) equals the data's entries, in order.
+          This checks data/accessibility, not visible text; no row-height filter. A
           ScrollView lists all its rows in the tree, off-screen ones too, so no
           scrolling is needed. Prints the row count and `identical=True/False`.
 licence   one component's licence page is open: the title is an entry's name,
@@ -49,8 +50,7 @@ def about_line(entry):
 def check_list(tree, entries):
     labels = []
     for node, _, _ in ax.walk(tree):
-        x, y, w, h = ax.frame(node)
-        if node.get('type') == 'Button' and round(x) == 20 and round(w) == 362 and round(h) == 53:
+        if node.get('type') == 'Button' and ', ' in (node.get('AXLabel') or ''):
             labels.append(node.get('AXLabel'))
     expected = [f"{e['name']}, {e['license']}" for e in entries]
     print(f'rows={len(labels)} entries={len(expected)} identical={labels == expected}')

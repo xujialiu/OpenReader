@@ -87,7 +87,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChoiceMenu, Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, useAccent, type Choice } from './controls';
+import { ChoiceMenu, RowWords, Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, useAccent, type Choice } from './controls';
 import { drawerDetentHeight } from './drawer-height';
 import { DRAWER_LIST, drawerRowText } from './drawer-list';
 import { createDrawerTurns } from './drawer-turns';
@@ -536,22 +536,17 @@ export function DrawerSeparator() {
 /**
  * A row of the list that opens the system's short menu (`ChoiceMenu`, ADR
  * 0035): its name, what it is set to, and the two chevrons iOS puts on such a
- * row. One line, 52 pt, because the menu is laid out at the height it is given.
+ * row. The menu grows to the words, including at accessibility text sizes.
  */
 export function DrawerMenuRow<T extends string | number>({ label, choices, chosen, onChoose }: {
   label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
 }) {
   return (
     <View style={styles.menuRow}>
-      <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} height={DRAWER.row.rowHeight}>
+      <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose}>
         <View style={styles.menuWords}>
-          <Text style={[styles.rowText, styles.menuLabel]}>{label}</Text>
-          <View style={styles.menuValue}>
-            <Text style={[styles.rowText, styles.menuValueText]} numberOfLines={1}>
-              {choices.find((choice) => choice.value === chosen)?.label}
-            </Text>
-            <Icon name="menu" color={INK.secondary} size={18} />
-          </View>
+          <RowWords label={label} value={choices.find((choice) => choice.value === chosen)?.label} />
+          <Icon name="menu" color={INK.secondary} size={18} />
         </View>
       </ChoiceMenu>
       <DrawerSeparator />
@@ -609,9 +604,6 @@ const styles = StyleSheet.create({
   footer: { marginTop: DRAWER.footerGap, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
   // The menu's label spans the words, not the drawer: a label as wide as the
   // drawer took the whole drawer off the screen while its menu was open.
-  menuRow: { height: DRAWER.row.rowHeight, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
-  menuWords: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
-  menuLabel: { flexShrink: 0 },
-  menuValue: { alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 4 },
-  menuValueText: { color: INK.secondary, flexShrink: 1 },
+  menuRow: { minHeight: DRAWER.row.rowHeight, paddingLeft: DRAWER.row.textInset, paddingRight: DRAWER.row.inset },
+  menuWords: { alignItems: 'center', minHeight: DRAWER.row.rowHeight, paddingVertical: 10, flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
 });
