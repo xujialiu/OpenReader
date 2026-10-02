@@ -169,8 +169,9 @@ The build before this stored `appearance.scale`, a percentage or null, and that
 field is simply no longer read. There is no migration, because the app has not
 been released, and every install starts at 16.
 
-_Changed on 2026-10-01, at the owner's word: `DEFAULT_APPEARANCE.size` is 26,
-and a missing or unknown `appearance.size` reads as 26. A saved size on the
+_Changed on 2026-10-02, at the owner's word: `DEFAULT_APPEARANCE.size` is 24,
+replacing the 26 chosen on 2026-10-01; a missing or unknown `appearance.size`
+reads as 24. A saved size on the
 ladder is kept, 16 included. The download indexer's `highlighterSource()` takes
 the default too; it never counts and nothing it lays out is read, so only the
 text-size-adjust percentage in its stylesheet changes._

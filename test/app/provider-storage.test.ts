@@ -108,15 +108,21 @@ describe('local settings persistence', () => {
     expect(read).toEqual({ 'openai-official': 1, compatible: 1, azure: 1, speechify: 1, fish: 5, local: 1 });
     expect(SENTENCES_AT_ONCE).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
+  it('starts with 24-point text and 28-point Margins, without changing saved choices', () => {
+    expect(readSettings().appearance).toMatchObject({ size: 24, margins: 28 });
+    const settings = { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, size: 26 as const, margins: 24 as const } };
+    writeSettings(settings);
+    expect(readSettings().appearance).toEqual(settings.appearance);
+  });
   it('keeps a Font Size on the ladder and drops anything else, including the percentages of the build before', () => {
     // The app has not been released, so a percentage saved by the previous build is
-    // not converted: it is dropped and the owner starts at the default, 26 (#17).
+    // not converted: it is dropped and the owner starts at the default, 24 (#17).
     expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', size: 20 } } }).appearance)
-      .toEqual({ font: 'georgia', size: 20, margins: 24, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
+      .toEqual({ font: 'georgia', size: 20, margins: 28, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
     expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', scale: 150 } } }).appearance)
-      .toEqual({ font: 'georgia', size: 26, margins: 24, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
+      .toEqual({ font: 'georgia', size: 24, margins: 28, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
     for (const size of [25, 17.5, '18', 0, -1, null]) {
-      expect(parseSettings({ version: 1, settings: { appearance: { size } } }).appearance.size).toBe(26);
+      expect(parseSettings({ version: 1, settings: { appearance: { size } } }).appearance.size).toBe(24);
     }
     // A size already saved is kept, the first default among them.
     expect(parseSettings({ version: 1, settings: { appearance: { size: 16 } } }).appearance.size).toBe(16);
@@ -132,17 +138,17 @@ describe('local settings persistence', () => {
     }
     expect(parseSettings({}).appearance.textAlignment).toBe('justify');
   });
-  it('keeps Margins on the ladder and reads anything else, or nothing, as 24', () => {
+  it('keeps Margins on the ladder and reads anything else, or nothing, as 28', () => {
     // A settings file written before #84 has no Margins in it, and is read the
     // way a new install starts. Nothing is migrated, since the app has not been
     // released.
-    for (const margins of [8, 16, 36, 48]) {
+    for (const margins of [8, 16, 24, 28, 36, 48]) {
       expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance.margins).toBe(margins);
     }
     for (const margins of [undefined, null, 0, 4, 18, 52, '16', 16.5, true]) {
-      expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance.margins).toBe(24);
+      expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance.margins).toBe(28);
     }
-    expect(parseSettings({}).appearance.margins).toBe(24);
+    expect(parseSettings({}).appearance.margins).toBe(28);
   });
   it('keeps the Highlight Colours with the Appearance, Blue for a file written before #118', () => {
     expect(parseSettings({ version: 1, settings: {} }).appearance.highlight).toEqual(DEFAULT_HIGHLIGHT_COLOURS);
