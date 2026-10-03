@@ -2,6 +2,8 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
+import { GestureDetector } from 'react-native-gesture-handler';
 
 import { asDocumentId, type LibraryEntry } from '../core/document';
 import { childFolders, directFolderCounts, folderAt, folderSubtree, targetKey, type Folder, type FolderId, type LibraryTarget } from '../core/folders';
@@ -12,6 +14,7 @@ import { AddDrawer, confirmFolderDeletion, FolderActions, MoveContent } from './
 import { Drawer } from './drawer';
 import { useLibrarySelection } from './use-library-selection';
 import { LibrarySelectionAction } from './library-selection-actions';
+import { useRowSweep } from './use-sweep';
 import { importDocument } from './import-document';
 import { documentFile } from './library';
 import { folderSummary } from './library-row-layout';
@@ -37,6 +40,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const { settings, library, sync } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
   const insets = useSafeAreaInsets();
+  const focused = useIsFocused();
   const [actionHeight, setActionHeight] = useState(52);
   const actionBottom = Math.max(insets.bottom, 12);
   const reading = useHeldReading();
@@ -68,6 +72,12 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const working = selection.working;
   const selectedKeys = new Set(selection.selected.map(targetKey));
   const selectionLocked = busy || selection.working || selection.moving || selection.confirming;
+  const sweepIds = rows.map((row) => targetKey(rowTarget(row)));
+  const sweep = useRowSweep<Row>({
+    ids: sweepIds, values: sweepIds.map((id) => [id]), selected: selectedKeys,
+    enabled: focused && !selectionLocked && !adding && !actions && !folderActions && !picking && !library.loading && !problem,
+    scope: tree.current ?? 'root', bottomInset: actionBottom + actionHeight + 12,
+  }, selection.sweepTo);
   const remove = (entry: LibraryEntry) => {
     void requestInventory(entry.id).then(() => Alert.alert('Delete this book?',
       `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
@@ -118,6 +128,14 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: selecting ? `${selectedCount} selected` : currentFolder?.name ?? 'Library',
+      // Native bar items size their own labels at accessibility text sizes; custom RN text can outgrow UIKit's bar.
+      unstable_headerLeftItems: selecting ? () => [{ type: 'button',
+        label: selectedCount === rows.length && rows.length > 0 ? 'Deselect all' : 'Select all',
+        onPress: () => selectionRef.current.selectAll(), disabled: selectionLocked || !rows.length, tintColor: INK.text,
+      }] : undefined,
+      unstable_headerRightItems: selecting ? () => [{ type: 'button', label: 'Cancel',
+        onPress: () => selectionRef.current.cancel(), disabled: selectionLocked, tintColor: INK.text,
+      }] : undefined,
       headerLeft: () => selecting
         ? <HeaderButton label={selectedCount === rows.length && rows.length > 0 ? 'Deselect all' : 'Select all'} onPress={() => selectionRef.current.selectAll()} disabled={selectionLocked || !rows.length} />
         : currentFolder
@@ -142,11 +160,14 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   }, [library.entries]);
   const counts = useMemo(() => directFolderCounts(tree, library.entries.map((entry) => entry.id)), [tree, library.entries]);
   return <View style={styles.screen}>
+    <GestureDetector gesture={sweep.gesture}>
     <FlatList<Row>
+      {...sweep.list}
+      style={styles.list}
       key={tree.current ?? 'root'}
       contentContainerStyle={{ paddingTop: 12, paddingBottom: (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
       data={rows}
-      keyExtractor={(row) => row.kind === 'folder' ? `folder:${row.folder.id}` : row.entry.id}
+      keyExtractor={(row) => targetKey(rowTarget(row))}
       renderItem={({ item }) => item.kind === 'folder'
         ? <FolderRow title={item.folder.name} summary={folderSummary(counts.get(item.folder.id)?.documents ?? 0, counts.get(item.folder.id)?.folders ?? 0)} disabled={selectionLocked} selected={selection.active ? selectedKeys.has(targetKey(rowTarget(item))) : undefined}
           onPress={() => selection.active ? selection.toggle(rowTarget(item)) : visit(item.folder.id)} onActions={() => setFolderActions(item.folder.id)} />
@@ -163,6 +184,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
         {settings.enabledProviders.length === 0 ? <Note attention>{NO_PROVIDER_SENTENCE}</Note> : null}
       </View>}
     />
+    </GestureDetector>
     {selection.active ? <View pointerEvents="box-none" style={[styles.selectionActions, { bottom: actionBottom }]}
       onLayout={(event) => setActionHeight(event.nativeEvent.layout.height)}>
       <LibrarySelectionAction action="Move" disabled={!selection.selected.length || selectionLocked || !!problem} onPress={selection.openMove} />
@@ -187,6 +209,7 @@ function LibraryDocument({ entry, present, onPress, onActions, disabled, selecte
 }
 const READING_BUTTON_ROOM = READING_BUTTON_PLACE.bottom + 52 + 12;
 const styles = StyleSheet.create({
+  list: { flex: 1 },
   selectionActions: { position: 'absolute', left: 22, right: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   banner: { paddingHorizontal: 16, paddingTop: 12 },

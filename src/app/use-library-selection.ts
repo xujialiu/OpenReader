@@ -95,6 +95,11 @@ export function useLibrarySelection(navigation: Pick<ScreenProps<'Library'>['nav
   };
   return {
     active, selected, moving, working, confirming, begin, toggle, selectAll, deleteSelected,
+    sweepTo: (next: Set<string>) => {
+      if (locked.current || moving || confirming || latest.current.folders.getSnapshot().busy) return;
+      setActive(true);
+      setKeys(next);
+    },
     cancel: () => { if (!locked.current) clear(); },
     openMove: () => { if (!locked.current && selected.length) setMoving(true); },
     closeMove: () => setMoving(false),

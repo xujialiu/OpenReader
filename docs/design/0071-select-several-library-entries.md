@@ -2,7 +2,7 @@
 
 ## What has been decided
 
-The Library's top-right `+` becomes `…`. The menu keeps the existing actions and adds Select. This menu is the only entry into selection mode; long press does not become another entry.
+The Library's top-right `+` becomes `…`. The menu keeps the existing actions and adds Select. The owner subsequently added a second entry: a two-finger drag on the list enters selection mode directly. Long press does not become another entry.
 
 Selection is limited to the current level of the Library. Documents and Folders can be selected together. A Folder is selected rather than opened while selecting; selecting across different levels is not supported.
 
@@ -27,6 +27,12 @@ Moving or deleting several entries currently means repeating the same operation 
 ## What it costs
 
 Entries in different Folders must be handled in separate batches. Keeping selection at one level makes the selected group visible in one list and avoids selecting both a Folder and its contents separately.
+
+## Choosing a range with two fingers
+
+Two fingers dragged over the Library start selection directly, or extend an existing selection. Starting on an unselected row adds the range; starting on a selected row removes it. Dragging back shrinks this sweep's range and restores rows outside it to their pre-sweep state. Separate sweeps accumulate.
+
+Holding near either visible list edge scrolls the list so the range can extend beyond the screen. The bottom edge used for this gesture stays above the floating actions. One finger continues to scroll normally. A sweep does not enter Folders or submit Move or Delete; it is limited to the current level and is unavailable while a batch runs or an action chooser or confirmation is open.
 
 ## Deleting a selection
 

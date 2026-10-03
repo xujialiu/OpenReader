@@ -26,7 +26,7 @@ it('uses native glass capsules, readable text, semantic deletion and native disa
     ]) },
   }] });
   await act(async () => renderer.update(createElement(LibrarySelectionAction, { action: 'Delete', disabled: false, onPress })));
-  expect(renderer.toJSON()).toMatchObject({ props: { seedColor: undefined }, children: [{ props: { label: 'Delete', role: 'destructive', onPress } }] });
+  expect(renderer.toJSON()).toMatchObject({ props: { seedColor: '#ff453a' }, children: [{ props: { label: 'Delete', role: 'destructive', onPress } }] });
   await act(async () => renderer.update(createElement(LibrarySelectionAction, { action: 'Delete', disabled: true, working: true, onPress })));
   expect(renderer.toJSON()).toMatchObject({ children: [{ props: { label: 'Deleting…', modifiers: expect.arrayContaining([{ name: 'disabled', value: true }]) } }] });
   await act(async () => renderer.unmount());

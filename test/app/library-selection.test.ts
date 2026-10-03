@@ -68,6 +68,22 @@ it('starts empty, toggles mixed rows, selects all, deselects all, and clears on 
   await h.close();
 });
 
+it('enters selection directly through a two-finger range and keeps it current-level only', async () => {
+  const h = await mount();
+  expect(h.selection.active).toBe(false);
+  await h.run(() => h.selection.sweepTo(new Set([`document:${ids[0]}`, `document:${ids[1]}`])));
+  expect(h.selection.active).toBe(true);
+  expect(h.selection.selected).toEqual(targets.slice(0, 2));
+  await h.run(() => h.selection.openMove());
+  await h.run(() => h.selection.sweepTo(new Set([`document:${ids[2]}`])));
+  expect(h.selection.selected).toEqual(targets.slice(0, 2));
+  await h.run(() => h.selection.closeMove());
+  await h.run(() => h.selection.sweepTo(new Set()));
+  expect(h.selection.active).toBe(true);
+  expect(h.selection.selected).toEqual([]);
+  await h.close();
+});
+
 it('preserves selection on move/deletion cancellation, but clears it on page blur', async () => {
   const h = await mount();
   await h.run(() => h.selection.begin());
@@ -163,7 +179,7 @@ it('ignores stale confirmation after blur and blocks duplicate submission while 
   h.remove.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
   await h.run(() => { answer(1); answer(1); });
   expect(h.selection.working).toBe(true);
-  await h.run(() => { h.selection.cancel(); h.selection.toggle(targets[0]); h.selection.selectAll(); });
+  await h.run(() => { h.selection.cancel(); h.selection.toggle(targets[0]); h.selection.selectAll(); h.selection.sweepTo(new Set()); });
   expect(h.selection.active).toBe(true);
   expect(h.selection.selected).toHaveLength(3);
   await h.run(h.blur);
