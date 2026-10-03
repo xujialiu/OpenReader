@@ -71,6 +71,17 @@ first measured run landed at the top of the 2,076-row list with nothing marked.
 The probe now waits, then retries once after closing and reopening Contents.
 Neither mode touches downloads, rename, or deletion.
 
+## Two-finger range selection in the Library (#128, `LibraryTwoFingerProbe.swift`)
+
+Drives the Library's two-finger range selection with the #57 synthesized
+two-pointer technique, and reads the result off the accessibility tree: adds,
+reverse retract, accumulate, one-finger non-selection, edge auto-scroll,
+Cancel. Launches the app with `-RCT_jsLocation` pinned to this checkout's
+Metro (a launch without it silently loads another Metro's older bundle), and
+counts row bounds before asserting sweep totals. Recipe, measured pitfalls and
+the retract end-state wobble:
+[library-two-finger.md](library-and-reader/library-two-finger.md).
+
 ## Long-press lookup and translation (issue #73, `TranslationProbe.swift`)
 
 With the current Debug app connected to Metro and `A Short Test of Reading Aloud` in the Library, build the disposable UI-test project and run `TranslationProbe.testSettingsDefaultsMenusAndPersistence` first, then `TranslationProbe.testLongPressDisabledThenEnabledDrawerAndCopy` and `TranslationProbe.testPronunciationButtonsTouchDictionaryAudio`:
