@@ -1,16 +1,17 @@
 /** The Library's current Folder: immediate child folders, then Documents in their existing recency order (#121). */
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { asDocumentId, type LibraryEntry } from '../core/document';
 import { childFolders, directFolderCounts, folderAt, folderSubtree, targetKey, type Folder, type FolderId, type LibraryTarget } from '../core/folders';
-import { DocumentRow, FolderRow, HeaderButton, INK, Note, useAccent } from './controls';
+import { DocumentRow, FolderRow, HeaderButton, INK, Note } from './controls';
 import { pickDocument } from './document';
 import { useDocumentCover } from './document-cover';
 import { AddDrawer, confirmFolderDeletion, FolderActions, MoveContent } from './folder-actions';
 import { Drawer } from './drawer';
 import { useLibrarySelection } from './use-library-selection';
+import { LibrarySelectionAction } from './library-selection-actions';
 import { importDocument } from './import-document';
 import { documentFile } from './library';
 import { folderSummary } from './library-row-layout';
@@ -36,7 +37,8 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const { settings, library, sync } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
   const insets = useSafeAreaInsets();
-  const accent = useAccent();
+  const [actionHeight, setActionHeight] = useState(52);
+  const actionBottom = Math.max(insets.bottom, 12);
   const reading = useHeldReading();
   const held = reading.current;
   const [picking, setPicking] = useState(false);
@@ -142,7 +144,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   return <View style={styles.screen}>
     <FlatList<Row>
       key={tree.current ?? 'root'}
-      contentContainerStyle={{ paddingTop: 12, paddingBottom: held ? READING_BUTTON_ROOM : 12 }}
+      contentContainerStyle={{ paddingTop: 12, paddingBottom: (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
       data={rows}
       keyExtractor={(row) => row.kind === 'folder' ? `folder:${row.folder.id}` : row.entry.id}
       renderItem={({ item }) => item.kind === 'folder'
@@ -161,19 +163,12 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
         {settings.enabledProviders.length === 0 ? <Note attention>{NO_PROVIDER_SENTENCE}</Note> : null}
       </View>}
     />
-    {selection.active ? <View style={[styles.selectionBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-      {selection.working ? <View style={styles.working}><ActivityIndicator /><Note>Deleting…</Note></View> : <>
-        <Pressable accessibilityRole="button" accessibilityLabel="Move selected" disabled={!selection.selected.length || selectionLocked || !!problem}
-          onPress={selection.openMove} style={[styles.batchAction, (!selection.selected.length || selectionLocked || !!problem) && styles.disabled]}>
-          <Text style={[styles.batchLabel, { color: accent.reading }]}>Move</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Delete selected" disabled={!selection.selected.length || selectionLocked || !!problem}
-          onPress={selection.deleteSelected} style={[styles.batchAction, (!selection.selected.length || selectionLocked || !!problem) && styles.disabled]}>
-          <Text style={[styles.batchLabel, { color: INK.attention }]}>Delete</Text>
-        </Pressable>
-      </>}
+    {selection.active ? <View pointerEvents="box-none" style={[styles.selectionActions, { bottom: actionBottom }]}
+      onLayout={(event) => setActionHeight(event.nativeEvent.layout.height)}>
+      <LibrarySelectionAction action="Move" disabled={!selection.selected.length || selectionLocked || !!problem} onPress={selection.openMove} />
+      <LibrarySelectionAction action="Delete" disabled={!selection.selected.length || selectionLocked || !!problem} working={selection.working} onPress={selection.deleteSelected} />
     </View> : null}
-    {held ? <View style={[styles.reading, selection.active && { bottom: READING_BUTTON_PLACE.bottom + 64 + insets.bottom }]} pointerEvents="box-none">
+    {held ? <View style={[styles.reading, selection.active && { bottom: actionBottom + actionHeight + 12 }]} pointerEvents="box-none">
       <ReadingButton playing={held.playing} buffering={held.buffering} label="Return to the reading"
         onPress={() => navigation.navigate('Reader', { id: held.id })} />
     </View> : null}
@@ -192,11 +187,7 @@ function LibraryDocument({ entry, present, onPress, onActions, disabled, selecte
 }
 const READING_BUTTON_ROOM = READING_BUTTON_PLACE.bottom + 52 + 12;
 const styles = StyleSheet.create({
-  selectionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingTop: 8, backgroundColor: INK.panel },
-  batchAction: { minHeight: 44, minWidth: 80, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  batchLabel: { ...TEXT_EMPHASIZED.body },
-  disabled: { opacity: 0.4 },
-  working: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  selectionActions: { position: 'absolute', left: 22, right: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   banner: { paddingHorizontal: 16, paddingTop: 12 },
   empty: { alignItems: 'flex-start', gap: 12, padding: 24 },

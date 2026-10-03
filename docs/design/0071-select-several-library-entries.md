@@ -46,6 +46,12 @@ An execution error stops the batch at the first failure. Completed entries are n
 
 Failure does not imply that nothing changed. A failed entry may already have lost its Offline Narration while remaining in the Library. The app must report such partial outcomes honestly rather than promise rollback. Continuing past an error was turned down because a storage failure may affect every subsequent entry and spread partial changes further.
 
+## The bottom actions follow the navigation buttons
+
+Move and Delete are separate frosted-glass capsule buttons, Move on the left and Delete on the right. They retain their text labels; Delete stays red. The solid full-width bottom bar is removed, so the list remains visible behind the floating buttons. Enough scrolling room remains to bring the last entry above them, and they do not overlap the Reading Button.
+
+The glass follows the phone's light and dark appearances and its reduced-transparency setting without sacrificing legibility. Zero-selection and in-progress restrictions remain unchanged. A shared capsule and icon-only buttons were turned down: independent capsules are closer to the navigation buttons, while text keeps both actions unambiguous.
+
 ## Design review
 
-The owner accepted the individual choices and confirmed the complete brief for implementation on 2026-10-04 (#128). This extends the single-entry scope of decision 0069 without changing the meaning of Folder membership, movement or deletion.
+The owner accepted the individual choices and confirmed the complete brief for implementation on 2026-10-04 (#128). This extends the single-entry scope of decision 0069 without changing the meaning of Folder membership, movement or deletion. The owner subsequently approved the floating glass actions above and authorized merging to main and pushing after verification, without an additional owner inspection gate.
