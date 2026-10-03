@@ -52,3 +52,6 @@ __pycache__/
 
 # Sub-worktrees an agent creates for other agents (AGENTS.md, "Sub-worktrees")
 /.worktrees/
+
+# App Store screenshots and the script that resizes them; local only
+/.screenshots/
