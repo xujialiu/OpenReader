@@ -4,6 +4,8 @@
 
 The Library's add button opens a Drawer offering `Create folder` and `Import file`. Import file starts the existing import flow.
 
+_Extended by [decision 0071](0071-select-several-library-entries.md): the add button becomes `…`, retains these actions and adds selection for moving or deleting several entries. The single-entry behavior below applies outside selection mode._
+
 A Folder is a place, not a label. Each Document belongs to one Folder or sits at the Library root. Moving it into a Folder removes it from the root's immediate list; it does not copy the original file, change the Reading Position or discard Offline Narration.
 
 Folders can contain other Folders. The owner can organize Documents as, for example, Language learning → English → Fiction, entering and returning through the hierarchy.

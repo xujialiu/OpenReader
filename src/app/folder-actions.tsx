@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import type { DocumentId } from '../core/document';
-import { childFolders, folderAt, folderNameProblem, folderPath, folderSubtree, type FolderId } from '../core/folders';
+import { childFolders, folderAt, folderNameProblem, folderPath, folderSubtree, type FolderId, type LibraryTarget } from '../core/folders';
 import { INK } from './controls';
 import { Drawer, DrawerChevron, DrawerFooter, DrawerRow, DrawerRowText, DrawerScroll } from './drawer';
 import { RenameAlert } from './rename-alert';
@@ -10,18 +10,21 @@ import { useShell } from './routes';
 const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /** Kept mounted until the native dismissal finishes before handing over to Files. */
-export function AddDrawer({ visible, onClose, onImport }: { visible: boolean; onClose(): void; onImport(): void }) {
+export function AddDrawer({ visible, onClose, onImport, onSelect }: { visible: boolean; onClose(): void; onImport(): void; onSelect(): void }) {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
   const [naming, setNaming] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const importing = useRef(false);
   const parent = useRef<FolderId | null>(null);
-  return <Drawer visible={visible} title="Add" onClose={onClose} onDismiss={() => {
+  return <Drawer visible={visible} title="Library actions" onClose={onClose} onDismiss={() => {
     setNaming(false); setFailure(null);
     if (importing.current) { importing.current = false; onImport(); }
   }}>
     <DrawerScroll>
+      <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => { onClose(); onSelect(); }}>
+        <DrawerRowText>Select</DrawerRowText>
+      </DrawerRow>
       <DrawerRow icon="folder" disabled={busy || !!problem} onPress={() => { parent.current = tree.current; setNaming(true); }}>
         <DrawerRowText>Create folder</DrawerRowText>
       </DrawerRow>
@@ -41,14 +44,15 @@ export function AddDrawer({ visible, onClose, onImport }: { visible: boolean; on
 
 export type MoveTarget = { kind: 'folder'; id: FolderId } | { kind: 'document'; id: DocumentId };
 /** Shared by Document and Folder action drawers; exploring a destination never changes the browsing location. */
-export function MoveContent({ target, onMoved }: { target: MoveTarget; onMoved(): void }) {
+export function MoveContent({ target, targets, onMoved }: ({ target: MoveTarget; targets?: never } | { target?: never; targets: readonly LibraryTarget[] }) & { onMoved(): void }) {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
-  const source = target.kind === 'folder' ? folderAt(tree, target.id).parent : tree.documents[target.id] ?? null;
+  const source = target ? (target.kind === 'folder' ? tree.folders.find((folder) => folder.id === target.id)?.parent ?? null : tree.documents[target.id] ?? null) : tree.current;
   const [destination, setDestination] = useState<FolderId | null>(source);
   const [failure, setFailure] = useState<string | null>(null);
   const current = destination !== null && !tree.folders.some((folder) => folder.id === destination) ? null : destination;
-  const forbidden = target.kind === 'folder' ? folderSubtree(tree, target.id) : new Set<FolderId>();
+  const forbidden = new Set((targets ?? (target ? [target] : [])).flatMap((one) =>
+    one.kind === 'folder' && tree.folders.some((folder) => folder.id === one.id) ? [...folderSubtree(tree, one.id)] : []));
   const parent = current === null ? null : folderAt(tree, current).parent;
   return <DrawerScroll>
     <DrawerFooter>{folderPath(tree, current)}</DrawerFooter>
@@ -57,7 +61,8 @@ export function MoveContent({ target, onMoved }: { target: MoveTarget; onMoved()
     </DrawerRow> : null}
     <DrawerRow icon="check" disabled={current === source || busy || !!problem || (current !== null && forbidden.has(current))} onPress={() => {
       try {
-        if (target.kind === 'folder') library.folders.moveFolder(target.id, current);
+        if (targets) library.folders.moveEntries(targets, library.entries.map((entry) => entry.id), current);
+        else if (target.kind === 'folder') library.folders.moveFolder(target.id, current);
         else {
           if (!library.current(target.id)) throw new Error('That document is no longer in the Library.');
           library.folders.place(target.id, current);

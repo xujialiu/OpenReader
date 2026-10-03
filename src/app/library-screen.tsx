@@ -1,13 +1,16 @@
 /** The Library's current Folder: immediate child folders, then Documents in their existing recency order (#121). */
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { asDocumentId, type LibraryEntry } from '../core/document';
-import { childFolders, directFolderCounts, folderAt, folderSubtree, type Folder, type FolderId } from '../core/folders';
-import { DocumentRow, FolderRow, HeaderButton, INK, Note } from './controls';
+import { childFolders, directFolderCounts, folderAt, folderSubtree, targetKey, type Folder, type FolderId, type LibraryTarget } from '../core/folders';
+import { DocumentRow, FolderRow, HeaderButton, INK, Note, useAccent } from './controls';
 import { pickDocument } from './document';
 import { useDocumentCover } from './document-cover';
-import { AddDrawer, confirmFolderDeletion, FolderActions } from './folder-actions';
+import { AddDrawer, confirmFolderDeletion, FolderActions, MoveContent } from './folder-actions';
+import { Drawer } from './drawer';
+import { useLibrarySelection } from './use-library-selection';
 import { importDocument } from './import-document';
 import { documentFile } from './library';
 import { folderSummary } from './library-row-layout';
@@ -32,6 +35,8 @@ type Row = { kind: 'folder'; folder: Folder } | { kind: 'document'; entry: Libra
 export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const { settings, library, sync } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
+  const insets = useSafeAreaInsets();
+  const accent = useAccent();
   const reading = useHeldReading();
   const held = reading.current;
   const [picking, setPicking] = useState(false);
@@ -49,6 +54,18 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     await removeDownloads(document);
     library.remove(document);
   };
+  const rows: Row[] = [
+    ...childFolders(tree, tree.current).map((folder): Row => ({ kind: 'folder', folder })),
+    ...library.entries.filter((entry) => (tree.documents[entry.id] ?? null) === tree.current).map((entry): Row => ({ kind: 'document', entry })),
+  ];
+  const selection = useLibrarySelection(navigation, rows.map(rowTarget), removeDocument);
+  const selectionRef = useRef(selection);
+  useLayoutEffect(() => { selectionRef.current = selection; }, [selection]);
+  const selecting = selection.active;
+  const selectedCount = selection.selected.length;
+  const working = selection.working;
+  const selectedKeys = new Set(selection.selected.map(targetKey));
+  const selectionLocked = busy || selection.working || selection.moving || selection.confirming;
   const remove = (entry: LibraryEntry) => {
     void requestInventory(entry.id).then(() => Alert.alert('Delete this book?',
       `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
@@ -98,16 +115,20 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   }, [library]);
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: currentFolder?.name ?? 'Library',
-      headerLeft: () => currentFolder
+      title: selecting ? `${selectedCount} selected` : currentFolder?.name ?? 'Library',
+      headerLeft: () => selecting
+        ? <HeaderButton label={selectedCount === rows.length && rows.length > 0 ? 'Deselect all' : 'Select all'} onPress={() => selectionRef.current.selectAll()} disabled={selectionLocked || !rows.length} />
+        : currentFolder
         ? <HeaderButton icon="previous" label="Back to parent folder" onPress={() => visit(currentFolder.parent)} disabled={busy} />
         : <HeaderButton icon="settings" label="Settings" onPress={() => navigation.navigate('Settings')} />,
-      headerRight: () => <HeaderButton icon="plus" label={picking ? 'Adding…' : 'Add'} onPress={() => {
+      headerRight: () => selecting
+        ? <HeaderButton label="Cancel" onPress={() => selectionRef.current.cancel()} disabled={selectionLocked} />
+        : <HeaderButton icon="more" label={picking ? 'Adding…' : 'Library actions'} onPress={() => {
         importLocation.current = library.folders.getSnapshot().tree.current;
         setAdding(true);
-      }} disabled={picking || busy || library.loading || !!problem} />,
+      }} disabled={picking || busy || working || library.loading || !!problem} />,
     });
-  }, [navigation, currentFolder, visit, picking, busy, library, problem]);
+  }, [navigation, currentFolder, visit, picking, busy, library, problem, selecting, selectedCount, working, selectionLocked, rows.length]);
 
   const present = useMemo(() => {
     const found = new Set<string>();
@@ -118,10 +139,6 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     return found;
   }, [library.entries]);
   const counts = useMemo(() => directFolderCounts(tree, library.entries.map((entry) => entry.id)), [tree, library.entries]);
-  const rows: Row[] = [
-    ...childFolders(tree, tree.current).map((folder): Row => ({ kind: 'folder', folder })),
-    ...library.entries.filter((entry) => (tree.documents[entry.id] ?? null) === tree.current).map((entry): Row => ({ kind: 'document', entry })),
-  ];
   return <View style={styles.screen}>
     <FlatList<Row>
       key={tree.current ?? 'root'}
@@ -129,34 +146,57 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
       data={rows}
       keyExtractor={(row) => row.kind === 'folder' ? `folder:${row.folder.id}` : row.entry.id}
       renderItem={({ item }) => item.kind === 'folder'
-        ? <FolderRow title={item.folder.name} summary={folderSummary(counts.get(item.folder.id)?.documents ?? 0, counts.get(item.folder.id)?.folders ?? 0)} disabled={busy} onPress={() => visit(item.folder.id)} onActions={() => setFolderActions(item.folder.id)} />
-        : <LibraryDocument entry={item.entry} present={present.has(item.entry.id)} disabled={busy}
-          onPress={() => navigation.navigate('Reader', { id: item.entry.id })} onActions={() => setActions(item.entry)} />}
+        ? <FolderRow title={item.folder.name} summary={folderSummary(counts.get(item.folder.id)?.documents ?? 0, counts.get(item.folder.id)?.folders ?? 0)} disabled={selectionLocked} selected={selection.active ? selectedKeys.has(targetKey(rowTarget(item))) : undefined}
+          onPress={() => selection.active ? selection.toggle(rowTarget(item)) : visit(item.folder.id)} onActions={() => setFolderActions(item.folder.id)} />
+        : <LibraryDocument entry={item.entry} present={present.has(item.entry.id)} disabled={selectionLocked}
+          selected={selection.active ? selectedKeys.has(targetKey(rowTarget(item))) : undefined}
+          onPress={() => selection.active ? selection.toggle(rowTarget(item)) : navigation.navigate('Reader', { id: item.entry.id })} onActions={() => setActions(item.entry)} />}
       ListHeaderComponent={problem || library.note || busy ? <View style={styles.banner}>
         {problem ? <Note attention>{problem}</Note> : null}
         {library.note ? <Note attention>{library.note}</Note> : null}
-        {busy ? <Note>Deleting folder…</Note> : null}
+        {busy && !selection.working ? <Note>Deleting folder…</Note> : null}
       </View> : null}
       ListEmptyComponent={library.loading ? null : <View style={styles.empty}>
         <Text style={styles.emptyTitle}>{currentFolder ? 'No documents or folders yet' : 'Library is empty'}</Text>
         {settings.enabledProviders.length === 0 ? <Note attention>{NO_PROVIDER_SENTENCE}</Note> : null}
       </View>}
     />
-    {held ? <View style={styles.reading} pointerEvents="box-none">
+    {selection.active ? <View style={[styles.selectionBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      {selection.working ? <View style={styles.working}><ActivityIndicator /><Note>Deleting…</Note></View> : <>
+        <Pressable accessibilityRole="button" accessibilityLabel="Move selected" disabled={!selection.selected.length || selectionLocked || !!problem}
+          onPress={selection.openMove} style={[styles.batchAction, (!selection.selected.length || selectionLocked || !!problem) && styles.disabled]}>
+          <Text style={[styles.batchLabel, { color: accent.reading }]}>Move</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Delete selected" disabled={!selection.selected.length || selectionLocked || !!problem}
+          onPress={selection.deleteSelected} style={[styles.batchAction, (!selection.selected.length || selectionLocked || !!problem) && styles.disabled]}>
+          <Text style={[styles.batchLabel, { color: INK.attention }]}>Delete</Text>
+        </Pressable>
+      </>}
+    </View> : null}
+    {held ? <View style={[styles.reading, selection.active && { bottom: READING_BUTTON_PLACE.bottom + 64 + insets.bottom }]} pointerEvents="box-none">
       <ReadingButton playing={held.playing} buffering={held.buffering} label="Return to the reading"
         onPress={() => navigation.navigate('Reader', { id: held.id })} />
     </View> : null}
-    <AddDrawer visible={adding} onClose={() => setAdding(false)} onImport={() => void add()} />
+    <AddDrawer visible={adding} onClose={() => setAdding(false)} onImport={() => void add()} onSelect={selection.begin} />
+    <Drawer visible={selection.moving} title="Move to…" onClose={selection.closeMove}>
+      {selection.moving ? <MoveContent targets={selection.selected} onMoved={selection.moved} /> : null}
+    </Drawer>
     {actions ? <ReaderActions document={actions.id} movable onClose={() => setActions(null)} onDelete={() => remove(actions)} /> : null}
     {folderActions ? <FolderActions id={folderActions} onClose={() => setFolderActions(null)} onDelete={removeFolder} /> : null}
   </View>;
 }
-function LibraryDocument({ entry, present, onPress, onActions, disabled }: { entry: LibraryEntry; present: boolean; onPress(): void; onActions(): void; disabled?: boolean }) {
+function rowTarget(row: Row): LibraryTarget { return { kind: row.kind, id: row.kind === 'folder' ? row.folder.id : row.entry.id }; }
+function LibraryDocument({ entry, present, onPress, onActions, disabled, selected }: { entry: LibraryEntry; present: boolean; onPress(): void; onActions(): void; disabled?: boolean; selected?: boolean }) {
   const cover = useDocumentCover(entry);
-  return <DocumentRow title={entry.title} progress={progressOf(entry, present)} cover={cover} onPress={onPress} onLongPress={onActions} onActions={onActions} disabled={disabled} />;
+  return <DocumentRow title={entry.title} progress={progressOf(entry, present)} cover={cover} onPress={onPress} onLongPress={onActions} onActions={onActions} disabled={disabled} selected={selected} />;
 }
 const READING_BUTTON_ROOM = READING_BUTTON_PLACE.bottom + 52 + 12;
 const styles = StyleSheet.create({
+  selectionBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingTop: 8, backgroundColor: INK.panel },
+  batchAction: { minHeight: 44, minWidth: 80, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  batchLabel: { ...TEXT_EMPHASIZED.body },
+  disabled: { opacity: 0.4 },
+  working: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 12 },
   reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   banner: { paddingHorizontal: 16, paddingTop: 12 },
   empty: { alignItems: 'flex-start', gap: 12, padding: 24 },

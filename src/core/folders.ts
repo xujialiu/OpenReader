@@ -126,6 +126,49 @@ export function parseFolders(text: string): FolderTree {
   return tree;
 }
 
+export type LibraryTarget = { kind: 'folder' | 'document'; id: string };
+export const targetKey = (target: LibraryTarget): string => `${target.kind}:${target.id}`;
+
+/** Reject stale, cross-level or duplicate selections before any side effect. */
+export function selectionPlan(tree: FolderTree, targets: readonly LibraryTarget[], documents: readonly string[]) {
+  if (!targets.length) throw new Error('Select at least one entry.');
+  const live = new Set(documents);
+  const keys = new Set<string>();
+  const folders = new Set<FolderId>();
+  const plans = targets.map((target) => {
+    const key = targetKey(target);
+    if (keys.has(key)) throw new Error('An entry was selected twice.');
+    keys.add(key);
+    const parent = target.kind === 'folder' ? folderAt(tree, target.id).parent : tree.documents[target.id] ?? null;
+    if (parent !== tree.current || (target.kind === 'document' && !live.has(target.id))) {
+      throw new Error('The selected entries changed. Review the selection and try again.');
+    }
+    const subtree = target.kind === 'folder' ? folderSubtree(tree, target.id) : new Set<FolderId>();
+    for (const id of subtree) folders.add(id);
+    return { target, documents: target.kind === 'document' ? [target.id] : documents.filter((id) => subtree.has(tree.documents[id])) };
+  });
+  return { plans, folders, documents: new Set(plans.flatMap((plan) => plan.documents)) };
+}
+
+/** Build the complete move in memory; conflict or write failure never publishes an earlier subset. */
+export function moveSelection(tree: FolderTree, targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null): FolderTree {
+  const plan = selectionPlan(tree, targets, documents);
+  parentExists(tree, parent);
+  if (parent === tree.current) throw new Error('Choose a different destination.');
+  if (parent !== null && plan.folders.has(parent)) throw new Error('A selection cannot be moved into itself or its subfolders.');
+  let next = tree;
+  for (const target of targets) {
+    if (target.kind === 'document') next = placeDocument(next, target.id, parent);
+    else {
+      const folder = folderAt(next, target.id);
+      const problem = folderNameProblem(next, folder.name, parent, target.id);
+      if (problem) throw new Error(`“${folder.name}”: ${problem}`);
+      next = putFolder(next, { ...folder, parent });
+    }
+  }
+  return next;
+}
+
 export interface FolderSnapshot { tree: FolderTree; busy: boolean; problem: string | null }
 /** Synchronous durable mutations; listeners see a change only after its write succeeds. */
 export function createFolderStore(io: { read(): string | null; write(text: string): void; id(): string }) {
@@ -165,6 +208,25 @@ export function createFolderStore(io: { read(): string | null; write(text: strin
     rename(id: FolderId, name: string) { writable(); save(putFolder(snapshot.tree, { ...folderAt(snapshot.tree, id), name })); },
     moveFolder(id: FolderId, parent: FolderId | null) { writable(); save(putFolder(snapshot.tree, { ...folderAt(snapshot.tree, id), parent })); },
     place(document: string, parent: FolderId | null) { writable(); save(placeDocument(snapshot.tree, document, parent)); },
+    moveEntries(targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null) {
+      writable();
+      save(moveSelection(snapshot.tree, targets, documents, parent));
+    },
+    /** One lock covers the whole batch, including standalone Documents and gaps between Folders. */
+    async deleteEntries(targets: readonly LibraryTarget[], documents: readonly string[], remove: (id: string) => Promise<void>, completed: (target: LibraryTarget) => void) {
+      writable();
+      const { plans } = selectionPlan(snapshot.tree, targets, documents);
+      snapshot = { ...snapshot, busy: true }; emit();
+      try {
+        for (const plan of plans) {
+          for (const id of plan.documents) await remove(id);
+          if (plan.target.kind === 'folder') save(withoutFolder(snapshot.tree, plan.target.id));
+          completed(plan.target);
+        }
+      } finally {
+        snapshot = { ...snapshot, busy: false }; emit();
+      }
+    },
     /** Lock organization/imports while paid audio and Library entries are removed. On failure keep the remaining subtree reachable for retry. */
     async deleteTree(id: FolderId, documents: readonly string[], remove: (document: string) => Promise<void>) {
       writable();

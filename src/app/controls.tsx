@@ -596,34 +596,34 @@ export function HeaderButton({ label, icon, title, onPress, disabled }: {
  * 0060). The row's label is set rather than read off its words, so VoiceOver
  * says the whole name, and says it once.
  */
-export function DocumentRow({ title, progress, cover, onPress, onLongPress, onActions, disabled }: {
-  title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void; onActions(): void; disabled?: boolean;
+export function DocumentRow({ title, progress, cover, onPress, onLongPress, onActions, disabled, selected }: {
+  title: string; progress: string; cover?: string | null; onPress(): void; onLongPress?(): void; onActions(): void; disabled?: boolean; selected?: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   return <LibraryRow title={title} summary={progress} label={`${title}, ${progress}`} actionsLabel={`Actions for ${title}`}
-    onPress={onPress} onLongPress={onLongPress} onActions={onActions} disabled={disabled}
+    onPress={onPress} onLongPress={onLongPress} onActions={onActions} disabled={disabled} selected={selected}
     illustration={<View style={styles.cover}>
       {cover && failed !== cover ? <Image source={{ uri: cover }} style={styles.coverImage}
         resizeMode="contain" onError={() => setFailed(cover)} /> : <Icon name="book" color={INK.quiet} size={28} />}
     </View>} />;
 }
 
-export function FolderRow({ title, summary, onPress, onActions, disabled }: {
-  title: string; summary: string; onPress(): void; onActions(): void; disabled?: boolean;
+export function FolderRow({ title, summary, onPress, onActions, disabled, selected }: {
+  title: string; summary: string; onPress(): void; onActions(): void; disabled?: boolean; selected?: boolean;
 }) {
   return <LibraryRow title={title} summary={summary} label={`Folder, ${title}, ${summary}`} actionsLabel={`Actions for folder ${title}`}
-    onPress={onPress} onLongPress={onActions} onActions={onActions} disabled={disabled} illustration={<FolderArtwork />} />;
+    onPress={onPress} onLongPress={onActions} onActions={onActions} disabled={disabled} selected={selected} illustration={<FolderArtwork />} />;
 }
 
 /** One layout for both kinds: shared height, illustration column, title, second line and action hit target. */
-function LibraryRow({ title, summary, label, actionsLabel, illustration, onPress, onLongPress, onActions, disabled }: {
+function LibraryRow({ title, summary, label, actionsLabel, illustration, onPress, onLongPress, onActions, disabled, selected }: {
   title: string; summary: string; label: string; actionsLabel: string; illustration: ReactNode;
-  onPress(): void; onLongPress?(): void; onActions(): void; disabled?: boolean;
+  onPress(): void; onLongPress?(): void; onActions(): void; disabled?: boolean; selected?: boolean;
 }) {
   const { fontScale } = useWindowDimensions();
   return <View>
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} onLongPress={onLongPress}
-      disabled={disabled} accessibilityState={{ disabled: !!disabled }}
+    <Pressable accessibilityRole={selected === undefined ? 'button' : 'checkbox'} accessibilityLabel={label} onPress={onPress} onLongPress={selected === undefined ? onLongPress : undefined}
+      disabled={disabled} accessibilityState={{ disabled: !!disabled, ...(selected === undefined ? {} : { checked: selected }) }}
       style={({ pressed }) => [styles.documentRow, { height: libraryRowHeight(fontScale) }, pressed && styles.pressed]}>
       <View style={styles.illustration} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{illustration}</View>
       <View style={styles.documentWords}>
@@ -631,10 +631,19 @@ function LibraryRow({ title, summary, label, actionsLabel, illustration, onPress
         <Text style={styles.rowProgress} numberOfLines={1}>{summary}</Text>
       </View>
     </Pressable>
-    <Pressable accessibilityRole="button" accessibilityLabel={actionsLabel} onPress={onActions} disabled={disabled}
+    <Pressable accessibilityRole="button" accessibilityLabel={actionsLabel} onPress={selected === undefined ? onActions : onPress} disabled={disabled}
+      accessible={selected === undefined} accessibilityElementsHidden={selected !== undefined} importantForAccessibility={selected === undefined ? 'auto' : 'no-hide-descendants'}
       accessibilityState={{ disabled: !!disabled }} style={styles.documentActions}>
-      <Icon name="more" color={INK.quiet} size={DOCUMENT_ACTIONS.icon} />
+      {selected === undefined ? <Icon name="more" color={INK.quiet} size={DOCUMENT_ACTIONS.icon} /> : <SelectionCircle selected={selected} />}
     </Pressable>
+  </View>;
+}
+
+function SelectionCircle({ selected }: { selected: boolean }) {
+  const borders = useBorders();
+  const accent = useAccent();
+  return <View style={[styles.selectionCircle, { borderColor: selected ? accent.reading : borders.quiet }, selected && { backgroundColor: accent.reading }]}>
+    {selected ? <Icon name="check" size={16} color={INK.page} /> : null}
   </View>;
 }
 
@@ -647,6 +656,7 @@ const DOCUMENT_ACTIONS = { right: 12, padding: 10, icon: 22 };
 const DOCUMENT_ROW_PADDING = 22;
 
 const styles = StyleSheet.create({
+  selectionCircle: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.4 },
   note: { ...TEXT.footnote, color: INK.quiet },
   noteAttention: { color: INK.attention },
