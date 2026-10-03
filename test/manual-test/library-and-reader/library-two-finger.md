@@ -1,61 +1,34 @@
-# Library two-finger range selection (#128, beta4)
+# Library two-finger range selection (#128)
 
-`LibraryTwoFingerProbe.swift` drives the Library's two-finger range selection
-through the same private XCUIAutomation synthesis as
-[`../downloads/TwoFingerProbe.swift`](../downloads/TwoFingerProbe.swift)
-(ADR 0045): one `XCPointerEventPath` per finger in an
-`XCSynthesizedEventRecord`. The `Fingers` enum is copied into the file because
-`run-probe.sh` compiles one self-contained Swift file per probe.
+`LibraryTwoFingerProbe.swift` uses the two-pointer XCUIAutomation synthesis from `../downloads/TwoFingerProbe.swift` (ADR 0045). It sends real touches and reads the resulting selection from the accessibility tree. The helper is copied because the kit compiles one self-contained probe file.
 
 ```sh
-bash test/manual-test/kit/run-probe.sh LibraryTwoFingerProbe SIMULATOR_UDID NEW_OUTPUT_DIR \
-  [-only-testing:LibraryTwoFingerProbe/testName ...]
+TEST_RUNNER_OPENREADER_METRO_PORT=8082 \
+  bash test/manual-test/kit/run-probe.sh LibraryTwoFingerProbe SIMULATOR_UDID OUTPUT_DIR \
+  -collect-test-diagnostics never -test-timeouts-enabled YES \
+  -maximum-test-execution-time-allowance 60
 ```
 
-Prerequisites, all verified by the probe itself: the Debug app is installed;
-the Library root holds at least 8 rows at the default text size (rows are
-84 pt tall from y=128 on the 440x956 screen; the probe's fixed coordinates
-assume exactly that layout); the simulator's own volume is 0 (the runner
-checks); the app is not already in selection mode (a relaunch clears it).
+The Debug app must be installed, its Metro running, and the simulator volume zero. Seed the Library root with ten rows, first a Folder named Scratch. These probes currently use default text size on the iPhone 17 Pro Max's 440×956-point display: 84-point rows beginning at y=128. They do not import or delete content. Adapt coordinates for other devices rather than assuming the same geometry. Each method relaunches, pinning the app to `OPENREADER_METRO_PORT` from the test runner (default 8082), and requires the normal Library and its first row to be hittable.
 
-Methods, each reading state off the accessibility tree (header `N selected`,
-row `value: checkbox, checked`):
+## Checks
 
-- `testSweepAddsThenReverseRetracts` — from normal mode, two fingers down over
-  rows 1-6 enter selection and add the range (6); the reverse sweep over those
-  checked rows removes back to the sweep-start snapshot (0); a further sweep
-  accumulates again; Cancel restores the normal Library.
-- `testOneFingerScrollDoesNotSelect` — the same track with one finger scrolls
-  and never enters selection.
-- `testEdgeHoldAutoScrollsRange` — two fingers held against the list's bottom
-  edge should auto-scroll the range beyond the screen.
-- `testCancelAfterSweepRestoresNormal` — Cancel after a sweep is an ordinary
-  exit with rows back to buttons.
+- `testSweepAddsThenReverseRetracts`: normal mode → rows 1–6 selected; a separate sweep starting on those checked rows removes them, leaving selection mode active at zero; another sweep adds them again. Cancel restores normal mode.
+- `testSingleSweepReversalRestoresRows`: one uninterrupted contact goes from row 1 to 6 and back to 3. Only rows 1–3 remain selected.
+- `testOneFingerScrollDoesNotSelect`: one finger changes the first row's vertical position without entering selection. Checking only that selection stayed off would not prove scrolling worked.
+- `testEdgeHoldAutoScrollsRange`: a short horizontal sweep enters selection; Select all measures the total, Deselect all clears it. A new sweep begins at row 1 and holds four points above the native Move button for 1.5 seconds. It must select all ten rows, including the initially offscreen rows. The measured button frame, not a guessed y-coordinate, locates the edge band.
+- `testCancelAfterSweepRestoresNormal`: Cancel after direct two-finger entry restores ordinary rows.
 
-What it cannot prove: the exact auto-scroll band/speed (the edge-hold method
-needs the hold point inside the band above the floating actions); Retract
-end-state adjudication — measured twice with different gesture timings: the
-mode stayed at `0 selected` once and exited selection at zero once; which of
-the two matches Files is the owner's call, not this probe's. Any change to row
-height, the header, or the list insets shifts every hard-coded y and the
-row-bound counts (y=590 is mid-row-6 → 6 selected, not 5).
+The tests cannot establish storage-failure behavior, VoiceOver operation, paid Download cancellation, or every device/text-size combination. Floating-action colour, reduced transparency and XXXL layout are separately checked with device screenshots.
 
-## Pitfalls measured here (2026-10-04, beta4)
+## Diagnosis and failed runs, 2026-10-04
 
-- **A probe launch without `-RCT_jsLocation` silently tests the wrong tree.**
-  With `RCTMetroPort` empty in the app's Info.plist, `XCUIApplication.launch()`
-  fell back to port 8081 and ran another checkout's older bundle: the sweep
-  "failed" against code with no selection at all. Set
-  `app.launchArguments = ["-RCT_jsLocation", "localhost:8082"]` (the probe
-  does) and confirm the Debug Log's `[launch]` line names the intended beta.
-- **Count the row bounds before asserting a sweep's total.** The first
-  expected `5 selected` was an off-by-one: y=590 lands mid-row-6, and the
-  app's own tree (`value: checkbox, checked` on rows 1-6, header `6 selected`)
-  proved the sweep correct. Read the post-gesture tree from the xcresult
-  attachments (`xcrun xcresulttool export attachments`) before calling a sweep
-  failed — `XCTAssertTrue` records the failure and the method still runs, so
-  the capture after a failed assert holds the real state.
-- **Gesture timing moves the retract end-state.** Drag window 0.2-1.4 s ended
-  retracted at `0 selected` (mode still active); window 0-1.2 s with a 0.2 s
-  pause before lift ended with selection mode exited at zero. Same rows, same
-  direction. Adjudicate against Files before fixing either side.
+All failed artifacts were retained outside the repository under `/tmp/openreader-sel128-tf/` and `/tmp/openreader-sel128-parent/`.
+
+1. The original probe omitted `-RCT_jsLocation` and loaded another checkout on 8081. The intended simulator appeared in that Metro's `/json/list`. Pin every XCTest launch, not only shell launches; verify the app's Debug Log version.
+2. y=590 lands in row 6, not row 5. Read captured row frames before asserting totals. A first assertion failure does not stop XCTest, so later captures can be misleading if their prerequisites failed.
+3. The original edge probe started at row 7 in a ten-row list but expected eight selected, and held at y=780 outside the edge band. Neither could establish edge scrolling. The corrected probe starts at row 1 and measures the action frame.
+4. The alleged zero-selection automatic exit was not established: the preceding sweep in that raw run already failed to enter selection. Zero stays in selection mode, as approved; it is not a new owner decision.
+5. Even with corrected geometry, the parent reproduced a real recognizer race twice: horizontal entry worked, but a vertical two-finger sweep produced native scroll offsets down to approximately -261 and no selection-pan start. Wrapping the Library ScrollView in `Gesture.Native().requireExternalGestureToFail(selectionPan)` fixed it. The corrected four-method suite passed with zero failures before the single-contact reversal check was added. The chapter drawer retains its existing gesture attachment.
+6. Manual pan activation was rejected: gesture-handler's state manager warned that synchronous activation requires Reanimated, which is not installed. No dependency was added, and that experiment was removed.
+7. Xcode's automatic post-failure `simctl diagnose --timeout=600` repeatedly hung after test summaries had already been written. `-collect-test-diagnostics never` preserves the ordinary log and xcresult while avoiding that unrelated wait. One parent attempt instead stalled while setting up the launch automation session before any gesture; the bounded call was terminated, and an explicit launch to the correct Metro restored the next test. No app-data erase was used.

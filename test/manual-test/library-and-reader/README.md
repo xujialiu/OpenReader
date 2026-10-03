@@ -78,9 +78,9 @@ two-pointer technique, and reads the result off the accessibility tree: adds,
 reverse retract, accumulate, one-finger non-selection, edge auto-scroll,
 Cancel. Launches the app with `-RCT_jsLocation` pinned to this checkout's
 Metro (a launch without it silently loads another Metro's older bundle), and
-counts row bounds before asserting sweep totals. Recipe, measured pitfalls and
-the retract end-state wobble:
-[library-two-finger.md](library-and-reader/library-two-finger.md).
+counts row bounds before asserting sweep totals. Recipe, corrected edge-band
+checks and recognizer-priority diagnosis:
+[library-two-finger.md](library-two-finger.md).
 
 ## Long-press lookup and translation (issue #73, `TranslationProbe.swift`)
 

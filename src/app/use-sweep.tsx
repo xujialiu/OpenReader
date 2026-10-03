@@ -54,6 +54,9 @@ class SweepController<T> {
   } | null = null;
 
   readonly gesture = sweepGesture(this);
+  // The Library wraps its ScrollView with this dependency: without it a vertical
+  // two-finger drag can become a native scroll before the selection pan starts.
+  readonly nativeGesture = Gesture.Native().requireExternalGestureToFail(this.gesture);
 
   private readonly Cell = recordingCell<T>(this.extents);
 
@@ -186,5 +189,5 @@ export function useRowSweep<T>(rows: SelectableRows, select: (next: Set<string>)
   // After render, never during it: the gesture reads them only when fingers move.
   useEffect(() => controller.show(rows, select));
   useEffect(() => () => controller.end(), [controller]);
-  return { gesture: controller.gesture, list: controller.list };
+  return { gesture: controller.gesture, nativeGesture: controller.nativeGesture, list: controller.list };
 }

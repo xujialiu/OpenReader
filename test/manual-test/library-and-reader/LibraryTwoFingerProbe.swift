@@ -100,8 +100,8 @@ final class LibraryTwoFingerProbe: XCTestCase {
   /// The header's `N selected` count, or nil outside selection mode.
   func selectedCount() -> Int? {
     let header = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^\\d+ selected$")).firstMatch
-    guard header.exists, let label = header.value as? String ?? Optional(header.label as String) else { return nil }
-    return Int(label.components(separatedBy: " ").first ?? "")
+    guard header.exists else { return nil }
+    return Int(header.label.components(separatedBy: " ").first ?? "")
   }
 
   func waitCount(_ expected: Int?, timeout: TimeInterval = 8) -> Bool {
@@ -116,11 +116,14 @@ final class LibraryTwoFingerProbe: XCTestCase {
   /// has no selection at all.
   func launchAtRoot() {
     app.terminate()
-    app.launchArguments = ["-RCT_jsLocation", "localhost:8082"]
+    let port = ProcessInfo.processInfo.environment["OPENREADER_METRO_PORT"] ?? "8082"
+    app.launchArguments = ["-RCT_jsLocation", "localhost:\(port)"]
     app.launch()
     let first = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Folder, Scratch'")).firstMatch
     XCTAssertTrue(first.waitForExistence(timeout: 20), "Library root did not show its first row")
     XCTAssertNil(selectedCount(), "Library launched already in selection mode")
+    XCTAssertTrue(app.buttons["Library actions"].waitForExistence(timeout: 10))
+    XCTAssertTrue(until(5) { first.isHittable })
   }
 
   func cancelSelection() {
@@ -149,10 +152,25 @@ final class LibraryTwoFingerProbe: XCTestCase {
     capture("cancelled-normal")
   }
 
+  /// A single continuous contact moves out and back: rows beyond the new end
+  /// return to their pre-gesture state, rather than remaining selected.
+  func testSingleSweepReversalRestoresRows() {
+    launchAtRoot()
+    var track = Fingers.line(CGPoint(x: 220, y: 170), CGPoint(x: 220, y: 590), start: 0.2, seconds: 0.8)
+    track += Fingers.line(CGPoint(x: 220, y: 590), CGPoint(x: 220, y: 338), start: 1.0, seconds: 0.8).dropFirst()
+    Fingers.play(Fingers.pair(track, lift: 2.0), name: "single-contact-reversal", in: self)
+    XCTAssertTrue(waitCount(3), "Returning to row 3 in the same contact must restore rows 4-6")
+    capture("single-contact-reversal-3")
+    cancelSelection()
+  }
+
   /// One finger over the same track is an ordinary scroll: no selection.
   func testOneFingerScrollDoesNotSelect() {
     launchAtRoot()
+    let first = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Folder, Scratch'")).firstMatch
+    let originalTop = first.frame.minY
     Fingers.play([Fingers.finger(Fingers.line(CGPoint(x: 220, y: 600), CGPoint(x: 220, y: 200), start: 0.2, seconds: 0.6), lift: 1.0)], name: "one-finger", in: self)
+    XCTAssertTrue(until(3) { !first.exists || first.frame.minY < originalTop - 20 }, "One finger did not actually scroll the list")
     XCTAssertTrue(until(3) { self.selectedCount() == nil }, "One-finger scroll entered selection mode")
     let library = app.staticTexts["Library"]
     XCTAssertTrue(library.waitForExistence(timeout: 5), "Library header lost after one-finger scroll")
@@ -161,12 +179,20 @@ final class LibraryTwoFingerProbe: XCTestCase {
   /// Two fingers held against the bottom edge auto-scroll the range beyond the screen.
   func testEdgeHoldAutoScrollsRange() {
     launchAtRoot()
-    // Hold inside row 8 (716-800), above the row's bottom edge: the gesture's
-    // bottom band excludes the floating actions and the list's last points.
-    var track = Fingers.line(CGPoint(x: 220, y: 660), CGPoint(x: 220, y: 780), start: 0.2, seconds: 0.5)
-    track += Fingers.hold(CGPoint(x: 220, y: 780), seconds: 3.5, start: 0.7)
-    Fingers.play(Fingers.pair(track, lift: 4.3), name: "edge-hold", in: self)
-    XCTAssertTrue(waitCount(8, timeout: 10), "Edge hold did not auto-scroll to at least 8 selected (count \(selectedCount().map(String.init) ?? "none"))")
+    // Enter with a short horizontal sweep, then clear only the selection so
+    // the native action's measured frame defines the visible list edge.
+    Fingers.play(Fingers.pair(Fingers.line(CGPoint(x: 200, y: 170), CGPoint(x: 240, y: 170), start: 0.2, seconds: 0.5), lift: 0.9), name: "enter-selection", in: self)
+    guard waitCount(1) else { XCTFail("Horizontal two-finger entry failed"); capture("entry-failed"); return }
+    app.buttons["Select all"].tap()
+    let total = selectedCount() ?? 0
+    XCTAssertGreaterThanOrEqual(total, 10, "Seed at least 10 root rows")
+    app.buttons["Deselect all"].tap()
+    XCTAssertTrue(waitCount(0))
+    let edge = app.buttons["Move selected"].frame.minY - 4
+    var track = Fingers.line(CGPoint(x: 220, y: 170), CGPoint(x: 220, y: edge), start: 0.2, seconds: 1.0)
+    track += Fingers.hold(CGPoint(x: 220, y: edge), seconds: 1.5, start: 1.2)
+    Fingers.play(Fingers.pair(track, lift: 2.9), name: "edge-hold", in: self)
+    XCTAssertTrue(waitCount(total, timeout: 5), "Edge hold did not reach all \(total) rows (count \(selectedCount().map(String.init) ?? "none"))")
     capture("edge-autoscrolled")
     cancelSelection()
   }

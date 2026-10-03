@@ -15,4 +15,4 @@
  * simulator. `app.config.ts` reads both native numbers from it, and
  * test/app-config.test.ts holds it, them and `package.json` together.
  */
-export const APP_VERSION = '1.0.0 (5)-beta4';
+export const APP_VERSION = '1.0.0 (5)-beta5';

@@ -6,7 +6,7 @@ import { useRowSweep, type SelectableRows } from '../../src/app/use-sweep';
 
 const handlers = vi.hoisted(() => ({ start: (_event: { y: number }) => {}, update: (_event: { y: number }) => {}, end: () => {} }));
 vi.mock('react-native', () => ({ View: 'View' }));
-vi.mock('react-native-gesture-handler', () => ({ Gesture: { Pan: () => {
+vi.mock('react-native-gesture-handler', () => ({ Gesture: { Native: () => ({ requireExternalGestureToFail: vi.fn() }), Pan: () => {
   const gesture = {
     minPointers: vi.fn(() => gesture), minDistance: vi.fn(() => gesture), runOnJS: vi.fn(() => gesture),
     onStart: (fn: typeof handlers.start) => { handlers.start = fn; return gesture; },

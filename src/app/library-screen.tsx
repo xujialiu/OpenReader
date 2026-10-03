@@ -161,6 +161,8 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const counts = useMemo(() => directFolderCounts(tree, library.entries.map((entry) => entry.id)), [tree, library.entries]);
   return <View style={styles.screen}>
     <GestureDetector gesture={sweep.gesture}>
+    <View style={styles.list} collapsable={false}>
+    <GestureDetector gesture={sweep.nativeGesture}>
     <FlatList<Row>
       {...sweep.list}
       style={styles.list}
@@ -184,6 +186,8 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
         {settings.enabledProviders.length === 0 ? <Note attention>{NO_PROVIDER_SENTENCE}</Note> : null}
       </View>}
     />
+    </GestureDetector>
+    </View>
     </GestureDetector>
     {selection.active ? <View pointerEvents="box-none" style={[styles.selectionActions, { bottom: actionBottom }]}
       onLayout={(event) => setActionHeight(event.nativeEvent.layout.height)}>
