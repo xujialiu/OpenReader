@@ -99,3 +99,9 @@
   after `background` and before the end of the background time (27 s). Read the
   crossing from the task's own `current` against the app's `background` event
   (`download-ahead.cjs` or `download-sampler.cjs`), not from the script's mark.
+
+## `lock-device.sh home` can hang for minutes after the probe has errored (#128, 2026-10-04)
+
+- **Symptom**: on a session-made iPhone 17 Pro Max (iOS 27.0), `bash lock-device.sh UDID home` printed nothing and a 90 s caller timeout killed the wrapper; the probe's own log (`home.log`) ended in an xcodebuild error naming a result-bundle staging path, and an orphaned `simctl diagnose -l -b --timeout=600 …` (PID kept in the run report) went on staging logs.
+- **Cause**: the `testHome` run failed and xcodebuild's post-run diagnostics staging (`simctl diagnose`, up to 600 s) outlived every reasonable wait; lock and unlock in the same script passed in 3.6 s each moments before.
+- **Fix**: run `home` with a bounded caller timeout and treat a hang as a failed attempt, not a silent pass: check for the orphaned `simctl diagnose` child, keep its log and the `xcresult`, then kill that PID (it serves a dead run you own). Background-state coverage that needs only the app's lifecycle, not the Home gesture itself, can ride the lock cycle instead: a simulated lock is measured (#75, above) to pass `inactive` → brief `active` → `background`, so "survives background" evidence from a lock/unlock round trip covers the same app-level events the Home press produces.
