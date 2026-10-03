@@ -130,21 +130,26 @@ describe('ADR 0001: ios/ and android/ are generated, never committed', () => {
   });
 });
 
-describe('AGENTS.md: every app change carries a beta version', () => {
-  it('uploads a build as the version it leads to, the same in app.config.ts and package.json, in a form iOS accepts (#108)', () => {
-    // app.config.ts's becomes CFBundleShortVersionString: integers and dots,
-    // never the beta suffix (ITMS-90060). It is APP_VERSION without the beta,
-    // because a released version takes no more uploads (ITMS-90186), so a beta
-    // labelled with the last release would be refused.
-    expect(config.version).toBe(manifest.version);
-    expect(config.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(config.version).toBe(APP_VERSION.replace(/-beta[1-9]\d*$/, ''));
+describe('MEMORY/app-change.md: every app change carries a beta version (#127)', () => {
+  // `x.y.z (n)` for an upload, `x.y.z (n)-betaN` for each change before it.
+  const shown = /^(\d+\.\d+\.\d+) \(([1-9]\d*)\)(?:-beta([1-9]\d*))?$/.exec(APP_VERSION);
+
+  it('shows in Settings the Version, the Build Number in brackets, and the Beta if there is one', () => {
+    expect(shown, `${APP_VERSION} is neither 'x.y.z (n)' nor 'x.y.z (n)-betaN'`).not.toBeNull();
   });
 
-  it('shows in Settings that version, or a beta of it', () => {
-    const shown = /^(\d+\.\d+\.\d+)(?:-beta([1-9]\d*))?$/.exec(APP_VERSION);
-    expect(shown, `${APP_VERSION} is neither X.Y.Z nor X.Y.Z-betaN`).not.toBeNull();
-    expect(shown![1]).toBe(manifest.version);
+  it('uploads a build as the Version it leads to, the same in app.config.ts and package.json, in a form iOS accepts (#108)', () => {
+    // app.config.ts's becomes CFBundleShortVersionString: integers and dots,
+    // never the bracket or the beta (ITMS-90060). It is the Version the tree
+    // leads to, because a released version takes no more uploads (ITMS-90186),
+    // so a beta labelled with the last release would be refused.
+    expect(config.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(config.version).toBe(shown![1]);
+    expect(config.version).toBe(manifest.version);
+  });
+
+  it('gives CFBundleVersion the Build Number Settings shows, so the line names the upload', () => {
+    expect(config.ios?.buildNumber).toBe(shown![2]);
   });
 });
 

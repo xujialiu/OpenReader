@@ -5,19 +5,33 @@ In order: set the beta version, hand the tree to the tester, then leave the late
 ## Every app change carries a beta version
 
 Settings shows `APP_VERSION` from `app-version.ts`, so the owner can read off
-the device which build is running. Every app change — each one that ends with
-the latest app in the simulator — sets it before the tree goes to the tester:
-the next patch version plus `-beta1` after a release (`0.0.1` → `0.0.2-beta1`),
-then `-beta2`, `-beta3`, … for each later change. Minor and major bumps are the
-owner's call. `app.config.ts` takes its version from `APP_VERSION` without the
-`-beta<n>`, and `package.json` carries the same numbers, so the first `-beta1`
-of a new version moves `package.json` too; the comment on `version` in
-`app.config.ts` says why.
+the device which build is running. It is `x.y.z (n)-betaN`: the Version, Build
+Number and Beta of CONTEXT.md (#127, ADR 0070). Debug Mode adds `-debug`.
+Every app change sets it before the tree goes to the tester, meaning each change
+that ends with the latest app in the simulator:
 
-Worktrees that start from the same base can pick the same number. Before naming
+- **The first change after an upload** raises the Build Number by one and starts
+  the Beta at 1. Build 4 was `1.0.0 (4)`, so the next change is
+  `1.0.0 (5)-beta1`.
+- **Each later change** takes the next Beta: `1.0.0 (5)-beta2`, `-beta3`, ….
+- **The upload** drops the Beta: `1.0.0 (5)`. The procedure is in
+  `docs/release-to-app-store.md`.
+- **The Version** (`x.y.z`) changes only when the owner says so. Uploads,
+  submissions and new features leave it as it is. When the owner names a new
+  Version, `npm version <x.y.z> --no-git-tag-version` moves `package.json` with
+  it.
+
+Write it exactly like that: no `v`, and a space before the bracket. Every
+record that names a build uses the same form, including notes, test records,
+commit subjects and issue comments. Records written before #127 stay as they
+were written. `app.config.ts` reads both native numbers from `APP_VERSION`, and
+test/app-config.test.ts fails on any other form.
+
+Worktrees that start from the same base can pick the same Beta. Before naming
 one, read `app-version.ts` on `main` and in each worktree (`git worktree list`)
-and take the next after the highest. The number narrows which build is running;
-the change itself, seen in the running app, proves it is the latest.
+and take the next after the highest with the same Build Number. The number
+narrows down which build is running. Seeing the change itself in the running app
+is what proves it is the latest.
 
 ## Delegate final iOS verification
 

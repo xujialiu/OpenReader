@@ -37,11 +37,13 @@ describe('DEBUG_MODE', () => {
 });
 
 describe('the version Settings shows', () => {
-  it('ends in -debug in Debug Mode and is the beta alone otherwise', async () => {
+  it('ends in -debug in Debug Mode and is the version alone otherwise', async () => {
     const { shownVersion } = await modeWith(undefined, false);
-    expect(shownVersion('0.0.2-beta51', true)).toBe('0.0.2-beta51-debug');
-    expect(shownVersion('0.0.2-beta51', false)).toBe('0.0.2-beta51');
+    expect(shownVersion('1.0.0 (5)-beta1', true)).toBe('1.0.0 (5)-beta1-debug');
+    expect(shownVersion('1.0.0 (5)-beta1', false)).toBe('1.0.0 (5)-beta1');
+    // An upload has no beta, and the owner's Debug Mode install of it says so (#127).
+    expect(shownVersion('1.0.0 (5)', true)).toBe('1.0.0 (5)-debug');
     // Its default is the build's own answer.
-    expect(shownVersion('0.0.2-beta51')).toBe('0.0.2-beta51');
+    expect(shownVersion('1.0.0 (5)-beta1')).toBe('1.0.0 (5)-beta1');
   });
 });

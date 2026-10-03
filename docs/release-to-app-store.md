@@ -12,14 +12,21 @@ The owner set these on 2026-09-30.
   - The working tree must be clean, and HEAD must equal `origin/main`.
   - Start every build from `npx expo prebuild --platform ios --clean`, never from an `ios/` left over from earlier work.
   - A Debug Mode build (ADR 0054) is for the owner's phone only. Do not upload one.
-- **Version.** `app.config.ts` derives `CFBundleShortVersionString` from
-  `APP_VERSION` minus its `-beta<n>` (#108). A beta therefore uploads as the
-  version it leads to, for example 1.0.0-beta3 as 1.0.0. The build you submit has
-  `APP_VERSION` with no suffix. App Store Connect refuses uploads to a version
-  that is already released (ITMS-90186).
-- **Build number.** `ios.buildNumber` in `app.config.ts` goes up by one for every
-  upload, across all versions, and a number is never reused. Commit the increase
-  to `main` before archiving: the commit that raises it is the commit that
+- **The version line.** `APP_VERSION` in `app-version.ts` is
+  `x.y.z (n)-betaN`: the Version, Build Number and Beta of CONTEXT.md (#127,
+  ADR 0070). `app.config.ts` reads `CFBundleShortVersionString` (`x.y.z`) and
+  `CFBundleVersion` (`n`) from it. The beta changes before an upload
+  already carry the number that upload will take: `1.0.0 (5)-beta3` uploads as
+  1.0.0 (5). Every uploaded build, TestFlight-only or submitted, has
+  `APP_VERSION` with no Beta, `1.0.0 (5)`.
+- **Version.** Only the owner changes `x.y.z`; an upload or a submission does
+  not. App Store Connect refuses uploads to a version that is already released
+  (ITMS-90186). If the version is live on the App Store, stop before archiving
+  and ask the owner for the next one, recommending the next patch.
+- **Build number.** It goes up by one for every upload, across all versions, and
+  a number is never reused. The first app change after an upload raises it
+  (MEMORY/app-change.md). An upload with no change since the last one raises it
+  itself. The commit that sets the upload's `APP_VERSION` is the commit that
   build is made from.
 - **Tags.**
   - Every uploaded build gets an annotated `build-N` on the commit it was built from.
@@ -76,10 +83,9 @@ The owner set these on 2026-09-30.
    - Run the unit tests, `npx tsc --noEmit` and `npx eslint .`.
    - Check for other heavy Xcode builds (`pgrep -fl xcodebuild`). A build in the same workspace at the same time needs its own `-derivedDataPath`, because two builds cannot share one DerivedData.
 2. **Version and build number**, as a commit that reaches `main` through the usual merge:
-   - Set `APP_VERSION` in `app-version.ts`: `1.0.0` for the submission, `1.0.0-betaN` for a TestFlight-only beta.
-   - `npm version <X.Y.Z> --no-git-tag-version`, so that `package.json` and the lockfile match.
-   - Raise `ios.buildNumber` by one.
-   - `npx vitest run test/app-config.test.ts` checks that the three agree.
+   - Set `APP_VERSION` in `app-version.ts` to `X.Y.Z (N)`: drop the `-betaN`. `N` must be one more than the last uploaded build (the highest `build-*` tag). It is already, unless nothing has changed since that upload; then raise it.
+   - Only if the owner named a new Version: `npm version <X.Y.Z> --no-git-tag-version`, so that `package.json` and the lockfile match.
+   - `npx vitest run test/app-config.test.ts` checks that `APP_VERSION`, `app.config.ts` and `package.json` agree.
 3. **Prebuild:** `npx expo prebuild --platform ios --clean`, then check that `node_modules/expo-sqlite/ios/sqlite3.h` exists.
 4. **Archive**, without `EXPO_PUBLIC_OPENREADER_DEBUG_MODE` anywhere: not on the command line, not in the shell, not in `.env*`, and not in `ios/.xcode.env.local`.
 

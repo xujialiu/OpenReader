@@ -7,8 +7,9 @@ import { DEFAULT_SETTINGS } from '../../src/app/settings';
 
 /**
  * Settings' version line (#30) says when a build has Debug Mode (#82, design
- * 0054): `0.0.2-beta51-debug`, read aloud as `Version 0.0.2-beta51-debug`, and
- * the beta alone in a build without it. Nothing else on the screen changes.
+ * 0054): `1.0.0 (5)-beta1-debug` (#127), read aloud as
+ * `Version 1.0.0 (5)-beta1-debug`, and the version alone in a build without it.
+ * Nothing else on the screen changes.
  * The real screen, with the settings controls replaced by probes that keep
  * what they were handed.
  */

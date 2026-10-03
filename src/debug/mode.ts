@@ -17,7 +17,7 @@
 export const DEBUG_MODE: boolean =
   (typeof __DEV__ !== 'undefined' && __DEV__) || process.env.EXPO_PUBLIC_OPENREADER_DEBUG_MODE === '1';
 
-/** The version line Settings shows: the beta, and `-debug` after it in Debug Mode (#82). */
+/** The version line Settings shows: `APP_VERSION` (`1.0.0 (5)-beta1`, #127), and `-debug` after it in Debug Mode (#82). */
 export function shownVersion(version: string, debugMode: boolean = DEBUG_MODE): string {
   return debugMode ? `${version}-debug` : version;
 }

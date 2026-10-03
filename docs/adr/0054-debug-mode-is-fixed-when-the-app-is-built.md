@@ -360,7 +360,9 @@ Settings' version line and its accessibility label are
 `shownVersion(APP_VERSION)`: `0.0.2-beta51-debug` in Debug Mode, `0.0.2-beta51`
 without, and the rows above it the same either way
 (test/app/settings-version.test.ts). `SettingsVersionProbe` expects `-debug`,
-and `--mode release` the beta alone.
+and `--mode release` the beta alone. Since #127 (ADR 0070), `APP_VERSION` also
+carries the Build Number, as in `1.0.0 (5)-beta1-debug`; `shownVersion` did not
+change.
 
 There is no control to mark a fault: the owner says roughly when, and the
 lines' stamps are searched around that time.

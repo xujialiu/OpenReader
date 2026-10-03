@@ -364,10 +364,27 @@ receive any, and the yes is kept on that device only. A server at an address the
 owner typed is a service of its own.
 _Avoid_: permission, approval, opt-in, agreement, privacy prompt
 
+**Version**:
+The three numbers the App Store knows a release by, such as 1.0.0. Only the
+owner changes it; uploads, submissions and new features leave it as it is.
+_Avoid_: release (for the number), marketing version, `v1.0.0`
+
+**Build Number**:
+The number of one upload to App Store Connect, shown in brackets after the
+Version: 1.0.0 (5). Each upload takes the next number, across all Versions, and
+no number is used twice. A Beta shows the number of the upload it leads to.
+_Avoid_: build (alone), upload number
+
+**Beta**:
+One app change since the last upload, counted from 1 again after each upload:
+1.0.0 (5)-beta3 is the third change since build 4. An uploaded build has none,
+although TestFlight calls every upload a beta.
+_Avoid_: TestFlight beta, beta build, pre-release
+
 **Debug Mode**:
 What a build of the app installed on the owner's own devices has and a released
-build never has: it keeps a Debug Log, and the version it shows ends in
-`-debug`.
+build never has: it keeps a Debug Log, and the line in Settings that names its
+Version ends in `-debug`, as in 1.0.0 (5)-beta1-debug.
 _Avoid_: debug build, diagnostic build, dev build, debug configuration, logging mode
 
 **Debug Log**:

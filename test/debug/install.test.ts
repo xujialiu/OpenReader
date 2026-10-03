@@ -135,9 +135,10 @@ describe('a build with Debug Mode', () => {
     expect(world.made).toEqual([FOLDER]);
     expect(world.excluded).toEqual([FOLDER]);
     log.flushDebugLog();
-    // The version is app-version.ts's, so a new beta or release changes nothing here.
+    // The version is app-version.ts's, so a new beta or release changes nothing
+    // here. It holds a bracket and dots since #127, so all of it is escaped.
     expect(written()).toMatch(new RegExp(
-      `\\[launch\\] OpenReader ${APP_VERSION.replace(/\./g, '\\.')}, native 0\\.0\\.1 \\(1\\), Debug Mode on, embedded bundle, system log on, kept in file:///container/Library/Application Support/debug-log\n$`,
+      `\\[launch\\] OpenReader ${APP_VERSION.replace(/[.()]/g, '\\$&')}, native 0\\.0\\.1 \\(1\\), Debug Mode on, embedded bundle, system log on, kept in file:///container/Library/Application Support/debug-log\n$`,
     ));
     expect(world.system[0]).toMatch(/^\[launch\] OpenReader /);
   });
