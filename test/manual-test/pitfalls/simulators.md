@@ -264,6 +264,11 @@
   the background and poll, rather than under a short tool timeout that reads as
   a hang.
 
+## The #129 run (2026-10-04, fresh iPhone 17 Pro Max under another session's Release build)
+
+- **A fresh device's first `bootstatus -b` can outlast a 300 s foreground wait in Data Migration.** `ios-tester-129` (created that minute, iOS 27.0, the Mac also running another session's `xcodebuild`) sat in `Waiting on Data Migration / Running plugin com.apple.tone.migrator` for over five minutes; the blocking wait hit the tool's timeout. The boot itself was healthy and finished on its own. Fix: create the device, start Metro first, then poll `xcrun simctl list devices booted` in short bounded waits instead of one long `bootstatus -b` call.
+- **A session's MCP tool surface can expose `snapshot_ui` without `tap`/`touch`**, although its output tells you to tap element refs. The kit's `ax.py` (AXe) covered every touch this run — rows, the Theme menu, alert buttons — and `xcrun simctl launch` brought the app back from Safari. Check which mobilebuildmcp verbs your session actually has before planning element-ref taps; `ax.py UDID touch LABEL` is the fallback.
+
 ## A killed `recordVideo` holds the host recorder until a reboot (#118, 2026-10-02)
 
 - **Every later `simctl io recordVideo` answers "Host recording is already in progress" after a recorder process was killed, and only rebooting the simulator clears it.**
