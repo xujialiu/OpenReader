@@ -37,6 +37,8 @@ cannot use Expo Go as a substitute.
 
 - On 2026-10-04, `1.0.0 (5)-beta5` (Debug Mode) was built in the main checkout from `c12ff21`, over an `ios/` prebuilt after the last `app.config.ts` change, with `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20261002`: exit 0 in 178 s. The profile Xcode embedded is the paid team's, expiring 2027-09-30. `devicectl` installed over the existing app and launched it (both 0), with no Security error. Screen not inspected (notes 2026-10-04 11:13).
 
+- On 2026-10-04, `1.0.0 (6)-beta1` (Debug Mode, #129) was built in a fresh worktree (`npm ci`, then `npx expo prebuild --platform ios`, whose `pod install` left `sqlite3.h` and the FFmpeg entries in the Pods release xcconfig in place) from `aeda72b`, with `-derivedDataPath /tmp/openreader-129-iphone` and `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-129`: exit 0 in 1,149 s from scratch, with no second `pod install` needed. The plain bundle read `var DEBUG_MODE = true;` and `1.0.0 (6)-beta1`, `Info.plist` 1.0.0 / 6, `codesign --verify --deep --strict` passed, and the embedded profile expires 2027-09-30. With no cable, `devicectl` installed over the existing app and launched it (both 0), with no Security error. Screen not inspected.
+
 The device, account, and paths above are specific to this run. Look them up again
 when changing computers or phones. If the user has since trusted the developer
 and launched the app successfully, update the verification results.
