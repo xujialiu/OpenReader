@@ -461,7 +461,10 @@ export function ReadingView({
   const plan = planOf(document.identity.id);
   const progress = playerVoice ? chapterProgress(document.identity.id, playerVoice) : null;
   const downloaded = useMemo(
-    () => (contentsOpen && plan && progress ? downloadedRows(contents.rows, plan.chapters, progress) : NONE_DOWNLOADED),
+    // Until a progress has been read, `chapterProgress` answers with a new empty
+    // map each time; answering that with the one empty set keeps the drawn rows
+    // from being drawn again on every render of the reader.
+    () => (contentsOpen && plan && progress?.size ? downloadedRows(contents.rows, plan.chapters, progress) : NONE_DOWNLOADED),
     [contentsOpen, contents.rows, plan, progress],
   );
 

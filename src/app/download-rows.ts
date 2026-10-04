@@ -1,6 +1,6 @@
 import { rowOfSection, type ContentsRow } from '../core/document/contents';
 import type { ChapterProgress } from '../offline/catalog';
-import { chapterTextCount, type Chapter, type DownloadTask, type TaskState } from '../offline/model';
+import { chapterTextCount, speaks, type Chapter, type DownloadTask, type TaskState } from '../offline/model';
 import { isPaused } from '../offline/pausing';
 
 /**
@@ -106,21 +106,23 @@ export function downloadedChapters(
   chapters: readonly Chapter[],
   progress: ReadonlyMap<string, ChapterProgress>,
 ): Set<string> {
-  const spoken = new Map<string, boolean>();
-  const complete = new Map<string, boolean>();
+  // Folded up from each chapter's subtree: whether any part of it speaks, and
+  // whether every part of it that speaks is complete.
+  const subtreeSpeaks = new Map<string, boolean>();
+  const subtreeComplete = new Map<string, boolean>();
   const downloaded = new Set<string>();
-  for (let at = chapters.length - 1; at >= 0; at--) {
-    const chapter = chapters[at];
-    let some = spoken.get(chapter.id) ?? false;
-    let every = complete.get(chapter.id) ?? true;
-    if (chapter.prepared === false || chapterTextCount(chapter) > 0) {
-      some = true;
-      every = every && !!progress.get(chapter.id)?.complete;
+  for (let index = chapters.length - 1; index >= 0; index--) {
+    const chapter = chapters[index];
+    let groupSpeaks = subtreeSpeaks.get(chapter.id) ?? false;
+    let groupComplete = subtreeComplete.get(chapter.id) ?? true;
+    if (speaks(chapter)) {
+      groupSpeaks = true;
+      groupComplete = groupComplete && !!progress.get(chapter.id)?.complete;
     }
-    if (some && every) downloaded.add(chapter.id);
+    if (groupSpeaks && groupComplete) downloaded.add(chapter.id);
     if (chapter.parent) {
-      spoken.set(chapter.parent, (spoken.get(chapter.parent) ?? false) || some);
-      complete.set(chapter.parent, (complete.get(chapter.parent) ?? true) && every);
+      subtreeSpeaks.set(chapter.parent, (subtreeSpeaks.get(chapter.parent) ?? false) || groupSpeaks);
+      subtreeComplete.set(chapter.parent, (subtreeComplete.get(chapter.parent) ?? true) && groupComplete);
     }
   }
   return downloaded;
@@ -152,10 +154,10 @@ export function downloadedRows(
   const byPlace = new Map<string, string[]>();
   for (const chapter of chapters) {
     if (chapter.section === null || chapter.section === undefined) continue;
-    const at = place(chapter.section, chapter.fragment ?? '');
-    const waiting = byPlace.get(at);
+    const key = place(chapter.section, chapter.fragment ?? '');
+    const waiting = byPlace.get(key);
     if (waiting) waiting.push(chapter.id);
-    else byPlace.set(at, [chapter.id]);
+    else byPlace.set(key, [chapter.id]);
   }
   rows.forEach((row, index) => {
     if (row.target === null) return;

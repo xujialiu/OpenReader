@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
-import { chapterTextCount, descendants, fullyPrepared, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
+import { chapterTextCount, descendants, fullyPrepared, speaks, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
 import { INK, useAccent, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
@@ -84,9 +84,8 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
   // The check's one rule, which Contents shares (#134).
   const downloaded = useMemo(() => downloadedChapters(chapters, progress), [chapters, progress]);
   const progressReady=!!plan && progress.size===chapters.length;
-  const textual = (c: Chapter) => c.prepared === false || chapterTextCount(c) > 0;
   const markers = new Map<string, Marker | null>(chapters.map((c) => [c.id, marker(c, progress.get(c.id), task, manage)]));
-  const eligible = chapters.filter((c) => textual(c) && markers.get(c.id)?.kind === 'checkbox');
+  const eligible = chapters.filter((c) => speaks(c) && markers.get(c.id)?.kind === 'checkbox');
   const eligibleIds = new Set(eligible.map((c) => c.id));
   const chosen = [...selected].filter((id) => eligibleIds.has(id));
   const toggle = (ids: string[]) => setSelected((was) => {
@@ -102,7 +101,7 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
     return true;
   };
   // What Download lists; Manage lists fewer (#37).
-  const rows = chapters.filter((c) => (textual(c) || parents.has(c.id)) && unfolded(c));
+  const rows = chapters.filter((c) => (speaks(c) || parents.has(c.id)) && unfolded(c));
   const visible = listed ? chapters.filter((c) => listed.has(c.id) && unfolded(c)) : rows;
   // Two fingers over the list select the rows under them (#57).
   const sweep = useSweep({ shown: visible, chapters, collapsed, choosable: eligibleIds, selected }, setSelected);
@@ -120,7 +119,7 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
   useEffect(() => { onSelectAll({ label: allLabel, onPress: pressAll, disabled: noneEligible }); }, [allLabel, noneEligible, pressAll, onSelectAll]);
   useEffect(() => () => onSelectAll(null), [onSelectAll]);
 
-  const full = chapters.filter(textual).length;
+  const full = chapters.filter(speaks).length;
   const completed = [...progress.values()].filter((p) => p.complete).length;
   const whole = !!plan && fullyPrepared(plan) && full > 0 && completed === full;
   const state = downloads.indexingState(document);

@@ -52,9 +52,9 @@ then come back. Before a trip, or on one, that is the question asked most.
 - **The phone's own downloaded symbol, an arrow in a circle, instead of the
   check.** It is what the phone's Music app draws. But the Download drawer
   already says downloaded with the check, and the same fact would then look
-  different in two drawers of one app. A check in a list of chapters could be
-  read as "already read", but the app marks nothing as read, so nothing in it
-  can be confused with the check.
+  different in two drawers of one app. A check in Contents could be read as
+  "already read", but the app marks nothing as read, so nothing in it can be
+  confused with the check.
 - **Dimming the chapters that are not downloaded.** Contents already dims the
   rows that cannot be opened, and the two meanings would run together.
 - **A check on a cover or a picture page in a book that is downloaded
