@@ -1,4 +1,4 @@
-import { rowOfSection } from '../core/document/contents';
+import { rowOfSection, type ContentsRow } from '../core/document/contents';
 import type { ChapterProgress } from '../offline/catalog';
 import { chapterTextCount, type Chapter, type DownloadTask, type TaskState } from '../offline/model';
 import { isPaused } from '../offline/pausing';
@@ -86,6 +86,93 @@ export function readingChapter(shown: readonly Chapter[], section: number | null
   if (section === null) return null;
   const at = rowOfSection(shown.map((c) => c.section ?? null), section);
   return at ? shown[at.row].id : null;
+}
+
+/**
+ * Every chapter and volume that is **Downloaded** (CONTEXT.md) in the Voice
+ * `progress` was read in: each chapter in it with something to speak is
+ * complete, and there is at least one. A volume's chapters are its descendants
+ * (`descendants`), so a volume heading is Downloaded once every chapter under
+ * it is, and a part with nothing to speak never is.
+ *
+ * The one answer behind the Download drawer's check and Contents' (#134), so
+ * the two drawers cannot disagree about a chapter. One pass from the end,
+ * because the navigation lists a parent before its children: each chapter's
+ * subtree is folded into its parent before the parent is reached. Asking
+ * `descendants` per row, as the drawer did, walks the whole plan for every row,
+ * which over Contents' 2,076 rows is four million steps on every update.
+ */
+export function downloadedChapters(
+  chapters: readonly Chapter[],
+  progress: ReadonlyMap<string, ChapterProgress>,
+): Set<string> {
+  const spoken = new Map<string, boolean>();
+  const complete = new Map<string, boolean>();
+  const downloaded = new Set<string>();
+  for (let at = chapters.length - 1; at >= 0; at--) {
+    const chapter = chapters[at];
+    let some = spoken.get(chapter.id) ?? false;
+    let every = complete.get(chapter.id) ?? true;
+    if (chapter.prepared === false || chapterTextCount(chapter) > 0) {
+      some = true;
+      every = every && !!progress.get(chapter.id)?.complete;
+    }
+    if (some && every) downloaded.add(chapter.id);
+    if (chapter.parent) {
+      spoken.set(chapter.parent, (spoken.get(chapter.parent) ?? false) || some);
+      complete.set(chapter.parent, (complete.get(chapter.parent) ?? true) && every);
+    }
+  }
+  return downloaded;
+}
+
+/**
+ * The Contents rows that carry the Downloaded check (#134), as indexes into
+ * `rows`, for the Voice `progress` was read in: a row whose chapter or volume
+ * is Downloaded (`downloadedChapters`).
+ *
+ * A row is matched to the download plan's chapter for the same navigation
+ * entry by the place both point to, the spine item and the fragment, and never
+ * by position. Contents is the renderer's reading of the navigation and the
+ * plan is the app's own (`navigation.ts`), and the two keep different entries:
+ * the app keeps an entry with no link that the renderer drops, and adds a part
+ * the navigation does not list. Entries pointing to one place, such as a volume
+ * heading and its first chapter on the same file, are paired in order, so each
+ * row answers for its own chapter. A row that cannot be opened has no place and
+ * is never checked; neither is a row that matches no chapter.
+ */
+export function downloadedRows(
+  rows: readonly ContentsRow[],
+  chapters: readonly Chapter[],
+  progress: ReadonlyMap<string, ChapterProgress>,
+): Set<number> {
+  const checked = new Set<number>();
+  if (!progress.size) return checked;
+  const downloaded = downloadedChapters(chapters, progress);
+  const byPlace = new Map<string, string[]>();
+  for (const chapter of chapters) {
+    if (chapter.section === null || chapter.section === undefined) continue;
+    const at = place(chapter.section, chapter.fragment ?? '');
+    const waiting = byPlace.get(at);
+    if (waiting) waiting.push(chapter.id);
+    else byPlace.set(at, [chapter.id]);
+  }
+  rows.forEach((row, index) => {
+    if (row.target === null) return;
+    const id = byPlace.get(place(row.target, fragmentOf(row.href)))?.shift();
+    if (id !== undefined && downloaded.has(id)) checked.add(index);
+  });
+  return checked;
+}
+const place = (section: number, fragment: string) => `${section}#${fragment}`;
+/** As the plan records a fragment: decoded (`navigation.ts`), and as written when it does not decode. */
+function fragmentOf(href: string): string {
+  const written = href.split('#')[1] ?? '';
+  try {
+    return decodeURIComponent(written);
+  } catch {
+    return written;
+  }
 }
 
 /**

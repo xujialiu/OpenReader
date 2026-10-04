@@ -53,6 +53,7 @@ import { chapterOf, useNowPlaying } from '../now-playing';
 import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
 
 import { ContentsSheet } from './contents-sheet';
+import { downloadedRows } from './download-rows';
 import { INK } from './controls';
 import type { OpenDocument } from './document';
 import { useDocumentCover } from './document-cover';
@@ -67,7 +68,8 @@ import { useVoiceLists } from './use-voices';
 import { voiceInList } from './voices';
 import { knownVoice } from './voice-catalog';
 import { VoiceSheet } from './voice-sheet';
-import { hasSavedVoice, inventoryReady, inventoryError, requestInventory, useDownloads } from '../offline/runtime';
+import { chapterProgress, hasSavedVoice, inventoryReady, inventoryError, planOf, releaseProgress, requestInventory, requestProgress, useDownloads } from '../offline/runtime';
+import type { OfflineVoice } from '../offline/model';
 
 /**
  * How often a Reading Position is written to the Library while the reading is
@@ -438,6 +440,32 @@ export function ReadingView({
   const contents = useMemo(() => contentsOf(toc as readonly NavigationEntry[], status.spineHrefs), [toc, status.spineHrefs]);
 
   /**
+   * The Contents rows that carry the Downloaded check (#134), counted in the
+   * Player's Voice, the one Play would read from the phone, and none while no
+   * Voice is chosen. The Download drawer counts in the same Voice
+   * (`reader-actions.tsx`). Asked for only while Contents is open: while it is
+   * asked for, every saved clip of a running Download reads the progress again,
+   * which costs nothing a closed drawer would show. Contents opens without
+   * waiting for it; the checks are drawn when it arrives, and move as clips are
+   * saved or deleted.
+   */
+  const playerVoice = useMemo<OfflineVoice | null>(
+    () => (settings.voice.trim() ? { provider: settings.provider, voice: settings.voice, label: settings.voice } : null),
+    [settings.provider, settings.voice],
+  );
+  useEffect(() => {
+    if (!contentsOpen || !playerVoice) return;
+    requestProgress(document.identity.id, playerVoice);
+    return () => releaseProgress(document.identity.id, playerVoice);
+  }, [contentsOpen, document.identity.id, playerVoice]);
+  const plan = planOf(document.identity.id);
+  const progress = playerVoice ? chapterProgress(document.identity.id, playerVoice) : null;
+  const downloaded = useMemo(
+    () => (contentsOpen && plan && progress ? downloadedRows(contents.rows, plan.chapters, progress) : NONE_DOWNLOADED),
+    [contentsOpen, contents.rows, plan, progress],
+  );
+
+  /**
    * Pause, and the one path there is.
    *
    * **Pausing re-opens the player**, and the navigation bar with it (#67) — the assumption is that the owner is about to
@@ -730,6 +758,7 @@ export function ReadingView({
         spineKnown={status.spineHrefs.length > 0}
         section={at}
         onGo={reading.goToSection}
+        downloaded={downloaded}
       />
 
       <VoiceSheet
@@ -744,6 +773,8 @@ export function ReadingView({
     </View>
   );
 }
+
+const NONE_DOWNLOADED: ReadonlySet<number> = new Set();
 
 /** Never a blank screen: a blank screen and a crash look identical. */
 function Waiting({ words }: { words: string }) {

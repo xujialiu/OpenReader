@@ -5,7 +5,7 @@ import { chapterTextCount, descendants, fullyPrepared, type Chapter, type Downlo
 import * as downloads from '../offline/runtime';
 import { INK, useAccent, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
-import { listedInManage, marker, readingChapter, type Marker } from './download-rows';
+import { downloadedChapters, listedInManage, marker, readingChapter, type Marker } from './download-rows';
 import { DRAWER, DrawerList, DrawerRow, DrawerRowText, type DrawerAction } from './drawer';
 import { Icon } from './icon';
 import { useSweep } from './use-sweep';
@@ -81,6 +81,8 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
     return ()=>downloads.releaseProgress(document,selectedVoice);
   },[document,choice.provider,choice.voice,choice.label,plan]);
   const progress=downloads.chapterProgress(document,choice);
+  // The check's one rule, which Contents shares (#134).
+  const downloaded = useMemo(() => downloadedChapters(chapters, progress), [chapters, progress]);
   const progressReady=!!plan && progress.size===chapters.length;
   const textual = (c: Chapter) => c.prepared === false || chapterTextCount(c) > 0;
   const markers = new Map<string, Marker | null>(chapters.map((c) => [c.id, marker(c, progress.get(c.id), task, manage)]));
@@ -170,7 +172,7 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
     const children = chapters.some((c) => c.parent === item.id);
     const group = descendants(chapters, item.id);
     const ids = group.map((c) => c.id).filter((id) => eligibleIds.has(id));
-    const done = group.length > 0 && group.every((c) => progress.get(c.id)?.complete);
+    const done = downloaded.has(item.id);
     const picked = ids.length > 0 && ids.every((id) => selected.has(id));
     const count = progress.get(item.id)?.count ?? 0;
     const failed = !!task?.failed.includes(item.id);
