@@ -140,10 +140,15 @@ Sync, and the removal of brackets. They now share one arrangement.
   switch would not stay on, is the line under its card. In General, a refused
   list of bracket pairs is said under its card.
 
-General keeps one standing sentence under its card: chapters already downloaded
-keep the audio they were saved with until they are downloaded again. Nothing
-else on any screen shows that, and without it the first downloaded chapter read
-the old way would look like the setting had not worked.
+General keeps one standing sentence under its card: downloaded sentences the
+change alters are read online until their chapters are downloaded again, and
+switching back plays their saved audio again. Nothing else on any screen shows
+that, and without it a chapter downloaded before the change would stop, with no
+network, on its sentences with brackets, with nothing to say why.
+
+_Revised on 2026-10-05 (#135): the sentence used to say that chapters already
+downloaded keep the audio they were saved with until they are downloaded again,
+which read as though they went on playing it after the change._
 
 ## The speed opens in a small bubble at the number
 
