@@ -62,3 +62,7 @@ than fix size and updated when the evidence changes:
 `enhancement` and `chore` have no severity label. Retain the other mirrored
 labels for parity; routine issue classification uses the labels above, with
 no milestones.
+
+The agent-skill workflow labels (the triage labels in
+`docs/agents/triage-labels.md` and `wayfinder:*`) are OpenReader's own
+additions to the Zotero-TTS set; `gh label clone` leaves them in place.

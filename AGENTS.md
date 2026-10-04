@@ -34,3 +34,17 @@ Each file under `MEMORY/` holds the rules for one kind of work. Read it in full 
 - **Phone faults** — [docs/debug-on-iphone.md](docs/debug-on-iphone.md): when the owner reports a fault seen on the iPhone, before the first command against the phone.
 - **Simulator** — [docs/install-on-simulator.md](docs/install-on-simulator.md): before installing or updating the simulator app, or fixing a Metro connection or simulator build.
 - **Release** — [docs/release-to-app-store.md](docs/release-to-app-store.md): before building for, uploading to or submitting on App Store Connect, or tagging a release.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `xujialiu/OpenReader`, through `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels, each named after its role. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `CONTEXT.md` plus `docs/adr/`. See `docs/agents/domain.md`.
