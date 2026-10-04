@@ -50,11 +50,16 @@ then come back. Before a trip, or on one, that is the question asked most.
   partly saved chapter still needs the network for the rest, and a mark that is
   half true is the one the owner would trust at the wrong moment.
 - **The phone's own downloaded symbol, an arrow in a circle, instead of the
-  check.** It is what the phone's Music app draws. But the Download drawer
-  already says downloaded with the check, and the same fact would then look
-  different in two drawers of one app. A check in Contents could be read as
-  "already read", but the app marks nothing as read, so nothing in it can be
-  confused with the check.
+  check.** It is what the phone's Music app draws beside a downloaded song.
+  This is a deliberate exception to [decision
+  0042](0042-the-app-follows-the-phones-own-look.md), which puts looking like
+  the phone before looking like the rest of the app, chosen by the owner on
+  2026-10-05: the phone's own list of a book's parts, in Books, carries no
+  downloaded mark to copy, and the app's Download drawer already says
+  downloaded with the check. Two marks for one fact in two drawers would read
+  as two different facts. A check in Contents could be read as "already read",
+  but the app marks nothing as read, so nothing in it can be confused with the
+  check.
 - **Dimming the chapters that are not downloaded.** Contents already dims the
   rows that cannot be opened, and the two meanings would run together.
 - **A check on a cover or a picture page in a book that is downloaded
