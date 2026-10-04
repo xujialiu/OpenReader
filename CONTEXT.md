@@ -105,6 +105,13 @@ chapters the owner chose, worked through one chapter at a time. Each chapter in
 it is waiting its turn, being written, paused, failed or saved.
 _Avoid_: task, job, queue
 
+**Downloaded**:
+Said of a chapter whose Offline Narration in one voice is complete: a Clip
+saved for every one of its Utterances. A chapter with only some of them saved is
+not downloaded, and a part with nothing to speak never is. Downloaded in one
+voice says nothing about another.
+_Avoid_: offline, saved, cached, available offline
+
 **Sentences at once**:
 How many of a chapter's sentences a Download asks one Provider for at the
 same time. Chosen per Provider.
