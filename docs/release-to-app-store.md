@@ -82,6 +82,9 @@ The owner set these on 2026-09-30.
   - Books category, content-rights declaration, calculated 4+ age rating and non-trader status saved. Reviewer contact is saved only in App Store Connect. No sign-in is required; manual release is selected.
   - The owner privately replaced the review-key placeholder in App Store Connect and confirmed completion. Before submission, a boolean-only check confirmed the placeholder was absent; no key was output or committed.
   - Follow-up simulator diagnosis completed: paced AXe input in one batch persisted a local test key to Keychain and passed Fish Audio's connection test, without app changes. Real import, voice selection and first consent were exercised. Playback screenshots still showed buffering; actual audio onset/word timing and paused Reading-position preservation remain unverified. The documentation-only test branch was merged and its sub-worktree removed; the standalone app remains installed and stopped.
+- **Owed with the next submission, build 6 (#129)**
+  - The owner decided on 2026-10-04 that the Author's card (Settings: Author, Email, GitHub and the star line) ships with build 6, whether that is a resubmitted 1.0.0 or the first build of the next Version. Build 5 in review was not withdrawn for it.
+  - With that submission: set **Marketing URL** to `https://github.com/xujialiu/OpenReader` (the App Store's "Developer Website"), end the **Description** with the line in the listing below, and describe the card in the review notes (guideline 2.3.1(a) asks for every new feature there). These fields are version metadata, locked while 1.0.0 (5) waits for review; this was not checked in App Store Connect.
 - **Web pages**, from `site/` through `.github/workflows/pages.yml`:
   - Support URL: https://xujialiu.github.io/OpenReader/
   - Privacy Policy URL: https://xujialiu.github.io/OpenReader/privacy.html
@@ -227,7 +230,14 @@ To test:
 Text goes only to the service the user chooses, and only after the user allows it.
 Word Lookup (long-press a word) asks the same way before it sends a selection to a
 dictionary or translation service.
+
+Settings shows the developer's name and email and the project's GitHub
+repository. Tapping Email starts an email in Mail; tapping GitHub opens the
+repository in Safari.
 ```
+
+The last paragraph is new with build 6 (#129); leave it out of a build without
+the Author's card.
 
 ### Store listing (draft, for the owner to approve)
 
@@ -255,5 +265,10 @@ dictionary or translation service.
 
   No account, no subscription, no server of its own. Your documents stay on your
   iPhone, and text goes only to the service you choose, after you allow it.
-  OpenReader is open source.
+  OpenReader is free and open source: github.com/xujialiu/OpenReader
   ```
+
+  The last line was `OpenReader is open source.` up to 1.0.0 (5); the new one
+  goes in with build 6 (#129).
+- **Marketing URL:** `https://github.com/xujialiu/OpenReader`, from build 6
+  (#129). Before it, none.

@@ -47,14 +47,19 @@ for less" — it leads the next person to strip out something the store never
 objected to, and to make the app worse in the name of a rule that was never
 broken.
 
-## The one link the app does have
+## The links the app does have
 
-The app opens exactly one page: its own privacy policy, from a row at the foot
-of Settings. The store requires the policy to be reachable from inside the app,
-and it lives on the project's own site. It is not the route this decision
-closes, because it leads to no provider's signup, prices or keys. It is also
-the only link, so the rule stays one anyone can check: nothing in the app leads
-to a provider.
+The app opens its own privacy policy, from a row at the foot of Settings. The
+store requires the policy to be reachable from inside the app, and it lives on
+the project's own site. It is not the route this decision closes, because it
+leads to no provider's signup, prices or keys.
+
+Since decision 0072 it also opens the project's page on GitHub and starts an
+email to its author. Neither leads to a provider either. The project's site
+and its GitHub page are now each one tap from the app, so the rule holds for
+them too. They may say that a key is created on the service's
+website; they may not link to that page. The rule stays one anyone can check:
+nothing in the app, and nothing one tap from it, leads to a provider's signup.
 
 ## What it costs the person setting the app up
 

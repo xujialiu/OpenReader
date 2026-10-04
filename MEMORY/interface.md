@@ -25,6 +25,10 @@ same fact in other words and goes.
 This applies to the words *and* the space they take. On a phone every removed
 line is a line of the list the owner came for.
 
+**One standing line is kept on purpose**: the star line under the Author's card
+on the front page of Settings (`STAR_LINE`, design 0072). The owner chose it;
+do not remove it under this rule.
+
 ## How the interface looks
 
 **Native first**: before designing or restyling a screen, control or drawer,

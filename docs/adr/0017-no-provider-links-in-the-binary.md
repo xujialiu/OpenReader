@@ -51,6 +51,40 @@ pricing or key console is still unreachable from the binary. The line the
 rejection drew was a route to a Provider's paid signup, and a page of our own
 that names none is not one.
 
+## Two more: the repository and the Author's email (#129)
+
+The owner decided on 2026-10-04 that Settings names the Author, his email and
+the GitHub repository, each a tap away. The product argument is in
+`docs/design/0072-the-app-names-its-author.md`.
+
+`src/app/own-site.ts` now opens three constants and nothing else:
+`PRIVACY_POLICY`, `REPOSITORY` (`https://github.com/xujialiu/OpenReader`) and
+`mailto:${EMAIL}`. `test/app/no-outgoing-links.test.ts` pins all three: the
+addresses the module names, the arguments of its `openURL` calls, and the
+constants' values. Guideline 1.5 reads "Make sure your app and its Support URL
+include an easy way to contact you". Before #129 only the Support URL did.
+
+A link to the repository changes what the rule has to cover. The README is the
+first thing the repository shows, so it is one tap from the binary, and the
+site already was. A README line such as "get your key here", linking to a
+Provider's console, would rebuild the rejected route with one more tap in it.
+So the same test now reads `README.md` and every `site/*.html`. Every absolute
+address either one names, linked or written out, must be on its
+`PAGES_MAY_NAME` list. A page may say "create an API key on that service's
+website", as the support page does, but it may not link to that page.
+
+The list on 2026-10-04: the site and its privacy page, the repository and its
+issues, Zotero-TTS's repository, the Author's `mailto:`, and the five Provider
+addresses `site/privacy.html` gives for each service's own data terms (OpenAI's
+data controls, Fish Audio's privacy page and customer agreement, Microsoft's
+speech data policy, Speechify's privacy page). None is a signup, pricing or key
+page. A new address fails the test until it has been looked at and added.
+Adding a deliberate console link to `README.md` failed it, naming the address.
+
+Deeper pages of the repository, such as `docs/`, are not covered. They are
+several taps from the app, and a reviewer reaches them only by browsing the
+source.
+
 ## What was deferred, and is now built (#109)
 
 Guideline 5.1.2(i), amended in late 2025 to name third-party AI explicitly,
