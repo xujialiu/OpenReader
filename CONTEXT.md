@@ -364,6 +364,8 @@ receive any, and the yes is kept on that device only. A server at an address the
 owner typed is a service of its own.
 _Avoid_: permission, approval, opt-in, agreement, privacy prompt
 
+### The author's side
+
 **Author**:
 The person who made OpenReader and answers its email: Xujia Liu. Whoever reads
 with the app is its owner; the author is one of them.
@@ -372,7 +374,7 @@ document's author"
 
 **Version**:
 The three numbers the App Store knows a release by, such as 1.0.0. Only the
-owner changes it; uploads, submissions and new features leave it as it is.
+author changes it; uploads, submissions and new features leave it as it is.
 _Avoid_: release (for the number), marketing version, `v1.0.0`
 
 **Build Number**:
@@ -388,18 +390,18 @@ although TestFlight calls every upload a beta.
 _Avoid_: TestFlight beta, beta build, pre-release
 
 **Debug Mode**:
-What a build of the app installed on the owner's own devices has and a released
+What a build of the app installed on the author's own devices has and a released
 build never has: it keeps a Debug Log, and the line in Settings that names its
 Version ends in `-debug`, as in 1.0.0 (5)-beta1-debug.
 _Avoid_: debug build, diagnostic build, dev build, debug configuration, logging mode
 
 **Debug Log**:
 The record a build with Debug Mode keeps on the device of what the app did, read
-back from the Mac after the owner reports a fault. It never holds a credential.
+back from the Mac after the author reports a fault. It never holds a credential.
 _Avoid_: log file, trace, diagnostics, crash log
 
 **Demo App**:
-A second OpenReader on the owner's iPhone, installed beside his own under another
+A second OpenReader on the author's iPhone, installed beside his own under another
 identity and starting empty, so a recording for App Review touches none of his
 documents, settings or keys. The line in Settings that names its Version ends in
 `-demo`, as in 1.0.0 (5)-beta5-demo.
