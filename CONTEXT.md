@@ -107,9 +107,10 @@ _Avoid_: task, job, queue
 
 **Downloaded**:
 Said of a chapter whose Offline Narration in one voice is complete: a Clip
-saved for every one of its Utterances. A chapter with only some of them saved is
-not downloaded, and a part with nothing to speak never is. Downloaded in one
-voice says nothing about another.
+saved for every one of its Utterances, of the Speech Text the owner's settings
+now make of it. A chapter with only some of them saved is not downloaded, and a
+part with nothing to speak never is. Downloaded in one voice says nothing about
+another.
 _Avoid_: offline, saved, cached, available offline
 
 **Sentences at once**:
