@@ -364,6 +364,12 @@ receive any, and the yes is kept on that device only. A server at an address the
 owner typed is a service of its own.
 _Avoid_: permission, approval, opt-in, agreement, privacy prompt
 
+**Author**:
+The person who made OpenReader and answers its email: Xujia Liu. Whoever reads
+with the app is its owner; the author is one of them.
+_Avoid_: developer, maintainer, creator; for whoever wrote a Document, say "the
+document's author"
+
 **Version**:
 The three numbers the App Store knows a release by, such as 1.0.0. Only the
 owner changes it; uploads, submissions and new features leave it as it is.
