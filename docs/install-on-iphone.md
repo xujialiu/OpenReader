@@ -35,6 +35,8 @@ cannot use Expo Go as a substitute.
 
 - On 2026-10-02, `1.0.0-beta12` (Debug Mode) was built in a worktree whose `node_modules` had just been reinstalled with `npm ci`, over an `ios/` from an earlier prebuild. `npm ci` takes away two generated things the Pods put in `node_modules`: `expo-sqlite/ios/sqlite3.h` and RNAudioAPI's downloaded FFmpeg xcframeworks. The first build failed in ExpoSQLite (`cannot find 'exsqlite3_open'`). After `pod install` restored the header, the second build failed to link FFmpeg (`_avformat_open_input` and others undefined). By then its own script phase had downloaded the xcframeworks again, but the Pods xcconfig had been written without them. A second `pod install`, which put `libavformat` back into `Pods-OpenReader.release.xcconfig`, and a new `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20261002` gave exit 0 in 126 s. Install and launch then both returned 0. So, after an `npm ci`: `pod install`, build once, and if FFmpeg fails to link, `pod install` again and rebuild.
 
+- On 2026-10-04, `1.0.0 (5)-beta5` (Debug Mode) was built in the main checkout from `c12ff21`, over an `ios/` prebuilt after the last `app.config.ts` change, with `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20261002`: exit 0 in 178 s. The profile Xcode embedded is the paid team's, expiring 2027-09-30. `devicectl` installed over the existing app and launched it (both 0), with no Security error. Screen not inspected (notes 2026-10-04 11:13).
+
 The device, account, and paths above are specific to this run. Look them up again
 when changing computers or phones. If the user has since trusted the developer
 and launched the app successfully, update the verification results.

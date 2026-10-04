@@ -391,3 +391,10 @@ _Avoid_: debug build, diagnostic build, dev build, debug configuration, logging 
 The record a build with Debug Mode keeps on the device of what the app did, read
 back from the Mac after the owner reports a fault. It never holds a credential.
 _Avoid_: log file, trace, diagnostics, crash log
+
+**Demo App**:
+A second OpenReader on the owner's iPhone, installed beside his own under another
+identity and starting empty, so a recording for App Review touches none of his
+documents, settings or keys. The line in Settings that names its Version ends in
+`-demo`, as in 1.0.0 (5)-beta5-demo.
+_Avoid_: demo version, demo build, test app, second app

@@ -48,6 +48,10 @@ The owner set these on 2026-09-30.
 - **Build 0.0.1 (1)**
   - Uploaded 2026-09-30 at 22:29 CST. Processing ended "Complete", with no ITMS error and no Missing Compliance.
   - It tested the pipeline only, before #109 and the version rule. Never submit it.
+- **App Review, 2026-10-04: Guideline 2.1 - Information Needed**
+  - "This app has been submitted by a developer account that has a limited App Review history." Apple asks for a reply in App Store Connect, also added to App Review Information → Notes for future submissions, with six items: (1) a screen recording on a physical device running the latest operating system, beginning with launching the app and showing the typical user flow, including account registration/login/deletion, user-generated content with reporting and blocking, and paid content where the app has them (OpenReader has none of the three); (2) the app's purpose and target audience; (3) setup instructions, with any credentials or sample files; (4) the external services the core functionality uses; (5) regional differences, or confirmation that the app works the same in all regions; (6) documentation for a regulated industry or protected third-party material.
+  - Which build that submission carries was not checked. The newest upload on this Mac (archives, `build-*` tags, logs) is 1.0.0 (4).
+  - The owner records and replies himself. For the recording, a Demo App of `1.0.0 (5)-beta5` (the owner's choice) was installed beside his own app: [install-demo-on-iphone.md](install-demo-on-iphone.md). The owner's iPhone ran iOS 27.0.1 (24A446), the newest public release for it on that day (notes 2026-10-04 11:10).
 - **Build 1.0.0 (4)**
   - Uploaded to TestFlight on 2026-10-03 at 03:07 CST from clean, synchronized `main` commit `98809b5`. Xcode reported `Upload succeeded` and `EXPORT SUCCEEDED`; Apple processing completion has not yet been checked.
   - Includes the owner-accepted softer Blue/Amber presets (#126). Saved personal choices are unchanged; selecting a preset applies its new colours.
