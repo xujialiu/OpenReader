@@ -473,6 +473,42 @@ export function ActionRow({ label, onPress, disabled }: { label: string; onPress
 }
 
 /**
+ * A fact as a row of its card: its name, and what it is in the quiet ink, as
+ * the phone's own About page lists its Name and Model (design 0042). Nothing
+ * happens when it is tapped, so it does not highlight. One element, read as
+ * `Author, Xujia Liu`.
+ */
+export function DetailRow({ label, value }: { label: string; value: string }) {
+  const { fontScale } = useWindowDimensions();
+  return (
+    <View key={fontScale} style={styles.settingRow} accessible accessibilityLabel={`${label}, ${value}`}>
+      <RowWords label={label} value={value} />
+    </View>
+  );
+}
+
+/**
+ * A row whose value is an address the app hands to another app: the Author's
+ * email, the repository (#129, design 0072). The value is in the reading accent
+ * because it is what a tap opens, as the privacy policy's tinted words are
+ * (`ActionRow`); there is no chevron, which would promise a page of the app's
+ * own. Name and value wrap as `RowWords` does, so a long address is never cut.
+ */
+export function LinkRow({ label, value, onPress }: { label: string; value: string; onPress(): void }) {
+  const accent = useAccent();
+  const { fontScale } = useWindowDimensions();
+  return (
+    <Pressable key={fontScale} accessibilityRole="link" accessibilityLabel={`${label}, ${value}`} onPress={onPress}
+      style={({ pressed }) => [styles.settingRow, pressed && styles.rowPressed]}>
+      <View style={styles.rowWords}>
+        <Text style={[styles.settingLabel, styles.completeWord]}>{label}</Text>
+        <Text style={[styles.settingDetail, styles.completeWord, { color: accent.reading }]}>{value}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
  * Text that is the card's content rather than a row of it: a licence (#111).
  * Set as the phone's own legal pages set theirs, small and in the text colour,
  * with a row's inset on every side, and selectable, so a notice can be copied.

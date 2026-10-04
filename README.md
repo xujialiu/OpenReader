@@ -2,8 +2,11 @@
 
 OpenReader is an iPhone app that reads EPUB documents aloud with the speech service you choose, and highlights each word as it is spoken. It uses your own account with that service, and has no account, no server of its own and no analytics.
 
+If you like OpenReader, give it a ⭐ on GitHub — it helps others find it.
+
 - Support: https://xujialiu.github.io/OpenReader/
 - Privacy policy: https://xujialiu.github.io/OpenReader/privacy.html
+- Author: Xujia Liu · xujialiuphd@gmail.com
 
 Its desktop counterpart is [Zotero-TTS](https://github.com/xujialiu/Zotero-TTS). The two carry a reading position between them through the owner's own WebDAV storage.
 

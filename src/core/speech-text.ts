@@ -47,8 +47,8 @@ export function validateBracketPairs(value: string): BracketValidation {
  * **Wherever it encloses text, not only when the whole utterance is brackets**
  * (#25). The rule used to be the second — "anything less certain is left
  * exactly as it was: reading two extra characters aloud is a nuisance, while
- * deleting a word the author wrote is a lie about the document" — and it was
- * written for a voice that reads a bracket out loud. Fish Audio does the
+ * deleting a word the [document's] author wrote is a lie about the document" —
+ * and it was written for a voice that reads a bracket out loud. Fish Audio does the
  * opposite: it takes `[…]` for an instruction to the voice and says none of
  * it, so `He cast [Fireball] at the wolf.` was heard as "He cast at the wolf",
  * and the lie the old rule guarded against was being told by leaving the

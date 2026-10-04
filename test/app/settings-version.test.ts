@@ -9,7 +9,8 @@ import { DEFAULT_SETTINGS } from '../../src/app/settings';
  * Settings' version line (#30) says when a build has Debug Mode (#82, design
  * 0054): `1.0.0 (5)-beta1-debug` (#127), read aloud as
  * `Version 1.0.0 (5)-beta1-debug`, and the version alone in a build without it.
- * Nothing else on the screen changes.
+ * Nothing else on the screen changes. Above it, the Author's card (#129, design
+ * 0072) names the Author, his email and the repository, and asks for a star.
  * The real screen, with the settings controls replaced by probes that keep
  * what they were handed.
  */
@@ -17,9 +18,15 @@ const footnotes = vi.hoisted(() => [] as { label: string | undefined; text: Reac
 const rows = vi.hoisted(() => [] as string[]);
 const links = vi.hoisted(() => new Map<string, () => void>());
 const openPrivacyPolicy = vi.hoisted(() => vi.fn());
+const openRepository = vi.hoisted(() => vi.fn());
+const emailAuthor = vi.hoisted(() => vi.fn());
 const presses = vi.hoisted(() => new Map<string, () => void>());
 const navigate = vi.hoisted(() => vi.fn());
-vi.mock('../../src/app/own-site', () => ({ openPrivacyPolicy }));
+// The constants as `own-site.ts` has them; `own-site.test.ts` holds that module to them.
+vi.mock('../../src/app/own-site', () => ({
+  openPrivacyPolicy, openRepository, emailAuthor,
+  AUTHOR: 'Xujia Liu', EMAIL: 'xujialiuphd@gmail.com', REPOSITORY_NAME: 'xujialiu/OpenReader',
+}));
 vi.mock('../../src/app/controls', () => ({
   SettingsPage: ({ children }: { children: ReactNode }) => children,
   SettingsGroup: ({ footer, children }: { footer: ReactNode; children: ReactNode }) => [footer, children],
@@ -34,6 +41,15 @@ vi.mock('../../src/app/controls', () => ({
   },
   ActionRow: ({ label, onPress }: { label: string; onPress(): void }) => {
     rows.push(`link: ${label}`);
+    links.set(label, onPress);
+    return null;
+  },
+  DetailRow: ({ label, value }: { label: string; value: string }) => {
+    rows.push(`${label}: ${value}`);
+    return null;
+  },
+  LinkRow: ({ label, value, onPress }: { label: string; value: string; onPress(): void }) => {
+    rows.push(`link: ${label}: ${value}`);
     links.set(label, onPress);
     return null;
   },
@@ -56,7 +72,7 @@ async function shown(debugMode: boolean) {
     tree = create(createElement(SettingsScreen, { navigation: { navigate }, route: {} } as never));
   });
   await act(async () => tree!.unmount());
-  return { footnote: footnotes.at(-1)!, rows: [...new Set(rows)] };
+  return { footnote: footnotes.at(-1)!, footnotes: footnotes.map((note) => note.text), rows: [...new Set(rows)] };
 }
 
 afterEach(() => vi.doUnmock('../../src/debug/mode'));
@@ -73,7 +89,27 @@ it('shows the beta alone in a build without Debug Mode, and the rows above it ar
   expect(off.footnote.label).toBe(`Version ${APP_VERSION}`);
   const on = await shown(true);
   expect(on.rows).toEqual(off.rows);
-  expect(off.rows).toEqual(['General', 'Word Lookup & Translation', 'Providers: 0 enabled', 'Sync: Off', 'link: Privacy Policy', 'Acknowledgements']);
+  expect(off.rows).toEqual([
+    'General', 'Word Lookup & Translation', 'Providers: 0 enabled', 'Sync: Off',
+    'Author: Xujia Liu', 'link: Email: xujialiuphd@gmail.com', 'link: GitHub: xujialiu/OpenReader',
+    'link: Privacy Policy', 'Acknowledgements',
+  ]);
+});
+
+it('asks for a star under the Author\'s card, the one footnote above the version (#129, design 0072)', async () => {
+  const { footnotes: notes } = await shown(false);
+  expect(notes).toEqual(['If you like OpenReader, give it a ⭐ on GitHub — it helps others find it.', APP_VERSION]);
+});
+
+it('starts an email to the Author from the Email row, and opens the repository from the GitHub row (#129)', async () => {
+  await shown(false);
+  emailAuthor.mockClear();
+  openRepository.mockClear();
+  links.get('Email')!();
+  expect(emailAuthor).toHaveBeenCalledTimes(1);
+  expect(openRepository).not.toHaveBeenCalled();
+  links.get('GitHub')!();
+  expect(openRepository).toHaveBeenCalledTimes(1);
 });
 
 it('opens the privacy policy from its own row, under the settings and above the version (#110)', async () => {
