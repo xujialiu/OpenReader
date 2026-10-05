@@ -61,6 +61,11 @@ stays first and remains the default for a new install or an owner who had never
 chosen. The owner accepted the four script-rendered light/dark examples; this
 acceptance judges the colours, not their behaviour on the phone.
 
+On 2026-10-05 the owner refined Blue again to match a lavender-blue reference,
+then chose the gentler of two word strengths in light/dark colour simulations.
+The sentence is less grey, while the word gives up some prominence for a softer
+mark. Amber is unchanged.
+
 A previously saved choice keeps its exact colours and strengths. Updating a
 preset does not change it silently; tapping a preset again applies its new look.
 

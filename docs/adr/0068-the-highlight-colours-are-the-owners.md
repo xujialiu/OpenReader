@@ -359,6 +359,25 @@ script-rendered comparison, withdrew review of 1.0.0(3), and chose to retain
 label is therefore retired before first publication. Native interaction testing
 was not completed in this round; the tester failed at MCP startup.
 
+## Reference-matched Blue (#126, 2026-10-05)
+
+The owner accepted a further Blue-only revision after comparing script-rendered
+light/dark examples: sentence `#727bfa` at 22%, word `#727efa` at 38%.
+The supplied reference has a clearer lavender-blue sentence wash than the
+previous muted preset. The owner chose 38% over the proposed 47% and 44% word
+opacity for a gentler word mark. Amber is unchanged.
+
+On the reference light page, the sentence and nested word composites are
+`#e0e2fe` and `#b6bcfc`; on the dark page they are `#262847` and `#43498b`.
+Calculated text contrast is respectively 16.5:1 / 11.6:1 and 11.4:1 / 6.6:1.
+These are palette calculations, not native rendering measurements.
+
+The owner explicitly retained the no-migration rule: previously saved colours,
+including the October 3 Blue, stay unchanged; selecting Blue applies the new
+values. Tests pin this historical-value preservation and both themes' colour
+composites. The owner waived iOS verification and accepted the colour simulation;
+no simulator or phone installation is claimed for this revision.
+
 ## Alternatives
 
 - **Separate colours per theme**, `{ light, dark }` per level. Twice the

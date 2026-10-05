@@ -323,7 +323,7 @@ describe('Highlight Colours as a stylesheet', () => {
   it('marks the sentence and the word in Blue, the default, at its opacities', () => {
     expect(highlightRules(DEFAULT_HIGHLIGHT_COLOURS)).toEqual([
       '::highlight(' + UTTERANCE_HIGHLIGHT + ') { background-color: rgba(114, 123, 250, 0.22); }',
-      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(114, 126, 250, 0.47); }',
+      '::highlight(' + WORD_HIGHLIGHT + ') { background-color: rgba(114, 126, 250, 0.38); }',
     ]);
     expect(DEFAULT_HIGHLIGHT_COLOURS).toEqual(HIGHLIGHT_PRESETS.blue);
   });
@@ -355,10 +355,10 @@ describe('Highlight Colours as a stylesheet', () => {
     const sentenceRgb: [number, number, number] = [114, 123, 250];
     const wordRgb: [number, number, number] = [114, 126, 250];
     for (const [page, sentence, word] of [
-      [[255, 255, 255], '#e0e2fe', '#acb3fc'],
+      [[255, 255, 255], '#e0e2fe', '#b6bcfc'],
       // CSS retains fractional channels until the final composite, unlike
       // the native preview's intermediate 8-bit sentence colour.
-      [[0x11, 0x11, 0x14], '#262847', '#4a519b'],
+      [[0x11, 0x11, 0x14], '#262847', '#43498b'],
     ] as const) {
       const underWord = over(sentenceRgb, blue.sentence.opacity / 100, [...page]);
       expect(hex(underWord)).toBe(sentence);

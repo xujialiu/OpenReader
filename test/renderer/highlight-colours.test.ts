@@ -14,14 +14,14 @@ import {
 describe('Highlight Colours (#118)', () => {
   it('offers balanced Blue and Amber for both themes, Blue first and by default', () => {
     expect(HIGHLIGHT_PRESETS.amber).toEqual({ sentence: { color: '#e4ad38', opacity: 18 }, word: { color: '#d99324', opacity: 38 } });
-    expect(HIGHLIGHT_PRESETS.blue).toEqual({ sentence: { color: '#727bfa', opacity: 22 }, word: { color: '#727efa', opacity: 47 } });
+    expect(HIGHLIGHT_PRESETS.blue).toEqual({ sentence: { color: '#727bfa', opacity: 22 }, word: { color: '#727efa', opacity: 38 } });
     expect(HIGHLIGHT_PRESET_ORDER).toEqual(['blue', 'amber']);
     expect(DEFAULT_HIGHLIGHT_COLOURS).toEqual(HIGHLIGHT_PRESETS.blue);
   });
 
   it('paints a level as rgba, its opacity a fraction', () => {
     expect(rgba(HIGHLIGHT_PRESETS.amber.sentence)).toBe('rgba(228, 173, 56, 0.18)');
-    expect(rgba(HIGHLIGHT_PRESETS.blue.word)).toBe('rgba(114, 126, 250, 0.47)');
+    expect(rgba(HIGHLIGHT_PRESETS.blue.word)).toBe('rgba(114, 126, 250, 0.38)');
     expect(rgba({ color: '#000000', opacity: 0 })).toBe('rgba(0, 0, 0, 0)');
   });
 

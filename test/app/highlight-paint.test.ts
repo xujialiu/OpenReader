@@ -11,7 +11,7 @@ import { HIGHLIGHT_PRESETS } from '../../src/renderer/highlight-colours';
  */
 describe("the Highlight section's sample of the page (#118)", () => {
   it('lays a level over the page at its opacity', () => {
-    expect(paintOver('#ffffff', HIGHLIGHT_PRESETS.blue.word)).toBe('#bdc2fd');
+    expect(paintOver('#ffffff', HIGHLIGHT_PRESETS.blue.word)).toBe('#c9cefd');
     expect(paintOver('#111114', { color: '#ffffff', opacity: 50 })).toBe('#88888a');
   });
 
@@ -29,8 +29,8 @@ describe("the Highlight section's sample of the page (#118)", () => {
   });
 
   it.each([
-    ['blue', 'light', '#e0e2fe', '#acb3fc'],
-    ['blue', 'dark', '#262847', '#4a509b'],
+    ['blue', 'light', '#e0e2fe', '#b6bcfc'],
+    ['blue', 'dark', '#262847', '#43498b'],
     ['amber', 'light', '#faf0db', '#edcd95'],
     ['amber', 'dark', '#372d1a', '#75541e'],
   ] as const)('%s on %s keeps text readable on both nested marks (#126)', (preset, scheme, sentence, word) => {
