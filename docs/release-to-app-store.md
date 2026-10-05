@@ -53,11 +53,20 @@ The owner set these on 2026-09-30.
   - Checked in App Store Connect on 2026-10-04: the rejected submission carried 1.0.0 (4), submitted October 3 at 03:22. Submission ID `86a36ec0-b6f7-4919-9e1f-a79d3cef1038`.
   - The owner recorded the video, then authorized the agent to complete the reply, notes, upload and resubmission, including pushing the release commit and tags. For the recording, a Demo App of `1.0.0 (5)-beta5` (the owner's choice) was installed beside his own app: [install-demo-on-iphone.md](install-demo-on-iphone.md). The owner's iPhone ran iOS 27.0.1 (24A446), the newest public release for it on that day (notes 2026-10-04 11:10).
   - On October 4 at 12:03, posted all six answers and the recording as a private App Review reply; the same 3,950-character text and recording are saved in App Review Information. The existing private review credential was preserved. The reply accurately identifies the Demo App rather than presenting it as TestFlight build 5. The 85-second original was transcoded, not cut, to H.264/AAC `OpenReader-Review-Demo.mp4` (about 5.8 MB) to fit the browser transfer limit; no public video hosting or repository upload. First frame shows the Home Screen; sampled frames show provider setup, import, voice selection, consent and playback highlighting. No full audio-quality or fresh-install test of the final uploaded binary is claimed.
+- **Build 1.0.0 (6)**
+  - Uploaded October 5 at 14:38 CST from clean, synchronized `main` commit `5b02aed`, whose release-only change drops `-beta4`. It carries the Author's card (#129), Contents' Downloaded check (#134), the bracket note (#135) and the final Blue highlight (#126).
+  - `npm ci`, 2,372 tests in 143 files, TypeScript and ESLint passed. Clean prebuild; the archive (132 s) and the export with upload (175 s) returned 0, ending `Upload succeeded` and `EXPORT SUCCEEDED`. The archive's Info.plist has the production bundle ID, 1.0.0 (6), exempt encryption, iPhone only, background audio and the microphone string; its bundle has `DEBUG_MODE = false`. Only the documented dSYM warnings, and four of the harmless `exit code 0` lines.
+  - At the owner's request, 1.0.0 (5) was removed from review on October 5 at about 14:36 CST. Its submission shows Removed, and the version went to Developer Rejected. Apple had build 6 Ready to Submit about ten minutes after the upload.
+  - Saved with the owner's approval: **Marketing URL** `https://github.com/xujialiu/OpenReader`; the **Description**'s new last line; the review notes changed in two places only, `1.0.0 (5)` to `(6)` in the heading and `build 5 uses the same app functionality` to `build 6 …`. They are still 3,950 characters, with the review key and the attachment unchanged. The owner decided not to describe the Author's card or the Contents check in the notes: there is no new feature worth listing.
+  - Build 5 replaced by build 6, then submitted on October 5 at 14:52 CST. App Review shows **Waiting for Review**, with manual release still selected. This is not approval or public release.
+  - Annotated `build-6` and `v1.0.0` (moved from build 5's `ca1aae3`) point to `5b02aed`, pushed with the owner's permission.
+  - In App Store Connect, a value written by script (the native value setter plus `input`/`change` events) shows in the field but is not saved: Save sent no PATCH, and a fresh tab still showed the old text. Typing over a selection made by script saved (PATCH `appStoreVersionLocalizations` and `appStoreReviewDetails`, both 200), and kept the review key out of the agent's output.
 - **Build 1.0.0 (5)**
+  - Removed from review on October 5, replaced by build 6 (above).
   - Uploaded October 4 at 11:57 CST from clean, synchronized `main` commit `ca1aae3`. Release-only change drops `-beta5` from `APP_VERSION`; no app behavior was changed.
   - `npm ci`, 2,356 tests in 143 files, TypeScript and ESLint passed. Clean iOS prebuild, archive and export all returned 0; Xcode reported `Upload succeeded` and `EXPORT SUCCEEDED`. Archive metadata confirms production bundle ID, version/build, iPhone-only, background audio and exempt encryption; pre-Hermes bundle confirms `DEBUG_MODE = false`. Only the documented prebuilt-framework dSYM warnings occurred.
   - Apple processed build 5 and made it selectable. Replaced build 4, saved, updated the existing submission and resubmitted on October 4 around 12:06. App Store Connect shows **Waiting for Review**, item **1.0.0 (5)**. Reopening the version page confirmed the exact saved notes and **manual release** still selected. This is not approval or public release.
-  - Annotated `build-5` and `v1.0.0` both point to `ca1aae3` and were pushed with the owner's permission. The previously local-only `v1.0.0` was moved from build 3. Historical `build-2`, `build-3` and `build-4` remain local.
+  - Annotated `build-5` and `v1.0.0` both pointed to `ca1aae3` and were pushed with the owner's permission; `v1.0.0` has since moved to build 6. The previously local-only `v1.0.0` was moved from build 3. Historical `build-2`, `build-3` and `build-4` remain local.
   - Build logs and the transcoded review attachment: `/tmp/openreader-release-124/build5/`. `.worktrees/demo` (`main--demo`) remains intentionally unmerged until Apple accepts the recording; no new sub-worktree, Metro or simulator was started for this release-only task.
 - **Build 1.0.0 (4)**
   - Uploaded to TestFlight on 2026-10-03 at 03:07 CST from clean, synchronized `main` commit `98809b5`. Xcode reported `Upload succeeded` and `EXPORT SUCCEEDED`; Apple processing completion has not yet been checked.
@@ -82,9 +91,6 @@ The owner set these on 2026-09-30.
   - Books category, content-rights declaration, calculated 4+ age rating and non-trader status saved. Reviewer contact is saved only in App Store Connect. No sign-in is required; manual release is selected.
   - The owner privately replaced the review-key placeholder in App Store Connect and confirmed completion. Before submission, a boolean-only check confirmed the placeholder was absent; no key was output or committed.
   - Follow-up simulator diagnosis completed: paced AXe input in one batch persisted a local test key to Keychain and passed Fish Audio's connection test, without app changes. Real import, voice selection and first consent were exercised. Playback screenshots still showed buffering; actual audio onset/word timing and paused Reading-position preservation remain unverified. The documentation-only test branch was merged and its sub-worktree removed; the standalone app remains installed and stopped.
-- **Owed with the next submission, build 6 (#129)**
-  - The owner decided on 2026-10-04 that the Author's card (Settings: Author, Email, GitHub and the star line) ships with build 6, whether that is a resubmitted 1.0.0 or the first build of the next Version. Build 5 in review was not withdrawn for it.
-  - With that submission: set **Marketing URL** to `https://github.com/xujialiu/OpenReader` (the App Store's "Developer Website"), end the **Description** with the line in the listing below, and describe the card in the review notes (guideline 2.3.1(a) asks for every new feature there). These fields are version metadata, locked while 1.0.0 (5) waits for review; this was not checked in App Store Connect.
 - **Web pages**, from `site/` through `.github/workflows/pages.yml`:
   - Support URL: https://xujialiu.github.io/OpenReader/
   - Privacy Policy URL: https://xujialiu.github.io/OpenReader/privacy.html
@@ -230,14 +236,12 @@ To test:
 Text goes only to the service the user chooses, and only after the user allows it.
 Word Lookup (long-press a word) asks the same way before it sends a selection to a
 dictionary or translation service.
-
-Settings shows the developer's name and email and the project's GitHub
-repository. Tapping Email starts an email in Mail; tapping GitHub opens the
-repository in Safari.
 ```
 
-The last paragraph is new with build 6 (#129); leave it out of a build without
-the Author's card.
+The notes saved in App Store Connect are the longer Guideline 2.1 answer
+(build 6 above), close to the field's 4,000-character limit. The owner decided
+on 2026-10-05 that the Author's card and Contents' Downloaded check are not
+new features worth describing there.
 
 ### Store listing (draft, for the owner to approve)
 
@@ -269,6 +273,6 @@ the Author's card.
   ```
 
   The last line was `OpenReader is open source.` up to 1.0.0 (5); the new one
-  goes in with build 6 (#129).
-- **Marketing URL:** `https://github.com/xujialiu/OpenReader`, from build 6
-  (#129). Before it, none.
+  went in with build 6 on 2026-10-05 (#129).
+- **Marketing URL:** `https://github.com/xujialiu/OpenReader`, set with build 6
+  on 2026-10-05 (#129). Before it, none.
