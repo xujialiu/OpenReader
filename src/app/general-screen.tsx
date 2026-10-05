@@ -148,7 +148,10 @@ export function GeneralScreen() {
           offered next to it, because an owner who cannot see what is wrong with
           their list needs somewhere to go. The sentence about downloaded
           chapters stays under the card whatever the switch says: nothing else on
-          any screen shows it (design 0041). */}
+          any screen shows it (design 0041). It says what a change does (#135):
+          a downloaded sentence whose Speech Text it alters stops counting as
+          saved and is read online until its chapter is downloaded again, and
+          switching back makes its saved audio count again (ADR 0028). */}
       <SettingsGroup
         footer={<>
           {problem ? <Footnote attention>{problem}</Footnote> : null}
@@ -156,7 +159,7 @@ export function GeneralScreen() {
             setProblem(null);
             setSettings((was) => ({ ...was, bracketPairs: DEFAULT_BRACKET_PAIRS, stripBrackets: true }));
           }}><Text style={[styles.link, { color: accent.reading }]}>Use {DEFAULT_BRACKET_PAIRS} instead</Text></Pressable> : null}
-          <Footnote>Chapters already downloaded keep the audio they were saved with until they are downloaded again.</Footnote>
+          <Footnote>Downloaded sentences this changes are read online until their chapters are downloaded again; switching back plays their saved audio again.</Footnote>
         </>}
       >
         <SwitchRow label="Remove enclosing brackets when reading" value={settings.stripBrackets} onChange={strip}

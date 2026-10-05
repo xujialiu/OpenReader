@@ -1,5 +1,22 @@
 # Merges, seeding and past verification runs
 
+## Verifying #134: Contents' Downloaded check (2026-10-05)
+
+- **A chapter deleted in Manage and downloaded again in the same process came
+  back at once, without a request.** Delete hid the chapter and Contents lost
+  its check, but `Download selected` on it then finished instantly: the fake
+  speech server's log gained no `text=` line, and the database and Contents
+  showed the chapter Downloaded again. The runtime's in-memory clip cache
+  still held its sentences, and a download fetches through it, so nothing
+  was sent. That is the app saving a request, not a fault in the check, but
+  it makes such a run worthless as evidence of a live download. Fix: after a
+  deletion, terminate and relaunch the app before downloading again, and
+  confirm in the provider's log that the sentences were asked for.
+- **After a cold relaunch, an exact-label touch on `The Second Chapter, being
+  read` found no element.** While the plan loads, the Download drawer can mark
+  another chapter as the one being read, so the `, being read` suffix moves.
+  Fix: read the tree again after a relaunch and touch the label as it is now.
+
 ## Verifying #115: Play in the middle of the transport row (2026-10-01)
 
 - **On a fresh install the collapse arrow seems dead, and so does every way

@@ -52,6 +52,7 @@ import { currentRow, type Contents, type ContentsRow } from '../core/document/co
 
 import { INK, useAccent } from './controls';
 import { Drawer, DrawerFooter, DrawerList, DrawerRow, DrawerRowText } from './drawer';
+import { Icon } from './icon';
 
 export interface ContentsSheetProps {
   visible: boolean;
@@ -76,6 +77,12 @@ export interface ContentsSheetProps {
   section: number | null;
   /** Go here: a spine index. The caller does the two steps (`use-reading.ts`'s `goToSection`). */
   onGo(section: number): void;
+  /**
+   * The rows that carry the Downloaded check, as indexes into `contents.rows`
+   * (#134, `download-rows.ts`'s `downloadedRows`). Worked out by the screen,
+   * which knows the Player's Voice and asks the offline store for its progress.
+   */
+  downloaded: ReadonlySet<number>;
 }
 
 /**
@@ -84,7 +91,7 @@ export interface ContentsSheetProps {
  * where it stays in view however far the list is scrolled. A footer at the end
  * of 2,076 rows would never be read.
  */
-export function ContentsSheet({ visible, onClose, contents, spineKnown, section, onGo }: ContentsSheetProps) {
+export function ContentsSheet({ visible, onClose, contents, spineKnown, section, onGo, downloaded }: ContentsSheetProps) {
   const here = useMemo(
     () => (section === null ? null : currentRow(contents, { sectionIndex: section })),
     [contents, section],
@@ -105,11 +112,12 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
           </DrawerFooter>
         ) : (
           // Mounted afresh at every opening of the drawer, which is when it opens again at the current row.
-          <DrawerList data={contents.rows} openAt={here?.row ?? null} ends={!footer}
+          <DrawerList data={contents.rows} openAt={here?.row ?? null} ends={!footer} extraData={downloaded}
             // The row's place in the whole list.
             keyExtractor={(_, index) => String(index)}
             renderItem={({ item, index }) => (
-              <Row row={item} current={index === here?.row} onPress={() => { if (item.target !== null) { onGo(item.target); onClose(); } }} />
+              <Row row={item} current={index === here?.row} downloaded={downloaded.has(index)}
+                onPress={() => { if (item.target !== null) { onGo(item.target); onClose(); } }} />
             )} />
         )}
 
@@ -146,14 +154,22 @@ function precisionLine(precision: 'shared' | 'before'): string {
   return 'This page is not in the contents, so the nearest row before it is marked.';
 }
 
-function Row({ row, current, onPress }: { row: ContentsRow; current: boolean; onPress(): void }) {
+/**
+ * One row. A Downloaded row carries the Download drawer's check at its right,
+ * in the same size and colour, and nothing beside it: the check is the word
+ * (design 0073). The check says the same to VoiceOver, as the Download
+ * drawer's does.
+ */
+function Row({ row, current, downloaded, onPress }: { row: ContentsRow; current: boolean; downloaded: boolean; onPress(): void }) {
   const unreachable = row.target === null;
   const accent = useAccent();
   return (
     // One level in per level of nesting. A book with volumes inside volumes sets
     // the inner ones in further, which is why this is arithmetic and not two styles.
     <DrawerRow onPress={onPress} disabled={unreachable} marked={current} level={row.depth}
-      accessibilityState={{ selected: current, disabled: unreachable }}>
+      accessibilityLabel={downloaded ? `${row.label || '—'}, downloaded` : undefined}
+      accessibilityState={{ selected: current, disabled: unreachable }}
+      accessory={downloaded ? <Icon name="check" color={current ? accent.onMark : accent.reading} size={22} /> : undefined}>
       <DrawerRowText emphasized={current || row.heading}
         style={[current && { color: accent.onMark }, unreachable && styles.unreachable]}>
         {row.label || '—'}

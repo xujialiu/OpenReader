@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { listedInManage, marker, readingChapter, type Marker } from '../../src/app/download-rows';
+import { downloadedRows, listedInManage, marker, readingChapter, type Marker } from '../../src/app/download-rows';
+import type { ContentsRow } from '../../src/core/document/contents';
 import type { Chapter, DownloadTask } from '../../src/offline/model';
 
 const chapter = (id: string, textCount = 17, prepared = true): Chapter => ({ id, title: id, depth: 0, parent: null, texts: [], textCount, prepared });
@@ -115,5 +116,65 @@ describe('which row the download drawer marks and opens at (#88)', () => {
   });
   it('marks the heading of a folded volume, whose chapters are not shown', () => {
     expect(readingChapter([at('Volume 1', 2), at('Volume 2', 7)], 4)).toBe('Volume 1');
+  });
+});
+
+describe('which Contents rows carry the Downloaded check (#134)', () => {
+  /** A Contents row as the renderer's navigation gives it: the href as written, and the spine item it resolved to. */
+  const row = (href: string, target: number | null, depth = 0, heading = false): ContentsRow =>
+    ({ id: href, label: href, depth, heading, section: 0, target, href });
+  /** The download plan's chapter for one navigation entry, as the app's own reading of the navigation makes it. */
+  const entry = (id: string, section: number | null, fragment = '', extra: Partial<Chapter> = {}): Chapter =>
+    ({ id, title: id, depth: 0, parent: null, texts: [], textCount: 17, prepared: true, section, fragment, ...extra });
+  /** Saved sentences per chapter in the Player's Voice; 17 of 17 is Downloaded. */
+  const savedIn = (counts: Record<string, number>) =>
+    new Map(Object.entries(counts).map(([id, count]) => [id, { id, count, complete: count === 17 }]));
+
+  it('checks a Downloaded chapter, and not one with only some sentences saved', () => {
+    const rows = [row('a.xhtml', 0), row('b.xhtml', 1), row('c.xhtml', 2)];
+    const chapters = [entry('nav.0', 0), entry('nav.1', 1), entry('nav.2', 2)];
+    expect(downloadedRows(rows, chapters, savedIn({ 'nav.0': 17, 'nav.1': 3, 'nav.2': 0 }))).toEqual(new Set([0]));
+  });
+  it('checks a volume heading when every chapter under it with something to speak is Downloaded, and not when one is missing', () => {
+    // Volume 1's title page has nothing to speak; Volume 2's has a line of its own.
+    const rows = [row('v1.xhtml', 1, 0, true), row('c1.xhtml', 2, 1), row('c2.xhtml', 3, 1), row('v2.xhtml', 4, 0, true), row('c3.xhtml', 5, 1)];
+    const chapters = [
+      entry('nav.0', 1, '', { textCount: 0 }), entry('nav.0.0', 2, '', { parent: 'nav.0', depth: 1 }), entry('nav.0.1', 3, '', { parent: 'nav.0', depth: 1 }),
+      entry('nav.1', 4), entry('nav.1.0', 5, '', { parent: 'nav.1', depth: 1 }),
+    ];
+    expect(downloadedRows(rows, chapters, savedIn({ 'nav.0': 0, 'nav.0.0': 17, 'nav.0.1': 17, 'nav.1': 17, 'nav.1.0': 9 }))).toEqual(new Set([0, 1, 2]));
+  });
+  it('never checks a row with nothing to speak, or a row that cannot be opened', () => {
+    // A cover, a row whose href the renderer could not resolve although the
+    // app's own reading of the navigation did, and an ordinary chapter.
+    const rows = [row('cover.xhtml', 0), row('../elsewhere/c1.xhtml', null), row('c2.xhtml', 2)];
+    const chapters = [entry('nav.0', 0, '', { textCount: 0 }), entry('nav.1', 1), entry('nav.2', 2)];
+    expect(downloadedRows(rows, chapters, savedIn({ 'nav.0': 0, 'nav.1': 17, 'nav.2': 17 }))).toEqual(new Set([2]));
+  });
+  it('matches each row to its own chapter by the part and fragment it points to, not by position', () => {
+    // The renderer and the app read the navigation separately: here the app
+    // kept an entry with no link the renderer dropped, and added a part the
+    // contents do not list. A volume heading and its first chapter point at the
+    // same file, and a chapter's fragment arrives percent-encoded in the href.
+    const rows = [
+      row('v1.xhtml', 1, 0, true), row('v1.xhtml', 1, 1), row('v1-2.xhtml#%E7%AB%A0', 2, 1),
+      row('c3.xhtml', 4),
+    ];
+    const chapters = [
+      entry('nav.0', 1, '', { textCount: 0 }), entry('nav.0.0', 1, '', { parent: 'nav.0', depth: 1 }),
+      entry('nav.0.1', 2, '章', { parent: 'nav.0', depth: 1 }),
+      entry('nav.1', null, '', { title: 'Untitled chapter', textCount: 0 }),
+      entry('section-3', 3, ''), entry('nav.2', 4),
+    ];
+    // The volume's second chapter is partly saved: the heading is not checked,
+    // although the first chapter, which shares its file, is.
+    expect(downloadedRows(rows, chapters, savedIn({ 'nav.0.0': 17, 'nav.0.1': 5, 'section-3': 17, 'nav.2': 17 }))).toEqual(new Set([1, 3]));
+    // Once the second chapter is saved too, the whole volume is.
+    expect(downloadedRows(rows, chapters, savedIn({ 'nav.0.0': 17, 'nav.0.1': 17, 'nav.2': 17 }))).toEqual(new Set([0, 1, 2, 3]));
+  });
+  it('checks nothing when nothing is saved in the Voice, as for a Voice that was never downloaded', () => {
+    const rows = [row('a.xhtml', 0), row('b.xhtml', 1)];
+    expect(downloadedRows(rows, [entry('nav.0', 0), entry('nav.1', 1)], new Map())).toEqual(new Set());
+    expect(downloadedRows(rows, [], new Map())).toEqual(new Set());
   });
 });

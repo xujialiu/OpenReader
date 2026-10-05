@@ -56,9 +56,11 @@ export function descendants(chapters: Chapter[], id: string): Chapter[] {
   const ids = new Set([id]);
   // The navigation is parent-before-child, including empty volume headings.
   for (const chapter of chapters) if (chapter.parent && ids.has(chapter.parent)) ids.add(chapter.id);
-  return chapters.filter((chapter) => ids.has(chapter.id) && (chapter.prepared === false || chapterTextCount(chapter) > 0));
+  return chapters.filter((chapter) => ids.has(chapter.id) && speaks(chapter));
 }
 export const chapterTextCount=(chapter:Chapter)=>chapter.textCount??chapter.texts.length;
+/** A chapter with something to speak, or one whose text has not been read yet and so may have. A cover or a picture page does not. */
+export const speaks = (chapter: Chapter) => chapter.prepared === false || chapterTextCount(chapter) > 0;
 
 export function navigationPlan(navigation: DocumentNavigation): NarrationPlan {
   const chapters: Chapter[] = navigation.chapters.map((chapter) => ({ ...chapter, texts: [], prepared: chapter.section === null }));
