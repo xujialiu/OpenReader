@@ -27,9 +27,9 @@ function hue(color: string): number {
 }
 
 describe('the reading accent (#118)', () => {
-  it('darkens the softened Blue on light surfaces and lightens it on dark ones', () => {
-    expect(readingAccent(HIGHLIGHT_PRESETS.blue, 'light').reading).toBe('#5367cf');
-    expect(readingAccent(HIGHLIGHT_PRESETS.blue, 'dark').reading).toBe('#667ce8');
+  it('darkens Blue on light surfaces and keeps its colour on dark ones', () => {
+    expect(readingAccent(HIGHLIGHT_PRESETS.blue, 'light').reading).toBe('#5d66cb');
+    expect(readingAccent(HIGHLIGHT_PRESETS.blue, 'dark').reading).toBe('#727efa');
   });
 
   it('darkens Amber on the light surfaces and keeps it on the dark ones', () => {
@@ -38,8 +38,8 @@ describe('the reading accent (#118)', () => {
   });
 
   it('goes a step further on a drawer\'s marked row and round button', () => {
-    expect(readingAccent(HIGHLIGHT_PRESETS.blue, 'light').onMark).toBe('#485ab5');
-    expect(readingAccent(HIGHLIGHT_PRESETS.blue, 'dark').onMark).toBe('#97a5ef');
+    expect(readingAccent(HIGHLIGHT_PRESETS.blue, 'light').onMark).toBe('#5159b1');
+    expect(readingAccent(HIGHLIGHT_PRESETS.blue, 'dark').onMark).toBe('#9aa2fb');
     expect(readingAccent(HIGHLIGHT_PRESETS.amber, 'light').onMark).toBe('#835916');
     expect(readingAccent(HIGHLIGHT_PRESETS.amber, 'dark').onMark).toBe('#dd9d38');
   });
@@ -69,7 +69,8 @@ describe('the reading accent (#118)', () => {
   });
 
   it('goes only as far as it has to: one step less would not read', () => {
-    const blue = channels(readingAccent(HIGHLIGHT_PRESETS.blue, 'dark').reading);
+    // A fixed colour that needs lightening, independent of preset revisions.
+    const blue = channels(readingAccent(wordIn('#5c73e6'), 'dark').reading);
     const lessBlue = '#' + blue.map((value) => (value - 1).toString(16).padStart(2, '0')).join('');
     expect(Math.min(...ACCENT_SURFACES.dark.map((surface) => contrast(lessBlue, surface)))).toBeLessThan(4.5);
   });
@@ -82,7 +83,7 @@ describe('the reading accent (#118)', () => {
 
   it('washes the player\'s A in the word\'s colour at the word\'s opacity, the same in both themes', () => {
     for (const scheme of SCHEMES) {
-      expect(readingAccent(HIGHLIGHT_PRESETS.blue, scheme).following).toBe('rgba(92, 115, 230, 0.44)');
+      expect(readingAccent(HIGHLIGHT_PRESETS.blue, scheme).following).toBe('rgba(114, 126, 250, 0.47)');
       expect(readingAccent(HIGHLIGHT_PRESETS.amber, scheme).following).toBe('rgba(217, 147, 36, 0.38)');
       expect(readingAccent(wordIn('#4456de', 0), scheme).following).toBe('rgba(68, 86, 222, 0)');
     }

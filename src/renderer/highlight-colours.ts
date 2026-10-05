@@ -34,7 +34,7 @@ export interface HighlightColours {
  * Their names are what VoiceOver says; the drawer shows only their samples.
  */
 export const HIGHLIGHT_PRESETS = {
-  blue: { sentence: { color: '#5965a8', opacity: 22 }, word: { color: '#5c73e6', opacity: 44 } },
+  blue: { sentence: { color: '#727bfa', opacity: 22 }, word: { color: '#727efa', opacity: 47 } },
   amber: { sentence: { color: '#e4ad38', opacity: 18 }, word: { color: '#d99324', opacity: 38 } },
 } as const satisfies Record<string, HighlightColours>;
 

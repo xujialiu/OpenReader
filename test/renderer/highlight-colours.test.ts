@@ -14,14 +14,14 @@ import {
 describe('Highlight Colours (#118)', () => {
   it('offers balanced Blue and Amber for both themes, Blue first and by default', () => {
     expect(HIGHLIGHT_PRESETS.amber).toEqual({ sentence: { color: '#e4ad38', opacity: 18 }, word: { color: '#d99324', opacity: 38 } });
-    expect(HIGHLIGHT_PRESETS.blue).toEqual({ sentence: { color: '#5965a8', opacity: 22 }, word: { color: '#5c73e6', opacity: 44 } });
+    expect(HIGHLIGHT_PRESETS.blue).toEqual({ sentence: { color: '#727bfa', opacity: 22 }, word: { color: '#727efa', opacity: 47 } });
     expect(HIGHLIGHT_PRESET_ORDER).toEqual(['blue', 'amber']);
     expect(DEFAULT_HIGHLIGHT_COLOURS).toEqual(HIGHLIGHT_PRESETS.blue);
   });
 
   it('paints a level as rgba, its opacity a fraction', () => {
     expect(rgba(HIGHLIGHT_PRESETS.amber.sentence)).toBe('rgba(228, 173, 56, 0.18)');
-    expect(rgba(HIGHLIGHT_PRESETS.blue.word)).toBe('rgba(92, 115, 230, 0.44)');
+    expect(rgba(HIGHLIGHT_PRESETS.blue.word)).toBe('rgba(114, 126, 250, 0.47)');
     expect(rgba({ color: '#000000', opacity: 0 })).toBe('rgba(0, 0, 0, 0)');
   });
 
@@ -42,6 +42,7 @@ describe('Highlight Colours (#118)', () => {
   });
 
   it.each([
+    { sentence: { color: '#5965a8', opacity: 22 }, word: { color: '#5c73e6', opacity: 44 } },
     { sentence: { color: '#434665', opacity: 22 }, word: { color: '#4456de', opacity: 62 } },
     { sentence: { color: '#434665', opacity: 60 }, word: { color: '#4456de', opacity: 50 } },
     { sentence: { color: '#ffc400', opacity: 22 }, word: { color: '#ffa800', opacity: 62 } },
