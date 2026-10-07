@@ -202,8 +202,10 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     <Drawer visible={selection.moving} title="Move to…" onClose={selection.closeMove}>
       {selection.moving ? <MoveContent targets={selection.selected} onMoved={selection.moved} /> : null}
     </Drawer>
-    {actions ? <ReaderActions document={actions.id} movable onClose={() => setActions(null)} onDelete={() => remove(actions)} /> : null}
-    {folderActions ? <FolderActions id={folderActions} onClose={() => setFolderActions(null)} onDelete={removeFolder} /> : null}
+    {actions ? <ReaderActions document={actions.id} movable onClose={() => setActions(null)} onDelete={() => remove(actions)}
+      onSelect={() => { setActions(null); selection.begin({ kind: 'document', id: actions.id }); }} /> : null}
+    {folderActions ? <FolderActions id={folderActions} onClose={() => setFolderActions(null)} onDelete={removeFolder}
+      onSelect={(id) => { setFolderActions(null); selection.begin({ kind: 'folder', id }); }} /> : null}
   </View>;
 }
 function rowTarget(row: Row): LibraryTarget { return { kind: row.kind, id: row.kind === 'folder' ? row.folder.id : row.entry.id }; }

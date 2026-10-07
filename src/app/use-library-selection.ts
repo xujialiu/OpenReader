@@ -27,10 +27,11 @@ export function useLibrarySelection(navigation: Pick<ScreenProps<'Library'>['nav
   useEffect(() => navigation.addListener('blur', clear), [navigation, clear]);
   useEffect(() => () => { generation.current++; }, []);
 
-  const begin = () => {
+  /** Empty from the Library's `…`; with the entry already selected from that entry's own actions (#136). */
+  const begin = (target?: LibraryTarget) => {
     if (locked.current || library.folders.getSnapshot().busy) return;
     generation.current++;
-    setKeys(new Set()); setActive(true);
+    setKeys(new Set(target ? [targetKey(target)] : [])); setActive(true);
   };
   const toggle = (target: LibraryTarget) => {
     if (locked.current || moving || confirming) return;

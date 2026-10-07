@@ -59,3 +59,25 @@ describe('a list that ends the drawer runs on to the sheet’s bottom edge (#117
     pin(drawer, "contentContainerStyle={[contentContainerStyle, ends && { paddingBottom: bottom }]}", 'drawer.tsx DrawerList');
   });
 });
+
+describe('Select in the Library (#136, design 0071)', () => {
+  it('lists the Library actions as Import file, Create folder, Select', () => {
+    const add = code('folder-actions.tsx');
+    const at = (label: string) => add.indexOf(`<DrawerRowText>${label}</DrawerRowText>`);
+    expect(at('Import file')).toBeGreaterThan(-1);
+    expect(at('Import file')).toBeLessThan(at('Create folder'));
+    expect(at('Create folder')).toBeLessThan(at('Select'));
+  });
+
+  it("offers Select directly above Delete in a Document's and a Folder's actions, and only the Library grants it", () => {
+    for (const name of ['reader-actions.tsx', 'folder-actions.tsx']) {
+      const source = code(name);
+      const deleteRow = source.lastIndexOf('<DrawerRow ', source.indexOf('icon="trash"'));
+      const rowAbove = source.lastIndexOf('<DrawerRow ', deleteRow - 1);
+      expect(source.slice(rowAbove, deleteRow), name).toContain('<DrawerRowText>Select</DrawerRowText>');
+    }
+    pin(code('library-screen.tsx'), "selection.begin({ kind: 'document', id: actions.id });", 'library-screen.tsx Document Select');
+    pin(code('library-screen.tsx'), "selection.begin({ kind: 'folder', id });", 'library-screen.tsx Folder Select');
+    expect(code('reader-screen.tsx')).not.toContain('onSelect=');
+  });
+});
