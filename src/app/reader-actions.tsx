@@ -45,8 +45,11 @@ const TITLES: Record<Exclude<Page, 'menu'>, string> = { appearance: 'Appearance'
  * opens a page has a chevron. Every page has a back button to the page it was
  * opened from (`BACK`), and a swipe down closes the drawer from any of them.
  * Rename is not a page but the phone's alert over the menu (`RenameAlert`).
+ *
+ * **Select** (#136) is granted like `onDelete`: only the Library has a list to
+ * select in, so only it passes `onSelect`, and the row sits directly above Delete.
  */
-export function ReaderActions({ document, onClose, onDelete, appearance = false, movable = false }: { document: DocumentId; onClose(): void; onDelete?(): void; appearance?: boolean; movable?: boolean }) {
+export function ReaderActions({ document, onClose, onDelete, onSelect, appearance = false, movable = false }: { document: DocumentId; onClose(): void; onDelete?(): void; onSelect?(): void; appearance?: boolean; movable?: boolean }) {
   const { library, settings, setSettings } = useShell();
   const entry = library.entries.find((e) => e.id === document);
   const held = useHeldReading().current;
@@ -87,6 +90,7 @@ export function ReaderActions({ document, onClose, onDelete, appearance = false,
       <DrawerRow icon="download" onPress={() => setPage('download')} accessory={<DrawerChevron />}>
         <DrawerRowText>Download</DrawerRowText>
       </DrawerRow>
+      {onSelect ? <DrawerRow icon="check" onPress={onSelect}><DrawerRowText>Select</DrawerRowText></DrawerRow> : null}
       {onDelete ? <DrawerRow icon="trash" iconColour={INK.attention} onPress={onDelete}>
         <DrawerRowText style={{ color: INK.attention }}>Delete</DrawerRowText>
       </DrawerRow> : null}

@@ -2,7 +2,9 @@
 
 ## What has been decided
 
-The Library's top-right `+` becomes `…`. The menu keeps the existing actions and adds Select. The owner subsequently added a second entry: a two-finger drag on the list enters selection mode directly. Long press does not become another entry.
+The Library's top-right `+` becomes `…`, listing Import file, Create folder, then Select. The owner subsequently added two more entries: a two-finger drag on the list enters selection mode directly, and a Document's or Folder's own actions offer Select (#136).
+
+Select in an entry's actions starts selection with that entry already selected. It sits directly above Delete, so the red Delete stays at the bottom. A long press still opens those same actions rather than starting selection by itself, so it keeps reaching Rename, Move and Delete. The Reader's actions for the open Document do not offer Select, because there is no list behind them.
 
 Selection is limited to the current level of the Library. Documents and Folders can be selected together. A Folder is selected rather than opened while selecting; selecting across different levels is not supported.
 

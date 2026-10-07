@@ -1,5 +1,22 @@
 # Merges, seeding and past verification runs
 
+## Verifying #136: Select from an entry's own actions (2026-10-07)
+
+- `mobilebuildmcp build_sim` hit the known 60 s MCP transport timeout again
+  (see **#125 Release verification tooling** in `../README.md`) while its `xcodebuild` ran
+  on; the process exited on its own after about 245 s with the Debug products
+  written. Same handling as #125: never start a competing build, poll for that
+  exact `xcodebuild` to exit, then check `Build/Products`.
+- A simulator that lists no app can still come back with old data. `simctl
+  listapps` on a previously used test device showed no OpenReader, yet `simctl
+  install` re-adopted the device's week-old data container: the Library came
+  back already seeded, and a leftover `harness.json` replayed its last `settings`
+  patch at first launch (`HX settings patched {"theme":"light"}` in the Metro
+  log). The replay was benign here, but a leftover `add` would have imported a
+  book mid-run. Before trusting a "fresh" device, read
+  `simctl get_app_container UDID top.xujialiu.openreader data/Documents` and
+  `harness.json` first, or erase the device.
+
 ## Verifying #134: Contents' Downloaded check (2026-10-05)
 
 - **A chapter deleted in Manage and downloaded again in the same process came

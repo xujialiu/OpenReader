@@ -22,14 +22,14 @@ export function AddDrawer({ visible, onClose, onImport, onSelect }: { visible: b
     if (importing.current) { importing.current = false; onImport(); }
   }}>
     <DrawerScroll>
-      <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => { onClose(); onSelect(); }}>
-        <DrawerRowText>Select</DrawerRowText>
+      <DrawerRow icon="plus" disabled={busy || !!problem} onPress={() => { importing.current = true; onClose(); }}>
+        <DrawerRowText>Import file</DrawerRowText>
       </DrawerRow>
       <DrawerRow icon="folder" disabled={busy || !!problem} onPress={() => { parent.current = tree.current; setNaming(true); }}>
         <DrawerRowText>Create folder</DrawerRowText>
       </DrawerRow>
-      <DrawerRow icon="plus" disabled={busy || !!problem} onPress={() => { importing.current = true; onClose(); }}>
-        <DrawerRowText>Import file</DrawerRowText>
+      <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => { onClose(); onSelect(); }}>
+        <DrawerRowText>Select</DrawerRowText>
       </DrawerRow>
       {failure ? <DrawerFooter attention>{failure}</DrawerFooter> : null}
     </DrawerScroll>
@@ -78,7 +78,7 @@ export function MoveContent({ target, targets, onMoved }: ({ target: MoveTarget;
   </DrawerScroll>;
 }
 
-export function FolderActions({ id, onClose, onDelete }: { id: FolderId; onClose(): void; onDelete(id: FolderId): void }) {
+export function FolderActions({ id, onClose, onDelete, onSelect }: { id: FolderId; onClose(): void; onDelete(id: FolderId): void; onSelect(id: FolderId): void }) {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
   const folder = tree.folders.find((one) => one.id === id);
@@ -90,6 +90,7 @@ export function FolderActions({ id, onClose, onDelete }: { id: FolderId; onClose
     {moving ? <MoveContent target={{ kind: 'folder', id }} onMoved={onClose} /> : <DrawerScroll>
       <DrawerRow icon="rename" disabled={busy || !!problem} onPress={() => setNaming(true)}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
       <DrawerRow icon="folder" disabled={busy || !!problem} onPress={() => setMoving(true)} accessory={<DrawerChevron />}><DrawerRowText>Move to…</DrawerRowText></DrawerRow>
+      <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => onSelect(id)}><DrawerRowText>Select</DrawerRowText></DrawerRow>
       <DrawerRow icon="trash" iconColour={INK.attention} disabled={busy || !!problem} onPress={() => onDelete(id)}>
         <DrawerRowText style={{ color: INK.attention }}>Delete</DrawerRowText>
       </DrawerRow>

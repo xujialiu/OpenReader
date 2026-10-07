@@ -68,6 +68,20 @@ it('starts empty, toggles mixed rows, selects all, deselects all, and clears on 
   await h.close();
 });
 
+it("starts with the entry already selected when Select comes from that entry's own actions (#136)", async () => {
+  const h = await mount();
+  await h.run(() => { h.folders.create('Folder', null); });
+  await h.run(() => h.selection.begin(targets[1]));
+  expect(h.selection.active).toBe(true);
+  expect(h.selection.selected).toEqual([targets[1]]);
+  await h.run(() => h.selection.cancel());
+  await h.run(() => h.selection.begin({ kind: 'folder', id: 'folder-1' }));
+  expect(h.selection.selected).toEqual([{ kind: 'folder', id: 'folder-1' }]);
+  await h.run(() => h.selection.begin());
+  expect(h.selection.selected).toEqual([]);
+  await h.close();
+});
+
 it('enters selection directly through a two-finger range and keeps it current-level only', async () => {
   const h = await mount();
   expect(h.selection.active).toBe(false);
