@@ -25,6 +25,11 @@ it: the check is the word, as it is there.
   read what is saved. If what is saved cannot be read, Contents shows no checks
   and says nothing, because the Download drawer already says what is wrong.
 
+A chapter deleted from the download loses its check, even when the chapters
+still downloaded keep every one of its sentences on the phone, as the Download
+drawer shows it (decision 0027). The owner deleted it, and a check would say
+it was still downloaded.
+
 A change to the bracket setting does to the checks what it already does in the
 Download drawer: a chapter with sentences whose spoken form the change alters
 stops being downloaded until those sentences are downloaded again, and loses its

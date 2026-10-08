@@ -30,3 +30,7 @@ Matching by position was the alternative, and it is simpler. It was turned down 
 ## Drawing
 
 The check is `Icon name="check"` at 22 pt in the row's accessory, in `accent.reading`, or `accent.onMark` on the marked row: the Download drawer's sizes and colours. A checked row's accessibility label ends in `, downloaded`, as the Download drawer's does.
+
+## Amendment (2026-10-08, #146): only a chapter in the download
+
+The progress both drawers pass to `downloadedChapters` is `chapterProgress`, which now counts nothing for a chapter that is not in the voice's Download task. So a chapter deleted from the download loses its check in Contents as in the Download drawer, even while the chapters still downloaded keep every one of its sentences. The rule and its measurements are in [ADR 0027](0027-whole-document-offline-narration.md#amendment-2026-10-08-146-a-chapter-outside-the-download-counts-nothing-on-the-screen); `download-rows.ts` is unchanged.
