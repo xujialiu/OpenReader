@@ -29,7 +29,10 @@ test/app-config.test.ts fails on any other form.
 
 Worktrees that start from the same base can pick the same Beta. Before naming
 one, read `app-version.ts` on `main` and in each worktree (`git worktree list`)
-and take the next after the highest with the same Build Number. The number
+and take the next after the highest with the same Build Number. A Beta spent
+on a branch that was never merged stays spent: Build 7's beta2 to beta9 went to
+the Downloads manager turned down in #137, and beta9 is on the owner's phone, so
+`main`'s next change in Build 7 is `1.0.0 (7)-beta10`. The number
 narrows down which build is running. Seeing the change itself in the running app
 is what proves it is the latest.
 
