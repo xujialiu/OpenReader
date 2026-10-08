@@ -251,11 +251,47 @@ export async function requestInventory(
   }
   await inventoryJobs.get(document);
 }
+/** Each progress snapshot as the owner downloaded it, for the chapter list it was answered for. */
+const downloadedProgress = new WeakMap<
+  Map<string, ChapterProgress>,
+  { chapters: readonly string[] | undefined; seen: Map<string, ChapterProgress> }
+>();
+/**
+ * Each chapter's saved sentences in `voice`, as the Download drawer, Manage
+ * downloads and Contents show them: a chapter that is not in the voice's
+ * Download counts none and is not complete (#146).
+ *
+ * A sentence that two chapters share is one Clip. Deleting one of them keeps
+ * it while a chapter still in the Download uses it, and the catalogue goes on
+ * counting it for both. The owner deleted the chapter, so it shows as deleted:
+ * not in Manage downloads, no count, no check, even when every one of its
+ * sentences is still saved for others. A chapter never downloaded that shares
+ * a line with one that was is shown the same way. The scheduler and the Live
+ * Activity read the catalogue's own count, and are not shown this.
+ *
+ * Cached per snapshot and chapter list, both replaced rather than changed, so
+ * that a screen's memo holds until one of them is.
+ */
 export function chapterProgress(
   document: string,
   voice: OfflineVoice,
 ): ReadonlyMap<string, ChapterProgress> {
-  return progressSnapshots.get(progressKey(document, voice)) ?? new Map();
+  const saved = progressSnapshots.get(progressKey(document, voice));
+  if (!saved) return new Map();
+  const chapters = tasks.find(
+    (task) => task.document === document && sameVoice(task.voice, voice),
+  )?.chapters;
+  const known = downloadedProgress.get(saved);
+  if (known && known.chapters === chapters) return known.seen;
+  const kept = new Set(chapters);
+  const seen = new Map(
+    [...saved].map(([id, progress]): [string, ChapterProgress] => [
+      id,
+      kept.has(id) ? progress : { ...progress, count: 0, complete: false },
+    ]),
+  );
+  downloadedProgress.set(saved, { chapters, seen });
+  return seen;
 }
 export function requestProgress(document: string, voice: OfflineVoice): void {
   const key = progressKey(document, voice);
