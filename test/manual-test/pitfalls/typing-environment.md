@@ -2,6 +2,20 @@
 
 ## Typing, environment and silence
 
+- **A fresh simulator's first keyboard dismissal can fail an XCTest assertion
+  that the identical retry passes (2026-10-08, #146, `OfflineFixProbe`
+  `testConfigureFishProvider`, iOS 27.0).** First run on a device created that
+  minute: the key typed into the masked field, the "Voice sources" tap fired,
+  but `keyboards.firstMatch.waitForNonExistence(timeout: 3)` failed — "The
+  keyboard stayed up". The retry minutes later passed end to end with the same
+  gestures and no other change, and the provider's Enable switch then worked on
+  the first connection check, so this is first-run keyboard timing on the fresh
+  device, not an app defect and not a lost-typing wedge (the key had landed).
+  Treat one such failure on a brand-new device as a failed attempt to report
+  and retry once before suspecting the app; also expect xcodebuild's
+  post-failure `simctl diagnose` to hold the caller afterwards (the #128
+  lock-and-background bullet).
+
 - **A fresh native input read can precede the Debug Log's disk flush.** #123's
   first diagnostic loop read the correct native text but no JS events on disk;
   the tagged change/render events appeared later. `debug-log.ts` batches writes

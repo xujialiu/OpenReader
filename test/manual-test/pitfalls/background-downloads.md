@@ -136,3 +136,19 @@
   `OpenReaderOffline: app will terminate; …` line appeared. A close from the app
   switcher is the case to test, and only the phone can show what it does to a
   continued task.
+- **A dead host VPN leaves the app in `waiting` for as long as the simulator's
+  OS connectivity stays down, and a simulator reboot both heals it and resumes
+  the download by itself (2026-10-08, #146, iOS 27.0).** The Mac reached
+  `api.fish.audio` over TCP (curl, 0.3 s) while the app's flows died in a stale
+  `utun4` path (`Operation timed out`, `No network route` in `log show`), so
+  every scheduler pass threw before any request and the drawer sat at "No
+  network connection, waiting to reconnect" for eight minutes; recovery rides a
+  native `connectivity` event, not a timer, so Pause/Resume all alone did not
+  help while the OS path stayed unsatisfied. A `simctl shutdown` + `boot` (data
+  kept) re-established the paths — and `startDownloads` restored the persisted
+  task as `queued`, so the download ran to completion unattended during the
+  post-boot AX wait (#95): expect a restored download to be running, possibly
+  finished, by the time you can drive the drawer again, and plan the pause
+  window accordingly. Never diagnose a stalled `waiting` download from the
+  Mac's own reachability; check the app's flows with `xcrun simctl spawn UDID
+  log show`.
