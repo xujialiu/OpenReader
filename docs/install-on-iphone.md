@@ -1,49 +1,31 @@
-# Install OpenReader on an iPhone
+# Install OpenReader on the owner's iPhone
 
-Use this guide to install a Release build on your own iPhone from a local Mac so
-that it can run without being connected to the computer.
-These steps are based on an actual installation performed on 2026-09-20. The
-project includes custom native modules, so it requires a native app build and
-cannot use Expo Go as a substitute.
+Use this guide to build a Release of the current checkout and install it on the
+owner's iPhone, where it runs without the Mac. OpenReader has native modules of
+its own, so it needs a native build; Expo Go cannot stand in for it.
 
-## Results verified in this run
+This guide holds the steps and the facts they depend on. What a run built, how
+long it took and what failed goes in that day's `notes/` file
+(MEMORY/documentation.md). The references below such as "notes 2026-10-02
+14:01" name the entry with that time.
 
-- Environment: Expo SDK 57, Xcode 27.0 (27A266); the project's minimum iOS version is 17.2.
-- Physical device: `Xujia’s iPhone`, written `IPHONE_UDID` in the commands below.
-- Workspace: `ios/OpenReader.xcworkspace`; scheme: `OpenReader`.
-- Bundle ID: `top.xujialiu.openreader`.
-- Automatic signing used `Xujia Liu (Personal Team)`, with an Apple Development certificate.
-- On 2026-09-30 the account joined the Apple Developer Program, and the Personal Team was upgraded in place rather than joined by a second team: Xcode's Settings → Apple Accounts lists one team, `Xujia Liu`, as a Developer Team with the Admin role and a "Download Manual Profiles" button, and the owner confirmed in developer.apple.com/account → Membership details that the Team ID is still `UPR29WR8FC`. So `DEVELOPMENT_TEAM=UPR29WR8FC` below is unchanged. Xcode's cached team list (`defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier`) still read `Personal Team` after the pane was opened; do not take it as the membership's state. The keychain still held only the Apple Development certificate, and the profiles already on the Mac were the free-team ones (the app's expires `2026-10-04 03:43:34 UTC`).
-- Later on 2026-09-30, `0.0.2-beta73` (Debug Mode) was built from a worktree whose prebuild writes `DEVELOPMENT_TEAM` itself (`ios.appleTeamId` in `app.config.ts`, #108). Xcode keeps using a cached profile that is still valid: that day's App Store archive, built with `-allowProvisioningUpdates`, embedded the free team's profile expiring 2026-10-04. So that profile was first moved out of `~/Library/Developer/Xcode/UserData/Provisioning Profiles/`. Xcode then made a new `iOS Team Provisioning Profile: top.xujialiu.openreader` for the paid team: created 2026-09-30 22:47 CST, expiring **2027-09-30 22:47 CST**, one device. A simulator build of the same workspace was running, so this build had its own `-derivedDataPath`, and from scratch it returned 0 in 20.5 minutes. `devicectl` installed over the existing app and launched it (both 0), with no Security error.
-- The `xcodebuild` command below returned 0; `devicectl` confirmed that the app was installed.
-- Automatic launch returned a Security error containing “profile has not been explicitly trusted by the user”. The user was prompted to trust the developer on the phone; this record does not confirm launch, reading, or audio functionality after trust was granted.
-- 2026-09-22 follow-up: on the same phone and account, a fresh Release build, install,
-  and `devicectl device process launch` all succeeded, and the launch returned no
-  Security/trust error — the developer trust granted earlier persisted across this
-  reinstall. This run only confirms the command-line launch; it does not confirm
-  on-screen behavior, reading, or audio, since it was not visually inspected on the
-  device. It also used a different DerivedData path than the one recorded above
-  (the hash in the path changes per checkout, as this guide already notes), so that
-  recorded path is not reusable as-is.
-- Later on 2026-09-22, the `0.0.2-beta5` Release build succeeded after the native dependency recovery below, and installation returned `App installed`. Launch then failed with `CoreDeviceError 10002` / `Security`. Local signature and profile checks passed, but device trust and successful launch remain unconfirmed. The earlier successful launch does not establish that this later installation can launch.
+## Facts
 
-- On 2026-09-26, with no cable connected, the paired iPhone was discovered wirelessly. The current checkout's `0.0.2-beta32` Release build returned 0 after dependency recovery; `devicectl` then confirmed installation and launch. Screen behavior, reading and playback were not tested. This establishes wireless installation for this already-paired phone, not first-time wireless pairing.
+- Workspace `ios/OpenReader.xcworkspace`, scheme `OpenReader`, bundle ID
+  `top.xujialiu.openreader`.
+- Team `UPR29WR8FC`, a paid Developer Team. It kept this ID when the Personal
+  Team was upgraded (notes 2026-09-30 17:13). `app.config.ts` sets it as
+  `ios.appleTeamId` (#108), so a prebuild writes `DEVELOPMENT_TEAM` itself.
+  Xcode's cached team list (`defaults read com.apple.dt.Xcode
+  IDEProvisioningTeamByIdentifier`) can still say `Personal Team`; it is not
+  the membership's state.
+- The development profile for the app expires 2027-09-30 (notes 2026-09-30
+  23:07). Profiles and their expiry are below.
+- The phone is written `IPHONE_UDID` in anything committed; `xcrun devicectl
+  list devices` gives the real one. Once paired, `devicectl` reaches it over
+  Wi-Fi as well as the cable: check before asking the owner to plug one in.
 
-- On 2026-09-27, `0.0.2-beta39` built and installed successfully after restoring the missing generated SQLite header with `pod install` and using `/tmp/openreader-iphone-module-cache-20260927-restored`. Automatic launch returned `CoreDeviceError 10002` / `Security`. Local signature verification passed; the profile expires at `2026-10-04 03:43:34 UTC`, includes the phone, and matches the signed application and team identifiers. The owner subsequently confirmed developer trust and that the app opens on the phone. Reading and playback were not tested in this installation run.
-
-- On 2026-09-30, `0.0.2-beta66` (Debug Mode) was built from a worktree with no `ios/`: `npx expo prebuild --platform ios` (which ran `pod install`; `sqlite3.h` present), then the Release command below with `DEVELOPMENT_TEAM=UPR29WR8FC CODE_SIGN_STYLE=Automatic` and a new `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-ui-20260930`. It returned 0 in about 3.5 minutes; its log still held five lines `error: the following command failed with exit code 0 but produced no further output`, which did not fail the build. The bundle beside the app read `var DEBUG_MODE = true;` and `0.0.2-beta66`, `codesign --verify --deep --strict` passed, and with the cable connected `devicectl` installed over the existing app and launched it (both 0), with no Security error. The profile expires at `2026-10-04 03:43:34 UTC`. On-screen checks were left to the owner. `0.0.2-beta67` followed from the same `ios/` and module cache as an incremental build: 0 in under a minute, installed and launched over it (both 0).
-
-- On 2026-10-02, `1.0.0-beta12` (Debug Mode) was built in a worktree whose `node_modules` had just been reinstalled with `npm ci`, over an `ios/` from an earlier prebuild. `npm ci` takes away two generated things the Pods put in `node_modules`: `expo-sqlite/ios/sqlite3.h` and RNAudioAPI's downloaded FFmpeg xcframeworks. The first build failed in ExpoSQLite (`cannot find 'exsqlite3_open'`). After `pod install` restored the header, the second build failed to link FFmpeg (`_avformat_open_input` and others undefined). By then its own script phase had downloaded the xcframeworks again, but the Pods xcconfig had been written without them. A second `pod install`, which put `libavformat` back into `Pods-OpenReader.release.xcconfig`, and a new `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20261002` gave exit 0 in 126 s. Install and launch then both returned 0. So, after an `npm ci`: `pod install`, build once, and if FFmpeg fails to link, `pod install` again and rebuild.
-
-- On 2026-10-04, `1.0.0 (5)-beta5` (Debug Mode) was built in the main checkout from `c12ff21`, over an `ios/` prebuilt after the last `app.config.ts` change, with `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20261002`: exit 0 in 178 s. The profile Xcode embedded is the paid team's, expiring 2027-09-30. `devicectl` installed over the existing app and launched it (both 0), with no Security error. Screen not inspected (notes 2026-10-04 11:13).
-
-- On 2026-10-04, `1.0.0 (6)-beta1` (Debug Mode, #129) was built in a fresh worktree (`npm ci`, then `npx expo prebuild --platform ios`, whose `pod install` left `sqlite3.h` and the FFmpeg entries in the Pods release xcconfig in place) from `aeda72b`, with `-derivedDataPath /tmp/openreader-129-iphone` and `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-129`: exit 0 in 1,149 s from scratch, with no second `pod install` needed. The plain bundle read `var DEBUG_MODE = true;` and `1.0.0 (6)-beta1`, `Info.plist` 1.0.0 / 6, `codesign --verify --deep --strict` passed, and the embedded profile expires 2027-09-30. With no cable, `devicectl` installed over the existing app and launched it (both 0), with no Security error. Screen not inspected.
-
-The device, account, and paths above are specific to this run. Look them up again
-when changing computers or phones. If the user has since trusted the developer
-and launched the app successfully, update the verification results.
-
-## Initial setup
+## First time on a Mac or a phone
 
 1. Connect the iPhone to the Mac with a cable, unlock it, and choose “Trust This Computer”. On the phone, open “Settings → Privacy & Security → Developer Mode”, enable Developer Mode, and complete the restart and confirmation requested by the phone.
 2. In Xcode, open Settings → Accounts and sign in with the Apple ID. Select the account, then use Manage Certificates → ＋ → Apple Development to create a certificate. Skip this if a valid certificate already exists.
@@ -54,21 +36,18 @@ and launched the app successfully, update the verification results.
    ```
 
 4. Press ⌘1 to show the project navigator, then click the blue OpenReader project on the far left. The narrow middle column contains PROJECT and TARGETS. Click **OpenReader under TARGETS**. The PROJECT entry and Pods are not the app's signing settings.
-5. In the right pane, open Signing & Capabilities → All, enable Automatically manage signing, and choose your team under Team. Select the physical device `Xujia’s iPhone` in the run destination at the top, rather than a simulator such as iPhone 18 Pro.
+5. In the right pane, open Signing & Capabilities → All, check that Automatically manage signing is on and the team is `UPR29WR8FC`. Select the physical iPhone in the run destination at the top, rather than a simulator.
 
 The repository's `ios/` directory is generated. If it does not exist, install the
 project dependencies and run `npx expo prebuild --platform ios` first, then open
-the workspace. After regenerating the native directory, review the signing team
-again. There is no need to delete or clean the native directory for routine
-installation.
+the workspace. There is no need to delete or clean the native directory for
+routine installation.
 
-## Subsequent installation: check, build, install, and launch
+## Each installation
 
-Run the following commands from the repository root. Keep the phone connected and
-unlocked. A cable is not required when the previously paired phone is reachable
-wirelessly: check `devicectl` before asking the owner to connect one.
+Run the commands from the repository root. Keep the phone unlocked.
 
-### 1. Confirm the device and certificate
+### 1. The phone, the certificate and Xcode
 
 ```bash
 xcrun devicectl list devices
@@ -79,43 +58,75 @@ xcodebuild -version
 You should see the physical iPhone and at least one valid Apple Development
 identity. `0 valid identities found` means that signing in to the account alone
 was not enough; create a certificate in Xcode. The device list also includes
-simulators; the physical iPhone's UDID is `IPHONE_UDID` in the commands below.
+simulators.
 
-### Before spending time on a native build
+### 2. The checkout, before a native build
 
-1. Check installed dependencies against the current checkout, for example with `npm ls --depth=0 --omit=dev`, and investigate missing or invalid runtime packages before building. A package's presence in the manifest and lockfile does not establish that it exists in `node_modules`. On 2026-09-26, missing `react-native-teleport` was discovered only at the late JavaScript bundling stage.
-2. If a missing package has native code, restore it and run `pod install` in `ios/` **before** the Release build. Teleport needs this registration. Also check that `node_modules/expo-sqlite/ios/sqlite3.h` exists: Pods generates it, and a passing `npm ls` does not check it. On 2026-09-27 it was absent; Pods restoration followed by a fresh module cache made the failing SQLite Swift compiler command pass. Avoid reinstalling Pods or clearing build products on every routine installation: dependency regeneration can trigger broad recompilation.
-3. Reuse this checkout's successful isolated module cache. The 2026-09-27 build passed with `CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20260927-restored`; include that setting in the build command below while that cache remains available. The default shared cache reproduced the already documented ExpoSQLite failure. Create a new isolated cache only when necessary, and keep using the same one for retries.
-4. Check for other active Xcode builds before starting an expensive rebuild. Another simulator build was running during this installation. Coordinate heavy builds where possible; do not stop someone else's build. Concurrent compilation can compete for resources, but its individual contribution to this run's delay was not measured.
-5. Capture build output outside the repository, wait for the build's final exit code, and keep build, transfer and launch results separate. A quiet log is not evidence of a hang; check whether compiler processes are active before restarting. Do not present a library's link step as completion of the whole app.
+A native build takes minutes, and a missing piece is often found only near its
+end, so check these first:
 
-### 2. Build a standalone Release version
+1. `npm ls --depth=0 --omit=dev` reports nothing missing or invalid. A package
+   in the manifest and the lockfile can still be absent from `node_modules`; a
+   missing one otherwise surfaces only when the JavaScript is bundled (notes
+   2026-09-26 13:24). The repair is in Troubleshooting.
+2. `ios/` exists. If not, `npx expo prebuild --platform ios`, which runs
+   `pod install`.
+3. `node_modules/expo-sqlite/ios/sqlite3.h` exists. Pods generate it and
+   `npm ls` does not check it. If it is missing, `(cd ios && pod install)`.
+4. **After an `npm ci` over an existing `ios/`**: `npm ci` also removes the
+   FFmpeg xcframeworks that RNAudioAPI downloads. Run `pod install`, build once,
+   and if the link fails on FFmpeg symbols, run `pod install` again and rebuild
+   (notes 2026-10-02 14:01). A fresh prebuild after `npm ci` needs neither
+   (notes 2026-10-04 14:51).
+5. Other heavy Xcode builds: `pgrep -fl xcodebuild`. They slow this one down;
+   leave them running, since they may be someone else's.
 
-This is the command that succeeded for this project during the recorded run,
-with the Debug Mode switch added on 2026-09-29 (#82):
+Run `pod install` or clear build products only for one of the reasons above:
+regenerating the dependencies recompiles most of the native code.
+
+### 3. Build
 
 ```bash
+CHECKOUT=$(basename "$PWD")
 xcodebuild \
   -workspace ios/OpenReader.xcworkspace \
   -scheme OpenReader \
   -configuration Release \
   -destination 'id=IPHONE_UDID' \
+  -derivedDataPath "/tmp/openreader-iphone-$CHECKOUT" \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
   ENABLE_USER_SCRIPT_SANDBOXING=NO \
+  CLANG_MODULE_CACHE_PATH="/tmp/openreader-iphone-module-cache-$CHECKOUT" \
   EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1 \
-  -quiet build
+  -quiet build > "/tmp/openreader-iphone-$CHECKOUT.log" 2>&1
+echo "exit $?"
 ```
 
-The first build compiles native dependencies and takes significantly longer than
-later incremental builds. Use exit code 0 as the success criterion; do not use
-warnings in the log or the presence of an `.app` directory as the criterion.
-
+- `-derivedDataPath` and `CLANG_MODULE_CACHE_PATH`: one pair per checkout,
+  named after it, reused by every build there. A build beside another one in
+  the same workspace needs its own DerivedData, and Xcode's shared module cache
+  has reproduced the ExpoSQLite failure in Troubleshooting. The first build in
+  a new DerivedData compiles every native dependency, 1,149 s from scratch
+  (notes 2026-10-04 14:51); later ones are incremental, a few minutes or less.
+  `/tmp` is emptied when the Mac restarts.
 - `-allowProvisioningUpdates`: allows Xcode to create or update signing profiles using the logged-in account.
 - `-allowProvisioningDeviceRegistration`: allows automatic signing to register the target device.
-- `ENABLE_USER_SCRIPT_SANDBOXING=NO`: the Xcode build setting required by this build so that the React Native bundling script can read the project and write the JavaScript bundle. It applies only to this command and does not modify the project configuration.
+- `ENABLE_USER_SCRIPT_SANDBOXING=NO`: lets the React Native bundling script read the project and write the JavaScript bundle. It applies only to this command and does not modify the project configuration.
 - `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1`: Debug Mode ([ADR 0054](adr/0054-debug-mode-is-fixed-when-the-app-is-built.md)), always set for the owner's phone, so that a fault met away from the Mac leaves a Debug Log on the phone to be read back afterwards. Settings then shows the version ending in `-debug`. The Debug Log is in the app's container at `Library/Application Support/debug-log/`; copy it off with `python3 test/manual-test/kit/debug-log.py IPHONE_UDID OUT_DIR` (`test/manual-test/kit/README.md`, "Pull the Debug Log off the phone"); the whole diagnosis is [debug-on-iphone.md](debug-on-iphone.md).
 - Release bundles the JavaScript and resources into the app, so Metro and a computer connection are not required at runtime. Online speech services and other features still require a network connection.
+
+**Success is exit code 0**, not the log's wording and not the presence of an
+`.app`. A build that returns 0 can still print
+`error: the following command failed with exit code 0 but produced no further output`:
+Xcode's wording for a command that printed only warnings (notes 2026-09-29
+18:04). To find a real failure, search the log for `BUILD FAILED` or an
+`error:` naming a file.
+
+macOS has no `timeout` command. Give the tool call its own timeout, or run the
+build in the background with its exit code written to a file and poll that. A
+quiet log is not a hang: check whether compiler processes are still running
+before restarting anything.
 
 **A build without Debug Mode**, which is what a release is: the same command
 without the `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` line. Its Settings shows the
@@ -127,13 +138,8 @@ bundled during the build and cannot be switched on afterwards.
 Where the switch's value could go stale:
 
 - **Metro's cache: guarded.** `metro.config.js` puts every `EXPO_PUBLIC_` value
-  in Metro's cache key, so a build without the switch right after one with it
-  (or the reverse) never reuses the other's cached answer. Measured on
-  2026-09-29 (ADR 0054): three Release builds in a row, without, with and
-  without again, came out off, on, off; and with the cache kept (`CI=1`, under
-  which Expo skips the phase's cache reset), a build without the switch right
-  after one with it came out on without that file and off with it. The two
-  kinds can be built one after the other, in either order, with no clean.
+  in Metro's cache key, so the two kinds can be built one after the other, in
+  either order, with no clean (notes 2026-09-29 10:42 and 10:44, ADR 0054).
 - **The shell, `ios/.xcode.env.local` and `.env` files: not guarded.** The
   bundling phase inherits the shell's environment and sources
   `ios/.xcode.env.local`, and Expo loads `.env`, `.env.local`, `.env.production`
@@ -141,52 +147,25 @@ Where the switch's value could go stale:
   `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` in any of them makes every build, a
   release included, one with Debug Mode. Pass the switch on the command line
   only, as above.
-- **To check a build**, read the plain bundle the phase leaves beside the app:
-  `grep -o 'var DEBUG_MODE = [a-z]*;' TARGET_BUILD_DIR/main.jsbundle` (the
-  directory from step 3) prints `true` for a build with Debug Mode and `false`
-  for one without. The copy inside the app is Hermes bytecode.
 
-**Once after pulling #82**, run `pod install` in `ios/` (or a prebuild): the
-Debug Log's system-log line is a new local native module, and an `ios/` from
-before it builds without it. Such a build still starts and still writes the
-Debug Log, and its first line says `system log missing (no native module)`.
-
-### 3. Find and install the build product
-
-The build product from this run was at:
-
-```text
-/Users/xujialiu/Library/Developer/Xcode/DerivedData/OpenReader-buxlmytdygazkfacxjuwdxvtamkb/Build/Products/Release-iphoneos/OpenReader.app
-```
-
-The verified command below can be used with the same checkout. After changing
-computers, checkouts, or DerivedData settings, first query `TARGET_BUILD_DIR`
-and `FULL_PRODUCT_NAME` through the build settings and combine the values for the
-**OpenReader target** to form the app path:
+### 4. Check and install
 
 ```bash
-xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \
-  -configuration Release -sdk iphoneos -showBuildSettings \
-  | rg 'Build settings for action|TARGET_BUILD_DIR =|FULL_PRODUCT_NAME ='
+APP="/tmp/openreader-iphone-$CHECKOUT/Build/Products/Release-iphoneos/OpenReader.app"
+grep -o 'var DEBUG_MODE = [a-z]*;' "${APP%/*}/main.jsbundle"
+codesign --verify --deep --strict "$APP"
+xcrun devicectl device install app --device IPHONE_UDID "$APP"
 ```
 
-```bash
-xcrun devicectl device install app \
-  --device IPHONE_UDID \
-  /Users/xujialiu/Library/Developer/Xcode/DerivedData/OpenReader-buxlmytdygazkfacxjuwdxvtamkb/Build/Products/Release-iphoneos/OpenReader.app
-```
+- `main.jsbundle` beside the app is the plain bundle: it prints `true` for a
+  build with Debug Mode and `false` for one without. The copy inside the app is
+  Hermes bytecode.
+- Successful installation prints `App installed` and
+  `bundleID: top.xujialiu.openreader`.
+- Install over the existing app. Never uninstall it first: uninstalling deletes
+  the app's container, with the owner's Library and settings.
 
-Successful output should contain `App installed` and
-`bundleID: top.xujialiu.openreader`.
-
-### 4. Trust the developer and launch
-
-After the first installation, open “Settings → General → VPN & Device
-Management” on the iPhone, find the developer entry for the Apple ID, tap
-“Trust”, and complete the system prompts. The user must perform this action on
-the phone.
-
-Launch OpenReader from the Home Screen, or run:
+### 5. Launch
 
 ```bash
 xcrun devicectl device process launch \
@@ -194,80 +173,55 @@ xcrun devicectl device process launch \
   top.xujialiu.openreader
 ```
 
-Record build, installation, and launch as separate checks. Once the app displays
-normally, disconnect the computer and open it again to verify standalone
-operation. A successful installation alone does not prove that launch or app
-functionality works.
+On the first installation on a phone, the owner trusts the developer before the
+app can launch: Settings → General → VPN & Device Management → the developer
+entry → Trust. Only the owner can do this, on the phone.
 
-## Problems encountered: follow the matching branch
+Report build, installation and launch as separate results. Installation does
+not prove launch, and a launch from the command line does not prove what is on
+the screen: the screen, reading and playback are checked on the phone. To check
+that the app runs on its own, disconnect the Mac and open it again.
 
-| Symptom | Conclusion and handling from this run |
-| --- | --- |
-| The Release build fails with `Signing for "OpenReader" requires a development team` (2026-09-29, a worktree whose `ios/` a prebuild had just made) | Before #108 a prebuild wrote no team. `app.config.ts` now sets `ios.appleTeamId`, so a fresh prebuild writes `DEVELOPMENT_TEAM = UPR29WR8FC`. An older `ios/` needs the Xcode step in "Initial setup" redone, or the team passed on the command line instead. Add `DEVELOPMENT_TEAM=TEAM_ID CODE_SIGN_STYLE=Automatic` to the `xcodebuild` command above; it changes only that build. `TEAM_ID` is the `OU` of the Apple Development certificate: `security find-certificate -c "Apple Development" -p \| openssl x509 -noout -subject`, not the ID in parentheses after the account's name. With it, 0.0.2-beta59 built in 3 min 17 s and returned 0. |
-| Expo reports `No code signing certificates are available to use` | `security find-identity` confirmed 0 identities. Creating an Apple Development certificate in Xcode resolved it. |
-| Xcode shows `Communication with Apple failed`, specifically saying that the team has no devices, and also reports that no profile exists | Select the physical iPhone and use the automatic signing and device registration options above; this allowed compilation to proceed during the recorded run. The title alone is not enough to diagnose a network failure; read the detailed reason. |
-| `npx expo run:ios --device … --configuration Release` reports `No profiles … found` and requests `-allowProvisioningUpdates` | The Expo command did not complete profile creation during this run. Switching to the `xcodebuild` command above succeeded. Do not repeatedly run the same Expo command expecting signing to recover automatically. |
-| `Sandbox: node … deny(1) file-read-data` or a write to `main.jsbundle` is denied | This is the Xcode build script sandbox restriction. Adding `ENABLE_USER_SCRIPT_SANDBOXING=NO` made the recorded build return 0. |
-| Installation succeeds, but launch reports `CoreDeviceError 10002` / `Security` | The error lists signing, entitlements, or an untrusted profile among its possible causes. First trust the developer on the phone, then retry. If it still fails after trust, inspect the actual signing and provisioning profile; do not attribute every Security error to an untrusted profile. |
+## Profiles and expiry
 
-Installation through a Personal Team is subject to provisioning profile expiry.
-The team has been a paid one since 2026-09-30 (above), and a profile Xcode makes
-for it lasts a year: 2027-09-30, measured above. Xcode keeps using a cached
-profile until it expires, so after the team changes, move the old one out of
-`~/Library/Developer/Xcode/UserData/Provisioning Profiles/` before building.
-Release describes the build configuration and does not mean the signature is
-permanent. Re-sign and reinstall after expiry. Do not uninstall the old app for
-this purpose: uninstalling may delete the local library and settings.
+- A profile Xcode makes for the paid team lasts a year. Release is a build
+  configuration, not a permanent signature: when the profile expires, build and
+  install again over the existing app.
+- Xcode keeps using a cached profile until it expires, even after the team
+  changes. To make it create a new one, move the old one out of
+  `~/Library/Developer/Xcode/UserData/Provisioning Profiles/` before building
+  (notes 2026-09-30 23:07).
+- A new bundle ID, or a profile renewed, needs an Apple ID signed in to Xcode:
+  `defaults read com.apple.dt.Xcode DVTDeveloperAccountManagerAppleIDLists`
+  must not be an empty list. If it is, the owner signs in under Xcode →
+  Settings → Accounts (notes 2026-09-29 21:13).
+- To inspect a build's signature and profile, decode the profile with
+  `security cms -D -i "$APP/embedded.mobileprovision"` and read the signature's
+  entitlements with `codesign -d --entitlements :- "$APP"`. Compare the
+  profile's expiry, whether `ProvisionedDevices` includes the phone, whether
+  `application-identifier` matches the profile's, and whether the signature's
+  team is in the profile's `TeamIdentifier`. Keep the decoded profile and the
+  phone's real UDID out of the repository.
 
-### Missing local dependencies during wireless installation (2026-09-26)
+## Troubleshooting
 
-The first build failed on the known ExpoSQLite prefixed-symbol error. Retrying with an isolated module cache passed that stage, but bundling then failed with `Unable to resolve module react-native-teleport`. The manifest and lockfile declared 1.2.2; its installed directory was absent. Starting the native build before checking installed dependencies, and initially reusing the failing shared cache despite the recorded recovery, caused avoidable retries.
-
-`npm install --no-save --package-lock=false` was not a useful repair: it attempted to resolve `react-test-renderer@19.3.0`, which requires React `^19.3.0`, against the project's React 19.2.3. Do not disable the lockfile or upgrade React to repair a missing installed package. For this one missing package, `npm pack react-native-teleport@1.2.2 --pack-destination /tmp --json` obtained the exact archive; its reported integrity matched the lockfile. Extracting it into `node_modules/react-native-teleport` and running `pod install` in `ios/` restored its native integration. This targeted recovery is not a replacement for synchronizing a generally incomplete dependency tree.
-
-The subsequent Release build with the same isolated cache returned 0, and wireless installation and launch both returned 0. Most of the wait preceded transfer: native compilation was repeated after dependency repair, while another simulator build was active. Wireless transfer itself was brief. Do the preflight above first next time; do not attribute a long native build to Wi-Fi.
-
-### Native dependency recovery measured on 2026-09-22 (#43)
-
-A later Release build failed in ExpoSQLite with `cannot find 'exsqlite3_open' in scope` and other prefixed symbols. Both the installed package and Pod lock were 57.0.3, and the generated header contained the declarations. Repeating the build with a fresh module cache passed SQLite compilation; stale cache state is a hypothesis, not a proven root cause.
-
-That build then failed at linking with undefined FFmpeg symbols, including `avformat_open_input`. The downloaded xcframeworks existed under RNAudioAPI, but the generated `Pods-OpenReader.release.xcconfig` lacked their framework paths. Running `pod install` from `ios/` registered all four frameworks: `libavcodec`, `libavformat`, `libavutil` and `libswresample`.
-
-After confirming the downloaded frameworks exist, regenerate the Pods integration:
-
-```bash
-(cd ios && pod install)
-```
-
-Then repeat the Release build command above with a new, task-specific cache directory added as a build setting, for example:
-
-```text
-CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-20260922
-```
-
-Use the same isolated directory for subsequent attempts. This combined recovery returned build exit code 0, and `codesign --verify --deep --strict APP_PATH` passed for the resulting app. No app source was changed. The original cause of the missing generated FFmpeg integration was not established.
-
-### Installation succeeds, but launch is denied (2026-09-22, #43)
-
-The owner temporarily disconnected the phone while the build was repaired. After reconnection, `devicectl device install app` returned 0 and `App installed` for `top.xujialiu.openreader`. This was an installation over the existing app; the old app was not uninstalled.
-
-The subsequent `devicectl device process launch` returned 1 with `com.apple.dt.CoreDeviceError 10002`, `FBSOpenApplicationServiceErrorDomain 1`, and `FBSOpenApplicationErrorDomain 3`. Its reason was `Security`: “invalid code signature, inadequate entitlements or its profile has not been explicitly trusted by the user”. This message lists possible causes; it does not identify which one applies.
-
-Checks on the installed build's local source package established:
-
-- `codesign --verify --deep --strict APP_PATH` returned 0.
-- The embedded provisioning profile expires at `2026-09-27 03:12:56 UTC`; it was not expired at installation.
-- `ProvisionedDevices` includes the connected phone, represented here as `IPHONE_UDID`.
-- The signature's `application-identifier` matches the profile's, and the signature's team identifier belongs to the profile's `TeamIdentifier` list.
-
-To repeat these checks, use `security cms -D -i APP_PATH/embedded.mobileprovision` to decode the profile and `codesign -d --entitlements :- APP_PATH` to inspect the signature's entitlements. Substitute the actual app path and quote paths containing spaces. Compare the fields above locally; do not commit the decoded profile or the phone's real UDID. These checks do not establish that iOS trusts the developer or that every entitlement is valid for launch.
-
-The next on-device step is Settings → General → VPN & Device Management → the developer entry → Trust, completing any system prompts, then opening OpenReader again. If the entry already shows trust, capture the actual on-device launch message and investigate further rather than declaring trust to be the cause. No successful trust action or subsequent launch was observed in this run. Build and installation are verified; launch, standalone operation and reading/audio remain unverified.
+| Symptom | What to do | Notes |
+| --- | --- | --- |
+| `Signing for "OpenReader" requires a development team` | The `ios/` predates #108, whose prebuild writes the team. Prebuild again, or add `DEVELOPMENT_TEAM=UPR29WR8FC CODE_SIGN_STYLE=Automatic` to the build command; it changes only that build. The Team ID is the `OU` of the Apple Development certificate (`security find-certificate -c "Apple Development" -p \| openssl x509 -noout -subject`), not the ID in parentheses after the account's name. | 2026-09-28 20:50, 2026-09-29 23:25 |
+| Expo reports `No code signing certificates are available to use` | `security find-identity` finds 0 identities: create an Apple Development certificate in Xcode. | 2026-09-20 11:24 |
+| Xcode shows `Communication with Apple failed`, saying that the team has no devices and no profile exists | Choose the physical iPhone as the destination and keep `-allowProvisioningUpdates -allowProvisioningDeviceRegistration`. Read the detailed reason: the title alone does not mean a network failure. | 2026-09-20 11:24 |
+| `npx expo run:ios --device … --configuration Release` reports `No profiles … found` and asks for `-allowProvisioningUpdates` | Use the `xcodebuild` command above. Running the Expo command again does not create the profile. | 2026-09-20 11:24 |
+| `No Accounts: Add a new account in Accounts settings`, with `No profiles for '<bundle id>' were found` | No Apple ID is signed in to Xcode (Profiles and expiry above). The owner signs in. | 2026-09-29 21:13 |
+| `Sandbox: node … deny(1) file-read-data`, or a write to `main.jsbundle` is denied | The build script sandbox: `ENABLE_USER_SCRIPT_SANDBOXING=NO`, as in the command above. | 2026-09-20 11:24 |
+| ExpoSQLite fails with `cannot find 'exsqlite3_open' in scope` and other prefixed symbols | Check that `sqlite3.h` exists, and if not, `pod install`. If it exists and the error stays, the module cache keeps the failed compile: delete `/tmp/openreader-iphone-module-cache-$CHECKOUT` and build again. A stale cache is suspected, not proven; the SQLite sources and the signing are not at fault. | 2026-09-22 19:52, 2026-09-27 12:00, 2026-10-02 14:01 |
+| The link fails on undefined FFmpeg symbols, such as `_avformat_open_input` | `Pods-OpenReader.release.xcconfig` under `ios/Pods/Target Support Files/` was written while the downloaded FFmpeg xcframeworks were missing. Once they exist under RNAudioAPI, `pod install` registers `libavcodec`, `libavformat`, `libavutil` and `libswresample`; build again. | 2026-09-22 19:52, 2026-10-02 14:01 |
+| Bundling fails with `Unable to resolve module <package>`, although the manifest and lockfile declare it | The package is missing from `node_modules`. Restore that exact version: `npm pack <package>@<version> --pack-destination /tmp --json`, check its integrity against the lockfile, extract it into `node_modules/<package>`, and `pod install` if it has native code. `npm install --no-save --package-lock=false` is the wrong repair: it resolves newer peers (it took `react-test-renderer@19.3.0` against React 19.2.3). For a tree missing more than one package, `npm ci`, then step 2. | 2026-09-26 13:24 |
+| A wireless installation waits long before any transfer begins | The time is the native build, not Wi-Fi: transfer itself is brief. Do step 2 before building. | 2026-09-26 13:24 |
+| Installation succeeds, but launch fails with `CoreDeviceError 10002` / `Security`: "invalid code signature, inadequate entitlements or its profile has not been explicitly trusted by the user" | The message lists alternatives; it does not say which applies. Have the owner trust the developer on the phone (step 5) and launch again. If the developer is already trusted, inspect the signature and profile (Profiles and expiry), and capture the message the phone shows. | 2026-09-20 11:24, 2026-09-22 19:55, 2026-09-27 12:00 |
+| Launch fails with `BSErrorCodeDescription = Locked` | The phone is locked. The owner unlocks it and opens the app. | 2026-10-04 11:30 |
+| The Debug Log's first line says `system log missing (no native module)` | The `ios/` predates #82, whose Debug Log system-log line is a local native module. Run `pod install` in `ios/` (or prebuild) and build again. | |
 
 ## References
 
 - [Expo SDK 57 documentation](https://docs.expo.dev/versions/v57.0.0/)
 - [Expo local builds and device selection](https://docs.expo.dev/guides/local-app-development/)
-
-Use the measured failures and successful commands above as the source of truth;
-there is no need to rediscover the installation path each time.

@@ -2,7 +2,7 @@
 
 Use this guide when the owner reports a fault seen on the phone, usually a
 screenshot and a time. It gets from that report to the state the app was in,
-in one pass. It was written from #112 (2026-10-01), where the pass took four
+in one pass. It was written from #112, where the pass took four
 rounds; each step below is one of those rounds, done in order.
 
 The phone is the owner's own. Everything here only reads it; on a build before
@@ -43,7 +43,7 @@ to install one (`install-on-iphone.md`) and have the owner meet the fault again.
 
 ```sh
 python3 test/manual-test/kit/debug-log.py IPHONE_UDID /tmp/or-debug-NAME
-python3 test/manual-test/kit/debug-log-timeline.py /tmp/or-debug-NAME/debug-log --from '2026-10-01 01:28' --to '2026-10-01 01:50'
+python3 test/manual-test/kit/debug-log-timeline.py /tmp/or-debug-NAME/debug-log --from 'YYYY-MM-DD HH:MM' --to 'YYYY-MM-DD HH:MM'
 ```
 
 `debug-log.py` copies the folder and prints the span it covers. The owner's time

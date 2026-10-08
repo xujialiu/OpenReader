@@ -7,32 +7,25 @@ provisioning and the Release build itself are as in
 [install-on-iphone.md](install-on-iphone.md); this guide covers only what is
 different.
 
-## When it was needed
+## When to make one
 
-On 2026-10-04 App Review answered the 1.0.0 submission with **Guideline 2.1 -
-Information Needed - New App Submission**, because the account "has a limited
-App Review history". Its first item: "A screen recording captured on a physical
-device, running the latest operating system, demonstrating the app's
-functionality. The recording must begin with launching the app and show the
-typical user flow." The other five items (purpose and audience, setup
-instructions and sample files, external services, regional differences,
-regulated or protected material) are text; the state is in
-[release-to-app-store.md](release-to-app-store.md).
+When App Review asks for a screen recording on a physical device, as its
+Guideline 2.1 request did (notes 2026-10-04 11:30). What App Review
+Information holds now is in [release-to-app-store.md](release-to-app-store.md).
 
-## The owner's decisions (2026-10-04)
+## Rules
 
-- **Another bundle identifier**, `top.xujialiu.openreader.demo`, installed beside
-  the owner's app. Not the same identifier with his data backed up and restored,
-  and not a simulator: Apple asked for a physical device.
+- **Another bundle identifier**, `top.xujialiu.openreader.demo`, installed
+  beside the owner's app. Not the same identifier with his data backed up and
+  restored, and not a simulator: Apple asks for a physical device.
 - **The Home Screen name stays `OpenReader`**, the same as the owner's app, so
   the recording opens on what the App Store will show. The two are told apart by
   Settings alone (below).
-- **The version line ends in `-demo`**: `1.0.0 (5)-beta5-demo`.
+- **The version line ends in `-demo`**, for example `1.0.0 (5)-beta5-demo`.
 - **No Debug Mode**: the Demo App behaves as a released build does, and no
   `-debug` appears in the recording.
-- **The code**: the owner named it, `1.0.0 (5)-beta5` (`main` at `c12ff21`). It
-  is not necessarily the build App Review is looking at; the newest upload was
-  then 1.0.0 (4).
+- **The code is the owner's choice**: ask which commit. It need not be the
+  build App Review is looking at.
 - **Built in a throwaway sub-worktree.** The two edits below are never
   committed to `main`, so `main` and its Beta do not move and no `ios-tester`
   run is owed (MEMORY/app-change.md).
@@ -107,24 +100,25 @@ install-on-iphone.md):
    `OpenReader`, that the entitlements file is still empty, and that
    `node_modules/expo-sqlite/ios/sqlite3.h` exists.
 4. **Build** without `EXPO_PUBLIC_OPENREADER_DEBUG_MODE` anywhere (shell,
-   `.env*`, `ios/.xcode.env.local`), with its own DerivedData and module cache,
-   so that it neither waits on nor disturbs a build of the owner's app:
+   `.env*`, `ios/.xcode.env.local`), with the sub-worktree's own DerivedData and
+   module cache (install-on-iphone.md, step 3), so that it neither waits on nor
+   disturbs a build of the owner's app:
 
    ```bash
    xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \
      -configuration Release -destination 'id=IPHONE_UDID' \
-     -derivedDataPath /tmp/openreader-demo-derived-YYYYMMDD \
+     -derivedDataPath /tmp/openreader-iphone-demo \
      -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
      ENABLE_USER_SCRIPT_SANDBOXING=NO \
-     CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-demo-YYYYMMDD \
+     CLANG_MODULE_CACHE_PATH=/tmp/openreader-iphone-module-cache-demo \
      -quiet build
    ```
 
    `-allowProvisioningUpdates` lets Xcode make the signing profile. The app
-   has no capabilities, so on 2026-10-04 Xcode signed it with a new wildcard
-   profile, `iOS Team Provisioning Profile: *`, rather than one for an explicit
-   App ID.
-5. **Check** the product, `/tmp/openreader-demo-derived-YYYYMMDD/Build/Products/Release-iphoneos/`:
+   has no capabilities, so Xcode signs it with the team's wildcard profile,
+   `iOS Team Provisioning Profile: *`, rather than one for an explicit App ID
+   (notes 2026-10-04 11:30).
+5. **Check** the product, `/tmp/openreader-iphone-demo/Build/Products/Release-iphoneos/`:
    `main.jsbundle` beside the app reads `var DEBUG_MODE = false;` and holds the
    `-demo` template; `codesign -d --entitlements :- OpenReader.app` shows
    `application-identifier` `UPR29WR8FC.top.xujialiu.openreader.demo`.
@@ -132,12 +126,14 @@ install-on-iphone.md):
 
    ```bash
    xcrun devicectl device install app --device IPHONE_UDID \
-     /tmp/openreader-demo-derived-YYYYMMDD/Build/Products/Release-iphoneos/OpenReader.app
+     /tmp/openreader-iphone-demo/Build/Products/Release-iphoneos/OpenReader.app
    xcrun devicectl device process launch --device IPHONE_UDID top.xujialiu.openreader.demo
    ```
 
    Then confirm both apps are installed:
    `xcrun devicectl device info apps --device IPHONE_UDID | rg top.xujialiu.openreader`.
+   A launch that returns `BSErrorCodeDescription = Locked` means the phone is
+   locked: the owner opens the app.
 
 ## Telling the two apart
 
@@ -157,20 +153,7 @@ After Apple accepts the recording:
    identifier.
 2. The owner checks developer.apple.com → Certificates, Identifiers & Profiles
    → Identifiers for `top.xujialiu.openreader.demo`, and removes it if it is
-   there. On 2026-10-04 Xcode signed with the wildcard profile (step 4), so
-   none may have been registered. The wildcard profile is the team's and can
-   stay.
+   there. With the wildcard profile (step 4), none may have been registered.
+   The wildcard profile is the team's and can stay.
 3. `git worktree remove --force .worktrees/demo` (it holds the two uncommitted
    edits) and `git branch -D main--demo`.
-
-## Runs
-
-- **2026-10-04**, `1.0.0 (5)-beta5-demo` from `c12ff21` (notes 2026-10-04
-  11:30). `npm ci` 8 s; prebuild 0, with Pods; Release build 0 in 215 s from
-  an empty DerivedData. Its three
-  `error: the following command failed with exit code 0 but produced no further output`
-  lines failed nothing. The bundle read `var DEBUG_MODE = false;` and held the
-  `-demo` line; signed `UPR29WR8FC.top.xujialiu.openreader.demo` with the
-  wildcard profile, expiring 2027-10-04. Install returned 0 and both apps were
-  then listed. Launch returned 1 because the phone was locked
-  (`BSErrorCodeDescription = Locked`); opening it was left to the owner.

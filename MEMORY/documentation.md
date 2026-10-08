@@ -1,11 +1,12 @@
 # Where a thing gets written down
 
-Four places. Putting something in the wrong one is how it stops being read.
+Five places. Putting something in the wrong one is how it stops being read.
 
 |                | Who reads it                   | What it holds                                                        |
 | -------------- | ------------------------------ | -------------------------------------------------------------------- |
 | `docs/design/` | Someone who does not read code | The trade-off: what was chosen, what was given up, and who it is for |
 | `docs/adr/`    | Someone who does               | The technical decision, and the measured facts behind it             |
+| `docs/*.md`    | Whoever does the task next     | A guide: the steps as they are today, and the facts they need        |
 | `notes/`       | The author, later              | What was measured, when                                              |
 | `CONTEXT.md`   | Everyone                       | The glossary, and nothing else                                       |
 
@@ -44,6 +45,20 @@ Not every decision has both halves. A purely technical one (adopting a platform
 life cycle, say) has an ADR and no design file. A purely product one has a
 design file and no ADR. The number is still spent, so a number never means two
 different decisions.
+
+## `docs/*.md` — guides
+
+A guide (installing on the simulator or the iPhone, a Demo App, a release,
+debugging on the phone) holds the steps as they are today, the facts they
+depend on (a team ID, a bundle ID, a profile's expiry), and a short reason
+where it stops someone taking a wrong turn. Write it in the present tense. A
+date in a guide belongs to a fact, such as an expiry, never to a run.
+
+A run of a guide goes to that day's `notes/`: what was built, how long it took,
+what failed and what fixed it. The guide gains only what the run changed — a
+step, a fact, a row of its troubleshooting table — ending with the note it came
+from: `(notes 2026-10-02 14:01)`. A run that changed nothing in the guide
+changes only the notes.
 
 ## `notes/` — dated, and timestamped inside
 

@@ -19,11 +19,9 @@ xcrun simctl list devices booted
 lsof -nP -iTCP:8081 -sTCP:LISTEN
 ```
 
-The target recorded in this guide is an iPhone 17 with UDID
-`13D669CF-ADBD-470C-9D6C-C3B03B9746E9`. Always check the device list first and
-replace `SIMULATOR_UDID` in the commands below with the target for this run. Be
-especially careful not to use `booted` blindly when multiple simulators are
-running.
+Check the device list first and replace `SIMULATOR_UDID` in the commands
+below with the target for this run. Be especially careful not to use `booted`
+blindly when multiple simulators are running.
 If the target is not already running:
 
 ```bash
@@ -80,17 +78,6 @@ You must also open the screen affected by the change and confirm that the final
 change is actually visible; a successful connection alone does not prove that
 the update is complete.
 
-### Encountered: Metro pointed to the old directory
-
-On 2026-09-20, the process on port 8081 was still running from the old
-`Works/react_native` directory. Restarting the app showed
-`ConfigError: The expected package.json path … does not exist`, and `/json/list`
-was initially empty. Stopping that stale process, starting Metro in
-`Works/openreader`, and restarting the app fixed the problem. The logs showed a
-new bundle, the debug target appeared, and the reading page displayed the latest
-same-row layout and speed buttons. No app deletion or library clearing was
-needed.
-
 ## First installation or native changes: build a Debug simulator app
 
 Read the [Expo SDK 57 documentation](https://docs.expo.dev/versions/v57.0.0/)
@@ -108,9 +95,7 @@ The usual build and launch entry point is:
 npx expo run:ios --device SIMULATOR_UDID --port 8081
 ```
 
-You can also build, install, and launch separately to identify which step fails.
-The following shows the Debug simulator command shape; during the recorded run,
-the JavaScript-only update was verified without rerunning this build command:
+You can also build, install, and launch separately to identify which step fails:
 
 ```bash
 xcodebuild \
@@ -138,32 +123,9 @@ or erase the simulator as part of a routine update.
 Then complete the Metro connection checks above and the interaction verification
 below.
 
-### Encountered: Debug linked the Release React framework
-
-On 2026-09-20, the Debug link failed with missing symbols
-`facebook::react::Sealable` and `ShadowNode::getDebugName`. When
-`React-Core-prebuilt/.last_build_configuration` is missing,
-`replace-rncore-version.js` treats an unmarked framework as Debug and skips the
-replacement; the installed binary was actually the Release binary.
-
-Only when you encounter the same symbol errors, inspect the current framework's
-symbols, the generated configuration marker, and the local replacement script.
-The previous fix set the generated marker to Release, then used the installed
-script to switch to Debug and extract the Debug archive from the cache. `nm`
-then found the Sealable constructor and the build passed.
-This is not required for every build; the complete measurement is preserved in
-the engineering log for that day.
+A build or launch that fails is in Troubleshooting below.
 
 ## Final delivery verification
-
-If a Debug build links after replacing React but crashes before JavaScript in `expo::ExpoViewProps` / `facebook::react::Props::Props`, check for precompiled Expo modules built against a different React configuration. On 2026-09-20, rebuilding those modules from source resolved this startup crash:
-
-```sh
-cd ios
-EXPO_USE_PRECOMPILED_MODULES=0 pod install
-```
-
-Then run the Debug build from the repository root as above. A simulator launch failure naming `/usr/lib/libSystem.B.dylib` and `no dyld cache` was separately resolved by shutting down and booting the same device; no app uninstall or device erase was needed. These are specific observed failures, not required steps for every build.
 
 1. Open the page affected by the change and verify the visible result of the final code.
 2. Operate the changed control and check its result. When needed, save a simulator screenshot:
@@ -207,36 +169,28 @@ that the final working-tree code is loaded.
 Any real external blocker must be reported explicitly; incomplete simulator
 delivery must not be reported as complete.
 
-### Encountered: DeviceHub launcher did not open a window
-
-On 2026-09-20, the desktop was unlocked and a DeviceHub process already existed,
-but opening the app bundle still produced no discoverable window.
-Launching the actual executable inside the bundle directly made the window and
-the simulator's accessibility control tree appear:
+If DeviceHub is running but opening its bundle gives no window, start the
+executable inside the bundle directly; the window and the simulator's
+accessibility tree then appear (notes 2026-09-20 13:15):
 
 ```bash
 /Applications/Xcode-27.0.0.app/Contents/Applications/DeviceHub.app/Contents/MacOS/DeviceHub \
   > /tmp/openreader-devicehub.log 2>&1
 ```
 
-This run used accessibility controls to operate and read back the enabled switch,
-read-only fields, and audio source; coordinate input still reported that the
-window was not focused. Do not describe successful accessibility operations as a
-passed coordinate-touch test.
+In that window, accessibility actions can work while coordinate input still
+reports the window unfocused. Report a successful accessibility action as that,
+not as a passed coordinate touch.
 
-### Lock-screen button is clickable, but its icon is invisible
+## Troubleshooting
 
-On this machine, iOS 27.0 once showed an enabled Play button in the system
-accessibility tree. Clicking it actually played or paused, but the icon was not
-visible in the screenshot. First use the lock-screen screenshot, real-click, and
-system-resource inspection scripts in
-[`test/manual-test/README.md`](../test/manual-test/README.md) to distinguish these
-facts; “XCTest passed” does not mean that the icon is visible.
-The resource-loading failure recorded on 2026-09-20 and the iOS 26.5 comparison
-are in that day's engineering log. The owner later reported that the lock-screen
-displayed correctly on a physical device. For now, treat this as a display issue
-in the tested simulator environment and keep the app's existing media-control
-implementation. The physical device model and system version were not recorded,
-so this does not establish that all devices have been verified.
-When the same symptom occurs, compare with a physical device first; do not
-replace the app's lock-screen interface solely to fix a simulator screenshot.
+More simulator failures, by tool, are in
+[`test/manual-test/pitfalls/simulators.md`](../test/manual-test/pitfalls/simulators.md).
+
+| Symptom | What to do | Notes |
+| --- | --- | --- |
+| The app shows `ConfigError: The expected package.json path … does not exist`, and `/json/list` is empty | Metro on that port runs from another directory. Stop that exact PID, start Metro in this repository, and restart the app (Routine update). The app and its library can stay. | 2026-09-20 12:33 |
+| The Debug link fails on missing `facebook::react::Sealable` and `ShadowNode::getDebugName` | The installed React framework is the Release one: with `React-Core-prebuilt/.last_build_configuration` missing, `replace-rncore-version.js` takes an unmarked framework for Debug and skips the replacement. Check the framework's symbols with `nm`, set the generated marker to Release, then run the installed replacement script for Debug, which extracts the cached Debug archive. | 2026-09-20 12:00 |
+| A Debug build links but crashes before JavaScript in `expo::ExpoViewProps` / `facebook::react::Props::Props` | Precompiled Expo modules built against another React configuration. Rebuild them from source with `cd ios && EXPO_USE_PRECOMPILED_MODULES=0 pod install`, then the Debug build above. | 2026-09-20 17:50 |
+| Launch fails in dyld naming `/usr/lib/libSystem.B.dylib` and `no dyld cache` | Shut the simulator down and boot it again. The app and the simulator's data can stay. | 2026-09-20 17:50 |
+| On the lock screen, Play is in the accessibility tree and works, but its icon is invisible in screenshots | A display problem of the iOS 27.0 simulator: the owner's phone shows the lock screen normally. Compare with a physical device first, and keep the app's media controls. The lock-screen screenshot, real-click and system-resource scripts in [`test/manual-test/README.md`](../test/manual-test/README.md) tell these apart; "XCTest passed" does not mean the icon is visible. | 2026-09-20 14:36, 14:47, 15:12 |
