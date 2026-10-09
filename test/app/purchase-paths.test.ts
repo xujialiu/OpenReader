@@ -70,8 +70,9 @@ describe('a Reading speaks only through the gate', () => {
     pin(play, 'else restateNowPlaying();', 'play()');
     const nowPlaying = read('src/now-playing/index.ts');
     const restate = between(nowPlaying, 'export function restateNowPlaying(): void {', 'export function lockScreenPosition(', 'restateNowPlaying()');
-    pin(restate, 'if (!shown || !last) return;', 'restateNowPlaying()');
-    pin(restate, 'lockScreen().show({ ...last, position: pushed });', 'restateNowPlaying()');
+    pin(restate, 'if (!shown || !last || last.playing) return;', 'restateNowPlaying()');
+    pin(restate, 'lockScreen().show({ ...paused, playing: true, position: pushed });', 'restateNowPlaying()');
+    pin(restate, 'if (shown && last === paused) lockScreen().show({ ...paused, position: pushed });', 'restateNowPlaying()');
     // `last` is what the show effect last wrote, playing state included, and is forgotten with the item.
     pin(nowPlaying, "last = { title, chapter, cover: cover ?? '', playing, rate };", 'src/now-playing/index.ts');
     pin(nowPlaying, '      last = null;', 'src/now-playing/index.ts');

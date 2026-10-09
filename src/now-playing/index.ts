@@ -121,18 +121,28 @@ function lockScreen(): typeof NowPlayingModule {
  * agree instead of drifting apart by the 1.5-3x the app runs at.
  */
 /**
- * Show the lock screen what was last shown, again (#148).
+ * Put the lock screen's button back after a press the app refused (#148).
  *
  * The system turns its centre button to Pause the moment Play is tapped,
- * before the app has answered. When the app then refuses the press, read-aloud
- * being locked, nothing it shows has changed, so nothing would be written, and
- * the button stayed on Pause over a paused app (LockScreenProbe, 85 s later,
- * on 1.0.0 (7)-beta11). Writing the same paused state again puts it back.
- * Nothing happens before a reading has been shown.
+ * before the app has answered, and it turns it back only on a change of state:
+ * writing the same paused state again moved nothing (1.0.0 (7)-beta12: three
+ * refusals, `mediaremoted` logged no change, and LockScreenProbe still read
+ * Pause 36 s and 42 s later). So the reading is shown playing, as the tap made
+ * it look, and 400 ms later paused again, the change that puts the button back
+ * to Play (the same pair, sent by hand on beta12, made LockScreenProbe read
+ * Play). The second write is skipped if a real Play has shown the reading
+ * playing in between. Nothing happens before a reading has been shown.
  */
+let restating: ReturnType<typeof setTimeout> | null = null;
 export function restateNowPlaying(): void {
-  if (!shown || !last) return;
-  lockScreen().show({ ...last, position: pushed });
+  if (!shown || !last || last.playing) return;
+  const paused = last;
+  lockScreen().show({ ...paused, playing: true, position: pushed });
+  if (restating) clearTimeout(restating);
+  restating = setTimeout(() => {
+    restating = null;
+    if (shown && last === paused) lockScreen().show({ ...paused, position: pushed });
+  }, 400);
 }
 
 export function lockScreenPosition(position: number): void {
