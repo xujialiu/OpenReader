@@ -26,5 +26,12 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.test.ts'],
     setupFiles: ['test/setup.ts'],
+    /**
+     * Every test runs as a build without the lock (#148, ADR 0075), so the
+     * Reading and the downloads under test speak as they did before there was
+     * one. The Trial and the Unlock are tested with `lockOn` handed in
+     * (`test/purchase/`) or a controller configured in (`test/app/purchase-*`).
+     */
+    env: { EXPO_PUBLIC_OPENREADER_UNLOCKED: '1' },
   },
 });

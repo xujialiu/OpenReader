@@ -43,7 +43,7 @@ const bridge = {
   onSelection: (callback: (message: Selected) => void) => { select = callback; return () => {}; },
   closeLookup: vi.fn(),
 } as unknown as ReaderBridge;
-const reading = { bridge, pause: vi.fn(), play: vi.fn(), status: { playing: false } };
+const reading = { bridge, pause: vi.fn(), play: vi.fn(), carryOn: vi.fn(), status: { playing: false } };
 
 let handle: LookupHandle | null = null;
 let tree: ReactTestRenderer | null = null;

@@ -184,7 +184,7 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     // three paragraphs away", arriving late instead of wrong.
     const reading = code('use-reading.ts');
     expect(within(reading, 'const seekTo = useCallback(', '}, [sectionOf')).toContain('abandonResume();');
-    expect(within(reading, 'const play = useCallback(', '}, [settings, build, report, walkForward')).toContain('abandonResume();');
+    expect(within(reading, 'const start = useCallback(', '}, [settings, build, report, walkForward')).toContain('abandonResume();');
     expect(within(reading, 'const abandonResume = useCallback(', '}, []);')).toContain('resumeRef.current = null;');
   });
 
@@ -192,7 +192,7 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     // Giving it up started the engine at this device's older sentence and wrote
     // that over the newer place on every device. The wait is asked first, before
     // the claim is ended and before the cover-page walk moves the page elsewhere.
-    const play = within(code('use-reading.ts'), 'const play = useCallback(', '}, [settings, build, report, walkForward');
+    const play = within(code('use-reading.ts'), 'const start = useCallback(', '}, [settings, build, report, walkForward');
     const waits = play.indexOf('awaitedSection(');
     expect(waits).toBeGreaterThan(-1);
     expect(waits).toBeLessThan(play.indexOf('abandonResume();'));

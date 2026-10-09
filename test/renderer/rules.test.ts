@@ -1923,7 +1923,7 @@ describe('A or M, and M bringing the page back (#71, #53, ADR 0050)', () => {
       'bridgeRef.current?.clock.onClip(cue, !playIntent.current ? { reveal: false } : asked ? { reveal: true } : { reveal: false, recover: true });',
       'use-reading.ts, the clock',
     );
-    const play = reading.slice(reading.indexOf('const play = useCallback('), reading.indexOf('const pause = useCallback('));
+    const play = reading.slice(reading.indexOf('const start = useCallback('), reading.indexOf('const pause = useCallback('));
     pin(play, 'playIntent.current = true;\n    revealCue.current = true;', 'use-reading.ts, play');
     const start = reading.indexOf('const pause = useCallback(');
     pin(reading.slice(start, reading.indexOf('}, []);', start)), 'revealCue.current = false;', 'use-reading.ts, pause');

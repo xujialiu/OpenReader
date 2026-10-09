@@ -12,7 +12,7 @@ import { consent, lookupRecipient } from './consent';
 
 export interface LookupSelection { text: string; mode: LookupMode; selecting: boolean; attempt: number }
 export function useLookup(settings: LookupSettings, reading: {
-  bridge: ReaderBridge; pause(): void; play(): void; status: { playing: boolean };
+  bridge: ReaderBridge; pause(): void; play(): void; carryOn(): void; status: { playing: boolean };
 }, focused: boolean) {
   const [selection, setSelection] = useState<LookupSelection | null>(null);
   const [result, setResult] = useState<LookupResult | null>(null);
@@ -28,7 +28,8 @@ export function useLookup(settings: LookupSettings, reading: {
   const pronunciation = useMemo(() => createPronunciationController({
     playing: () => latest.current.reading.status.playing,
     pause: () => latest.current.reading.pause(),
-    resume: () => latest.current.reading.play(),
+    // A continuation, not a press: never asked about the Trial (#148).
+    resume: () => latest.current.reading.carryOn(),
     audio: (url, signal) => playPronunciation(url, signal, () => pronunciation.stop(false)),
     changed: setPronouncing,
     failed: setAudioError,

@@ -51,6 +51,7 @@ import {
   type ContinuedShown,
 } from "./continued-processing";
 import { consent, declinedSentence, providerRecipient, type Recipient } from "../app/consent";
+import { purchases } from "../app/purchase";
 import { cutText, debugLog, describeProblem, shortId } from "../debug/debug-log";
 import { DEBUG_MODE } from "../debug/mode";
 import { offlineRepository } from "./database";
@@ -596,9 +597,15 @@ const scheduler = createScheduler({
   // Away from the screen, the end of the bounded background time stops a
   // download only once neither a Reading nor a continued task the phone
   // accepted keeps the app running (ADR 0053).
+  // While read-aloud is locked (#148, ADR 0075), nothing is written: a download
+  // waits queued, or, caught mid-chapter as the Trial ends, stops at the next
+  // sentence as `interrupted`, and goes on once the Trial starts or the Unlock
+  // arrives (`startDownloads`). Asked here without a question: the scheduler
+  // never raises an alert.
   allowed: () =>
     loaded &&
     !storeError &&
+    purchases.allowsSpeech() &&
     (foreground || !expired || readingPlays || continued.running()),
   // Where the hidden rendering prepares a chapter's text (#76).
   foreground: () => AppState.currentState === "active",
@@ -945,10 +952,21 @@ export function startDownloads(): () => void {
   const leaving = AppState.addEventListener("change", (value) => {
     if (value !== "active") abandonPreparation();
   });
+  // The Trial started, the Unlock bought, restored or approved (#148): what the
+  // lock held back goes on, a download it stopped mid-chapter included. Only in
+  // front, where a stop for the background time is undone the same way.
+  const unlocked = purchases.subscribe(() => {
+    if (!purchases.allowsSpeech()) return;
+    if (foreground)
+      for (const task of tasks)
+        if (task.state === "interrupted") task.state = "queued";
+    fire(persist().then(kick));
+  });
   // Without a platform connectivity observer, periodically retry only connectivity failures.
   const timer = Platform.OS !== "ios" ? setInterval(kick, 5000) : null;
   kick();
   return () => {
+    unlocked();
     network?.remove();
     expiration?.remove();
     continuedExpiration?.remove();
@@ -1003,6 +1021,9 @@ export async function startDownload(
     voice.provider,
     found,
   );
+  // The Trial and the Unlock first (#148, ADR 0075): no Consent is asked for a
+  // download that could not be written.
+  if (!(await purchases.askForSpeech())) return false;
   consent.again(recipient.key);
   if (!(await consent.ensure(recipient))) return false;
   enqueue(document, voice, chapters);
@@ -1056,6 +1077,12 @@ export const goesOn = (task: DownloadTask) =>
 export function toggleTask(task: DownloadTask): void {
   if (goesOn(task)) pausing.pauseAll(task);
   else {
+    // Resuming is asking for speech: while read-aloud is locked, the person is
+    // asked first, and the resume happens only once it is allowed (#148).
+    if (!purchases.allowsSpeech()) {
+      void purchases.askForSpeech().then((yes) => { if (yes) toggleTask(task); });
+      return;
+    }
     // Resume all, or Retry failed: the owner asking again, so a Provider they
     // refused is asked about again as the download reaches it (#109).
     consent.again();
@@ -1068,6 +1095,11 @@ export function toggleTask(task: DownloadTask): void {
 export function toggleChapter(task: DownloadTask, chapter: string): void {
   const resumes =
     !pausing.GOES_ON.includes(task.state) || pausing.isPaused(task, chapter);
+  // A ring that resumes is asking for speech, as Resume all is (#148).
+  if (resumes && !purchases.allowsSpeech()) {
+    void purchases.askForSpeech().then((yes) => { if (yes) toggleChapter(task, chapter); });
+    return;
+  }
   pausing.tapChapter(task, chapter, completeIn(task));
   if (resumes) {
     consent.again();

@@ -43,6 +43,7 @@ import type { ProviderId } from '../core/providers/types';
 import type { Utterance } from '../core/segmenter';
 import { debugLog } from '../debug/debug-log';
 import { consent, isDeclined } from './consent';
+import { purchases } from './purchase';
 import { lockScreenPosition } from '../now-playing';
 import {
   createPlaybackEngine,
@@ -197,7 +198,14 @@ export interface Reading {
   status: ReadingStatus;
   /** The document is open and epub.js has displayed it. `language` is the EPUB's own `dc:language`, which is never sniffed (ADR 0006). */
   opened(language: string | null | undefined): void;
+  /** A press of Play: asks about the Trial and the Unlock when read-aloud is locked (#148). */
   play(): void;
+  /**
+   * The Reading going on after a Pronunciation paused it (#148): not a new
+   * press, so never asked about the Trial, and a Reading the end of the Trial
+   * found playing is not cut off by a word looked up.
+   */
+  carryOn(): void;
   pause(): void;
   chooseVoice(provider: ProviderId, voice: string, selected: () => void): void;
   /**
@@ -1351,7 +1359,14 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     return engine;
   }, [settings, hasKey, clock, report, ranOutOfText, document, sectionOf]);
 
-  const play = useCallback(() => {
+  /**
+   * What a press of Play starts, once `play` below has let it through, and what
+   * carries a Reading on after something paused it for a moment (#148): the
+   * cover-page walk and the wait for a place, both after a press already let
+   * through, and the end of a Pronunciation. None of those is asked about the
+   * Trial again, because none is a new press.
+   */
+  const start = useCallback(() => {
     if (endedRef.current) {
       debugLog('reading', 'play after the reading ended: ignored');
       return;
@@ -1447,6 +1462,35 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       report(error);
     });
   }, [settings, build, report, walkForward, abandonResume, document, hasKey]);
+  const startRef = useRef(start);
+  useEffect(() => {
+    startRef.current = start;
+  }, [start]);
+
+  /**
+   * A press of Play: the Player's button, the Lock Screen, the headphones.
+   *
+   * The Trial and the Unlock first (#148, ADR 0075), before Consent, which
+   * `start` asks: there is no point asking a Provider's Consent for speech that
+   * cannot play. When the app may speak, the press goes straight on. When it may
+   * not, the person is asked, and the press goes on once they have started the
+   * Trial, bought the Unlock or restored it; otherwise nothing plays. Away from
+   * the screen nobody is asked, so a Lock Screen Play while locked plays nothing.
+   *
+   * A Reading already playing never comes here, so the end of the Trial never
+   * cuts one off: it meets the gate at the next press after a pause.
+   */
+  const play = useCallback(() => {
+    if (endedRef.current || purchases.allowsSpeech()) {
+      start();
+      return;
+    }
+    debugLog('reading', 'play while read-aloud is locked: asking (#148)');
+    void purchases.askForSpeech().then((yes) => {
+      debugLog('reading', yes ? 'read-aloud allowed: the press goes on' : 'read-aloud still locked: nothing plays');
+      if (yes) startRef.current();
+    });
+  }, [start]);
 
   /**
    * The section Play was looking for has arrived with text in it, so the reading
@@ -1460,8 +1504,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     if (!seekingRef.current || loadedRef.current.length === 0) return;
     seekingRef.current = false;
     setStatus((was) => ({ ...was, seeking: false }));
-    play();
-  }, [status.known, play]);
+    start();
+  }, [status.known, start]);
 
   /**
    * The place Play was waiting for has landed, or its section reported without
@@ -1476,8 +1520,8 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   useEffect(() => {
     if (!awaitingPlaceRef.current || resumeRef.current) return;
     awaitingPlaceRef.current = false;
-    play();
-  }, [status, play]);
+    start();
+  }, [status, start]);
 
   const pause = useCallback(() => {
     debugLog('reading', `pause at utterance ${atRef.current ?? 'none'}`);
@@ -1766,5 +1810,5 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     if (late && readingPosition() === null) resumeAt(late);
   }, [stopped, readingPosition, resumeAt]);
 
-  return { bridge, status, opened, play, pause, chooseVoice, seekTo: pointAt, skip, returnToReading, goToSection, readingPosition, resumeAt };
+  return { bridge, status, opened, play, carryOn: start, pause, chooseVoice, seekTo: pointAt, skip, returnToReading, goToSection, readingPosition, resumeAt };
 }

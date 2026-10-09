@@ -56,6 +56,7 @@ import { navigationRef, ShellContext, type RootStackParamList, type Shell } from
 import { ReadingHost } from './reading-host';
 import { configureConsent } from './consent';
 import { askWithAlert } from './consent-alert';
+import { startPurchases, storeCommand } from './purchase-setup';
 import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
@@ -120,6 +121,12 @@ export function OpenReader() {
     keep: (key) => setSettings((was) => was.consent.includes(key) ? was : { ...was, consent: [...was.consent, key] }),
     ask: askWithAlert,
   }), [setSettings]);
+  /**
+   * The Trial and the Unlock (#148, ADR 0075), configured before the downloads
+   * start for the reason Consent is: a download left queued may be about to
+   * speak, and nothing speaks until this has said whether it may.
+   */
+  useEffect(() => startPurchases(), []);
   useEffect(() => { configureDownloads(settings); }, [settings]);
   useEffect(() => startDownloads(), []);
   // The Debug Log names the Documents a continued task's Live Activity covers as the Library does (ADR 0053, #93).
@@ -153,6 +160,7 @@ export function OpenReader() {
   // WALKTHROUGH-HARNESS
   useHarnessCommands((command: HarnessCommand) => {
     const what = String(command.do);
+    if (what === 'store') return storeCommand(command);
     if (what === 'add') {
       void library.add(new HxFile(HxPaths.document, 'Inbox', String(command.file)), { move: false }).then(
         ({ entry }) => hlog(`added ${entry.id} "${entry.title}"`),

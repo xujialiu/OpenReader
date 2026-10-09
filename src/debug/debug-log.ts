@@ -40,6 +40,7 @@ export type DebugCategory =
   | 'download'
   | 'sync'
   | 'lookup'
+  | 'purchase'
   | 'renderer'
   | 'probe';
 
