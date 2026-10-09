@@ -30,6 +30,7 @@ function setup(options: {
     trial: async (price) => { asked.push(`trial ${price}`); return options.answers?.trial ?? 'not-now'; },
     ended: async (price) => { asked.push(`ended ${price}`); return options.answers?.ended ?? 'not-now'; },
     unavailable: async () => { asked.push('unavailable'); },
+    nothingToRestore: async () => { asked.push('nothing to restore'); },
   };
   const purchases = createPurchases({
     lockOn: options.lockOn ?? true,
@@ -144,6 +145,7 @@ describe('the gate in front of a press of Play or a download', () => {
         trial: () => { asked.push('trial'); return new Promise((resolve) => { answer = resolve; }); },
         ended: async () => 'not-now',
         unavailable: async () => {},
+        nothingToRestore: async () => {},
       },
     });
     purchases.start();
@@ -218,6 +220,48 @@ describe('the Settings rows', () => {
     await purchases.askForSpeech();
     expect(purchases.price()).toBe('$4.99');
   });
+});
+
+describe('Restore Purchase with nothing to restore', () => {
+  it('says so once the App Store has answered without an Unlock, from the Settings row', async () => {
+    const { purchases, asked } = setup();
+    expect(await purchases.restore()).toBe(false);
+    expect(asked).toEqual(['nothing to restore']);
+  });
+
+  it('says so from the ended alert too, and nothing plays', async () => {
+    const { purchases, asked } = setup({ state: { ...NOT_STARTED, trialStartedAt: START - TRIAL_MS - DAY_MS }, answers: { ended: 'restore' } });
+    expect(await purchases.askForSpeech()).toBe(false);
+    expect(asked).toEqual(['ended $4.99', 'nothing to restore']);
+  });
+
+  it('says so during the Trial, which goes on', async () => {
+    const { purchases, asked } = setup({ state: { ...NOT_STARTED, trialStartedAt: START - DAY_MS } });
+    expect(await purchases.restore()).toBe(true);
+    expect(asked).toEqual(['nothing to restore']);
+  });
+
+  it('says nothing when the restore did not finish, a sign-in cancelled', async () => {
+    const store = createFakeStore(NOT_STARTED, { now: () => START });
+    const { purchases, asked } = setup({ store: { ...store, sync: () => Promise.reject(new Error('userCancelled')) } });
+    expect(await purchases.restore()).toBe(false);
+    expect(asked).toEqual([]);
+  });
+
+  it('says nothing when the Unlock is found', async () => {
+    const store = createFakeStore({ ...FAKE_UNLOCKED, unlocked: true }, { now: () => START });
+    const hidden: Store = { ...store, entitlements: async () => (store.calls.sync ? store.entitlements() : []), listen: () => () => {} };
+    const { purchases, asked } = setup({ store: hidden });
+    expect(await purchases.restore()).toBe(true);
+    expect(asked).toEqual([]);
+  });
+
+  it('stays silent on a purchase waiting for a parent\'s approval', async () => {
+    const { purchases, asked } = setup({ state: { ...NOT_STARTED, outcome: 'pending' } });
+    expect(await purchases.unlock()).toBe(false);
+    expect(asked).toEqual([]);
+  });
+
 });
 
 describe('the harness\'s states for a build with Debug Mode', () => {

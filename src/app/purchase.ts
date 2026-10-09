@@ -43,6 +43,9 @@ export function endedQuestion(price: string): { title: string; message: string; 
 /** No product loads: offline, the App Store down, or a bundle ID with nothing to sell (decision of 2026-10-09). */
 export const UNAVAILABLE = { title: 'Purchases Unavailable', message: "The App Store can't be reached right now.", ok: 'OK' } as const;
 
+/** Restore finished and found no Unlock for this Apple Account (decision of 2026-10-09). */
+export const NOTHING_TO_RESTORE = { title: 'No Purchase Found', message: "There's no purchase to restore for this Apple Account.", ok: 'OK' } as const;
+
 /** The Settings row's label (#148). */
 export const READ_ALOUD = 'Read Aloud';
 

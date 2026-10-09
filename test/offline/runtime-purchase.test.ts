@@ -118,6 +118,7 @@ function configure(state: Parameters<typeof createFakeStore>[0]) {
       trial: async (price) => { asked.push(`trial ${price}`); return answers.trial; },
       ended: async (price) => { asked.push(`ended ${price}`); return answers.ended; },
       unavailable: async () => { asked.push('unavailable'); },
+      nothingToRestore: async () => { asked.push('nothing to restore'); },
     },
   }));
 }

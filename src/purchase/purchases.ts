@@ -17,6 +17,8 @@ export interface PurchaseAsker {
   ended(price: string): Promise<'unlock' | 'restore' | 'not-now'>;
   /** No product loads: the App Store is out of reach, or this build's bundle ID sells nothing. */
   unavailable(): Promise<void>;
+  /** Restore finished, and the Unlock is still not owned. */
+  nothingToRestore(): Promise<void>;
 }
 
 export interface PurchaseDeps {
@@ -155,6 +157,12 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
     return speaks(access());
   }
 
+  /**
+   * Restore Purchase. When the App Store has answered and the Unlock is still
+   * not owned, the person is told there was nothing to restore (decision of
+   * 2026-10-09); a restore that did not finish, a sign-in cancelled, says
+   * nothing, since the person stopped it themselves.
+   */
   async function restoring(): Promise<boolean> {
     try {
       await store.sync();
@@ -164,6 +172,7 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
     }
     await refresh();
     log(`restored: ${access().kind}`);
+    if (!record.unlocked) await ask.nothingToRestore();
     return speaks(access());
   }
 

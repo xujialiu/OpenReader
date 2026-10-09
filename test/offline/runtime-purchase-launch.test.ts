@@ -88,7 +88,7 @@ async function launch(owned: { unlocked: boolean; trialStartedAt: number | null 
   configurePurchases(createPurchases({
     lockOn: true, store: slow, record: { load: () => record, save: (next) => { record = next; } },
     now: () => NOW, log: () => {},
-    ask: { canAsk: () => true, trial: async () => 'not-now', ended: async () => 'not-now', unavailable: async () => {} },
+    ask: { canAsk: () => true, trial: async () => 'not-now', ended: async () => 'not-now', unavailable: async () => {}, nothingToRestore: async () => {} },
   }));
   runtime.configureDownloads(settings);
   runtime.startDownloads();

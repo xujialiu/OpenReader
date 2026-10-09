@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { endedQuestion, readAloudValue, trialQuestion, UNAVAILABLE } from '../../src/app/purchase';
+import { endedQuestion, NOTHING_TO_RESTORE, readAloudValue, trialQuestion, UNAVAILABLE } from '../../src/app/purchase';
 import { DAY_MS } from '../../src/purchase/products';
 import { pin } from '../structural';
 
@@ -174,6 +174,7 @@ describe('what the app says (#148)', () => {
       notNow: 'Not Now',
     });
     expect(UNAVAILABLE).toEqual({ title: 'Purchases Unavailable', message: "The App Store can't be reached right now.", ok: 'OK' });
+    expect(NOTHING_TO_RESTORE).toEqual({ title: 'No Purchase Found', message: "There's no purchase to restore for this Apple Account.", ok: 'OK' });
   });
 
   it('says on the Settings row only the state: days left, ended, or unlocked', () => {
