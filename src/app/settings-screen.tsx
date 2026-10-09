@@ -2,8 +2,10 @@ import { APP_VERSION } from '../../app-version';
 import { shownVersion } from '../debug/mode';
 import { ActionRow, DetailRow, Footnote, LinkRow, NavigationRow, SettingsGroup, SettingsPage } from './controls';
 import { AUTHOR, EMAIL, emailAuthor, openPrivacyPolicy, openRepository, REPOSITORY_NAME } from './own-site';
+import { READ_ALOUD, readAloudValue } from './purchase';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
+import { usePurchases } from './use-purchases';
 
 /**
  * Why the Author's card asks for a star. It is the one standing line
@@ -35,10 +37,18 @@ export const STAR_LINE = 'If you like OpenReader, give it a ⭐ on GitHub — it
  * acknowledgements are a page in the app, so theirs is a row like any other.
  * Both sit in a card of their own at the foot of the page, where the phone puts
  * its own legal rows.
+ *
+ * **Read Aloud** (#148, ADR 0075) closes the first card in a build with the
+ * lock: the days left in the Trial, that it ended, or that the Unlock is owned,
+ * and nothing before the Trial. It opens the page that buys and restores the
+ * Unlock; once the Unlock is owned there is nothing behind it, so it opens
+ * nothing. A build without the lock has no such row.
  */
 export function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
   const { settings } = useShell();
+  const { access, now } = usePurchases();
   const version = shownVersion(APP_VERSION);
+  const readAloud = readAloudValue(access, now);
   return (
     <SettingsPage>
       <SettingsGroup>
@@ -47,6 +57,9 @@ export function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
         <NavigationRow label="Providers" value={`${settings.enabledProviders.length} enabled`}
           onPress={() => navigation.navigate('Providers')} />
         <NavigationRow label="Sync" value={settings.sync.enabled ? 'On' : 'Off'} onPress={() => navigation.navigate('Sync')} />
+        {access && access.kind === 'unlocked' ? <DetailRow label={READ_ALOUD} value={readAloud!} /> : null}
+        {access && access.kind !== 'unlocked' && access.kind !== 'off'
+          ? <NavigationRow label={READ_ALOUD} value={readAloud} onPress={() => navigation.navigate('ReadAloud')} /> : null}
       </SettingsGroup>
       <SettingsGroup footer={<Footnote>{STAR_LINE}</Footnote>}>
         <DetailRow label="Author" value={AUTHOR} />

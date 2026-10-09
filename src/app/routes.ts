@@ -48,6 +48,8 @@ export type RootStackParamList = {
   Providers: undefined;
   Provider: { id: ProviderId };
   Sync: undefined;
+  /** Buying and restoring the Unlock (#148). */
+  ReadAloud: undefined;
   Acknowledgements: undefined;
   /** One component's licence, by its name in acknowledgements.json: a string, so it survives a state restore. */
   Acknowledgement: { name: string };

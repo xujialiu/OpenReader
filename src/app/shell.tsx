@@ -51,6 +51,7 @@ import { importDocument } from './import-document';
 import { useHandedOverDocuments, type HandedOverFile } from './opened-document';
 import { ProviderScreen } from './provider-screen';
 import { ProvidersScreen } from './providers-screen';
+import { ReadAloudScreen } from './read-aloud-screen';
 import { ReaderScreen } from './reader-screen';
 import { navigationRef, ShellContext, type RootStackParamList, type Shell } from './routes';
 import { ReadingHost } from './reading-host';
@@ -382,6 +383,7 @@ export function OpenReader() {
               {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
               <Stack.Screen name="Provider" component={ProviderScreen} options={settingsScreen} />
               <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings', ...settingsScreen }} />
+              <Stack.Screen name="ReadAloud" component={ReadAloudScreen} options={{ title: 'Read Aloud', headerBackTitle: 'Settings', ...settingsScreen }} />
               <Stack.Screen name="Acknowledgements" component={AcknowledgementsScreen} options={{ title: 'Acknowledgements', headerBackTitle: 'Settings', ...settingsScreen }} />
               {/* Its title is the component's name and is set by the screen, as the Provider screen sets its own. */}
               <Stack.Screen name="Acknowledgement" component={AcknowledgementScreen} options={settingsScreen} />
