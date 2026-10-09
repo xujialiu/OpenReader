@@ -9,7 +9,8 @@ Issue #148; the author's decisions of 2026-10-09 are its plan comment. The terms
 are CONTEXT.md's **Trial** and **Unlock**. Every Apple page below was read on
 2026-10-09: the App Store Review Guidelines "Last Updated: June 8, 2026", and the
 Developer Program License Agreement (DPLA) "last updated August 18, 2026". Code
-places are at `7b039fd`. None of this is built yet._
+places in the sections before "As built" are at `7b039fd`, as they were read
+before the build; "As built" says what the code is now._
 
 ## The products
 
@@ -382,6 +383,131 @@ constraints, kept here in case that changes:
   needs a defined fallback.
 - **It cannot be tested end to end before release.** Every non-production
   environment returns "1.0".
+
+## As built (2026-10-09)
+
+Built on `xujialiu/in_app_purchase--iap` from `2c85a5b`, before any device
+test. Where it differs from the plan above, this section is the code.
+
+### The module
+
+`modules/open-reader-store/ios/OpenReaderStoreModule.swift` is 130 lines and
+its binding `modules/open-reader-store/index.ts` 34. It offers `products`,
+`purchase` (`purchased`, `pending` or `cancelled`; an unverified answer is a
+rejection), `entitlements`, `revoked`, `sync`, `environment` and a
+`transaction` event. `revoked` asks `Transaction.latest(for:)` for each
+product and reports the ones whose latest verified transaction carries a
+`revocationDate`, so a refund made while the app was closed is seen at the next
+launch, not only by `Transaction.updates`. `purchase` uses
+`purchase(confirmIn:)` with the foreground scene from iOS 18.2, and
+`purchase()` below that.
+
+**`Transaction` must be spelled `StoreKit.Transaction`.** The first simulator
+compile failed: "'Transaction' is ambiguous for type lookup in this context",
+with candidates `StoreKit.Transaction` and `SwiftUI.Transaction`.
+ExpoModulesCore brings SwiftUI into the module (notes 2026-10-09 15:10).
+`AsyncFunction` with `async throws` closures compiled under the pod's
+`swift_version = '5.9'`.
+
+### The TypeScript
+
+- `src/purchase/`, platform-free:
+  - `mode.ts`: `PURCHASE_LOCK`;
+  - `products.ts`;
+  - `access.ts`: the states and the arithmetic;
+  - `record.ts`: the fallback record, kept as `{ unlocked, trialStartedAt }`;
+  - `store.ts`: the port;
+  - `storekit.ts`: the module behind the port;
+  - `fake-store.ts`;
+  - `purchases.ts`: the controller.
+- `src/app/purchase.ts`: the one controller and the words.
+- `src/app/purchase-alert.ts`: the alert.
+- `src/app/purchase-setup.ts`: which store and record, configured by the shell
+  before `startDownloads`.
+- `src/app/read-aloud-screen.tsx`, `src/app/use-purchases.ts`: Settings.
+
+**The products are waited for 15 s.** After that, or when the App Store has
+neither product under this bundle ID, they count as out of reach until a later
+press asks again. A purchase that rejects also shows "Purchases Unavailable".
+
+**The fallback record** is kept in `Library/Application Support/purchase.json`,
+which the Files app never shows. Owning the Unlock, or the trial's purchase
+date, is taken from StoreKit whenever StoreKit reports it. A product StoreKit
+reports as revoked is forgotten. Anything StoreKit is silent about stays as it
+was.
+
+### The gate
+
+- **`play()` in `use-reading.ts` is the press.** Its old body is now
+  `start()`, which builds the engine and asks Consent. `play()` calls `start()`
+  at once when `purchases.allowsSpeech()` is true. Otherwise it asks
+  `purchases.askForSpeech()`, and calls `start()` only on a yes.
+- **What calls `start()` without asking**: the cover-page walk and the wait for
+  a place, which both follow a press already let through, and `carryOn`. The
+  automatic resume after a Pronunciation calls `reading.carryOn()`, not
+  `reading.play()` (`use-lookup.ts`). So a Reading that the end of the Trial
+  found playing is not stopped by a word looked up.
+- **The Player, Now Playing's remote commands and the harness** all call
+  `reading.play()`.
+- **Nothing is asked away from the screen** (`AppState.currentState !==
+  'active'`). A Lock Screen Play while locked plays nothing and leaves no alert
+  behind.
+- **Downloads.** `startDownload` asks before Consent. `toggleTask` and a
+  resuming `toggleChapter` ask first, and redo the toggle on a yes.
+  `allowed()` reads `purchases.allowsSpeech()`. The scheduler checks `allowed()`
+  before each chapter and inside a chapter before each sentence, so a download
+  the end of the Trial catches stops at the next sentence. It ends as
+  `interrupted`, as it would at the end of the background time.
+- **Unlocking.** `startDownloads` subscribes to the controller. On every change
+  that leaves read-aloud allowed, it requeues `interrupted` tasks, but only in
+  front, as the foreground handler does. Then it kicks the scheduler.
+- **Pinned** in `test/app/purchase-paths.test.ts`, with
+  `test/offline/runtime-purchase.test.ts` behind it.
+
+### Builds with Debug Mode ask a pretend App Store
+
+Every existing manual test and XCTest probe presses Play on a Debug build. If
+a Debug build asked StoreKit, each would meet an alert, or "Purchases
+Unavailable" in a simulator with no StoreKit configuration. So a build with
+Debug Mode asks `fake-store.ts` instead. It starts as if the Unlock were owned,
+and the walkthrough harness's `{"do":"store",…}` command can put it into any
+state or swap in StoreKit (`test/manual-test/purchase/README.md`). Its choice is
+kept in `Library/Application Support/purchase-debug.json`. Its controller keeps
+its fallback record in memory, so the real record is never touched.
+
+The owner's phone build has Debug Mode, so it too starts unlocked. A build
+without Debug Mode always asks StoreKit. `DEBUG_MODE` never reaches an upload
+(the release guide checks it), so no build that leaves the Mac can reach the
+pretend App Store.
+
+### Tests run as a build without the lock
+
+`vitest.config.mts` sets `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`, so the Reading
+and download tests speak as before. The lock is tested in two ways:
+`createPurchases` gets `lockOn: true` directly (`test/purchase/`), or a
+controller is configured into the app's one (`runtime-purchase.test.ts`).
+
+### The switch in the bundle
+
+In the plain bundle beside the app, the one the release guide greps for
+`DEBUG_MODE`, `export:embed --dev false --minify false` printed:
+
+- `var PURCHASE_LOCK = true;` with the variable unset;
+- `var PURCHASE_LOCK = false;` with `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`.
+
+`var DEBUG_MODE = false;` both times (notes 2026-10-09 15:22). The release
+guide now checks for `true`.
+
+### The scheme
+
+The plugin wrote `identifier = "../../storekit/OpenReader.storekit"` into
+`ios/OpenReader.xcodeproj/xcshareddata/xcschemes/OpenReader.xcscheme`, the last
+child of `<LaunchAction>`. That path is relative to the `.xcodeproj` package,
+as in `Automattic/simplenote-ios` and `echo-loop/Echo-Loop`.
+`damus-io/damus`'s `../../Purple.storekit` does not fit that reading.
+rules_xcodeproj relativizes against `xcshareddata/xcschemes`. **That Xcode
+resolves it has not been seen**: nobody has yet launched from Xcode and bought
+from the file.
 
 ## Related
 

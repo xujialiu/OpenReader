@@ -34,6 +34,13 @@ Information holds now is in [release-to-app-store.md](release-to-app-store.md).
   developer account, and the sub-worktree.
 - The recording itself, the key and the book used in it, and the reply to Apple
   are the owner's.
+- **Open question (#148): the Demo App and the Trial.** A Demo App has no Debug
+  Mode, so it asks StoreKit, and under `top.xujialiu.openreader.demo` App Store
+  Connect has nothing to sell. Every Play would raise "Purchases Unavailable"
+  and nothing would be read aloud in the recording. Not decided: build it with
+  `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`, so it reads aloud with no Trial and no
+  alert; or record the purchase flow from the owner's own app with a Sandbox
+  Apple Account instead. Ask the owner before the next Demo App is built.
 
 ## Why another identifier keeps the owner's app untouched
 

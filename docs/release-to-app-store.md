@@ -83,7 +83,7 @@ store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
    - Only if the owner named a new Version: `npm version <X.Y.Z> --no-git-tag-version`, so that `package.json` and the lockfile match.
    - `npx vitest run test/app-config.test.ts` checks that `APP_VERSION`, `app.config.ts` and `package.json` agree.
 3. **Prebuild:** `npx expo prebuild --platform ios --clean`, then check that `node_modules/expo-sqlite/ios/sqlite3.h` exists.
-4. **Archive**, without `EXPO_PUBLIC_OPENREADER_DEBUG_MODE` anywhere: not on the command line, not in the shell, not in `.env*`, and not in `ios/.xcode.env.local`.
+4. **Archive**, without `EXPO_PUBLIC_OPENREADER_DEBUG_MODE` or `EXPO_PUBLIC_OPENREADER_UNLOCKED` anywhere: not on the command line, not in the shell, not in `.env*`, and not in `ios/.xcode.env.local`. The first would ship Debug Mode; the second would ship the app with no Trial and no Unlock (ADR 0075).
 
    ```bash
    xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \
@@ -109,7 +109,14 @@ store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
        ~/Library/Developer/Xcode/DerivedData/OpenReader-*/Build/Intermediates.noindex/ArchiveIntermediates/OpenReader/BuildProductsPath/Release-iphoneos/main.jsbundle
      ```
 
-     It must print `false`. Take the newest file if there are several.
+     It must print `false`. Take the newest file if there are several. In the same file,
+
+     ```bash
+     grep -o 'var PURCHASE_LOCK = [a-z]*;' \
+       ~/Library/Developer/Xcode/DerivedData/OpenReader-*/Build/Intermediates.noindex/ArchiveIntermediates/OpenReader/BuildProductsPath/Release-iphoneos/main.jsbundle
+     ```
+
+     must print `true`: the build sells read-aloud. `false` means `EXPO_PUBLIC_OPENREADER_UNLOCKED=1` reached the bundle; find where, and archive again (notes 2026-10-09 15:22).
    - The archive is signed for development. The export re-signs it.
 5. **Export and upload.** `ExportOptions.plist`:
 

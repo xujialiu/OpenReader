@@ -78,6 +78,14 @@ You must also open the screen affected by the change and confirm that the final
 change is actually visible; a successful connection alone does not prove that
 the update is complete.
 
+## The Trial and the Unlock in a simulator build
+
+A Debug build has Debug Mode, so it asks a pretend App Store that starts as if
+the Unlock were owned (#148, ADR 0075): Play plays as it always did. The
+harness puts it into any other state, and `storekit/OpenReader.storekit` is the
+real StoreKit's answer only when Xcode itself launches the app
+(`test/manual-test/purchase/README.md`).
+
 ## First installation or native changes: build a Debug simulator app
 
 Read the [Expo SDK 57 documentation](https://docs.expo.dev/versions/v57.0.0/)

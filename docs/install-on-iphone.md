@@ -128,6 +128,27 @@ build in the background with its exit code written to a file and poll that. A
 quiet log is not a hang: check whether compiler processes are still running
 before restarting anything.
 
+**The Trial and the Unlock** (#148, ADR 0075). A build with Debug Mode, which
+the owner's phone build always is, asks a pretend App Store that starts as if
+the Unlock were owned. So the phone reads aloud as before, and Settings ends
+its first card with `Read Aloud  Unlocked`. To try StoreKit itself on the
+phone, send `{"do":"store","use":"real"}` through the phone's harness
+(`test/manual-test/kit/phone-hx.cjs`) and sign in with a Sandbox Apple Account
+(App Store Connect → Users and Access → Sandbox) when the App Store's sheet
+asks. Where the phone's own Settings keeps that account was not checked on
+iOS 27.
+`{"do":"store","use":"fake"}` goes back. What the pretend App Store can be
+made to do is in `test/manual-test/purchase/README.md`.
+
+A build **without** Debug Mode asks StoreKit. Signed for development, that is
+the App Store's sandbox: a Sandbox Apple Account buys the Trial and the Unlock
+for nothing, once their App Store Connect metadata is complete. To build one
+that never asks, add `EXPO_PUBLIC_OPENREADER_UNLOCKED=1` to the command, beside
+the Debug Mode line, which is what the README tells anyone building from
+source. Like Debug Mode, it is decided when the JavaScript is bundled, Metro's
+cache is guarded against it, and the shell, `ios/.xcode.env.local` and `.env`
+files are not: pass it on the command line only.
+
 **A build without Debug Mode**, which is what a release is: the same command
 without the `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` line. Its Settings shows the
 version with no `-debug`, and it keeps no Debug Log, never reads the
@@ -159,7 +180,9 @@ xcrun devicectl device install app --device IPHONE_UDID "$APP"
 
 - `main.jsbundle` beside the app is the plain bundle: it prints `true` for a
   build with Debug Mode and `false` for one without. The copy inside the app is
-  Hermes bytecode.
+  Hermes bytecode. `grep -o 'var PURCHASE_LOCK = [a-z]*;'` on the same file
+  prints `true` for a build with the lock and `false` for one made with
+  `EXPO_PUBLIC_OPENREADER_UNLOCKED=1` (notes 2026-10-09 15:22).
 - Successful installation prints `App installed` and
   `bundleID: top.xujialiu.openreader`.
 - Install over the existing app. Never uninstall it first: uninstalling deletes
