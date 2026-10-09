@@ -43,15 +43,39 @@ start another, and neither does moving from an iPhone to an iPad.
 A Reading that is playing when the thirty days run out is not cut off in the
 middle of a sentence. The next time the owner presses Play after pausing, or
 starts a Download, the alert says the Trial has ended. It offers the Unlock at
-the local price, Restore Purchase, and Not Now. A Download that is running when
-the Trial ends pauses where it is, and carries on once the Unlock is bought.
+the local price, Restore Purchase, and Not Now. If Restore finds nothing on
+the owner's Apple Account, a second alert says so, rather than leaving them to
+wonder whether it worked.
+
+A Download that is running when the Trial ends stops after the sentence it is
+on, and is paused, exactly as if the owner had paused it themselves. The same
+happens to any Download that would otherwise go on by itself, when the app is
+opened or brought back after the Trial has ended. So the Download drawer shows
+it paused, with Resume all, and never a download that claims to be waiting for
+something while nothing can happen. Resume all, or a chapter's ring, asks for
+the Unlock first, and buying it there resumes the Download. Nothing works on a
+Download away from the screen while it cannot be written, so no progress shows
+on the Lock Screen for it.
+
+An Unlock bought on another device, or approved by a parent, does not restart a
+paused Download on its own. A paused Download goes on when the owner resumes
+it, whoever paused it. That is one rule, and it is the one the owner already
+knows from pausing a Download themselves.
 
 Offline Narration saved during the Trial stays on the phone. It does not play
 until the Unlock is bought, and then it plays as before.
 
-Nothing reminds the owner as the end approaches. The front page of Settings has
-one row that shows how many days are left, or that the app is unlocked. From
-it the owner can buy the Unlock early, or restore it on a new phone.
+A Play pressed on the Lock Screen or with headphones after the Trial plays
+nothing, and the Lock Screen's button goes back to Play, rather than showing a
+pause over silence.
+
+Nothing reminds the owner as the end approaches. The first group of rows on the
+front page of Settings ends with one named Purchase, its name in the colour the
+app uses for things to do. On its right it shows how many days are left, or
+that the Trial has ended, and before the Trial nothing. It opens a page, also
+called Purchase, where the owner can start the Trial, buy the Unlock early, or
+restore it on a new phone. Once the Unlock is bought, the row turns plain, says
+Unlocked, and leads nowhere, because there is nothing left to do there.
 
 ### Where it stays free
 
@@ -137,6 +161,15 @@ both.
 - **Letting narration saved during the Trial play for ever.** Kinder to someone
   who downloaded a book in the last week. But a month of Downloads would then be
   a lifetime of listening.
+- **A Download left waiting for the Trial's end to pass.** The first test
+  build did this. The drawer said the Download would continue when it could,
+  over a Download that could never continue by itself, and after the app came
+  back it even showed one going on while nothing moved. A paused Download says
+  what is true, and the button beside it is the way on.
+- **Restarting the Downloads the end of the Trial paused, when the Unlock is
+  bought elsewhere.** Convenient. But a paused Download would then restart by
+  itself or not depending on who had paused it, and the drawer could not say
+  which. One rule holds instead: what is paused waits for the owner.
 - **Stopping a Reading the moment the Trial ends.** Exact, but it stops someone
   mid-sentence, perhaps mid-walk, over a few more minutes of audio.
 - **A full page for the purchase, or a drawer.** Room for more words. But the

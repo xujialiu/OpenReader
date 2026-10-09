@@ -460,13 +460,95 @@ was.
   resuming `toggleChapter` ask first, and redo the toggle on a yes.
   `allowed()` reads `purchases.allowsSpeech()`. The scheduler checks `allowed()`
   before each chapter and inside a chapter before each sentence, so a download
-  the end of the Trial catches stops at the next sentence. It ends as
-  `interrupted`, as it would at the end of the background time.
-- **Unlocking.** `startDownloads` subscribes to the controller. On every change
-  that leaves read-aloud allowed, it requeues `interrupted` tasks, but only in
-  front, as the foreground handler does. Then it kicks the scheduler.
+  the end of the Trial catches stops at the next sentence. How it is left
+  then is in "Downloads while locked are paused" below: beta11 left it
+  `interrupted` and requeued it when an Unlock arrived, and beta12 does
+  neither.
 - **Pinned** in `test/app/purchase-paths.test.ts`, with
   `test/offline/runtime-purchase.test.ts` behind it.
+
+### Downloads while locked are paused (beta12)
+
+The ios-tester run on 1.0.0 (7)-beta11 found the drawer reading
+`Interrupted · continues when available` over a download the lock held back,
+and, after a background and return, `Queued` with Pause all while nothing ran.
+The Debug Log also had `[download] continued task submitted showing
+"Downloading 1 book" … : not run` for a download that could not run
+(`test/manual-test/purchase/README.md`, "Measured on beta11"). The owner
+decided on 2026-10-09:
+
+- **Paused, as Pause all pauses.** While read-aloud is locked, every download
+  that would go on, in `queued`, `preparing`, `downloading`, `waiting` or
+  `interrupted`, is paused with `pausing.pauseAll`. The drawer shows the
+  existing Paused state with Resume all. Resume all, or a ring, asks first,
+  raising the ended alert, and buying from it resumes.
+- **When.** `pauseForLock()` in `runtime.ts` runs:
+  - in the scheduler's `changed()`, for a download it stopped mid-chapter;
+  - at the start of every `kick()`: a return to the app, the network back, a
+    Reading in the background, an enqueue;
+  - at launch, after `await purchases.ready()`;
+  - on every change the controller reports;
+  - from a timer set for the end of the Trial (`armTrialEnd`, from
+    `purchases.trialLeft()`, at most `2 ** 31 - 1` ms), so a download waiting
+    for the network is paused at the moment the Trial ends, not at the next
+    kick. Away from the screen that timer may not run; the next kick or launch
+    catches up.
+- **Only once what is owned has been read** (`purchases.settled()`). In a build
+  with Debug Mode the controller's record starts empty, so for a few
+  milliseconds after launch the app does not yet know it is unlocked. Pausing
+  then would pause every download of an owner who owns the Unlock.
+  `runtime-purchase-launch.test.ts` reads what is owned 20 ms late and checks
+  that the download goes on.
+- **No continued task while locked.** `continueAway()` returns while
+  `purchases.allowsSpeech()` is false, so neither a continued-processing task
+  nor its Live Activity is submitted. At launch it runs after
+  `purchases.ready()`, so an owner with the Unlock still gets one for a
+  download left going on.
+- **An Unlock that arrives by itself resumes nothing.** A purchase on another
+  device, or a parent's approval, leaves every paused download paused, whoever
+  paused it. Downloads the lock paused are told apart from the person's own by
+  nothing: they are paused the same way. The person resumes them with Resume
+  all or a ring, which asks nothing once the Unlock is owned. That was the
+  simplest rule to state: a paused download goes on only when someone resumes
+  it.
+
+### The Lock Screen after a refused press (beta12)
+
+The system turns Now Playing's centre button to Pause the moment Play is
+tapped, before the app answers. On beta11 a refused Play changed nothing the
+app shows, so nothing was written, and the button stayed on Pause over a
+paused app. `LockScreenProbe` read "Pause" 85 s later, with `playing=false`.
+
+`restateNowPlaying()` in `src/now-playing/index.ts` writes the last shown
+reading again with its position, and `play()` calls it on every refusal. The
+show effect keeps that reading in `last`, playing state included, and the item's
+teardown forgets it. No Swift change was needed: the native `show` always
+republishes `nowPlayingInfo` and `playbackState` (`publish()`). The hook loads
+the native module with `require`, which `vi.mock` does not reach, so the
+behaviour is pinned structurally in `purchase-paths.test.ts`, not run.
+
+### Restore with nothing to restore (beta12)
+
+When `AppStore.sync()` finishes and the Unlock is still not owned, the phone's
+alert says "No Purchase Found" / "There's no purchase to restore for this Apple
+Account." with OK. This applies whether Restore was pressed in the ended alert
+or on the Purchase page, and during the Trial too. A sync that rejects (a
+sign-in cancelled) says nothing, and Ask to Buy pending stays silent. It is
+`PurchaseAsker.nothingToRestore`, called from `restoring()` in `purchases.ts`.
+
+### The Purchase row (beta12)
+
+The owner chose the row's wording and look on 2026-10-09:
+
+- The label is **Purchase**, drawn in the reading accent as Privacy Policy's
+  action is, through `NavigationRow`'s new `tint`. The value stays in the quiet
+  ink: `N days left`, `1 day left` or `Trial ended`, and nothing before the
+  Trial. The chevron stays.
+- The row opens a page titled Purchase (`purchase-screen.tsx`, route
+  `Purchase`). Unlocked, it is a plain `DetailRow` reading `Unlocked` that
+  opens nothing.
+- It is still the last row of the first card.
+- `READ_ALOUD`/`readAloudValue` became `PURCHASE`/`purchaseValue`.
 
 ### Builds with Debug Mode ask a pretend App Store
 
