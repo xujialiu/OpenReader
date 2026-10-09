@@ -70,3 +70,15 @@ next sentence while the screen is dark and the owner is walking.
 
 Deleting the app does not delete it. The app therefore needs a visible way to
 remove a stored credential, and "I deleted the app" must not be treated as one.
+
+## Paying for reading aloud (2026-10-09)
+
+Since decision 0075, reading aloud is bought once, after a free month. That is
+not the subscription turned down above:
+
+- It is a single purchase made through the store, not a payment that recurs.
+- There is still no account to open with us.
+- Nothing passes through a machine of ours.
+
+The owner still pays their provider for every sentence spoken. The purchase
+pays for the app, not for the speech.

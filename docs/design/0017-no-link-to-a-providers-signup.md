@@ -92,5 +92,23 @@ It waited while the only person using the app was the person who would be asked.
 It is built now, for the dictionaries and translators as well as the providers:
 decision 0064.
 
+## The app now sells something (2026-10-09)
+
+The app no longer "sells nothing". After a free month, reading aloud is bought
+once, inside the app, through the store (decision 0075). A reviewer now has a
+paid path in the app to set the person's own credential beside. The part of
+the posture above that rested on there being nothing for sale is gone.
+
+The part this file is about remains, and it matters more now: nothing in the
+app leads to a provider's signup, its prices or the place a key is issued. The
+person's key pays the provider for its speech and unlocks nothing in the app.
+What the app sells, it sells only through the store.
+
+A second line now runs beside it. Nothing in the app, and nothing on its store
+page, tells the person how to get reading aloud without paying, whether through
+the beta or by building the app themselves. Those ways are written on the
+project's page on GitHub, which is one tap from the app. The author chose to
+accept that tap.
+
 *The engineering half of this decision is
 [ADR 0017](../adr/0017-no-provider-links-in-the-binary.md).*

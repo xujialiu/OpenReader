@@ -52,3 +52,15 @@ provider's key eventually would.
 
 Keychain entries survive an app uninstall on iOS, so removing a key has to be an
 explicit action in the app.
+
+## The Unlock (2026-10-09, #148)
+
+After a 30-day Trial, read-aloud becomes a one-time in-app purchase:
+[ADR 0075](0075-read-aloud-is-bought-once-after-a-trial.md). The rest of this
+decision stands. There is no server of ours, no proxy, no subscription and no
+hosted tier. Purchases are StoreKit transactions signed by Apple and checked on
+the device. Nothing about a purchase reaches a machine of ours or a third party,
+and that is why RevenueCat was turned down there.
+
+[ADR 0017](0017-no-provider-links-in-the-binary.md) counted "having no in-app
+purchase at all" as part of this decision's posture. That part no longer holds.

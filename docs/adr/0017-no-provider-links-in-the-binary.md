@@ -97,3 +97,35 @@ It was deferred while the app was used only by its author, when the consent
 would have been asked of the person granting it. It is built now. There is one
 gate in front of every send, a Provider's synthesis and a lookup service alike,
 asked once per recipient in the phone's own alert: ADR 0064.
+
+## The app now sells the Unlock (2026-10-09, #148)
+
+"Combined with having no in-app purchase at all (ADR 0002), which removes any
+second paid path a reviewer could compare against, this is the whole posture."
+That no longer holds. From the version that ships
+[ADR 0075](0075-read-aloud-is-bought-once-after-a-trial.md), the app sells one
+Non-Consumable, the Unlock, after a free "30-day Trial" Non-Consumable. A
+reviewer now has a paid path in the app to set beside the Provider key the
+owner brings.
+
+What still holds:
+
+- **The line the documented rejection drew.** There is no tappable route from
+  the binary to a Provider's signup, pricing or key console, and
+  `test/app/no-outgoing-links.test.ts` still pins it.
+- **The argument to make if a reviewer asks.** The owner's key is a credential
+  for the owner's own Provider account and unlocks nothing of ours. What the app
+  sells is unlocked only through in-app purchase, which is what 3.1.1 asks. That
+  argument has not yet been tested in review.
+
+A second rule joins the first. Neither the binary nor the App Store metadata
+names a free way to get read-aloud, whether the TestFlight beta or building
+from source (DPLA 7.4, Guidelines 2.2 and 2.3.1(a); ADR 0075).
+
+The README does name them, by the author's decision of 2026-10-09. Since #129
+the README has been one tap from the binary. By this ADR's own reasoning about
+"get your key here", a README line about a free copy is a route from the
+binary with one more tap in it. That is accepted knowingly. Its risk falls on
+the public TestFlight link, which Apple may stop under DPLA 6.5, and not on the
+app. If the README links the TestFlight invitation, the address must be added
+to `PAGES_MAY_NAME` before the test passes.
