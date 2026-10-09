@@ -137,7 +137,7 @@ Eight properties of the following, and each is a rule rather than an accident.
   `dragged` ignores it until the next gesture's first finger. The page cannot
   be magnified either: the patched template's viewport is
   `maximum-scale=1.0, user-scalable=no`.
-- **What clears it** (#71, Zotero-TTS's rule). A revealed highlight — the first
+- **What clears it** (#71, Zotero-OpenReader's rule). A revealed highlight — the first
   cue after Play, a tapped sentence, a skip, a place from another device; M
   (`return`); the player collapsing (`followOnly`); and, by itself, a cue the
   reading moved on to while playing (`recover`) whose sentence begins with its

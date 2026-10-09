@@ -1,7 +1,7 @@
 # src/core/sync — ADR 0003, ADR 0031
 
-Reading positions over the owner's own WebDAV server, in the **same folder** the
-Zotero-TTS desktop plugin already uses.
+Reading positions over the owner's own WebDAV server, in the **same folder**
+Zotero-OpenReader already uses.
 
 This is not a feature bolted on. ADR 0003 is blunt about it: sync is the reason
 this app exists at all — the owner left Speechify specifically because it could
