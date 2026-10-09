@@ -374,6 +374,20 @@ receive any, and the yes is kept on that device only. A server at an address the
 owner typed is a service of its own.
 _Avoid_: permission, approval, opt-in, agreement, privacy prompt
 
+### Paying for speech
+
+**Trial**:
+Thirty days in which the app speaks without the Unlock, begun by the owner the
+first time they ask it to speak. One per Apple Account; it never begins again.
+_Avoid_: free period, demo, evaluation, free version
+
+**Unlock**:
+The one-time purchase that keeps the app speaking for good: playing a Reading,
+and making or playing Offline Narration. Opening, Browsing, Word Lookup, Text
+Translation and sync are free without it. Narration saved during the Trial
+stays on the device but does not play until it is bought.
+_Avoid_: pro, premium, full version, licence, subscription
+
 ### The author's side
 
 **Author**:
