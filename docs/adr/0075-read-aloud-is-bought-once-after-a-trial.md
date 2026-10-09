@@ -316,9 +316,18 @@ flag was forgotten (decision of 2026-10-09).
 
 The cost falls on someone building from source. Their bundle ID has no
 products in App Store Connect, so a build that leaves the lock on finds nothing
-to sell. The README tells them to turn it off. What the app shows when no
-product loads is left to the implementation. The Demo App
+to sell. The README tells them to turn it off. The Demo App
 (`top.xujialiu.openreader.demo`) is in the same position: it has no products.
+
+**When no product loads, speech stays locked** (decision of 2026-10-09). The
+entitlement state is read from StoreKit's own cache, offline included; only the
+products and their prices need the App Store. So when the gate would show an
+alert but no product loads, the alert reads "Purchases Unavailable / The App
+Store can't be reached right now." with one OK, and nothing plays. It names no
+free route. The same alert covers the App Store copy offline or during an
+outage. Letting speech through instead would let anyone whose Trial had ended
+play saved Offline Narration in Airplane Mode. It would also make the
+locked-by-default switch pointless for builds from source.
 
 ## Testing locally
 
