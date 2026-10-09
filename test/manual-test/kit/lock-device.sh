@@ -20,6 +20,11 @@
 # home-on press Home instead of the lock button (XCUIDevice's own press; `axe
 # button home` did nothing on iOS 27.0), home-on waiting for SIGNAL_FILE as
 # lock-on does, with its log in /tmp/openreader-lock-device/home-on.log.
+# OPENREADER_LOCK_DEVICE_WORK names another build directory (default
+# /tmp/openreader-lock-device), which every session shares and this script
+# deletes and rebuilds when its checkout's DeviceLockProbe.swift is newer: set it
+# to a directory of your own so a run in one worktree never removes the build
+# another session's run is using (pitfalls/lock-and-background.md).
 set -euo pipefail
 [[ ( $# -eq 2 && ( $2 == lock || $2 == unlock || $2 == play || $2 == pause || $2 == home ) ) || ( $# -eq 3 && ( $2 == lock-on || $2 == home-on ) ) ]] \
   || { echo 'Usage: lock-device.sh SIMULATOR_UDID lock|unlock|play|pause|home | lock-device.sh SIMULATOR_UDID lock-on|home-on SIGNAL_FILE' >&2; exit 2; }
@@ -27,7 +32,7 @@ simulator=$1
 action=$2
 source_dir=$(cd "$(dirname "$0")" && pwd)
 [[ $action == play ]] && { bash "$source_dir/silence.sh" check "$simulator" || exit 2; }
-work=/tmp/openreader-lock-device
+work=${OPENREADER_LOCK_DEVICE_WORK:-/tmp/openreader-lock-device}
 if [[ ! -d "$work/build/Build/Products" || "$source_dir/DeviceLockProbe.swift" -nt "$work/build/Build/Products" ]]; then
   rm -rf "$work"; mkdir -p "$work"
   ruby "$source_dir/project.rb" "$work" top.xujialiu.openreader NO inspect DeviceLockProbe.swift

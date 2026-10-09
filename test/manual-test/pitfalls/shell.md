@@ -164,3 +164,7 @@
   and copy attachments from the run's own `attachments-STAMP` directory —
   `ls -td OUTPUT/attachments-* | head -1` only after the run's stamp is
   confirmed in the output (`../lock-screen/README.md`, #119b).
+
+## The #148 run (2026-10-09)
+
+- **In zsh, `local a=$1 b=$a` expands `$a` before it is assigned.** A helper that built its evidence file name from a `local` declared on the same line wrote every pass to `settings--.txt`, one file overwritten six times, while the screenshots (named from the arguments) were right. Declare on one line, use on the next. A `grep -c … || echo 0` prints `0` twice when nothing matches (grep prints the count and exits 1): use `|| true`.
