@@ -1,6 +1,6 @@
 # Where a thing gets written down
 
-Five places. Putting something in the wrong one is how it stops being read.
+Six places. Putting something in the wrong one is how it stops being read.
 
 |                | Who reads it                   | What it holds                                                        |
 | -------------- | ------------------------------ | -------------------------------------------------------------------- |
@@ -9,6 +9,7 @@ Five places. Putting something in the wrong one is how it stops being read.
 | `docs/*.md`    | Whoever does the task next     | A guide: the steps as they are today, and the facts they need        |
 | `notes/`       | The author, later              | What was measured, when                                              |
 | `CONTEXT.md`   | Everyone                       | The glossary, and nothing else                                       |
+| `README.md`    | A visitor to the GitHub page   | What the app does and how to install it                              |
 
 ## `docs/design/` — the product argument
 
@@ -70,7 +71,7 @@ One file per day, `notes/NOTES_YYYY-MM-DD.md`, opening with
 ## user-select: none silently stops ::highlight() from painting (2026-09-19 18:04)
 ```
 
-The same shape as the Zotero-TTS repository's log, deliberately: the two
+The same shape as the Zotero-OpenReader repository's log, deliberately: the two
 projects share a provider layer and a sync format, and one day a reader will
 have both logs open.
 
@@ -84,6 +85,23 @@ A term, what it means, and the words to avoid for it. **No implementation
 details, no decisions, no scratch notes.** If a definition needs a sentence
 about how something works, that sentence belongs in an ADR and the definition is
 too long.
+
+## `README.md` — the front page
+
+The GitHub page, one tap from the app's Settings (design 0072). It is laid out
+like Zotero-OpenReader's: centred icon, name and tagline, badges, a GIF, then
+what the app does and how to install it.
+
+- **Every absolute address** in it is on `PAGES_MAY_NAME` in
+  `test/app/no-outgoing-links.test.ts` (ADR 0017, #129), badge images included.
+  Add a new one there once you have looked at it; a Provider's signup, pricing
+  or key page never goes on.
+- **The TestFlight badge** names the build Apple approved for external testing;
+  `docs/release-to-app-store.md` says when it changes.
+- **The owner sees it before it is committed.** Once a change is ready, run
+  `bash scripts/readme-preview.sh`: it renders the README with GitHub's own
+  renderer into `.docs/README.html` (ignored by git) and opens it. Give the
+  owner that path, and commit after he has looked.
 
 ## When a term or a decision changes
 
