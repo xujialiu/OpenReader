@@ -29,6 +29,16 @@ OpenReader is an iPhone app that reads EPUB documents aloud with the speech serv
 
 ## Install
 
+OpenReader comes three ways. Reading, Word Lookup, translation and sync are free in all of them. Only reading aloud is paid for, and only on the App Store, where the purchase supports OpenReader's development.
+
+| Where | Reading aloud |
+| --- | --- |
+| [TestFlight beta](https://testflight.apple.com/join/vjC8QejW) | Free |
+| [Built from source](#building) | Free |
+| App Store (coming soon) | Free for 30 days, then a one-time in-app purchase |
+
+Apple charges nothing for in-app purchases in a TestFlight beta, so reading aloud stays free there.
+
 1. On an iPhone with iOS 17.2 or later, open the [TestFlight link](https://testflight.apple.com/join/vjC8QejW), install Apple's TestFlight app, then install OpenReader from it.
 2. In OpenReader, open **Settings → Providers**, choose a service, paste your API key and turn **Enabled** on.
 3. Add an EPUB with **⋯ → Import file** in the Library, or share one to OpenReader from Files. Open it and press **Play**.
@@ -44,6 +54,8 @@ Its desktop counterpart is [Zotero-OpenReader](https://github.com/xujialiu/Zoter
 ## Building
 
 OpenReader is an Expo SDK 57 app with native modules of its own, so it runs as a development build rather than in Expo Go. [docs/install-on-simulator.md](docs/install-on-simulator.md) and [docs/install-on-iphone.md](docs/install-on-iphone.md) describe both builds.
+
+A build from source reads aloud for free once the App Store's purchase is turned off. Set `EXPO_PUBLIC_OPENREADER_UNLOCKED=1` in the environment of the build, for example `EXPO_PUBLIC_OPENREADER_UNLOCKED=1 npx expo run:ios`. Without it, the build asks for the same purchase as the App Store, and under your own bundle ID there is nothing to buy.
 
 ## Licence
 

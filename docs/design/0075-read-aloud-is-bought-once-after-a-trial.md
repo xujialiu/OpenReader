@@ -173,9 +173,11 @@ both.
   hold the owner's own key up against. Now there is one. What still holds is
   the rest of 0017: nothing in the app leads to a Provider's signup or prices.
   Now nothing leads to a free copy either.
-- **One question is left open.** The app's first version is in review as a free
-  app. If it reaches the store before this ships, the author decides after its
-  approval whether the people who installed it then keep read-aloud for good.
+- **The first version waits for this.** The app's first version was sent for
+  review as a free app. It is kept back after approval, and the first version
+  anyone can download already has the Trial and the Unlock. So nobody got
+  read-aloud free from the store before it cost money, and there is no early
+  group to make an exception for.
 - **Contributions need terms of their own.** The store copy is safe under the
   project's licence while every line in it is the author's. Issue #149 covers
   what an outside contribution must allow.

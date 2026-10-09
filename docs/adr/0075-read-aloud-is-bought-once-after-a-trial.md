@@ -305,8 +305,9 @@ The lock is on in every build unless an `EXPO_PUBLIC_` value turns it off at
 build time. It is read as `DEBUG_MODE` is (`src/debug/mode.ts`,
 [ADR 0054](0054-debug-mode-is-fixed-when-the-app-is-built.md)): inlined into
 the bundle as a constant, with `metro.config.js`'s `publicEnvironment` closing
-the Metro cache trap that ADR measured. The variable's name is chosen when it
-is built.
+the Metro cache trap that ADR measured. The variable is
+`EXPO_PUBLIC_OPENREADER_UNLOCKED`, and `1` turns the lock off. It was named on
+2026-10-09, before it was built, because the README names it.
 
 With the switch off, there is no gate, no alert, no Settings row and no StoreKit
 call.
@@ -347,11 +348,21 @@ locked-by-default switch pointless for builds from source.
   local StoreKit `purchase()` returns `.userCancelled` at once, even in Apple's
   sample app. iOS 27 has not been checked.
 
-## Open: people who installed before the Unlock
+## No one installed before the Unlock (decided 2026-10-09)
 
-1.0.0 (6) was submitted as a free app. If it is released before the Unlock
-ships, whether its users keep read-aloud is decided after its approval. If they
-do, the check has these constraints:
+The first version on the App Store already sells the Unlock (author's decision,
+2026-10-09). 1.0.0 (6), submitted on 2026-10-05 as a free app with manual
+release, is left to finish review for its verdict on the bring-your-own-key
+model. It is not released. When the build with the Unlock is ready, 1.0.0 (6)
+is withdrawn ("Cancel this release" or Developer Reject), and the new build is
+submitted under the same Version, 1.0.0, together with both In-App Purchases.
+Forum reports say that withdrawing an approved version has occasionally left
+the record stuck until App Store Connect Support reset it.
+
+So no one ever installs from the store before the Unlock, and nothing checks
+when the app was first installed. TestFlight testers pay nothing in any case.
+Had a free version been released first, the check would have had these
+constraints, kept here in case that changes:
 
 - **The value is the build number.** `AppTransaction.originalAppVersion` "contains
   the original value of the CFBundleShortVersionString for apps running in

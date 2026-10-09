@@ -49,6 +49,7 @@ happened in that day's `notes/` file.
   - "OpenReader" was already taken as an App Store name. The Home Screen name stays OpenReader, from `CFBundleDisplayName`.
 - **Builds**
   - The last upload is **1.0.0 (6)**, from `5b02aed`. It is submitted and **Waiting for Review**, with manual release selected. That is not approval or public release. The next upload is build 7.
+  - **Do not release 1.0.0 (6)** (author's decision, 2026-10-09; ADR 0075). The first public version sells the Unlock. Once approved, 1.0.0 (6) stays unreleased. When the build with the In-App Purchases is ready, withdraw 1.0.0 (6) with "Cancel this release" or Developer Reject, then submit the new build under 1.0.0 with both purchases.
   - 1.0.0 (5) was removed from review when build 6 replaced it.
   - 0.0.1 (1) tested the pipeline only. Never submit it.
 - **TestFlight**
