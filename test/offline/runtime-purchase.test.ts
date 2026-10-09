@@ -7,9 +7,11 @@ import { speechKeying } from '../../src/offline/speech';
 /**
  * #148, ADR 0075: a download is speech, so it waits on the Trial and the
  * Unlock. Started or resumed from the drawer, it asks first, before Consent and
- * before a task exists. Running, it is held back by the scheduler without a
- * question, and one the end of the Trial catches stops at the next sentence and
- * goes on once the Unlock arrives. The platform is behind the doubles of
+ * before a task exists. While read-aloud is locked, every download that would
+ * go on is paused, as Pause all pauses it: one the end of the Trial catches
+ * stops at the next sentence and is paused, and so is one requeued on a return
+ * to the app. Nothing goes on away from the screen for it, and an Unlock that
+ * arrives by itself resumes nothing. The platform is behind the doubles of
  * `runtime-reading.test.ts`; the App Store is the pretend one, and the
  * person's answers are scripted.
  */
@@ -18,9 +20,22 @@ const mock = vi.hoisted(() => ({
   sent: [] as string[],
   held: new Set<string>(),
   pending: new Map<string, () => void>(),
+  appStateListeners: [] as ((state: string) => void)[],
+  appStateNow: 'active',
+  appState: (state: string) => {
+    mock.appStateNow = state;
+    mock.appStateListeners.forEach((listener) => listener(state));
+  },
+  submitContinued: vi.fn(async (): Promise<boolean> => false),
 }));
 vi.mock('react-native', () => ({
-  AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
+  AppState: {
+    get currentState() { return mock.appStateNow; },
+    addEventListener: (_event: string, listener: (state: string) => void) => {
+      mock.appStateListeners.push(listener);
+      return { remove() { mock.appStateListeners = mock.appStateListeners.filter((l) => l !== listener); } };
+    },
+  },
   Platform: { OS: 'ios' },
 }));
 vi.mock('expo-file-system', () => ({ FileMode: { ReadOnly: 'r' } }));
@@ -29,7 +44,7 @@ vi.mock('../../modules/open-reader-offline', () => ({
     addListener: () => ({ remove() {} }),
     beginBackground: async () => true,
     endBackground: async () => {},
-    submitContinued: async () => false,
+    submitContinued: mock.submitContinued,
     updateContinued: async () => {},
     finishContinued: async () => {},
   },
@@ -56,7 +71,7 @@ vi.mock('../../src/core/providers/factory', () => ({
 }));
 vi.mock('../../src/offline/database', () => ({ offlineRepository: () => mock.open() }));
 
-const { configureDownloads, downloadTasks, downloadsReady, startDownload, startDownloads, toggleTask } = await import('../../src/offline/runtime');
+const { configureDownloads, downloadTasks, downloadsReady, goesOn, startDownload, startDownloads, toggleTask } = await import('../../src/offline/runtime');
 const consentAsked: string[] = [];
 (await import('../../src/app/consent')).configureConsent({ kept: () => false, keep: () => {}, ask: async (recipient) => { consentAsked.push(recipient.key); return true; } });
 const { configurePurchases } = await import('../../src/app/purchase');
@@ -149,7 +164,7 @@ describe('a download started from the drawer while read-aloud is locked', () => 
 });
 
 describe('a download the end of the Trial catches', () => {
-  it('stops at the next sentence, waits without a question, and goes on once the Unlock arrives', async () => {
+  it('stops at the next sentence and is paused, and an Unlock arriving by itself resumes nothing', async () => {
     configure({ ...FAKE_UNLOCKED, unlocked: false, trialStartedAt: clock.now - TRIAL_MS + DAY_MS });
     const texts = ['Three one.', 'Three two.', 'Three three.'];
     for (const text of texts) mock.held.add(text);
@@ -160,21 +175,31 @@ describe('a download the end of the Trial catches', () => {
     await vi.waitFor(() => expect(mock.pending.has('Three two.')).toBe(true));
     clock.now += DAY_MS;
     await release('Three two.');
-    await vi.waitFor(() => expect(downloadTasks('caught')[0]?.state).toBe('interrupted'));
+    const task = downloadTasks('caught')[0]!;
+    await vi.waitFor(() => expect(task.state).toBe('paused'));
+    // Paused as Pause all pauses: the drawer offers Resume all.
+    expect(task.paused).toEqual(['a']);
+    expect(goesOn(task)).toBe(false);
     await tick();
     expect(mock.sent).not.toContain('Three three.');
     expect(asked).toEqual([]);
 
+    // Bought on another device, or approved by a parent: nothing resumes by itself.
     store.set({ ...store.state(), unlocked: true });
+    await tick();
+    expect(task.state).toBe('paused');
+    expect(mock.sent).not.toContain('Three three.');
+
+    // Resume all goes on, with no question now.
+    toggleTask(task);
     await release('Three three.');
-    await vi.waitFor(() => expect(downloadTasks('caught')[0]?.state).toBe('done'));
+    await vi.waitFor(() => expect(task.state).toBe('done'));
     expect(asked).toEqual([]);
   });
 
   it('asks before Resume all goes on after the Trial, and resumes once the Unlock is bought', async () => {
-    configure({ ...FAKE_UNLOCKED, unlocked: false, trialStartedAt: clock.now - TRIAL_MS - DAY_MS });
-    books.set('paused', ['Four.']);
     configure({ ...FAKE_UNLOCKED, unlocked: true });
+    books.set('paused', ['Four.']);
     expect(await startDownload('paused', voice, ['a'])).toBe(true);
     const task = downloadTasks('paused')[0]!;
     await vi.waitFor(() => expect(task.state).toBe('done'));
@@ -188,6 +213,32 @@ describe('a download the end of the Trial catches', () => {
     answers.ended = 'unlock';
     toggleTask(task);
     await vi.waitFor(() => expect(asked).toEqual(['ended $4.99', 'ended $4.99']));
-    await vi.waitFor(() => expect(task.paused ?? []).toEqual([]));
+    await vi.waitFor(() => expect(task.state).toBe('done'));
+  });
+});
+
+describe('a return to the app while read-aloud is locked', () => {
+  it('pauses a download that would go on, and submits no continued task for it', async () => {
+    configure({ ...FAKE_UNLOCKED, unlocked: true });
+    books.set('away', ['Five one.', 'Five two.']);
+    mock.held.add('Five one.');
+    expect(await startDownload('away', voice, ['a'])).toBe(true);
+    const task = downloadTasks('away')[0]!;
+    await vi.waitFor(() => expect(mock.pending.has('Five one.')).toBe(true));
+    // Away, the Trial ends with the app not running its timers: on the return
+    // the download is requeued, as after the background time, and then paused.
+    configure({ ...FAKE_UNLOCKED, unlocked: false, trialStartedAt: clock.now - TRIAL_MS - DAY_MS });
+    await tick();
+    mock.submitContinued.mockClear();
+    task.state = 'interrupted';
+    mock.appState('background');
+    mock.appState('active');
+    await vi.waitFor(() => expect(task.state).toBe('paused'));
+    expect(mock.submitContinued).not.toHaveBeenCalled();
+    mock.pending.get('Five one.')?.();
+    mock.pending.delete('Five one.');
+    await tick();
+    expect(mock.sent).not.toContain('Five two.');
+    expect(asked).toEqual([]);
   });
 });

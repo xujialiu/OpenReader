@@ -597,11 +597,10 @@ const scheduler = createScheduler({
   // Away from the screen, the end of the bounded background time stops a
   // download only once neither a Reading nor a continued task the phone
   // accepted keeps the app running (ADR 0053).
-  // While read-aloud is locked (#148, ADR 0075), nothing is written: a download
-  // waits queued, or, caught mid-chapter as the Trial ends, stops at the next
-  // sentence as `interrupted`, and goes on once the Trial starts or the Unlock
-  // arrives (`startDownloads`). Asked here without a question: the scheduler
-  // never raises an alert.
+  // While read-aloud is locked (#148, ADR 0075), nothing is written. A download
+  // caught mid-chapter as the Trial ends stops at the next sentence, and
+  // `pauseForLock` then pauses it. Asked here without a question: the
+  // scheduler never raises an alert.
   allowed: () =>
     loaded &&
     !storeError &&
@@ -609,7 +608,11 @@ const scheduler = createScheduler({
     (foreground || !expired || readingPlays || continued.running()),
   // Where the hidden rendering prepares a chapter's text (#76).
   foreground: () => AppState.currentState === "active",
-  changed: persist,
+  // A download the lock stopped mid-run is paused as it stops (#148).
+  changed: () => {
+    pauseForLock();
+    return persist();
+  },
   // The texts a chapter holds are the Utterances' own; what is checked, spoken
   // and saved is their Speech Text, as reading asks for it (#25).
   exists: async (task, text) =>
@@ -813,7 +816,9 @@ function beginBounded() {
  * continued task keeps the app running from then on.
  */
 function continueAway() {
-  if (!foreground) return;
+  // Nothing goes on away from the screen while read-aloud is locked, so no
+  // continued task and no Live Activity is submitted for it (#148).
+  if (!foreground || !purchases.allowsSpeech()) return;
   void continued.start().then((running) => {
     if (running && !foreground) void offlineNative?.endBackground();
   });
@@ -827,7 +832,51 @@ function interruptAway() {
   expired = true;
   if (!readingPlays) interruptWriting();
 }
+/**
+ * While read-aloud is locked (#148, ADR 0075), every download that would go on
+ * is paused, as Pause all pauses it: the drawer shows it Paused, with Resume
+ * all, which asks about the Unlock first (`toggleTask`). That covers the end of
+ * the Trial, a launch and a return to the app, and a download the scheduler
+ * stopped mid-chapter, which `interrupted` would otherwise leave reading
+ * "continues when available" over a download that cannot.
+ *
+ * Only once what is owned has first been read: until then a lock is not known,
+ * and a launch must not pause what an Unlock read a moment later allows.
+ * Returns whether anything was paused, for the caller to persist.
+ */
+function pauseForLock(): boolean {
+  if (!purchases.settled() || purchases.allowsSpeech()) return false;
+  let paused = false;
+  for (const task of tasks)
+    if (pausing.GOES_ON.includes(task.state) || task.state === "interrupted") {
+      pausing.pauseAll(task);
+      paused = true;
+    }
+  if (paused) debugLog("download", "read-aloud is locked: every download that would go on is paused (#148)");
+  return paused;
+}
+/** The longest a timer may be set for: a longer one fires at once. */
+const LONGEST_TIMER_MS = 2 ** 31 - 1;
+let trialEnd: ReturnType<typeof setTimeout> | null = null;
+/**
+ * The end of the Trial with the app running: whatever would go on is paused
+ * at that moment, not at the next launch (#148). Set again whenever what is
+ * owned changes. Away from the screen the timer may not run; a return or a
+ * launch pauses then instead (`kick`, `startDownloads`).
+ */
+function armTrialEnd(): void {
+  if (trialEnd) clearTimeout(trialEnd);
+  trialEnd = null;
+  const left = purchases.trialLeft();
+  if (left === null) return;
+  trialEnd = setTimeout(() => {
+    trialEnd = null;
+    if (pauseForLock()) fire(persist());
+    else if ((purchases.trialLeft() ?? 0) > 1000) armTrialEnd();
+  }, Math.min(Math.max(0, left) + 50, LONGEST_TIMER_MS));
+}
 const kick = () => {
+  if (pauseForLock()) fire(persist());
   void scheduler
     .run()
     .catch((error) => {
@@ -887,6 +936,11 @@ export function startDownloads(): () => void {
           task.state = "queued";
       loaded = true;
       await persist();
+      // Whether read-aloud may go on is known before anything goes on by
+      // itself: while it is locked, a download left going on is paused, and no
+      // continued task is submitted for it (#148).
+      await purchases.ready();
+      if (pauseForLock()) await persist();
       // Opened with a download that goes on by itself (#77).
       continueAway();
       // Before the first run, so the scheduler never trusts keys computed under
@@ -952,21 +1006,22 @@ export function startDownloads(): () => void {
   const leaving = AppState.addEventListener("change", (value) => {
     if (value !== "active") abandonPreparation();
   });
-  // The Trial started, the Unlock bought, restored or approved (#148): what the
-  // lock held back goes on, a download it stopped mid-chapter included. Only in
-  // front, where a stop for the background time is undone the same way.
-  const unlocked = purchases.subscribe(() => {
-    if (!purchases.allowsSpeech()) return;
-    if (foreground)
-      for (const task of tasks)
-        if (task.state === "interrupted") task.state = "queued";
-    fire(persist().then(kick));
+  // What is owned changed (#148). Locked now, whatever would go on is paused.
+  // An Unlock that arrives by itself, from another device or a parent's
+  // approval, resumes nothing: a download the lock paused stays paused, as one
+  // the person paused does, until Resume all or a ring.
+  const purchaseWatch = purchases.subscribe(() => {
+    if (pauseForLock()) fire(persist());
+    armTrialEnd();
   });
+  armTrialEnd();
   // Without a platform connectivity observer, periodically retry only connectivity failures.
   const timer = Platform.OS !== "ios" ? setInterval(kick, 5000) : null;
   kick();
   return () => {
-    unlocked();
+    purchaseWatch();
+    if (trialEnd) clearTimeout(trialEnd);
+    trialEnd = null;
     network?.remove();
     expiration?.remove();
     continuedExpiration?.remove();

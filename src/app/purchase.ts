@@ -86,6 +86,16 @@ export function configurePurchases(next: Purchases | null): void {
  */
 export const purchases = {
   allowsSpeech: (): boolean => (current ? current.allowsSpeech() : !PURCHASE_LOCK),
+  /** Settles once what is owned has first been read; at once while nothing is configured. */
+  ready: (): Promise<void> => current?.ready() ?? Promise.resolve(),
+  /**
+   * Whether what is owned has been read, so that "locked" is known. Before
+   * then a download is held back but never paused for the lock (#148).
+   * Unconfigured, a build without the lock is settled, and one with it is not.
+   */
+  settled: (): boolean => (current ? current.settled() : !PURCHASE_LOCK),
+  /** How long the running Trial has left, in milliseconds; null outside a Trial. */
+  trialLeft: (): number | null => current?.trialLeft() ?? null,
   askForSpeech: (): Promise<boolean> => (current ? current.askForSpeech() : Promise.resolve(!PURCHASE_LOCK)),
   access: (): Access | null => (current ? current.access() : PURCHASE_LOCK ? null : { kind: 'off' }),
   price: (): string | null => current?.price() ?? null,

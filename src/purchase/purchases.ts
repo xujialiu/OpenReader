@@ -54,6 +54,10 @@ export interface Purchases {
   start(): void;
   /** Settles once the first read of what is owned has. */
   ready(): Promise<void>;
+  /** Whether that first read has settled, so that a lock is known and not merely not yet disproved. */
+  settled(): boolean;
+  /** How long the running Trial has left, by this controller's clock; null outside a Trial. */
+  trialLeft(): number | null;
   access(): Access;
   allowsSpeech(): boolean;
   /** The Unlock's price in the person's currency, once the products have loaded. */
@@ -80,6 +84,7 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
   let started = false;
   let stopListening: (() => void) | null = null;
   let firstRead: Promise<void> = Promise.resolve();
+  let read = !deps.lockOn;
   const listeners = new Set<() => void>();
   const notify = () => { for (const listener of [...listeners]) listener(); };
 
@@ -202,10 +207,18 @@ export function createPurchases(deps: PurchaseDeps): Purchases {
         log(`transaction: ${transaction.productId} ${transaction.revoked ? 'revoked' : 'owned'}`);
         keep(applyTransaction(record, transaction));
       });
-      firstRead = refresh();
+      firstRead = refresh().finally(() => {
+        read = true;
+        notify();
+      });
       void loadProducts();
     },
     ready: () => firstRead,
+    settled: () => read,
+    trialLeft() {
+      const now = access();
+      return now.kind === 'trial' ? now.endsAt - deps.now() : null;
+    },
     access,
     allowsSpeech: () => speaks(access()),
     price: () => unlockPrice(products),

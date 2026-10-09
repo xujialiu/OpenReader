@@ -89,11 +89,30 @@ describe('a download speaks only through the gate', () => {
     expect(ring.indexOf('purchases.allowsSpeech()')).toBeLessThan(ring.indexOf('pausing.tapChapter('));
   });
 
-  it('holds the scheduler back without a question, and lets it go when allowed', () => {
+  it('holds the scheduler back without a question', () => {
     const allowed = between(runtime, '  allowed: () =>', '  // Where the hidden rendering prepares', 'the scheduler\'s allowed()');
     pin(allowed, 'purchases.allowsSpeech() &&', 'the scheduler\'s allowed()');
     expect(allowed).not.toContain('askForSpeech');
-    pin(runtime, 'const unlocked = purchases.subscribe(() => {', 'src/offline/runtime.ts');
+  });
+
+  it('pauses whatever would go on while locked: mid-run, on every kick, at launch and when what is owned changes', () => {
+    const pause = between(runtime, 'function pauseForLock(): boolean {', '/** The longest a timer may be set for', 'pauseForLock()');
+    pin(pause, 'if (!purchases.settled() || purchases.allowsSpeech()) return false;', 'pauseForLock()');
+    pin(pause, 'pausing.pauseAll(task);', 'pauseForLock()');
+    pin(between(runtime, '  changed: () => {', '  // The texts a chapter holds', 'the scheduler\'s changed()'), 'pauseForLock();', 'the scheduler\'s changed()');
+    pin(between(runtime, 'const kick = () => {', '.catch((error) => {', 'kick()'), 'if (pauseForLock()) fire(persist());', 'kick()');
+    const launch = between(runtime, 'export function startDownloads(): () => void {', 'const network = offlineNative?.addListener(', 'the launch in startDownloads()');
+    pin(launch, 'await purchases.ready();', 'the launch');
+    expect(launch.indexOf('await purchases.ready();')).toBeLessThan(launch.indexOf('continueAway();'));
+    const watch = between(runtime, 'const purchaseWatch = purchases.subscribe(() => {', '  // Without a platform connectivity observer', 'the purchase watch');
+    pin(watch, 'if (pauseForLock()) fire(persist());', 'the purchase watch');
+    // An Unlock arriving by itself resumes nothing.
+    expect(watch).not.toMatch(/resumeAll|state = "queued"|kick/);
+  });
+
+  it('submits no continued task while locked', () => {
+    pin(between(runtime, 'function continueAway() {', 'function interruptAway() {', 'continueAway()'),
+      'if (!foreground || !purchases.allowsSpeech()) return;', 'continueAway()');
   });
 });
 
