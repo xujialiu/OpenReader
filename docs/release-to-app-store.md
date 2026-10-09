@@ -35,7 +35,7 @@ The owner set these.
 
 ## Current state
 
-Checked 2026-10-05. When a fact here changes, change it here, and record what
+Checked 2026-10-05; In-App Purchases 2026-10-09. When a fact here changes, change it here, and record what
 happened in that day's `notes/` file.
 
 - **Team and signing**
@@ -54,6 +54,10 @@ happened in that day's `notes/` file.
 - **Tags**: `build-5`, `build-6` and `v1.0.0` (on `5b02aed`, build 6) are pushed. `build-2`, `build-3` and `build-4` are local only.
 - **App Review Information**: the notes are the Guideline 2.1 answer (3,950 characters), with the recording `OpenReader-Review-Demo.mp4` attached. The review key is saved only in App Store Connect.
 - **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), not on Apple silicon Macs or Apple Vision Pro. Books, 4+, non-trader. The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
+- **In-App Purchases** (ADR 0075, #148), both Non-Consumable and in Prepare for Submission. The first one must go to review with a new app version, and each still needs its review screenshot.
+  - "30-day Trial": `top.xujialiu.openreader.trial`, Apple ID 6820864102, US$0.00. English (U.S.) display name "30-day Trial", description "Read aloud free for 30 days."
+  - "Unlock": `top.xujialiu.openreader.unlock`, Apple ID 6820865303, US$4.99 with the United States as base. Apple's generated prices hold elsewhere (Australia A$7.99, for example). English (U.S.) display name "Unlock Read Aloud", description "Read aloud and offline narration, for good."
+  - Both: 174 countries or regions (every one except China mainland), future territories added automatically, Family Sharing off, tax category matched to the app. An In-App Purchase's availability list starts with China mainland ticked, so untick it there. (notes 2026-10-09 14:20)
 - **Web pages**, from `site/` through `.github/workflows/pages.yml`:
   - Support URL: https://xujialiu.github.io/OpenReader/
   - Privacy Policy URL: https://xujialiu.github.io/OpenReader/privacy.html

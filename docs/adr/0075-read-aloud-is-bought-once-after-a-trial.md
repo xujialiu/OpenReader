@@ -13,8 +13,16 @@ places are at `7b039fd`. None of this is built yet._
 
 ## The products
 
-There are two Non-Consumables in App Store Connect. Their product identifiers
-are recorded with their creation on #148.
+There are two Non-Consumables in App Store Connect, created on 2026-10-09
+(notes 2026-10-09 14:20):
+
+| Reference name | Product ID | Apple ID | Price |
+| --- | --- | --- | --- |
+| 30-day Trial | `top.xujialiu.openreader.trial` | 6820864102 | US$0.00 |
+| Unlock | `top.xujialiu.openreader.unlock` | 6820865303 | US$4.99 |
+
+The trial's identifier names no length, so a change of length keeps the
+product; only its display name, "30-day Trial", follows the length.
 
 - **"30-day Trial"**, at price 0. Guideline 3.1.1: "Non-subscription apps may
   offer a free time-based trial period before presenting a full unlock option by
@@ -26,8 +34,8 @@ are recorded with their creation on #148.
   - The current help page, "Set a price for an In-App Purchase", does not show a
     free price point. An Apple DTS reply of April 2026 called the free and paid
     pair "the current approach", and that thread's app went live with one in May
-    2026 (https://developer.apple.com/forums/thread/823270). Confirm this when
-    the product is created.
+    2026 (https://developer.apple.com/forums/thread/823270). On 2026-10-09 the
+    Price menu offered `$0.00` as its first entry, and the trial was saved at it.
 - **The Unlock**, at US$4.99 with the United States as the base storefront.
   US$4.99 is a valid point: steps are $0.10 up to $9.99. From the help page
   (https://developer.apple.com/help/app-store-connect/manage-in-app-purchases/set-a-price-for-an-in-app-purchase),
