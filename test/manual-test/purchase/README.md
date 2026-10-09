@@ -39,7 +39,7 @@ HX store use=fake access={"kind":"trial","endsAt":1791734400000} allows=true pri
 | `{"do":"store","state":"unavailable"}` / `"available"` | whether products load; with them out, a gated press raises "Purchases Unavailable" |
 | `{"do":"store","outcome":"cancelled"}` | the next purchase: `purchased` (default), `pending` (Ask to Buy), `cancelled`, or `failed` (raises "Purchases Unavailable") |
 | `{"do":"store","revoke":"unlock"}` | a refund of the Unlock (or `"trial"`) |
-| `{"do":"store","arrive":"unlock"}` | the Unlock reported by itself while the app runs, as a purchase on another device or a parent's approval is: downloads held back go on with no relaunch |
+| `{"do":"store","arrive":"unlock"}` | the Unlock reported by itself while the app runs, as a purchase on another device or a parent's approval is. Since beta12 it resumes nothing: a download the lock paused stays Paused until Resume all or a ring |
 | `{"do":"store","use":"real"}` / `"fake"` | StoreKit instead of the pretend App Store, kept across launches |
 
 `state`, `outcome` and `revoke` make the app's controller afresh, as a launch
@@ -68,17 +68,37 @@ with `"use":"real"`.
    a book with a Provider and Voice ready, and stop at the player.
 2. `{"do":"store","state":"not-started"}`. Press Play: the trial alert, with
    `$4.99`. Not Now: nothing plays and nothing is sent. Play again, Start Free
-   Trial: it plays. Settings → Read Aloud reads `30 days left`.
+   Trial: it plays. The last row of Settings' first card reads **Purchase**,
+   its label in the tint as Privacy Policy's is, `30 days left` on the right in
+   grey, and a chevron. Before the Trial it has no value. It opens a page titled
+   Purchase: Start Free Trial (before the Trial only), Unlock for $4.99,
+   Restore Purchase.
 3. `{"do":"store","state":"ended"}`. Press Play: the ended alert with Unlock for
-   $4.99, Restore Purchase, Not Now. Unlock: it plays. Settings reads `Unlocked`.
+   $4.99, Restore Purchase, Not Now. Unlock: it plays. The row is now plain, not
+   tinted, reads `Unlocked` and opens nothing.
 4. `{"do":"store","state":"unavailable"}` after `"state":"ended"`: Play raises
    "Purchases Unavailable"; OK; nothing plays.
 5. The end of the Trial mid-use: `{"do":"store","state":"trial","seconds":20}`,
    press Play, and let 20 s pass while it plays. It keeps playing. Pause, then
-   Play: the ended alert. A download started inside those 20 s stops at the
-   next sentence (`interrupted`) and goes on after `{"do":"store","arrive":"unlock"}`.
-6. A Lock Screen Play while locked plays nothing and leaves no alert behind.
-7. Leave the simulator with `{"do":"store","state":"unlocked"}`.
+   Play: the ended alert.
+6. A download across the end (`download-across-end.sh`): it stops at the next
+   sentence and is **Paused**, as Pause all pauses it. The drawer shows no state
+   line, Resume all, and Resume download rings. `{"do":"store","arrive":"unlock"}`
+   resumes nothing; Resume all then goes on with no question. Without the
+   Unlock, Resume all or a ring raises the ended alert, and Unlock there
+   resumes it. Sent to the background and back while locked, it stays Paused,
+   nothing is fetched, and the Debug Log has no `continued task submitted` line.
+   A relaunch while locked leaves it Paused too.
+7. A Lock Screen Play while locked plays nothing and leaves no alert behind,
+   and the centre button **goes back to Play** (`LockScreenProbe`, after the
+   kit's `play`), where beta11 left it on Pause.
+8. Restore with nothing to restore: `{"do":"store","state":"ended"}`, Play,
+   Restore Purchase raises **No Purchase Found** / "There's no purchase to
+   restore for this Apple Account." with OK, and nothing plays. The same from
+   Purchase → Restore Purchase. The pretend App Store's restore always finishes,
+   so a cancelled sign-in, which says nothing, is reached only with
+   `"use":"real"`.
+9. Leave the simulator with `{"do":"store","state":"unlocked"}`.
 
 Play only while measuring, then stop (MEMORY/device-testing.md).
 
@@ -98,14 +118,20 @@ bash test/manual-test/purchase/download-across-end.sh SIMULATOR_UDID SECONDS SHO
   end and any `play while read-aloud is locked` line (none may precede the end).
   `--ask` then presses Play and prints the ended alert. Reader open and paused,
   Voice ready.
-- `download-across-end.sh` is step 5's Download: with the drawer open and
+- `download-across-end.sh` is step 6's Download: with the drawer open and
   chapters chosen, a Trial of `SECONDS`, a press on `Download selected (N)`, a
-  poll of the drawer until it reads Interrupted, a screenshot, the drawer's
-  lines, the fake server's last requests beside the Trial's end, and a press on
-  Resume all that raises the ended alert (answered Not Now). Its Provider needs
-  to be slow and the Document not yet saved in that voice (see below).
+  poll of the drawer until it shows Paused (Resume all, no running state; it
+  fails on beta11's Interrupted), a screenshot, the drawer's lines, the fake
+  server's last requests beside the Trial's end, and a press on Resume all that
+  raises the ended alert (answered Not Now). Its Provider needs to be slow and
+  the Document not yet saved in that voice (see below).
 
 ## Measured on beta11 (2026-10-09, iPhone 17, iOS 27.0, Metro, the fake Kokoro)
+
+What beta11 did, kept as measured. beta12 changed two of these on the owner's
+decision: a download the lock stops is now Paused and not Interrupted, and an
+Unlock arriving by itself no longer resumes it. A refused Lock Screen Play now
+puts the button back to Play (recipe steps 6 and 7).
 
 - **The least Trial that works is 2 s.** A real touch lands about 1.4 s after
   the harness command is written: the app reads it within 250 ms, and `axe
