@@ -34,13 +34,13 @@ Information holds now is in [release-to-app-store.md](release-to-app-store.md).
   developer account, and the sub-worktree.
 - The recording itself, the key and the book used in it, and the reply to Apple
   are the owner's.
-- **Open question (#148): the Demo App and the Trial.** A Demo App has no Debug
-  Mode, so it asks StoreKit, and under `top.xujialiu.openreader.demo` App Store
-  Connect has nothing to sell. Every Play would raise "Purchases Unavailable"
-  and nothing would be read aloud in the recording. Not decided: build it with
-  `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`, so it reads aloud with no Trial and no
-  alert; or record the purchase flow from the owner's own app with a Sandbox
-  Apple Account instead. Ask the owner before the next Demo App is built.
+- **No Trial and no Unlock in the Demo App (#148).** A Demo App has no Debug
+  Mode, so it would ask StoreKit, and App Store Connect sells nothing under
+  `top.xujialiu.openreader.demo`. Every Play would raise "Purchases
+  Unavailable". So it is built with `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`, and it
+  reads aloud with no alert and no Read Aloud row (owner's decision,
+  2026-10-09). If App Review asks to see the purchase, that is recorded from
+  the owner's own app with a Sandbox Apple Account.
 
 ## Why another identifier keeps the owner's app untouched
 
@@ -107,12 +107,13 @@ install-on-iphone.md):
    `OpenReader`, that the entitlements file is still empty, and that
    `node_modules/expo-sqlite/ios/sqlite3.h` exists.
 4. **Build** without `EXPO_PUBLIC_OPENREADER_DEBUG_MODE` anywhere (shell,
-   `.env*`, `ios/.xcode.env.local`), with the sub-worktree's own DerivedData and
+   `.env*`, `ios/.xcode.env.local`) and with `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`
+   in the build's environment, with the sub-worktree's own DerivedData and
    module cache (install-on-iphone.md, step 3), so that it neither waits on nor
    disturbs a build of the owner's app:
 
    ```bash
-   xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \
+   EXPO_PUBLIC_OPENREADER_UNLOCKED=1 xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \
      -configuration Release -destination 'id=IPHONE_UDID' \
      -derivedDataPath /tmp/openreader-iphone-demo \
      -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
@@ -126,8 +127,8 @@ install-on-iphone.md):
    `iOS Team Provisioning Profile: *`, rather than one for an explicit App ID
    (notes 2026-10-04 11:30).
 5. **Check** the product, `/tmp/openreader-iphone-demo/Build/Products/Release-iphoneos/`:
-   `main.jsbundle` beside the app reads `var DEBUG_MODE = false;` and holds the
-   `-demo` template; `codesign -d --entitlements :- OpenReader.app` shows
+   `main.jsbundle` beside the app reads `var DEBUG_MODE = false;` and
+   `var PURCHASE_LOCK = false;`, and holds the `-demo` template; `codesign -d --entitlements :- OpenReader.app` shows
    `application-identifier` `UPR29WR8FC.top.xujialiu.openreader.demo`.
 6. **Install and launch**:
 
