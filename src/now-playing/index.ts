@@ -38,7 +38,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
 import type NowPlayingModule from '../../modules/open-reader-now-playing';
-import type { RemoteCommandEvent } from '../../modules/open-reader-now-playing';
+import type { NowPlayingReading, RemoteCommandEvent } from '../../modules/open-reader-now-playing';
 
 import { intentOf, type RemoteIntent } from './reading';
 
@@ -63,6 +63,12 @@ let shown = false;
  * screen's clock to zero every time the owner pressed pause.
  */
 let pushed = 0;
+
+/**
+ * The last reading shown, without its position, so that a press the app
+ * refused can put the lock screen back as it was (#148, `restateNowPlaying`).
+ */
+let last: Omit<NowPlayingReading, 'position'> | null = null;
 
 /**
  * The native module, required at the moment it is needed rather than at import.
@@ -114,6 +120,21 @@ function lockScreen(): typeof NowPlayingModule {
  * which is how a content position advances, so its arithmetic and the graph's
  * agree instead of drifting apart by the 1.5-3x the app runs at.
  */
+/**
+ * Show the lock screen what was last shown, again (#148).
+ *
+ * The system turns its centre button to Pause the moment Play is tapped,
+ * before the app has answered. When the app then refuses the press, read-aloud
+ * being locked, nothing it shows has changed, so nothing would be written, and
+ * the button stayed on Pause over a paused app (LockScreenProbe, 85 s later,
+ * on 1.0.0 (7)-beta11). Writing the same paused state again puts it back.
+ * Nothing happens before a reading has been shown.
+ */
+export function restateNowPlaying(): void {
+  if (!shown || !last) return;
+  lockScreen().show({ ...last, position: pushed });
+}
+
 export function lockScreenPosition(position: number): void {
   pushed = position;
   if (!shown) return;
@@ -189,7 +210,8 @@ export function useNowPlaying({ title, chapter, cover, playing, rate, live, onIn
 
   useEffect(() => {
     if (!live || cover === undefined) return;
-    lockScreen().show({ title, chapter, cover: cover ?? '', playing, rate, position: pushed });
+    last = { title, chapter, cover: cover ?? '', playing, rate };
+    lockScreen().show({ ...last, position: pushed });
     shown = true;
   }, [title, chapter, cover, playing, rate, live]);
 
@@ -203,6 +225,7 @@ export function useNowPlaying({ title, chapter, cover, playing, rate, live, onIn
     () => () => {
       shown = false;
       pushed = 0;
+      last = null;
       lockScreen().hide();
     },
     [],

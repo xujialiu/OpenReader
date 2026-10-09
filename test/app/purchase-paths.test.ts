@@ -61,6 +61,22 @@ describe('a Reading speaks only through the gate', () => {
     pin(read('src/app/use-lookup.ts'), 'resume: () => latest.current.reading.carryOn(),', 'src/app/use-lookup.ts');
   });
 
+  it('puts the Lock Screen back when a press is refused (#148, F2)', () => {
+    // The system turns its button to Pause at the tap; the refusal changes
+    // nothing the app shows, so it must be written again. The native module is
+    // Swift and the hook loads it with `require`, so this reads the source.
+    const play = between(reading, '  const play = useCallback(() => {', '   * The section Play was looking for has arrived', 'play() in src/app/use-reading.ts');
+    pin(play, 'if (yes) startRef.current();', 'play()');
+    pin(play, 'else restateNowPlaying();', 'play()');
+    const nowPlaying = read('src/now-playing/index.ts');
+    const restate = between(nowPlaying, 'export function restateNowPlaying(): void {', 'export function lockScreenPosition(', 'restateNowPlaying()');
+    pin(restate, 'if (!shown || !last) return;', 'restateNowPlaying()');
+    pin(restate, 'lockScreen().show({ ...last, position: pushed });', 'restateNowPlaying()');
+    // `last` is what the show effect last wrote, playing state included, and is forgotten with the item.
+    pin(nowPlaying, "last = { title, chapter, cover: cover ?? '', playing, rate };", 'src/now-playing/index.ts');
+    pin(nowPlaying, '      last = null;', 'src/now-playing/index.ts');
+  });
+
   it('gives the Player, the Lock Screen and the headphones the gated play', () => {
     const view = read('src/app/reading-view.tsx');
     pin(view, "onIntent: (intent) => (intent === 'play' ? play() : pause()),", 'src/app/reading-view.tsx');

@@ -44,7 +44,7 @@ import type { Utterance } from '../core/segmenter';
 import { debugLog } from '../debug/debug-log';
 import { consent, isDeclined } from './consent';
 import { purchases } from './purchase';
-import { lockScreenPosition } from '../now-playing';
+import { lockScreenPosition, restateNowPlaying } from '../now-playing';
 import {
   createPlaybackEngine,
   nextParagraph,
@@ -1489,6 +1489,9 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
     void purchases.askForSpeech().then((yes) => {
       debugLog('reading', yes ? 'read-aloud allowed: the press goes on' : 'read-aloud still locked: nothing plays');
       if (yes) startRef.current();
+      // The system turned the Lock Screen's button to Pause at the tap; the
+      // refusal changed nothing it shows, so it is told again (#148).
+      else restateNowPlaying();
     });
   }, [start]);
 
