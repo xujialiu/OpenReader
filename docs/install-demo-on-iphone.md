@@ -38,7 +38,7 @@ Information holds now is in [release-to-app-store.md](release-to-app-store.md).
   Mode, so it would ask StoreKit, and App Store Connect sells nothing under
   `top.xujialiu.openreader.demo`. Every Play would raise "Purchases
   Unavailable". So it is built with `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`, and it
-  reads aloud with no alert and no Read Aloud row (owner's decision,
+  reads aloud with no alert and no Purchase row (owner's decision,
   2026-10-09). If App Review asks to see the purchase, that is recorded from
   the owner's own app with a Sandbox Apple Account.
 

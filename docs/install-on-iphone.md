@@ -131,7 +131,7 @@ before restarting anything.
 **The Trial and the Unlock** (#148, ADR 0075). A build with Debug Mode, which
 the owner's phone build always is, asks a pretend App Store that starts as if
 the Unlock were owned. So the phone reads aloud as before, and Settings ends
-its first card with `Read Aloud  Unlocked`. To try StoreKit itself on the
+its first card with a plain `Purchase  Unlocked` row. To try StoreKit itself on the
 phone, send `{"do":"store","use":"real"}` through the phone's harness
 (`test/manual-test/kit/phone-hx.cjs`) and sign in with a Sandbox Apple Account
 (App Store Connect → Users and Access → Sandbox) when the App Store's sheet
