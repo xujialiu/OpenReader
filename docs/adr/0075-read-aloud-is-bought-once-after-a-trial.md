@@ -512,20 +512,37 @@ decided on 2026-10-09:
   simplest rule to state: a paused download goes on only when someone resumes
   it.
 
-### The Lock Screen after a refused press (beta12)
+### The Lock Screen after a refused press (beta13)
 
 The system turns Now Playing's centre button to Pause the moment Play is
 tapped, before the app answers. On beta11 a refused Play changed nothing the
 app shows, so nothing was written, and the button stayed on Pause over a
 paused app. `LockScreenProbe` read "Pause" 85 s later, with `playing=false`.
 
-`restateNowPlaying()` in `src/now-playing/index.ts` writes the last shown
-reading again with its position, and `play()` calls it on every refusal. The
-show effect keeps that reading in `last`, playing state included, and the item's
-teardown forgets it. No Swift change was needed: the native `show` always
-republishes `nowPlayingInfo` and `playbackState` (`publish()`). The hook loads
-the native module with `require`, which `vi.mock` does not reach, so the
-behaviour is pinned structurally in `purchase-paths.test.ts`, not run.
+On beta12, `restateNowPlaying()` wrote the same paused reading again. The
+button still read Pause 36 s and 42 s later, and `mediaremoted` logged no
+`PlaybackState changed` in that minute. A write that leaves the system's model
+Paused does not turn the button back; only a change of state does.
+
+On beta13 (`2533e80`), `restateNowPlaying()` writes the last shown reading as
+playing, then 400 ms later as paused. The paused write is skipped if a real Play
+has shown the reading playing in between. `play()` calls it on every refusal,
+and the show effect keeps that reading in `last`. Measured on the simulator in
+three refusals (notes and `test/manual-test/purchase/README.md`):
+
+- `mediaremoted` logged `PlaybackState changed from Paused to Playing`, then
+  `from Playing to Paused`, 392 to 408 ms apart. For example, 17:51:49.109 and
+  17:51:49.501.
+- `LockScreenProbe` read `Play` 42 s and 51 s later.
+- Nothing played: no `play at utterance`, and no request reached the Provider.
+- A control with the Unlock owned played from the Lock Screen, and the button
+  followed the real state.
+
+The kit's `play` test asserts that the button stays on Pause, so it now fails
+on a refused press. `lock-device.sh … play-refused` is the action for this case.
+No Swift change was needed. The hook loads the native module with `require`,
+which `vi.mock` does not reach, so the behaviour is pinned structurally in
+`purchase-paths.test.ts`, not run.
 
 ### Restore with nothing to restore (beta12)
 

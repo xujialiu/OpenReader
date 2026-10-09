@@ -70,6 +70,30 @@ final class DeviceLockProbe: XCTestCase {
   /// stays locked (#75): Play when it reads Play, Pause when it reads Pause.
   func testLockScreenPlay() throws { try pressCentre(reading: "Play", becomes: "Pause") }
   func testLockScreenPause() throws { try pressCentre(reading: "Pause", becomes: "Play") }
+  /// A Lock Screen Play the app is expected to refuse (#148): taps the centre
+  /// button while it reads Play and prints the label as soon as the tap returns
+  /// and again 2 s later, asserting nothing about Pause. `testLockScreenPlay`
+  /// asserts that the button turns to Pause and stays long enough to be seen,
+  /// which a refusal that puts the button back after 400 ms (beta13) does not
+  /// allow: it fails, and a failed run leaves xcodebuild in `simctl diagnose`
+  /// for minutes (pitfalls/lock-and-background.md). The caller reads the
+  /// system's own state from `mediaremoted` and `LockScreenProbe`.
+  func testLockScreenPlayRefused() throws {
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let centre = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    if !(centre.exists && centre.isHittable) {
+      XCUIDevice.shared.press(.home)
+      _ = centre.waitForExistence(timeout: 3)
+    }
+    XCTAssertTrue(centre.exists, "No Now Playing centre button on the lock screen")
+    XCTAssertEqual(centre.label, "Play", "The centre button does not read Play")
+    guard centre.label == "Play" else { return }
+    print("LOCKPROBE tapping Play at \(Date().timeIntervalSince1970)")
+    centre.tap()
+    print("LOCKPROBE label when the tap returned: \(centre.label) at \(Date().timeIntervalSince1970)")
+    Thread.sleep(forTimeInterval: 2)
+    print("LOCKPROBE label 2 s later: \(centre.label) at \(Date().timeIntervalSince1970)")
+  }
   /// A dark screen is woken by one Home press, and only one: on the lock screen
   /// of a device with no passcode a second would open it.
   private func pressCentre(reading label: String, becomes next: String) throws {

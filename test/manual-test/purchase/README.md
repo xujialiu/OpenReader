@@ -91,7 +91,11 @@ with `"use":"real"`.
    A relaunch while locked leaves it Paused too.
 7. A Lock Screen Play while locked plays nothing and leaves no alert behind,
    and the centre button **goes back to Play** (`LockScreenProbe`, after the
-   kit's `play`), where beta11 left it on Pause.
+   kit's `play`), where beta11 and beta12 left it on Pause. Use
+   `lock-device.sh UDID play-refused` for the press, not `play`: from beta13 the
+   button is on Pause for about 400 ms, so `play`'s "turns to Pause" assertion
+   fails and the failed run leaves xcodebuild in `simctl diagnose` for minutes
+   (Measured on beta13, below).
 8. Restore with nothing to restore: `{"do":"store","state":"ended"}`, Play,
    Restore Purchase raises **No Purchase Found** / "There's no purchase to
    restore for this Apple Account." with OK, and nothing plays. The same from
@@ -105,7 +109,8 @@ Play only while measuring, then stop (MEMORY/device-testing.md).
 ## Scripts
 
 Both press with real touches (`axe touch`), read the app's own answers from the
-Debug Log, and set and check the simulator's volume before every press.
+Debug Log, and set and check the simulator's volume before every press. The
+Lock Screen's refused Play is `kit/lock-device.sh UDID play-refused` (above).
 
 ```sh
 bash test/manual-test/purchase/trial-end.sh SIMULATOR_UDID [SECONDS] [--ask]
@@ -125,6 +130,114 @@ bash test/manual-test/purchase/download-across-end.sh SIMULATOR_UDID SECONDS SHO
   server's last requests beside the Trial's end, and a press on Resume all that
   raises the ended alert (answered Not Now). Its Provider needs to be slow and
   the Document not yet saved in that voice (see below).
+
+## Measured on beta13 (2026-10-09, iPhone 17, iOS 27.0, Metro 8082): the Lock Screen button
+
+beta13 writes the reading as playing when a Play is refused, and as paused again
+400 ms later. A Reading was played and paused once (the Now Playing session),
+`{"do":"store","state":"ended"}`, `lock-device.sh UDID lock`, then
+`lock-device.sh UDID play-refused`, `unlock`, and `LockScreenProbe` reading the
+centre button (`run-probe.sh LockScreenProbe UDID OUT --expect-player`).
+
+- **The button comes back to Play.** Refused at 17:51:49.087: the test's own
+  reads were `label when the tap returned: Pause` (17:51:49.284) and `label 2 s
+  later: Play` (17:51:51.353); `LockScreenProbe` read `Play` at 17:52:40.434 (51 s
+  later, where beta12 read Pause at 36 and 42 s). Refused at 17:53:06.085: `Pause`
+  at 17:53:06.276, `Play` at 17:53:08.320, probe `Play` at 17:53:48.519 (42 s).
+  The first run used the old `play` test (refusal 17:43:52.950), which failed its
+  own assertion (`XCTWaiterResult(rawValue: 2)`, `Executed 1 test, with 1
+  failure`, DeviceLockProbe.swift:89): the label had turned back before its
+  first look, 1.5 s after the tap. Its xcodebuild then sat in `simctl diagnose
+  -l -b` for 5 minutes until its process group was killed, and `LockScreenProbe`
+  read `Play` 6.5 minutes later.
+- **`mediaremoted` shows the pair**: `17:51:49.109 PlaybackState changed from
+  Paused to Playing`, `17:51:49.501 … from Playing to Paused` (392 ms); `17:53:06.092`
+  and `17:53:06.486` (394 ms); `17:43:52.957` and `17:43:53.365` (408 ms). Beta12 had
+  none.
+- **Nothing played**: in all three the Debug Log has `play while read-aloud is
+  locked: asking`, `locked, and not asked away from the screen`, `read-aloud
+  still locked: nothing plays`, no `[reading] play at utterance`, no `playing=true`
+  (the app stayed `playing=false app=background`), and the fake server's text
+  count did not move (141 before and after). No alert waited after the unlock.
+- **Control, the Unlock owned**: the kit's `play` passed (`Executed 1 test, with 0
+  failures`); `17:54:19.341 [reading] play at utterance 29` with `app=background`,
+  `mediaremoted` `Paused to Playing` at 17:54:19.397, a harness pause at
+  17:54:21.421 (2.1 s of play), `Playing to Paused` at 17:54:21.439, and
+  `LockScreenProbe` read `Play` afterwards: the button follows the real state.
+  The `restate` is not involved (no pair of its kind).
+- **A refusal with the app in front** (Play, Not Now) writes the same pair
+  (`17:55:28.990` and `17:55:29.309`) and plays nothing.
+
+## Measured on beta12 (2026-10-09, iPhone 17, iOS 27.0, Metro 8082, the fake Kokoro at one sentence a second)
+
+Every press is a real touch; `store` and `open` are harness commands. To repeat
+a download run: Manage downloads → Delete all saved audio (it drops the task,
+so `Download selected` counts the chapters again), relaunch (the memory cache
+would answer sentences already fetched, `pitfalls/verification-runs.md`), then
+`Select all`. Before a relaunch put `{"do":"noop"}` in `harness.json`, or the
+last `store` command runs again at launch.
+
+- **A download across the end of the Trial is Paused.** Trial of 7 s ending at
+  17:23:02.821; the last request left at 09:23:02.612Z (in flight at the end,
+  saved), none after; `17:23:02.874 [download] read-aloud is locked: every
+  download that would go on is paused (#148)`, 53 ms after the end. The drawer
+  has no state line, `Resume all`, and four `Resume download` rings
+  (`download-across-end.sh` saw `no state line` plus `Resume all` at 17:23:03.156
+  and took its screenshot; the Paused test of the script is right on the screen).
+  `Resume all` raised the ended alert; Not Now left it Paused.
+- **The same with the app in the background**: a 15 s Trial ending at 17:33:08.335
+  with the app away since 17:33:00.5: last request 09:33:08.305Z (9 of 10 saved),
+  `17:33:08.585` paused (the timer ran away from the screen), and on the return
+  Paused, 131 requests before and after, no `continued task submitted`.
+- **Locked, a background and return** leaves it Paused: no `Queued`, no
+  request (79 before and after 10 s), no `continued task submitted` line, and
+  no `[download]` line at all after `[app] app active`. **A relaunch while
+  locked** does too, including a Trial that ended while the app was not running:
+  killed mid-download at 17:26:05, the Trial ended 17:26:12.034, launched
+  17:26:23.837, `owned: unlocked false` 17:26:24.159, paused 17:26:24.374, 102
+  requests before and after, no continued task.
+- **A purchase change pauses at once**: `{"do":"store","state":"ended"}` while a
+  download ran paused it in the same millisecond as the new controller
+  (17:24:59.604).
+- **An Unlock arriving by itself resumes nothing**: transaction 17:25:14.438,
+  90 requests before and after 9 s, still Paused. `Resume all` then went on with
+  no alert (90 to 93 in 3 s). After the end, `Resume all`, the alert, and Unlock
+  resumed it (17:24:47.432, 79 to 82 in 3 s).
+- **Control**: killed mid-download with the Unlock owned, the launch read
+  `owned: unlocked true` at 17:27:20.267 and `continued task submitted … 3 of 5
+  chapters` at 17:27:20.462, and the requests went on (108 to 111 in 5 s). A
+  Download from the not-started state, Start Free Trial: trial owned 17:36:59.238,
+  continued task and requests, not paused.
+- **No Purchase Found** ("There's no purchase to restore for this Apple
+  Account.", OK) from the Purchase page in a Trial, after it and before it, and
+  from the ended alert's Restore Purchase, which then plays nothing
+  (`restored: ended`, `nothing plays`). With `"use":"real"`, Restore raises the
+  system's own `Sign in to Apple Account` sheet (Apple Account, Password, Cancel,
+  OK); Cancel logged `[purchase] restore did not finish: Error:
+  UnexpectedException: Request Canceled` and the app showed nothing.
+- **The Purchase row**: label in the tint as Privacy Policy's, value in grey,
+  chevron; `Purchase` (no value) before the Trial, `12 days left`, `1 day left`,
+  `Trial ended`; plain `Purchase · Unlocked` that opens nothing; the page titled
+  Purchase; unavailable shows `Unlock` and the footnote. Light and dark.
+- **The Lock Screen button did not come back to Play** (beta12; beta13 fixes it, below). Three
+  refused Plays with the Trial over (17:19:17.118, 17:28:36.864, 17:30:00.476):
+  `LockScreenProbe` read `Pause` at 17:19:59.029 (42 s later) and 17:30:36.328
+  (36 s later), and the kit's `pause` test, which passes only while the button
+  reads Pause, passed on a run started 24 s after the second. The app did
+  restate: the simulator's log has `Setting nowPlayingInfo` with
+  `PlaybackRate = 0` from OpenReader at 17:19:17.116, 2 ms after the command's
+  success reply. But `mediaremoted` logged no `PlaybackState changed` or
+  `isPlaying changed` at all in that minute (it does on a real Play: `17:18:32.013
+  PlaybackState changed from Paused to Playing`), and MediaRemoteUI's own
+  waveform controller said `playing=1` for the app at 17:19:56: the button is the
+  system UI's own state from the tap, and rewriting the same paused state moves
+  nothing. A diagnostic through `globalThis.expo.modules.OpenReaderNowPlaying`
+  (`cdp.cjs --eval FILE http://127.0.0.1:8082`: `show({…, playing:true})`, then
+  `show({…, playing:false})` 400 ms later, no app code changed) put the button
+  back to `Play` (`LockScreenProbe`).
+  How to look: `xcrun simctl spawn UDID log show --start 'YYYY-MM-DD HH:MM:SS'
+  --end '…' --predicate 'process == "mediaremoted"' --style compact`, whole
+  seconds only (fractions answered nothing).
 
 ## Measured on beta11 (2026-10-09, iPhone 17, iOS 27.0, Metro, the fake Kokoro)
 
