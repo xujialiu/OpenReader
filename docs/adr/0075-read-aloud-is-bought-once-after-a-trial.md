@@ -320,6 +320,10 @@ The cost falls on someone building from source. Their bundle ID has no
 products in App Store Connect, so a build that leaves the lock on finds nothing
 to sell. The README tells them to turn it off. The Demo App
 (`top.xujialiu.openreader.demo`) is in the same position: it has no products.
+So it is built with the switch, and reads aloud with no alert in a recording
+for App Review (owner's decision, 2026-10-09; `docs/install-demo-on-iphone.md`).
+A recording of the purchase itself would come from the owner's own app with a
+Sandbox Apple Account.
 
 **When no product loads, speech stays locked** (decision of 2026-10-09). The
 entitlement state is read from StoreKit's own cache, offline included; only the
