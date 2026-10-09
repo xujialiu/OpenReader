@@ -250,6 +250,14 @@ const config: ExpoConfig = {
      */
     './plugins/with-now-playing-icon.ts',
 
+    /**
+     * #148, ADR 0075. Points the generated scheme's Run action at
+     * storekit/OpenReader.storekit, the Trial and the Unlock as App Store
+     * Connect has them, for runs Xcode itself launches. Nothing else reads it:
+     * not `expo run:ios`, not `simctl`, not an archive.
+     */
+    './plugins/with-storekit-configuration.ts',
+
     [
       'react-native-audio-api',
       {
