@@ -1,6 +1,6 @@
 # Philosophy
 
-**A draft, carried over and adapted from the Zotero-TTS plugin. Edit it — it is
+**A draft, carried over and adapted from Zotero-OpenReader. Edit it — it is
 meant to be the author's own yardstick, not a summary of one.**
 
 **I build this reader for the way I read, and it exists because the readers I

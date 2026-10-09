@@ -51,6 +51,9 @@ happened in that day's `notes/` file.
   - The last upload is **1.0.0 (6)**, from `5b02aed`. It is submitted and **Waiting for Review**, with manual release selected. That is not approval or public release. The next upload is build 7.
   - 1.0.0 (5) was removed from review when build 6 replaced it.
   - 0.0.1 (1) tested the pipeline only. Never submit it.
+- **TestFlight**
+  - The public link is https://testflight.apple.com/join/vjC8QejW ("Join the OpenReader: Read Aloud beta"). Anyone with it can join while it accepts testers.
+  - Apple approved **1.0.0 (5)** for external testing (reported by the owner on 2026-10-09). The link installs that build, and README.md's TestFlight badge names it.
 - **Tags**: `build-5`, `build-6` and `v1.0.0` (on `5b02aed`, build 6) are pushed. `build-2`, `build-3` and `build-4` are local only.
 - **App Review Information**: the notes are the Guideline 2.1 answer (3,950 characters), with the recording `OpenReader-Review-Demo.mp4` attached. The review key is saved only in App Store Connect.
 - **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), not on Apple silicon Macs or Apple Vision Pro. Books, 4+, non-trader. The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
@@ -134,6 +137,20 @@ store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
    - `git tag -a build-N -m "OpenReader X.Y.Z (N), uploaded YYYY-MM-DD"`
    - For the submitted build, also `git tag -a vX.Y.Z`.
    - Ask the owner before `git push origin main --tags`.
+
+## The README follows Apple's answers
+
+README.md says which build people can install (MEMORY/documentation.md,
+"README.md"). Change it in the same commit as the fact here:
+
+- **When Apple approves another build for external testing:**
+  - Change the TestFlight badge in README.md to `X.Y.Z (N)`. In the image address that is `X.Y.Z%20%28N%29`.
+  - Replace the old image address in `PAGES_MAY_NAME` in `test/app/no-outgoing-links.test.ts` with the new one.
+  - Update **TestFlight** under Current state.
+- **When a Version goes live on the App Store:**
+  - Add Apple's "Download on the App Store" badge to README.md, linking to https://apps.apple.com/app/id6817809106. Add both addresses to `PAGES_MAY_NAME`.
+  - Ask the owner whether the TestFlight badge stays.
+- Run `bash scripts/readme-preview.sh` and give the owner `.docs/README.html` to look at before committing.
 
 ## App Store Connect
 

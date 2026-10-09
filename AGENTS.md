@@ -24,7 +24,7 @@ Each file under `MEMORY/` holds the rules for one kind of work. Read it in full 
 
 - **Issues** — [MEMORY/github-workflow.md](MEMORY/github-workflow.md): a feature, bug fix or substantial change starts with an issue; small, clear chores go straight ahead. Read before starting such work, and before creating, labelling, commenting on or closing an issue.
 - **Interface** — [MEMORY/interface.md](MEMORY/interface.md): before adding or changing any text, screen, control or drawer the owner sees.
-- **Documentation** — [MEMORY/documentation.md](MEMORY/documentation.md): before writing to `docs/design/`, `docs/adr/`, a guide in `docs/`, `notes/` or `CONTEXT.md`, or when a term or decision changes.
+- **Documentation** — [MEMORY/documentation.md](MEMORY/documentation.md): before writing to `docs/design/`, `docs/adr/`, a guide in `docs/`, `notes/`, `CONTEXT.md` or `README.md`, or when a term or decision changes.
 - **Delegation** — [MEMORY/delegation.md](MEMORY/delegation.md): before handing work to another agent, waiting on one, or running work in parallel.
 - **App change** — [MEMORY/app-change.md](MEMORY/app-change.md): after any change to app code, before calling it done: beta version, `ios-tester`, latest app left in the simulator.
 - **Device testing** — [MEMORY/device-testing.md](MEMORY/device-testing.md): before running or writing a simulator, device or manual test, or playing any audio.

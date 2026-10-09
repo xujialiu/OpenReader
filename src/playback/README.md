@@ -5,7 +5,7 @@ The audio graph. One long-lived `AudioBufferQueueSourceNode` from
 **not** a file player queueing one file per sentence.
 
 Together with the segmenter, this is the bulk of the project (ADR 0006). It does
-not exist in the Zotero-TTS plugin: Zotero's own player and playback engine are
+not exist in Zotero-OpenReader: Zotero's own player and playback engine are
 roughly 1,900 lines each. ADR 0006 is specific about how they are borrowed —
 `zotero/reader` is AGPLv3, so **the behaviour is learned and the code is written
 fresh**. Three utterances of read-ahead, two concurrent fetches, a

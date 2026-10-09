@@ -3,7 +3,7 @@
 A reader for EPUB — later PDF and HTML — that speaks the text aloud through a
 text-to-speech provider the reader's owner chooses and pays for directly, and
 that keeps its place in sync across the owner's phones, tablets and their
-desktop copy of the Zotero-TTS plugin.
+desktop copy of Zotero-OpenReader.
 
 Everything the app runs on belongs to the owner: the provider is the owner's, the
 keys are the owner's, the sync server is the owner's, and the documents stay the
@@ -141,7 +141,7 @@ _Avoid_: rate, default speed, 1x
 **Pause between sentences**:
 The silence added after an utterance, on top of whatever silence the voice
 leaves at its own end. It is set at natural pace, so it shortens as playback
-speeds up. Named as the desktop plugin names it.
+speeds up. Named as Zotero-OpenReader names it.
 _Avoid_: gap, delay, sentence gap, break
 
 **Pause between paragraphs**:
@@ -293,16 +293,23 @@ One device's complete settings, written for that device alone and never
 merged. Restoring one replaces settings rather than combining them.
 _Avoid_: snapshot, export, sync
 
+**Zotero-OpenReader**:
+OpenReader's desktop counterpart: a Zotero plugin by the same author that reads
+documents aloud and shares the sync folder with the app. Inside Zotero it is
+called OpenReader too.
+_Avoid_: Zotero-TTS (its former name), the plugin, desktop plugin, OpenReader
+(for it)
+
 **Sync Folder**:
 The folder on the owner's own WebDAV server that holds shared settings and
-the positions file. Shared with the desktop Zotero-TTS plugin, which reads
-and writes the same files.
+the positions file. Shared with Zotero-OpenReader, which reads and writes the
+same files.
 _Avoid_: remote, cloud, server, bucket
 
 **Positions File**:
 The one file in the sync folder, `xujialiu-positions.json`, that holds every
-device's reading positions by document id, written by the phones and by the
-desktop plugin alike.
+device's reading positions by document id, written by the phones and by
+Zotero-OpenReader alike.
 _Avoid_: sync file, remote library, catalogue, documents file
 
 ### Looking up and translating
