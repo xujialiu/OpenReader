@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { endedQuestion, NOTHING_TO_RESTORE, readAloudValue, trialQuestion, UNAVAILABLE } from '../../src/app/purchase';
+import { endedQuestion, NOTHING_TO_RESTORE, PURCHASE, purchaseValue, trialQuestion, UNAVAILABLE } from '../../src/app/purchase';
 import { DAY_MS } from '../../src/purchase/products';
 import { pin } from '../structural';
 
@@ -177,14 +177,34 @@ describe('what the app says (#148)', () => {
     expect(NOTHING_TO_RESTORE).toEqual({ title: 'No Purchase Found', message: "There's no purchase to restore for this Apple Account.", ok: 'OK' });
   });
 
+  it('draws the Purchase row in the tint with a grey value and a chevron, plain once unlocked, last in the first card', () => {
+    expect(PURCHASE).toBe('Purchase');
+    const settings = read('src/app/settings-screen.tsx');
+    const card = between(settings, '        <NavigationRow label="General"', '      <SettingsGroup footer={<Footnote>{STAR_LINE}</Footnote>}>', 'the first card of src/app/settings-screen.tsx');
+    pin(card, "? <NavigationRow label={PURCHASE} value={purchase} tint onPress={() => navigation.navigate('Purchase')} /> : null}", 'the first card');
+    pin(card, "{access && access.kind === 'unlocked' ? <DetailRow label={PURCHASE} value={purchase!} /> : null}", 'the first card');
+    // Last: nothing after the two Purchase rows in the card.
+    expect(card.lastIndexOf('<NavigationRow label="Sync"')).toBeLessThan(card.indexOf('label={PURCHASE}'));
+    const controls = read('src/app/controls.tsx');
+    pin(controls, '<RowWords label={label} value={value} tint={tint ? accent.reading : undefined} />', 'NavigationRow in src/app/controls.tsx');
+    pin(controls, "<Text style={[styles.settingLabel, styles.completeWord, tint ? { color: tint } : null]}>{label}</Text>", 'RowWords in src/app/controls.tsx');
+    // The value keeps the quiet ink.
+    pin(controls, '{value ? <Text style={[styles.settingDetail, styles.completeWord]}>{value}</Text> : null}', 'RowWords in src/app/controls.tsx');
+    const shell = read('src/app/shell.tsx');
+    pin(shell, '<Stack.Screen name="Purchase" component={PurchaseScreen} options={{ title: PURCHASE,', 'src/app/shell.tsx');
+    const page = read('src/app/purchase-screen.tsx');
+    pin(page, '<ActionRow label="Start Free Trial"', 'src/app/purchase-screen.tsx');
+    pin(page, '<ActionRow label="Restore Purchase"', 'src/app/purchase-screen.tsx');
+  });
+
   it('says on the Settings row only the state: days left, ended, or unlocked', () => {
     const now = Date.UTC(2026, 9, 9);
-    expect(readAloudValue({ kind: 'trial', endsAt: now + 12 * DAY_MS - 60_000 }, now)).toBe('12 days left');
-    expect(readAloudValue({ kind: 'trial', endsAt: now + 1 }, now)).toBe('1 day left');
-    expect(readAloudValue({ kind: 'ended' }, now)).toBe('Trial ended');
-    expect(readAloudValue({ kind: 'unlocked' }, now)).toBe('Unlocked');
-    expect(readAloudValue({ kind: 'not-started' }, now)).toBeUndefined();
-    expect(readAloudValue(null, now)).toBeUndefined();
+    expect(purchaseValue({ kind: 'trial', endsAt: now + 12 * DAY_MS - 60_000 }, now)).toBe('12 days left');
+    expect(purchaseValue({ kind: 'trial', endsAt: now + 1 }, now)).toBe('1 day left');
+    expect(purchaseValue({ kind: 'ended' }, now)).toBe('Trial ended');
+    expect(purchaseValue({ kind: 'unlocked' }, now)).toBe('Unlocked');
+    expect(purchaseValue({ kind: 'not-started' }, now)).toBeUndefined();
+    expect(purchaseValue(null, now)).toBeUndefined();
   });
 
   it('names no free route anywhere the app can show: not TestFlight, not building from source', () => {

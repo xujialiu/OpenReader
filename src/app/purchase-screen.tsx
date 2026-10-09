@@ -6,7 +6,7 @@ import type { ScreenProps } from './routes';
 import { usePurchases } from './use-purchases';
 
 /**
- * Settings → Read Aloud (#148, ADR 0075): where the Unlock can be bought before
+ * Settings → Purchase (#148, ADR 0075): where the Unlock can be bought before
  * the Trial ends, and restored on a new phone.
  *
  * Before the Trial it also offers the Trial, through the same alert a press of
@@ -20,7 +20,7 @@ import { usePurchases } from './use-purchases';
  * again here. Once the Unlock is owned there is nothing left to do here, and
  * the page closes.
  */
-export function ReadAloudScreen({ navigation }: ScreenProps<'ReadAloud'>) {
+export function PurchaseScreen({ navigation }: ScreenProps<'Purchase'>) {
   const { access, price, unavailable } = usePurchases();
   const done = !access || access.kind === 'unlocked' || access.kind === 'off';
   useEffect(() => {

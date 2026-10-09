@@ -46,15 +46,15 @@ export const UNAVAILABLE = { title: 'Purchases Unavailable', message: "The App S
 /** Restore finished and found no Unlock for this Apple Account (decision of 2026-10-09). */
 export const NOTHING_TO_RESTORE = { title: 'No Purchase Found', message: "There's no purchase to restore for this Apple Account.", ok: 'OK' } as const;
 
-/** The Settings row's label (#148). */
-export const READ_ALOUD = 'Read Aloud';
+/** The Settings row's label, and the title of the page it opens (the owner's wording, 2026-10-09). */
+export const PURCHASE = 'Purchase';
 
 /**
- * What the Settings row says on its right: the days left, that the Trial has
+ * What the Purchase row says on its right: the days left, that the Trial has
  * ended, or that the Unlock is owned. Nothing before the Trial, which has no
  * state yet to report, and no row at all without the lock.
  */
-export function readAloudValue(access: Access | null, now: number): string | undefined {
+export function purchaseValue(access: Access | null, now: number): string | undefined {
   if (!access) return undefined;
   if (access.kind === 'trial') {
     const left = daysLeft(access.endsAt, now);

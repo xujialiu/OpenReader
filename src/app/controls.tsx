@@ -355,16 +355,20 @@ export function SwitchRow({ label, value, onChange, disabled, note, accessibilit
  * The same row as every other settings row on purpose. The Providers list and
  * the front page of Settings used to be two different full-width rows a tap
  * apart, which is the first thing #48 found.
+ *
+ * `tint` draws the label in the reading accent, as `ActionRow` draws an
+ * action, for a row that leads to something to do rather than to settings:
+ * Purchase (#148). The value stays in the quiet ink, and the chevron stays.
  */
-export function NavigationRow({ label, value, checked, onPress, accessibilityLabel }: {
-  label: string; value?: string; checked?: boolean; onPress(): void; accessibilityLabel?: string;
+export function NavigationRow({ label, value, checked, tint, onPress, accessibilityLabel }: {
+  label: string; value?: string; checked?: boolean; tint?: boolean; onPress(): void; accessibilityLabel?: string;
 }) {
   const accent = useAccent();
   const { fontScale } = useWindowDimensions();
   return (
     <Pressable key={fontScale} accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress}
       style={({ pressed }) => [styles.settingRow, pressed && styles.rowPressed]}>
-      <RowWords label={label} value={value} />
+      <RowWords label={label} value={value} tint={tint ? accent.reading : undefined} />
       <View style={styles.settingValue}>
         {checked ? <Icon name="check" color={accent.reading} size={20} strokeWidth={2.2} /> : null}
         <View style={styles.chevron}><Icon name="next" color={INK.tertiary} size={22} strokeWidth={2} /></View>
@@ -587,9 +591,9 @@ export function ChoiceMenu<T extends string | number>({ label, choices, chosen, 
 
 /** Name and value share one line when they fit, otherwise wrap in reading order.
  * The accessory has its own column, so neither words nor units run under it. */
-export function RowWords({ label, value }: { label: string; value?: string }) {
+export function RowWords({ label, value, tint }: { label: string; value?: string; tint?: string }) {
   return <View style={styles.rowWords}>
-    <Text style={[styles.settingLabel, styles.completeWord]}>{label}</Text>
+    <Text style={[styles.settingLabel, styles.completeWord, tint ? { color: tint } : null]}>{label}</Text>
     {value ? <Text style={[styles.settingDetail, styles.completeWord]}>{value}</Text> : null}
   </View>;
 }
