@@ -4,7 +4,7 @@ A **provider** is a source of synthesized speech reached over the network: a
 hosted service, a server on the owner's own machine, or the operating system's
 own voices.
 
-This directory is a **copy** of the Zotero-TTS plugin's provider layer, not a
+This directory is a **copy** of Zotero-OpenReader's provider layer, not a
 shared package. ADR 0013 says why: sharing looks free and is not, because the
 contract change below is an improvement on mobile and pure cost on the desktop,
 and a shared package would mean every provider change answering to two

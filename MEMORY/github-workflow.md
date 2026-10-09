@@ -35,11 +35,11 @@ When an issue is required:
 Write issues and comments in English. Keep each paragraph on one line;
 separate blocks with blank lines, because GitHub renders single newlines.
 
-## Labels — match Zotero-TTS
+## Labels — match Zotero-OpenReader
 
 The GitHub label names, colors and descriptions mirror
-`xujialiu/Zotero-TTS`. Inspect them with `gh label list`; when synchronizing,
-use `gh label clone xujialiu/Zotero-TTS --repo xujialiu/OpenReader --force`.
+`xujialiu/Zotero-OpenReader`. Inspect them with `gh label list`; when synchronizing,
+use `gh label clone xujialiu/Zotero-OpenReader --repo xujialiu/OpenReader --force`.
 
 For everyday work, choose one category:
 
@@ -65,4 +65,4 @@ no milestones.
 
 The agent-skill workflow labels (the triage labels in
 `docs/agents/triage-labels.md` and `wayfinder:*`) are OpenReader's own
-additions to the Zotero-TTS set; `gh label clone` leaves them in place.
+additions to the Zotero-OpenReader set; `gh label clone` leaves them in place.

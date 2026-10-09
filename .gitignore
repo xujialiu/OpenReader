@@ -55,3 +55,7 @@ __pycache__/
 
 # App Store screenshots and the script that resizes them; local only
 /.screenshots/
+
+# The README as GitHub renders it, built for the owner to look at
+# (scripts/readme-preview.sh, MEMORY/documentation.md)
+/.docs/

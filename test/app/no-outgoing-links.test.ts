@@ -64,8 +64,15 @@ const PAGES_MAY_NAME = [
   `${SITE}privacy.html`,
   REPOSITORY,
   `${REPOSITORY}/issues`,
-  'https://github.com/xujialiu/Zotero-TTS',
+  'https://github.com/xujialiu/Zotero-OpenReader',
   'mailto:xujialiuphd@gmail.com',
+  // README.md (#147): the public TestFlight link, and the badges' images and links.
+  'https://testflight.apple.com/join/vjC8QejW',
+  `${REPOSITORY}/commits/main`,
+  'https://img.shields.io/badge/iOS-17.2%2B-0071E3?style=flat-square&logo=apple',
+  'https://img.shields.io/badge/TestFlight-1.0.0%20%285%29-0D96F6?style=flat-square&logo=apple',
+  'https://img.shields.io/github/last-commit/xujialiu/OpenReader?style=flat-square&label=Last%20commit',
+  'https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square',
   // site/privacy.html: each Provider's own data and privacy terms.
   'https://platform.openai.com/docs/guides/your-data',
   'https://fish.audio/privacy/',

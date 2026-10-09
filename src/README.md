@@ -9,7 +9,7 @@ The split that matters is `core/` against everything else.
 | Directory | What lives there | Decided by |
 | --- | --- | --- |
 | [`core/`](core/) | The half that runs under Node. No React, no React Native, no Expo — enforced. | ADR 0013 |
-| [`core/providers/`](core/providers/) | The provider layer, copied from the Zotero-TTS plugin. Text in, PCM out. | ADR 0013 |
+| [`core/providers/`](core/providers/) | The provider layer, copied from Zotero-OpenReader. Text in, PCM out. | ADR 0013 |
 | [`core/segmenter/`](core/segmenter/) | Text into utterances, over upstream `sentencex`. | ADR 0006 |
 | [`core/sync/`](core/sync/) | The owner's WebDAV folder, shared with the desktop plugin. | ADR 0003 |
 | [`core/document/`](core/document/) | Document identity and reading positions. | ADR 0004, 0007, 0008 |
@@ -32,6 +32,6 @@ an empty directory, because it would have to be believed and then found out —
 which is why an empty directory here means exactly that and not "started".
 
 Code has arrived in two of them. `core/` holds the platform-free files ported
-from the Zotero-TTS plugin — `align.ts` above all, which ADR 0005 names the
+from Zotero-OpenReader — `align.ts` above all, which ADR 0005 names the
 first thing to carry over. `keys/` holds the Keychain, which is small and whose
 correctness is entirely in one line of options (ADR 0002).

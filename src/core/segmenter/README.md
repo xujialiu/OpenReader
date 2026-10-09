@@ -5,7 +5,7 @@ a paragraph, a heading, a list item — into **utterances**, one sentence each.
 The utterance is the unit sent to a provider, the unit of caching, of
 prefetching and of resuming.
 
-This does not exist in the Zotero-TTS plugin. A reader of that codebase would
+This does not exist in Zotero-OpenReader. A reader of that codebase would
 reasonably assume it does; the plugin's own notes open by saying it does not.
 Segmentation there is Zotero's, roughly 870 lines over a 7,600-line sentence
 library plus a language detector carrying two megabytes of data.

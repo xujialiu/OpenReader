@@ -111,6 +111,15 @@
   and use the id as a `voice` line prints it, e.g. `en/e3cd384158934cc9a01029cd7d278634`
   ("Laura").
 
+- **`OfflineFixProbe.testConfigureFishProvider` types the key but leaves Fish
+  off.** It then fails after about 340 s with "Fish Audio did not report Enabled
+  after the connection check" (2026-10-09, #147, a new iPhone 17 Pro Max on
+  iOS 27.0). The key stayed in the masked field, and nothing on the screen said
+  why the switch had not turned on. Fix, with no key on screen:
+  `python3 test/manual-test/kit/ax.py UDID touch "Test connection"` (it read
+  "Connection successful"), then `ax.py UDID touch "Enable Fish Audio"`. The
+  switch then read 1, with "Turn off to edit." under it.
+
 ## Node probes against providers and books
 
 - **Node's `WebSocket` sends no upgrade headers** (2026-09-24, #61). `createAzureProvider` passes its key as a third constructor argument, `{ headers }`, which React Native honours. Node 22's global `WebSocket` takes only `(url, protocols)`, so the key never reaches Azure. `context-probe.ts` wraps it in `QueryHeaderWebSocket`, which moves each header into the URL's query, where the desktop plugin puts the key for the same reason.

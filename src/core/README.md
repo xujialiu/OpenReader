@@ -11,8 +11,8 @@ firing.
 
 Two reasons, and neither is tidiness.
 
-The first is ADR 0013. About 3,200 lines of provider tests come across from the
-Zotero-TTS plugin, driven entirely by fake `fetch` implementations and injected
+The first is ADR 0013. About 3,200 lines of provider tests come across from
+Zotero-OpenReader, driven entirely by fake `fetch` implementations and injected
 dependencies. They run under `vitest` with `environment: 'node'` because the
 code they test has no platform underneath it. The moment something here imports
 `react-native`, that suite needs a simulator and stops being run.

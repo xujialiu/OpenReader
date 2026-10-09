@@ -1,7 +1,7 @@
 # test
 
 `vitest`, `environment: 'node'`, no `globals` — deliberately the same shape as
-the Zotero-TTS plugin's suite, because about 3,200 lines of provider tests come
+Zotero-OpenReader's suite, because about 3,200 lines of provider tests come
 across from it (ADR 0013) and the point of matching is that they arrive
 unchanged.
 
