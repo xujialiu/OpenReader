@@ -1,9 +1,13 @@
-# The move drawer in the header (#151, `1.0.0 (8)-beta1`)
+# The move drawer in the header (#151, `1.0.0 (8)-beta2`)
 
-Verified on a dedicated simulator, `move-151` (iPhone 16 Pro, iOS 27.0,
-created for this run), with the Debug app of `xujialiu/move_items` at `fb131ae`
-connected to its own Metro (port 8097, `EXPO_UNSTABLE_MCP_SERVER=1`). The app
-was built with the guide's `xcodebuild` and launched with
+First verified at `fb131ae` (`1.0.0 (8)-beta1`) and re-verified after the
+owner's revision at `094b522` (`1.0.0 (8)-beta2`) on the same dedicated
+simulator, `move-151` (iPhone 16 Pro, iOS 27.0, created for this run), the
+Debug app connected to its own Metro (port 8097,
+`EXPO_UNSTABLE_MCP_SERVER=1`). The beta2 re-check is JS-only: a relaunch
+reloading the bundle from Metro, Settings reading
+`Version 1.0.0 (8)-beta2-debug`; its samples are the `40-`…`50-` screenshots.
+The app was built with the guide's `xcodebuild` and launched with
 `-RCT_jsLocation localhost:8097`; Settings read
 `Version 1.0.0 (8)-beta1-debug`. Nothing played; the simulator was silenced
 (`kit/silence.sh set`) after its boot and again after the relaunches, because a
@@ -37,23 +41,25 @@ patched with the harness (`{"do":"settings","patch":{…}}`; the Amber word is
   `Move here` row and no `‹ parent` row in the list
   (`04-`…`06-move-doc-*.png`, `08-`…`11-move-folder-*.png`,
   `17-move-selection-root.png`).
-- **Where it is grey, where it is filled.** At the entries' own folder, inside
-  a Folder being moved, and inside that Folder's descendant it reads
-  `enabled=False` (read off `axe describe-ui`: `{'AXLabel': 'Move',
+- **Where it is grey, where it takes the App Colour.** At the entries' own
+  folder, inside a Folder being moved, and inside that Folder's descendant it
+  reads `enabled=False` (read off `axe describe-ui`: `{'AXLabel': 'Move',
   'enabled': False}`), and a real touch does nothing — the drawer stayed at
   `Library → Alpha → Alpha One` and no move happened. Elsewhere it acts.
-  Pixel samples, all matching `accent.ts`'s arithmetic (fill =
-  `accentOn(word, scheme, ACCENT_SURFACES)`, word = `INK.page`; disabled =
-  `colours.button` with `INK.text`, unfaded):
+  Since beta2 the disabled `Move` is Files' grey capsule with a white word,
+  unfaded (`colours.inactive`/`inactiveText`), and the enabled `Move` is the
+  header's plain capsule with its word in the App Colour, `accent.onMark`, in
+  Headline. Pixel samples, all matching `accent.ts`'s arithmetic:
 
   | Preset | Theme | Disabled fill / word | Enabled fill / word |
   | --- | --- | --- | --- |
-  | Blue | light | `#ffffff` / `#16161a` | `#5d66cb` / `#ffffff` |
-  | Blue | dark | `#2c2c32` / `#e6e6ea` | `#727efa` / `#111114` |
-  | Amber | light | `#ffffff` / `#16161a` | `#976619` / `#ffffff` |
-  | Amber | dark | `#2c2c32` / `#e6e6ea` | `#d99324` / `#111114` |
+  | Blue | light | `#d6d6d6` / `#ffffff` | `#ffffff` / `#5159b1` |
+  | Blue | dark | `#505052` / `#ffffff` | `#2c2c32` / `#9aa2fb` |
+  | Amber | light | `#d6d6d6` / `#ffffff` (as Blue) | `#ffffff` / `#835916` |
+  | Amber | dark | `#505052` / `#ffffff` (as Blue) | `#2c2c32` / `#dd9d38` |
 
-  (`04-`, `05-`, `22-`–`26-move-*.png`.)
+  (Disabled/enabled Blue and Amber: `40-`…`45-b2-*.png`; the beta1 fills —
+  `accent.reading` capsules — were `04-`, `05-`, `22-`–`26-move-*.png`.)
 - **Back.** Inside a folder the round button reads `Back to <parent>`
   (`Back to Library`, `Back to Alpha`, `Back to Alpha One`, read from the
   accessibility tree) and goes up one level. At the Library root, in the
@@ -89,7 +95,10 @@ patched with the harness (`{"do":"settings","patch":{…}}`; the Amber word is
   and a selection of `Same` + `Pause Gap Fixture` into `Alpha One` (selection
   flow): each closed the drawer, landed the entries where the path said
   (read back from the Library's tree), and ended selection mode
-  (`07-`, `19-after-selection-move.png`).
+  (`07-`, `19-after-selection-move.png`). The beta2 re-check added one smoke
+  move of its own: `Bay` into `Alpha One` from the drawer it had opened for
+  the behind-touch test, the drawer closed and the Library counted
+  `3 documents · 2 folders` (`50-b2-smoke-enabled.png`).
 - **A disabled drawer row is drawn at 30 % in every drawer.** The
   `short-test-fixture` rows stopped being unreachable when #125 fixed the
   rooted nav match, so `unreachable-contents-fixture.py` rewrites a copy of it
@@ -110,30 +119,31 @@ patched with the harness (`{"do":"settings","patch":{…}}`; the Amber word is
   label samples `#c5c5c7` on `#ffffff` — the tertiary label at 30 %, the same
   mechanism as the app's disabled rows
   (`33-files-move-source.png`, `34-files-move-in-other.png`). The dark values
-  are in notes/NOTES_2026-10-10.md (13:42). The app's disabled capsule is not
-  Files' grey pill: it keeps the drawer's plain capsule (`#ffffff` fill,
-  hairline rim, unfaded text) in light, and fills with the owner's App Colour
-  where it can act instead of iOS blue.
+  are in notes/NOTES_2026-10-10.md (13:42). Since beta2 the app's disabled
+  capsule is Files' own grey (`#d6d6d6` light, `#505052` dark, `#ffffff`
+  word), and where it can act it keeps the header's plain capsule with the
+  word in the App Colour rather than a fill.
 - **Large type.** At the simulator's extra-extra-extra-large content size the
   header still holds: the centred title stays clear of the back button and the
   capsule (`35-move-header-xxl.png`; capsule frame grew to 86 pt wide).
 
-## Finding for the implementing agent (not fixed here)
+## Behind-the-sheet touches switch the drawer's subject (fixed in beta2)
 
 The Library's page behind a half-screen drawer stays interactive by design
-(`presentationBackgroundInteraction`). A touch meant for the drawer that
-instead lands on a Library row's `…` behind it switches the open actions
-drawer to that other entry while it keeps its page and its browsed folder:
-with `Same`'s move drawer open at `Library → Bay`, a touch on
-`Actions for folder Bay` left the same drawer showing `Bay`'s move at
-`Library → Bay` (`14-stale-subject-bay.png`); `Move` stayed correctly grey
-(inside the moved subtree) and did nothing. The same reproduction with a
-Document's drawer left it at `Library → Alpha → Alpha One → Same` with
-`Move` enabled for the other document (`20-`, `21-doc-stale-subject.png`) —
-pressing it would have moved the other document. Nothing was pressed and no
-data changed in either probe; the header nowhere names the subject, so the
-switch is invisible. A drawer should stop being live behind a sheet, or the
-subject switch should restart the move page.
+(`presentationBackgroundInteraction`), so a touch meant for the drawer that
+lands on a Library row's `…` behind it reaches the Library. At beta1 the same
+mounted drawer kept its Move page and its browsed folder under the new subject
+(`14-stale-subject-bay.png`, `20-`/`21-doc-stale-subject.png`) — the header
+nowhere names the subject, so the switch was invisible, and in the Document
+case `Move` stayed enabled for the other document. Since beta2 the drawer
+shows the new entry's actions menu: re-measured for a Document (touch on
+`Actions for A Short Test of Reading Aloud` while Pause's move page was
+browsing → title `A Short Test of Reading Aloud` with Rename / Move to… /
+Download / Select / Delete, `46-b2-doc-behind-menu.png`) and for a Folder
+(`Actions for folder Bay` while Alpha One's move page was browsing → title
+`Bay`, `48-b2-folder-behind-menu.png`); `Move to…` then opened at the new
+entry's own folder with `Move` grey there (`Library → Alpha → Alpha One`,
+`47-b2-doc-restart.png`; `Library → Alpha`, `49-b2-folder-restart.png`).
 
 ## What this cannot prove
 
