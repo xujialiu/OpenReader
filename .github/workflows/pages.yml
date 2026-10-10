@@ -1,31 +1,84 @@
 # Publishes site/ (the support page and the privacy policy that App Store
 # Connect links to, #110) to GitHub Pages. Only site/: publishing docs/ would
 # render every design file and ADR as a page.
+#
+# It also publishes testflight.json beside them (#150): the build the
+# TestFlight Beta's public link installs, which the README's badge reads
+# through shields.io. scripts/testflight-badge.mjs asks App Store Connect for
+# it. The file is written here and is in no commit. Every hour the `testflight`
+# job asks again, and an hourly run deploys only when the answer has changed.
 name: Pages
 
 on:
   push:
     branches: [main]
-    paths: ['site/**', '.github/workflows/pages.yml']
+    paths: ['site/**', '.github/workflows/pages.yml', 'scripts/testflight-badge.mjs']
+  schedule:
+    - cron: '23 * * * *'
   workflow_dispatch:
-
-permissions:
-  contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  PUBLISHED: https://xujialiu.github.io/OpenReader/testflight.json
+
 jobs:
-  deploy:
+  testflight:
+    # A fork has neither the key nor this site.
+    if: github.repository == 'xujialiu/OpenReader'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # The key is the environment's, which only main may use. `deployment: false`
+    # reads it without recording a deployment every hour.
+    environment:
+      name: github-pages
+      deployment: false
+    outputs:
+      badge: ${{ steps.read.outputs.badge }}
+      changed: ${{ steps.read.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          badge="$(node scripts/testflight-badge.mjs)"
+          published="$(curl -fsS "$PUBLISHED" || true)"
+          echo "$badge"
+          echo "badge=$badge" >> "$GITHUB_OUTPUT"
+          if [ "$badge" = "$published" ]; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+
+  deploy:
+    needs: testflight
+    # An hourly run deploys only a new answer. A push deploys the site even
+    # when App Store Connect could not be read: the run is red for that, and
+    # the pages are published all the same.
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.testflight.outputs.changed == 'true') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+      - name: Write site/testflight.json
+        env:
+          BADGE: ${{ needs.testflight.outputs.badge }}
+        # With no new answer, the published one stays.
+        run: |
+          if [ -n "$BADGE" ]; then
+            printf '%s\n' "$BADGE" > site/testflight.json
+          else
+            curl -fsS "$PUBLISHED" -o site/testflight.json || rm -f site/testflight.json
+          fi
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
