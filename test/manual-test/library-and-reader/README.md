@@ -356,3 +356,26 @@ greys and no message appears, in the tree and in the screenshot
 fresh name still works with the always-present slot. The 84-point rows, the
 `Empty`/count second line and the layered blue Folder artwork were visible at
 once in the same run.
+
+## The move drawer's header revision (#151, `move-drawer.md`)
+
+Verified 2026-10-10 on commit fb131ae (`1.0.0 (8)-beta1`), a dedicated iPhone
+16 Pro simulator on iOS 27.0 (`move-151`), the Debug build on its own Metro
+(8097), nothing played. The recipe
+[move-drawer.md](move-drawer.md) records it: `Move` as the header's capsule at
+one frame across root, folder and nested folder; grey (`enabled=False`,
+touch-inert) at the source, inside a moved Folder and its descendant, and
+filled with the App Colour elsewhere — pixel-sampled against `accent.ts`'s
+arithmetic in both themes and both Highlight presets; back labels
+`Back to <parent>`; a selection's move without a back button at the root;
+folders-only lists that include the Folder being moved; every reopening at the
+entries' own folder; `Could not move` as the phone's alert over the sheet in
+the single-Folder and selection flows, the drawer staying put after OK;
+successful moves in all three flows; Contents' unreachable rows at exactly the
+30 % disabled blend (`unreachable-contents-fixture.py` rebuilds a fixture with
+unreachable rows, which #125 took from the plain short-test fixture); Files'
+own Move sheet sampled for comparison in light (disabled `#d6d6d6`/`#ffffff`,
+enabled `#0087fd`/`#efffff`, greyed file label `#c5c5c7`); the header intact at
+extra-extra-extra-large type. Also recorded there, for the implementing agent:
+a touch on a Library `…` behind the half-screen drawer switches the open
+drawer's subject while it keeps its Move page and browsed folder.
