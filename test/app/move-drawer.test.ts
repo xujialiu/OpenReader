@@ -51,12 +51,22 @@ describe('the move drawer (#151)', () => {
   });
 });
 
+describe('another entry touched behind the open drawer (#151)', () => {
+  it("starts that entry's actions at their menu, with the move page's place forgotten", () => {
+    pin(code('reader-actions.tsx'), "setShown(document); setPage('menu'); setRenaming(false); setUnshared(null); setSelectAll(null); move.restart();", 'reader-actions.tsx subject');
+    pin(code('folder-actions.tsx'), 'setShown(id); setMoving(false); setNaming(false); setFailure(null); move.restart();', 'folder-actions.tsx subject');
+  });
+});
+
 describe("the header's prominent capsule and a disabled row (#151)", () => {
-  it('fills the capsule with the App Colour and its word in the page colour while it can act, and leaves it plain and unfaded while it cannot', () => {
+  it("sets the word in the App Colour on the plain capsule while it can act, and draws Files' grey capsule with a white word, unfaded, while it cannot", () => {
     const drawer = code('drawer.tsx');
-    pin(drawer, 'filled ? { backgroundColor: accent.reading, borderColor: accent.reading } : { backgroundColor: colours.button, borderColor: colours.rim },', 'drawer.tsx capsule fill');
+    pin(drawer, 'inactive ? { backgroundColor: colours.inactive, borderColor: colours.inactive } : { backgroundColor: colours.button, borderColor: colours.rim },', 'drawer.tsx capsule');
     pin(drawer, '(pressed || (disabled && !prominent)) && styles.dimmed]}>', 'drawer.tsx capsule fade');
-    pin(drawer, '{ color: filled ? INK.page : prominent ? INK.text : accent.onMark }', 'drawer.tsx capsule word');
+    pin(drawer, '{ color: inactive ? colours.inactiveText : accent.onMark }', 'drawer.tsx capsule word');
+    pin(drawer, "inactive: '#d6d6d6', inactiveText: '#ffffff',", 'drawer.tsx light inactive');
+    pin(drawer, "inactive: '#505052', inactiveText: '#ffffff',", 'drawer.tsx dark inactive');
+    expect(drawer).not.toContain('accent.reading, borderColor: accent.reading');
   });
 
   it("draws a disabled row as the phone does, at the tertiary label's 30 %", () => {

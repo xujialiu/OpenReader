@@ -115,6 +115,11 @@ export function FolderActions({ id, onClose, onDelete, onSelect }: { id: FolderI
   const [naming, setNaming] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const move = useMovePage({ target: { kind: 'folder', id } }, { onMoved: onClose, onLeave: () => setMoving(false) });
+  // Another Folder's `…`, touched in the Library behind the open drawer, opens that Folder's menu afresh, as a Document's does (#151).
+  const [shown, setShown] = useState(id);
+  if (shown !== id) {
+    setShown(id); setMoving(false); setNaming(false); setFailure(null); move.restart();
+  }
   if (!folder) return null;
   return <Drawer visible onClose={onClose} {...(moving ? move.header : { title: folder.name })}>
     {moving ? move.body : <DrawerScroll>

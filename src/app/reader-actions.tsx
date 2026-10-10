@@ -49,6 +49,10 @@ const TITLES: Record<Exclude<Page, 'menu' | 'move'>, string> = { appearance: 'Ap
  *
  * **Select** (#136) is granted like `onDelete`: only the Library has a list to
  * select in, so only it passes `onSelect`, and the row sits directly above Delete.
+ *
+ * **Another Document** (#151). The Library stays live behind the drawer, so a
+ * touch on another row's `…` hands this drawer a new `document`. It starts at
+ * that Document's menu rather than keeping the page it was on.
  */
 export function ReaderActions({ document, onClose, onDelete, onSelect, appearance = false, movable = false }: { document: DocumentId; onClose(): void; onDelete?(): void; onSelect?(): void; appearance?: boolean; movable?: boolean }) {
   const { library, settings, setSettings } = useShell();
@@ -67,6 +71,11 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   // Download's Select all, which only Download knows the rows for.
   const [selectAll, setSelectAll] = useState<DrawerAction | null>(null);
   const move = useMovePage({ target: { kind: 'document', id: document } }, { onMoved: onClose, onLeave: () => setPage(BACK.move) });
+  // Another Document's `…`, touched in the Library behind the open drawer, opens that Document's menu afresh: a page kept from the last one, a move page above all, would act on the new Document unnoticed (#151).
+  const [shown, setShown] = useState(document);
+  if (shown !== document) {
+    setShown(document); setPage('menu'); setRenaming(false); setUnshared(null); setSelectAll(null); move.restart();
+  }
   const current = settingsForDocument(settings, entry?.voice ?? null);
   const voice = { provider: current.provider, voice: current.voice, label: current.voice ? knownVoice(current)?.label ?? `${PROVIDER_LABELS[current.provider]} · ${current.voice}` : '' };
   if (!entry) return null;

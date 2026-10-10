@@ -156,10 +156,12 @@ export const DRAWER = {
     light: {
       page: SETTINGS_SURFACE.light.page, separator: '#e8e8e8', mark: PALETTE.light.line,
       button: SETTINGS_SURFACE.light.card, rim: PALETTE.light.line,
+      inactive: '#d6d6d6', inactiveText: '#ffffff',
     },
     dark: {
       page: SETTINGS_SURFACE.dark.card, separator: '#44444b', mark: '#3e3e47',
       button: '#2c2c32', rim: '#3e3e47',
+      inactive: '#505052', inactiveText: '#ffffff',
     },
   },
 } as const;
@@ -233,9 +235,10 @@ export function useDrawerTurn(visible: boolean, close: () => void, { animated = 
  * Document's Share. Without one it is a capsule with `label` in it: Download's
  * Select all, as the phone puts a word in a toolbar.
  *
- * `prominent` is the page's confirming action, as Files' Move is (#151, notes
- * 2026-10-10 13:42): filled with the App Colour while it can act, and a plain
- * capsule, not faded, while it cannot.
+ * `prominent` is the page's confirming action, Move (#151): its word in
+ * Headline and the App Colour while it can act; while it cannot, Files'
+ * disabled Move, a grey capsule with a white word, not faded (notes
+ * 2026-10-10 13:42 and the tester's light values in ADR 0069).
  */
 export interface DrawerAction {
   icon?: IconName;
@@ -335,23 +338,23 @@ function HeaderAction({ action }: { action: DrawerAction }) {
 /**
  * A word in the header's right end, in the round button's capsule: the phone's toolbar draws a word as it draws an icon.
  *
- * Prominent, it is Files' Move (#151): while it can act, filled with the App
- * Colour, its word in the page's colour, which the App Colour is made to be
- * read against (the selection circle's check is drawn the same way); while it
- * cannot, the plain capsule with the word in the text's colour, unfaded, as
- * Files draws its disabled Move.
+ * Prominent, it is Move (#151): the same capsule with its word in Headline
+ * while it can act. While it cannot, it is drawn as Files draws its disabled
+ * Move, `inactive`: a grey capsule with a white word, unfaded, so it looks
+ * unlike the header's live buttons beside it. The owner chose the word in the
+ * App Colour over a capsule filled with it.
  */
 function CapsuleButton({ label, onPress, disabled, prominent }: { label: string; onPress(): void; disabled?: boolean; prominent?: boolean }) {
   const colours = useDrawerColours();
   const accent = useAccent();
-  const filled = prominent && !disabled;
+  const inactive = prominent && disabled;
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
       style={({ pressed }) => [styles.button, styles.capsule,
-        filled ? { backgroundColor: accent.reading, borderColor: accent.reading } : { backgroundColor: colours.button, borderColor: colours.rim },
+        inactive ? { backgroundColor: colours.inactive, borderColor: colours.inactive } : { backgroundColor: colours.button, borderColor: colours.rim },
         (pressed || (disabled && !prominent)) && styles.dimmed]}>
       <Text style={[prominent ? styles.capsuleTextProminent : styles.capsuleText,
-        { color: filled ? INK.page : prominent ? INK.text : accent.onMark }]} numberOfLines={1}>{label}</Text>
+        { color: inactive ? colours.inactiveText : accent.onMark }]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }

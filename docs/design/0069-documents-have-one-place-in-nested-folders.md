@@ -60,7 +60,7 @@ After comparing both previews, the owner chose the more compact layout (B): Fold
 
 The owner found that `Move here` changed place. At the Library root it was the first row; inside a Folder it was the second, under the row that went up a level. In the Folder the entries were already in, it could not be pressed, but it looked exactly like a row that could.
 
-The move Drawer now follows the phone's Files app. `Move` is a button at the right of the Drawer's header, in the same place in every Folder. Where it can move the entries, it is filled with the App Colour. Where it cannot, it is a plain grey button: the Folder the entries are already in, a Folder being moved, and anything inside one. Going up a level is the header's back button. At the Library root that button returns to the entry's actions; when a selection is being moved, there is none. The title stays `Move to…`, and the full path stays under it as the one line that says where the Drawer is. Files titles its sheet with the Folder's name instead, but the root and a Folder can both be called Library, and that title would read `Library` at both.
+The move Drawer now follows the phone's Files app. `Move` is a button at the right of the Drawer's header, in the same place in every Folder. Where it can move the entries, its word is in the App Colour. Where it cannot, it is a grey button with a white word, as Files draws it, unlike the header's other buttons: in the Folder the entries are already in, in a Folder being moved, and anywhere inside one. Going up a level is the header's back button. At the Library root that button returns to the entry's actions; when a selection is being moved, there is none. The title stays `Move to…`, and the full path stays under it as the one line that says where the Drawer is. Files titles its sheet with the Folder's name instead, but the root and a Folder can both be called Library, and that title would read `Library` at both.
 
 The list holds only the Folders in the Folder shown. A Folder being moved is listed with the others and can be entered, as Files lists it, and `Move` stays grey inside it. Documents are not listed. Nothing names what is being moved: a selection is in view behind the Drawer, and a single entry was chosen a moment before.
 
@@ -68,12 +68,16 @@ A refused move, such as one into a Folder that already holds a Folder of the sam
 
 In every Drawer, a row that cannot be pressed is now drawn as the phone draws one, in a much fainter grey. Before, it looked like any other row. The chapters in Contents that lead nowhere are drawn the same way.
 
+The Library stays usable behind a Drawer, so the owner can touch another entry's actions button while a Drawer is open. That Drawer now starts again at the new entry's actions. Before, it stayed on the page it was on: a move Drawer kept its Folder and its live `Move`, and would have moved the newly touched entry with nothing on screen saying so.
+
 Turned down:
 
 - **A wide `Move here` fixed at the bottom of the Drawer**, the owner's first idea. It would also stay in place, but the phone puts a sheet's confirming action at the top right, and the bottom of the Drawer sits beside the home indicator, at a height the owner sets.
 - **Keeping `Move here` as the first row.** It would stop moving, but it is not the phone's arrangement.
 - **Hiding the Folders being moved**, as before, or listing them in grey. Files lists them like any other Folder.
-- **A disabled `Move` faded to half strength**, like the header's other word buttons. Files does not fade its disabled `Move`; it shows a plain grey button.
+- **A disabled `Move` faded to half strength**, like the header's other word buttons. Files does not fade its disabled `Move`; it turns it grey.
+- **A `Move` filled with the App Colour**, as Files fills its own with the phone's blue. The owner wanted only the word in the App Colour.
+- **Closing a Drawer when the owner touches another entry, or shutting the Library behind a Drawer to touches.** Touching another entry's actions button asks for that entry's actions, so the Drawer shows them, and the Library behind a Drawer stays usable (decision 0066).
 
 The owner chose each of these on 2026-10-10 (#151).
 
