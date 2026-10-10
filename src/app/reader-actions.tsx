@@ -8,7 +8,7 @@ import { DownloadContent } from './download-sheet';
 import { HighlightPage } from './highlight-section';
 import { useHeldReading } from './reading-host';
 import { RenameAlert } from './rename-alert';
-import { MoveContent } from './folder-actions';
+import { useMovePage } from './folder-actions';
 import { useShell } from './routes';
 import { PROVIDER_LABELS, selectVoice, settingsForDocument } from './settings';
 import { shareDocument } from './share-document';
@@ -17,7 +17,8 @@ import { knownVoice } from './voice-catalog';
 /** The drawer's pages, and the page each goes back to. The menu is the first, and goes back to nothing. */
 const BACK = { menu: null, appearance: 'menu', fonts: 'appearance', highlight: 'appearance', download: 'menu', manage: 'download', move: 'menu' } as const;
 type Page = keyof typeof BACK;
-const TITLES: Record<Exclude<Page, 'menu'>, string> = { appearance: 'Appearance', fonts: 'Fonts', highlight: 'Highlight', download: 'Download', manage: 'Manage', move: 'Move to…' };
+/** Move's header is its own (`useMovePage`). */
+const TITLES: Record<Exclude<Page, 'menu' | 'move'>, string> = { appearance: 'Appearance', fonts: 'Fonts', highlight: 'Highlight', download: 'Download', manage: 'Manage' };
 
 /**
  * A Document's actions, as one drawer wherever it is asked for.
@@ -65,6 +66,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   const [unshared, setUnshared] = useState<string | null>(null);
   // Download's Select all, which only Download knows the rows for.
   const [selectAll, setSelectAll] = useState<DrawerAction | null>(null);
+  const move = useMovePage({ target: { kind: 'document', id: document } }, { onMoved: onClose, onLeave: () => setPage(BACK.move) });
   const current = settingsForDocument(settings, entry?.voice ?? null);
   const voice = { provider: current.provider, voice: current.voice, label: current.voice ? knownVoice(current)?.label ?? `${PROVIDER_LABELS[current.provider]} · ${current.voice}` : '' };
   if (!entry) return null;
@@ -77,14 +79,14 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   const onAppearance = (next: typeof settings.appearance) => setSettings((was) => ({ ...was, appearance: next }));
   const header = page === 'menu'
     ? { titleLeft: true as const, title: entry.title, action: { icon: 'share' as const, label: 'Share', onPress: share, disabled: sharing } }
-    : { title: TITLES[page], onBack: back ? () => setPage(back) : undefined, action: (page === 'download' || page === 'manage') && selectAll ? selectAll : undefined };
+    : page === 'move' ? move.header : { title: TITLES[page], onBack: back ? () => setPage(back) : undefined, action: (page === 'download' || page === 'manage') && selectAll ? selectAll : undefined };
   return <Drawer visible onClose={onClose} {...header}>
     {page === 'menu' ? <DrawerScroll>
       {appearance ? <DrawerRow icon="appearance" onPress={() => setPage('appearance')} accessory={<DrawerChevron />}>
         <DrawerRowText>Appearance</DrawerRowText>
       </DrawerRow> : null}
       <DrawerRow icon="rename" onPress={() => setRenaming(true)}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
-      {movable ? <DrawerRow icon="folder" onPress={() => setPage('move')} accessory={<DrawerChevron />}>
+      {movable ? <DrawerRow icon="folder" onPress={() => { move.restart(); setPage('move'); }} accessory={<DrawerChevron />}>
         <DrawerRowText>Move to…</DrawerRowText>
       </DrawerRow> : null}
       <DrawerRow icon="download" onPress={() => setPage('download')} accessory={<DrawerChevron />}>
@@ -96,7 +98,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
       </DrawerRow> : null}
       {unshared ? <DrawerFooter attention>{unshared}</DrawerFooter> : null}
     </DrawerScroll> : null}
-    {page === 'move' ? <MoveContent target={{ kind: 'document', id: document }} onMoved={onClose} /> : null}
+    {page === 'move' ? move.body : null}
     {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onFonts={() => setPage('fonts')}
       onHighlight={() => setPage('highlight')} onChange={onAppearance} /> : null}
     {page === 'fonts' ? <FontList appearance={settings.appearance} onChange={onAppearance} /> : null}

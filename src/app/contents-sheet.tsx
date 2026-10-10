@@ -46,11 +46,10 @@
  */
 
 import { useMemo } from 'react';
-import { StyleSheet } from 'react-native';
 
 import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
 
-import { INK, useAccent } from './controls';
+import { useAccent } from './controls';
 import { Drawer, DrawerFooter, DrawerList, DrawerRow, DrawerRowText } from './drawer';
 import { Icon } from './icon';
 
@@ -158,7 +157,8 @@ function precisionLine(precision: 'shared' | 'before'): string {
  * One row. A Downloaded row carries the Download drawer's check at its right,
  * in the same size and colour, and nothing beside it: the check is the word
  * (design 0073). The check says the same to VoiceOver, as the Download
- * drawer's does.
+ * drawer's does. A row that leads nowhere is drawn as the phone draws a row it
+ * cannot press, as every drawer's disabled row is (#151).
  */
 function Row({ row, current, downloaded, onPress }: { row: ContentsRow; current: boolean; downloaded: boolean; onPress(): void }) {
   const unreachable = row.target === null;
@@ -171,13 +171,9 @@ function Row({ row, current, downloaded, onPress }: { row: ContentsRow; current:
       accessibilityState={{ selected: current, disabled: unreachable }}
       accessory={downloaded ? <Icon name="check" color={current ? accent.onMark : accent.reading} size={22} /> : undefined}>
       <DrawerRowText emphasized={current || row.heading}
-        style={[current && { color: accent.onMark }, unreachable && styles.unreachable]}>
+        style={current && { color: accent.onMark }}>
         {row.label || '—'}
       </DrawerRowText>
     </DrawerRow>
   );
 }
-
-const styles = StyleSheet.create({
-  unreachable: { color: INK.quiet },
-});

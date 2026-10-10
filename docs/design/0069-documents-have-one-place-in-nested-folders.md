@@ -34,6 +34,8 @@ Each location lists its immediate child Folders first, sorted by name, followed 
 
 Creation and renaming use the phone's text-input alert, with confirmation and cancellation. A blank name cannot be submitted. A duplicate name can be submitted, but is refused in a separate system warning explaining the conflict; Back to editing restores the entered name, and Cancel leaves everything unchanged. The owner chose this submit-time warning over moving the editor into a Drawer after live validation messages proved invisible on the tested phone interface. Moving uses a Drawer that shows the destination's full path and only its child Folders; the owner navigates up or down and confirms with `Move here`. Dismissing it does not move anything.
 
+_Revised on 2026-10-10 (#151): `Move here` became a `Move` button in the Drawer's header, and the Folders being moved are listed. See "Move stays in the Drawer's header" below._
+
 Moving a Folder into a location with an existing same-named Folder is refused with a request to rename it first. Folders are never merged or overwritten automatically.
 
 When the remembered Folder no longer exists, browsing returns directly to the Library root, not to a surviving ancestor. Subsequent imports use that root location.
@@ -53,6 +55,27 @@ The owner chose a layered blue Folder illustration close to Files: a top tab, ba
 A Folder's second line shows counts of its directly contained Documents and child Folders, excluding deeper descendants; an empty Folder says `Empty`. No date is shown.
 
 After comparing both previews, the owner chose the more compact layout (B): Folder and Document rows share one height, Covers become smaller, and the text stays the same size. More entries fit on screen, at the cost of less prominent Covers. Keeping the larger Document rows was turned down because Folder rows would then have too much empty space. Both row kinds grow together for larger system text. Existing folder behavior remains as agreed above.
+
+## Move stays in the Drawer's header
+
+The owner found that `Move here` changed place. At the Library root it was the first row; inside a Folder it was the second, under the row that went up a level. In the Folder the entries were already in, it could not be pressed, but it looked exactly like a row that could.
+
+The move Drawer now follows the phone's Files app. `Move` is a button at the right of the Drawer's header, in the same place in every Folder. Where it can move the entries, it is filled with the App Colour. Where it cannot, it is a plain grey button: the Folder the entries are already in, a Folder being moved, and anything inside one. Going up a level is the header's back button. At the Library root that button returns to the entry's actions; when a selection is being moved, there is none. The title stays `Move to…`, and the full path stays under it as the one line that says where the Drawer is. Files titles its sheet with the Folder's name instead, but the root and a Folder can both be called Library, and that title would read `Library` at both.
+
+The list holds only the Folders in the Folder shown. A Folder being moved is listed with the others and can be entered, as Files lists it, and `Move` stays grey inside it. Documents are not listed. Nothing names what is being moved: a selection is in view behind the Drawer, and a single entry was chosen a moment before.
+
+A refused move, such as one into a Folder that already holds a Folder of the same name, is said in the phone's own alert, with one OK. The Drawer stays where it was, so the owner can choose somewhere else. A line at the end of a long list could be out of sight of the button that was pressed.
+
+In every Drawer, a row that cannot be pressed is now drawn as the phone draws one, in a much fainter grey. Before, it looked like any other row. The chapters in Contents that lead nowhere are drawn the same way.
+
+Turned down:
+
+- **A wide `Move here` fixed at the bottom of the Drawer**, the owner's first idea. It would also stay in place, but the phone puts a sheet's confirming action at the top right, and the bottom of the Drawer sits beside the home indicator, at a height the owner sets.
+- **Keeping `Move here` as the first row.** It would stop moving, but it is not the phone's arrangement.
+- **Hiding the Folders being moved**, as before, or listing them in grey. Files lists them like any other Folder.
+- **A disabled `Move` faded to half strength**, like the header's other word buttons. Files does not fade its disabled `Move`; it shows a plain grey button.
+
+The owner chose each of these on 2026-10-10 (#151).
 
 ## Design review
 

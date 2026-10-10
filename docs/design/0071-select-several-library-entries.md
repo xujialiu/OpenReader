@@ -46,6 +46,8 @@ Documents are removed from the Library, not erased from the owner's external ori
 
 The whole batch is checked before anything moves. A same-named Folder in the destination prevents the batch from starting; the conflict is named, and the owner can choose another destination or return to adjust the selection or rename. Folders are never merged or overwritten. Same-named Documents remain allowed.
 
+_Revised on 2026-10-10 (#151): the conflict is named in the phone's own alert, and the destination chooser stays open behind it. The chooser opens at the current parent, where its `Move` button is grey. It lists the selected Folders like any other, and `Move` stays grey inside them and their descendants (decision 0069, "Move stays in the Drawer's header")._
+
 The destination is the Library root or an existing Folder. The current parent and all selected Folders and their descendants are invalid destinations. Creating a Folder inside the destination chooser is not added. Moving retains Reading Positions and Offline Narration and does not stop Reading or Downloads.
 
 ## When a batch cannot finish
