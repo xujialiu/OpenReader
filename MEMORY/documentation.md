@@ -96,8 +96,10 @@ what the app does and how to install it.
   `test/app/no-outgoing-links.test.ts` (ADR 0017, #129), badge images included.
   Add a new one there once you have looked at it; a Provider's signup, pricing
   or key page never goes on.
-- **The TestFlight badge** names the build Apple approved for external testing;
-  `docs/release-to-app-store.md` says when it changes.
+- **The TestFlight badge** names the build the TestFlight Beta's public link
+  installs. It reads that from the project's site, where a workflow publishes
+  what App Store Connect answers (#150). Never write a build into the README;
+  `docs/release-to-app-store.md` says how the badge follows.
 - **The owner sees it before it is committed.** Once a change is ready, run
   `bash scripts/readme-preview.sh`: it renders the README with GitHub's own
   renderer into `.docs/README.html` (ignored by git) and opens it. Give the

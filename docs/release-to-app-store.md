@@ -53,8 +53,14 @@ happened in that day's `notes/` file.
   - 1.0.0 (5) was removed from review when build 6 replaced it.
   - 0.0.1 (1) tested the pipeline only. Never submit it.
 - **TestFlight**
-  - The public link is https://testflight.apple.com/join/vjC8QejW ("Join the OpenReader: Read Aloud beta"). Anyone with it can join while it accepts testers.
-  - Apple approved **1.0.0 (5)** for external testing (reported by the owner on 2026-10-09). The link installs that build, and README.md's TestFlight badge names it.
+  - The TestFlight Beta's public link is https://testflight.apple.com/join/vjC8QejW ("Join the OpenReader: Read Aloud beta"). Anyone with it can join while it accepts testers.
+  - Two groups. The internal group `owner` gets every upload. The external group `public` owns the public link, and gets a build only when the owner adds the group to it.
+  - Which build the link installs is not written here, because it changes without a commit. Read it from App Store Connect ("The README follows Apple's answers", below), never from memory: the 1.0.0 (5) this line named until 2026-10-10 was never in `public` (notes 2026-10-10 13:53).
+- **App Store Connect API** (#150): access was approved on 2026-10-10.
+  - One Team key, "OpenReader README badge", with the Developer role. Apple's role table gives that role read-only access to TestFlight builds and external groups; no role is read-only throughout. A key does not expire and its role cannot be changed: revoke it and generate another.
+  - On the Mac, `~/.secrets/openreader/app-store-connect-api.env` names the Key ID, the Issuer ID and the `.p8` beside it. Apple lets the `.p8` be downloaded once.
+  - On GitHub, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_PRIVATE_KEY` are secrets of the `github-pages` environment, which only `main` may use.
+  - If the key leaks, revoke it under Users and Access → Integrations → App Store Connect API, generate another, and set the three secrets again.
 - **Tags**: `1.0.0(2)` to `1.0.0(7)`, all pushed. On 2026-10-10 they replaced `build-2` to `build-6` and `v1.0.0`, which were deleted locally and from GitHub.
 - **App Review Information**: the notes are the Guideline 2.1 answer, revised for build 7 on 2026-10-10 (3,990 characters). The revision adds a paragraph on the In-App Purchases and removes the claims that the app sells nothing. The recording `OpenReader-Review-Demo.mp4` is still attached, and predates the purchases. The review key is saved only in App Store Connect.
 - **Description**: since 2026-10-10 it says "Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase unlocks it for good. Reading, look-up and sync stay free." It ends "OpenReader is open source", without "free and".
@@ -149,16 +155,25 @@ store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
 ## The README follows Apple's answers
 
 README.md says which build people can install (MEMORY/documentation.md,
-"README.md"). Change it in the same commit as the fact here:
+"README.md").
 
-- **When Apple approves another build for external testing:**
-  - Change the TestFlight badge in README.md to `X.Y.Z (N)`. In the image address that is `X.Y.Z%20%28N%29`.
-  - Replace the old image address in `PAGES_MAY_NAME` in `test/app/no-outgoing-links.test.ts` with the new one.
-  - Update **TestFlight** under Current state.
+- **The TestFlight badge follows by itself** (#150). It names the build the TestFlight Beta's public link installs: the highest Build Number in the group `public` that App Store Connect lists as Testing. No commit names a build.
+  - `scripts/testflight-badge.mjs` asks the App Store Connect API. `.github/workflows/pages.yml` runs it every hour and publishes the answer as `testflight.json` on the project's site, and the badge reads that file through shields.io. An hourly run deploys only when the answer has changed.
+  - So the badge is up to an hour behind App Store Connect, and then as long again as shields.io and GitHub cache the image.
+  - To read the build now:
+
+    ```bash
+    node --env-file="$HOME/.secrets/openreader/app-store-connect-api.env" scripts/testflight-badge.mjs
+    ```
+
+  - To make the badge follow now: `gh workflow run pages.yml`.
+  - It reads `none` when no build in `public` is in testing, or the public link is off.
+  - If App Store Connect cannot be read, the run fails and GitHub mails the owner. The badge keeps the last build, and a push still publishes the site.
+  - GitHub stops a scheduled workflow after 60 days without activity in the repository. Turn it on again under Actions → Pages.
 - **When a Version goes live on the App Store:**
   - Add Apple's "Download on the App Store" badge to README.md, linking to https://apps.apple.com/app/id6817809106. Add both addresses to `PAGES_MAY_NAME`.
-  - Ask the owner whether the TestFlight badge stays.
-- Run `bash scripts/readme-preview.sh` and give the owner `.docs/README.html` to look at before committing.
+  - The TestFlight badge stays beside it (owner's decision, 2026-10-10).
+  - Run `bash scripts/readme-preview.sh` and give the owner `.docs/README.html` to look at before committing.
 
 ## App Store Connect
 

@@ -113,6 +113,15 @@ describe('#150: the README reads the file the workflow publishes', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   const workflow = readFileSync(join(ROOT, '.github', 'workflows', 'pages.yml'), 'utf8');
 
+  it('draws the badge from testflight.json on the project site', () => {
+    expect(readme).toContain(`https://img.shields.io/endpoint?url=${encodeURIComponent(PUBLISHED)}`);
+  });
+
+  it('names no build of its own, which is how the badge fell behind', () => {
+    expect(readme).not.toMatch(/TestFlight-\d/);
+    expect(readme).not.toMatch(/alt="TestFlight \d/);
+  });
+
   it('is published there by the workflow, from what the script prints', () => {
     expect(workflow).toContain(PUBLISHED);
     expect(workflow).toContain('node scripts/testflight-badge.mjs');

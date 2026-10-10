@@ -70,7 +70,8 @@ const PAGES_MAY_NAME = [
   'https://testflight.apple.com/join/vjC8QejW',
   `${REPOSITORY}/commits/main`,
   'https://img.shields.io/badge/iOS-17.2%2B-0071E3?style=flat-square&logo=apple',
-  'https://img.shields.io/badge/TestFlight-1.0.0%20%285%29-0D96F6?style=flat-square&logo=apple',
+  // The TestFlight badge reads testflight.json on SITE, which names the build (#150). The address never changes with it.
+  `https://img.shields.io/endpoint?url=${encodeURIComponent(`${SITE}testflight.json`)}&label=TestFlight&style=flat-square&logo=apple`,
   'https://img.shields.io/github/last-commit/xujialiu/OpenReader?style=flat-square&label=Last%20commit',
   'https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square',
   // site/privacy.html: each Provider's own data and privacy terms.

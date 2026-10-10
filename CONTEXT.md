@@ -418,7 +418,13 @@ _Avoid_: build (alone), upload number
 One app change since the last upload, counted from 1 again after each upload:
 1.0.0 (5)-beta3 is the third change since build 4. An uploaded build has none,
 although TestFlight calls every upload a beta.
-_Avoid_: TestFlight beta, beta build, pre-release
+_Avoid_: beta build, pre-release; "TestFlight beta" names the TestFlight Beta
+
+**TestFlight Beta**:
+The test copies of OpenReader that anyone can install through the author's
+public TestFlight link. A newcomer gets the newest build the author has put in
+it and Apple has passed, which is not always the last upload.
+_Avoid_: external testing, public beta, beta (alone: that is a Beta)
 
 **Debug Mode**:
 What a build of the app installed on the author's own devices has and a released
