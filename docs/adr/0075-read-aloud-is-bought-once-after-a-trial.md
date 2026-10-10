@@ -636,3 +636,5 @@ from the file.
 - Issue #149: contributor terms. The App Store copy is safe under AGPL-3.0
   only while every commit is the author's. As of 2026-10-09, `git log` shows
   one author for all 619 commits.
+  [ADR 0076](0076-a-contribution-is-licensed-once-more-to-the-author.md) holds
+  the terms an outside contribution is accepted on.

@@ -212,5 +212,6 @@ both.
   read-aloud free from the store before it cost money, and there is no early
   group to make an exception for.
 - **Contributions need terms of their own.** The store copy is safe under the
-  project's licence while every line in it is the author's. Issue #149 covers
-  what an outside contribution must allow.
+  project's licence while every line in it is the author's.
+  [Design 0076](0076-a-contribution-is-licensed-once-more-to-the-author.md)
+  says what an outside contribution must allow.

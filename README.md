@@ -62,3 +62,5 @@ A build from source reads aloud for free once the App Store's purchase is turned
 Copyright (C) 2026 Xujia Liu.
 
 OpenReader is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. See [LICENSE](LICENSE).
+
+Contributions are accepted on the terms in [CONTRIBUTING.md](CONTRIBUTING.md), which also let the author ship them in the App Store copy.

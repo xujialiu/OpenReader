@@ -66,3 +66,23 @@ no milestones.
 The agent-skill workflow labels (the triage labels in
 `docs/agents/triage-labels.md` and `wayfinder:*`) are OpenReader's own
 additions to the Zotero-OpenReader set; `gh label clone` leaves them in place.
+
+## Outside contributions — the terms come first
+
+OpenReader ships on the App Store, which AGPL-3.0 alone does not allow for
+code the owner does not own (ADR 0076). So every line that enters the
+repository is the owner's own, or given under the terms in `CONTRIBUTING.md`.
+
+- **A pull request someone else opened**: merge it only when its author has
+  ticked the "Contribution terms" box in its description. The description's
+  edit history shows who ticked it. While the box is empty, ask for the tick in
+  a comment and leave the pull request open.
+- **Lines from a pull request without the tick** stay out of every commit, the
+  owner's included. Fix the problem it points at in new code, written from the
+  problem rather than from its diff.
+- **Code copied in from Zotero-OpenReader** (ADR 0013): copy a file only when
+  every change to it there is the owner's, by `git log --format='%an' -- <path>`
+  and the pull requests that touched it, or was merged there under the same
+  terms.
+- **Code a contributor marks "Submitted on behalf of a third party"**: put it
+  to the owner with its source and licence before merging.
