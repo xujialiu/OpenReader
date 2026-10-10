@@ -29,13 +29,13 @@ The owner set these.
   itself. The commit that sets the upload's `APP_VERSION` is the commit that
   build is made from.
 - **Tags.**
-  - Every uploaded build gets an annotated `build-N` on the commit it was built from.
-  - The build you submit also gets `vX.Y.Z`.
+  - Every uploaded build gets an annotated tag `X.Y.Z(N)` on the commit it was built from, such as `1.0.0(7)`. It is the form every record names a build in, `X.Y.Z (N)` (MEMORY/app-change.md), without the space, which git refuses in a tag name (owner's decision, 2026-10-10). Quote it in a shell.
+  - There is no `v` tag: the submitted build is named by its own `X.Y.Z(N)`.
   - Push `main` and tags only after the owner agrees. The repository is public.
 
 ## Current state
 
-Checked 2026-10-05; In-App Purchases 2026-10-09. When a fact here changes, change it here, and record what
+Checked 2026-10-10. When a fact here changes, change it here, and record what
 happened in that day's `notes/` file.
 
 - **Team and signing**
@@ -48,17 +48,18 @@ happened in that day's `notes/` file.
   - iOS only, primary language English (U.S.), Full Access.
   - "OpenReader" was already taken as an App Store name. The Home Screen name stays OpenReader, from `CFBundleDisplayName`.
 - **Builds**
-  - The last upload is **1.0.0 (6)**, from `5b02aed`. It is submitted and **Waiting for Review**, with manual release selected. That is not approval or public release. The next upload is build 7.
-  - **Do not release 1.0.0 (6)** (author's decision, 2026-10-09; ADR 0075). The first public version sells the Unlock. Once approved, 1.0.0 (6) stays unreleased. When the build with the In-App Purchases is ready, withdraw 1.0.0 (6) with "Cancel this release" or Developer Reject, then submit the new build under 1.0.0 with both purchases.
+  - The last upload is **1.0.0 (7)**, from `08ec380`, uploaded 2026-10-10 12:49. It is the first build that sells the Unlock (ADR 0075). On 2026-10-10 13:03 it was submitted together with both In-App Purchases, three items in one submission, and it is **Waiting for Review**, with manual release selected. The next upload is build 8.
+  - 1.0.0 (6) was removed from review on 2026-10-10 (author's decision), before Apple had reviewed it, and never released. Version 1.0.0 then read Developer Rejected until build 7 replaced build 6.
   - 1.0.0 (5) was removed from review when build 6 replaced it.
   - 0.0.1 (1) tested the pipeline only. Never submit it.
 - **TestFlight**
   - The public link is https://testflight.apple.com/join/vjC8QejW ("Join the OpenReader: Read Aloud beta"). Anyone with it can join while it accepts testers.
   - Apple approved **1.0.0 (5)** for external testing (reported by the owner on 2026-10-09). The link installs that build, and README.md's TestFlight badge names it.
-- **Tags**: `build-5`, `build-6` and `v1.0.0` (on `5b02aed`, build 6) are pushed. `build-2`, `build-3` and `build-4` are local only.
-- **App Review Information**: the notes are the Guideline 2.1 answer (3,950 characters), with the recording `OpenReader-Review-Demo.mp4` attached. The review key is saved only in App Store Connect.
+- **Tags**: `1.0.0(2)` to `1.0.0(7)`, all pushed. On 2026-10-10 they replaced `build-2` to `build-6` and `v1.0.0`, which were deleted locally and from GitHub.
+- **App Review Information**: the notes are the Guideline 2.1 answer, revised for build 7 on 2026-10-10 (3,990 characters). The revision adds a paragraph on the In-App Purchases and removes the claims that the app sells nothing. The recording `OpenReader-Review-Demo.mp4` is still attached, and predates the purchases. The review key is saved only in App Store Connect.
+- **Description**: since 2026-10-10 it says "Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase unlocks it for good. Reading, look-up and sync stay free." It ends "OpenReader is open source", without "free and".
 - **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), not on Apple silicon Macs or Apple Vision Pro. Books, 4+, non-trader. The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
-- **In-App Purchases** (ADR 0075, #148), both Non-Consumable and in Prepare for Submission. The first one must go to review with a new app version. Each has its review screenshot (2026-10-09): the phone's alert from 1.0.0 (7)-beta11 on the simulator, the Trial's for the trial and the ended one, with Unlock for $4.99, for the Unlock. Neither has review notes.
+- **In-App Purchases** (ADR 0075, #148), both Non-Consumable, submitted with 1.0.0 (7) on 2026-10-10 and Waiting for Review. Each has its review screenshot (2026-10-09): the phone's alert from 1.0.0 (7)-beta11 on the simulator, the Trial's for the trial and the ended one, with Unlock for $4.99, for the Unlock. Neither has review notes.
   - "30-day Trial": `top.xujialiu.openreader.trial`, Apple ID 6820864102, US$0.00. English (U.S.) display name "30-day Trial", description "Read aloud free for 30 days."
   - "Unlock": `top.xujialiu.openreader.unlock`, Apple ID 6820865303, US$4.99 with the United States as base. Apple's generated prices hold elsewhere (Australia A$7.99, for example). English (U.S.) display name "Unlock Read Aloud", description "Read aloud and offline narration, for good."
   - Both: 174 countries or regions (every one except China mainland), future territories added automatically, Family Sharing off, tax category matched to the app. An In-App Purchase's availability list starts with China mainland ticked, so untick it there. (notes 2026-10-09 14:20)
@@ -79,7 +80,7 @@ store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
    - Run the unit tests, `npx tsc --noEmit` and `npx eslint .`.
    - Check for other heavy Xcode builds (`pgrep -fl xcodebuild`). A build in the same workspace at the same time needs its own `-derivedDataPath`, because two builds cannot share one DerivedData.
 2. **Version and build number**, as a commit that reaches `main` through the usual merge:
-   - Set `APP_VERSION` in `app-version.ts` to `X.Y.Z (N)`: drop the `-betaN`. `N` must be one more than the last uploaded build (the highest `build-*` tag). It is already, unless nothing has changed since that upload; then raise it.
+   - Set `APP_VERSION` in `app-version.ts` to `X.Y.Z (N)`: drop the `-betaN`. `N` must be one more than the last uploaded build (the highest `X.Y.Z(N)` tag). It is already, unless nothing has changed since that upload; then raise it.
    - Only if the owner named a new Version: `npm version <X.Y.Z> --no-git-tag-version`, so that `package.json` and the lockfile match.
    - `npx vitest run test/app-config.test.ts` checks that `APP_VERSION`, `app.config.ts` and `package.json` agree.
 3. **Prebuild:** `npx expo prebuild --platform ios --clean`, then check that `node_modules/expo-sqlite/ios/sqlite3.h` exists.
@@ -142,8 +143,7 @@ store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
    - `App record with bundle identifier … not found` means no App Store Connect record uses this bundle ID.
 6. **Processing.** App Store Connect → the app → TestFlight → Build Uploads shows Processing, then Complete, within about 10 to 25 minutes. Apple emails any ITMS problem.
 7. **Tags**, on the build's commit:
-   - `git tag -a build-N -m "OpenReader X.Y.Z (N), uploaded YYYY-MM-DD"`
-   - For the submitted build, also `git tag -a vX.Y.Z`.
+   - `git tag -a "X.Y.Z(N)" -m "OpenReader X.Y.Z (N), uploaded YYYY-MM-DD"`
    - Ask the owner before `git push origin main --tags`.
 
 ## The README follows Apple's answers
@@ -168,7 +168,10 @@ The decisions are the owner's. Items marked "draft" still need the owner's appro
 setter plus `input`/`change` events) shows in the field but is not saved.
 Select the field's text by script and type over it; that saves, and keeps a
 secret such as the review key out of the agent's output (notes 2026-10-05,
-build 6).
+build 6). `document.execCommand('insertText', false, text)` on the selected
+field also saves. So a revision built in the page from the field's own value,
+with the review key left where it was, never passes through the agent (notes
+2026-10-10 13:05).
 
 - **App Privacy.** Published:
   - **Other User Content**: App Functionality and Other Purposes;
@@ -200,7 +203,7 @@ build 6).
   - Free.
   - Every country or region except China mainland, which requires an ICP filing and falls under the deep-synthesis rules.
   - Turn off availability on Mac with Apple silicon and on Apple Vision Pro; neither has been tested.
-- **EU Digital Services Act:** non-trader. The owner sets it from the banner on the Apps page. Revisit it if the app ever charges money.
+- **EU Digital Services Act:** trader, since the app sells the Unlock. The owner submitted it on 2026-10-09 from Business → Compliance; it was In Review on 2026-10-10. Until it is verified, the EU storefronts may hold back the version (ADR 0075).
 - **Export compliance:** nothing to answer, because `ITSAppUsesNonExemptEncryption = NO` is in the build.
 - **Content rights:** the owner answers. The app shows documents the person adds themselves, and ships none.
 - **Category:** Books (saved).
@@ -222,7 +225,7 @@ build 6).
 ```text
 OpenReader reads EPUB documents aloud with a speech service the user chooses,
 using the user's own API key for that service. It has no account and no server
-of its own, and it sells nothing.
+of its own. Reading aloud is free for 30 days, then a one-time In-App Purchase.
 
 To test:
 1. In Safari, download a public-domain EPUB, for example

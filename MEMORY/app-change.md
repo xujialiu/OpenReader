@@ -21,7 +21,7 @@ that ends with the latest app in the simulator:
   Version, `npm version <x.y.z> --no-git-tag-version` moves `package.json` with
   it.
 
-Write it exactly like that: no `v`, and a space before the bracket. Every
+Write it exactly like that: no `v`, and a space before the bracket. A git tag is the one exception: it cannot hold a space, so the tag of an uploaded build is `1.0.0(7)` (docs/release-to-app-store.md). Every
 record that names a build uses the same form, including notes, test records,
 commit subjects and issue comments. Records written before #127 stay as they
 were written. `app.config.ts` reads both native numbers from `APP_VERSION`, and
