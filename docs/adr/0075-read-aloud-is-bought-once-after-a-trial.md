@@ -544,6 +544,24 @@ No Swift change was needed. The hook loads the native module with `require`,
 which `vi.mock` does not reach, so the behaviour is pinned structurally in
 `purchase-paths.test.ts`, not run.
 
+### StoreKit's sandbox on a phone (beta13, 2026-10-10)
+
+The owner's iPhone (iOS 27.0.1) ran a development-signed Release with Debug
+Mode, switched to StoreKit through the harness, with a Sandbox Apple Account
+(notes 2026-10-10 12:23):
+
+- Both products loaded 0.98 s after the switch.
+- `AppTransaction.shared` threw, so the Debug Log reads `StoreKit environment:
+  unavailable`, as it does on a simulator.
+- A cancelled sign-in during Restore rejects with `UnexpectedException:
+  Request Canceled`, and the app shows nothing.
+- The Trial's purchase date, as StoreKit gives it, is a whole second, 2.9 s
+  earlier than the app's own clock at the purchase: `04:22:48.000Z` against
+  `04:22:50.872Z`. It replaced the app's value 11 ms after the purchase
+  returned.
+- Apple's sheet showed $0.00 for the Trial, marked Sandbox. A real Play went on
+  1 ms after the Trial was bought, and the Unlock was bought from Settings.
+
 ### Restore with nothing to restore (beta12)
 
 When `AppStore.sync()` finishes and the Unlock is still not owned, the phone's

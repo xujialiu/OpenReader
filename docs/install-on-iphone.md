@@ -135,8 +135,9 @@ its first card with a plain `Purchase  Unlocked` row. To try StoreKit itself on 
 phone, send `{"do":"store","use":"real"}` through the phone's harness
 (`test/manual-test/kit/phone-hx.cjs`) and sign in with a Sandbox Apple Account
 (App Store Connect → Users and Access → Sandbox) when the App Store's sheet
-asks. Where the phone's own Settings keeps that account was not checked on
-iOS 27.
+asks. On the owner's iPhone (iOS 27.0.1) this bought the Trial and the Unlock
+and ran Restore, with the products loading in about a second (notes 2026-10-10
+12:23). Where the phone's own Settings keeps that account was not checked.
 `{"do":"store","use":"fake"}` goes back. What the pretend App Store can be
 made to do is in `test/manual-test/purchase/README.md`.
 
