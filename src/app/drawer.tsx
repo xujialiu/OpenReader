@@ -156,10 +156,12 @@ export const DRAWER = {
     light: {
       page: SETTINGS_SURFACE.light.page, separator: '#e8e8e8', mark: PALETTE.light.line,
       button: SETTINGS_SURFACE.light.card, rim: PALETTE.light.line,
+      inactive: '#d6d6d6', inactiveText: '#ffffff',
     },
     dark: {
       page: SETTINGS_SURFACE.dark.card, separator: '#44444b', mark: '#3e3e47',
       button: '#2c2c32', rim: '#3e3e47',
+      inactive: '#505052', inactiveText: '#ffffff',
     },
   },
 } as const;
@@ -232,12 +234,18 @@ export function useDrawerTurn(visible: boolean, close: () => void, { animated = 
  * button showing only the icon, `label` being what VoiceOver says: a
  * Document's Share. Without one it is a capsule with `label` in it: Download's
  * Select all, as the phone puts a word in a toolbar.
+ *
+ * `prominent` is the page's confirming action, Move (#151): its word in
+ * Headline and the App Colour while it can act; while it cannot, Files'
+ * disabled Move, a grey capsule with a white word, not faded (notes
+ * 2026-10-10 13:42 and the tester's light values in ADR 0069).
  */
 export interface DrawerAction {
   icon?: IconName;
   label: string;
   onPress(): void;
   disabled?: boolean;
+  prominent?: boolean;
 }
 
 /**
@@ -248,10 +256,10 @@ export interface DrawerAction {
  * (design 0057).
  */
 type DrawerHeader =
-  | { titleLeft?: false; onBack?(): void; action?: DrawerAction }
-  | { titleLeft: true; action: DrawerAction; onBack?: never };
+  | { titleLeft?: false; onBack?(): void; backLabel?: string; action?: DrawerAction }
+  | { titleLeft: true; action: DrawerAction; onBack?: never; backLabel?: never };
 
-export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, action, titleLeft, children }: {
+export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, backLabel, action, titleLeft, children }: {
   visible: boolean;
   /** The centred title; with `heading`, the name the heading's control is given for VoiceOver. */
   title: string;
@@ -286,7 +294,7 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ac
           <RNHostView>
             <View style={[styles.body, { paddingBottom: bottom }]} onAccessibilityEscape={onClose}>
               <DrawerBottom value={bottom}>
-                <DrawerTitle title={title} heading={heading} onBack={onBack} action={action} titleLeft={!!titleLeft} />
+                <DrawerTitle title={title} heading={heading} onBack={onBack} backLabel={backLabel} action={action} titleLeft={!!titleLeft} />
                 {children}
               </DrawerBottom>
             </View>
@@ -297,7 +305,7 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ac
   );
 }
 
-function DrawerTitle({ title, heading, onBack, action, titleLeft }: { title: string; heading?: ReactNode; onBack?(): void; action?: DrawerAction; titleLeft: boolean }) {
+function DrawerTitle({ title, heading, onBack, backLabel, action, titleLeft }: { title: string; heading?: ReactNode; onBack?(): void; backLabel?: string; action?: DrawerAction; titleLeft: boolean }) {
   // How far in the centred title is kept on both sides: past the wider of the two ends, so it is centred on the drawer.
   const [actionWidth, setActionWidth] = useState(0);
   if (titleLeft && action) {
@@ -315,7 +323,7 @@ function DrawerTitle({ title, heading, onBack, action, titleLeft }: { title: str
       <View style={[styles.titleCentred, { left: clear, right: clear }]}>
         {heading ?? <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>}
       </View>
-      {onBack ? <RoundButton icon="previous" label={`Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : <View />}
+      {onBack ? <RoundButton icon="previous" label={backLabel ?? `Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : <View />}
       {action ? <View onLayout={(event) => setActionWidth(event.nativeEvent.layout.width)}><HeaderAction action={action} /></View> : null}
     </View>
   );
@@ -324,18 +332,29 @@ function DrawerTitle({ title, heading, onBack, action, titleLeft }: { title: str
 function HeaderAction({ action }: { action: DrawerAction }) {
   return action.icon
     ? <RoundButton icon={action.icon} label={action.label} onPress={action.onPress} disabled={action.disabled} drawn={DRAWER.button.action} />
-    : <CapsuleButton label={action.label} onPress={action.onPress} disabled={action.disabled} />;
+    : <CapsuleButton label={action.label} onPress={action.onPress} disabled={action.disabled} prominent={action.prominent} />;
 }
 
-/** A word in the header's right end, in the round button's capsule: the phone's toolbar draws a word as it draws an icon. */
-function CapsuleButton({ label, onPress, disabled }: { label: string; onPress(): void; disabled?: boolean }) {
+/**
+ * A word in the header's right end, in the round button's capsule: the phone's toolbar draws a word as it draws an icon.
+ *
+ * Prominent, it is Move (#151): the same capsule with its word in Headline
+ * while it can act. While it cannot, it is drawn as Files draws its disabled
+ * Move, `inactive`: a grey capsule with a white word, unfaded, so it looks
+ * unlike the header's live buttons beside it. The owner chose the word in the
+ * App Colour over a capsule filled with it.
+ */
+function CapsuleButton({ label, onPress, disabled, prominent }: { label: string; onPress(): void; disabled?: boolean; prominent?: boolean }) {
   const colours = useDrawerColours();
   const accent = useAccent();
+  const inactive = prominent && disabled;
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!disabled }} disabled={disabled} onPress={onPress}
-      style={({ pressed }) => [styles.button, styles.capsule, { backgroundColor: colours.button, borderColor: colours.rim },
-        (pressed || disabled) && styles.dimmed]}>
-      <Text style={[styles.capsuleText, { color: accent.onMark }]} numberOfLines={1}>{label}</Text>
+      style={({ pressed }) => [styles.button, styles.capsule,
+        inactive ? { backgroundColor: colours.inactive, borderColor: colours.inactive } : { backgroundColor: colours.button, borderColor: colours.rim },
+        (pressed || (disabled && !prominent)) && styles.dimmed]}>
+      <Text style={[prominent ? styles.capsuleTextProminent : styles.capsuleText,
+        { color: inactive ? colours.inactiveText : accent.onMark }]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }
@@ -366,7 +385,8 @@ function RoundButton({ icon, label, onPress, disabled, drawn }: {
  * mark's colour (Contents' current row). `icon` stands before the words, and
  * `accessory` after them at the right: a value, a chevron, a check, a control.
  * An accessory taller than a line is drawn over the row's padding rather than
- * growing it, so a one-line row stays 52 pt.
+ * growing it, so a one-line row stays 52 pt. `disabled` draws all of it, the
+ * separator apart, at 30 %, as the phone draws a row it cannot press (#151).
  *
  * Without `onPress` it is a plain view, not a button, so it can be what a
  * system menu draws (`ChoiceMenu`) or hold buttons of its own.
@@ -388,7 +408,7 @@ export function DrawerRow({ children, onPress, marked, level = 0, disabled, icon
   const colours = useDrawerColours();
   const line = (
     <>
-      <View style={styles.rowLine}>
+      <View style={[styles.rowLine, disabled && styles.rowDisabled]}>
         {icon ? <View style={styles.rowIcon}><Icon name={icon} color={iconColour ?? INK.text} size={DRAWER.row.icon} /></View> : null}
         <View style={styles.rowWords}>{children}</View>
         {accessory ? <View style={styles.rowAccessory}>{accessory}</View> : null}
@@ -582,6 +602,8 @@ const styles = StyleSheet.create({
     paddingVertical: DRAWER.row.padding,
   },
   rowLine: { alignItems: 'center', flexDirection: 'row', gap: DRAWER.row.gap },
+  // The phone's disabled row: its words in the tertiary label, which is the label at 30 % (Files, notes 2026-10-10 13:42; #151).
+  rowDisabled: { opacity: 0.3 },
   rowIcon: { marginVertical: -DRAWER.row.padding },
   rowWords: { flex: 1 },
   // Over the row's padding, up to the row's edges, rather than growing it.
@@ -594,6 +616,7 @@ const styles = StyleSheet.create({
   list: { flexGrow: 0, flexShrink: 1 },
   capsule: { paddingHorizontal: 16, width: undefined },
   capsuleText: { ...TEXT.body },
+  capsuleTextProminent: { ...TEXT.headline },
   pressed: { opacity: 0.65 },
   rowText: { ...drawerRowText(false), color: INK.text },
   rowTextEmphasized: { ...drawerRowText(true), color: INK.text },

@@ -129,6 +129,18 @@ export function parseFolders(text: string): FolderTree {
 export type LibraryTarget = { kind: 'folder' | 'document'; id: string };
 export const targetKey = (target: LibraryTarget): string => `${target.kind}:${target.id}`;
 
+/**
+ * What the move drawer offers at `shown` while `moving` leaves `from` (#151):
+ * whether its `Move` can act there, and the Folders it lists. Every child
+ * Folder is listed, a Folder being moved included, as Files lists it; `Move`
+ * cannot act where the entries already are, nor inside a Folder being moved.
+ */
+export function moveChoice(tree: FolderTree, moving: readonly LibraryTarget[], from: FolderId | null, shown: FolderId | null): { canMove: boolean; folders: Folder[] } {
+  const inside = new Set(moving.flatMap((one) =>
+    one.kind === 'folder' && tree.folders.some((folder) => folder.id === one.id) ? [...folderSubtree(tree, one.id)] : []));
+  return { canMove: shown !== from && !(shown !== null && inside.has(shown)), folders: childFolders(tree, shown) };
+}
+
 /** Reject stale, cross-level or duplicate selections before any side effect. */
 export function selectionPlan(tree: FolderTree, targets: readonly LibraryTarget[], documents: readonly string[]) {
   if (!targets.length) throw new Error('Select at least one entry.');

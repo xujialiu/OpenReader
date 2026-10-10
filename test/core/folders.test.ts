@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { childFolders, createFolderStore, emptyFolders, folderPath, folderSubtree, parseFolders, placeDocument, putFolder, withoutFolder } from '../../src/core/folders';
+import { childFolders, createFolderStore, emptyFolders, folderPath, folderSubtree, moveChoice, parseFolders, placeDocument, putFolder, withoutFolder } from '../../src/core/folders';
 
 function storage(initial: string | null = null) {
   let saved = initial;
@@ -143,5 +143,29 @@ describe('durable local organization', () => {
     expect(remove).toHaveBeenCalledWith('one');
     expect(store.getSnapshot().tree.folders).toHaveLength(3);
     expect(store.getSnapshot().busy).toBe(false);
+  });
+});
+
+describe('what the move drawer offers in each folder (#151)', () => {
+  const tree = putFolder(putFolder(fixture(), { id: 'd', name: 'Art', parent: null }), { id: 'e', name: 'Painting', parent: 'd' });
+  it("cannot move into the entries' own folder, and can into any other", () => {
+    expect(moveChoice(tree, [{ kind: 'document', id: 'book' }], 'b', 'b').canMove).toBe(false);
+    expect(moveChoice(tree, [{ kind: 'document', id: 'book' }], 'b', null).canMove).toBe(true);
+    expect(moveChoice(tree, [{ kind: 'document', id: 'book' }], null, null).canMove).toBe(false);
+    expect(moveChoice(tree, [{ kind: 'document', id: 'book' }], null, 'c').canMove).toBe(true);
+  });
+  it('cannot move into a Folder being moved or any of its descendants, and lists that Folder all the same', () => {
+    const moving = [{ kind: 'folder' as const, id: 'a' }, { kind: 'document' as const, id: 'book' }];
+    for (const shown of ['a', 'b', 'c']) expect(moveChoice(tree, moving, null, shown).canMove).toBe(false);
+    expect(moveChoice(tree, moving, null, 'd').canMove).toBe(true);
+    expect(moveChoice(tree, moving, null, 'e').canMove).toBe(true);
+    expect(moveChoice(tree, moving, null, null).folders.map((folder) => folder.id)).toEqual(['d', 'a']);
+  });
+  it('lists only the shown folder\'s own Folders, by name', () => {
+    expect(moveChoice(tree, [], null, 'a').folders.map((folder) => folder.name)).toEqual(['English']);
+    expect(moveChoice(tree, [], null, 'c').folders).toEqual([]);
+  });
+  it('ignores a moved Folder that no longer exists', () => {
+    expect(moveChoice(tree, [{ kind: 'folder', id: 'gone' }], null, 'a').canMove).toBe(true);
   });
 });

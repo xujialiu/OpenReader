@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Alert } from 'react-native';
 import type { DocumentId } from '../core/document';
-import { childFolders, folderAt, folderNameProblem, folderPath, folderSubtree, type FolderId, type LibraryTarget } from '../core/folders';
+import { folderAt, folderNameProblem, folderPath, moveChoice, type FolderId, type LibraryTarget } from '../core/folders';
 import { INK } from './controls';
-import { Drawer, DrawerChevron, DrawerFooter, DrawerRow, DrawerRowText, DrawerScroll } from './drawer';
+import { Drawer, DrawerChevron, DrawerFooter, DrawerRow, DrawerRowText, DrawerScroll, type DrawerAction } from './drawer';
 import { RenameAlert } from './rename-alert';
 import { useShell } from './routes';
 
@@ -43,39 +43,68 @@ export function AddDrawer({ visible, onClose, onImport, onSelect }: { visible: b
 }
 
 export type MoveTarget = { kind: 'folder'; id: FolderId } | { kind: 'document'; id: DocumentId };
-/** Shared by Document and Folder action drawers; exploring a destination never changes the browsing location. */
-export function MoveContent({ target, targets, onMoved }: ({ target: MoveTarget; targets?: never } | { target?: never; targets: readonly LibraryTarget[] }) & { onMoved(): void }) {
+
+/** A move page's header, spread into its `Drawer`, and what goes under it. */
+export interface MovePage {
+  header: { title: string; onBack?(): void; backLabel?: string; action: DrawerAction };
+  body: ReactNode;
+  /** Show the entries' own folder again: called as the page is opened. */
+  restart(): void;
+}
+
+/**
+ * The move page, shared by a Document's and a Folder's actions and by a
+ * selection's Move; looking through destinations never changes the folder
+ * being browsed.
+ *
+ * As Files' Move sheet (#151, notes 2026-10-10 13:42), so that nothing on it
+ * changes place from one folder to the next: `Move` is the header's action at
+ * the right, plain where it cannot act (the entries' own folder, a Folder being
+ * moved and its descendants) and filled where it can; the header's back button
+ * goes up a folder, and at the Library root leaves the page through `onLeave`,
+ * or is absent without one. Under the header are the path, the one place that
+ * says where the page is, and the folder's Folders, a Folder being moved
+ * included. A refusal is the phone's alert, since a line under a long list is
+ * out of sight of the button that was pressed.
+ */
+export function useMovePage(moving: { target: MoveTarget } | { targets: readonly LibraryTarget[] }, { onMoved, onLeave }: { onMoved(): void; onLeave?(): void }): MovePage {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
+  const target = 'target' in moving ? moving.target : null;
   const source = target ? (target.kind === 'folder' ? tree.folders.find((folder) => folder.id === target.id)?.parent ?? null : tree.documents[target.id] ?? null) : tree.current;
-  const [destination, setDestination] = useState<FolderId | null>(source);
-  const [failure, setFailure] = useState<string | null>(null);
-  const current = destination !== null && !tree.folders.some((folder) => folder.id === destination) ? null : destination;
-  const forbidden = new Set((targets ?? (target ? [target] : [])).flatMap((one) =>
-    one.kind === 'folder' && tree.folders.some((folder) => folder.id === one.id) ? [...folderSubtree(tree, one.id)] : []));
+  /** `undefined` until the owner leaves the entries' own folder. */
+  const [destination, setDestination] = useState<FolderId | null | undefined>(undefined);
+  const shown = destination === undefined ? source : destination;
+  const current = shown !== null && !tree.folders.some((folder) => folder.id === shown) ? null : shown;
+  const { canMove, folders } = moveChoice(tree, target ? [target] : 'targets' in moving ? moving.targets : [], source, current);
   const parent = current === null ? null : folderAt(tree, current).parent;
-  return <DrawerScroll>
-    <DrawerFooter>{folderPath(tree, current)}</DrawerFooter>
-    {current !== null ? <DrawerRow icon="previous" onPress={() => { setDestination(parent); setFailure(null); }}>
-      <DrawerRowText>{parent === null ? 'Library' : folderAt(tree, parent).name}</DrawerRowText>
-    </DrawerRow> : null}
-    <DrawerRow icon="check" disabled={current === source || busy || !!problem || (current !== null && forbidden.has(current))} onPress={() => {
-      try {
-        if (targets) library.folders.moveEntries(targets, library.entries.map((entry) => entry.id), current);
-        else if (target.kind === 'folder') library.folders.moveFolder(target.id, current);
-        else {
-          if (!library.current(target.id)) throw new Error('That document is no longer in the Library.');
-          library.folders.place(target.id, current);
-        }
-        onMoved();
-      } catch (error) { setFailure(describe(error)); }
-    }}><DrawerRowText>Move here</DrawerRowText></DrawerRow>
-    {childFolders(tree, current).filter((folder) => !forbidden.has(folder.id)).map((folder) =>
-      <DrawerRow key={folder.id} icon="folder" accessory={<DrawerChevron />} onPress={() => { setDestination(folder.id); setFailure(null); }}>
-        <DrawerRowText>{folder.name}</DrawerRowText>
-      </DrawerRow>)}
-    {failure ? <DrawerFooter attention>{failure}</DrawerFooter> : null}
-  </DrawerScroll>;
+  const move = () => {
+    try {
+      if (!target) library.folders.moveEntries('targets' in moving ? moving.targets : [], library.entries.map((entry) => entry.id), current);
+      else if (target.kind === 'folder') library.folders.moveFolder(target.id, current);
+      else {
+        if (!library.current(target.id)) throw new Error('That document is no longer in the Library.');
+        library.folders.place(target.id, current);
+      }
+      onMoved();
+    } catch (error) { Alert.alert('Could not move', describe(error)); }
+  };
+  return {
+    header: {
+      title: 'Move to…',
+      onBack: current !== null ? () => setDestination(parent) : onLeave,
+      backLabel: current !== null ? `Back to ${parent === null ? 'Library' : folderAt(tree, parent).name}` : undefined,
+      action: { label: 'Move', prominent: true, disabled: !canMove || busy || !!problem, onPress: move },
+    },
+    body: <DrawerScroll>
+      <DrawerFooter>{folderPath(tree, current)}</DrawerFooter>
+      {folders.map((folder) =>
+        <DrawerRow key={folder.id} icon="folder" accessory={<DrawerChevron />} onPress={() => setDestination(folder.id)}>
+          <DrawerRowText>{folder.name}</DrawerRowText>
+        </DrawerRow>)}
+    </DrawerScroll>,
+    restart: () => setDestination(undefined),
+  };
 }
 
 export function FolderActions({ id, onClose, onDelete, onSelect }: { id: FolderId; onClose(): void; onDelete(id: FolderId): void; onSelect(id: FolderId): void }) {
@@ -85,11 +114,17 @@ export function FolderActions({ id, onClose, onDelete, onSelect }: { id: FolderI
   const [moving, setMoving] = useState(false);
   const [naming, setNaming] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const move = useMovePage({ target: { kind: 'folder', id } }, { onMoved: onClose, onLeave: () => setMoving(false) });
+  // Another Folder's `…`, touched in the Library behind the open drawer, opens that Folder's menu afresh, as a Document's does (#151).
+  const [shown, setShown] = useState(id);
+  if (shown !== id) {
+    setShown(id); setMoving(false); setNaming(false); setFailure(null); move.restart();
+  }
   if (!folder) return null;
-  return <Drawer visible title={moving ? 'Move to…' : folder.name} onClose={onClose} onBack={moving ? () => setMoving(false) : undefined}>
-    {moving ? <MoveContent target={{ kind: 'folder', id }} onMoved={onClose} /> : <DrawerScroll>
+  return <Drawer visible onClose={onClose} {...(moving ? move.header : { title: folder.name })}>
+    {moving ? move.body : <DrawerScroll>
       <DrawerRow icon="rename" disabled={busy || !!problem} onPress={() => setNaming(true)}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
-      <DrawerRow icon="folder" disabled={busy || !!problem} onPress={() => setMoving(true)} accessory={<DrawerChevron />}><DrawerRowText>Move to…</DrawerRowText></DrawerRow>
+      <DrawerRow icon="folder" disabled={busy || !!problem} onPress={() => { move.restart(); setMoving(true); }} accessory={<DrawerChevron />}><DrawerRowText>Move to…</DrawerRowText></DrawerRow>
       <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => onSelect(id)}><DrawerRowText>Select</DrawerRowText></DrawerRow>
       <DrawerRow icon="trash" iconColour={INK.attention} disabled={busy || !!problem} onPress={() => onDelete(id)}>
         <DrawerRowText style={{ color: INK.attention }}>Delete</DrawerRowText>

@@ -276,6 +276,12 @@ The colour and opacity the sentence being read and the word being spoken are
 marked in. Part of Appearance, and the same under either theme.
 _Avoid_: highlight style, highlight theme, highlight scheme
 
+**App Colour**:
+The colour of a check, a link or an action, wherever the phone would use its
+own blue. It is the spoken word's highlight colour, made only as much darker or
+lighter as it must be to be read.
+_Avoid_: accent, system colour, tint, amber
+
 **Theme**:
 Whether the app is shown light or dark, including the document itself but not
 its highlight colours. It

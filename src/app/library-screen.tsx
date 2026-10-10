@@ -10,7 +10,7 @@ import { childFolders, directFolderCounts, folderAt, folderSubtree, targetKey, t
 import { DocumentRow, FolderRow, HeaderButton, INK, Note } from './controls';
 import { pickDocument } from './document';
 import { useDocumentCover } from './document-cover';
-import { AddDrawer, confirmFolderDeletion, FolderActions, MoveContent } from './folder-actions';
+import { AddDrawer, confirmFolderDeletion, FolderActions, useMovePage } from './folder-actions';
 import { Drawer } from './drawer';
 import { useLibrarySelection } from './use-library-selection';
 import { LibrarySelectionAction } from './library-selection-actions';
@@ -65,6 +65,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     ...library.entries.filter((entry) => (tree.documents[entry.id] ?? null) === tree.current).map((entry): Row => ({ kind: 'document', entry })),
   ];
   const selection = useLibrarySelection(navigation, rows.map(rowTarget), removeDocument);
+  const move = useMovePage({ targets: selection.selected }, { onMoved: selection.moved });
   const selectionRef = useRef(selection);
   useLayoutEffect(() => { selectionRef.current = selection; }, [selection]);
   const selecting = selection.active;
@@ -191,7 +192,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     </GestureDetector>
     {selection.active ? <View pointerEvents="box-none" style={[styles.selectionActions, { bottom: actionBottom }]}
       onLayout={(event) => setActionHeight(event.nativeEvent.layout.height)}>
-      <LibrarySelectionAction action="Move" disabled={!selection.selected.length || selectionLocked || !!problem} onPress={selection.openMove} />
+      <LibrarySelectionAction action="Move" disabled={!selection.selected.length || selectionLocked || !!problem} onPress={() => { move.restart(); selection.openMove(); }} />
       <LibrarySelectionAction action="Delete" disabled={!selection.selected.length || selectionLocked || !!problem} working={selection.working} onPress={selection.deleteSelected} />
     </View> : null}
     {held ? <View style={[styles.reading, selection.active && { bottom: actionBottom + actionHeight + 12 }]} pointerEvents="box-none">
@@ -199,8 +200,8 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
         onPress={() => navigation.navigate('Reader', { id: held.id })} />
     </View> : null}
     <AddDrawer visible={adding} onClose={() => setAdding(false)} onImport={() => void add()} onSelect={selection.begin} />
-    <Drawer visible={selection.moving} title="Move to…" onClose={selection.closeMove}>
-      {selection.moving ? <MoveContent targets={selection.selected} onMoved={selection.moved} /> : null}
+    <Drawer visible={selection.moving} {...move.header} onClose={selection.closeMove}>
+      {selection.moving ? move.body : null}
     </Drawer>
     {actions ? <ReaderActions document={actions.id} movable onClose={() => setActions(null)} onDelete={() => remove(actions)}
       onSelect={() => { setActions(null); selection.begin({ kind: 'document', id: actions.id }); }} /> : null}
