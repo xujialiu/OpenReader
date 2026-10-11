@@ -69,7 +69,34 @@
   case as code-inspection-only (`numberOfLines={1}` in `player.tsx`) unless a
   fixture voice is fabricated for it.
 
+## Route-loss probes (#152)
+
+- **A repeated cached position is mistaken for proof that native audio did not
+  advance.** `lastReportedPosition` and `lastContentPosition` are JS samples;
+  after an LLDB attachment they may be several seconds old. A native event's
+  `receivedMs` is the one-second batch drain time, not its JS handler time.
+  Compare native `pause.done`/rebuild state and origin timestamps with the
+  separate JS `route.received` line for ordering. Use the host queue replay for
+  a content-advancement assertion; use the owner's actual heard/resumed words
+  for Bluetooth tails. LLDB also stops app threads during symbol loading, so
+  the highlighter can catch up to sentence end after detaching; that cannot
+  establish a mid-sentence hold. See `native-audio/route-loss.md` and notes
+  2026-10-11 14:37.
+- **LLDB batch mode waits forever after `process continue`.** A subsequent
+  sleep does not make `continue` return while the app is running. Post the
+  notification with `expr`, then `detach` and `quit` in batch mode, with a tool
+  timeout. A notification injection is a handler probe, not a radio event
+  (notes 2026-10-11 14:37).
+
 ## Fish Audio from the simulator
+
+- **`OfflineFixProbe.testChooseVoiceForShortFixture` says no voice rows
+  appeared although the sheet contains Aarav.** Its `label CONTAINS " - "`
+  predicate matches no current name-only row. Inspect the actual tree and
+  touch the named voice, then check the chosen voice separately; successful
+  HTTP responses alone do not prove when rows became visible. Its configuration
+  test also assumes the Library is showing: return there before running it,
+  or its Settings tap fails on an already-open Reader (notes 2026-10-11 14:37).
 
 - **The first Fish request after a minute or so of quiet fails with "The
   network connection was lost", and the reading stops.** The reader's note is

@@ -64,7 +64,7 @@ the words selected, a title, the address of the sync server.
 
 The owner has approved extending the record so a fault during a playback
 interruption can be investigated afterwards, without first turning on a capture
-and repeating it. Implementation and device verification are still pending.
+and repeating it.
 
 The scope is playback interruptions, not only AirPods and not a review of every
 part of the app: an output disappearing or changing, a phone call, a pause from
