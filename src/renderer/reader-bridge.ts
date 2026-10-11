@@ -747,6 +747,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
 
   const hold = useCallback((options?: { stop?: boolean }) => {
     holding.current = true;
+    if (DEBUG_MODE) debugLog('playback', `page hold.request utterance=${cued.current?.utterance ?? null} lastElapsedMs=${corrected.current?.elapsedMs ?? null} lastWord=${corrected.current?.word ?? null} deferred=${awaiting.current !== null} stop=${options?.stop === true}`);
     if (awaiting.current !== null) return;
     send(options?.stop ? { kind: 'hold', stop: true } : { kind: 'hold' });
   }, [send]);

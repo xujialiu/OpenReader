@@ -14,6 +14,7 @@ import { debugLogNative } from '../../modules/open-reader-debug-log';
 import { offlineNative } from '../../modules/open-reader-offline';
 import { createDebugLog, debugLog, describeValue, flushDebugLog, setDebugLogWriter, type DebugLogFiles } from './debug-log';
 import { DEBUG_MODE } from './mode';
+import { recordNativePlayback } from './playback';
 
 /**
  * Where the Debug Log is kept, from the app's container. Under Library, which
@@ -61,7 +62,18 @@ export function installDebugLog(): void {
       `kept in ${folder.uri}`,
   );
 
+  // Capture at native event time, not at the later JS delivery time. No native
+  // subscription or timer exists without Debug Mode. Empty drains write nothing.
+  const drainPlayback = () => {
+    if (native) recordNativePlayback(native.drainPlaybackCapture(), Date.now());
+  };
+  if (native) {
+    native.startPlaybackCapture();
+    setInterval(drainPlayback, 1_000);
+  }
+
   AppState.addEventListener('change', (state) => {
+    drainPlayback();
     debugLog('app', `app ${state}`);
     if (state !== 'active') flushDebugLog();
   });

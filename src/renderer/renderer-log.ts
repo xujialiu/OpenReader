@@ -674,6 +674,12 @@ function installRendererLog(env) {
       safely(function () { line('snapshot, ' + String(why).slice(0, TEXT_CHARS) + ': ' + snapshot()); });
     },
     traceRenderAhead: traceRenderAhead,
+    playback: function (event, utterance, word, held, elapsed) {
+      safely(function () {
+        line('playback received=' + event + ' pageMs=' + Date.now() + ' utterance=' + utterance +
+          ' word=' + word + ' held=' + held + ' elapsedMs=' + Math.round(elapsed));
+      });
+    },
     /* The watchdog's look, taken again whenever a Clip cue arrives: in the
        background iOS lets the WebView run only while the app hands it something,
        and a timer may not come round in that moment. */

@@ -466,3 +466,117 @@ diff --git a/node_modules/react-native-audio-api/common/cpp/audioapi/dsp/WsolaTi
 +}
 +
  } // namespace audioapi
+diff --git a/node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.mm b/node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.mm
+index d0e77d8..652eb85 100644
+--- a/node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.mm
++++ b/node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.mm
+@@ -1,5 +1,6 @@
+ #import <audioapi/ios/system/AudioEngine.h>
+ #import <audioapi/ios/system/AudioSessionManager.h>
++#import <audioapi/ios/system/OpenReaderAudioTrace.h>
+ 
+ #include <mutex>
+ 
+@@ -340,6 +341,7 @@ - (void)onInterruptionBegin
+   }
+ 
+   self.state = AudioEngineState::AudioEngineStateInterrupted;
++  ORAudioTrace(@"interruption.began", (NSInteger)self.state, [self.audioEngine isRunning]);
+ }
+ 
+ - (void)onSessionDeactivated
+@@ -381,6 +383,8 @@ - (void)onInterruptionEnd:(bool)shouldResume
+   std::scoped_lock lock(_engineLock);
+   NSError *error = nil;
+ 
++  ORAudioTrace(shouldResume ? @"interruption.end.resume" : @"interruption.end.hold",
++               (NSInteger)self.state, [self.audioEngine isRunning]);
+   if (self.state != AudioEngineState::AudioEngineStateInterrupted) {
+     return;
+   }
+@@ -437,6 +441,7 @@ - (void)rebuildAudioEngineAndResumeIfNeeded
+   }
+ 
+   _isRebuildingAudioEngine = YES;
++  ORAudioTrace(@"engine.rebuild.begin", (NSInteger)self.state, [self.audioEngine isRunning]);
+ 
+   if ([self.audioEngine isRunning]) {
+     [self.audioEngine stop];
+@@ -452,6 +457,7 @@ - (void)rebuildAudioEngineAndResumeIfNeeded
+   [self notifyConfigurationChanges];
+ 
+   _isRebuildingAudioEngine = NO;
++  ORAudioTrace(@"engine.rebuild.end", (NSInteger)self.state, [self.audioEngine isRunning]);
+ }
+ 
+ - (void)rebuildAudioEngine
+@@ -465,6 +471,7 @@ - (void)rebuildAudioEngine
+ 
+ - (bool)startEngine
+ {
++  ORAudioTrace(@"engine.start.request", (NSInteger)self.state, [self.audioEngine isRunning]);
+   NSError *error = nil;
+ 
+   if (self.audioEngine != nil && [self.audioEngine isRunning] &&
+@@ -501,6 +508,7 @@ - (bool)startEngine
+ 
+   self.state = AudioEngineState::AudioEngineStateRunning;
+   self.sessionDeactivationInvalidatedGraph = false;
++  ORAudioTrace(@"engine.start.done", (NSInteger)self.state, [self.audioEngine isRunning]);
+   return true;
+ }
+ 
+@@ -536,6 +544,7 @@ - (bool)startIfNecessary
+ - (void)pauseIfNecessary
+ {
+   std::scoped_lock lock(_engineLock);
++  ORAudioTrace(@"engine.pause.request", (NSInteger)self.state, [self.audioEngine isRunning]);
+   if (self.state == AudioEngineState::AudioEngineStatePaused) {
+     return;
+   }
+@@ -545,6 +554,7 @@ - (void)pauseIfNecessary
+   }
+ 
+   self.state = AudioEngineState::AudioEngineStatePaused;
++  ORAudioTrace(@"engine.pause.done", (NSInteger)self.state, [self.audioEngine isRunning]);
+ }
+ 
+ - (void)stopIfNecessary
+diff --git a/node_modules/react-native-audio-api/ios/audioapi/ios/system/OpenReaderAudioTrace.h b/node_modules/react-native-audio-api/ios/audioapi/ios/system/OpenReaderAudioTrace.h
+new file mode 100644
+index 0000000..a4b0c69
+--- /dev/null
++++ b/node_modules/react-native-audio-api/ios/audioapi/ios/system/OpenReaderAudioTrace.h
+@@ -0,0 +1,13 @@
++#import <Foundation/Foundation.h>
++
++// OpenReader #152. Lifecycle events only: never called from the render loop.
++// With Debug Mode off there is no observer and no record is retained. The
++// observer copies scalar facts synchronously, preserving native event time even
++// if JS receives the batch later. No port names, addresses or document text.
++static inline void ORAudioTrace(NSString *event, NSInteger state, BOOL running)
++{
++  [[NSNotificationCenter defaultCenter]
++      postNotificationName:@"OpenReaderAudioTrace"
++                    object:nil
++                  userInfo:@{@"event" : event, @"state" : @(state), @"running" : @(running)}];
++}
+diff --git a/node_modules/react-native-audio-api/ios/audioapi/ios/system/SystemNotificationManager.mm b/node_modules/react-native-audio-api/ios/audioapi/ios/system/SystemNotificationManager.mm
+index 5b37cbf..5c3af17 100644
+--- a/node_modules/react-native-audio-api/ios/audioapi/ios/system/SystemNotificationManager.mm
++++ b/node_modules/react-native-audio-api/ios/audioapi/ios/system/SystemNotificationManager.mm
+@@ -214,6 +214,14 @@ - (void)handleRouteChange:(NSNotification *)notification
+       break;
+   }
+ 
++  // OpenReader #152: the JS event is asynchronous. Rebuilding while the native
++  // state is still Running consumes unheard speech and can reclaim Bluetooth.
++  // Freeze before publishing or scheduling a rebuild. A later explicit Play
++  // starts the engine; reconnect/configuration and interruption-end do not.
++  if (routeChangeReason == AVAudioSessionRouteChangeReasonOldDeviceUnavailable) {
++    [self.audioAPIModule.audioEngine pauseIfNecessary];
++  }
++
+   [self.audioAPIModule
+       invokeHandlerWithEventName:audioapi::AudioEvent::ROUTE_CHANGE
+                          payload:audioapi::StringPayload{

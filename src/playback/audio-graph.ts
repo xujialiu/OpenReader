@@ -26,6 +26,10 @@ import { framesFor } from './gap';
 import { resampleLinear } from './pcm';
 import { POSITION_INTERVAL_MS } from './reader-clock';
 import { bufferParts } from './buffer-parts';
+import { debugLog } from '../debug/debug-log';
+import { DEBUG_MODE } from '../debug/mode';
+
+let nextGraphId = 0;
 
 /**
  * The offset that tells the native queue node to leave its read index where it
@@ -44,11 +48,10 @@ export interface AudioGraphHandlers {
    * The output the owner was listening on has gone away —
    * `OldDeviceUnavailable`, which in practice means the headphones came out.
    *
-   * The caller must pause. It is not optional and the library will not do it:
-   * `SystemNotificationManager.handleRouteChange` dispatches this event and then
-   * calls `handleEngineConfigurationChange`, which rebuilds the engine and keeps
-   * playing — so the book reads itself aloud through the speaker
-   * (notes/NOTES.md footgun 2).
+   * The native patch freezes the engine before publishing this event (#152).
+   * The caller must still pause the source and publish paused state so the page
+   * stops too. Upstream dispatches first and rebuilds while still Running:
+   * delayed JS would consume unheard words and could reclaim the output.
    */
   onOutputLost(): void;
   onError(error: unknown): void;
@@ -157,6 +160,13 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
   let node: AudioBufferQueueSourceNode = context.createBufferQueueSource({ pitchCorrection: true });
   let sourceGeneration = 0;
   let playbackRate = 1;
+  const graphId = ++nextGraphId;
+  let lastPosition: number | null = null;
+  let lastPositionAt: number | null = null;
+  function trace(event: string) {
+    if (!DEBUG_MODE) return;
+    debugLog('playback', `graph=${graphId} source=${sourceGeneration} event=${event} rate=${playbackRate} lastReportedPosition=${lastPosition} reportAgeMs=${lastPositionAt === null ? null : Date.now() - lastPositionAt}`);
+  }
   node.connect(context.destination);
 
   /**
@@ -193,10 +203,11 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
   function drive(next: boolean): void {
     if (running === next) return;
     running = next;
+    trace(next ? 'resume.request' : 'suspend.request');
     driving = driving
       .then(() => {
         if (closed) return;
-        return next ? context.resume() : context.suspend();
+        return (next ? context.resume() : context.suspend()).then(() => trace(next ? 'resume.done' : 'suspend.done'));
       })
       .catch(handlers.onError);
   }
@@ -217,6 +228,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
     node.onPositionChangedInterval = POSITION_INTERVAL_MS;
     node.onPositionChanged = (event) => {
       if (generation !== sourceGeneration) return;
+      if (DEBUG_MODE) { lastPosition = event.value; lastPositionAt = Date.now(); }
       try { handlers.onPosition(event.value); } catch (error) { handlers.onError(error); }
     };
     node.onBufferEnded = (event) => {
@@ -228,6 +240,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
 
   /** Footgun 2. See `AudioGraphHandlers.onOutputLost`. */
   const routeChange: AudioEventSubscription | undefined = AudioManager.addSystemEventListener('routeChange', (event) => {
+    trace(`route.received.${event.reason}`);
     if (event.reason !== 'OldDeviceUnavailable') return;
     try {
       handlers.onOutputLost();
@@ -342,6 +355,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
       // stays in the playing state and resumes on the next buffer, and adding a
       // defensive stop is what breaks that resumption.
       node.pause();
+      trace('node.paused');
       // And the engine, because the owner asking is also the one time footgun 3's
       // other half does not apply: a stopped engine lets iOS suspend the app,
       // which is the risk while a reading waits for its next Clip and the point
@@ -354,6 +368,9 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
       // A seek has a new content origin. Scope callbacks as well as DSP state:
       // events already dispatched by the old source cannot move the new reading.
       sourceGeneration++;
+      lastPosition = null;
+      lastPositionAt = null;
+      trace('source.clear');
       node.onPositionChanged = null;
       node.onBufferEnded = null;
       node.stop();
@@ -367,6 +384,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
     async dispose() {
       sourceGeneration++;
       closed = true;
+      trace('dispose');
       routeChange?.remove();
       node.onPositionChanged = null;
       node.onBufferEnded = null;

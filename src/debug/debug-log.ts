@@ -36,6 +36,7 @@ export type DebugCategory =
   | 'error'
   | 'document'
   | 'reading'
+  | 'playback'
   | 'provider'
   | 'download'
   | 'sync'

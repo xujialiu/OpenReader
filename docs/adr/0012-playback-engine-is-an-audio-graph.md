@@ -144,3 +144,34 @@ scheduling and event adapters. Full real chapter output and the 35-repetition
 native run retain waveform alignment; iOS integration is verified separately.
 Bluetooth output latency and provider alignment accuracy are not established by
 a native host waveform test.
+
+## Output loss freezes natively before rebuilding (#152)
+
+The upstream route handler publishes `OldDeviceUnavailable` asynchronously to JS,
+then schedules an engine rebuild. If JS has not paused yet, the native desired
+state remains Running, so rebuilding starts a new engine and activates the
+session again. The owner's AirPods could switch away, then back, while unread
+content was consumed. Captures and the minimized host replay are recorded in
+`notes/NOTES_2026-10-11.md` and `test/manual-test/native-audio/route-loss.md`.
+
+The patch calls the engine's locked `pauseIfNecessary` before dispatching that
+route event or scheduling a rebuild. Rebuilding now preserves Paused; a late
+interruption-end or new-device notification does not undo it. JS still pauses
+the queue, suspends the context and publishes the stopped Reading. Explicit Play
+uses the existing resume path. Ordinary interruption behavior remains unchanged.
+A fixed rewind was rejected: it hides content consumed on the wrong output and
+cannot establish what the headphones actually delivered.
+
+An engine-originated pause must also hold the page. Previously only the owner's
+pause handler sent that message; automatic pause changed React state but left
+the WebView's independent word clock running to the end of its sentence. The
+`useReading` state callback now sends a stopping hold on a true-to-false play
+intent transition, excluding quiet construction. A test executes the real hook
+and generated frame/hold code; manual pause is its control.
+
+The native test compiles extracted production route, rebuild, pause and
+interruption methods with the actual queue; hardware and scheduling are adapters.
+It reproduces 1.397 seconds of unheard advancement at 1.55x before the fix and
+zero afterwards under the same 338-quantum delivery delay. That establishes the
+race, not exact Bluetooth output latency or physical auto-switch causality.
+Physical AirPods acceptance remains necessary.

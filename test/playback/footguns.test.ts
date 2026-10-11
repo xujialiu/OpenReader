@@ -98,16 +98,15 @@ describe('footgun 1: the audio session needs iosCategory AND iosMode together', 
 
 describe('footgun 2: pause on OldDeviceUnavailable, or the book reads itself aloud', () => {
   it('listens for the route change and tests for that reason', () => {
-    // SystemNotificationManager.handleRouteChange dispatches the event and then
-    // calls handleEngineConfigurationChange, which rebuilds the engine and keeps
-    // playing. Nothing else pauses.
+    // The native patch now freezes output first (#152); JS still must pause
+    // the source, publish paused state, and stop the page's word clock.
     const graph = code('audio-graph.ts');
     expect(graph).toContain("addSystemEventListener('routeChange'");
     expect(graph).toContain("'OldDeviceUnavailable'");
   });
 
   it('pauses when it fires', () => {
-    expect(code('engine.ts')).toMatch(/function onOutputLost\(\): void \{\s*pauseNow\(\);/);
+    expect(code('engine.ts')).toMatch(/function onOutputLost\(\): void \{\s*pauseNow\('output-lost'\);/);
   });
 });
 

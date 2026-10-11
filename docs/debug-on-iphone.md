@@ -66,6 +66,8 @@ status line appears only when `playing`, `known`, `section`, `rendered` or
 | `[hx] playing=… app=… utterance=… known=… section=… rendered=I/S …` | the Reading's status, every 0.5 s when it changes and every 5 s when it does not, while a Document is open or its Reading is held. `app=` (from `1.0.0-beta3`) is the app's state then. `known` is the number of Utterances the app holds, `section` the spine index being read, `rendered` the last section the page reported out of `S` spine items. |
 | `[renderer] …` | (from `1.0.0-beta3`, #113) epub.js on the reader's page, event by event: `renderAhead:` asking for the next section, and `done` or why nothing was asked; `view N appended / displayed in X ms / unloaded / removed before its display finished / has not finished displaying`; `display "…" asked by X ← Y`; `views cleared`; `stage resized`; `page hidden / visible`; `manager queue stalled` with what is in flight and waiting, then `moving again`; and `snapshot, the reading ran out of text` beside the out-of-text note |
 | `[probe]` | a harness `js` probe's answer (step 4) |
+| `[playback]` | from #152: native route/interruption and engine lifecycle, remote commands, source pause/resume, and page hold requests. Native records retain `nativeMs` (Unix milliseconds), `uptimeMs`, `sequence` and `receivedMs`; the line's stamp is JS receipt/write time, not necessarily event time. `lastReportedPosition` and `reportAgeMs` name the latest callback, not the last word heard. `native dropped=N` means the 128-event native buffer overflowed. |
+| `[renderer] playback received=hold` | from #152: the page actually handled the hold; `pageMs`, utterance and word indices, `held` and elapsed milliseconds. A sent hold alone is not proof the page received it. |
 | `[sync]`, `[download]`, `[provider]` | skipped by the timeline by default; `--skip ''` shows them |
 | `[warn]`, `[error]` | `console.warn` and `console.error`, uncaught errors, unhandled rejections |
 
@@ -73,6 +75,15 @@ On a build with `[renderer]` lines, read those around the fault first: they
 say what epub.js was doing and waiting on, which is what #112 needed four rounds
 of probing to learn. Search `stalled`, `has not finished displaying` and
 `snapshot`.
+
+For an audio-route fault, include `[playback]` and page acknowledgements and use
+`--width 1000` to retain the full numeric snapshot. Order native events by their
+sequence and origin time, not by the JS-written line alone. Compare the output
+loss, native pause/rebuild, JS route delivery and page hold receipt. Preserve
+any dropped-event count. These records contain no new document text and cannot
+establish the last word actually delivered by AirPods; ask the owner for that
+word if the remaining discrepancy depends on it. The host replay and separate
+physical checks are in `test/manual-test/native-audio/route-loss.md`.
 
 Compare the fault's window with an earlier stretch where the same thing worked.
 In #112 the comparison was the finding. In the foreground, entering section N

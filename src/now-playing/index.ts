@@ -38,6 +38,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
 import type NowPlayingModule from '../../modules/open-reader-now-playing';
+import { debugLog } from '../debug/debug-log';
 import type { NowPlayingReading, RemoteCommandEvent } from '../../modules/open-reader-now-playing';
 
 import { intentOf, type RemoteIntent } from './reading';
@@ -213,6 +214,7 @@ export function useNowPlaying({ title, chapter, cover, playing, rate, live, onIn
   useEffect(() => {
     const subscription = lockScreen().addListener('remoteCommand', ({ command }: RemoteCommandEvent) => {
       const { playing: running, onIntent: act } = now.current;
+      debugLog('playback', `remote command=${command} playing=${running}`);
       act(intentOf(command, running));
     });
     return () => subscription.remove();

@@ -15,6 +15,9 @@ interface DebugLogNative {
   readonly nativeBuild: string;
   /** One line to the system log at the default level, subsystem `top.xujialiu.openreader`, category `debug-log`, public. */
   systemLog(line: string): void;
+  /** Debug Mode only; fixed-name/scalar native events, at most 128 waiting. */
+  startPlaybackCapture(): void;
+  drainPlaybackCapture(): unknown;
 }
 
 export const debugLogNative = requireOptionalNativeModule<DebugLogNative>('OpenReaderDebugLog');

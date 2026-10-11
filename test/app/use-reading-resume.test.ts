@@ -1,3 +1,4 @@
+import vm from 'node:vm';
 import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +9,7 @@ import { segmentDocument } from '../../src/app/segment';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
 import { useReading, type Reading } from '../../src/app/use-reading';
 import { SynthesisError } from '../../src/core/providers/errors';
+import { highlighterSource } from '../../src/renderer/highlighter';
 
 /**
  * A place taken from another device while a book is open, in a section the
@@ -34,6 +36,7 @@ const bridge = vi.hoisted(() => ({
   show: vi.fn<(utterance: number, options?: { reveal?: boolean }) => void>(),
   onClip: vi.fn<(cue: { utterance: number }, options?: { reveal?: boolean; recover?: boolean }) => void>(),
   clear: vi.fn<() => void>(),
+  hold: vi.fn<(options?: { stop?: boolean }) => void>(),
   returnToReading: vi.fn<(utterance: number | null) => void>(),
   options: null as null | { onBlocks?(blocks: readonly ReportedBlock[], section: { index: number; href: string; spine: number }): void },
 }));
@@ -98,7 +101,7 @@ vi.mock('../../src/renderer', async () => {
         setAppearance() {},
         setTheme() {},
         resumeFollowing() {},
-        hold() {},
+        hold: bridge.hold,
         clear: bridge.clear,
         returnToReading: bridge.returnToReading,
         setFollowOnly() {},
@@ -150,6 +153,7 @@ function mount(options: { settings?: AppSettings; resume?: ReadingPlace | null; 
   bridge.show.mockClear();
   bridge.onClip.mockClear();
   bridge.clear.mockClear();
+  bridge.hold.mockReset();
   engines.built.length = 0;
   let reading: Reading | undefined;
   function Probe() {
@@ -182,6 +186,50 @@ function mount(options: { settings?: AppSettings; resume?: ReadingPlace | null; 
     get reading() { return reading!; },
   };
 }
+
+describe('the highlight when output is lost (#152)', () => {
+  it.each(['owner', 'output loss'] as const)('holds the last word when paused by %s', async (source) => {
+    const m = mount({ settings: { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' } });
+    await m.up();
+    try {
+      await m.report(CHAPTER_ONE, 0);
+      await m.press((reading) => reading.play());
+      const engine = engines.built[0];
+      await act(async () => { engine.deps.onState!({ playing: true, buffering: false }); });
+
+      // Run the shipped renderer's frame loop and hold receiver, not a model of
+      // its interpolation. DOM painting and frame scheduling alone are adapters.
+      const program = highlighterSource();
+      const loop = program.slice(program.indexOf('  function start() {'), program.indexOf('  /* ---- following the line'));
+      const hold = program.slice(program.indexOf("    if (message.kind === 'hold') {"), program.indexOf("    if (message.kind === 'browse') {"));
+      expect(loop).toContain('function tick(now)');
+      expect(hold).toContain('state.held = true');
+      const page = vm.runInNewContext(`(function () {
+        var word = -1, frame = 0;
+        var state = { held: false, epoch: 0, next: 0, durationMs: 2000,
+          words: [0, 500, 1000, 1500].map(function (atMs, index) { return {atMs: atMs, ranges: [index]}; }) };
+        var window = {requestAnimationFrame: function () {return 1;}, cancelAnimationFrame: function () {}};
+        function showWord(ranges) {word = ranges[0];}
+        function halt() {}
+        ${loop}
+        function dispatch(message) {${hold}}
+        return {tick: tick, hold: function () {dispatch({kind: 'hold', stop: true});}, word: function () {return word;}};
+      })()`) as { tick(now: number): void; hold(): void; word(): number };
+      bridge.hold.mockImplementation(() => page.hold());
+      page.tick(0);
+      expect(page.word()).toBe(0);
+      if (source === 'owner') await m.press((reading) => reading.pause());
+      // The graph's output-loss handler publishes paused without calling the
+      // owner's reading.pause(). It reaches this real useReading callback.
+      await act(async () => { engine.deps.onState!({ playing: false, buffering: false }); });
+      expect(m.reading.status.playing).toBe(false);
+      page.tick(2000);
+      expect(page.word(), 'paused audio must not leave the highlight running to the last word').toBe(0);
+    } finally {
+      await m.down();
+    }
+  });
+});
 
 describe('an adopted place in a section not yet reported (defect 3)', () => {
   it('asks the renderer for that section once, and lands the moment the section reports', async () => {

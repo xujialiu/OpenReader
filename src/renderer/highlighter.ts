@@ -3063,7 +3063,11 @@ function rendererLogSplice(): string {
     '      return;\n' +
     '    }\n' +
     "    if (message && message.kind === 'speak') rendererLog.watch();\n" +
+    '    var wasHeld = !!(state && state.held);\n' +
     '    dispatchPlain(message);\n' +
+    "    if (message && (message.kind === 'hold' || (message.kind === 'speak' && wasHeld))) {\n" +
+    "      rendererLog.playback(message.kind, state ? state.utterance : null, state ? state.next - 1 : null, !!(state && state.held), state ? Math.min(state.durationMs, Math.max(0, window.performance.now() - state.epoch)) : 0);\n" +
+    '    }\n' +
     '  };\n'
   );
 }

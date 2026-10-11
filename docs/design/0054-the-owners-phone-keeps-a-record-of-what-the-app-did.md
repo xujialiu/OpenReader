@@ -60,6 +60,31 @@ The document's own words appear, because a fault is often about a particular
 sentence or selection. They are cut to about a line: the sentence being spoken,
 the words selected, a title, the address of the sync server.
 
+## Playback interruptions: agreed scope for #152
+
+The owner has approved extending the record so a fault during a playback
+interruption can be investigated afterwards, without first turning on a capture
+and repeating it. Implementation and device verification are still pending.
+
+The scope is playback interruptions, not only AirPods and not a review of every
+part of the app: an output disappearing or changing, a phone call, a pause from
+the app or Lock Screen, and a return to playback. The record must distinguish
+what asked playback to stop, where the audio stopped and would continue, and
+whether the word highlight was told to stop too. A record of a position is not
+proof of the last word the headphones actually delivered to the owner's ear.
+
+These new records use positions and event order, not the document's words. They
+contain no recording of sound, no credentials, and introduce no automatic
+upload. This choice applies to the new playback diagnostics; it does not change
+the existing excerpts described above.
+
+The key events are kept automatically within a bounded local record. Recording
+every animation frame or requiring the owner to enable detailed capture before
+a fault were rejected: the former spends resources on repetition, while the
+latter loses the first occurrence, which is often the one the owner can report.
+The storage and runtime cost of the additional records must be measured before
+calling the extension complete.
+
 ## What never goes in it
 
 No key to any speech or translation service, no password to the sync server,

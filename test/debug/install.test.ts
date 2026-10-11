@@ -17,6 +17,9 @@ const world = vi.hoisted(() => ({
   touched: 0,
   appState: [] as ((state: string) => void)[],
   system: [] as string[],
+  captureStarts: 0,
+  captureDrains: 0,
+  nativeEvents: [] as unknown[],
 }));
 
 vi.mock('expo-file-system', () => {
@@ -62,7 +65,11 @@ vi.mock('react-native', () => ({
   AppState: { addEventListener: (_event: string, listener: (state: string) => void) => { world.appState.push(listener); return { remove() {} }; } },
 }));
 vi.mock('../../modules/open-reader-debug-log', () => ({
-  debugLogNative: { nativeVersion: '0.0.1', nativeBuild: '1', systemLog: (line: string) => void world.system.push(line) },
+  debugLogNative: {
+    nativeVersion: '0.0.1', nativeBuild: '1', systemLog: (line: string) => void world.system.push(line),
+    startPlaybackCapture() { world.captureStarts++; },
+    drainPlaybackCapture() { world.captureDrains++; const events = world.nativeEvents.splice(0); return { events, dropped: 0 }; },
+  },
 }));
 vi.mock('../../modules/open-reader-offline', () => ({
   offlineNative: { excludeFromBackup: (uri: string) => void world.excluded.push(uri) },
@@ -99,6 +106,9 @@ beforeEach(() => {
   world.touched = 0;
   world.appState = [];
   world.system = [];
+  world.captureStarts = 0;
+  world.captureDrains = 0;
+  world.nativeEvents = [];
   previousHandler = vi.fn();
   installedHandler = null;
   tracker = null;
@@ -118,6 +128,8 @@ describe('a build without Debug Mode', () => {
     log.flushDebugLog();
     vi.advanceTimersByTime(60_000);
     expect(world.touched).toBe(0);
+    expect(world.captureStarts).toBe(0);
+    expect(world.captureDrains).toBe(0);
     expect(world.made).toEqual([]);
     expect(world.files.size).toBe(0);
     expect(world.system).toEqual([]);
@@ -130,6 +142,20 @@ describe('a build without Debug Mode', () => {
 });
 
 describe('a build with Debug Mode', () => {
+  it('keeps native origin times across delayed JS delivery, and empty drains write nothing', async () => {
+    const log = await install(true);
+    expect(world.captureStarts).toBe(1);
+    world.nativeEvents.push({ event: 'session.route', sequence: 1, nativeMs: 100, uptimeMs: 200, reason: 2, privateText: 'must not persist' });
+    vi.advanceTimersByTime(1_000);
+    log.flushDebugLog();
+    expect(written()).toContain('native session.route receivedMs=');
+    expect(written()).toContain('sequence=1 nativeMs=100 uptimeMs=200 reason=2');
+    expect(written()).not.toContain('must not persist');
+    const before = written();
+    vi.advanceTimersByTime(60_000);
+    log.flushDebugLog();
+    expect(written()).toBe(before);
+  });
   it('keeps the log under Library, outside the backup, and starts it with the launch line', async () => {
     const log = await install(true);
     expect(world.made).toEqual([FOLDER]);

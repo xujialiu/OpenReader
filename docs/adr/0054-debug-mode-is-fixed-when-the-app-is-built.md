@@ -100,6 +100,45 @@ native constant, and a JavaScript fact that is unknown until the native module
 loads; the inlined constant is known to every module as it loads, and is what
 the plan named.
 
+## Playback interruption evidence (#152)
+
+The owner approved automatic bounded local evidence across output changes,
+interruptions and explicit playback commands, without new document excerpts,
+recorded audio, credentials or upload. The existing Debug Mode gate remains the
+only gate; no Settings control or separate diagnostic mode is added.
+
+The native Debug Log module starts notification observers only when
+`installDebugLog` runs in Debug Mode. The audio library patch publishes fixed-name
+lifecycle notifications outside the render loop. The observer records state and
+hardware-running flags; AVAudioSession observers record numeric reason/options,
+output latency, I/O duration and sample rate. No notification dictionary is
+serialized, and no port name or hardware identifier is retained. Native origin
+wall time, monotonic uptime and sequence are captured synchronously, before JS
+can delay delivery.
+
+`PlaybackTraceBuffer` keeps the most recent 128 events under a lock and counts
+dropped older events. JS drains once per second and on app-state changes into
+the existing four-file 20 MB rolling Debug Log, adding JS receipt wall time.
+Empty drains write nothing. `recordNativePlayback` accepts only the event
+allowlist and named finite numeric fields, at most 128 per drain. A build without
+Debug Mode starts neither observers nor drain timer and retains no events.
+This adds no file writes on the audio thread. Like the existing two-second JS
+batch, undrained native memory is not crash-proof storage.
+
+`[playback]` identifies remote commands, output-loss delivery, engine play/pause,
+graph suspend/resume and page hold requests. Graph snapshots label the latest
+callback position `lastReportedPosition` and include its receipt age; this is
+not a synchronous hardware/ear measurement. The Debug Mode highlighter splice
+acknowledges a received hold (and a cue from a held state) with utterance/word
+indices, elapsed time and page wall time, through the existing bounded renderer
+logger. No word or frame stream is added. Native uptime is not compared directly
+with a WebView performance clock; wall timestamps connect those processes.
+
+Host tests cover release inactivity, delayed JS delivery, numeric-field privacy,
+overflow, ordered native timestamps, draining and empty-batch silence. The
+10,000-event Swift measurement and capture sizes are in the engineering log;
+phone overhead and physical route behavior require device verification.
+
 ## The Debug Log
 
 `src/debug/debug-log.ts` is the writer and the one function every call site

@@ -1332,7 +1332,12 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
       onError: report,
       onState: (state) => {
         if (generation !== engineGeneration.current) return;
-        if (!buildingRef.current) playIntent.current = state.playing;
+        if (!buildingRef.current) {
+          // Output loss pauses inside the engine, without passing through the
+          // owner's pause(). Stop the page's independent word clock too (#152).
+          if (playIntent.current && !state.playing) bridgeRef.current?.hold({ stop: true });
+          playIntent.current = state.playing;
+        }
         // Building for a press of Play, or waiting for its place (#54): a paused
         // engine saying it is paused — after a quiet reload — is not the press undone.
         setStatus((was) => ({ ...was, ...((awaitingPlaceRef.current || (buildingRef.current && playIntent.current)) && !state.playing

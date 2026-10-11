@@ -43,6 +43,8 @@ import { enqueueCeiling, fetchWindow, hasRunOut, retryOnPlay, type UtteranceStat
 import type { ReaderClock } from './reader-clock';
 import { createTimeline, type QueuedClip, type TimelinePosition } from './timeline';
 import { wordHandoff } from './voice-boundary';
+import { debugLog } from '../debug/debug-log';
+import { DEBUG_MODE } from '../debug/mode';
 
 /**
  * What the engine knows about its own exhaustion, which is more than "it
@@ -525,15 +527,21 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
   /**
    * The headphones came out (`OldDeviceUnavailable`). Pausing here is the whole
-   * of footgun 2: the library dispatches this event and then rebuilds the engine
-   * and keeps going, so without this line the book reads itself aloud through
-   * the speaker.
+   * of the JS half of footgun 2: the native patch has already frozen output
+   * before rebuilding (#152). Pause the source and publish the matching state
+   * here, so later Play resumes intentionally and the page holds its highlight.
    */
   function onOutputLost(): void {
-    pauseNow();
+    pauseNow('output-lost');
   }
 
-  function pauseNow(): void {
+  function trace(event: string): void {
+    if (!DEBUG_MODE) return;
+    debugLog('playback', `engine event=${event} playing=${playing} utterance=${cursor} rate=${rate} lastContentPosition=${last?.position ?? null} lastClipPosition=${last?.inClip ?? null} inGap=${last?.inGap ?? null}`);
+  }
+
+  function pauseNow(reason = 'engine'): void {
+    trace(`pause.${reason}`);
     playing = false;
     graph?.pause();
     publish();
@@ -723,6 +731,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
     play() {
       if (disposed) return;
+      trace('play.request');
       // The press is the explicit act a retry waits for, and it asks again for
       // every refused Utterance rather than the one the reading stopped on (#45).
       // The refusal it answers goes with them, so a stop after this press names
@@ -745,7 +754,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       pump();
     },
 
-    pause: pauseNow,
+    pause: () => pauseNow('request'),
 
     seek(utterance) {
       if (disposed) return;

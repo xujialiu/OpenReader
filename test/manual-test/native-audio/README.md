@@ -1,5 +1,11 @@
 # Native audio queue (#63)
 
+## Output loss and automatic-pause highlighting (#152)
+
+[Route-loss replay and physical acceptance](route-loss.md): a deterministic native
+route/rebuild/queue test, the real hook/highlighter regression, bounded native
+Debug Log capture, and the separate AirPods checks.
+
 ## Native queue position versus actual rendered audio (#63)
 
 On macOS with Xcode command-line tools and installed dependencies:
