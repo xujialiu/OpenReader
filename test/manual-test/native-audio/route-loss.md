@@ -43,6 +43,46 @@ The Swift command compiles the production bounded native event buffer. It checks
 and origin times, drain to empty, and reject non-finite numeric fields. It reports
 host elapsed time and retained JSON bytes; it does not benchmark phone overhead.
 
+## Driving the actual app's handler on the simulator (2026-10-11 run)
+
+The installed Debug simulator app's real `handleRouteChange:` can be driven by
+posting the system notification at it through LLDB while it plays:
+
+```sh
+lldb -p APP_PID --batch \
+  -o 'expr -l objc -O -- [[NSNotificationCenter defaultCenter] postNotificationName:@"AVAudioSessionRouteChangeNotification" object:nil userInfo:@{"AVAudioSessionRouteChangeReasonKey": @2}]' \
+  -o 'detach' -o 'quit'
+```
+
+Reason `2` is `OldDeviceUnavailable`, `1` reconnects; `AVAudioSessionInterruptionNotification`
+with `AVAudioSessionInterruptionTypeKey` 1/0 and `AVAudioSessionInterruptionOptionKey` 1
+drives the ordinary interruption pair. Every play must still sit behind a passed
+`silence.sh check` chained with `&&`.
+
+What this proves: the actual installed handler ran — the patched `pauseIfNecessary`
+before event dispatch shows as `native engine.pause.request` (state=1 running=1)
+followed by `engine.pause.done` (state=2 running=0) in the Debug Log, the later
+rebuild preserves `state=2 running=0`, and JS's `pause.output-lost` arrives ~0.5 s
+later (the async gap the fix closes) to find the engine at the route event's own
+content coordinate — measured 3.66287 s twice, deterministically. Reconnect and
+late interruption do not resume; explicit Play does; an interruption end with
+`shouldResume` continues.
+
+What it cannot prove: attaching LLDB stops every thread of the app for roughly
+6–10 s while symbols load. During that window the page's word clock is frozen but
+the wall clock runs, so when the hold lands the page has already interpolated to
+near the utterance's final word, and a painted word at an utterance end cannot
+distinguish held from sentence-finished. Engine-side positions and native
+sequences are immune to this; the page-clock hold at a mid-sentence word is what
+`use-reading-resume.test.ts`'s real-hook run establishes (word 0 held, not word 3).
+On this run every hold request was also answered by the page's
+`[renderer] playback received=hold … held=true` (78 of 78), and each paused state
+read twice seconds apart stayed identical.
+
+A quiet stretch can still put the simulator's volume back to 60 (the #109 round 2
+pitfall) with nothing playing; `check` immediately before every play, and again
+after any pause you intend to leave.
+
 ## Physical acceptance remains separate
 
 Host rendering does not emulate AirPods auto-switch, Bluetooth buffered audio,
