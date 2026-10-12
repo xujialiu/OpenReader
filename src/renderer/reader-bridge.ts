@@ -50,12 +50,9 @@ import {
   type ReadingScheme,
 } from './highlighter';
 import {
-  BLOCKS_MESSAGE,
   DOCUMENT_MESSAGE,
   FOLLOWING_STATE_MESSAGE,
-  PROBE_MESSAGE,
   PROBLEM_MESSAGE,
-  RENDERER_MESSAGE,
   TAP_MESSAGE,
   SELECTION_MESSAGE,
   type SelectionMessage,
@@ -67,6 +64,7 @@ import {
   type ReportedBlock,
   type SpeakMessage,
   type WebViewMessage,
+  readWebViewMessage,
 } from './messages';
 import { isPageLine, logFromPage } from './renderer-log';
 
@@ -456,23 +454,10 @@ export interface ReaderBridge {
  * the **parsed object**, not the WebView event — and only when the object's `type`
  * is not one of the library's own `internalEvents`, which is why both message
  * names here are prefixed. The declared type is `(event: any) => void`.
+ * `readWebViewMessage` takes it only with every field its type carries.
  */
 function asMessage(event: unknown): WebViewMessage | null {
-  if (typeof event !== 'object' || event === null) return null;
-  const type = (event as { type?: unknown }).type;
-  if (
-    type !== BLOCKS_MESSAGE &&
-    type !== DOCUMENT_MESSAGE &&
-    type !== FOLLOWING_STATE_MESSAGE &&
-    type !== PROBLEM_MESSAGE &&
-    type !== TAP_MESSAGE &&
-    type !== SELECTION_MESSAGE &&
-    type !== RENDERER_MESSAGE &&
-    type !== PROBE_MESSAGE
-  ) {
-    return null;
-  }
-  return event as WebViewMessage;
+  return readWebViewMessage(event);
 }
 
 /** The Block a cued sentence starts in, as this app has it: its section and its CFI (#120). */
@@ -795,9 +780,10 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
 
   const goToSection = useCallback(
     (index: number) => {
-      // `goToLocation` interpolates its argument into `rendition.display('…')`,
-      // and epub.js's `Spine.get` reads a target that is not a CFI and is not NaN
-      // as a spine index. So the index travels as its own decimal spelling.
+      // `goToLocation` hands its argument to `rendition.display` as a string
+      // (patched to a JSON string literal, ADR 0077), and epub.js's `Spine.get`
+      // reads a target that is not a CFI and is not NaN as a spine index. So the
+      // index travels as its own decimal spelling.
       debugLog('renderer', `the app asks epub.js to display section ${index} (goToSection)`);
       goToLocation(String(index));
     },
@@ -867,7 +853,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         return;
       }
       if (message.type === SELECTION_MESSAGE) {
-        if (lookupEnabled.current && typeof message.text === 'string' && typeof message.expanded === 'boolean' && typeof message.selecting === 'boolean') {
+        if (lookupEnabled.current) {
           selectionCallback.current?.({ ...message, text: message.text.slice(0, 5001) });
         }
         return;

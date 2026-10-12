@@ -233,6 +233,13 @@ Each rules out the obvious implementation.
 `updateAnnotation` re-renders every view's annotation pane, and each call is a
 fresh string evaluation.
 
+**And nothing from a Document runs in the page** (ADR 0077). The patched
+template's policy lets only the page's own three scripts run, and every section
+inherits it, so a Document's script and inline handlers do not run. A string
+that crosses into script goes as a JSON literal, as `goToLocation` now writes a
+place. The page itself may not `eval` or build a `Function` from a string: the
+policy refuses both.
+
 ## The design that works
 
 `injectJavascript` installs our own highlighter **once**. When a clip starts, the
@@ -298,7 +305,7 @@ The split is where the platform is, and it is the whole of the test strategy.
 | --- | --- |
 | `cursor.ts` | A Word Timing into a place in the document, and which word is current at time *t*. Three coordinate systems and every decision the renderer makes — plus the two walks back along that chain, a tapped point and a stored Reading Position, into the Utterance to read from. |
 | `blocks.ts` | The Blocks the WebView has reported, in reading order — sections arrive out of it and more than once. |
-| `messages.ts` | The protocol between the two halves. Types, and the five message names that must not collide with the library's own. |
+| `messages.ts` | The protocol between the two halves. Types, the message names that must not collide with the library's own, and `readWebViewMessage`, which takes a message from the page only with every field its type carries. |
 | `body-text.ts` | A Document's body text size, from the character counts the WebView reports: the size most of the text is set in, once enough text has been seen. |
 
 | Runs in Safari's JavaScript, not tested here | |

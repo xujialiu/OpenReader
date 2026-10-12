@@ -476,6 +476,7 @@ manager's offset. They are now written as they happen, in Debug Mode only.
   `[renderer] the app asks epub.js to display … (goTo|goToSection|browse)`.
   They reach the page through the library's `goToLocation`, whose injected
   `rendition.display('…')` the page can name only as `injected code`.
+  (Since ADR 0077 it injects `rendition.display("…")`, the place as a JSON literal.)
 - **The status line.** It carries `app=active|inactive|background` from
   `AppState.currentState`, right after `playing=`, so it still starts
   `playing=` and the kit's `HX playing=` matches.

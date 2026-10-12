@@ -352,7 +352,10 @@ export function reportedPlaces(blocks: readonly ReportedBlock[]): PlaceReader {
  * place a locator is minted for storage, and every comparison below is made on
  * the stripped form, so a locator written by either side finds its Block here.
  * The renderer keeps the assertions for its own `rendition.display`, where they
- * are harmless (spec 6.4; measured 2026-09-21, notes/NOTES_2026-09-21.md 17:11).
+ * are harmless (spec 6.4; measured 2026-09-21, notes/NOTES_2026-09-21.md 17:11)
+ * now that the patched epub.js writes an id into its XPath as a quoted literal:
+ * before, an id with an apostrophe in it broke the XPath and the display never
+ * finished (ADR 0077).
  */
 export function canonicalCfi(cfi: string): string {
   return cfi.replace(/\[[^\]]*\]/g, '');
