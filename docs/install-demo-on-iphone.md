@@ -10,8 +10,8 @@ different.
 ## When to make one
 
 When App Review asks for a screen recording on a physical device, as its
-Guideline 2.1 request did (notes 2026-10-04 11:30). What App Review
-Information holds now is in [release-to-app-store.md](release-to-app-store.md).
+Guideline 2.1 request did. What App Review Information holds now is in
+[release-to-app-store.md](release-to-app-store.md).
 
 ## Rules
 
@@ -38,9 +38,9 @@ Information holds now is in [release-to-app-store.md](release-to-app-store.md).
   Mode, so it would ask StoreKit, and App Store Connect sells nothing under
   `top.xujialiu.openreader.demo`. Every Play would raise "Purchases
   Unavailable". So it is built with `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`, and it
-  reads aloud with no alert and no Purchase row (owner's decision,
-  2026-10-09). If App Review asks to see the purchase, that is recorded from
-  the owner's own app with a Sandbox Apple Account.
+  reads aloud with no alert and no Purchase row (owner's decision). If App
+  Review asks to see the purchase, that is recorded from the owner's own app
+  with a Sandbox Apple Account.
 
 ## Why another identifier keeps the owner's app untouched
 
@@ -124,8 +124,7 @@ install-on-iphone.md):
 
    `-allowProvisioningUpdates` lets Xcode make the signing profile. The app
    has no capabilities, so Xcode signs it with the team's wildcard profile,
-   `iOS Team Provisioning Profile: *`, rather than one for an explicit App ID
-   (notes 2026-10-04 11:30).
+   `iOS Team Provisioning Profile: *`, rather than one for an explicit App ID.
 5. **Check** the product, `/tmp/openreader-iphone-demo/Build/Products/Release-iphoneos/`:
    `main.jsbundle` beside the app reads `var DEBUG_MODE = false;` and
    `var PURCHASE_LOCK = false;`, and holds the `-demo` template; `codesign -d --entitlements :- OpenReader.app` shows

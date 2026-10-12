@@ -11,6 +11,11 @@ Six places. Putting something in the wrong one is how it stops being read.
 | `CONTEXT.md`   | Everyone                       | The glossary, and nothing else                                       |
 | `README.md`    | A visitor to the GitHub page   | What the app does and how to install it                              |
 
+**Only `notes/` carries timestamps.** A note says when; a file under `docs/`
+says what holds today, and leaves the date, the time and the `(notes …)`
+reference of a run in the note. A date that is itself the fact, such as a
+profile's expiry, belongs where the fact is.
+
 ## `docs/design/` — the product argument
 
 A product manager must be able to read any file here end to end and understand
@@ -52,14 +57,15 @@ different decisions.
 A guide (installing on the simulator or the iPhone, a Demo App, a release,
 debugging on the phone) holds the steps as they are today, the facts they
 depend on (a team ID, a bundle ID, a profile's expiry), and a short reason
-where it stops someone taking a wrong turn. Write it in the present tense. A
-date in a guide belongs to a fact, such as an expiry, never to a run.
+where it stops someone taking a wrong turn. Write it in the present tense.
 
 A run of a guide goes to that day's `notes/`: what was built, how long it took,
 what failed and what fixed it. The guide gains only what the run changed — a
-step, a fact, a row of its troubleshooting table — ending with the note it came
-from: `(notes 2026-10-02 14:01)`. A run that changed nothing in the guide
-changes only the notes.
+step, a fact, a row of its troubleshooting table — written as it stands today.
+A run that changed nothing in the guide changes only the notes.
+
+Installing on the owner's iPhone is the exception: it is routine and is
+recorded nowhere. Its build, installation and launch go in the reply.
 
 ## `notes/` — dated, and timestamped inside
 
