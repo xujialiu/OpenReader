@@ -186,10 +186,10 @@ Pause syncs **at once** rather than after a quiet period: a phone paused from
 the lock screen may be suspended within seconds, and the plugin's ten quiet
 seconds are a desktop's luxury.
 
-A stop means every stop, and until #155 (2026-10-13) it meant only the owner's
-pause. The write and the sync lived in the screen's pause handler, so a Reading
-stopped by the AirPods switching away, by a refused Clip, at the end of the
-book or by a Word Lookup (#216) wrote nothing and synced nothing. Locked on
+A stop means every stop, and until #155 it meant only the owner's pause. The
+write and the sync lived in the screen's pause handler, so a Reading stopped by
+the AirPods switching away, by a refused Clip, at the end of the book or by a
+Word Lookup (#216) wrote nothing and synced nothing. Locked on
 sentence one and stopped by the AirPods on sentence six, the phone's Library
 held sentence four (the ten-second write) and the Positions File sentence one,
 which is where the desktop would have resumed. Both now happen in
@@ -240,7 +240,7 @@ The first version took the kept place only if `readingPosition()` was null,
 and let the screen's pause write first. That held for #105's case, a Reading
 still on the sentence it resumed at, and failed for a Reading that had spoken a
 sentence of its own since the book was opened and was played again on it
-(#154, 2026-10-11): `readingPosition()` answered that sentence, the pause wrote
+(#154): `readingPosition()` answered that sentence, the pause wrote
 it stamped above the desktop's place and uploaded it, and the settling, which
 ran after, let the kept place go. A Contents row that only browses while
 the reading plays (#107) moves neither the reading nor the kept place. One that
