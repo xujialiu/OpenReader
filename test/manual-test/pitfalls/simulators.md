@@ -285,3 +285,7 @@
 ## The #148 run (2026-10-09, a device created for the session)
 
 - **`sim_volume` read 60 at the start of the run, after the main session's `set` and with nothing played.** `silence.sh check` at 15:33 refused (the file said 0 after the boot, per the brief); a `set` then held for the hour of presses that followed (15:33 to 16:25), every one chained as `silence.sh set && silence.sh check && press`, none refused. The rule above stands: a check from earlier in the day, or from the brief, proves nothing.
+
+## ADR 0077 verification (2026-10-12)
+
+- **The volume reset to 60 nine times in one hour, with the app never playing.** Between plays — during builds, probe runs and screen work — `check` read 60 again and again (23:12, 23:24, 23:29 post-boot, 23:32, 23:34, 23:35, 23:44, 23:47, 23:53); a `set` immediately before each `check` with the play chained by `&&` was the only thing that held, exactly as the bullets above conclude, and the cadence here (roughly every few minutes, including twice inside one `set`→launch→`check` sequence after a boot) is why nothing else is safe. A refusal costs only the retry; a missed reset plays at 60 into the owner's room.
