@@ -9,6 +9,7 @@ Until a delegated agent returns, the main agent must wait patiently for its comp
 - **Arm it at dispatch.** In pi, call `bg_wait({ id: <the run or workflow id>, nonBlocking: true, timeoutMs: 3000000 })` straight after the `subagent` call; it wakes the session at 50 minutes. Other harnesses use their own timer.
 - **At the wake, look once.** Take one `status` look at the run. Report in a few lines what it is working on, when it last acted, and whether it is alive. Then arm the next 50 minutes.
 - **A dead or stuck run is a failed run.** Report its exact failure and its worktree's state before any retry.
+- **A pi run has a time limit.** pi-subagents ends an async run after 30 minutes unless the call or the agent's frontmatter sets `timeoutMs`. `.pi/agents/ios-tester.md` sets 3 hours: on 2026-10-12 a simulator check was cut off halfway, after its build alone took about 15 minutes. Any other run that may outlast 30 minutes gets its own `timeoutMs` at dispatch.
 
 ## A delegated agent's worktree
 
