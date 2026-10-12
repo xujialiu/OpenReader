@@ -230,9 +230,11 @@ _Avoid_: quote, snippet, excerpt, context
 **Stamp**:
 The wall-clock time something was last written, together with the device
 name of whoever wrote it, used to decide which of two copies wins. A library
-entry carries one that moves whenever the owner touches the document; a
-reading position carries its own, which moves only when the reading moves
-somewhere new.
+entry carries one that moves only when the owner adds the document or it is
+read aloud, on this device or another, and the Library lists the latest first;
+opening a document without playing it leaves it where it was. A reading
+position carries its own, which moves only when the reading moves somewhere
+new.
 _Avoid_: timestamp, ts, version, clock
 
 **Device Name**:

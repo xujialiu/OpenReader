@@ -107,7 +107,7 @@ describe('a place a resume landed on is never written again (observation b, ADR 
 describe('leaving or pausing on an unmoved place writes nothing (defect 4, ADR 0031)', () => {
   it('asks samePlace before every write, at the one place every write goes through', () => {
     const library = code('use-library.ts');
-    const reached = within(library, 'const reached = useCallback(', '[change, stamp],');
+    const reached = within(library, 'const reached = useCallback(', '[change],');
     pin(reached, 'if (held?.position && samePlace(held.position, place, held.format)) return;', 'use-library.ts, reached');
     expect(reached.indexOf('samePlace(')).toBeLessThan(reached.indexOf('change(id,'));
   });

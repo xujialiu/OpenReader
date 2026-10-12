@@ -172,3 +172,23 @@ recipe goes.
 - Silence checks caught volume 60 twice after earlier zero readings, blocking
   Play as intended. Recheck immediately before each playback; no silence result
   is valid for an entire session.
+
+### Verifying #228: `axe batch` tap space, and the masked key field (2026-10-12)
+
+- **An `axe batch` of 107 steps reported `✓ Batch completed successfully` and
+  typed nothing.** The steps were `tap -x 344 -y 282` (focus the API key field)
+  followed by per-character `type` steps, in one stdin batch. Batch `tap` uses
+  the screenshot pixel space, like the standalone `tap`; point-space
+  coordinates (what `ax.py find` returns) landed both taps in the header, the
+  field never had focus, and the characters went nowhere — with exit 0 and no
+  per-step complaint. Fix: use point-space `touch -x -y --down --up` steps in
+  batches, and screenshot the target's focused state (keyboard up, cursor in
+  the field) before the first `type` step. The standalone tools' split —
+  `touch` points, `tap` pixels — applies inside `batch` too.
+- **The masked provider key field reads back empty until revealed.** After the
+  text was provably in (masked dots on screen), `axe describe-ui` and the AX
+  tree both reported the secure field's value as length 0. Tap **Show API key**
+  (its frame does not move when the keyboard rises; the form does not scroll on
+  this screen) and the same readback then returns the exact text. Per-character
+  HID `type` steps with `sleep 0.2` between them, into the focused revealed
+  field, landed all 51 characters exactly on the first focused attempt.

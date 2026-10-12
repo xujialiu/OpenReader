@@ -134,6 +134,24 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     playingRef.current = mine && live.playing;
   }, [mine, live.playing]);
   const plays = mine && live.playing;
+  /**
+   * Speech is being heard: playing, and not still waiting for a Clip. Play that
+   * is building, asking for Consent or fetching its first Clip is not yet, and a
+   * refused one never is.
+   */
+  const speaking = plays && !live.buffering;
+  const speakingRef = useRef(false);
+  /**
+   * Hearing a Document is what moves it up the Library (#228): here as speech
+   * starts, and with each place written while it goes on (`reached`). Opening it
+   * moves nothing.
+   */
+  useEffect(() => {
+    speakingRef.current = speaking;
+    if (speaking && heldId) library.heard(heldId);
+    // Once per start of speech, not once per Library write.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speaking]);
   /** Told here, which outlives every screen: a playing Reading's audio keeps the app running away from the screen, and a download with it (#75). */
   useEffect(() => {
     if (!plays) return;
@@ -143,7 +161,7 @@ export function ReadingHost({ children }: { children: ReactNode }) {
 
   /**
    * Read the bytes, once per Reading. Opening a book is a sync moment (issue
-   * #20), and it moves the book to the top of the Library.
+   * #20). It does not move the book up the Library: only hearing it does (#228).
    */
   useEffect(() => {
     if (!heldId) return;
@@ -151,7 +169,6 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     const entry = library.current(heldId);
     if (!entry) return;
     let alive = true;
-    library.opened(heldId);
     sync.poke('open');
     const adoptedAt = library.adoptedAt[heldId] ?? null;
     const started = Date.now();
@@ -218,8 +235,17 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     [openedId, library, settings, setSettings],
   );
   const setRate = useCallback((rate: number) => setSettings((previous) => ({ ...previous, rate })), [setSettings]);
-  /** Bound to the Document that is open, never to whatever is held next: a view on its way out writes its own place. */
-  const reached = useCallback((place: ReadingPlace) => { if (openedId) library.reached(openedId, place); }, [library, openedId]);
+  /**
+   * Bound to the Document that is open, never to whatever is held next: a view on its way out writes its own place.
+   *
+   * A place written while speech is heard (every ten seconds or so, and at its own pause) keeps the Document
+   * moving up the Library with it (#228). One written while paused, as a tapped sentence still is (#96), does not.
+   */
+  const reached = useCallback((place: ReadingPlace) => {
+    if (!openedId) return;
+    library.reached(openedId, place);
+    if (speakingRef.current) library.heard(openedId);
+  }, [library, openedId]);
   const titled = useCallback((said: string) => { if (openedId) library.retitled(openedId, said); }, [library, openedId]);
   const onChrome = useCallback(
     (chrome: boolean) => setLive((was) => (was.id === openedId ? (was.chrome === chrome ? was : { ...was, chrome }) : { id: openedId, playing: false, buffering: false, chrome, section: null })),

@@ -3,8 +3,9 @@
  * wrote it, used to decide which of two copies wins.
  *
  * Its own file because two things carry one and they must not be confused. A
- * Library entry's Stamp moves whenever the owner touches the Document — opening
- * it, renaming it, reading it — and orders the shelf. A Reading Position's
+ * Library entry's Stamp moves when the Document is added and when it is heard,
+ * here or on another device, and orders the shelf; opening or renaming it
+ * leaves it alone (#228). A Reading Position's
  * Stamp moves **only when speech stops somewhere new**, and it is the one a
  * merge compares: opening a book on the phone to glance at the shelf must not
  * make the phone's older place beat the desktop's newer one, which is exactly

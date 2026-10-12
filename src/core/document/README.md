@@ -88,8 +88,8 @@ anchor, and falls back to searching for the anchor when they disagree. Those two
 are a `ReadingPlace`, which is what the renderer produces and what resolving
 takes. A `ReadingPosition` is a place **with its own Stamp** (`stamp.ts`): when
 speech stopped there and on which device. That Stamp moves only when the reading
-does, and it — not the Library entry's, which moves whenever the owner touches
-the book — is what a merge between devices compares. The Library stamps a place
+does, and it — not the Library entry's, which moves when the book is added or
+heard and orders the shelf (#228) — is what a merge between devices compares. The Library stamps a place
 as it stores it, above whatever it held (`nextStamp`), so a slow clock cannot
 lose the place it is reading to one it adopted a moment ago.
 

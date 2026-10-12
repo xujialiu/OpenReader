@@ -16,7 +16,9 @@ import { DEFAULT_SETTINGS } from '../../src/app/settings';
  */
 
 const views = vi.hoisted(() => ({ shown: false, mounted: [] as string[], unmounted: [] as string[], state: null as null | ((playing: boolean, buffering: boolean) => void),
-  section: null as null | ((section: number | null) => void) }));
+  section: null as null | ((section: number | null) => void), reached: null as null | ((place: unknown) => void) }));
+/** What the host told the Library that orders it (#228). */
+const told = vi.hoisted(() => ({ heard: [] as string[], opened: [] as string[], reached: [] as string[] }));
 const portal = vi.hoisted(() => ({ hostName: undefined as string | undefined }));
 const shell = vi.hoisted(() => ({ current: null as unknown }));
 /** What the offline runtime was last told about the Reading playing (#75). */
@@ -35,9 +37,10 @@ vi.mock('react-native-teleport', () => ({
 vi.mock('../../src/app/reading-view', async () => {
   const { useEffect } = await vi.importActual<typeof import('react')>('react');
   return {
-    ReadingView: (props: { shown: boolean; document: { identity: { id: string } }; onState(playing: boolean, buffering: boolean): void; onSection(section: number | null): void }) => {
+    ReadingView: (props: { shown: boolean; document: { identity: { id: string } }; onState(playing: boolean, buffering: boolean): void; onSection(section: number | null): void; onReached(place: unknown): void }) => {
       const id = props.document.identity.id;
       views.state = props.onState;
+      views.reached = props.onReached;
       views.section = props.onSection;
       views.shown = props.shown;
       useEffect(() => {
@@ -73,7 +76,10 @@ shell.current = {
   sync: { poke: () => {}, wait: async () => null },
   library: {
     entries, adoptedAt: {}, current: (id: DocumentId) => entries.find((one) => one.id === id) ?? null,
-    opened: () => {}, voiced: () => {}, reached: () => {}, retitled: () => {},
+    opened: (id: string) => { told.opened.push(id); },
+    heard: (id: string) => { told.heard.push(id); },
+    reached: (id: string) => { told.reached.push(id); },
+    voiced: () => {}, retitled: () => {},
   },
 };
 
@@ -87,6 +93,9 @@ async function host() {
   await act(async () => { tree = create(createElement(ReadingHost, null, createElement(Probe))); });
   views.mounted.length = 0;
   views.unmounted.length = 0;
+  told.heard.length = 0;
+  told.opened.length = 0;
+  told.reached.length = 0;
   const run = async (step: (reading: ReadingHandle) => void) => { await act(async () => { step(handle.current!); }); };
   return { handle, run, close: async () => { await act(async () => { tree!.unmount(); }); } };
 }
@@ -194,6 +203,65 @@ describe('the Reading outlives the Reader while it plays (#68)', () => {
     await h.run((r) => r.end(A));
     expect(views.unmounted).toEqual([A]);
     expect(h.handle.current!.current).toBeNull();
+    await h.close();
+  });
+});
+
+describe('what the Reading tells the Library about its order (#228)', () => {
+  const place = { locator: 'epubcfi(/6/8!/4/2/4)', anchor: { exact: 'A sentence.', prefix: '', suffix: '' } };
+
+  it('moves nothing for a Document opened and left without Play', async () => {
+    const h = await host();
+    await h.run((r) => r.show(A));
+    expect(views.mounted).toEqual([A]);
+    await h.run(() => views.state!(false, false));
+    await h.run((r) => r.left(A));
+    expect(told.opened).toEqual([]);
+    expect(told.heard).toEqual([]);
+    await h.close();
+  });
+
+  it('moves it up when speech starts, and not while Play is still waiting or was refused', async () => {
+    const h = await host();
+    await h.run((r) => r.show(A));
+    // Play pressed: building, asking for Consent, fetching the first Clip.
+    await h.run(() => views.state!(true, true));
+    expect(told.heard).toEqual([]);
+    // Refused, as a declined Consent or a missing key is.
+    await h.run(() => views.state!(false, false));
+    expect(told.heard).toEqual([]);
+    await h.run(() => views.state!(true, true));
+    await h.run(() => views.state!(true, false));
+    expect(told.heard).toEqual([A]);
+    await h.close();
+  });
+
+  it('moves it up again with each place written while it speaks, and not with one written while paused (#96)', async () => {
+    const h = await host();
+    await h.run((r) => r.show(A));
+    // A tapped sentence, written while paused.
+    await h.run(() => views.reached!(place));
+    expect(told.reached).toEqual([A]);
+    expect(told.heard).toEqual([]);
+    await h.run(() => views.state!(true, false));
+    expect(told.heard).toEqual([A]);
+    // The ten-second write while it speaks, and the one its own pause makes.
+    await h.run(() => views.reached!(place));
+    expect(told.heard).toEqual([A, A]);
+    // Waiting for a late Clip is not speech.
+    await h.run(() => views.state!(true, true));
+    await h.run(() => views.reached!(place));
+    expect(told.heard).toEqual([A, A]);
+    await h.close();
+  });
+
+  it('keeps moving it up while it speaks in the Library', async () => {
+    const h = await host();
+    await h.run((r) => r.show(A));
+    await h.run(() => views.state!(true, false));
+    await h.run((r) => r.left(A));
+    await h.run(() => views.reached!(place));
+    expect(told.heard).toEqual([A, A]);
     await h.close();
   });
 });

@@ -17,8 +17,8 @@
  * **In**: an item is taken for an entry with the same Document Id when its
  * Stamp is newer than the entry's position's, or the entry has no position. The
  * entry's own Stamp — the shelf's order — moves up to the item's when that is
- * newer, so a book read yesterday on the desktop rises above one opened last
- * week here. Items for Documents not on this shelf are not this device's to
+ * newer, so a book read yesterday on the desktop rises above one heard last
+ * week here (#228). Items for Documents not on this shelf are not this device's to
  * keep; they stay in the file, which the transport carries through.
  */
 

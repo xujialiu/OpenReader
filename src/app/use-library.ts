@@ -20,6 +20,12 @@
  * first" is `stamp.at` descending, and the Stamp is already the field
  * `core/document/library.ts` keeps for deciding which of two copies of an entry
  * wins — so there is no second notion of recency to disagree with it.
+ *
+ * "Recent" is recently **heard** (#228): an entry's Stamp moves when the
+ * Document is added (`add`), when speech in it is heard (`heard`), and when a
+ * place heard on another device is adopted (`adopt`), and at nothing else. A
+ * Document opened, looked at and left without Play stays where it was, and so
+ * does one renamed or given its own title.
  */
 
 import type { File } from 'expo-file-system';
@@ -55,8 +61,13 @@ export interface Library {
   add(source: File, options: { move: boolean; folder?: FolderId | null }): Promise<{ entry: LibraryEntry; duplicate: boolean }>;
   folders: FolderStore;
   folderSnapshot: FolderSnapshot;
-  /** This Document is being opened: its Stamp moves to now, which is what puts it at the top of the list. */
-  opened(id: DocumentId): void;
+  /**
+   * Speech in this Document is being heard: its Stamp moves to now, which is what
+   * puts it at the top of the list (#228). Called as the Reading starts speaking
+   * and again as it goes on, so a Document heard until 11:00 here stays above one
+   * heard until 10:30 on the desktop.
+   */
+  heard(id: DocumentId): void;
   /** What the document turned out to call itself, once epub.js has read its metadata. Ignored when it is empty or unchanged. */
   retitled(id: DocumentId, title: string): void;
   rename(id: DocumentId, title: string): void;
@@ -67,6 +78,9 @@ export interface Library {
    * is what knows the time and the device, and the position's Stamp is written
    * above whatever it held (`nextStamp`), so a slow clock cannot lose the place
    * it is reading to one it adopted a moment ago.
+   *
+   * It does not move the entry's own Stamp: a place is also written while the
+   * Reading is paused (#96), which is not the Document being heard (#228).
    */
   reached(id: DocumentId, place: ReadingPlace): void;
   /** This device's Device Name (CONTEXT.md), which every Stamp written here carries. */
@@ -104,10 +118,9 @@ export interface Library {
    * and from then on the document keeps it". Unchanged when the entry already holds
    * this pair, so an open costs no write of its own.
    *
-   * It does **not** move the Stamp. A Stamp is when this Document was last touched
-   * by the owner, which is what orders the shelf, and `opened` has already moved it
-   * a moment earlier; moving it again for a value the owner inherited rather than
-   * chose would reorder the shelf for an open that already did.
+   * It does **not** move the Stamp, which orders the shelf by when each Document
+   * was last heard (#228): a Voice chosen or inherited is not the Document being
+   * read aloud.
    */
   voiced(id: DocumentId, voice: VoiceChoice): void;
   /**
@@ -230,7 +243,7 @@ export function useLibrary(): Library {
     [commit],
   );
 
-  const opened = useCallback((id: DocumentId) => change(id, (entry) => ({ ...entry, stamp: stamp() })), [change, stamp]);
+  const heard = useCallback((id: DocumentId) => change(id, (entry) => ({ ...entry, stamp: stamp() })), [change, stamp]);
 
   const retitled = useCallback(
     (id: DocumentId, title: string) => {
@@ -238,9 +251,9 @@ export function useLibrary(): Library {
       if (!trimmed) return;
       if (displayNames()[id]) return;
       if (entriesRef.current.find((one) => one.id === id)?.title === trimmed) return;
-      change(id, (entry) => ({ ...entry, title: trimmed, stamp: stamp() }));
+      change(id, (entry) => ({ ...entry, title: trimmed }));
     },
-    [change, stamp],
+    [change],
   );
 
   const reached = useCallback(
@@ -253,10 +266,9 @@ export function useLibrary(): Library {
       change(id, (entry) => ({
         ...entry,
         position: stampPlace(place, nextStamp(Date.now(), deviceRef.current, entry.position?.stamp)),
-        stamp: stamp(),
       }));
     },
-    [change, stamp],
+    [change],
   );
 
   const positionsItems = useCallback(() => itemsOf(entriesRef.current, deviceRef.current), []);
@@ -293,11 +305,11 @@ export function useLibrary(): Library {
   const rename = useCallback((id: DocumentId, title: string) => {
     if (title.trim()) {
       saveDisplayName(id, title.trim());
-      change(id, (entry) => ({ ...entry, title: title.trim(), stamp: stamp() }));
+      change(id, (entry) => ({ ...entry, title: title.trim() }));
     }
-  }, [change, stamp]);
+  }, [change]);
   const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id), true), [commit]);
-  return { folders, folderSnapshot, entries, loading, note, add, opened, retitled, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
+  return { folders, folderSnapshot, entries, loading, note, add, heard, retitled, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
 }
 
 /**

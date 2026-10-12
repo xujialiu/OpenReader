@@ -19,7 +19,12 @@ are six providers.
 **The shelf is the front door.** Opening the app shows the documents already
 opened, most recent first, each with its title and how far through it the
 reading got. Tapping one opens it where it was left. Two buttons sit at the top:
-one adds a book, one opens the settings.
+one adds a book, one opens the settings. _(Revised in
+[#228](https://github.com/xujialiu/OpenReader/issues/228): most recent means
+most recently added or listened to, here or on the desktop. A book opened and
+left without listening stays where it was, so a book looked into and put back
+no longer pushes down the one being listened to. Renaming a book does not move
+it either.)_
 
 **The reader is a screen you arrive at and leave.** It carries a back arrow, the
 book's own name, and one more control on the right for how the page looks. Back
