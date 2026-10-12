@@ -156,7 +156,7 @@ export interface ReadingViewProps {
   onRate(rate: number): void;
   /** A Provider and a Voice together: a Voice belongs to exactly one Provider (CONTEXT.md, ADR 0010). */
   onVoice(provider: ProviderId, voice: string): void;
-  /** Where speech got to. Called on a Clip boundary at most every `POSITION_INTERVAL_MS`, on a pause, and once more on the way out. */
+  /** Where speech got to. Called on a Clip boundary at most every `POSITION_INTERVAL_MS`, at every stop of the Reading (#155), and once more on the way out. */
   onReached(place: ReadingPlace): void;
   /** What the EPUB calls itself, once epub.js has its metadata. */
   onTitle(title: string): void;
@@ -277,8 +277,14 @@ export function ReadingView({
     () => (position ? readLocator(position.locator, document.identity.format) : null),
     [position, document.identity.format],
   );
-  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id);
-  const lookup = useLookup(settings.lookup, reading, shown);
+  /** Where the Reading reports a stop; filled in below, beside the place it writes. */
+  const stoppedRef = useRef<(place: ReadingPlace | null) => void>(() => {});
+  const onStopped = useCallback((place: ReadingPlace | null) => stoppedRef.current(place), []);
+  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id, onStopped);
+  /** The lookup's pause is this screen's `pause`, defined below (#216). */
+  const pauseRef = useRef<() => void>(() => {});
+  const pauseForLookup = useCallback(() => pauseRef.current(), []);
+  const lookup = useLookup(settings.lookup, reading, shown, pauseForLookup);
   useDownloads();
   useEffect(()=>{void requestInventory(document.identity.id,{provider:settings.provider,voice:settings.voice}).catch(()=>{});},[document.identity.id,settings.provider,settings.voice]);
   const savedVoice = hasSavedVoice(document.identity.id, settings.provider, settings.voice);
@@ -400,6 +406,26 @@ export function ReadingView({
   useEffect(() => {
     syncRef.current = sync;
   }, [sync]);
+
+  /**
+   * A stop is a sync moment (issue #20, ADR 0031), whatever made it: the owner's
+   * pause, a Word Lookup's, the headphones coming out or the AirPods switching
+   * away, a refused Clip, the end of the book (#155). It may also be the moment
+   * a locked phone is suspended, so the place is written now rather than at the
+   * ten-second mark and the run starts at once. `useReading` calls this from
+   * its one stop exit, after it has settled a place kept from another device,
+   * so `place` is null when the Library already holds the newer one (#154).
+   */
+  useEffect(() => {
+    stoppedRef.current = (place) => {
+      if (place) {
+        positionRef.current = place;
+        writtenAtRef.current = Date.now();
+        onReachedRef.current(place);
+      }
+      syncRef.current.poke('pause');
+    };
+  }, []);
   useEffect(
     () => () => {
       // The Reading ending is a sync moment (issue #20): the place is written
@@ -468,6 +494,8 @@ export function ReadingView({
     [contentsOpen, contents.rows, plan, progress],
   );
 
+  /** The latest press of Play, numbered: `play` waits for its sync with it, and `pause` moves it on (#160). */
+  const playRequestRef = useRef(0);
   /**
    * Pause, and the one path there is.
    *
@@ -477,25 +505,27 @@ export function ReadingView({
    * next to the button. It is here now because the lock screen has a pause too
    * (ADR 0016), and a remote press has to leave this screen in a state it agrees
    * with: two pauses written to behave the same is two pauses that will stop
-   * behaving the same.
+   * behaving the same. A Word Lookup's pause is this one too (#216), so it
+   * re-opens both; a Pronunciation's interruption, which resumes by itself,
+   * is not (design 0051).
+   *
+   * A Play still waiting for its sync is taken back (#160), as Pause takes
+   * back every other wait a press of Play can be in (`use-reading.ts`).
+   *
+   * Writing the place and starting a sync are not here: every stop does both,
+   * this one included, from `stoppedRef` above.
    */
   const pause = useCallback(() => {
     reading.pause();
     setCollapsed(false);
+    playRequestRef.current += 1;
     lookup.stopPronunciation(false);
-    // A pause is a sync moment (issue #20), and the moment a locked phone may
-    // be suspended, so the place is written now rather than at the ten-second
-    // mark and the run starts at once.
-    const place = readingPosition();
-    if (place) {
-      positionRef.current = place;
-      writtenAtRef.current = Date.now();
-      onReachedRef.current(place);
-    }
-    sync.poke('pause');
     // `reading` is a fresh object every render; its `pause` is the stable callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reading.pause, readingPosition, sync, lookup.stopPronunciation]);
+  }, [reading.pause, lookup.stopPronunciation]);
+  useEffect(() => {
+    pauseRef.current = pause;
+  }, [pause]);
 
   /**
    * Play, after one look at the folder (issue #20): a place from another device
@@ -507,10 +537,15 @@ export function ReadingView({
    * or with the server down, it starts from here. A place the run takes after
    * that does not move the reading while it plays; the Reading keeps it and
    * takes it when it stops, unless the reading has moved on since (#105).
+   *
+   * Each press is numbered, and a Pause or a later Play moves the number on, so
+   * a press taken back during the wait starts nothing when the wait ends (#160).
    */
   const play = useCallback(() => {
     lookup.stopPronunciation(false);
+    const request = ++playRequestRef.current;
     void sync.wait('play').then((outcome) => {
+      if (request !== playRequestRef.current) return;
       if (outcome && outcome !== 'late' && outcome.adopted.includes(document.identity.id)) {
         const place = library.current(document.identity.id)?.position;
         if (place && reading.resumeAt(place)) positionRef.current = null;

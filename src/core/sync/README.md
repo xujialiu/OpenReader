@@ -39,9 +39,10 @@ desktop.
 
 **When** a sync runs is not decided here. `src/app/use-sync.ts` pokes the
 transport at launch, on returning to the foreground, on entering the background,
-on opening a book, on adding one, on a pause, and when a Reading ends (leaving the
-reader while it is paused, opening another book, or deleting it; #68); never on
-a timer while reading. It also waits on one, bounded, before Play.
+on opening a book, on adding one, whenever a Reading stops (a pause, the
+headphones or the AirPods, a refused Clip, the end of the book; #155), and when
+a Reading ends (leaving the reader while it is paused, opening another book, or
+deleting it; #68); never on a timer while reading. It also waits on one, bounded, before Play.
 
 **What the shelf does** with an adopted item is `src/app/sync-items.ts`: an item
 newer than the entry's position replaces it, the shelf Stamp follows when the

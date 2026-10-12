@@ -130,7 +130,8 @@ place. The Block's CFI is an **element** CFI with no text step, which is the hal
 of the dialect ADR 0008 records that Zotero's generator and resolver agree on.
 
 It is taken at a Clip boundary, where everything it needs is certainly in hand,
-and written to the Library at most every ten seconds — plus once, unconditionally,
+and written to the Library at most every ten seconds — plus once whenever the
+Reading stops, whatever stopped it (#155, ADR 0031), and once, unconditionally,
 when the screen is left. Leaving therefore loses nothing; a force-quit mid-chapter
 loses at most the last handful of sentences. It is read through a function rather
 than held in React state: a Reading Position changes once an Utterance, and
