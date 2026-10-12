@@ -45,14 +45,14 @@ own Metro. Everything here is this run's measurement, not a general recipe.
   still away from the screen. The simulator does not suspend the app the way a
   locked phone is, so the true suspension remains a device question.
 - **A refused Clip** (`Pause Gap Fixture`, the fake refusing from the third
-  request): Alpha and Beta played, Gamma's clip was refused, the engine stopped
-  itself (`pause.engine`), the Player showed the Provider's message, and the
-  stop wrote the Library and uploaded. The place written was **Beta**, the last
-  sentence spoken: the refusal hit the prefetch, before any cue of Gamma, so
-  `readingPosition()` still answered Beta. The regression test's engine model
-  has the cue fire first and pins the refused sentence; on-device, which
-  sentence a refusal writes depends on whether the clip was refused at prefetch
-  or after the cue. #155's contract — a stop writes and syncs — held either way.
+  request): the title heading (utterance 0, "Pause Gap Fixture") and Alpha
+  (utterance 1) played, and Beta (utterance 2), the third request, was refused.
+  The engine stopped itself on Beta (`pause.engine ... utterance=2` at
+  01:43:38.984), the Player showed the Provider's message, and the stop wrote
+  the Library and uploaded: the place written was **Beta**, the refused
+  sentence, stamped 01:43:39.010, the sentence the regression test pins. The
+  run's first report counted Alpha and Beta as played and Gamma as refused,
+  leaving out the heading; the app's Debug Log corrects it.
 - **#216, the lookup with the Player collapsed**: played, collapsed the Player
   (the Reading Button), long-pressed a word (AXe `touch --delay 2.0`, points).
   The drawer opened, the Reading paused through the screen's pause
