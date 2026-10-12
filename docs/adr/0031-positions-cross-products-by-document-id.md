@@ -186,6 +186,16 @@ Pause syncs **at once** rather than after a quiet period: a phone paused from
 the lock screen may be suspended within seconds, and the plugin's ten quiet
 seconds are a desktop's luxury.
 
+A stop means every stop, and until #155 it meant only the owner's pause. The
+write and the sync lived in the screen's pause handler, so a Reading stopped by
+the AirPods switching away, by a refused Clip, at the end of the book or by a
+Word Lookup (#216) wrote nothing and synced nothing. Locked on
+sentence one and stopped by the AirPods on sentence six, the phone's Library
+held sentence four (the ten-second write) and the Positions File sentence one,
+which is where the desktop would have resumed. Both now happen in
+`useReading`'s one stop exit, the effect that sees `playing` turn false
+whichever way it did, which hands the place to the screen to write and sync.
+
 The plugin's moments were the reason the two new ones exist on both sides. It
 synced at startup, reader open, tab close and shutdown, so a desktop paused
 with its tab open never uploaded, and Shift+Space never downloaded first — the
@@ -220,11 +230,19 @@ the file and adopted nothing, and Play offers only what its own run adopted.
 So the older sentence was read again, and its continuation was stamped above
 the newer place and uploaded (`notes/NOTES_2026-09-30.md`, 19:13: cursor 0
 instead of 2, `Phone old continuation.` on the server). Now `resumeAt` keeps a
-place it declines while playing. The effect that sees the reading stop, by a
-pause, the lock screen, the headphones or the end of the book, takes that place
-if `readingPosition()` is still null. Otherwise it lets the place go: speech
-reached another sentence, or the owner tapped or skipped, and the pause writes
-that sentence above the kept place. A Contents row that only browses while
+place it declines while playing, with the sentence speech was on when it
+arrived. A cue of any other sentence lets it go: the phone has read on, and
+the place it writes is the newer one. So does the owner tapping or skipping.
+The stop exit takes a place still kept, and only then hands the screen the
+place to write, which `readingPosition()` answers null on the place just taken.
+
+The first version took the kept place only if `readingPosition()` was null,
+and let the screen's pause write first. That held for #105's case, a Reading
+still on the sentence it resumed at, and failed for a Reading that had spoken a
+sentence of its own since the book was opened and was played again on it
+(#154): `readingPosition()` answered that sentence, the pause wrote
+it stamped above the desktop's place and uploaded it, and the settling, which
+ran after, let the kept place go. A Contents row that only browses while
 the reading plays (#107) moves neither the reading nor the kept place. One that
 chooses where a reading with no sentence yet starts (#86) lets it go at once,
 before its chapter reports and moves the cursor. And a place

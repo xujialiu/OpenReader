@@ -192,3 +192,42 @@ recipe goes.
   this screen) and the same readback then returns the exact text. Per-character
   HID `type` steps with `sleep 0.2` between them, into the focused revealed
   field, landed all 51 characters exactly on the first focused attempt.
+
+### Verifying #155/#216/#154/#160: sync setup, the Voice sheet, the consent hold, and the volume (2026-10-13)
+
+Record: [`sync/self-stop-writes-and-syncs.md`](sync/self-stop-writes-and-syncs.md).
+
+- **Ten-character `typeText` chunks lost characters in the Sync screen's
+  Address field.** Typing the 79-character test-folder URL read back
+  `hs://…` — the app's own check then refused it with "The WebDAV URL must
+  start with http:// or https://.", and the switch never turned on. The
+  controlled field re-renders per keystroke and a fast chunk still outraces
+  it. Fix: put `sync.url` and `sync.username` in with the harness settings
+  patch and type only the password, per character with a pause
+  (`sync/SyncSetupProbe.swift` asserts the fields show the caller's values
+  instead of typing them).
+- **The Voice sheet stands over the Play button, and the AX tree still lists
+  Play behind it.** On a fresh Document, Play opens the Voice sheet by design
+  (the Document has no Voice of its own yet); `ax.py find Play` then returns
+  the off-screen button's frame, touches land on the sheet, and the reading
+  never starts. Fix: choose the voice row, close the sheet with an `axe drag`
+  down its title (start-x/y at the title row, end 400 pt lower), and confirm
+  the tree's Play line came back before touching it.
+- **The consent alert holds the first Play with nothing on the status line.**
+  `say` keeps printing `playing=false … note=null` while the engine waits in
+  `consent.ensure`; the alert is only in the AX tree as a Sheet, and the
+  screenshots taken before synthesis show nothing. Fix: after the first Play
+  of a fresh provider setup, run `ax.py tree | grep Allow` and answer with
+  `ax.py alert-touch Allow`; the clips then fetch at once. The lookup's own
+  Youdao alert appears the same way over the drawer.
+- **The simulator's volume was back at 60 four times in one session with no
+  boot** — after the app relaunches a probe makes (#146) and twice in quiet
+  stretches. A `silence.sh check` failure also kills a `&&` chain, and a chain
+  ended with `&` backgrounds the whole chain, not just its last command — the
+  play silently never happened. Fix: `silence.sh set` immediately before every
+  play and keep the play in a call of its own.
+- **AXe's `touch` takes `-x`/`-y` with one dash but `--udid`, `--down`,
+  `--up`, `--delay` with two.** `--x` fails with "Missing expected argument
+  '-x'", `-udid` with "Missing expected argument '--udid'"; the error names
+  only the first missing flag. The working long press on a reader word is
+  `axe touch -x X -y Y --down --up --delay 2.0 --udid UDID`, in points.

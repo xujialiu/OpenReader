@@ -166,3 +166,15 @@ What it cannot prove: the case-2 shape (another Document opened inside the
 2 s window — three taps would not fit the window reliably) and any physical
 device. The handler-level plays that day (harness `play`) skip the wait
 entirely and are not evidence about this path.
+
+## A stop the owner did not make writes its place and syncs (#155, #216, #154, #160)
+
+[self-stop-writes-and-syncs.md](self-stop-writes-and-syncs.md) — 2026-10-13,
+beta6 at d7759d3: the end-of-Document stop, the same stop with the phone
+locked, a refused Clip, the lookup's pause with the Player collapsed, the
+Player's own Pause and the lock screen's, Play's late sync taken back by a
+Pause (#160), and a newer place from another device winning at a pause inside
+the sentence it arrived on (#154). The tools it added: `SyncSetupProbe.swift`
+(types only the sync password and turns the switch on), `webdav-poller.py`
+(the Positions File from the host, browser User-Agent), and
+`fake-kokoro.cjs`'s `OPENREADER_FAKE_TTS_REFUSE`.

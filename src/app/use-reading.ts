@@ -270,10 +270,10 @@ export interface Reading {
    * pressing Play reads from it. Playing, nothing moves: being dragged
    * somewhere else mid-sentence is the failure design 0020 keeps out of the
    * player. The place is kept instead and settled when the reading stops
-   * (#105): taken then if the reading still has no place of its own (speech
-   * still on the sentence it resumed at, nothing tapped, skipped or chosen),
-   * and let go otherwise, because the place the phone writes as it reads is
-   * the newer one. Returns whether the place was taken; a place whose section
+   * (#105): taken then if speech is still on the sentence it was on when the
+   * place arrived and nothing was tapped, skipped or chosen since (#154), and
+   * let go otherwise, because the place the phone writes as it reads is the
+   * newer one. Returns whether the place was taken; a place whose section
    * has not rendered yet is held and tried on every report, like the one the
    * book opened with, and a Play pressed meanwhile waits for it (#54). The
    * place already held, or already being read, is taken once, however many
@@ -309,9 +309,22 @@ export interface KnownCredentials {
  * (`reading-view.tsx` keys it by the Document Id) and the position is rewritten
  * every few sentences while the reading runs, so a value that kept arriving
  * would be the reading chasing its own tail.
+ * @param onStopped called each time the Reading goes from playing to stopped,
+ * whatever stopped it, with the place to write, or null when there is none to
+ * write. A stop is a sync moment (ADR 0031); see the stop effect at the end.
  */
-export function useReading(settings: AppSettings, credentials: KnownCredentials, resume: ReadingPlace | null, document: string): Reading {
+export function useReading(
+  settings: AppSettings,
+  credentials: KnownCredentials,
+  resume: ReadingPlace | null,
+  document: string,
+  onStopped?: (place: ReadingPlace | null) => void,
+): Reading {
   const { hasKey, writtenAt } = credentials;
+  const onStoppedRef = useRef(onStopped);
+  useEffect(() => {
+    onStoppedRef.current = onStopped;
+  }, [onStopped]);
   /**
    * The theme the page is painted in (ADR 0022), resolved the same way the shell
    * resolves the app's own — one function, so the chrome and the document cannot
@@ -488,9 +501,13 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
    *
    * Settled by the effect after `readingPosition`, whichever way the reading
    * stops. Let go at once when the owner points the reading somewhere
-   * (`seekTo`, `followRow`).
+   * (`seekTo`, `followRow`), and when speech reaches a sentence other than
+   * `at`, the one it was on when the place arrived (#154): from then on the
+   * phone has a newer place of its own (design 0031). `at` is null when the
+   * place arrived before the first cue, and is then the first cue's sentence,
+   * the one the reading started on.
    */
-  const lateRef = useRef<ReadingPlace | null>(null);
+  const lateRef = useRef<{ place: ReadingPlace; at: number | null } | null>(null);
   /**
    * The sentence to show if the resume is given up on, from the last attempt
    * that failed.
@@ -580,6 +597,11 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
         atRef.current = cue.utterance;
         // Speech has moved on from the resumed sentence; the next place is new.
         if (cue.utterance !== resumedAtRef.current) resumedAtRef.current = null;
+        // And from the sentence a place kept from another device arrived on:
+        // the phone has read on, so its own place is the newer one (#154).
+        const late = lateRef.current;
+        if (late?.at === null) late.at = cue.utterance;
+        else if (late && late.at !== cue.utterance) lateRef.current = null;
         // Once per Clip. `cue.words === null` is the Provider reporting no Word
         // Timings, which is the whole of the Highlight Level (ADR 0005): the
         // Utterance is highlighted, nothing is estimated, and the screen says
@@ -1074,7 +1096,7 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
         return true;
       }
       if (playIntent.current) {
-        lateRef.current = place;
+        lateRef.current = { place, at };
         return false;
       }
       lateRef.current = null;
@@ -1798,24 +1820,42 @@ export function useReading(settings: AppSettings, credentials: KnownCredentials,
   }, [placeAt]);
 
   /**
-   * The reading has stopped, with a place from another device kept while it
-   * played (#105). It stops by a pause, from the player or the lock screen, by
-   * the headphones coming out, or at the end of the book.
+   * The reading has stopped: the one exit every stop passes through. It stops
+   * by a pause, from the player, the lock screen or a Word Lookup, by the
+   * headphones coming out or the AirPods switching away, at a refused Clip, at
+   * the end of the book, or when the Provider or Voice changes under it.
    *
-   * Taken when the reading has no place of its own to write: the Library
-   * already holds the kept place, and while paused the newest place wins
-   * (ADR 0031). Let go when it has one. Speech reached another sentence after
-   * the place arrived, or the owner moved the reading, and the pause writes
-   * that place above the kept one (`reading-view.tsx`). From an effect, after
-   * the render that shows the stop, so nothing is sought from inside the
-   * engine's own state callback.
+   * First a place from another device kept while it played (#105) is settled.
+   * Still kept, it is taken: speech is still on the sentence it was on when
+   * the place arrived and the owner has not moved the reading, so the phone
+   * has nothing newer, the Library already holds the kept place, and while
+   * paused the newest place wins (ADR 0031). Had speech reached another
+   * sentence or the owner moved the reading, it was let go then (`lateRef`).
+   *
+   * Then the place to write goes to `onStopped`, which writes it and starts a
+   * sync (`reading-view.tsx`). After the settling, so a place just taken is not
+   * written over with the older sentence it replaced (#154): `readingPosition`
+   * answers null on it. Here and not in the owner's pause, because only that
+   * pause wrote and synced, and a Reading the AirPods stopped left the Sync
+   * Folder on the sentence the phone was locked on (#155). Only on the change
+   * from playing, so a pause of a Reading already paused writes nothing again.
+   *
+   * From an effect, after the render that shows the stop, so nothing is sought
+   * from inside the engine's own state callback.
    */
   const stopped = !status.playing;
+  const wasPlayingRef = useRef(false);
   useEffect(() => {
-    if (!stopped) return;
+    if (!stopped) {
+      wasPlayingRef.current = true;
+      return;
+    }
     const late = lateRef.current;
     lateRef.current = null;
-    if (late && readingPosition() === null) resumeAt(late);
+    if (late) resumeAt(late.place);
+    if (!wasPlayingRef.current) return;
+    wasPlayingRef.current = false;
+    onStoppedRef.current?.(readingPosition());
   }, [stopped, readingPosition, resumeAt]);
 
   return { bridge, status, opened, play, carryOn: start, pause, chooseVoice, seekTo: pointAt, skip, returnToReading, goToSection, readingPosition, resumeAt };

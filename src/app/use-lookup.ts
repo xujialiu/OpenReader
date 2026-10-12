@@ -11,9 +11,16 @@ import type { LookupMode, LookupSettings } from '../translation/settings';
 import { consent, lookupRecipient } from './consent';
 
 export interface LookupSelection { text: string; mode: LookupMode; selecting: boolean; attempt: number }
+/**
+ * @param pause the pause a lookup makes when "Pause reading during lookup" is on:
+ * the screen's own (`reading-view.tsx`), so it does everything a pause does and
+ * re-opens the Player and the navigation bar (#216, design 0020). A played
+ * Pronunciation interrupts with `reading.pause` instead, because it resumes by
+ * itself (design 0051) and is not the owner pausing.
+ */
 export function useLookup(settings: LookupSettings, reading: {
   bridge: ReaderBridge; pause(): void; play(): void; carryOn(): void; status: { playing: boolean };
-}, focused: boolean) {
+}, focused: boolean, pause: () => void = reading.pause) {
   const [selection, setSelection] = useState<LookupSelection | null>(null);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -21,8 +28,8 @@ export function useLookup(settings: LookupSettings, reading: {
   const [pronouncing, setPronouncing] = useState(false);
   const [loading, setLoading] = useState(false);
   const opened = useRef(false);
-  const latest = useRef({ settings, reading });
-  useEffect(() => { latest.current = { settings, reading }; }, [settings, reading]);
+  const latest = useRef({ settings, reading, pause });
+  useEffect(() => { latest.current = { settings, reading, pause }; }, [settings, reading, pause]);
   // The controller stores callbacks; reading state is consulted only on playback events.
   // eslint-disable-next-line react-hooks/refs
   const pronunciation = useMemo(() => createPronunciationController({
@@ -51,7 +58,7 @@ export function useLookup(settings: LookupSettings, reading: {
       if (!latest.current.settings.enabled) return;
       if (!opened.current) {
         opened.current = true;
-        if (latest.current.settings.pauseReading) latest.current.reading.pause();
+        if (latest.current.settings.pauseReading) latest.current.pause();
       }
       if (message.selecting) pronunciation.stop();
       setSelection((previous) => {

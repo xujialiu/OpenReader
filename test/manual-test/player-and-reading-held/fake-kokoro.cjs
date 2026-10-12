@@ -33,6 +33,15 @@
 // OPENREADER_FAKE_TTS_SECONDS   the clip length (default 2.5 s); a short one
 //                               walks a real chapter in seconds (#112's
 //                               chapter-boundary loop)
+// OPENREADER_FAKE_TTS_REFUSE   a JSON control file the server re-reads on every
+//                              synthesis: {"refuseFrom": N, "sentence": "optional"}
+//                              refuses request N onwards (1-based, the log's own
+//                              counter) — or every request whose text contains
+//                              "sentence" when that key is present — with HTTP
+//                              500 and a JSON error body, which the app reports
+//                              as the Provider's message. A refused Clip made to
+//                              happen at a chosen sentence (#155, 2026-10-13);
+//                              remove the file to stop refusing.
 
 const { Buffer } = require('node:buffer');
 const fs = require('node:fs');
@@ -103,6 +112,14 @@ const server = http.createServer((req, res) => {
           ` route=${kokoro ? 'kokoro' : 'speech'} auth=${auth}`,
       );
       setTimeout(() => {
+        let refuse = null;
+        try { refuse = JSON.parse(fs.readFileSync(process.env.OPENREADER_FAKE_TTS_REFUSE ?? '', 'utf8')); } catch {}
+        if (refuse && served >= (refuse.refuseFrom ?? Infinity) && (!refuse.sentence || text.includes(refuse.sentence))) {
+          record(`${served} refused on purpose`);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: { message: 'fake-tts: refusing this clip on purpose' } }));
+          return;
+        }
         if (kokoro) {
           const body = JSON.stringify({
             audio: pcmFor(SILENCE_SECONDS).toString('base64'),
