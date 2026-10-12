@@ -1344,7 +1344,9 @@ describe('what was read out of @epubjs-react-native/core rather than its documen
     // CFI dialect. All three come through `useReader`.
     const context = library('context.js');
     expect(context).toContain('book.current?.injectJavaScript(script)');
-    expect(context).toContain("rendition.display('${targetCfi}')");
+    // The place as a JSON string literal: the patch of ADR 0077, which
+    // test/renderer/places-reach-the-page.test.ts runs.
+    pin(context, 'rendition.display(${JSON.stringify(targetCfi)})', 'context.js goToLocation');
     expect(code('reader-bridge.ts')).toContain('injectJavascript, goToLocation } = useReader()');
   });
 });

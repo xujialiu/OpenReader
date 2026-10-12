@@ -651,3 +651,76 @@ export interface LookupControlMessage {
   releaseBrowsing?: boolean;
   selectionReleased?: boolean;
 }
+
+/**
+ * A message from the page, or null when it is not one of this app's: a `type`
+ * of its own **and** every field that type carries, of the right kind.
+ *
+ * The type alone is not enough. A message with a known type and none of its
+ * fields reached the code that reads them: a Blocks message without `blocks`
+ * threw out of `onWebViewMessage`, and a problem without a `detail` became the
+ * Player's note. Only the app's own program posts to this bridge (ADR 0077: a
+ * Document's script does not run in the page), so a message that fails here is a
+ * defect in that program, and it is dropped rather than half-read.
+ */
+export function readWebViewMessage(event: unknown): WebViewMessage | null {
+  if (!isObject(event)) return null;
+  switch (event.type) {
+    case BLOCKS_MESSAGE:
+      return isIndex(event.sectionIndex) &&
+        typeof event.section === 'string' &&
+        Array.isArray(event.blocks) &&
+        event.blocks.every(isReportedBlock) &&
+        (event.sizes === null || isSizes(event.sizes))
+        ? (event as unknown as BlocksMessage)
+        : null;
+    case DOCUMENT_MESSAGE:
+      return isIndex(event.spine) && Array.isArray(event.hrefs) && event.hrefs.every((href) => typeof href === 'string')
+        ? (event as unknown as DocumentMessage)
+        : null;
+    case FOLLOWING_STATE_MESSAGE:
+      return typeof event.following === 'boolean' ? (event as unknown as FollowingStateMessage) : null;
+    case PROBLEM_MESSAGE:
+      return typeof event.utterance === 'number' && typeof event.detail === 'string' ? (event as unknown as ProblemMessage) : null;
+    case TAP_MESSAGE:
+      return typeof event.block === 'string' && isIndex(event.offset) ? (event as unknown as TapMessage) : null;
+    case SELECTION_MESSAGE:
+      return typeof event.text === 'string' && typeof event.expanded === 'boolean' && typeof event.selecting === 'boolean'
+        ? (event as unknown as SelectionMessage)
+        : null;
+    case RENDERER_MESSAGE:
+      return typeof event.line === 'string' ? (event as unknown as RendererMessage) : null;
+    case PROBE_MESSAGE:
+      return typeof event.answer === 'string' ? (event as unknown as ProbeMessage) : null;
+    default:
+      return null;
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** A count or an offset: a whole number, zero or more. */
+function isIndex(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 0;
+}
+
+function isReportedBlock(value: unknown): value is ReportedBlock {
+  return (
+    isObject(value) &&
+    typeof value.id === 'string' &&
+    typeof value.text === 'string' &&
+    (value.role === 'paragraph' || value.role === 'heading' || value.role === 'other') &&
+    typeof value.section === 'string' &&
+    isIndex(value.sectionIndex) &&
+    typeof value.cfi === 'string'
+  );
+}
+
+function isSizes(value: unknown): value is CharactersBySize {
+  return (
+    Array.isArray(value) &&
+    value.every((pair) => Array.isArray(pair) && pair.length === 2 && Number.isFinite(pair[0]) && Number.isFinite(pair[1]))
+  );
+}

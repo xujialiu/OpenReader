@@ -24,6 +24,9 @@ npx tsx test/manual-test/fixtures/NAME.ts OUTPUT_DIRECTORY
   scrolling (#34).
 - `leading-strip-fixture.ts`: laid out like the owner's web novels, for the
   highlight's leading strip (#35).
+- `script-and-quote-fixture.ts`: a chapter with seven forms of a Document's own
+  script, each posting `SCRIPT RAN: …` as a problem if it runs, and a chapter whose
+  heading id holds an apostrophe, for ADR 0077.
 - `issue86-fixture.ts`: five short chapters and a text-less volume page, for
   the #86 skip/Contents measurements (`../player-and-reading-held/skips-while-playing.md`). Its contents
   are an **NCX on purpose**: epub.js spells an xhtml nav's hrefs with the nav
