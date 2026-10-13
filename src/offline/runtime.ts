@@ -58,6 +58,7 @@ import { offlineRepository } from "./database";
 import { audioKey, voiceKey } from "./catalog-keys";
 import { downloadSpeech, speechKeying } from "./speech";
 import type { ChapterProgress, VoiceInventory } from "./catalog";
+import { BLOCK_WALK } from "../renderer/highlighter";
 
 let revision = 0;
 let tasks: DownloadTask[] = [];
@@ -922,6 +923,32 @@ function ensureSpeechKeys(force = false): Promise<void> {
     .catch(reportStore);
   return keying;
 }
+/**
+ * Chapters another walk of the page prepared are asked for again (#184, ADR
+ * 0027): the Reading cuts its sentences with this walk, and a chapter that
+ * kept another walk's would read Downloaded while a sentence of it went to the
+ * Provider. Run once at launch, before the speech keys and the first run, on
+ * the same chain as the keys so the two never walk the catalogue at once. The
+ * plans held in memory are read again, since they carry `prepared`.
+ */
+function ensureWalk(): Promise<void> {
+  keying = keying
+    .then(async () => {
+      const repository = await offlineRepository();
+      if ((await repository.catalog.preparedWalk()) === BLOCK_WALK) return;
+      await repository.catalog.prepareAgain(BLOCK_WALK);
+      for (const document of [...plans.keys()]) {
+        const plan = await repository.plan(document);
+        if (plan) plans.set(document, plan);
+        else plans.delete(document);
+      }
+      for (const item of progressVoices.values())
+        requestProgress(item.document, item.voice);
+      emit();
+    })
+    .catch(reportStore);
+  return keying;
+}
 export function startDownloads(): () => void {
   if (!loaded && !starting) {
     starting = (async () => {
@@ -943,8 +970,9 @@ export function startDownloads(): () => void {
       if (pauseForLock()) await persist();
       // Opened with a download that goes on by itself (#77).
       continueAway();
-      // Before the first run, so the scheduler never trusts keys computed under
-      // a setting the owner has since changed.
+      // Before the first run, so the scheduler never trusts text another walk
+      // prepared, or keys computed under a setting the owner has since changed.
+      await ensureWalk();
       await ensureSpeechKeys();
       kick();
     })();

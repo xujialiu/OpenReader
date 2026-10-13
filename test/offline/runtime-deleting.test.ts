@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
 import type { SynthesisResult } from '../../src/core/providers/types';
+import { BLOCK_WALK } from '../../src/renderer/highlighter';
 import { OfflineCatalog, type SqlDatabase, type SqlSession, type StoredAudio } from '../../src/offline/catalog';
 import { audioAddress } from '../../src/offline/catalog-keys';
 import { OfflineRepository, type AudioFiles } from '../../src/offline/repository';
@@ -125,6 +126,7 @@ async function open(book: { id: string; texts: string[] }[]) {
   });
   await repository.saveSection('book', 0, book.map(({ id, texts }) => ({ id, title: id, depth: 0, parent: null, texts })));
   await catalog.recordSpeechKeying(speechKeying(settings));
+  await catalog.recordWalk(BLOCK_WALK);
   mock.repository = repository;
 
   vi.resetModules();

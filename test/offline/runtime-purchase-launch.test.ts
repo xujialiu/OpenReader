@@ -3,6 +3,7 @@ import { DEFAULT_SENTENCES_AT_ONCE, DEFAULT_SETTINGS, type AppSettings } from '.
 import type { SynthesisResult } from '../../src/core/providers/types';
 import type { Chapter, DownloadTask, NarrationPlan } from '../../src/offline/model';
 import { speechKeying } from '../../src/offline/speech';
+import { BLOCK_WALK } from '../../src/renderer/highlighter';
 
 /**
  * #148, ADR 0075: a launch with a download left going on. Whether read-aloud
@@ -66,7 +67,7 @@ async function launch(owned: { unlocked: boolean; trialStartedAt: number | null 
   const saved = new Set<string>();
   mock.open.mockResolvedValue({
     tasks: async () => [left],
-    catalog: { saveTasks: async () => {}, speechKeying: async () => speechKeying(settings) },
+    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, speechKeying: async () => speechKeying(settings) },
     plan: async (): Promise<NarrationPlan> => ({ version: 2, chapters: [chapter] }),
     chapter: async () => ({ ...chapter, texts: ['Left going on.'], textCount: 1, textsLoaded: true }),
     progress: async () => [],

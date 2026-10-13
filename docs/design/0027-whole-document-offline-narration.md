@@ -131,3 +131,11 @@ Whether a download gets past the end of a chapter with the phone locked, and how
 ## Amendment (2026-09-28, #77): a download goes on after the owner leaves the app
 
 On recent versions of iOS, a download the owner starts or resumes goes on after they leave the app or lock the phone, and so does one still going on by itself when they open the app. The phone shows it on the Lock Screen with the document's name and a count of the chapters saved, and the owner can stop it there. [Decision 0053](0053-a-download-goes-on-when-you-leave-the-app.md) says what the owner sees, what stopping it does and what was turned down. "The system may stop preparation after allowing only a limited time in the background" in the section above is now true only of earlier iOS versions, and it has been corrected there.
+
+## Amendment (#184): an update that reads a book differently asks for its downloads again
+
+Sometimes an update changes how the app divides a book into sentences: a list read an item at a time rather than as one long sentence, or a chapter heading on two lines read with its number and its title apart. A sentence read differently is a different recording, and a chapter saved before may not hold it.
+
+So after such an update every downloaded chapter loses its check until the owner downloads it again. Downloading it again is quick and costs little: what was already saved is used again, and only the sentences that changed are asked for. Until then the saved audio stays, and Manage downloads can still delete it.
+
+Two alternatives were turned down. Keeping the checks would tell the owner a chapter can be heard without a network when one of its sentences cannot, and with no network the reading would stop there, at every chapter's heading in some web novels. Asking for the changed sentences by itself would spend the owner's speech service credit without being asked.

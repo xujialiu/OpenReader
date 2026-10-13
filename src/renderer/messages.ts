@@ -67,7 +67,9 @@ export const PROBE_MESSAGE = 'openreader:probe';
  * an offset into this text is turned back into a DOM `Range` by walking the same
  * text nodes, so any rewriting here would break the one mapping that must not
  * drift. It also means an Utterance can contain the source file's newlines and
- * indentation, which a Provider speaks without noticing.
+ * indentation, which a Provider speaks without noticing. The one character no
+ * node holds is a newline where a `<br>` has no white space on either side
+ * (#192); no sentence or word starts or ends on it.
  */
 export interface ReportedBlock extends Block {
   /**
@@ -724,6 +726,7 @@ function isReportedBlock(value: unknown): value is ReportedBlock {
     typeof value.id === 'string' &&
     typeof value.text === 'string' &&
     (value.role === 'paragraph' || value.role === 'heading' || value.role === 'other') &&
+    (value.item === undefined || isIndex(value.item)) &&
     typeof value.section === 'string' &&
     isIndex(value.sectionIndex) &&
     typeof value.cfi === 'string'

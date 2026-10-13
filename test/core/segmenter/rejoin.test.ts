@@ -156,6 +156,16 @@ describe('what the structure has to say', () => {
     expect(blockRuns(within).map((run) => run.blocks)).toEqual([[0, 1]]);
   });
 
+  it('never joins two list items or cells, nor an item to the paragraph after its list (#184)', () => {
+    const items: Block[] = [{ text: 'lower cost', item: 0 }, { text: 'faster startup', item: 1 }, { text: 'fewer moving parts', item: 2 }];
+    expect(spoken(items)).toEqual(['lower cost', 'faster startup', 'fewer moving parts']);
+    expect(blockRuns([{ text: 'the last item', item: 4 }, { text: 'continues nothing.' }]).map((run) => run.blocks)).toEqual([[0], [1]]);
+  });
+
+  it('still joins a paragraph cut in two inside one item', () => {
+    expect(blockRuns([{ text: 'cut after', item: 3 }, { text: 'this continuation.', item: 3 }]).map((run) => run.blocks)).toEqual([[0, 1]]);
+  });
+
   it('treats a Block with no role as a paragraph, which is all a caller holding plain text could mean', () => {
     expect(blockRuns([{ text: 'cut after' }, { text: 'this continuation.' }]).map((run) => run.blocks)).toEqual([[0, 1]]);
     expect(blockRuns([{ text: 'cut after', role: 'other' }, { text: 'this continuation.' }]).map((run) => run.blocks)).toEqual([[0], [1]]);

@@ -329,10 +329,36 @@ that text is turned back into a `Range` by walking the same nodes, so collapsing
 whitespace here would break the one mapping that must not drift. A Provider
 speaks the newlines without noticing.
 
+One character is not the document's: where a `<br>` has no white space directly
+on either side, the walk puts one newline in the text, held by no node (#192).
+Without it `Chapter 1:<br/>Nightmare Begins` reached the Provider as
+`Chapter 1:Nightmare Begins`, `第9章<br/>下崖` as `第9章下崖`, and two lines of
+verse as one word. Sentences and words are trimmed of white space, so no range
+starts or ends on it, and `nearby()` passes over text no node holds. Where the
+document wrote white space beside the break, nothing is added.
+
 What counts as a Block is decided by the document's own computed `display` rather
 than by a list of tag names, because CONTEXT.md's definition is "a run of text
 the document itself presents as one unit" and an EPUB is as likely to lay its
-paragraphs out in `<div>`s as in `<p>`s.
+paragraphs out in `<div>`s as in `<p>`s. Two exceptions, both measured:
+
+- **An element taken out of the line** — floated, or positioned absolutely —
+  computes `display: block` in WebKit whatever it was declared (CSS 2.1 section
+  9.7). When a sibling in the line holds text, it is walked as part of that
+  line's Block: a drop cap is the first letter of its word (`<span>I</span>T is
+  a truth`, Chapter I of the Gutenberg Pride and Prejudice, #189), and a page
+  number or a pull quote leaves its paragraph one Block with one CFI (#194).
+  Lines a converted book positions each in an absolute box of their own have no
+  such sibling and stay Blocks of their own.
+- **List items, definition-list entries and table cells** are numbered, and every
+  Block reports the one it sits in as `item`; `rejoin.ts` never joins two Blocks
+  whose items differ (#184). The Block's own tag cannot say it: in
+  `<li><p>lower cost</p></li>` the Block is the `<p>`.
+
+**Raise `BLOCK_WALK` with any change that can make the walk report other Blocks
+for a section.** A Download keeps the sentences it prepared, a Reading asks for
+a saved Clip by the sentence it cuts itself, and the catalogue prepares again a
+chapter another walk prepared (ADR 0027).
 
 ## Two things a device found that nothing here could have
 

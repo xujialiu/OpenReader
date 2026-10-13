@@ -62,10 +62,11 @@ describe('a message with a known type is taken only whole', () => {
     arrive(bridge, { type: DOCUMENT_MESSAGE, spine: 1, hrefs: ['a.xhtml'] });
     arrive(bridge, { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [], sizes: null });
     arrive(bridge, { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [BLOCK], sizes: [[16, 120]] });
+    arrive(bridge, { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [{ ...BLOCK, text: 'lower cost', role: 'paragraph', item: 2 }], sizes: null });
     arrive(bridge, { type: PROBLEM_MESSAGE, utterance: -1, detail: 'a Range moved' });
     arrive(bridge, { type: FOLLOWING_STATE_MESSAGE, following: false });
     expect(seen.onDocument).toHaveBeenCalledTimes(1);
-    expect(seen.onBlocks).toHaveBeenCalledTimes(2);
+    expect(seen.onBlocks).toHaveBeenCalledTimes(3);
     expect(seen.onProblem).toHaveBeenCalledWith(expect.objectContaining({ detail: 'a Range moved' }));
     // The document message's own `onFollowing(true)`, then this one.
     expect(seen.onFollowing).toHaveBeenLastCalledWith(false);
@@ -74,6 +75,7 @@ describe('a message with a known type is taken only whole', () => {
   it.each([
     ['a Blocks message with no blocks', { type: BLOCKS_MESSAGE, sectionIndex: 0 }],
     ['a Blocks message whose blocks are not Blocks', { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [{ text: 'x' }], sizes: null }],
+    ['a Blocks message whose Block names its list item by anything but a count', { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [{ ...BLOCK, item: 'first' }], sizes: null }],
     ['a Blocks message with no section index', { type: BLOCKS_MESSAGE, section: 'a.xhtml', blocks: [BLOCK], sizes: null }],
     ['a Blocks message with sizes that are not sizes', { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [BLOCK], sizes: 'many' }],
     ['a document message with no hrefs', { type: DOCUMENT_MESSAGE, spine: 1 }],
