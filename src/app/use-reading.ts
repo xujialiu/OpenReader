@@ -1473,8 +1473,9 @@ export function useReading(
     // so the queue it paused on is the sentence the highlight is on — a place just
     // landed from another device included (#54).
     if (engineRef.current) {
+      // The engine publishes its state, and may synchronously report exhaustion
+      // and be paused by ranOutOfText. Do not overwrite that answer (#156).
       engineRef.current.play();
-      setStatus((was) => ({ ...was, playing: true, buffering: engineRef.current!.snapshot().queued === 0, note: null }));
       return;
     }
     if (!buildingRef.current) {

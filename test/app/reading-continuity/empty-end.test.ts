@@ -163,13 +163,11 @@ describe('the last spine item holds no text', () => {
     await book.report(book.text(), 0);
     await book.play();
     await book.hearAll();
-    console.log('ran out :', JSON.stringify(book.status));
     expect(book.status.note).toContain(WAITING);
 
     // The last spine item is laid out and holds no text: the same Blocks, under its index.
     await book.report(book.text(), 1);
     await book.wait(500);
-    console.log('after   :', JSON.stringify(book.status));
     expect(book.status.playing).toBe(false);
     expect(book.status.note).toContain(ENDED);
     await book.close();

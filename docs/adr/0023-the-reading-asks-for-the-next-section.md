@@ -431,3 +431,17 @@ bridge, playback engine and injected page program, with an epub.js/DOM stand-in
 and doubled native audio. The original #153 cases were red at `9c5e245`; the
 six-section reduction read 0, 1, 3 rather than 0, 1, 2. These tests do not by
 themselves establish WebKit layout, native sound or locked-phone behaviour.
+
+## Amendment (2026-10-13, #156): Play must hear the engine's answer
+
+A press after the end used to clear the note and resume an empty graph, while
+`announced` suppressed the exhaustion report. Re-arming that report alone was
+not enough: `start()` overwrote the stopped state and note after `engine.play()`
+returned. Play now re-arms exhaustion, and the hook leaves the engine's state
+and exhaustion callbacks authoritative. At the end the Reading stays stopped
+with the end note; before the end it retains the explanation that text is being
+waited for. No implicit restart at the beginning is introduced. The same path
+serves the Player, Now Playing and headphones; a stopped Reading is not kept as
+playing when the reader is left. A timed-out preparation can be retried by Play.
+The Host/View regression in `reading-continuity/play-after-end.test.ts` covers
+both entry points and leaving the reader, with native boundaries doubled.

@@ -439,9 +439,6 @@ describe('the voice reads on while the page is Browsing', () => {
     expect(book.page.views()).toEqual([39, 40, 41]);
 
     await book.listenThrough(ends(1));
-    console.log('[later] heard, in order:', book.spoken.join(' | '));
-    console.log('[later] sections the page reported:', book.reported, '| laid out for the reading:', book.page.record.laidOutAhead, '| displays asked of epub.js:', book.page.record.displays);
-    console.log('[later] playing', book.reading.status.playing, '| note', book.reading.status.note, '| readingPosition():', book.reading.readingPosition()?.anchor.exact);
 
     expect(book.problems).toEqual([]);
     expect(book.spoken).toEqual([begins(0), ends(0), begins(1), ends(1), begins(2)]);
@@ -451,7 +448,8 @@ describe('the voice reads on while the page is Browsing', () => {
   });
 
   it('a missing section blocks distant cached text, times out, and leaves Browsing where the owner put it', async () => {
-    const book = await openDocument(0, new Set([2]));
+    const stalled = new Set([2]);
+    const book = await openDocument(0, stalled);
     await book.play();
     await book.contentsRow(40);
     await book.listenThrough(ends(1));
@@ -461,6 +459,12 @@ describe('the voice reads on while the page is Browsing', () => {
     expect(book.reading.status).toMatchObject({ playing: false, buffering: false });
     expect(book.reading.status.note).toContain('timed out');
     expect(book.page.views()).toEqual([39, 40, 41]);
+    stalled.clear();
+    await book.play();
+    await book.wait(500);
+    expect(book.spoken).toContain(begins(2));
+    expect(book.spoken).not.toContain(begins(39));
+    expect(book.reading.status.playing).toBe(true);
     await book.close();
   });
 
@@ -475,9 +479,6 @@ describe('the voice reads on while the page is Browsing', () => {
     expect(book.page.views()).toEqual([1, 2, 3]);
 
     await book.listenThrough(ends(11));
-    console.log('[earlier] heard, in order:', book.spoken.join(' | '));
-    console.log('[earlier] sections the page reported:', book.reported, '| laid out for the reading:', book.page.record.laidOutAhead, '| displays asked of epub.js:', book.page.record.displays);
-    console.log('[earlier] playing', book.reading.status.playing, '| native queue', world.graph.queue.length, '| note', book.reading.status.note);
 
     expect(book.problems).toEqual([]);
     expect(book.spoken).toEqual([begins(9), ends(9), begins(10), ends(10), begins(11), ends(11), begins(12)]);

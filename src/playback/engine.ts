@@ -741,6 +741,9 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     play() {
       if (disposed) return;
       trace('play.request');
+      // Play is a new request, including at the end of the Document (#156).
+      // Re-report exhaustion so the caller can stop or explain the wait.
+      announced = false;
       // The press is the explicit act a retry waits for, and it asks again for
       // every refused Utterance rather than the one the reading stopped on (#45).
       // The refusal it answers goes with them, so a stop after this press names
