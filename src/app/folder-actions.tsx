@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Alert } from 'react-native';
 import type { DocumentId } from '../core/document';
-import { folderAt, folderNameProblem, folderPath, moveChoice, type FolderId, type LibraryTarget } from '../core/folders';
+import { documentNameProblem, folderAt, folderNameProblem, folderPath, moveChoice, type FolderId, type LibraryTarget } from '../core/folders';
 import { INK } from './controls';
 import { Drawer, DrawerChevron, DrawerFooter, DrawerRow, DrawerRowText, DrawerScroll, type DrawerAction } from './drawer';
 import { RenameAlert } from './rename-alert';
@@ -80,10 +80,15 @@ export function useMovePage(moving: { target: MoveTarget } | { targets: readonly
   const parent = current === null ? null : folderAt(tree, current).parent;
   const move = () => {
     try {
-      if (!target) library.folders.moveEntries('targets' in moving ? moving.targets : [], library.entries.map((entry) => entry.id), current);
+      if (!target) library.folders.moveEntries('targets' in moving ? moving.targets : [], library.entries.map((entry) => entry.id), current,
+        Object.fromEntries(library.entries.map((entry) => [entry.id, entry.title])));
       else if (target.kind === 'folder') library.folders.moveFolder(target.id, current);
       else {
-        if (!library.current(target.id)) throw new Error('That document is no longer in the Library.');
+        const entry = library.current(target.id);
+        if (!entry) throw new Error('That document is no longer in the Library.');
+        // A Document is not moved into a Folder holding another of its name (#227).
+        const problem = documentNameProblem(tree, library.entries, entry.title, current, entry.id);
+        if (problem) throw new Error(`“${entry.title}”: ${problem}`);
         library.folders.place(target.id, current);
       }
       onMoved();

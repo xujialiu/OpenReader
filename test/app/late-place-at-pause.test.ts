@@ -100,7 +100,7 @@ vi.mock('../../src/app/text-styles', () => ({ TEXT: { subhead: {} } }));
 vi.mock('../../src/app/walkthrough-harness', () => ({ hlog() {}, probeScript: () => '', statusLine: () => '', useHarnessCommands() {} }));
 vi.mock('../../src/app/use-provider-secrets', () => ({ useProviderKey: () => ({ presence: { state: 'held' } }) }));
 vi.mock('../../src/app/document', () => ({
-  addDocument: async () => { throw new Error('not in this test'); },
+  identifyFile: async () => { throw new Error('not in this test'); },
   openDocument: async (entry: { id: string; format: string }, title: string) => ({ identity: { id: entry.id, format: entry.format }, title, base64: '' }),
 }));
 vi.mock('../../src/app/display-names', () => ({ displayNames: () => ({}), saveDisplayName: () => {} }));

@@ -13,7 +13,7 @@ const disk = vi.hoisted(() => ({
 }));
 vi.mock('expo-file-system', () => ({ File: class { name = 'new.epub'; } }));
 vi.mock('react-native', () => ({ Alert: { alert: disk.alert } }));
-vi.mock('../../src/app/document', () => ({ addDocument: disk.identify }));
+vi.mock('../../src/app/document', () => ({ identifyFile: disk.identify, keepFile: vi.fn() }));
 vi.mock('../../src/app/display-names', () => ({ displayNames: () => ({}), saveDisplayName: vi.fn() }));
 vi.mock('../../src/app/library', () => ({
   thisDevice: () => 'test-phone',

@@ -82,7 +82,10 @@ export interface AddedDocument {
 }
 
 /**
- * Read a file, name it, and keep it.
+ * Read a file and name it. Nothing is kept: `keepFile` keeps it, once the
+ * Library has decided to (#227). An import the owner cancels because its name
+ * is taken in the Folder leaves no file behind, and the file the owner chose is
+ * not moved until then.
  *
  * The bytes are read once, here, and hashed here: `documentIdOf` is the only
  * thing that decides what a Document *is* (ADR 0004), and inventing a second
@@ -109,7 +112,7 @@ export interface AddedDocument {
  * bridge; a guessed source would make `matchIdentities` confident about the one
  * case ADR 0004 says it must not be.
  */
-export async function addDocument(source: File, options: { move: boolean }): Promise<AddedDocument> {
+export async function identifyFile(source: File): Promise<AddedDocument> {
   /**
    * The name is read **before** the file is kept, and that is a bug that was
    * found on the device rather than a precaution.
@@ -138,7 +141,7 @@ export async function addDocument(source: File, options: { move: boolean }): Pro
    *   opened in place — theirs, not ours (philosophy rule 8).
    * - The length comes from the `File` and not the handle: `File.size` is a
    *   `number`, while `FileHandle.size` and `.offset` are `number | null`.
-   * - The handle is closed **before** `keepDocument`, which moves or copies over
+   * - The handle is closed **before** `keepFile`, which moves or copies over
    *   the very file it is open on.
    */
   const handle = source.open(FileMode.ReadOnly);
@@ -158,8 +161,15 @@ export async function addDocument(source: File, options: { move: boolean }): Pro
     handle.close();
   }
 
-  keepDocument(identity.id, identity.format, source, options);
   return { identity, title: named };
+}
+
+/**
+ * Keep the file `identifyFile` read, under its Document Id, moved or copied as
+ * `options` says. Read `source.name` before this, never after (`identifyFile`).
+ */
+export function keepFile(added: AddedDocument, source: File, options: { move: boolean }): void {
+  keepDocument(added.identity.id, added.identity.format, source, options);
 }
 
 /**

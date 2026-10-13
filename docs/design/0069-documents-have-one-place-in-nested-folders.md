@@ -42,9 +42,29 @@ When the remembered Folder no longer exists, browsing returns directly to the Li
 
 A Folder row shows its icon, name and actions button. Tapping it enters that Folder. The page title is the current Folder name and the top-left control returns to its parent; Settings remains accessible at the Library root. Full paths appear in the move Drawer and duplicate-import alert rather than taking up space above the main list.
 
-When this feature first arrives, all existing Documents remain at the Library root, with their names, Reading Positions and Offline Narration unchanged. The owner organizes them explicitly. Sibling Folder names must be unique, but a Document and Folder may have the same name.
+When this feature first arrives, all existing Documents remain at the Library root, with their names, Reading Positions and Offline Narration unchanged. The owner organizes them explicitly. Sibling Folder names must be unique, and so must the names of Documents in one place (below), but a Document and Folder may have the same name.
 
 After the owner confirms deletion, any Reading or Download belonging to a contained Document is stopped before that Document is removed. Unrelated Reading and Downloads are unaffected. The warning explains this impact when applicable. Failures are reported explicitly, and content that could not be deleted is not presented as successfully removed. This version has no trash or recovery feature.
+
+## Two Documents in one place are not called alike
+
+Issue #227. A book is known by its name, and since issue #226 that name is the name of the file it was added from. Before this, an import compared only what was inside a file. A newer file of a book the Library already held, under the same name, was added beside the old one without a word. The two rows then read the same, only their Covers and progress lines told them apart, and the new one started at the beginning while the place reached stayed on the old row.
+
+Now Documents follow the rule Folders follow. Two Documents in one Folder, or both at the Library root, cannot share a name, compared as Folder names are: ignoring letter case and the spaces around it. Documents in different places may share a name, and a Document may still share a name with a Folder.
+
+- **Importing a file whose name is taken there** asks first. The phone's alert gives the name, the place, and the name the new one would have: the first free number after it, "Emma 2", then "Emma 3", as the phone's Files app numbers a copy. The choices are Cancel and Keep Both. Cancel adds nothing. Keep Both adds the new file under that name and opens it, as any import does. The same file again is still "Document already exists", as before; it is not a second book.
+- **Renaming a Document** to a name another Document in its place has is refused as a Folder's rename is, with Back to editing and Cancel.
+- **Moving a Document**, alone or in a selection, into a place holding one of its name is refused in the phone's alert, naming the Document and asking for a rename first, as a Folder's move is. Two of one selection with one name cannot go to the same place either.
+- **Names already alike stay as they are.** The rule refuses only a new one; nothing in the Library is renamed when this arrives.
+
+Turned down:
+
+- **Refusing a taken name at import**, as a Folder's is. Simpler, but bringing in a newer file of a book would mean renaming the old one first, and then importing again.
+- **Keep Both without asking.** The second row would appear before the owner is told, which is what was reported.
+- **Replace.** The new file is a different Document to the app. Replacing would throw away the old one's place and saved audio.
+- **Checking only at import.** A name can also change, and a Document can move, after it arrives; a rule kept at one door is not kept.
+
+The owner chose each of these on 2026-10-13 (#227).
 
 ## Visual refinement after simulator review
 

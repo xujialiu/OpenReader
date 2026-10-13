@@ -122,7 +122,7 @@ vi.mock('../../src/app/folder-storage', () => ({ openFolderStore: () => {
 } }));
 vi.mock('../../src/app/display-names', () => ({ displayNames: () => ({}), saveDisplayName: () => {} }));
 vi.mock('../../src/app/document', () => ({
-  addDocument: async () => { throw new Error('not in this test'); },
+  identifyFile: async () => { throw new Error('not in this test'); },
   openDocument: async (entry: { id: string; format: string; title: string }) => ({ identity: { id: entry.id, format: entry.format }, title: entry.title, base64: '' }),
 }));
 vi.mock('../../src/keys/store', () => ({ readSyncPassword: async () => ({ outcome: 'absent' }) }));

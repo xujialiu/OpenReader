@@ -15,7 +15,7 @@ import { useLibrary, type Library } from '../../src/app/use-library';
 const disk = vi.hoisted(() => ({ entries: [] as LibraryEntry[], identify: vi.fn() }));
 vi.mock('expo-file-system', () => ({ File: class { name = 'new.epub'; } }));
 vi.mock('react-native', () => ({ Alert: { alert: vi.fn() } }));
-vi.mock('../../src/app/document', () => ({ addDocument: disk.identify }));
+vi.mock('../../src/app/document', () => ({ identifyFile: disk.identify, keepFile: vi.fn() }));
 vi.mock('../../src/app/display-names', () => ({ displayNames: () => ({}), saveDisplayName: vi.fn() }));
 vi.mock('../../src/app/library', () => ({
   thisDevice: () => 'test-phone',

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { readLocator, type DocumentId, type ReadingPosition } from '../core/document';
+import { documentNameProblem } from '../core/folders';
 import { spineIndexOf } from '../renderer';
 import { AppearanceControls, FontList } from './appearance-sheet';
 import { INK } from './controls';
@@ -45,7 +46,9 @@ const TITLES: Record<Exclude<Page, 'menu' | 'move'>, string> = { appearance: 'Ap
  * **Pages** (#117). The menu's rows are the drawer's plain list; a row that
  * opens a page has a chevron. Every page has a back button to the page it was
  * opened from (`BACK`), and a swipe down closes the drawer from any of them.
- * Rename is not a page but the phone's alert over the menu (`RenameAlert`).
+ * Rename is not a page but the phone's alert over the menu (`RenameAlert`). A
+ * name another Document in the same Folder has is refused there, as a Folder's
+ * is (#227).
  *
  * **Select** (#136) is granted like `onDelete`: only the Library has a list to
  * select in, so only it passes `onSelect`, and the row sits directly above Delete.
@@ -119,6 +122,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
         library.voiced(document, next); setSettings((was) => selectVoice(was, next.provider, next.voice));
       }} /> : null}
     {renaming ? <RenameAlert name={entry.title} onCancel={() => setRenaming(false)}
+      validate={(name) => documentNameProblem(library.folderSnapshot.tree, library.entries, name, library.folderSnapshot.tree.documents[document] ?? null, document)}
       onSave={(name) => { setRenaming(false); library.rename(document, name); onClose(); }} /> : null}
   </Drawer>;
 }
