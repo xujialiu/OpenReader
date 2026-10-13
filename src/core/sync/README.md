@@ -17,7 +17,11 @@ implements section 6 of it — the **Positions File**, `xujialiu-positions.json`
 Three files:
 
 - `webdav.ts` — the plugin's client, **copied** (ADR 0013's rule), with its test
-  brought across. `fetch` is injected; `btoa` and `TextEncoder`, which it rests
+  brought across, then adapted at the network boundary: GETs explicitly send
+  `Cache-Control: no-cache` because Expo fetch does not pass `RequestInit.cache`
+  to its native request (#166). One deadline covers headers and any body the
+  caller consumes; abort is best-effort and a body that never settles still
+  times out (#168). `fetch` is injected; `btoa` and `TextEncoder`, which it rests
   on, are both on this Hermes (notes/NOTES_2026-09-19.md, 12:21).
 - `positions-file.ts` — parse, canonical serialise, merge. Canonical bytes so the
   transport can compare text; **carry through, never drop** an item this build
@@ -43,6 +47,8 @@ on opening a book, on adding one, whenever a Reading stops (a pause, the
 headphones or the AirPods, a refused Clip, the end of the book; #155), and when
 a Reading ends (leaving the reader while it is paused, opening another book, or
 deleting it; #68); never on a timer while reading. It also waits on one, bounded, before Play.
+Turning Sync back on forces a run past any previous failure's retry window,
+using the current settings; ordinary lifecycle pokes keep their backoff (#177).
 
 **What the shelf does** with an adopted item is `src/app/sync-items.ts`: an item
 newer than the entry's position replaces it, the shelf Stamp follows when the

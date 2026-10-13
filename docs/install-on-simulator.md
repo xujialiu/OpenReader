@@ -179,7 +179,7 @@ delivery must not be reported as complete.
 
 If DeviceHub is running but opening its bundle gives no window, start the
 executable inside the bundle directly; the window and the simulator's
-accessibility tree then appear (notes 2026-09-20 13:15):
+accessibility tree then appear:
 
 ```bash
 /Applications/Xcode-27.0.0.app/Contents/Applications/DeviceHub.app/Contents/MacOS/DeviceHub \
@@ -195,10 +195,10 @@ not as a passed coordinate touch.
 More simulator failures, by tool, are in
 [`test/manual-test/pitfalls/simulators.md`](../test/manual-test/pitfalls/simulators.md).
 
-| Symptom | What to do | Notes |
-| --- | --- | --- |
-| The app shows `ConfigError: The expected package.json path … does not exist`, and `/json/list` is empty | Metro on that port runs from another directory. Stop that exact PID, start Metro in this repository, and restart the app (Routine update). The app and its library can stay. | 2026-09-20 12:33 |
-| The Debug link fails on missing `facebook::react::Sealable` and `ShadowNode::getDebugName` | The installed React framework is the Release one: with `React-Core-prebuilt/.last_build_configuration` missing, `replace-rncore-version.js` takes an unmarked framework for Debug and skips the replacement. Check the framework's symbols with `nm`, set the generated marker to Release, then run the installed replacement script for Debug, which extracts the cached Debug archive. | 2026-09-20 12:00 |
-| A Debug build links but crashes before JavaScript in `expo::ExpoViewProps` / `facebook::react::Props::Props` | Precompiled Expo modules built against another React configuration. Rebuild them from source with `cd ios && EXPO_USE_PRECOMPILED_MODULES=0 pod install`, then the Debug build above. | 2026-09-20 17:50 |
-| Launch fails in dyld naming `/usr/lib/libSystem.B.dylib` and `no dyld cache` | Shut the simulator down and boot it again. The app and the simulator's data can stay. | 2026-09-20 17:50 |
-| On the lock screen, Play is in the accessibility tree and works, but its icon is invisible in screenshots | A display problem of the iOS 27.0 simulator: the owner's phone shows the lock screen normally. Compare with a physical device first, and keep the app's media controls. The lock-screen screenshot, real-click and system-resource scripts in [`test/manual-test/README.md`](../test/manual-test/README.md) tell these apart; "XCTest passed" does not mean the icon is visible. | 2026-09-20 14:36, 14:47, 15:12 |
+| Symptom | What to do |
+| --- | --- |
+| The app shows `ConfigError: The expected package.json path … does not exist`, and `/json/list` is empty | Metro on that port runs from another directory. Stop that exact PID, start Metro in this repository, and restart the app (Routine update). The app and its library can stay. |
+| The Debug link fails on missing `facebook::react::Sealable` and `ShadowNode::getDebugName` | The installed React framework is the Release one: with `React-Core-prebuilt/.last_build_configuration` missing, `replace-rncore-version.js` takes an unmarked framework for Debug and skips the replacement. Check the framework's symbols with `nm`, set the generated marker to Release, then run the installed replacement script for Debug, which extracts the cached Debug archive. |
+| A Debug build links but crashes before JavaScript in `expo::ExpoViewProps` / `facebook::react::Props::Props` | Precompiled Expo modules built against another React configuration. Rebuild them from source with `cd ios && EXPO_USE_PRECOMPILED_MODULES=0 pod install`, then the Debug build above. |
+| Launch fails in dyld naming `/usr/lib/libSystem.B.dylib` and `no dyld cache` | Shut the simulator down and boot it again. The app and the simulator's data can stay. |
+| On the lock screen, Play is in the accessibility tree and works, but its icon is invisible in screenshots | A display problem of the iOS 27.0 simulator: the owner's phone shows the lock screen normally. Compare with a physical device first, and keep the app's media controls. The lock-screen screenshot, real-click and system-resource scripts in [`test/manual-test/README.md`](../test/manual-test/README.md) tell these apart; "XCTest passed" does not mean the icon is visible. |

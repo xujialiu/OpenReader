@@ -44,6 +44,20 @@ function code(name: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
+/** Engine functions and returned members have different closing indentation. Fail closed if either boundary disappears. */
+function engineBody(source: string, header: string): string {
+  pin(source, header, 'engine.ts scope');
+  const start = source.indexOf(header);
+  const close = header.startsWith('function ') ? '\n  }' : '\n    },';
+  const end = source.indexOf(close, start);
+  if (end < 0) throw new Error('engine.ts has no close after ' + header);
+  return source.slice(start, end);
+}
+
+function pinEngine(source: string, header: string, marker: string): void {
+  pin(engineBody(source, header), marker, 'engine.ts, ' + header);
+}
+
 const everyFile = (): string[] => [...sources.keys()];
 const allCode = (): string => everyFile().map(code).join('\n');
 
@@ -60,6 +74,36 @@ function audioApiImports(): string[] {
   }
   return names;
 }
+
+describe('engine guard mutations (#181)', () => {
+  const engine = code('engine.ts');
+
+  it.each([
+    ['function onBufferEnded(', 'pump();'],
+    ['    seek(utterance) {', 'pump();'],
+    ['    play() {', 'quiet = false;'],
+  ])('rejects deletion in %s even when another function has the marker', (header, marker) => {
+    const body = engineBody(engine, header!);
+    pin(body, marker!, header!);
+    const mutated = engine.replace(body, body.replace(marker!, ''));
+    expect(mutated).toContain(marker!);
+    expect(() => pinEngine(mutated, header!, marker!)).toThrow('no longer contains');
+  });
+
+  it('does not search a later member for Play, nor count its duplicate', () => {
+    const header = '    play() {';
+    const body = engineBody(engine, header);
+    const later = engine.replace('    silence() {', '    silence() {\n      quiet = false;');
+    expect(() => pinEngine(later, header, 'quiet = false;')).not.toThrow();
+    const moved = later.replace(body, body.replace('quiet = false;', ''));
+    expect(() => pinEngine(moved, header, 'quiet = false;')).toThrow('no longer contains');
+  });
+
+  it('rejects missing scope boundaries rather than slicing to the end of the file', () => {
+    expect(() => engineBody(engine, '    missing() {')).toThrow('no longer contains');
+    expect(() => engineBody('    play() {\nquiet = false;', '    play() {')).toThrow('no close');
+  });
+});
 
 describe('the comment stripper this file relies on', () => {
   // First, so that a stripper that ate the whole file reports itself as that
@@ -148,7 +192,7 @@ describe('footgun 3: a drained queue is safe, so nothing defends against it', ()
     expect(engine).not.toMatch(/graph\?\.stop\(/);
     // A seek resets the source; ordinary input starvation does not. New audio
     // starts the replacement through enqueue, without suspending the context.
-    expect(engine).toMatch(/seek\(utterance\) \{[\s\S]*?pump\(\);\s*\},/);
+    pinEngine(engine, '    seek(utterance) {', 'pump();');
   });
 });
 
@@ -253,14 +297,7 @@ describe('footgun 3 again: the engine says when the silence is permanent', () =>
    */
   const engine = code('engine.ts');
 
-  /** One member of the returned object, from its opening line to the `},` that closes it. */
-  const member = (name: string): string => {
-    const start = engine.indexOf(name);
-    if (start < 0) throw new Error('engine.ts has no ' + name);
-    const end = engine.indexOf('\n    },', start);
-    if (end < 0) throw new Error('no close after ' + name);
-    return engine.slice(start, end);
-  };
+  const member = (name: string): string => engineBody(engine, name);
 
   it('asks after every pump, which is where a consumed buffer lands', () => {
     // `onBufferEnded` ends in `pump()`, and the last buffer ending is the moment
@@ -269,7 +306,7 @@ describe('footgun 3 again: the engine says when the silence is permanent', () =>
     const pump = engine.slice(engine.indexOf('function pump()'), engine.indexOf('function outOfText()'));
     pin(pump, 'outOfText();', 'engine.ts, pump');
     expect(pump.indexOf('void drain();')).toBeLessThan(pump.indexOf('outOfText();'));
-    expect(engine).toMatch(/function onBufferEnded\([\s\S]*?pump\(\);\s*\}/);
+    pinEngine(engine, 'function onBufferEnded(', 'pump();');
   });
 
   it('decides with read-ahead.ts’s four conditions rather than its own', () => {
@@ -396,8 +433,8 @@ describe('a quiet load cues nothing until Play (#46)', () => {
     expect(enqueue.indexOf('const wasEmpty = timeline.pending() === 0;')).toBeLessThan(enqueue.indexOf('queueAudio(audio,'));
     pin(slice('load(list, from = 0, options = {}) {', 'extend(list) {'), 'quiet = options.quiet === true && !playing;', 'engine.ts, load');
     pin(slice('function restart(', 'function cancelVoiceSwitch('), 'quiet = false;', 'engine.ts, restart');
-    const play = slice('    play() {', 'pause: pauseNow,');
-    pin(play, 'quiet = false;', 'engine.ts, play');
+    const play = engineBody(engine, '    play() {');
+    pinEngine(engine, '    play() {', 'quiet = false;');
     // Cleared before the front is cued, or Play would cue nothing either.
     expect(play.indexOf('quiet = false;')).toBeLessThan(play.indexOf('cue(front);'));
     // And a rate change does not cue what a quiet load held back.

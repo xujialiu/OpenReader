@@ -16,12 +16,11 @@
  * into a file that runs under Node and is tested — the fetch window
  * (`read-ahead.ts`), the cache key (`clip-cache.ts`), rate scaling
  * (`rate.ts`), the gap (`gap.ts`), the position arithmetic (`timeline.ts`).
- * What is left is the order things happen in, which needs a real audio device to
- * mean anything. `test/README.md` is explicit that React Native code and native
- * modules are not tested in this suite by design; a fake `AudioGraph` injected
- * here would produce coverage of a fiction, so there is no seam for one. This
- * file rests on the 60–90 minute backgrounded device session that
- * `notes/NOTES.md` item 4 still has open.
+ * The remaining ordering is tested through the real graph wrapper with controlled
+ * native callbacks and promises: starvation, a rate change before a position
+ * report, and a seek during decoding. Those tests establish the engine's state
+ * transitions, not the native queue's sound or timing. Native audio tests and iOS
+ * verification cover that separate boundary.
  *
  * ## The transport controls do not return promises
  *
@@ -258,6 +257,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   let graph: AudioGraph | null = null;
   /** `drain` is the only thing that enqueues, and it must do so in order, so only one run of it exists at a time. */
   let draining = false;
+  /** A pump during an awaited enqueue must be serviced after that drain releases its guard (#158). */
+  let drainRequested = false;
   /** The Utterance the renderer has been given a cue for, so a cue is sent once per Clip. */
   let cued: number | null = null;
   /**
@@ -396,8 +397,13 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   }
 
   async function drain(): Promise<void> {
-    if (draining || disposed) return;
+    if (disposed) return;
+    if (draining) {
+      drainRequested = true;
+      return;
+    }
     draining = true;
+    drainRequested = false;
     try {
       while (!disposed && !pending?.armed && nextToEnqueue < availableThrough() && nextToEnqueue <= enqueueCeiling(cursor)) {
         if (!sectionReady(nextToEnqueue)) break;
@@ -439,6 +445,14 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       deps.onError(error);
     } finally {
       draining = false;
+      // A seek can replace the generation and finish all its memory-cache fetches
+      // while this run awaits a native decode. Their pumps cannot enter drain.
+      // Replay that request, not every exit: an unconditional pump spins when
+      // there is no Clip ready or a chapter boundary still holds the queue.
+      if (drainRequested) {
+        drainRequested = false;
+        pump();
+      }
       publish();
     }
   }
@@ -475,6 +489,10 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     // announce the next Clip. Cue it here; otherwise its first word would wait
     // for a later position/boundary event. Quiet paused loads still wait for Play.
     const front = timeline.front();
+    // A late Clip starts without a preceding buffer's end to move the cursor.
+    // Short Clips may also finish before any position report (#157). Advance
+    // read-ahead with the new front, never with the Clips prefetched behind it.
+    if (wasEmpty && front && playing) cursor = front.utterance;
     if ((cued === null || wasEmpty) && front && !quiet) cue(front);
     prepareSwitch();
     publish();
@@ -794,7 +812,10 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       // array again and a correction to re-anchor its interpolation against.
       // Nothing about the queued audio changes: the Clips were synthesized at
       // Natural Pace and the stretch is a parameter (ADR 0009).
-      if (last) {
+      const front = timeline.front();
+      // The last report can belong to a Clip that ended before this one arrived,
+      // or before a refusal stopped the Reading. It cannot re-anchor either (#169).
+      if (last && last.clip.bufferId === front?.bufferId) {
         cue(last.clip);
         correct(last);
         return;
@@ -804,7 +825,6 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       // again and the correction that follows within the second anchors it. Not
       // after a quiet load: nothing has been cued to re-scale, and `play()` cues
       // at the rate in force then.
-      const front = timeline.front();
       if (front && !quiet) cue(front);
     },
 

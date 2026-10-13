@@ -130,6 +130,64 @@ recipe goes.
 - [The Trial and the Unlock](purchase/README.md): which App Store each build asks, the harness's `store` command, and the gate, the alerts and the end of the Trial mid-use (#148); `trial-end.sh`, `download-across-end.sh` and what beta11 measured (the least Trial, a Pronunciation's resume, a Download's drawer, the Lock Screen, StoreKit on a simulator).
 - [The kit](kit/README.md): Read the accessibility tree and touch what it lists (`ax.py`); Run an XCTest probe; Read runtime warnings or evaluate a targeted expression; Inspect, stop or briefly exercise the reading handler; Pull the Debug Log off the phone (#82, `debug-log.py`); Ask the app on the phone (`phone-hx.cjs`, `debug-log-timeline.py`, `probes/`).
 
+### Verifying #166/#168/#177: the controlled cache, the stall, and the probe builds (2026-10-13)
+
+Record: [`sync/cache-stall-and-recovery.md`](sync/cache-stall-and-recovery.md).
+
+- **`res.writeHead(...)` alone sends nothing: Node buffers the header bytes
+  until the first write/end, so a "send headers then stall" test server
+  measures a headers timeout while believing it measures a body timeout.**
+  The first #168 run's `closed after 15018 ms` was exactly that; caught
+  because `curl --max-time 2 --dump-header` received **0 bytes**. Fix: call
+  `res.flushHeaders()` immediately after `writeHead` in any stall branch,
+  and prove the client sees the headers (`curl -D` shows `200` +
+  `Content-Length` before the hang).
+- **expo/fetch (57.0.24) resolves `fetch()` at the first body chunk, not at
+  the response's headers.** Measured on the simulator: body held 8 s → the
+  response object and `.text()` completed together at 8 s; zero body bytes →
+  `fetch()` still unresolved at 20 s (abort rejected it); half the body →
+  resolved at +87 ms with `.text()` hanging. So a stall with no body bytes
+  bounds at `fetch()`, and the shape the old header-only timeout could not
+  bound is *headers + at least one body byte, then stall* — stall fixtures
+  for body-timeout work must deliver some body bytes first.
+- **A response without a `Date` header is not stored by the iOS URL cache at
+  all — so a cache probe shows *no caching*, not caching that expires.** The
+  controlled stub's GET first answered `Cache-Control: public, max-age=3600`,
+  a backdated `Last-Modified` and an `ETag`; on the simulator, plain fetches
+  then hit the server every time, which reads like "expo fetch bypasses the
+  cache". Adding `Date` made the same responses cached and stale-served
+  immediately (a plain fetch answered from the cache with no request
+  reaching the server). Symptom: a negative control that cannot reproduce
+  staleness. Cause: NSURLCache declining to store the response. Fix: send
+  `Date` on every cacheable answer a probe server writes.
+- **A bash-tool timeout kills a running `run-probe.sh` mid-build**, and the
+  killed run's `test-STAMP.log` has no `Executed` line at all — it is not a
+  failed test, it is a build that never finished. The probe project for a
+  fresh output dir builds for minutes on a loaded machine (one run: 848 s
+  wall, of which the test itself was 8 s). Fix: start the probe under
+  `nohup … &` writing its own log, then poll for `Executed`/`PROBE-EXIT`;
+  the output dir is reused only for the same probe from the same worktree,
+  so the rebuild after a kill is incremental.
+- **`build_run_sim`'s 60 s MCP timeout can fire before xcodebuild even
+  spawns** when the machine is loaded (the documented #125 timeout had the
+  build running; this one did not). Check `ps aux | grep xcodebuild` for the
+  destination UDID before concluding a build is in flight; if none exists,
+  fall back to the guide's manual `xcodebuild … build` under `nohup` and
+  poll the log for `EXIT=`. Point `TMPDIR` at the build's own directory via
+  `ios/.xcode.env.local` first: the bundle phase's `--reset-cache` clears
+  the shared `os.tmpdir()/metro-cache` other Metros on the machine are using.
+- **`axe` is not on PATH.** `ax.py` finds it under `~/.npm/_npx`; a bare
+  `axe drag …` fails with `command not found`. Use the full path
+  (`~/.npm/_npx/<hash>/node_modules/mobilebuildmcp/bundled/axe`) for drags
+  and point touches, or `python3 test/manual-test/kit/ax.py` for what it
+  wraps.
+- **`ax.py touch LABEL` touches the first element with that label — the
+  row's `StaticText`, not the switch beside it.** Touching the Sync screen's
+  `Keep my place across devices` label left the switch at `1`; the switch is
+  the `CheckBox` whose own frame is at the row's right edge. Fix: read the
+  CheckBox's frame from the tree and touch its centre with `axe touch -x -y
+  --down --up` (points).
+
 ### #125 Release verification tooling (2026-10-03)
 
 - `mobilebuildmcp build_sim` returned `MCP request timed out after 60000ms`

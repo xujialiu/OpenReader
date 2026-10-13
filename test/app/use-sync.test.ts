@@ -68,6 +68,53 @@ describe('turning the switch on runs the first sync (defect 1)', () => {
   });
 });
 
+describe('switch-on after a failed sync (#177)', () => {
+  it.each([25_000, 61_000])('syncs after correction %i ms after failure, without lifting ordinary backoff', async (elapsed) => {
+    let clock = 1_000_000;
+    let corrected = false;
+    const downloads: boolean[] = [];
+    const deps: SyncDeps = {
+      client: () => ({
+        check: async () => {},
+        download: async () => {
+          downloads.push(corrected);
+          if (!corrected) throw new WebDAVError('auth', 'Rejected credentials', 401);
+          throw new WebDAVError('not-found', 'no file', 404);
+        },
+        upload: async () => {},
+      }),
+      now: () => clock,
+    };
+    let handle: ReturnType<typeof useSync> | undefined;
+    function Probe({ settings }: { settings: AppSettings }) { handle = useSync(settings, library, deps); return null; }
+    let tree!: ReactTestRenderer;
+    await act(async () => { tree = create(createElement(Probe, { settings: settingsWith(true) })); });
+    try {
+      await act(async () => { await handle!.sync.wait('play'); });
+      expect(handle!.last).toMatchObject({ result: 'error' });
+      clock += 25_000;
+      corrected = true;
+      await act(async () => { handle!.sync.poke('foreground'); });
+      await settle();
+      expect(downloads).toEqual([false]);
+      expect(handle!.last).toMatchObject({ result: 'error' });
+
+      clock += elapsed - 25_000;
+      await act(async () => { tree.update(createElement(Probe, { settings: settingsWith(false) })); });
+      expect(await handle!.sync.check('https://dav.example/or', 'ann', 'corrected')).toEqual({ ok: true, folderMissing: false });
+      await act(async () => { tree.update(createElement(Probe, { settings: settingsWith(true) })); });
+      await settle();
+      expect(downloads).toEqual([false, true]);
+      expect(handle!.last).toMatchObject({ trigger: 'switch-on', result: 'ok' });
+      await act(async () => { tree.update(createElement(Probe, { settings: settingsWith(true) })); });
+      await settle();
+      expect(downloads).toEqual([false, true]);
+    } finally {
+      await act(async () => { tree.unmount(); });
+    }
+  });
+});
+
 describe('a completed run never pokes the next one (defect 2)', () => {
   it('keeps the handle stable across completed runs, so an effect depending on it runs once', async () => {
     const { counts, deps } = folder();
