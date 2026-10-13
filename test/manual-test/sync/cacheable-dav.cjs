@@ -56,6 +56,10 @@ fs.mkdirSync(PUTS, { recursive: true });
 
 const counters = { get: 0, get404: 0, put: 0, propfind: 0, mkcol: 0, rejected401: 0, stalls_done: 0 };
 const modes = { stall_next_get: false, acceptedPasswords: null };
+/** One-shot slow body: headers flushed at once, body delivered after ms. */
+const holdNext = { ms: 0 };
+/** One-shot partial body: headers + half the body flushed, then stall. */
+const halveNext = { on: false };
 
 function log(line) {
   const stamp = new Date().toISOString();
@@ -116,14 +120,26 @@ const server = http.createServer((req, res) => {
       // cacheability of this stub depends on the response being stored.
       res.writeHead(status, { Date: new Date().toUTCString(), ...headers });
       res.end(payload);
-      log(`${req.method} ${req.url} -> ${status}${headersText}`);
+      // Control queries can carry secrets; log the redacted form for them.
+      const loggedUrl = req.url.startsWith('/__accept') ? controlUrl : req.url;
+      log(`${req.method} ${loggedUrl} -> ${status}${headersText}`);
     };
 
     // Control endpoints (host-side, no auth, never seen by the app).
+    // Their queries can carry secrets (/__accept's password list); the log
+    // line and the answer below use a redacted form, never the raw URL.
+    const controlUrl = req.url.startsWith('/__accept')
+      ? `/__accept?list=<redacted>`
+      : req.url;
     if (req.url === '/__state') {
       const current = servedBody();
       return answer(200, { 'Content-Type': 'application/json' }, JSON.stringify({
-        counters, modes, served: current ? { bytes: current.length, sha: hash(current) } : null,
+        counters,
+        modes: {
+          stall_next_get: modes.stall_next_get,
+          acceptedPasswordCount: modes.acceptedPasswords === null ? null : modes.acceptedPasswords.length,
+        },
+        served: current ? { bytes: current.length, sha: hash(current) } : null,
       })), void (log(`__state served=${current ? hash(current) : 'none'}`));
     }
     if (req.url === '/__set' && req.method === 'POST') {
@@ -136,6 +152,16 @@ const server = http.createServer((req, res) => {
       modes.stall_next_get = req.url.includes('on=1');
       log(`__stall ${modes.stall_next_get ? 'ARMED' : 'disarmed'}`);
       return answer(200, { 'Content-Type': 'text/plain' }, `stall ${modes.stall_next_get ? 'armed' : 'disarmed'}\n`);
+    }
+    if (req.url.startsWith('/__halve')) {
+      halveNext.on = req.url.includes('on=1');
+      log(`__halve ${halveNext.on ? 'ARMED' : 'disarmed'}`);
+      return answer(200, { 'Content-Type': 'text/plain' }, `halve ${halveNext.on ? 'armed' : 'disarmed'}\n`);
+    }
+    if (req.url.startsWith('/__hold')) {
+      holdNext.ms = Number(new URL(req.url, 'http://x').searchParams.get('ms') ?? 0);
+      log(`__hold next GET body delay=${holdNext.ms}ms`);
+      return answer(200, { 'Content-Type': 'text/plain' }, `hold ${holdNext.ms}ms\n`);
     }
     if (req.url.startsWith('/__accept')) {
       const raw = new URL(req.url, 'http://x').searchParams.get('list');
@@ -209,6 +235,11 @@ const server = http.createServer((req, res) => {
           'Content-Length': String(current.length),
           ETag: `"${hash(current)}"`,
         });
+        // Node buffers writeHead's bytes until the first write/end: without
+        // this flush the client never receives the headers, and a stall
+        // measures a headers timeout, not the body timeout it exists for
+        // (found 2026-10-13: curl --dump-header caught 0 bytes).
+        res.flushHeaders();
         let closed = false;
         res.on('close', () => {
           if (closed) return;
@@ -219,6 +250,46 @@ const server = http.createServer((req, res) => {
         return; // The body never comes.
       }
       counters.get += 1;
+      if (halveNext.on) {
+        // One shot: headers + half the body, then stall — whether expo/fetch's
+        // promise resolves at the first body chunk decides which shape the
+        // old header-only timeout could not bound.
+        halveNext.on = false;
+        const half = Math.floor(current.length / 2);
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Length': String(current.length),
+          ETag: `"${hash(current)}"`,
+        });
+        res.flushHeaders();
+        res.write(current.subarray(0, half));
+        log(`GET ${req.url} -> 200 PARTIAL (${half} of ${current.length} bytes flushed, rest withheld)${headersText}`);
+        let halved = false;
+        res.on('close', () => {
+          if (halved) return;
+          halved = true;
+          log(`PARTIAL GET closed after ${Date.now() - started} ms (client gave up: ${!res.writableEnded})`);
+        });
+        return; // The rest never comes.
+      }
+      if (holdNext.ms > 0) {
+        // One shot: headers flushed at once, body after the hold — the
+        // discriminator for when expo/fetch's promise actually resolves.
+        const holdMs = holdNext.ms;
+        holdNext.ms = 0;
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Length': String(current.length),
+          ETag: `"${hash(current)}"`,
+        });
+        res.flushHeaders();
+        log(`GET ${req.url} -> 200 HEADERS-FLUSHED (body withheld ${holdMs} ms)${headersText}`);
+        setTimeout(() => {
+          res.end(current);
+          log(`HELD GET body delivered after ${Date.now() - started} ms total (hold ${holdMs} ms)`);
+        }, holdMs);
+        return;
+      }
       return answer(200, {
         'Content-Type': 'application/json',
         'Content-Length': String(current.length),
