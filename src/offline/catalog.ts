@@ -54,6 +54,13 @@ export interface PendingWrite extends AudioAddress {
   cancelled: number;
 }
 
+function recordWalk(tx: SqlSession, walk: number) {
+  return tx.runAsync(
+    "INSERT INTO state VALUES('walk',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+    String(walk),
+  );
+}
+
 export class OfflineCatalog {
   private writes: Promise<unknown> = Promise.resolve();
   constructor(private readonly db: SqlDatabase) {}
@@ -364,6 +371,48 @@ export class OfflineCatalog {
         "INSERT INTO state VALUES('speech',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
         value,
       );
+    });
+  }
+  /**
+   * Which walk of the page prepared the stored chapter texts (`BLOCK_WALK` in
+   * `highlighter.ts`), or null for a catalogue that never recorded one: every
+   * catalogue written before the walk was first raised (#184).
+   */
+  async preparedWalk(): Promise<number | null> {
+    const [row] = await this.db.getAllAsync<{ value: string }>(
+      "SELECT value FROM state WHERE name='walk'",
+    );
+    return row ? Number(row.value) : null;
+  }
+  /** That the catalogue's prepared texts are `walk`'s, as `recordSpeechKeying` records the keys' setting. */
+  async recordWalk(walk: number) {
+    await this.write((tx) => recordWalk(tx, walk));
+  }
+  /**
+   * Every chapter whose text another walk prepared is asked for again, and
+   * `walk` is recorded, in one transaction (#184, ADR 0027).
+   *
+   * A Reading cuts its sentences with the walk it has, and asks for a saved Clip
+   * by the sentence's Speech Text; a chapter prepared by another walk may hold
+   * sentences the Reading no longer makes, and would read Downloaded while one
+   * of them goes to the Provider. So each chapter with text is marked not
+   * prepared and its section taken out of `prepared_sections`. Its texts,
+   * memberships and Clips stay: Manage downloads can still delete them, and the
+   * next download of it prepares the text afresh and fetches only the sentences
+   * whose text changed. A chapter with nothing to speak stays as it is, because
+   * no walk finds text where the last found none.
+   */
+  async prepareAgain(walk: number) {
+    await this.write(async (tx) => {
+      await tx.runAsync(
+        "UPDATE chapters SET prepared=0 WHERE prepared=1 AND section IS NOT NULL AND text_count>0",
+      );
+      await tx.runAsync(
+        `UPDATE plans SET prepared_sections=(
+          SELECT json_group_array(value) FROM json_each(COALESCE(plans.prepared_sections,'[]'))
+          WHERE value NOT IN(SELECT section FROM chapters WHERE chapters.document=plans.document AND prepared=0 AND section IS NOT NULL))`,
+      );
+      await recordWalk(tx, walk);
     });
   }
   /** Every chapter whose text has been prepared, across documents: what re-keying walks. */

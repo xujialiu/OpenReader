@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../src/app/settings';
 import type { DownloadTask, NarrationPlan } from '../../src/offline/model';
+import { BLOCK_WALK } from '../../src/renderer/highlighter';
 
 /**
  * The runtime's half of #76. A chapter's text is prepared by the hidden
@@ -64,7 +65,7 @@ it('withdraws the preparation out when the app leaves, ignores its timeout, and 
   });
   mock.open.mockResolvedValue({
     tasks: async () => [stored],
-    catalog: { saveTasks: async () => {}, speechKeying: async () => null },
+    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, speechKeying: async () => null },
     rekey: async () => {},
     plan: async () => plan,
     progress: async () => [],

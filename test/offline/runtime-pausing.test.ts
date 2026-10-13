@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import type { DownloadTask } from '../../src/offline/model';
+import { BLOCK_WALK } from '../../src/renderer/highlighter';
 
 /**
  * The runtime's half of #56: a chapter the owner paused stays paused across a
@@ -45,7 +46,7 @@ it('keeps the chapters the owner paused paused across a restart and when other c
   const voice = { provider: 'fish' as const, voice: 'A', label: 'A' };
   const stored: DownloadTask = { id: 't', document: 'book', voice, chapters: ['a', 'b'], state: 'downloading', error: null, failed: [], paused: ['a'] };
   const saveTasks = vi.fn(async (_tasks: DownloadTask[]) => {});
-  mock.open.mockResolvedValue({ tasks: async () => [stored], catalog: { saveTasks, speechKeying: async () => null } });
+  mock.open.mockResolvedValue({ tasks: async () => [stored], catalog: { saveTasks, preparedWalk: async () => BLOCK_WALK, speechKeying: async () => null } });
   const stop = startDownloads();
   try {
     mock.connectivity!({ connected: false });

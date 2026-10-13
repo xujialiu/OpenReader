@@ -113,6 +113,21 @@ export const WORD_HIGHLIGHT = 'openreader-word';
 export const HIGHLIGHTER = '__openReaderHighlighter';
 
 /**
+ * Which walk the program's `walk()` is: what turns a rendered section into
+ * Blocks, and so into the sentences a Reading speaks and a Download saves.
+ *
+ * **Raise it with any change that can make the walk report other Blocks for the
+ * same section.** A Download keeps the sentences it prepared, and a Reading asks
+ * for a saved Clip by the sentence it cuts itself; the catalogue records this
+ * number, and a chapter another walk prepared is prepared again (ADR 0027).
+ *
+ * 1 is every walk before #184: unrecorded in any catalogue. 2 keeps list items
+ * and cells apart (#184), a drop cap in its word (#189) and the two lines of a
+ * `<br>` apart (#192).
+ */
+export const BLOCK_WALK = 2;
+
+/**
  * The fonts **Appearance** offers, as the owner reads them and as CSS names
  * them.
  *
@@ -831,8 +846,45 @@ ${constants}
   var PARAGRAPH = { P: 1, LI: 1, DD: 1, DT: 1, BLOCKQUOTE: 1, DIV: 1, TD: 1, TH: 1, PRE: 1, FIGCAPTION: 1 };
   /* A <br> is a line inside a Block, not a Block boundary: verse marked up with
      <br> is one unit, verse marked up a line to a <p> is not, and rejoin.ts is
-     what puts the second kind back together. */
+     what puts the second kind back together. What the walk does with the line
+     it draws is in visit(). */
   var INLINE = { BR: 1, WBR: 1 };
+  /* What a reader takes one at a time: a list item, a definition-list entry, a
+     table cell (#184). Each Block reports the one it sits in, and rejoin.ts
+     never reads two of them as one sentence. The tag is not enough on its own:
+     in <li><p>lower cost</p></li> the Block is the <p>. */
+  var ITEM = { LI: 1, DD: 1, DT: 1, TD: 1, TH: 1 };
+
+  /* Whether an element is taken out of the line it sits in: floated, or
+     positioned absolutely. WebKit then computes \`display: block\` for it,
+     whatever it was declared (CSS 2.1 section 9.7, measured on a floated span in
+     #189), so its \`display\` cannot say whether it was ever a Block. */
+  function outOfFlow(style) {
+    var floated = String(style.cssFloat || style.getPropertyValue('float') || 'none');
+    var position = String(style.position || '');
+    return floated !== 'none' || position === 'absolute' || position === 'fixed';
+  }
+
+  /* Whether the element stands in running text: a sibling that stays in the line
+     holds text. A drop cap does ("<span>I</span>T is a truth"), and so does a
+     page number or a pull quote set inside a paragraph. The lines a converted
+     book positions each in an absolute box of its own do not: their siblings are
+     the other boxes, and they stay Blocks of their own. */
+  function inRunningText(win, node) {
+    var siblings = node.parentNode ? node.parentNode.childNodes : [];
+    for (var i = 0; i < siblings.length; i++) {
+      var sibling = siblings[i];
+      if (sibling === node) continue;
+      if (sibling.nodeType === 3) {
+        if (/\\S/.test(sibling.data)) return true;
+        continue;
+      }
+      if (sibling.nodeType !== 1 || SKIP[String(sibling.tagName || '').toUpperCase()]) continue;
+      var style = win.getComputedStyle(sibling);
+      if (String(style.display || '').lastIndexOf('inline', 0) === 0 && !outOfFlow(style) && /\\S/.test(sibling.textContent || '')) return true;
+    }
+    return false;
+  }
 
   function roleOf(element) {
     var tag = element && element.tagName ? element.tagName.toUpperCase() : '';
@@ -845,27 +897,47 @@ ${constants}
     var win = contents.window;
     var found = [];
     var open = null;
+    /* The items of this section, numbered as the walk enters them. */
+    var items = 0;
 
     function close() {
       if (open && /\\S/.test(open.text)) found.push(open);
       open = null;
     }
 
-    function visit(node, owner) {
+    /* \`item\` is the number of the list item or cell the node is in, or null. */
+    function visit(node, owner, item) {
       if (node.nodeType === 3) {
         if (!node.data.length) return;
-        if (!open) open = { element: owner, text: '', parts: [] };
+        if (!open) open = { element: owner, text: '', parts: [], item: item, broken: false };
+        /* A line the Document breaks with a <br> and no white space on either
+           side (#192): "Chapter 1:<br/>Nightmare Begins", or two lines of verse.
+           One newline goes into the text, held by no node, so the words either
+           side stay two words for the Provider, the sentence splitter and the
+           word matching. Sentences and words are trimmed of white space, so no
+           range starts or ends on it, and nearby() passes over it. Where the
+           Document wrote white space beside the break, nothing is added. */
+        if (open.broken) {
+          open.broken = false;
+          if (/\\S$/.test(open.text) && /^\\S/.test(node.data)) open.text += '\\n';
+        }
         open.parts.push({ node: node, at: open.text.length, len: node.data.length });
-        /* Verbatim. Collapsing the source file's whitespace would break the one
-           mapping that must not drift: an offset into this text is walked back
-           into these very nodes. A Provider speaks the newlines without noticing. */
+        /* Verbatim, but for that newline. Collapsing the source file's whitespace
+           would break the one mapping that must not drift: an offset into this
+           text is walked back into these very nodes. A Provider speaks the
+           newlines without noticing. */
         open.text += node.data;
         return;
       }
       if (node.nodeType !== 1) return;
       var tag = node.tagName ? node.tagName.toUpperCase() : '';
       if (SKIP[tag]) return;
-      var display = INLINE[tag] ? 'inline' : String(win.getComputedStyle(node).display || '');
+      if (tag === 'BR') {
+        if (open) open.broken = true;
+        return;
+      }
+      var style = INLINE[tag] ? null : win.getComputedStyle(node);
+      var display = style ? String(style.display || '') : 'inline';
       if (display === 'none') return;
       /* What a Block is, the document decides — CONTEXT.md says "a run of text the
          document itself presents as one unit", and that is \`display\`, not a tag
@@ -877,22 +949,33 @@ ${constants}
       var inline =
         display.lastIndexOf('inline', 0) === 0 ||
         display === 'contents' ||
-        display.lastIndexOf('ruby', 0) === 0;
+        display.lastIndexOf('ruby', 0) === 0 ||
+        /* Taken out of a line of running text, it is still read in it: a
+           floated drop cap is the first letter of its word (#189), and a page
+           number or a pull quote set in a paragraph leaves the paragraph one
+           Block with one CFI (#194). */
+        (!!style && outOfFlow(style) && inRunningText(win, node));
       var children = node.childNodes;
       var i;
       if (inline) {
-        for (i = 0; i < children.length; i++) visit(children[i], owner);
+        for (i = 0; i < children.length; i++) visit(children[i], owner, item);
         return;
       }
       close();
-      for (i = 0; i < children.length; i++) visit(children[i], node);
+      var within = ITEM[tag] || display === 'list-item' || display === 'table-cell' ? items++ : item;
+      for (i = 0; i < children.length; i++) visit(children[i], node, within);
       close();
     }
 
     var body = contents.document.body;
-    if (body) visit(body, body);
+    if (body) visit(body, body, null);
     close();
     return found;
+  }
+
+  /* A Block's item as it is reported: absent outside any list item or cell. */
+  function itemOf(block) {
+    return block.item === null ? undefined : block.item;
   }
 
   /* This section's characters by the size the **Document** set them in, for the
@@ -967,7 +1050,7 @@ ${constants}
       });
       post({type:'openreader:offline-section', token:token, index:index, total:book.spine.length,
         language:String(book.package.metadata.language || '').trim() || 'en', points:points,
-        blocks:found.map(function(b) { return {text:b.text, role:roleOf(b.element), section:section.href}; })});
+        blocks:found.map(function(b) { return {text:b.text, role:roleOf(b.element), section:section.href, item:itemOf(b)}; })});
     } catch (error) { post({type:'openreader:offline-error', token:token, detail:String(error)}); }
   };
 
@@ -1367,6 +1450,7 @@ ${constants}
         id: id,
         text: found[i].text,
         role: roleOf(found[i].element),
+        item: itemOf(found[i]),
         section: href,
         sectionIndex: index,
         cfi: cfi

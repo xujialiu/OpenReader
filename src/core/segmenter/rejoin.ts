@@ -72,6 +72,15 @@
  * cannot be made to work and guessing is the one thing not allowed. The same
  * reasoning the plugin used to refuse a bare digit, which opens real paragraphs
  * too, applies to every uncased script at once.
+ *
+ * Nor does it join two list items, two definition-list entries or two table
+ * cells (#184). Each is presented as an item to take by itself, and a list of
+ * lowercase phrases without full stops passes both textual tests: "lower cost",
+ * "faster startup" and "fewer moving parts" were one sentence, and a table of
+ * 800 vocabulary cells one of 7,089 characters. Measured over 257 distinct
+ * EPUBs on the development Mac, 67 had such a weld, 5,337 sentences in all.
+ * Two Blocks inside one item may still be joined, so a book laid out inside a
+ * single table cell keeps the repair.
  */
 
 /**
@@ -106,6 +115,12 @@ export interface Block {
    * of trouble that this layer is not the place to fix.
    */
   section?: string;
+  /**
+   * Which list item, definition-list entry or table cell of its section the
+   * Block sits in, numbered by the page; absent outside one. Two Blocks whose
+   * items differ are never joined (#184).
+   */
+  item?: number;
 }
 
 /** The Blocks read as one text. One Block unless the repair layer put a sentence back together. */
@@ -215,6 +230,7 @@ const HAS_LETTER = /\p{L}/u;
 function joins(a: Block, b: Block): boolean {
   if ((a.role ?? 'paragraph') !== 'paragraph' || (b.role ?? 'paragraph') !== 'paragraph') return false;
   if (a.section !== b.section) return false;
+  if ((a.item ?? null) !== (b.item ?? null)) return false;
   // A Block with no letter in it is not the first half of a sentence. It is a
   // page number, a figure number, a bullet — and it has no terminator either, so
   // `endsMidSentence` alone would take it for a sentence left hanging and weld

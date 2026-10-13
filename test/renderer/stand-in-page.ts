@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { DOMParser } from '@xmldom/xmldom';
 
 import { highlighterSource } from '../../src/renderer/highlighter';
-import { BLOCKS_MESSAGE } from '../../src/renderer/messages';
+import { BLOCKS_MESSAGE, type ReportedBlock } from '../../src/renderer/messages';
 
 /**
  * **The real page program, run over a stand-in page.**
@@ -48,7 +48,35 @@ function linkHandler(): (root: any, follow: (href: string) => void) => void {
   return new Function('n', 'r', bundle.slice(from, to) + '; return h;')({ qs: () => null }, { a: Url });
 }
 
-const BLOCK = new Set(['html', 'body', 'p', 'div', 'h1', 'h2']);
+/** A browser's default `display` for the elements the tests use (HTML Standard, Rendering); anything else is inline. */
+const DISPLAY: Record<string, string> = {
+  html: 'block', body: 'block', p: 'block', div: 'block', h1: 'block', h2: 'block', h3: 'block', section: 'block', blockquote: 'block',
+  ul: 'block', ol: 'block', dl: 'block', dt: 'block', dd: 'block', li: 'list-item',
+  table: 'table', tbody: 'table-row-group', tr: 'table-row', td: 'table-cell', th: 'table-cell',
+};
+
+/** A property the element's own `style` attribute sets, lower-cased, or null. */
+function declared(element: any, property: string): string | null {
+  for (const part of String(element.getAttribute?.('style') ?? '').split(';')) {
+    const [name, value] = part.split(':');
+    if (name && value && name.trim().toLowerCase() === property) return value.trim().toLowerCase();
+  }
+  return null;
+}
+
+/**
+ * The computed style the program reads, from the tag and the element's `style`
+ * attribute. A floated or absolutely positioned box computes a block `display`
+ * whatever it was declared (CSS 2.1 section 9.7), as WebKit was measured to
+ * answer for a floated span (#189).
+ */
+function computedStyle(element: any) {
+  let display = declared(element, 'display') ?? DISPLAY[String(element.tagName).toLowerCase()] ?? 'inline';
+  const cssFloat = declared(element, 'float') ?? 'none';
+  const position = declared(element, 'position') ?? 'static';
+  if (display.startsWith('inline') && (cssFloat !== 'none' || position === 'absolute' || position === 'fixed')) display = 'block';
+  return { display, cssFloat, position, textAlign: 'start', fontSize: '16px', getPropertyValue: () => '' };
+}
 
 interface Listener {
   fn: (event: any) => void;
@@ -122,7 +150,7 @@ export function standInPage() {
     document.head = document.getElementsByTagName('head')[0];
     document.defaultView = {
       document, frameElement: { getBoundingClientRect: () => ({ top: 0 }) }, Highlight: class extends Set<unknown> { priority = 0; }, CSS: { highlights: new Map() },
-      getComputedStyle: (element: any) => ({ display: BLOCK.has(String(element.tagName).toLowerCase()) ? 'block' : 'inline', textAlign: 'start', fontSize: '16px', getPropertyValue: () => '' }),
+      getComputedStyle: computedStyle,
     };
     document.addEventListener = (type: string, fn: (event: any) => void, options?: boolean | { capture?: boolean }) => {
       const capture = options === true || (typeof options === 'object' && options !== null && options.capture === true);
@@ -134,8 +162,8 @@ export function standInPage() {
     } : null);
     document.createRange = () => {
       const range: any = { startContainer: null, endContainer: null, getClientRects: () => [], getBoundingClientRect: () => ({ top: 0, bottom: 0, height: 0, width: 0 }) };
-      range.setStart = (node: any) => { range.startContainer = node; };
-      range.setEnd = (node: any) => { range.endContainer = node; };
+      range.setStart = (node: any, offset: number) => { range.startContainer = node; range.startOffset = offset; };
+      range.setEnd = (node: any, offset: number) => { range.endContainer = node; range.endOffset = offset; };
       range.selectNode = (node: any) => { range.startContainer = node; range.endContainer = node; };
       return range;
     };
@@ -156,10 +184,15 @@ export function standInPage() {
   return {
     posted, displays, followed, manager, stage, addSection,
     send(message: object) { window.__openReaderHighlighter(message); },
+    /** A Download's preparation of one section, as the hidden rendition is asked for it (`indexer.tsx`); settles once the program has posted its answer. */
+    async prepare(index: number, points: unknown[] = []): Promise<any> {
+      await window.openreaderOfflineSection(index, points, 1);
+      return posted.filter((m) => m.type === 'openreader:offline-section' || m.type === 'openreader:offline-error').pop();
+    },
     /** The content hook, as epub.js runs it for every section it displays. */
     sweep() { for (const hook of hooks) hook(); },
     /** The Blocks the program reported for a section. */
-    blocks(section: Section): { id: string; text: string }[] {
+    blocks(section: Section): ReportedBlock[] {
       return posted.filter((m) => m.type === BLOCKS_MESSAGE && m.sectionIndex === section.index).pop().blocks;
     },
     /**

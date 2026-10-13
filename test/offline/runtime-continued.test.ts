@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { DownloadTask } from '../../src/offline/model';
+import { BLOCK_WALK } from '../../src/renderer/highlighter';
 
 /**
  * The runtime's half of ADR 0053 (#77): a download the owner starts or resumes
@@ -91,7 +92,7 @@ async function start(stored: DownloadTask[] = []) {
   const runtime = await import('../../src/offline/runtime');
   mock.open.mockResolvedValue({
     tasks: async () => stored,
-    catalog: { saveTasks: mock.saveTasks, speechKeying: async () => null },
+    catalog: { saveTasks: mock.saveTasks, preparedWalk: async () => BLOCK_WALK, speechKeying: async () => null },
     plan: () => new Promise(() => {}),
     progress: () => mock.progress(),
   });
