@@ -130,6 +130,19 @@ caller runs on the host and points `sync.url` at:
 A stub is the only way found to measure the bound: a wrong address cannot be
 typed while the switch is on, and a simulator has no way to lose its network.
 
+## Cache, the stalled download, and the switch-on recovery (#166, #168, #177)
+
+[cache-stall-and-recovery.md](cache-stall-and-recovery.md) — 2026-10-13,
+beta7 at 11a890c: the URL cache's stale Positions File defeated only by the
+request's `Cache-Control: no-cache` header (#166, with the negative control
+run on the app's own fetch through `cdp.cjs`), a GET that sends success
+headers and then never the body ending as a failure at the 15 s deadline
+with the single flight released (#168), and a switch-on 22 s after a 401
+failure running a real GET, not only the passing check (#177). The tools it
+added: `cacheable-dav.cjs` (cacheable answers, the one-shot stalled GET, the
+password list, header logging) and `SyncRecoveryProbe.swift`
+(`testFailThenRecoverInWindow`).
+
 ## A Play that waits past its Reading (#106)
 
 `reading-view.tsx`'s `play` waits for the pre-Play sync for at most
