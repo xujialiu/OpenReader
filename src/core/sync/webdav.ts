@@ -3,8 +3,9 @@ import { withTimeout } from '../timeout';
 /**
  * **Copied from the Zotero-TTS plugin's `src/core/webdav.ts`** (ADR 0013's
  * rule: the shared layers come across as a copy, not a package), with its test
- * `test/core/sync/webdav.test.ts` brought along. The one edit is the import
- * path of `withTimeout`. `btoa` and `TextEncoder`, which it rests on, are
+ * `test/core/sync/webdav.test.ts` brought along. This app also revalidates GETs
+ * through Expo fetch and bounds body consumption with the request (#166, #168).
+ * `btoa` and `TextEncoder`, which it rests on, are
  * both present on this Hermes (notes/NOTES_2026-09-19.md, 12:21).
  *
  * The plugin's own words follow.
@@ -15,8 +16,8 @@ import { withTimeout } from '../timeout';
  * WebDAV host the plugin is likely to meet (Nextcloud, Synology, Jianguoyun,
  * Koofr, Apache or nginx with a password file) accepts over HTTPS; a server
  * that insists on Digest is not supported. Every request is bounded by a
- * timeout: the plugin sandbox has no AbortController, so a stalled request
- * cannot be cancelled, but it must still surface as an error, never hang.
+ * timeout, including any response body the caller needs. Cancellation is
+ * best-effort: even a native body that ignores abort must reject on time.
  */
 
 export type WebDAVConfig = { url: string; username: string; password: string };
@@ -141,22 +142,38 @@ export function createWebDAVClient(cfg: WebDAVConfig, deps: { fetch: typeof fetc
   const timeoutMs = deps.timeoutMs ?? WEBDAV_TIMEOUT_MS;
   const auth: Record<string, string> = cfg.username ? { Authorization: basicAuthHeader(cfg.username, cfg.password) } : {};
 
-  async function request(method: string, target: string, init: { headers?: Record<string, string>; body?: string } = {}): Promise<Response> {
-    let response: Response;
+  async function request<T>(
+    method: string,
+    target: string,
+    consume: (response: Response) => T | Promise<T>,
+    init: { headers?: Record<string, string>; body?: string } = {},
+  ): Promise<T> {
+    const controller = new AbortController();
     try {
-      response = await withTimeout(
-        deps.fetch(target, { method, headers: { ...auth, ...init.headers }, body: init.body, cache: 'no-store' }),
+      return await withTimeout(
+        (async () => {
+          const response = await deps.fetch(target, {
+            method, headers: { ...auth, ...init.headers }, body: init.body,
+            cache: 'no-store', signal: controller.signal,
+          });
+          if (response.status === 401 || response.status === 403) {
+            throw new WebDAVError('auth', `The server rejected the username or password (HTTP ${response.status}).`, response.status);
+          }
+          // fetch resolves at the headers. Keep the same deadline until the
+          // caller has its body, not a second timeout starting at the headers.
+          return consume(response);
+        })(),
         timeoutMs,
         () => new WebDAVError('network', `No reply from ${url} within ${Math.round(timeoutMs / 1000)} s.`),
+        () => controller.abort(),
       );
     } catch (e) {
       if (e instanceof WebDAVError) throw e;
       throw new WebDAVError('network', `Cannot reach ${url}: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      // Also release bodies the caller does not need (PUT/check/error status).
+      controller.abort();
     }
-    if (response.status === 401 || response.status === 403) {
-      throw new WebDAVError('auth', `The server rejected the username or password (HTTP ${response.status}).`, response.status);
-    }
-    return response;
   }
 
   const failed = (what: string, response: Response) => new WebDAVError('http', `${what} failed: HTTP ${response.status}.`, response.status);
@@ -165,7 +182,7 @@ export function createWebDAVClient(cfg: WebDAVConfig, deps: { fetch: typeof fetc
     url,
 
     async check() {
-      const response = await request('PROPFIND', url, { headers: { Depth: '0' } });
+      const response = await request('PROPFIND', url, (response) => response, { headers: { Depth: '0' } });
       if (response.status === 404) {
         throw new WebDAVError('not-found', `The folder ${url} does not exist. It is created on the first upload.`, 404);
       }
@@ -174,13 +191,13 @@ export function createWebDAVClient(cfg: WebDAVConfig, deps: { fetch: typeof fetc
 
     async upload(name, text) {
       const target = url + name;
-      const put = () => request('PUT', target, { headers: { 'Content-Type': 'application/json' }, body: text });
+      const put = () => request('PUT', target, (response) => response, { headers: { 'Content-Type': 'application/json' }, body: text });
       let response = await put();
       // RFC 4918 answers 409 to a PUT whose parent collection is missing;
       // some servers say 404. Make the folder and write once more. A 405
       // from MKCOL means the folder exists after all.
       if (response.status === 404 || response.status === 409) {
-        const made = await request('MKCOL', url);
+        const made = await request('MKCOL', url, (response) => response);
         if (!made.ok && made.status !== 405) throw failed(`Creating the folder ${url}`, made);
         response = await put();
       }
@@ -189,19 +206,23 @@ export function createWebDAVClient(cfg: WebDAVConfig, deps: { fetch: typeof fetc
 
     async download(name) {
       const target = url + name;
-      const response = await request('GET', target);
-      if (response.status === 404) throw new WebDAVError('not-found', `No backup on the server yet (${target} not found).`, 404);
-      if (!response.ok) throw failed('Download', response);
-      return response.text();
+      // Expo fetch drops RequestInit.cache before the native URLSession request.
+      // Revalidate even a fresh cached copy: another device may have just uploaded.
+      return request('GET', target, (response) => {
+        if (response.status === 404) throw new WebDAVError('not-found', `No backup on the server yet (${target} not found).`, 404);
+        if (!response.ok) throw failed('Download', response);
+        return response.text();
+      }, { headers: { 'Cache-Control': 'no-cache' } });
     },
 
     async list() {
-      const response = await request('PROPFIND', url, { headers: { Depth: '1', 'Content-Type': 'application/xml' }, body: PROPFIND_BODY });
-      if (response.status === 404) {
-        throw new WebDAVError('not-found', `The folder ${url} does not exist. It is created on the first upload.`, 404);
-      }
-      if (!response.ok) throw failed('PROPFIND', response);
-      return parseMultistatus(await response.text());
+      return request('PROPFIND', url, async (response) => {
+        if (response.status === 404) {
+          throw new WebDAVError('not-found', `The folder ${url} does not exist. It is created on the first upload.`, 404);
+        }
+        if (!response.ok) throw failed('PROPFIND', response);
+        return parseMultistatus(await response.text());
+      }, { headers: { Depth: '1', 'Content-Type': 'application/xml' }, body: PROPFIND_BODY });
     },
   };
 }

@@ -61,13 +61,13 @@ describe('nothing that pokes depends on the last outcome (defect 2)', () => {
 });
 
 describe('the switch runs its first sync from the hook, once the settings are in force (defect 1)', () => {
-  it('pokes on the false-to-true edge, after the refs have been updated', () => {
+  it('forces a run on the false-to-true edge, after the refs have been updated', () => {
     const hook = code('use-sync.ts');
     const refs = hook.indexOf('settingsRef.current = settings;');
-    const edge = hook.indexOf("if (!was && enabled) transport().poke('switch-on');");
+    const edge = hook.indexOf("if (!was && enabled) void transport().flush('switch-on');");
     expect(refs).toBeGreaterThan(0);
     expect(edge).toBeGreaterThan(refs);
-    expect(code('sync-screen.tsx')).not.toContain("poke('switch-on')");
+    expect(code('sync-screen.tsx')).not.toMatch(/(?:poke|flush|wait)\('switch-on'\)/);
   });
 });
 
