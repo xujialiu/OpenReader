@@ -41,7 +41,7 @@ writeFileSync(file, `(() => {
 })()`);
 let out;
 try {
-  out = execFileSync(process.execPath, [join(__dirname, '..', 'kit', 'cdp.cjs'), '--eval', file], {
+  out = execFileSync(process.execPath, [require.resolve('../kit/cdp.cjs'), '--eval', file], {
     timeout: 20000, env: { ...process.env }, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
   });
 } catch (error) {
