@@ -123,10 +123,10 @@ class Queue {
 }
 
 /** The page: epub.js's stand-in, and the globals the program runs against. */
-function createPage(toApp: (message: unknown) => void, stalled: ReadonlySet<number>) {
+function createPage(toApp: (message: unknown) => void, stalled: ReadonlySet<number>, cleanupFailures: Set<number>) {
   const hooks: ((contents: unknown) => void)[] = [];
   const listeners = new Map<string, (() => void)[]>();
-  const record = { displays: [] as string[], laidOutAhead: [] as number[] };
+  const record = { displays: [] as string[], laidOutAhead: [] as number[], hosts: 0 };
 
   const spine: Section[] = [];
   for (let index = 0; index < SPINE; index++) {
@@ -199,7 +199,12 @@ function createPage(toApp: (message: unknown) => void, stalled: ReadonlySet<numb
     prepend(view: View) { this._views.unshift(view); this.length++; return view; },
     /** Only a displayed view is found. */
     find(section: Section) { return this._views.find((view) => view.displayed && view.section.index === section.index); },
-    destroy(view: View) { if (view.displayed) view.destroy(); },
+    destroy(view: View) {
+      if (view.displayed) view.destroy();
+      // epub.js Views.destroy removes from the visible container, not from
+      // an arbitrary parent. A preparation host belongs to another parent.
+      if (view.element.attached) throw new Error('NotFoundError: the view is not a child of the visible container');
+    },
     clear() {
       for (const view of this._views) this.destroy(view);
       this._views = [];
@@ -227,6 +232,7 @@ function createPage(toApp: (message: unknown) => void, stalled: ReadonlySet<numb
     }
     offset() { return { top: 0, left: 0 }; }
     destroy() {
+      if (this.element.attached && cleanupFailures.delete(this.section.index)) throw new Error('view cleanup failed');
       if (this.contents) this.contents.document.defaultView = null;
       this.contents = null;
       this.displayed = false;
@@ -248,10 +254,10 @@ function createPage(toApp: (message: unknown) => void, stalled: ReadonlySet<numb
         return {
           style: {}, setAttribute() {},
           appendChild(element: { attached: boolean }) { child = element; child.attached = true; },
-          remove() { if (child) child.attached = false; },
+          remove() { if (child) child.attached = false; record.hosts--; },
         };
       },
-      head: { appendChild() {} }, body: { appendChild() {} },
+      head: { appendChild() {} }, body: { appendChild() { record.hosts++; } },
     },
     // The library's View.js, 130-135: it parses the string and hands the object to onWebViewMessage.
     ReactNativeWebView: { postMessage: (data: string) => { const message = JSON.parse(data) as unknown; setTimeout(() => toApp(message), 0); } },
@@ -330,7 +336,7 @@ function createPage(toApp: (message: unknown) => void, stalled: ReadonlySet<numb
   };
 }
 
-async function openDocument(at: number, stalled: ReadonlySet<number> = new Set()) {
+async function openDocument(at: number, stalled: ReadonlySet<number> = new Set(), cleanupFailures = new Set<number>()) {
   world.graph.handlers = null;
   world.graph.queue.length = 0;
   world.graph.serial = 0;
@@ -352,7 +358,7 @@ async function openDocument(at: number, stalled: ReadonlySet<number> = new Set()
     if (typeof from.sectionIndex === 'number') reported.push(from.sectionIndex);
     if (typeof from.detail === 'string') problems.push(from.detail);
     reading.bridge.readerProps.onWebViewMessage(message);
-  }, stalled);
+  }, stalled, cleanupFailures);
   world.toPage = (code) => {
     const found = /\((\{.*\})\); true;$/s.exec(code);
     const message = found ? (JSON.parse(found[1]) as { kind?: string; utteranceRanges?: { text: string }[] }) : null;
@@ -443,6 +449,10 @@ describe('the voice reads on while the page is Browsing', () => {
     expect(book.problems).toEqual([]);
     expect(book.spoken).toEqual([begins(0), ends(0), begins(1), ends(1), begins(2)]);
     expect(world.graph.clears).toBe(clears);
+    expect(book.page.record.hosts).toBe(0);
+    await book.listenThrough(ends(3));
+    expect(book.spoken).toEqual([begins(0), ends(0), begins(1), ends(1), begins(2), ends(2), begins(3), ends(3), begins(4)]);
+    expect(book.page.record.hosts).toBe(0);
     expect(book.page.views()).toEqual([39, 40, 41]);
     await book.close();
   });
@@ -458,6 +468,7 @@ describe('the voice reads on while the page is Browsing', () => {
     await book.wait(16_000);
     expect(book.reading.status).toMatchObject({ playing: false, buffering: false });
     expect(book.reading.status.note).toContain('timed out');
+    expect(book.page.record.hosts).toBe(0);
     expect(book.page.views()).toEqual([39, 40, 41]);
     stalled.clear();
     await book.play();
@@ -465,6 +476,19 @@ describe('the voice reads on while the page is Browsing', () => {
     expect(book.spoken).toContain(begins(2));
     expect(book.spoken).not.toContain(begins(39));
     expect(book.reading.status.playing).toBe(true);
+    expect(book.page.record.hosts).toBe(0);
+    await book.close();
+  });
+
+  it('a cleanup error cannot leave the host behind or strand the next preparation', async () => {
+    const book = await openDocument(0, new Set(), new Set([2]));
+    await book.play();
+    await book.contentsRow(40);
+    await book.listenThrough(ends(3));
+    expect(book.spoken).toContain(begins(4));
+    expect(book.spoken).not.toContain(begins(39));
+    expect(book.page.record.hosts).toBe(0);
+    expect(book.page.views()).toEqual([39, 40, 41]);
     await book.close();
   });
 

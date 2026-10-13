@@ -432,6 +432,20 @@ and doubled native audio. The original #153 cases were red at `9c5e245`; the
 six-section reduction read 0, 1, 3 rather than 0, 1, 2. These tests do not by
 themselves establish WebKit layout, native sound or locked-phone behaviour.
 
+**The first WebKit check found a disposal bug (2026-10-13 13:12).** The temporary
+view must be destroyed directly, not through `manager.views.destroy(view)`:
+epub.js's `Views.destroy` also calls its visible container's `removeChild`, and
+the temporary view belongs to our own host. That call threw `NotFoundError`,
+leaving one host and an unsettled preparation promise. Later offscreen requests
+never ran, and the native deadline could stop them but could not repair the
+queue. The behavioral double had omitted that container removal. It now rejects
+a wrong-parent removal, checks that hosts disappear, and reads across several
+successive offscreen sections. Cleanup releases the #112 pending-display guards
+directly, calls the view's own `destroy`, removes its host, and settles the
+preparation promise even if cleanup throws. Timeout/retry and a deliberately
+throwing cleanup are covered too. The initial tester's conditional PASS is not
+accepted as final verification; the corrected candidate requires a retest.
+
 ## Amendment (2026-10-13, #156): Play must hear the engine's answer
 
 A press after the end used to clear the note and resume an empty graph, while

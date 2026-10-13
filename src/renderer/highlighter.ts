@@ -2383,12 +2383,22 @@ ${constants}
           if (finished) return;
           finished = true;
           window.clearTimeout(timer);
-          if (view) {
-            // Also settle a display removed before its iframe loaded (#112).
-            manager.views.destroy(view);
-            if (view.displayed) view.destroy();
+          try {
+            if (view) {
+              // This View belongs to our host, not manager.views. Its destroy
+              // removes from the visible container and throws NotFoundError.
+              // Settle our #112 display guard directly before removing the host.
+              var pending = view.openreaderDisplays ? view.openreaderDisplays.splice(0) : [];
+              for (var i = 0; i < pending.length; i++) pending[i](error || new Error('Preparation view released.'));
+              view.destroy();
+            }
+          } catch (cleanupError) {
+            error = error || cleanupError;
           }
-          if (host) host.remove();
+          try { if (host) host.remove(); }
+          catch (hostError) { error = error || hostError; }
+          // A cleanup failure must not strand every later preparation behind
+          // this promise. The owner can retry even when disposal itself failed.
           if (error) reject(error); else resolve();
         }
         try {
