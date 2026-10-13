@@ -30,6 +30,7 @@ vi.mock('../../src/app/document', () => ({
 vi.mock('../../src/app/display-names', () => ({
   displayNames: () => disk.names,
   saveDisplayName: (id: string, name: string) => { disk.names = { ...disk.names, [id]: name }; },
+  forgetDisplayName: (id: string) => { const { [id]: _gone, ...rest } = disk.names; disk.names = rest; },
 }));
 vi.mock('../../src/app/library', () => ({
   thisDevice: () => 'test-phone',
@@ -184,6 +185,47 @@ describe('two Documents in one Folder are not called alike (#227)', () => {
     await act(async () => { m.library.rename(emma, 'EMMA'); });
     await act(async () => { m.library.rename(elsewhere, 'Persuasion'); });
     expect(titles(m.library)).toEqual(['EMMA', 'Persuasion', 'Persuasion']);
+    await m.unmount();
+  });
+});
+
+describe('a Document deleted and added again has one name (#180)', () => {
+  it('the file\'s name, from the moment it is added and after the next launch', async () => {
+    const m = await mount();
+    const [id] = await importInto(m, null, 'pg1342-images-3.epub', 'd');
+    await act(async () => { m.library.rename(id, 'P&P (school copy)'); });
+    await act(async () => { m.library.remove(id); });
+    await importInto(m, null, 'pg1342-images-3.epub', 'd');
+    const inSession = m.library.current(id)!.title;
+    await m.unmount();
+    const again = await mount();
+    expect({ inSession, afterLaunch: again.library.current(id)!.title }).toEqual({ inSession: 'pg1342-images-3', afterLaunch: 'pg1342-images-3' });
+    expect(disk.names).toEqual({});
+    await again.unmount();
+  });
+
+  it('a name left from before the deletion does not land on a namesake in the Folder at the next launch', async () => {
+    const { m, fiction } = await withFiction();
+    const [a] = await importInto(m, fiction, 'a.epub', 'a');
+    await act(async () => { m.library.rename(a, 'Emma'); });
+    await act(async () => { m.library.remove(a); });
+    await importInto(m, fiction, 'Emma.epub', 'c');
+    await importInto(m, fiction, 'a.epub', 'a');
+    await m.unmount();
+    const again = await mount();
+    expect(namesakes(again.library, fiction, 'Emma')).toHaveLength(1);
+    expect(titles(again.library)).toEqual(['Emma', 'a']);
+    await again.unmount();
+  });
+
+  it('a name the Document still has is kept: the same file again is a duplicate, not a new entry', async () => {
+    const m = await mount();
+    answer('Cancel');
+    const [id] = await importInto(m, null, 'pride.epub', 'a');
+    await act(async () => { m.library.rename(id, 'Pride'); });
+    await importInto(m, null, 'pride.epub', 'a');
+    expect(disk.names).toEqual({ [id]: 'Pride' });
+    expect(m.library.current(id)!.title).toBe('Pride');
     await m.unmount();
   });
 });

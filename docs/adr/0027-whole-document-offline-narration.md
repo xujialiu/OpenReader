@@ -34,6 +34,8 @@ Explicit names are recorded in `display-names.json`, keyed by Document Id, and s
 
 Since #226 EPUB metadata names no Document: the catalogue title is the file's name without its extension until a Rename, and the reader no longer reports `dc:title` (`retitled` is gone). A name is still recorded here and overlaid at launch.
 
+A name goes with its entry (#180). `remove` leaves `display-names.json` alone, so `useLibrary().add` calls `forgetDisplayName(id)` when it makes a new entry for an id the file still names, before `keepFile`. Before that, a Document renamed, deleted and added again was called by its file's name for the rest of the launch and by the old name after the next one, since the launch overlay applies `names[entry.id]`. It is done at the add, not at the deletion, so that names left by deletions made before the change are dropped too; a failed write refuses the import and keeps nothing.
+
 ## SQLite owns offline metadata; audio keeps its file identity
 
 Issue #7 measured the legacy owner plan at 131,686 texts and a bounded 100 cold clip-size checks at 508.741 ms. `hasSavedVoice` performed that scan synchronously during Reader rendering; replacing only that check in the debugger let the same EPUB open. The owner approved SQLite rather than a custom JSON inventory. Indexed document/voice queries replace render-time hashes and file checks; chapter metadata and text are queried separately, and task state is persisted in the same database. Library, reading positions and credentials retain their existing stores.

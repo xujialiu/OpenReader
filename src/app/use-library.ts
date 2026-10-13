@@ -42,7 +42,7 @@ import { nextStamp, stampPlace, type DocumentId, type LibraryEntry, type Reading
 import type { PositionsItem } from '../core/sync/positions-file';
 
 import { identifyFile, keepFile } from './document';
-import { displayNames, saveDisplayName } from './display-names';
+import { displayNames, forgetDisplayName, saveDisplayName } from './display-names';
 import { migrateDocumentIds, readLibrary, thisDevice, writeLibrary, type LoadedLibrary } from './library';
 import { itemsOf, planAdoption, samePlace } from './sync-items';
 
@@ -267,6 +267,15 @@ export function useLibrary(): Library {
       }
       const parent = parentOf(tree);
       const title = freeDocumentName(tree, entriesRef.current, added.title, parent);
+      /**
+       * A name given to this Document before it was deleted is not its name now
+       * (#180): it would stay off the screen until the next launch, then come
+       * back over the file's name, perhaps onto a namesake in the Folder. It is
+       * dropped here rather than at the deletion, so a name left by a deletion
+       * before this rule goes too, and before the file is kept, so a failed
+       * write refuses the import and keeps nothing.
+       */
+      if (displayNames()[added.identity.id] !== undefined) forgetDisplayName(added.identity.id);
       keepFile(added, source, options);
       const entry: LibraryEntry = { ...added.identity, title, position: null, voice: null, stamp: stamp() };
       // Membership is saved first: an interrupted import may leave an unused
