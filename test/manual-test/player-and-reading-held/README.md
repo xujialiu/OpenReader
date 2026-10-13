@@ -26,6 +26,13 @@ that names the script or probe you are about to run.
   the fetch; a fake Kokoro provider that logs every request
   (`fake-kokoro.cjs`) and `Tap86Probe.swift` for the real touches.
 
+- [engine-scheduling.md](engine-scheduling.md) (#157, #169, #158, #181):
+  the playback engine's guards on the simulator — short late Clips at 3×
+  reading a whole fixture to the end, rate changes mid-starvation, on a
+  stopped Reading and on a refusal stop that re-cue nothing, and repeated
+  seeks during pending decode landing on the latest generation; the #86
+  fixture and fake Kokoro, slowed to 0.4 s Clips served 1.2 s late.
+
 `player-centre.py` has no recipe: whether the Voice name is centred in the
 player, from a screenshot (#70). Its header says how to run it;
 [pitfalls/providers-and-audio.md](../pitfalls/providers-and-audio.md) has a

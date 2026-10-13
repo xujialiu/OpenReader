@@ -122,6 +122,13 @@ and found the finding closed.
 - A Provider's yes being taken back: there is no way inside the app, so the
   runs cleared `consent` with the harness, which is not something an owner can
   do.
+- Pre-seeding the yes through the harness (`{"do":"settings","patch":
+  {"consent":["provider:local@http://127.0.0.1:8891"]}}`, 2026-10-13) prevents
+  a question that has not been asked yet, but does not resolve one already on
+  screen: `ensure` consults the kept list only on entry, and the Play that
+  opened the alert keeps waiting on it (the pending promise is shared by every
+  later `ensure` for the same key). Only tapping Allow ends the wait; the
+  settings patch reaches the gate for the next Play.
 - The audio itself: every play was at `sim_volume` 0 with the fake's zero-valued
   PCM, and stopped at once (durations in the run's report).
 
