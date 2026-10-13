@@ -89,6 +89,7 @@ vi.mock('../../src/renderer', async () => {
       return {
         goTo: bridge.goTo,
         goToSection: bridge.goToSection,
+        prepareSection: vi.fn(),
         browse: bridge.browse,
         show: bridge.show,
         clock: { onClip: bridge.onClip, onPosition() {} },

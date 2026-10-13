@@ -53,6 +53,7 @@ import {
   DOCUMENT_MESSAGE,
   FOLLOWING_STATE_MESSAGE,
   PROBLEM_MESSAGE,
+  TEXT_ERROR_MESSAGE,
   TAP_MESSAGE,
   SELECTION_MESSAGE,
   type SelectionMessage,
@@ -143,6 +144,8 @@ export interface ReaderBridgeOptions {
   onTap?(utterance: number): void;
   /** A highlight the WebView could not draw. Rare, and never a guess: see `ProblemMessage`. */
   onProblem?(problem: ProblemMessage): void;
+  /** Text preparation failed; unlike a highlight failure this can stop speech. */
+  onTextError?(section: number, detail: string): void;
   /**
    * Whether the page follows the reading — the player's **A** — or the owner is
    * browsing, its **M** (#71). Called when it changes, and with `true` whenever
@@ -386,6 +389,8 @@ export interface ReaderBridge {
    * it.
    */
   goToSection(index: number): void;
+  /** Obtain a missing section without moving the visible page. */
+  prepareSection(index: number): void;
   /**
    * Move the page to a spine item, and leave the reading where it is:
    * **Browsing** (CONTEXT.md, #52), which is what a Contents row is whenever the
@@ -790,6 +795,20 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [goToLocation],
   );
 
+  const preparing = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const pending = preparing.current;
+    return () => { for (const timer of pending.values()) clearTimeout(timer); pending.clear(); };
+  }, []);
+  const prepareSection = useCallback((index: number) => {
+    if (blocks.current.sections.has(index) || preparing.current.has(index)) return;
+    preparing.current.set(index, setTimeout(() => {
+      preparing.current.delete(index);
+      latest.current.onTextError?.(index, 'Preparing the next section timed out. Press Play to try again.');
+    }, 15_000));
+    send({ kind: 'prepare', section: index });
+  }, [send]);
+
   const browse = useCallback(
     (index: number) => {
       // First, so the sections the display renders arrive to a page that has
@@ -847,6 +866,12 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     (event: unknown) => {
       const message = asMessage(event);
       if (!message) return;
+      if (message.type === TEXT_ERROR_MESSAGE) {
+        clearTimeout(preparing.current.get(message.sectionIndex));
+        preparing.current.delete(message.sectionIndex);
+        latest.current.onTextError?.(message.sectionIndex, message.detail);
+        return;
+      }
       // Debug Mode's lines from the page (#113): written, and nothing else.
       if (isPageLine(message)) {
         if (DEBUG_MODE) logFromPage(message);
@@ -931,6 +956,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
           spine: spine.current,
         });
       }
+      clearTimeout(preparing.current.get(message.sectionIndex));
+      preparing.current.delete(message.sectionIndex);
       reportedSince.current.add(message.sectionIndex);
       if (awaiting.current !== null) paintAgain();
       // After the Blocks, which the reading cannot do without: keeping the size
@@ -973,7 +1000,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, snapshot, restart, readerProps }),
-    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, browse, snapshot, restart, readerProps],
+    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps }),
+    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps],
   );
 }

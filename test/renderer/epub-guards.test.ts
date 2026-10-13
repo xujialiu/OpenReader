@@ -203,7 +203,7 @@ function page({ guarded = true } = {}) {
 const settled = () => new Promise((resolve) => setImmediate(resolve));
 
 /** The program's own `renderAhead`, cut out of the program the app installs. */
-function realRenderAhead(rendition: object, bySection: Map<number, unknown>, asked: Set<number>, sweep: () => void, report: (detail: string) => void) {
+function realRenderAhead(rendition: object, bySection: Map<number, unknown>, asked: Set<number>, sweep: () => void, report: (detail: string) => void, spine: unknown[]) {
   const program = highlighterSource();
   const start = program.indexOf('function renderAhead(section) {');
   let depth = 0;
@@ -212,8 +212,8 @@ function realRenderAhead(rendition: object, bySection: Map<number, unknown>, ask
     if (program[end] === '{') depth++;
     else if (program[end] === '}' && --depth === 0) break;
   }
-  const make = vm.runInNewContext(`(function (rendition, bySection, asked, sweep, report) { ${program.slice(start, end + 1)}\n return renderAhead; })`);
-  return make(rendition, bySection, asked, sweep, report) as (section: number | null) => void;
+  const make = vm.runInNewContext(`(function (rendition, bySection, asked, sweep, report, book) { var post = function(message) { report(message.detail); }; ${program.slice(start, end + 1)}\n return renderAhead; })`);
+  return make(rendition, bySection, asked, sweep, report, { spine: { get: (index: number) => spine[index] } }) as (section: number | null) => void;
 }
 
 describe('a view taken off the page before its display finished (#112)', () => {
@@ -266,7 +266,7 @@ describe('a view taken off the page before its display finished (#112)', () => {
     const asked = new Set<number>();
     const bySection = new Map<number, unknown>([[33, []]]);
     const report = vi.fn();
-    const renderAhead = realRenderAhead(world.rendition, bySection, asked, () => {}, report);
+    const renderAhead = realRenderAhead(world.rendition, bySection, asked, () => {}, report, world.spine);
 
     renderAhead(33);
     expect(asked.has(34)).toBe(true);

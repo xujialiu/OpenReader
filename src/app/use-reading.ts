@@ -75,6 +75,7 @@ import {
   documentLanguage,
   firstUtteranceOfSection,
   outOfTextSentence,
+  readingExtent,
   readingFromRow,
   samePrefix,
   segmentDocument,
@@ -367,23 +368,12 @@ export function useReading(
    * takes the Blocks of the list the reading is on.
    */
   const loadedBlocksRef = useRef<readonly ReportedBlock[]>([]);
+  /** The section knowledge that limited the engine's previous list. */
+  const loadedSectionsRef = useRef<ReadonlySet<number>>(new Set());
   /** The Utterance being read, outside React state, so the callbacks below are never one render behind. */
   const atRef = useRef<number | null>(null);
   /** The section the renderer reported last, for the same reason: `play` reads it at the moment it is pressed. */
   const renderedRef = useRef<RenderedSection | null>(null);
-  /**
-   * The **furthest** spine item that has reported its Blocks, which is not
-   * `renderedRef`: sections render out of order and the last one to report is
-   * routinely behind the furthest one.
-   *
-   * It exists to tell the two ends of a reading apart. A reading that has run out
-   * of Utterances at the last spine item has reached the end of the book, which is
-   * an ordinary thing to say; one that has run out anywhere else has run out of
-   * *rendered* text, which is the defect of 2026-09-20 04:43 and a different
-   * sentence. Counting Block `sectionIndex`es would miss a section that rendered
-   * and held no text, and the end of a book is exactly where those live.
-   */
-  const furthestSectionRef = useRef(-1);
   /**
    * Every spine item that has reported, including one that held no Block — which
    * `blocksRef` cannot say, and which is what a stored place asks before it looks
@@ -680,10 +670,14 @@ export function useReading(
     const engine = engineRef.current;
     const held: Segmented = { utterances: loadedRef.current, blocks: loadedBlocksRef.current };
     const incoming: Segmented = { utterances: next, blocks: reported };
+    const heldEnd = readingExtent(held.utterances, loadedBlocksRef.current, atRef.current ?? 0, loadedSectionsRef.current, renderedRef.current?.spine ?? 0).end;
     loadedRef.current = next;
     loadedBlocksRef.current = reported;
+    loadedSectionsRef.current = new Set(reportedSectionsRef.current);
 
-    if (samePrefix(held.utterances, next)) {
+    // Text past the old gap could never be queued or fetched. Filling that gap
+    // may renumber that unused tail, but must not restart the audible sentence.
+    if (samePrefix(held.utterances.slice(0, heldEnd), next)) {
       engine?.extend(next);
       return;
     }
@@ -746,7 +740,10 @@ export function useReading(
    * feature.
    */
   const walkForward = useCallback((from: RenderedSection) => {
-    const next = from.index + 1;
+    let next = from.index + 1;
+    // A repeated report is intentionally suppressed by the bridge. Never wait
+    // for an already-known empty section to report again (#161).
+    while (next < from.spine && reportedSectionsRef.current.has(next)) next++;
     if (next < from.spine) {
       bridgeRef.current?.goToSection(next);
       return;
@@ -1134,7 +1131,6 @@ export function useReading(
       blocksRef.current = reported;
       renderedRef.current = section;
       reportedSectionsRef.current.add(section.index);
-      furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);
       setStatus((was) => ({ ...was, known: next.length, rendered: section }));
 
       /**
@@ -1213,6 +1209,16 @@ export function useReading(
     [adopt, walkForward, tryResume, seekTo, followRow, revealPendingPlace, stopWaitingIfArrived],
   );
 
+  const handleTextError = useCallback((section: number, detail: string) => {
+    const extent = readingExtent(loadedRef.current, loadedBlocksRef.current, atRef.current ?? 0, reportedSectionsRef.current, renderedRef.current?.spine ?? 0);
+    // A late failure of a section the owner has left is not this Reading's fault.
+    if (!playIntent.current || extent.next !== section) return;
+    playIntent.current = false;
+    engineRef.current?.pause();
+    bridgeRef.current?.hold({ stop: true });
+    setStatus((was) => ({ ...was, playing: false, buffering: false, note: `The next section could not be prepared: ${detail}` }));
+  }, []);
+
   const handleProblem = useCallback((problem: ProblemMessage) => {
     setStatus((was) => ({ ...was, note: `The highlight could not be drawn: ${problem.detail}` }));
   }, []);
@@ -1266,6 +1272,7 @@ export function useReading(
     // flashing white until the first message lands.
     scheme,
     onBlocks: handleBlocks,
+    onTextError: handleTextError,
     onDocument: handleDocument,
     // A tap on a word is a seek and nothing else. The bridge has already turned the
     // tapped place into an Utterance (`cursor.ts`'s `utteranceAt`) and calls this
@@ -1305,12 +1312,15 @@ export function useReading(
   const ranOutOfText = useCallback((report: OutOfTextReport) => {
     // Debug Mode: what epub.js held at this moment, beside the note below (#113).
     bridgeRef.current?.snapshot('the reading ran out of text');
-    const { ended, sentence } = outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0, {
+    const spine = renderedRef.current?.spine ?? 0;
+    const extent = readingExtent(loadedRef.current, loadedBlocksRef.current, atRef.current ?? 0, reportedSectionsRef.current, spine);
+    const { ended, sentence } = outOfTextSentence(extent.next === null ? spine - 1 : extent.next - 1, spine, {
       count: report.unspoken,
       // The engine hands the problem over unconverted, so that the one place a
       // problem becomes a sentence is the one place it is done anywhere here.
       reason: report.refusal === null ? null : describe(report.refusal),
     });
+    if (!ended && extent.next !== null) bridgeRef.current?.prepareSection(extent.next);
     if (ended) {
       playIntent.current = false;
       switchRequest.current++;
@@ -1367,6 +1377,7 @@ export function useReading(
       },
       onOutOfText: ranOutOfText,
       sectionOf,
+      availableThrough: (from) => readingExtent(loadedRef.current, loadedBlocksRef.current, from, reportedSectionsRef.current, renderedRef.current?.spine ?? 0).end,
       rate: settings.rate,
       // Read once, here: the pauses change only in General, where no reader is
       // mounted, so every engine is built after the owner's latest choice (#60).

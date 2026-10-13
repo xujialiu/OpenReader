@@ -2281,9 +2281,9 @@ ${constants}
      measured on the fixture at 05:03, one view, scrollTop 0, clientHeight 758,
      scrollHeight 3,072 — 758 + 500 is 1,258, and 1,258 < 3,072 for ever.
 
-     The trigger is the Clip cue, which already arrives once per Utterance and
-     already starts the page following, so **nothing is added to the bridge** —
-     the property ADR 0011 states of the following and the reason it is stated.
+     The trigger is the Clip cue, once per Utterance. Exhaustion also requests
+     missing text through the bridge, with a native-side deadline, so a stopped
+     page or a failed prefetch cannot leave speech waiting without an exit.
 
      Three guards, and each is what keeps this from becoming a second, slower
      renderer racing the first:
@@ -2295,8 +2295,9 @@ ${constants}
        same call its check() makes. The view list is a contiguous run of spine
        items, because append and prepend are the only things that extend it, so
        appending out of order would put the wrong text under the reader's thumb.
-       A last view further on than the voice means the next section is already
-       there and there is nothing to do.
+       If the voice is elsewhere, prepare in a temporary offscreen view instead.
+       A later last view may belong to Browsing and says nothing about the text
+       the Reading needs (#153).
      - **Once per section, ever.** \`bySection\` is what the Blocks were reported
        under, so a section already reported is never rendered for this again.
        That guard is load-bearing rather than tidy: the manager trims the view
@@ -2307,15 +2308,20 @@ ${constants}
      records survive the view being destroyed — that is what blocks.ts is for —
      and when the voice arrives there, follow() displays it exactly as it already
      does for text that is not on the page. So the manager goes on holding three
-     views and ADR 0011's memory figures stand. */
+     visible views. Offscreen preparation adds at most one temporary view. */
   function renderAhead(section) {
     if (section === null) return;
     var manager = rendition.manager;
     if (!manager || !manager.views || !manager.q) return;
-    var last = manager.views.last();
-    if (!last || !last.section || last.section.index !== section) return;
-    var next = last.section.next();
+    var current = book.spine.get(section);
+    var next = current && current.next();
+    while (next && bySection.has(next.index) && bySection.get(next.index).length === 0) next = next.next();
     if (!next || bySection.has(next.index) || asked.has(next.index)) return;
+    var last = manager.views.last();
+    if (!last || !last.section || last.section.index !== section) {
+      prepareSection(next.index);
+      return;
+    }
     asked.add(next.index);
     /* **Through the manager's own queue**, which is the whole difference between
        this working and not. Measured at 05:09 on the fixture: appended and
@@ -2336,7 +2342,10 @@ ${constants}
        per document. */
     manager.q.enqueue(function () {
       return manager.append(next).display(manager.request);
-    }).then(sweep, function (error) {
+    }).then(function () {
+      sweep();
+      if (bySection.has(next.index) && bySection.get(next.index).length === 0) renderAhead(next.index);
+    }, function (error) {
       /* Forgotten rather than remembered as asked, so the next Clip cue tries
          again. "Once per section, ever" is right for a section that rendered;
          applied to one that failed it would be this defect again, one section
@@ -2347,7 +2356,69 @@ ${constants}
          display() cleared the views, which is a race and not a failure, and
          the next cue asks again. */
       if (error && error.openreaderRemoved) return;
-      report('could not render the section the reading is walking into: ' + error);
+      post({ type: 'openreader:text-error', sectionIndex: next.index, detail: String(error) });
+    });
+  }
+
+  /* A single temporary iframe, outside the manager's visible view list. It
+     uses epub.js's own View, CSS, walk and CFI generator; only its lifetime and
+     placement differ. Browsing must neither starve speech nor be scrolled away
+     by preparation (#153). Requests are serialized and always bounded. */
+  var preparation = Promise.resolve();
+  var preparingSections = new Set();
+  function prepareSection(index) {
+    if (bySection.has(index) || asked.has(index) || preparingSections.has(index)) return;
+    asked.add(index);
+    preparingSections.add(index);
+    preparation = preparation.then(function () {
+      if (bySection.has(index)) return;
+      return new Promise(function (resolve, reject) {
+        var manager = rendition.manager;
+        var section = book.spine.get(index);
+        var host = null;
+        var view = null;
+        var finished = false;
+        var timer = window.setTimeout(function () { finish(new Error('Preparing the next section timed out. Press Play to try again.')); }, 15000);
+        function finish(error) {
+          if (finished) return;
+          finished = true;
+          window.clearTimeout(timer);
+          if (view) {
+            // Also settle a display removed before its iframe loaded (#112).
+            manager.views.destroy(view);
+            if (view.displayed) view.destroy();
+          }
+          if (host) host.remove();
+          if (error) reject(error); else resolve();
+        }
+        try {
+          if (!section || !manager || !manager.View) throw new Error('The next section is unavailable.');
+          var settings = Object.assign({}, manager.viewSettings);
+          if (settings.layout) settings.layout = Object.assign(Object.create(Object.getPrototypeOf(settings.layout)), settings.layout);
+          view = new manager.View(section, settings);
+          host = document.createElement('div');
+          host.setAttribute('aria-hidden', 'true');
+          host.style.cssText = 'position:absolute;left:-200vw;top:0;width:100vw;height:100vh;visibility:hidden;pointer-events:none;overflow:hidden';
+          host.appendChild(view.element);
+          document.body.appendChild(host);
+          view.display(manager.request).then(function () {
+            if (finished) { view.destroy(); return; }
+            try {
+              // A visible copy may have reported while this iframe loaded.
+              if (!bySection.has(index)) adopt(view.contents);
+              finish();
+            } catch (error) { finish(error); }
+          }, finish);
+        } catch (error) { finish(error); }
+      });
+    }).then(function () {
+      asked.delete(index);
+      preparingSections.delete(index);
+      if (bySection.has(index) && bySection.get(index).length === 0) renderAhead(index);
+    }, function (error) {
+      asked.delete(index);
+      preparingSections.delete(index);
+      if (!bySection.has(index)) post({ type: 'openreader:text-error', sectionIndex: index, detail: String(error) });
     });
   }
 
@@ -2753,6 +2824,13 @@ ${EPUB_GUARDS_SOURCE}
   /* ---- the one entry point ---- */
 
   function dispatch(message) {
+    if (message.kind === 'prepare') {
+      // Exhaustion is an explicit request, including a retry after a timeout.
+      // It must not wait behind a stuck visible manager queue (#153).
+      asked.delete(message.section);
+      prepareSection(message.section);
+      return;
+    }
     if (message.kind === 'lookup') {
       /* UIKit's selection handles can consume the DOM touchend. The enclosing
          native reader observes the release even when the iframe does not. */

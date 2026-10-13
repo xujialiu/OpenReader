@@ -105,7 +105,11 @@ describe('never send a position update per word across the bridge (ADR 0005)', (
   it('has nothing on the React Native side that could fire per word', () => {
     // No clock of its own and no loop: the only things that call into the WebView
     // are the two `ReaderClock` methods and the two commands, each once per call.
-    const bridge = code('reader-bridge.ts');
+    const source = code('reader-bridge.ts');
+    // A per-section preparation deadline is not a word/position clock (#153).
+    const preparation = source.slice(source.indexOf('const preparing ='), source.indexOf('const browse ='));
+    expect(preparation).toContain('15_000');
+    const bridge = source.replace(preparation, '');
     for (const forbidden of ['requestAnimationFrame', 'setInterval', 'setTimeout', 'forEach', 'for (', 'while (']) {
       expect(bridge).not.toContain(forbidden);
     }
@@ -349,7 +353,12 @@ describe('never highlight by mutating the DOM, and never check whether you can (
   });
 
   it('mutates the DOM in two ways only: the stylesheet a ::highlight() rule has to live in, and the mark on a Document’s own alignment', () => {
-    const program = code('highlighter.ts');
+    const source = code('highlighter.ts');
+    // The preparation host is outside the visible manager and document DOM.
+    const preparation = fn(source, 'prepareSection');
+    expect(preparation).toContain('host.appendChild(view.element)');
+    expect(preparation).toContain('host.remove()');
+    const program = source.replace(preparation, '');
     // Two stylesheets, and the second is not in a Document at all: it is the
     // page epub.js lays the sections out on, and it holds one rule, the room kept
     // above the first section for the navigation bar (#67, `reserve`). Nothing of
@@ -1481,15 +1490,17 @@ describe('the reading is fed by the reading, not by the scroll (notes/NOTES_2026
   it('asks for one section, the one after the voice, through epub.js’s own next()', () => {
     // Never a spine index of our own: `section.next()` is the call the manager's
     // own check() makes, and it is what knows about a spine item that is not linear.
-    expect(ahead).toContain('var next = last.section.next();');
-    expect(ahead).not.toContain('book.spine.get(');
+    expect(ahead).toContain('var current = book.spine.get(section);');
+    expect(ahead).toContain('var next = current && current.next();');
   });
 
-  it('only when that section is the manager’s last view', () => {
+  it('appends visibly only from the last view, and prepares offscreen otherwise (#153)', () => {
     // The view list is a contiguous run of spine items — append and prepend are the
     // only things that extend it — so appending out of order would put the wrong
     // text under the reader's thumb.
-    expect(ahead).toContain('if (!last || !last.section || last.section.index !== section) return;');
+    expect(ahead).toContain('if (!last || !last.section || last.section.index !== section) {');
+    expect(ahead).toContain('prepareSection(next.index);');
+    expect(ahead.indexOf('prepareSection(next.index);')).toBeLessThan(ahead.indexOf('manager.append(next)'));
   });
 
   it('once per section, ever', () => {
@@ -1516,7 +1527,7 @@ describe('the reading is fed by the reading, not by the scroll (notes/NOTES_2026
     // Watched for five seconds at 05:13 while the view reached `displayed`, held a
     // live document and a paragraph, and this program had not adopted it. Same gap
     // the 'relocated' sweep covers, same answer.
-    expect(ahead).toContain('}).then(sweep, function (error) {');
+    expect(ahead).toContain('}).then(function () {\n      sweep();');
   });
 
   it('forgets a section it could not render, so the next cue tries again', () => {
@@ -1743,8 +1754,8 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     pin(branch('hold', 'browse'), 'if (message.stop) halt();', "highlighter.ts, the 'hold' branch");
     const reading = readFileSync(new URL('../../src/app/use-reading.ts', import.meta.url).pathname, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     // pause(), a failure, a Contents row with nothing after it (#86), and an
-    // engine-originated pause (#152): each is where the reading stops.
-    expect(reading.match(/bridgeRef\.current\?\.hold\(\{ stop: true \}\);/g)).toHaveLength(4);
+    // engine-originated pause (#152), and text preparation failure (#153).
+    expect(reading.match(/bridgeRef\.current\?\.hold\(\{ stop: true \}\);/g)).toHaveLength(5);
     // The paused cue's hold stops the tick loop only.
     pin(reading, 'if (!playIntent.current) bridgeRef.current?.hold();', 'use-reading.ts, the clock');
   });

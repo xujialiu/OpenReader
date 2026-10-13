@@ -316,7 +316,7 @@ describe('footgun 3 again: the engine says when the silence is permanent', () =>
     // times a minute is noise nobody reads.
     expect(member('function outOfText()')).toContain('if (announced || disposed) return;');
     expect(member('function restart(')).toContain('announced = false;');
-    expect(member('extend(list) {')).toContain('if (list.length > utterances.length) announced = false;');
+    expect(member('extend(list) {')).toContain('announced = false;');
   });
 });
 
@@ -369,7 +369,7 @@ describe('a Clip is kept only until it is queued (#49)', () => {
 
   it('asks the window to start at the first sentence not yet queued, and keeps nothing behind it', () => {
     const pump = engine.slice(engine.indexOf('function pump()'), engine.indexOf('function outOfText()'));
-    pin(pump, 'fetchWindow({ cursor, nextToEnqueue, total: utterances.length, inFlight: inFlight.size, stateOf })', 'engine.ts, pump');
+    pin(pump, 'fetchWindow({ cursor, nextToEnqueue, total: availableThrough(), inFlight: inFlight.size, stateOf })', 'engine.ts, pump');
     const startFetch = engine.slice(engine.indexOf('function startFetch('), engine.indexOf('async function drain('));
     pin(startFetch, 'index >= nextToEnqueue && index <= enqueueCeiling(cursor)', 'engine.ts, startFetch');
   });

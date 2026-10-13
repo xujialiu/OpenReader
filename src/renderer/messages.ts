@@ -36,6 +36,14 @@ export const BLOCKS_MESSAGE = 'openreader:blocks';
 /** The `type` of the problem message. Same constraint. */
 export const PROBLEM_MESSAGE = 'openreader:problem';
 
+/** A missing section could not be prepared for speech. */
+export const TEXT_ERROR_MESSAGE = 'openreader:text-error';
+export interface TextErrorMessage {
+  type: typeof TEXT_ERROR_MESSAGE;
+  sectionIndex: number;
+  detail: string;
+}
+
 /** The `type` of the document message. Same constraint. */
 export const DOCUMENT_MESSAGE = 'openreader:document';
 
@@ -248,6 +256,7 @@ export type WebViewMessage =
   | DocumentMessage
   | FollowingStateMessage
   | ProblemMessage
+  | TextErrorMessage
   | TapMessage
   | SelectionMessage
   | RendererMessage
@@ -617,6 +626,7 @@ export interface SnapshotMessage {
 }
 
 export type HighlightMessage =
+  | { kind: 'prepare'; section: number }
   | LookupControlMessage
   | SnapshotMessage
   | SpeakMessage
@@ -680,6 +690,8 @@ export function readWebViewMessage(event: unknown): WebViewMessage | null {
         : null;
     case FOLLOWING_STATE_MESSAGE:
       return typeof event.following === 'boolean' ? (event as unknown as FollowingStateMessage) : null;
+    case TEXT_ERROR_MESSAGE:
+      return isIndex(event.sectionIndex) && typeof event.detail === 'string' ? (event as unknown as TextErrorMessage) : null;
     case PROBLEM_MESSAGE:
       return typeof event.utterance === 'number' && typeof event.detail === 'string' ? (event as unknown as ProblemMessage) : null;
     case TAP_MESSAGE:

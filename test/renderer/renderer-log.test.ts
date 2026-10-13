@@ -299,8 +299,8 @@ function realRenderAhead(world: ReturnType<typeof page>, sweep = () => {}, repor
     else if (program[end] === '}' && --depth === 0) break;
   }
   const source = program.slice(start, end + 1);
-  const make = vm.runInNewContext(`(function (rendition, bySection, asked, sweep, report) { ${source}\n return renderAhead; })`);
-  return make(world.rendition, world.bySection, world.asked, sweep, report) as (section: number | null) => void;
+  const make = vm.runInNewContext(`(function (rendition, bySection, asked, sweep, report, book) { var post = function(message) { report(message.detail); }; ${source}\n return renderAhead; })`);
+  return make(world.rendition, world.bySection, world.asked, sweep, report, { spine: { get: (index: number) => world.spine[index] } }) as (section: number | null) => void;
 }
 
 describe('the program says nothing of this without Debug Mode (#113)', () => {
@@ -469,7 +469,7 @@ describe('renderAhead, as the program runs it', () => {
     renderAhead(33);
     await world.pass(5);
     await world.frames();
-    expect(report).toHaveBeenCalledWith('could not render the section the reading is walking into: Error: section 34 would not load');
+    expect(report).toHaveBeenCalledWith('Error: section 34 would not load');
     expect(world.since(mark)).toContain('renderAhead: section 34 failed after 5 ms: "Error: section 34 would not load"');
   });
 });

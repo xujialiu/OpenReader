@@ -118,6 +118,32 @@ export function readingFromRow(
 }
 
 
+/**
+ * The contiguous text after `from`. Browsing can report a distant section, but
+ * sorting known sections does not fill the unknown ones between them (#153).
+ * Empty reports do fill a section: they are progress even without an Utterance.
+ * The prefix is retained so all engine and bridge indices keep their meaning.
+ */
+export function readingExtent(
+  utterances: readonly Utterance[],
+  blocks: readonly SectionedBlock[],
+  from: number,
+  reported: ReadonlySet<number>,
+  spine: number,
+): { end: number; next: number | null } {
+  const span = utterances[from]?.spans[0];
+  const section = span ? blocks[span.block]?.sectionIndex : undefined;
+  if (section === undefined) return { end: utterances.length, next: null };
+  let next = section + 1;
+  while (next < spine && reported.has(next)) next++;
+  if (next >= spine) return { end: utterances.length, next: null };
+  for (let at = from + 1; at < utterances.length; at++) {
+    const first = utterances[at].spans[0];
+    if (first && blocks[first.block]?.sectionIndex >= next) return { end: at, next };
+  }
+  return { end: utterances.length, next };
+}
+
 /** Whether the reading stopped because the book ended, and what the owner is told either way. */
 export interface OutOfText {
   /** True when the furthest section the renderer has reported is the document's last spine item. */
