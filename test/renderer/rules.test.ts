@@ -1239,6 +1239,21 @@ describe('tapping a word reads from there, and it is a tap (ADR 0020)', () => {
     expect(fn(program, 'blockOffsetOf')).toContain('element: found.element');
   });
 
+  it('takes a link epub.js follows for Browsing and not for a tap, before anything else can refuse the tap (#191)', () => {
+    // Run in link-in-document.test.ts; pinned here so the guard cannot slide
+    // below the lookup guard, which returns while epub.js follows the link anyway.
+    const program = highlighterSource();
+    const tapped = fn(program, 'tapped');
+    pin(tapped, 'if (linkFollowed(event)) return;', 'highlighter.ts, function tapped');
+    expect(tapped.indexOf('if (linkFollowed(event)) return;')).toBeLessThan(tapped.indexOf('lookupHeld || Date.now() < suppressTapUntil'));
+    pin(fn(program, 'linkFollowed'), 'setBrowsing(true);', 'highlighter.ts, function linkFollowed');
+    // epub.js's own rule for which hrefs it follows.
+    pin(fn(program, 'linkOf'), "return href.indexOf('mailto:') === 0 || href.indexOf('://') > -1 ? null : at;", 'highlighter.ts, function linkOf');
+    // Heard as the click goes down, so that it runs before epub.js's onclick on the link.
+    pin(fn(program, 'adopt'), "contents.document.addEventListener('click', linkHeld, true);", 'highlighter.ts, function adopt');
+    pin(fn(program, 'linkHeld'), 'if (!followOnly || !linkOf(event.target)) return;', 'highlighter.ts, function linkHeld');
+  });
+
   it('reports a place in a Block rather than an Utterance, the Utterances being on the other side', () => {
     // The WebView does not have the Utterance list. It reports the Block's own
     // coordinate system — the same UTF-16 offsets every other message uses — and
@@ -1778,6 +1793,10 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     expect(dragged.indexOf('halt();')).toBeGreaterThan(-1);
     expect(dragged.indexOf('halt();')).toBeLessThan(dragged.indexOf('if (touch.identifier !== touchId) {'));
     pin(fn(program, 'adopt'), "contents.document.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, function adopt');
+    // epub.js's corrections that keep the text still move the finger's starting
+    // scroll with them (#198, run in finger-and-corrections.test.ts).
+    pin(program, 'keepFingerOnText(rendition.manager);', 'highlighter.ts, the install');
+    pin(fn(program, 'keepFingerOnText'), "['erase', 'counter'].forEach(function (name) {", 'highlighter.ts, function keepFingerOnText');
     // The margins between the section documents, heard once on the container.
     pin(program, "if (stage) stage.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, the install');
     expect(program.match(/addEventListener\('touchmove'/g)).toHaveLength(2);

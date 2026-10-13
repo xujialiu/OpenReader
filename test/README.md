@@ -101,6 +101,19 @@ to their own bodies. Mutation tests delete the guarded statement while leaving
 other occurrences in later functions and require the same guard to reject it
 (#181). They also check a statement moved out of Play and an unrelated duplicate.
 
+### The page program, run
+
+`renderer/stand-in-page.ts` evaluates the real `highlighterSource()` in node:vm
+over doubles of epub.js's rendition and manager, the page's window and timers,
+and xmldom section documents with their selection and hit-test. A link's
+`onclick` is epub.js's own, cut out of the installed bundle. A click runs the
+document's capture listeners, each element's `onclick` from the target up, then
+the document's own listeners. `renderer/link-in-document.test.ts` (#191),
+`renderer/lookup-close.test.ts` (#193) and
+`renderer/finger-and-corrections.test.ts` (#198) use it. It shows the program's
+logic, the messages it posts and the displays it asks for; it does not show
+layout, WebKit's drawing or a scroll iOS drops.
+
 ## structural.ts — the one rule about reading source text
 
 Several of the files above guard a one-line invariant by reading the source and

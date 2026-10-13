@@ -120,6 +120,15 @@ states is about this app's page.
 - **A finger that stops the page and holds still for 200 ms is rest.** Whether
   iOS keeps an adjustment made under a still finger was not measured; touches
   cannot be used to tell, as measured above.
+- **An adjustment under a resting finger is not a drag (#198).** `dragged()`
+  measures a finger's travel as its `clientY` in the section document less the
+  page's scroll since its first move, and an adjustment scrolls the page while
+  the text and the finger stay put: the next tremble read as a drag of the whole
+  section and turned the player's A to M. `keepFingerOnText()` wraps `erase` and
+  `counter`, reads `scrollTop` before and after each, and moves the finger's
+  starting scroll by the difference, so an adjustment iOS drops moves nothing
+  and a drag under way keeps the distance it has covered
+  (`test/renderer/finger-and-corrections.test.ts`).
 - **`check()` borrows the manager's `scrollTop` for one call.** With the
   laid-out text shorter than about two screens, the borrowed value can let it
   append a section epub.js would have appended a moment later anyway.

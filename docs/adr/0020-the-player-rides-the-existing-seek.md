@@ -296,6 +296,43 @@ text selection stays enabled and the long press belongs to the platform.
 A tap that lands on no text node does nothing. It is explicitly **not** a
 toggle for the player's visibility: see the design file.
 
+### A link epub.js follows is Browsing, not a tap (#191)
+
+epub.js gives every `a[href]` of a section an `onclick` that hands the link to
+`rendition.display` and returns false, unless the href starts with `mailto:` or
+holds `://` (its Contents' `linksHandler`, in the bundled `epubjs.js`). Returning
+false cancels the click's default and does not stop it, so the click went on to
+the section document's listener, `tapped()`, which hit-tested it to the link's
+text and posted `openreader:tap`. One tap was answered twice. Measured in an
+offscreen `WKWebView` running the library's template (the issue has the run):
+with the app's answer 30 ms or 2.5 s after the click, the revealed `speak` for
+the link's sentence displayed its section again and the page ended where it
+began; with the answer in the same turn the page ended at the target with the
+reading on the link's line. Paused, the tap also became the Reading Position and
+went out with the next sync.
+
+The owner's rule is a Contents row's (ADR 0044, ADR 0063): the page goes to the
+target and stays, and the reading does not move. So `tapped()` first asks
+`linkFollowed()`: a click epub.js has cancelled on a link it follows (`linkOf`,
+the same href rule) posts no tap and does what the `'browse'` message does,
+`setBrowsing(true); halt();`. Browsing is not optional: without it, run in the
+same harness, the next sentence of a playing Reading took the page back from the
+target, because epub.js's own display leaves the page following and a cue that
+begins on a page that follows displays the reading's Block. It is asked before
+the lookup guard, because epub.js follows the link whatever that guard says;
+during a lookup it sets the Browsing the lookup's close gives back.
+
+With the player collapsed (`followOnly`, #71) nothing may start Browsing, so a
+link is not followed: `linkHeld()`, a capture-phase click listener on each
+section document, runs before the link's `onclick`, cancels the click and stops
+it, and hands it to `tapped()` as an ordinary tap on the link's text.
+`linkFollowed()` declines while `followOnly`, so that cancelled click is not
+taken for a followed link. A link whose href holds `://` gets no `onclick` from
+epub.js and is not examined here.
+
+Run in `test/renderer/link-in-document.test.ts` over the real program and
+epub.js's own link handler cut out of the installed bundle.
+
 ## Previous paragraph diverges from Zotero, and this is the one place it does
 
 Zotero's reader bundle (read from `/Applications/Zotero.app/Contents/Resources/
