@@ -65,16 +65,18 @@ a deadline test without touching app source.
 - **#156: Play after the end stays stopped — Player and lock screen.** A
   handler `play`, a real press on the player's Play, and a real press on the
   lock-screen card's centre button all leave the reading stopped with
-  "That was the last of this document…" and no synthesis request. The
-  lock-screen press is a dedicated named check
-  (`LockScreenProbe.testPlayAtEndStaysStopped` — do not use `--mode tap`, whose
-  transport expectation assumes playback starts): it asserts the press is
-  delivered and the reading stays stopped; on beta11 the press reached the app
-  (`remote command=play`, `play at utterance 54`), the exhaustion paused it in
-  the same millisecond, no synthesis ran, and the end note was retained. The
-  card's label showed "Pause" for about two seconds (the transient published
-  playing state), so the probe's strict no-label-flip assertion fails while
-  the reading itself stays stopped — read the app's log, not the label.
+  "That was the last of this document…" and no synthesis request. On beta12
+  (`engine.play` runs the exhaustion check before resuming audio and returns
+  without a graph resume; the hook restates the card through
+  `restateNowPlaying()`), the lock-screen press (the dedicated
+  `LockScreenProbe.testPlayAtEndStaysStopped` — not `--mode tap`, whose
+  transport expectation assumes playback starts) is answered by
+  `remote command=play` → `play.request`/`pause.request` in the same
+  millisecond with **no graph resume and no native engine start**, zero
+  synthesis, the card back to "Play" at 1 s and 2 s, and the end note
+  retained. On beta11 the graph did resume until an external pause landed
+  (the raw issue, superseded); an ordinary mid-document Play still resumes the
+  graph and streams normally.
 - **Return to Following is accurate.** From a browsing page, a real touch on
   the player's Following badge displays the reading's place with the exact
   sentence and word painted (page probe `lit`).
@@ -101,8 +103,8 @@ fence) were re-verified on beta11 and stand.
   neighbourhood, so the all-empty-prefix-with-gap state exists only on a
   Document's first open (which the gap fixture covers). Recreating it after a
   Play would need destructive Library surgery.
-- The lock-screen card's ~2 s "Pause" label on Play-after-end: the app
-  received the remote play, answered it with the exhaustion pause in the same
-  millisecond, and stayed stopped with no synthesis; what iOS draws while the
-  transient published state reaches the card is not the app's reading state.
-  The failed strict-label run is retained (`lockscreen-playend2`).
+- The lock-screen card's "Pause" label on Play-at-end does not occur on
+  beta12 (the card stays "Play"); on beta11 the graph resumed until an
+  external pause landed — the raw issue is retained in
+  `lockscreen-playend2` and `notes/NOTES_2026-10-13.md` as the superseded
+  record.
