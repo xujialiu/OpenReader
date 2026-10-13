@@ -130,6 +130,38 @@ recipe goes.
 - [The Trial and the Unlock](purchase/README.md): which App Store each build asks, the harness's `store` command, and the gate, the alerts and the end of the Trial mid-use (#148); `trial-end.sh`, `download-across-end.sh` and what beta11 measured (the least Trial, a Pronunciation's resume, a Download's drawer, the Lock Screen, StoreKit on a simulator).
 - [The kit](kit/README.md): Read the accessibility tree and touch what it lists (`ax.py`); Run an XCTest probe; Read runtime warnings or evaluate a targeted expression; Inspect, stop or briefly exercise the reading handler; Pull the Debug Log off the phone (#82, `debug-log.py`); Ask the app on the phone (`phone-hx.cjs`, `debug-log-timeline.py`, `probes/`).
 
+### Verifying #191/#198/#193 (1.0.0 (8)-beta14): the page's finger fixes (2026-10-14)
+
+- **`axe batch` piped steps on stdin do nothing unless `--stdin` is passed, and
+  exit 64 says so only as a usage error.** The first 51-character key typing ran
+  `axe batch --udid UDID` with the steps on stdin: exit 64 (EX_USAGE), no
+  per-step output, field still empty. Fix: `axe batch --udid UDID --stdin`
+  (or `--file`/`--step`); then per-character `type` steps with `sleep 0.2`
+  landed all 51 characters first try, exactly as #228's recipe says.
+- **A revealed SecretField's value is echoed by the AX tree.** After typing the
+  Fish API key with Show API key on, `ax.py tree` printed the whole key as the
+  TextField's value (the #228 masked-field note is about the masked state; the
+  revealed state leaks it instead). Keep tree reads out of logs and reports
+  until the key is hidden again, and screenshot only the hidden state.
+- **The simulator's volume returned to 60 three times in about 20 minutes,
+  with no boot and no app relaunch** (after consent, before a scenario play,
+  and before another). Each was caught by `silence.sh check` immediately before
+  the play, and its exit 2 killed the `&&` chain before the touch, as designed —
+  one chain's Play silently not happening is the documented alternative. Set
+  and check in the same breath as every play; a morning-old zero is not a zero.
+- **The iOS selection callout eats the lookup Drawer's close drag while the
+  looked-up word is still selected** (#117's pitfall again, in the #193 flow).
+  Both close drags from the grabber did nothing while Copy | Look Up |
+  Translate stood over it. Fix: dismiss the selection first with one ordinary
+  tap on the page — with the Drawer up the app's lookup guard eats that tap, so
+  the Reading does not move — then drag the grabber down.
+- **Tapping a link with the Player collapsed needs the Reading inside the
+  link's own section first**, because collapsed the page only follows and
+  cannot be scrolled or browsed anywhere. Setup, not a defect: place the
+  Reading with the harness's `seek` (binary-search the utterance, reading
+  `section=` off the status line between seeks), collapse by real touch, then
+  re-probe the link rows (collapse does not reflow) and tap.
+
 ### Verifying #166/#168/#177: the controlled cache, the stall, and the probe builds (2026-10-13)
 
 Record: [`sync/cache-stall-and-recovery.md`](sync/cache-stall-and-recovery.md).
