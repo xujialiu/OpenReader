@@ -31,6 +31,12 @@ that names the script or probe you are about to run.
   with the app away from the screen, and the queue race that stopped the
   owner's reading for good. `background-crossing.sh`, `queue-race-arm.js`,
   `queue-race-read.js`.
+- [reading-continuity.md](reading-continuity.md) (#153, #161, #170, #156):
+  speech across boundaries while browsing far ahead and behind, empty first and
+  last sections, Play after the end, and the offscreen preparation's deadlines
+  — with a fixture (`../fixtures/continuity-fixture.ts`) and the page probes
+  `continuity-page-state.js`, `continuity-arm-stalled-view.js`,
+  `continuity-disarm-stalled-view.js`.
 
 `PausedTransportProbe.swift` has no recipe: Play after an idle pause and a
 paused word tap by real touches (#26, #45, #46, #49). Its header says what it
