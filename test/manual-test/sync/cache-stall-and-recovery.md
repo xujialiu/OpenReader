@@ -169,6 +169,28 @@ turned the switch back on, all inside one XCTest run:
 - A physical device, a real WebDAV host, and iOS suspending the process
   remain untested.
 
+## Integrated delivery smoke (beta10, 109c6b4)
+
+2026-10-13 13:21–13:25, after the parent merged main (playback repairs
+#157/#158/#169/#181) and fast-forwarded this worktree: same simulator and
+Metro, app relaunched onto the new bundle (JS-only diff, no rebuild). Raw
+proof, all against the stub in normal mode:
+
+- the served bundle contains `1.0.0 (8)-beta10` and the `flush('switch-on')`
+  fix; Settings shows **`Version 1.0.0 (8)-beta10-debug`**
+  (tree read + `shots/beta10-version.png`);
+- relaunch's launch sync `launch: ok … uploaded` at 13:21:04.083; switch
+  off → on at 13:22 completed normally (`Synced at 1:22 PM.`, GET + PUT #4
+  at 05:22:40Z);
+- a server-newer place (the app's own 12:25 utterance-11 item, stamp +60 s,
+  device `fix2-desktop`) swapped in while the reader sat idle-paused; a
+  real-touch Play at 13:25:12 adopted it — Debug Log `play: ok, … 1 places
+  taken` and `[reading] play at utterance 11, compatible af_bella` — and
+  played silently (`sim_volume=0` checked in the `&&` chain). The short
+  fixture's end-of-document stop ended the reading at 13:25:26
+  (`pause: ok … uploaded`); playback stopped. Integrated playback + sync
+  cooperation holds at beta10 with no re-run of the earlier scenarios.
+
 ## Run metadata
 
 - Simulator `fix2-sync` (iPhone 17 Pro, iOS 27.0), UDID above; booted,
