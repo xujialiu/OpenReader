@@ -149,3 +149,29 @@ describe('Rename and Move to… in a Document\'s actions (#227)', () => {
     await screen.close();
   });
 });
+
+describe('Save in a Document\'s Rename when the name cannot be written (#215)', () => {
+  it('says why under the rows, keeps the old name and leaves the Drawer open, without throwing', async () => {
+    const screen = await open(PERSUASION);
+    disk.full = true;
+    expect(await screen.rename('Mansfield Park')).toBeNull();
+    expect(screen.footer()).toEqual(['No space left on device']);
+    expect(screen.library.current(PERSUASION)!.title).toBe('Persuasion');
+    expect(disk.names).toEqual({});
+    expect(screen.onClose).not.toHaveBeenCalled();
+    expect(disk.alert).not.toHaveBeenCalled();
+    await screen.close();
+  });
+
+  it('the line goes when Rename is chosen again, and a name that can then be written is saved', async () => {
+    const screen = await open(PERSUASION);
+    disk.full = true;
+    await screen.rename('Mansfield Park');
+    disk.full = false;
+    expect(await screen.rename('Mansfield Park')).toBeNull();
+    expect(screen.footer()).toEqual([]);
+    expect(screen.library.current(PERSUASION)!.title).toBe('Mansfield Park');
+    expect(screen.onClose).toHaveBeenCalledOnce();
+    await screen.close();
+  });
+});
