@@ -1,116 +1,96 @@
 # Reading continuity while browsing: empty sections, ends, and preparation (#153, #161, #170, #156)
 
-Verified 2026-10-13 on `openreader-continuity` (3FA96AD7-957F-4DEB-B186-DA0709922173,
-iOS 27.0), tree `xujialiu/fix--ios-continuity` at c8533af (app 1.0.0 (8)-beta9-debug,
-Settings screenshot `settings-version.png`), Metro 8091 from this worktree, the
-fake Kokoro provider (`../player-and-reading-held/fake-kokoro.cjs`, PID 71139,
-2.5 s clips) at 127.0.0.1:8791, and a Debug build from this tree
-(`/tmp/openreader-continuity-dd`). The fixture is
-`../fixtures/continuity-fixture.ts`: an empty first spine item, four text
-chapters whose every sentence names itself, and an empty last spine item.
+Current for **1.0.0 (8)-beta11** (889da33, the offscreen-release fix ff6b35e).
+Verified on `openreader-continuity` (3FA96AD7-957F-4DEB-B186-DA0709922173,
+iOS 27.0), Metro from this worktree, the fake Kokoro provider
+(`../player-and-reading-held/fake-kokoro.cjs`, 2.5 s silent clips) at
+127.0.0.1:8791 with its Consent granted, and a Debug build of this tree. The
+fixtures are `../fixtures/continuity-fixture.ts` (empty first + empty last),
+`../fixtures/continuity-empty-prefix-fixture.ts` (all-empty reported prefix at
+open) and `../fixtures/continuity-empty-gap-fixture.ts` (tall blanks that hold
+an all-empty prefix with a real gap). Dated measurements and chronologies are
+in `notes/NOTES_2026-10-13.md`; this file states what holds.
 
-Commands below send harness commands with `../kit/hx.cjs` (handler probes, not
-touches), read the Debug Log at
+Commands send harness commands with `../kit/hx.cjs` (handler probes, not
+touches), read the Debug Log under
 `$DATA/Library/Application Support/debug-log/`, and take real touches through
-`../library-and-reader/ReaderTouchProbe.swift`'s `testTouchPoint`.
-`continuity-page-state.js` (this folder) asks the reader's page for its views,
-offscreen preparation hosts, iframes and lit highlights;
-`continuity-arm-stalled-view.js` / `continuity-disarm-stalled-view.js` replace
-and restore the manager's View constructor from a page probe. Page probes run
-in the reader's WebView (the harness `js` command), so a leaked host or a live
-highlight is read from the same DOM the reader paints.
+`../library-and-reader/ReaderTouchProbe.swift`'s `testTouchPoint` (Play after
+the end; the player's Following badge) and `../lock-screen/LockScreenProbe.swift`
+(the lock-screen card). `continuity-page-state.js` (this folder) asks the
+reader's page for its views, offscreen preparation hosts, iframes and lit
+highlights; `continuity-arm-stalled-view.js` /
+`continuity-disarm-stalled-view.js` stall and release the manager's View
+constructor from a page probe, which turns the next offscreen preparation into
+a deadline test without touching app source.
 
-## What was measured (and what each fact came from)
+## What holds on beta11
 
-- **Empty first section does not block Play (#161).** From seek 0 with the
-  empty cover reported, Play cued "The First Chapter" and the chapter's
-  sentences; the fake provider's log shows the fetches (04:39:29–04:39:45Z) and
-  the Debug Log the cues. The reading then walked every fixture boundary in
-  order to the end.
-- **A late empty trailing section ends the Reading (#170).** The fixture run
-  ended on its own at 12:41:04: the exhaustion snapshot reads
-  `views [2 not displayed, 3 displayed, 4 displayed, 5 displayed 54px]` — the
-  empty last section reported through the visible run — and the note is
-  "That was the last of this document. The reading has stopped at the end of
-  the book.", `playing=false`.
-- **Play after the end stays stopped (#156).** Handler `play` (12:43:53) and a
-  real touch on the player's Play (`testTouchPoint`, `Executed 1 test, with 0
-  failures`, 12:44:53) both re-report exhaustion within 3 ms and leave the end
-  note with `playing=false`; the provider log gains no request. Leaving to the
-  Library afterwards shows no playing Reading (`navstate` routes, shelf line,
-  `library-after-end.png`).
-- **Sequential speech across boundaries while browsing far ahead and behind
-  (#153).** On Reverend Insanity 1-250 (254 spine items): play from the start,
-  nine seconds in browse to section 40 (`{"do":"section","section":40}` —
-  handler probe). `known` jumped 267→503 (sections 39–41 reported) while the
-  voice walked 6→14→15… in order; the page stayed on the browsed chapters
-  (`browse40-voice-section2.png`, player badge "M"), the engine fenced at the
-  first unknown gap — `renderAhead: offscreen sections 3 asked for, the voice
-  is in section 2` — and section 3 reported 0.6 s later through the offscreen
-  view. No fetch carries browsed-chapter body text: the only "Chapter 38/40/41"
-  lines in the provider log are the ToC rows of section 2. Browsing backward
-  mid-play to section 0 behaves the same: the voice walked 45→46 across the
-  boundary with the page parked on section 0 (`renderAhead: offscreen sections
-  47 asked for, the voice is in section 46`), no restart at 0.
-- **A section crossed away from the screen (#112 regression).**
-  `background-crossing.sh` on the real book: GREEN — the voice entered section
-  203 at 13:35:49 with the app background, and section 204 rendered 0.2 s later,
-  still in the background (`view 203 displayed in 15 ms`, `view 204 displayed in
-  30 ms`, `renderAhead: section 204 done in 139 ms`; `bg-window.txt`).
-- **Preparation deadlines and Play retry.** With the page Browsing at section 0
-  and the voice at a fence (202|203), the reading first says it is waiting
-  (13:30:01), then the **native** 15-second deadline stops it honestly:
-  "The next section could not be prepared: Preparing the next section timed
-  out. Press Play to try again." (13:30:15, `playing=false`). Pressing Play at
-  the fence re-arms, waits and stops again with the same note (13:31:05 →
-  13:31:20): **the retry cannot prepare the section while the page is Browsing
-  — see the finding below.** Play recovers by itself only while buffered text
-  is still speaking: at 13:17:12 the resume re-followed the page, the visible
-  display rendered the missing sections (46–48), and the voice continued into
-  47.
+- **Successive offscreen preparations work in one uninterrupted page, with
+  Browsing far ahead and far behind.** On Reverend Insanity 1-250: play, browse
+  to section 40, and the reading fences at the first unknown section and
+  prepares it offscreen; browse back to section 0 and the next unknown section
+  is prepared the same way. Sections 206 and 207 were both prepared this way in
+  one page session, each reported, the voice crossed into the prepared 206, and
+  every page probe read `hosts: []`; cues ran without a skip or repeat.
+- **A stalled preparation is bounded, cleans up, and Play recovers through the
+  offscreen path.** With the View constructor stalled from a page probe, the
+  next preparation's 15-second deadline stops the reading honestly
+  ("The next section could not be prepared: Error: Preparing the next section
+  timed out. Press Play to try again."), the host is removed (`hosts: []`
+  immediately after), and after releasing the stall a press of Play re-prepares
+  the same section offscreen (`renderAhead: offscreen sections 208 asked for…`
+  in the same instant as the press), reports it, clears the note and carries
+  the speech on. Without the stall the same machinery crosses boundaries in the
+  background: `background-crossing.sh` is GREEN on this tree (the voice entered
+  the next section away from the screen and the one after rendered 0.2 s later,
+  still away). Note `AWAY` must cover `OFFSET × clip seconds × rate`: with
+  2.5 s clips at rate 1.5, `OFFSET=58` needs `AWAY≥120`; the script's own
+  default pairing assumes 0.2 s clips.
+- **#161: an all-empty reported prefix does not block Play.** In
+  `An Empty Gap Check of Play` a fresh open holds `known=0` with the reported
+  prefix all empty (three 1000 px blanks; the manager stops there because the
+  empties are tall). Play reaches the first text in spine order and reads on to
+  the honest end.
+- **#170: the last empty section's first report may arrive after the
+  exhaustion, and the reading still ends honestly.** With the last empty
+  section held unreported (the stalled-view probe, labelled as induced), the
+  engine exhausts at the last text section's end with the waiting note; when
+  the preparation is released, the section reports empty and the reading stops
+  with "That was the last of this document…". Without the stall the section is
+  prepared during the last text section and the end is direct.
+- **#156: Play after the end stays stopped — Player and lock screen.** A
+  handler `play`, a real press on the player's Play, and a real press on the
+  lock-screen card's centre button all leave the reading stopped with
+  "That was the last of this document…" and no synthesis request. The
+  lock-screen press flips the card's label and back inside the probe's waits
+  while the app's own log records no play: the flip is the system label, not
+  playback.
+- **Return to Following is accurate.** From a browsing page, a real touch on
+  the player's Following badge displays the reading's place with the exact
+  sentence and word painted (page probe `lit`).
 
-## Finding for the implementing agent (reproduces on c8533af, real WebKit)
+## Superseded beta9 record (c8533af)
 
-`renderAhead`'s offscreen preparation never cleans up after itself, and its
-serialized chain jams on its first use. `prepareSection`'s `finish()` calls
-`manager.views.destroy(view)`; in this epub.js build `Views.destroy` runs
-`container.removeChild(view.element)`, which throws
-`NotFoundError: The object can not be found here.` because the temporary view's
-element is a child of the preparation's own host div, never of the manager's
-container. `finish()` has no guard around the call and does the `destroy`
-before `resolve()`/`reject()` and `host.remove()`, so:
+The beta9 run found that `prepareSection`'s `finish` stranded the preparation
+chain: `Views.destroy` removed from the visible container and threw
+`NotFoundError` for the private-host view, so the host leaked, later
+preparations were silently swallowed, and Play at a fence could only recover
+through a re-follow display. That was real on c8533af (raw chronology in
+`notes/NOTES_2026-10-13.md`, 13:04–13:32 entries, probe at 13:12:43) and is
+**fixed by ff6b35e**; the retest above is the current record. The beta9 runs'
+other facts (empty-prefix Play, the honest end, Play-after-end, the browse
+fence) were re-verified on beta11 and stand.
 
-- the host div leaks and the preparation's promise never settles (probed
-  directly: one `left:-200vw` host with an emptied `epub-view` div persisted
-  from 12:48:07 to 13:32:43, through both deadlines);
-- the `preparation` chain is stuck on that first link: every later offscreen
-  preparation — including the exhaustion-driven `prepare` message — is queued
-  behind it and never runs (its 15-second timer lives inside the executor that
-  never executes), with no log line and no text-error;
-- at a fence while Browsing the reading therefore always ends at the native
-  deadline's honest stop, and Play can never prepare the missing section again;
-  recovery needs the visible path (a Play that still has buffered text and
-  re-follows, or the owner scrolling/navigating to the text, or leaving the
-  reader — a fresh page starts clean: `hosts: []` on the reopened reader).
+## What this recipe cannot prove
 
-Reproduction: open a long book, play, browse far ahead mid-play (handler probe
-is enough), let the voice reach the first unknown section; watch the Debug Log
-for the waiting note then the timeout note, press Play, and watch the same
-timeout note return 15 s later; probe `continuity-page-state.js` for the leaked
-host. Page timers were verified live (a 2 s probe timer fires), so the missed
-deadlines are not throttling.
-
-## What these runs cannot prove
-
-- The owner's iPhone: real background suspension (the simulator only hides the
-  page), a locked screen, and audio actually audible (clips were silent PCM at
-  volume 0, per the kit rules).
-- Word-timing drift over a long run; the longest single run here is the
-  fixture's 95 s end-to-end walk.
-- Whether the #112 lock-screen behaviour holds: the crossing here was
-  app-background (Preferences in front), not a lock.
-- The stub probes (`continuity-arm-stalled-view.js`) were armed and disarmed
-  but never used against a playing Reading: `createView` reads `this.View` at
-  call time, so a stalled stub view would jam the visible manager queue as
-  well; arming during playback was judged too destructive for a verification
-  run.
+- The owner's iPhone: real background suspension, a locked device, audible
+  audio (clips are silent PCM at volume 0), and word-timing drift over long
+  runs.
+- The out-of-order-before-Play flavour of #161 as a stable state: a Document's
+  place persists across reopens and the resume display always reports its
+  neighbourhood, so the all-empty-prefix-with-gap state exists only on a
+  Document's first open (which the gap fixture covers). Recreating it after a
+  Play would need destructive Library surgery.
+- The lock-screen label flip on Play-after-end: the app records no play and no
+  synthesis, and the final state is paused with the end note; what iOS draws
+  between the flip and the return is the system's label, not the app's state.
