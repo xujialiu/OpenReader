@@ -130,6 +130,21 @@ recipe goes.
 - [The Trial and the Unlock](purchase/README.md): which App Store each build asks, the harness's `store` command, and the gate, the alerts and the end of the Trial mid-use (#148); `trial-end.sh`, `download-across-end.sh` and what beta11 measured (the least Trial, a Pronunciation's resume, a Download's drawer, the Lock Screen, StoreKit on a simulator).
 - [The kit](kit/README.md): Read the accessibility tree and touch what it lists (`ax.py`); Run an XCTest probe; Read runtime warnings or evaluate a targeted expression; Inspect, stop or briefly exercise the reading handler; Pull the Debug Log off the phone (#82, `debug-log.py`); Ask the app on the phone (`phone-hx.cjs`, `debug-log-timeline.py`, `probes/`).
 
+### Verifying the Block-walk migration of #184/#189/#192 (1.0.0 (8)-beta15) (2026-10-14)
+
+Record: [`downloads/walk-block-migration.md`](downloads/walk-block-migration.md); `downloads/walk-utts.cjs` reads the open Reading's Utterance list off the React fiber tree through CDP (`OPENREADER_METRO=… node downloads/walk-utts.cjs`; needs a Document open, reads the list, not the painted highlight).
+
+- **The per-character `axe batch` typing recipe lost 1 of the 51 key characters on its first try** (typed 51 steps, the revealed field read back 50, first differing index 1; Fish answered the Enable with a 401). The same recipe had landed all 51 first try on the beta14 run above. Fix, before trusting any Enable: tap Show API key and compare the field's value against the source in memory (never printed); on mismatch, clear the field with one `key-sequence --keycodes 42,42,…` step of ~80 backspaces (a `key-sequence --keycodes 224,4,225` select-all did **not** select the field's text), retype, re-compare — the second typed batch compared exactly equal and Enable passed with "Connection successful".
+- **Inside `axe batch`, `key-sequence` and `key` steps want `--keycodes`; the standalone help's positional form fails.** `key-sequence 42` as a batch step exits 1 with `ArgumentParser.CommandError` naming only the step kind; `key-sequence --keycodes 42` runs. The standalone command's own examples are positional — the two parsers differ.
+- **The Download drawer's "N chapters downloaded" and row marks answer the drawer's own voice, not the Document's saved audio.** With the Document's Voice still unset, a finished download shows "0 chapters downloaded" and no row marked `, downloaded`, while Manage downloads lists everything — the exact shape the #184 walk reset produces. Tap the drawer's "Use downloaded voice · …" row (or set the voice before downloading) and the checks appear. Check which voice the drawer header shows before reading a lost-check state as the migration.
+- **A paused seek to a heading can land on the book's own ToC row instead of
+  the chapter's heading**: Shadow Slave's ToC holds "Chapter 1: Nightmare
+  Begins" (one line, one Utterance, a plain space) pages before the chapter's
+  own `Chapter 1:<br/><span>Nightmare Begins</span>` heading (a second
+  Utterance, text `Chapter 1:\nNightmare Begins`). Collect every match of the
+  pattern from the Utterance list and pick by the text's shape (the newline),
+  not the first hit.
+
 ### Verifying #191/#198/#193 (1.0.0 (8)-beta14): the page's finger fixes (2026-10-14)
 
 - **`axe batch` piped steps on stdin do nothing unless `--stdin` is passed, and
