@@ -46,11 +46,15 @@ a deadline test without touching app source.
   still away). Note `AWAY` must cover `OFFSET × clip seconds × rate`: with
   2.5 s clips at rate 1.5, `OFFSET=58` needs `AWAY≥120`; the script's own
   default pairing assumes 0.2 s clips.
-- **#161: an all-empty reported prefix does not block Play.** In
-  `An Empty Gap Check of Play` a fresh open holds `known=0` with the reported
-  prefix all empty (three 1000 px blanks; the manager stops there because the
-  empties are tall). Play reaches the first text in spine order and reads on to
-  the honest end.
+- **#161: the defining trigger — an all-empty reported prefix, an unknown gap, and a KNOWN EMPTY section beyond it — does not block Play.** In
+  `An Empty Order Check of Play` (sections 0–5 blank and tall, 5 several
+  screens so displaying it does not render 6; text at 6–7), a fresh open
+  reports 0–1 (all empty, `known=0`); a browse to The End reports 5 and then 4
+  (both empty) out of order — `known` stays 0 with 5 known while 2–3 are
+  unknown. Play skips the known empty 5, obtains 6, and starts reading at the
+  first text (the provider's first request is "The First Chapter"). The
+  simpler all-empty-prefix state (no out-of-order reports) is covered by
+  `An Empty Gap Check of Play`.
 - **#170: the last empty section's first report may arrive after the
   exhaustion, and the reading still ends honestly.** With the last empty
   section held unreported (the stalled-view probe, labelled as induced), the
@@ -62,9 +66,15 @@ a deadline test without touching app source.
   handler `play`, a real press on the player's Play, and a real press on the
   lock-screen card's centre button all leave the reading stopped with
   "That was the last of this document…" and no synthesis request. The
-  lock-screen press flips the card's label and back inside the probe's waits
-  while the app's own log records no play: the flip is the system label, not
-  playback.
+  lock-screen press is a dedicated named check
+  (`LockScreenProbe.testPlayAtEndStaysStopped` — do not use `--mode tap`, whose
+  transport expectation assumes playback starts): it asserts the press is
+  delivered and the reading stays stopped; on beta11 the press reached the app
+  (`remote command=play`, `play at utterance 54`), the exhaustion paused it in
+  the same millisecond, no synthesis ran, and the end note was retained. The
+  card's label showed "Pause" for about two seconds (the transient published
+  playing state), so the probe's strict no-label-flip assertion fails while
+  the reading itself stays stopped — read the app's log, not the label.
 - **Return to Following is accurate.** From a browsing page, a real touch on
   the player's Following badge displays the reading's place with the exact
   sentence and word painted (page probe `lit`).
@@ -91,6 +101,8 @@ fence) were re-verified on beta11 and stand.
   neighbourhood, so the all-empty-prefix-with-gap state exists only on a
   Document's first open (which the gap fixture covers). Recreating it after a
   Play would need destructive Library surgery.
-- The lock-screen label flip on Play-after-end: the app records no play and no
-  synthesis, and the final state is paused with the end note; what iOS draws
-  between the flip and the return is the system's label, not the app's state.
+- The lock-screen card's ~2 s "Pause" label on Play-after-end: the app
+  received the remote play, answered it with the exhaustion pause in the same
+  millisecond, and stayed stopped with no synthesis; what iOS draws while the
+  transient published state reaches the card is not the app's reading state.
+  The failed strict-label run is retained (`lockscreen-playend2`).
