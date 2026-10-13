@@ -246,7 +246,6 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     library.reached(openedId, place);
     if (speakingRef.current) library.heard(openedId);
   }, [library, openedId]);
-  const titled = useCallback((said: string) => { if (openedId) library.retitled(openedId, said); }, [library, openedId]);
   const onChrome = useCallback(
     (chrome: boolean) => setLive((was) => (was.id === openedId ? (was.chrome === chrome ? was : { ...was, chrome }) : { id: openedId, playing: false, buffering: false, chrome, section: null })),
     [openedId],
@@ -324,7 +323,6 @@ export function ReadingHost({ children }: { children: ReactNode }) {
             onRate={setRate}
             onVoice={setVoice}
             onReached={reached}
-            onTitle={titled}
             barHeight={barHeight}
             onChrome={onChrome}
             onState={onState}

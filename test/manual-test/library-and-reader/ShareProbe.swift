@@ -10,9 +10,10 @@ import XCTest
 /// arguments"): the port comes from TEST_RUNNER_OPENREADER_METRO_PORT, which
 /// xcodebuild hands the runner without its prefix.
 final class ShareProbe: XCTestCase {
-  /// The row prefix as the Library first showed it. The first real open
-  /// retitles the entry from the EPUB's own metadata ("… — Chapters 1–250"),
-  /// so every lookup matches the shared prefix only.
+  /// The row prefix as the Library first showed it. Before #226 the first
+  /// real open retitled the entry from the EPUB's own metadata ("… —
+  /// Chapters 1–250"); since #226 the entry keeps the name it was added or
+  /// seeded under, and every lookup still matches the shared prefix only.
   static let book = "The First Legendary Beast Master"
 
   func capture(_ name: String, _ app: XCUIApplication) {

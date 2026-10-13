@@ -25,7 +25,11 @@
  * Document is added (`add`), when speech in it is heard (`heard`), and when a
  * place heard on another device is adopted (`adopt`), and at nothing else. A
  * Document opened, looked at and left without Play stays where it was, and so
- * does one renamed or given its own title.
+ * does one renamed.
+ *
+ * A Document is called by the name of the file it was added from, without its
+ * extension, until the owner renames it (#226). The EPUB's own `dc:title` never
+ * names it: the owner knows a book by the file they chose.
  */
 
 import type { File } from 'expo-file-system';
@@ -68,8 +72,6 @@ export interface Library {
    * heard until 10:30 on the desktop.
    */
   heard(id: DocumentId): void;
-  /** What the document turned out to call itself, once epub.js has read its metadata. Ignored when it is empty or unchanged. */
-  retitled(id: DocumentId, title: string): void;
   rename(id: DocumentId, title: string): void;
   remove(id: DocumentId): void;
   /**
@@ -217,8 +219,8 @@ export function useLibrary(): Library {
       /**
        * The same book added twice from two places is one entry (ADR 0019), and
        * the one it is is the one already in the Library: its Reading Position, its
-       * Voice and the title epub.js gave it are each worth more than a second
-       * reading of the same file name. A duplicate now asks before opening;
+       * Voice and its name are each worth more than a second reading of a file
+       * name. A duplicate now asks before opening;
        * cancelling that alert must not move the entry or its Stamp (#121).
        */
       const existing = entriesRef.current.find((one) => one.id === added.identity.id);
@@ -244,17 +246,6 @@ export function useLibrary(): Library {
   );
 
   const heard = useCallback((id: DocumentId) => change(id, (entry) => ({ ...entry, stamp: stamp() })), [change, stamp]);
-
-  const retitled = useCallback(
-    (id: DocumentId, title: string) => {
-      const trimmed = title.trim();
-      if (!trimmed) return;
-      if (displayNames()[id]) return;
-      if (entriesRef.current.find((one) => one.id === id)?.title === trimmed) return;
-      change(id, (entry) => ({ ...entry, title: trimmed }));
-    },
-    [change],
-  );
 
   const reached = useCallback(
     (id: DocumentId, place: ReadingPlace) => {
@@ -309,7 +300,7 @@ export function useLibrary(): Library {
     }
   }, [change]);
   const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id), true), [commit]);
-  return { folders, folderSnapshot, entries, loading, note, add, heard, retitled, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
+  return { folders, folderSnapshot, entries, loading, note, add, heard, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
 }
 
 /**

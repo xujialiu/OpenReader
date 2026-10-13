@@ -89,9 +89,10 @@ export interface AddedDocument {
  * identity — a path, a name, a row id — is the mistake that makes two devices
  * disagree about which book they are holding.
  *
- * The title is the file's own name with its extension taken off. It is a
- * placeholder and is replaced the moment the book opens and epub.js reports the
- * EPUB's `dc:title`; a file named `9780571364039.epub` is not a title.
+ * The title is the file's own name with its extension taken off, and it is
+ * the Document's name from then on, until the owner renames it (#226). The
+ * EPUB's `dc:title` is not used: the owner knows a book by the file they chose,
+ * and a metadata title is whatever the EPUB's producer wrote.
  *
  * ## The publication's own `dc:identifier` is not filled in
  *
@@ -119,9 +120,7 @@ export async function addDocument(source: File, options: { move: boolean }): Pro
    * location" — while its copy does not. So reading `source.name` afterwards
    * gives the file's *new* name on the move path and its real one on the copy
    * path, and the Library ends up calling a book
-   * `sha256-e933d9c41d9db4d9…`. It did, for the 34 MB novel, whose title also
-   * takes long enough to arrive from epub.js that the placeholder is what the
-   * owner reads in the meantime.
+   * `sha256-e933d9c41d9db4d9…`. It did, for the 34 MB novel.
    */
   const named = titleFromFileName(source.name);
 
@@ -179,7 +178,7 @@ export async function openDocument(identity: DocumentIdentity, title: string): P
   return { identity, title, base64: await file.base64() };
 }
 
-/** The file's name without its extension. What a Document is called until the EPUB says otherwise. */
+/** The file's name without its extension: what a Document is called until the owner renames it (#226). */
 function titleFromFileName(name: string): string {
   const dot = name.lastIndexOf('.');
   return dot > 0 ? name.slice(0, dot) : name;

@@ -9,7 +9,7 @@ import { useLibrary, type Library } from '../../src/app/use-library';
 /**
  * What moves a Document up the Library (#228): being added, being heard, and a
  * place heard on another device. Opening it, a place written without speech
- * (#96), a rename and the Document's own title leave it where it was.
+ * (#96) and a rename leave it where it was.
  */
 
 const disk = vi.hoisted(() => ({ entries: [] as LibraryEntry[], identify: vi.fn() }));
@@ -86,10 +86,8 @@ describe('what moves a Document up the Library (#228)', () => {
     await mounted.unmount();
   });
 
-  it('leaves a Document where it was when it is renamed or its own title arrives', async () => {
+  it('leaves a Document where it was when it is renamed', async () => {
     const mounted = await mount();
-    await act(async () => { mounted.library.retitled(B, 'Its own title'); });
-    expect(mounted.library.current(B)!.title).toBe('Its own title');
     await act(async () => { mounted.library.rename(B, 'A new name'); });
     expect(order(mounted.library)).toEqual([A, B]);
     expect(mounted.library.current(B)!.stamp).toEqual({ at: 20, device: 'test' });

@@ -158,8 +158,6 @@ export interface ReadingViewProps {
   onVoice(provider: ProviderId, voice: string): void;
   /** Where speech got to. Called on a Clip boundary at most every `POSITION_INTERVAL_MS`, at every stop of the Reading (#155), and once more on the way out. */
   onReached(place: ReadingPlace): void;
-  /** What the EPUB calls itself, once epub.js has its metadata. */
-  onTitle(title: string): void;
   /**
    * How tall the navigation bar over the top of the page is, in points, whether
    * or not it is shown (#67). The screen measures it; the page keeps that much
@@ -252,7 +250,6 @@ export function ReadingView({
   onRate,
   onVoice,
   onReached,
-  onTitle,
   barHeight,
   onChrome,
   onState,
@@ -355,15 +352,14 @@ export function ReadingView({
    * been installed — the Blocks of the first section are on their way. The
    * language goes in now because it decides how the text is split, and the
    * document's own is the only one that is ever used (ADR 0006).
+   *
+   * The metadata's title is not taken: a Document keeps the name of the file it
+   * was added from (#226, ADR 0059).
    */
   const onReady = useCallback(() => {
     setDisplayError(null);
-    const meta = getMeta();
-    reading.opened(meta.language);
-    // The book's own title, which is worth more than the file name the Library
-    // has been calling it. Ignored when the EPUB does not say (`use-library.ts`).
-    onTitle(meta.title ?? '');
-  }, [getMeta, reading, onTitle]);
+    reading.opened(getMeta().language);
+  }, [getMeta, reading]);
 
   /**
    * Where speech got to, written down.

@@ -881,12 +881,12 @@
   drawer's own "Use downloaded voice · `provider/voice`" link is offered
   (`otherVoices` in `download-sheet.tsx`) and a real tap on it calls
   `library.voiced()` for real, after which the count and the checkmarks
-  appear. Tap it before selecting any chapter. The same first real open also
-  retitles the Library entry from the EPUB's own metadata (the `add`
-  version of this pitfall, above) even when the entry was seeded directly
-  in `library.json` with a different title, not only when `add` named it
-  after its file — a `BEGINSWITH` match on the seeded title stops working
-  after that first open for the same reason either way.
+  appear. Tap it before selecting any chapter. Before #226 the same first
+  real open also retitled the Library entry from the EPUB's own metadata,
+  so a `BEGINSWITH` match on a seeded title stopped working after it. Since
+  #226 nothing retitles an entry: it keeps the title `add` gave it (the
+  file's name without `.epub`) or the one seeded in `library.json`, so a
+  probe matches the row by that name, not by the EPUB's `dc:title`.
 - **A single `typeText` call on a `keyboard="url"` `TextInput` silently drops
   characters mid-string.** Verifying #65 (`DownloadConcurrencyProbe`,
   OpenAI Compatible's Address field), one unchunked `field.typeText(baseURL)`

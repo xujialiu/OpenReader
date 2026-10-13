@@ -32,6 +32,8 @@ On iOS 26 and later, a download the owner starts or resumes on the screen, or on
 
 Explicit names are recorded in `display-names.json`, keyed by Document Id, and shown in the existing catalogue title. EPUB metadata cannot overwrite an explicit name. The shared catalogue format gains no fields, following ADR 0003's sibling-file rule; neither document identity nor the original EPUB is changed.
 
+Since #226 EPUB metadata names no Document: the catalogue title is the file's name without its extension until a Rename, and the reader no longer reports `dc:title` (`retitled` is gone). A name is still recorded here and overlaid at launch.
+
 ## SQLite owns offline metadata; audio keeps its file identity
 
 Issue #7 measured the legacy owner plan at 131,686 texts and a bounded 100 cold clip-size checks at 508.741 ms. `hasSavedVoice` performed that scan synchronously during Reader rendering; replacing only that check in the debugger let the same EPUB open. The owner approved SQLite rather than a custom JSON inventory. Indexed document/voice queries replace render-time hashes and file checks; chapter metadata and text are queried separately, and task state is persisted in the same database. Library, reading positions and credentials retain their existing stores.

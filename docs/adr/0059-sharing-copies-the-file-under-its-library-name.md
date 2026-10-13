@@ -102,11 +102,18 @@ was not measured.
 
 ## The name
 
+The title it starts from is the Library entry's. Since #226 that is the file's
+name without its extension, given by `addDocument` (`titleFromFileName`) and
+kept: the reader's `onTitle` and the Library's `retitled`, which wrote the
+EPUB's `dc:title` over it on the first open, are gone. Only Rename changes it.
+Entries added before keep the title they hold.
+
 `src/app/share-name.ts`, `sharedFileName(title, format)`, is pinned by
 `test/app/share-name.test.ts`:
 
 - U+0000–U+001F and U+007F become spaces, and runs of whitespace become one
-  space. A `dc:title` can carry line breaks.
+  space. A `dc:title`, which entries added before #226 hold, can carry line
+  breaks.
 - `/`, `\` and `:` become `-`, or ` - ` when whitespace touches them:
   `Volume Three: The Long Road` → `Volume Three - The Long Road`. A slash cannot
   be in a POSIX name. A colon is displayed as a slash by Finder and Files

@@ -73,6 +73,14 @@ Two other names were turned down:
   worse than the book's own title: a downloaded file can be called
   `9780571364039.epub`.
 
+Since issue #226 a book is called by the name of the file it was added from,
+and opening it no longer replaces that name with the title written inside the
+book. So a book added since then and never renamed goes under the name of its
+file, which is now the name the Library shows. Books added before keep the
+names they had, and go under those. The owner asked for this: a book is known
+by the file that was chosen, and the title inside it is whatever its publisher
+wrote, which the owner cannot see before adding it.
+
 A few characters cannot be in a file's name, or are shown as something else on a
 Mac, so they become dashes. "Volume Three: The Long Road" arrives as
 "Volume Three - The Long Road". A very long name is shortened to what the phone
