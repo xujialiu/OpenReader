@@ -771,7 +771,11 @@ ${constants}
     lookupHeld = false;
     setBrowsing(beforeLookupBrowsing);
     lookupKeepBrowsing = beforeLookupBrowsing;
-    if (selectionDoc && selectionDoc.getSelection) selectionDoc.getSelection().removeAllRanges();
+    /* A section epub.js has destroyed since the word was selected answers
+       getSelection() with null (measured in WebKit, #193): there is then
+       nothing to clear, and the rest of the close must still run. */
+    var selection = selectionDoc && selectionDoc.getSelection ? selectionDoc.getSelection() : null;
+    if (selection) selection.removeAllRanges();
     selectionDoc = null;
     selectedText = '';
     selectionExpanded = false;
