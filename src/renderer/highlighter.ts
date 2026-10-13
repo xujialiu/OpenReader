@@ -695,7 +695,8 @@ ${constants}
   var onScreen = null;
   /* The owner has moved the page away from the reading, and it stays where they
      put it: Browsing (CONTEXT.md, #52), the player's M (#71). Set by a Contents
-     row, playing or paused (the 'browse' message, #107), and by a finger
+     row, playing or paused (the 'browse' message, #107), by a link in the
+     Document that epub.js follows (#191, see linkFollowed), and by a finger
      dragging the page. Cleared by a highlight that is revealed — Play's first
      cue, a tapped sentence, a skip or a place from another device — by M (the
      'return' message), by the player collapsing ('followOnly'), and by itself
@@ -1116,6 +1117,7 @@ ${constants}
      gesture and taking it would mean \`user-select: none\`, which silently stops
      ::highlight() from painting (see this file's header, and the 20:10 note). */
   function tapped(event) {
+    if (linkFollowed(event)) return;
     if (lookupEnabled && (lookupHeld || Date.now() < suppressTapUntil)) return;
     var node = event.target;
     var doc = node && node.ownerDocument ? node.ownerDocument : null;
@@ -1129,6 +1131,69 @@ ${constants}
     if (!inside(place.element, event.clientX, event.clientY)) return;
     lookupKeepBrowsing = false;
     post({ type: TAP, block: place.block, offset: place.offset });
+  }
+
+  /* The link at or above a clicked node that epub.js follows, or null.
+
+     epub.js gives every \`a[href]\` of a section an \`onclick\` that hands the
+     link to \`rendition.display\` and returns false, unless the href starts
+     with \`mailto:\` or holds \`://\` (its Contents' linksHandler, read out of
+     the bundled epub.js). The same rule here, so that this program and
+     epub.js agree on which clicks are links. */
+  function linkOf(node) {
+    for (var at = node; at && at.nodeType === 1; at = at.parentNode) {
+      var name = String(at.localName || at.tagName || '').toLowerCase();
+      if (name !== 'a' || !at.hasAttribute || !at.hasAttribute('href')) continue;
+      var href = at.getAttribute('href') || '';
+      return href.indexOf('mailto:') === 0 || href.indexOf('://') > -1 ? null : at;
+    }
+    return null;
+  }
+
+  /* A tap on a link in the Document moves the page and nothing else (#191).
+
+     epub.js's \`onclick\` on the link has run by the time the click reaches
+     the document, and has asked epub.js to display the link's target; it
+     cancels the click's default but does not stop it, so tapped() hears the
+     same click. Taken as a tap as well, it moved the reading to the link's
+     sentence, and the page came straight back from the target. The owner's
+     rule is a Contents row's (ADR 0044, ADR 0063): Browsing, the reading and
+     its position where they were, and the page left at the target until M,
+     Play or a tapped sentence brings it back. So what the 'browse' message
+     does, and no tap. Without Browsing the next sentence of a playing Reading
+     takes the page back from the target, because epub.js's own display leaves
+     it following.
+
+     Before tapped()'s lookup guard, because epub.js follows the link whatever
+     that guard says. During a lookup the page is already Browsing; the link
+     sets the Browsing the lookup's close gives back, so the page stays at
+     the link after the Drawer closes.
+
+     Not with the player collapsed: there linkHeld() has kept epub.js from
+     following the link, and the click is an ordinary tap. */
+  function linkFollowed(event) {
+    if (followOnly || !event.defaultPrevented || !linkOf(event.target)) return false;
+    if (lookupHeld) {
+      beforeLookupBrowsing = true;
+      return true;
+    }
+    setBrowsing(true);
+    halt();
+    return true;
+  }
+
+  /* With the player collapsed the page only follows, and nothing can start
+     Browsing (#71), so a link is not followed there: the tap reads from the
+     link's sentence, as one on any other text does (#191). Heard as the click
+     goes down, on the document, which is before epub.js's \`onclick\` on the
+     link: stopping it there keeps that handler from running, and cancelling
+     it keeps the link's own navigation from the section's frame. Stopped, it
+     no longer reaches tapped() as it bubbles back, so it is handed there. */
+  function linkHeld(event) {
+    if (!followOnly || !linkOf(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    tapped(event);
   }
 
   /* A finger dragging the page is Browsing too (#52): the page goes where the
@@ -1253,6 +1318,7 @@ ${constants}
        act on, and this function is already the one place that runs once per
        document. A document epub.js destroys takes its listener with it. */
     contents.document.addEventListener('click', tapped, false);
+    contents.document.addEventListener('click', linkHeld, true);
     contents.document.addEventListener('selectionchange', selectionChanged);
     contents.document.addEventListener('touchstart', selectionStarted, { passive: true });
     contents.document.addEventListener('touchend', selectionEnded, { passive: true });

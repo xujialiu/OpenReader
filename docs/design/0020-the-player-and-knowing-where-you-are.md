@@ -182,6 +182,34 @@ made inert in the first place: a gesture that is easy to miss must not move your
 place in the book when you miss it. Reading something you did not point at is
 worse than reading nothing.
 
+## A link in the book moves the page, and nothing else
+
+Many books carry links of their own: a list of chapters on one of their first
+pages, a note mark that leads to the note. Tapping one takes the page there, as
+choosing a row of the contents does, and that is all it does. The reading stays
+on its sentence, a voice that is speaking goes on speaking it, and the place the
+book is kept at does not move. The player shows that the page has been taken
+away from the reading, and the button that brings it back, Play, or tapping a
+sentence returns it.
+
+Before this was decided a tap on a link did two things at once: the page went to
+the link's target, and the tap also counted as a tap on the link's own words. The
+reading jumped to a line of the book's list of chapters, the page came straight
+back from the chapter it had just opened, and, while paused, that line of the
+list became the book's place on every device.
+
+**The alternatives were** that the reading should follow the link too, so the
+voice would carry on from the chapter or the note; or that links should not be
+followed at all, a tap on one reading from its line like any other words. The
+first makes a glance at a note lose your place in the story, which is what the
+contents was already designed never to do. The second leaves a book's own list
+of chapters and its notes unusable, when the book's own way of getting about is
+exactly what a reader reaches for.
+
+**With the player collapsed the page belongs to the reading**, and nothing can
+take it elsewhere. There a link is not followed, and the tap reads from its line
+as a tap on any other words does.
+
 ## The player says what it is doing, and hiding it hides that too
 
 The running status line below is superseded by
