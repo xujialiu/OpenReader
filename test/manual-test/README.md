@@ -134,6 +134,22 @@ recipe goes.
 
 Record: [`sync/cache-stall-and-recovery.md`](sync/cache-stall-and-recovery.md).
 
+- **`res.writeHead(...)` alone sends nothing: Node buffers the header bytes
+  until the first write/end, so a "send headers then stall" test server
+  measures a headers timeout while believing it measures a body timeout.**
+  The first #168 run's `closed after 15018 ms` was exactly that; caught
+  because `curl --max-time 2 --dump-header` received **0 bytes**. Fix: call
+  `res.flushHeaders()` immediately after `writeHead` in any stall branch,
+  and prove the client sees the headers (`curl -D` shows `200` +
+  `Content-Length` before the hang).
+- **expo/fetch (57.0.24) resolves `fetch()` at the first body chunk, not at
+  the response's headers.** Measured on the simulator: body held 8 s → the
+  response object and `.text()` completed together at 8 s; zero body bytes →
+  `fetch()` still unresolved at 20 s (abort rejected it); half the body →
+  resolved at +87 ms with `.text()` hanging. So a stall with no body bytes
+  bounds at `fetch()`, and the shape the old header-only timeout could not
+  bound is *headers + at least one body byte, then stall* — stall fixtures
+  for body-timeout work must deliver some body bytes first.
 - **A response without a `Date` header is not stored by the iOS URL cache at
   all — so a cache probe shows *no caching*, not caching that expires.** The
   controlled stub's GET first answered `Cache-Control: public, max-age=3600`,

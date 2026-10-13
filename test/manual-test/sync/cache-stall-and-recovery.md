@@ -12,11 +12,15 @@ port 8093. Everything here is this run's measurement, not a general recipe.
   in one process: every GET answers cacheable (`Cache-Control: public,
   max-age=3600`, a backdated `Last-Modified`, an `ETag`, **and a `Date`
   header** — without `Date` NSURLCache stores nothing, see Pitfalls), a
-  one-shot stalled GET (`/__stall?on=1`) that sends success headers and then
-  never the body and logs the close with its elapsed time, a password list
-  (`/__accept?list=a,b`, `list=*` for anything) whose rejects answer 401,
-  content swap by POST to `/__set`, and full request-header logging with the
-  Authorization masked. State under `/tmp/openreader-fix2-dav/`.
+  one-shot stalled GET (`/__stall?on=1`) and a one-shot **partial-body**
+  stall (`/__halve?on=1`, headers + first half, the shape the old code
+  could not bound) plus a slow-body hold (`/__hold?ms=N`) for measuring
+  when `fetch()` resolves — all three **`flushHeaders()` immediately** and
+  log the close with its elapsed time —, a password list
+  (`/__accept?list=a,b`, `list=*` for anything) whose rejects answer 401
+  and whose log line and `/__state` expose only the **count**, never the
+  values, content swap by POST to `/__set`, and full request-header logging
+  with the Authorization masked. State under `/tmp/openreader-fix2-dav/`.
 
   ```sh
   node test/manual-test/sync/cacheable-dav.cjs 8765
@@ -71,23 +75,55 @@ started at the server's newer place, not the local end-of-book one.
 
 ## #168 — success headers, then a stalled body
 
-On the Sync screen, with real touches on the switch: off, on. The check
-passed (PROPFIND 207), the run's GET answered `200` with the true
-`Content-Length` and **no body** (the stub's one-shot stall). The outcome,
-from the app's own log and the stub's socket:
+The first attempt of this run (2026-10-13 ~12:35) is **superseded and was
+inadequate**: the stall branch then wrote the headers with `writeHead` and
+returned — and Node buffers those bytes until the first write/end, so the
+client never received them (`curl --max-time 2 --dump-header`: exit 28, **0
+header bytes**, `STALLED GET closed after 2005 ms` at 04:59:51Z). Its
+`closed after 15018 ms` line therefore proved a deadline over a request
+whose **headers** never arrived — not the body wait the issue is about. The
+raw log is preserved; the stub now calls `res.flushHeaders()` immediately.
 
-- `STALLED GET closed after 15018 ms (client gave up: true)` — the deadline's
-  abort reached the socket;
+Two mechanism facts were measured on this expo build while correcting that
+(both on the app's own `expo/fetch`, via `cdp.cjs`):
+
+- **`fetch()` does not resolve at the response's headers — it resolves at
+  the first body chunk.** With headers flushed and the body held 8 s, the
+  response object arrived at the same millisecond the body did
+  (`responseArrivedAt == textDoneAt`, +8.06 s); with headers flushed and
+  **zero** body bytes ever, `fetch()` was still unresolved at 20 s and the
+  abort rejected it (`FetchRequestCanceledException`); with **half** the
+  body flushed, it resolved at **+87 ms** while `.text()` hung (and a later
+  cancel left that pending `text()` neither resolved nor rejected within
+  3 s). The issue's source reading ("resolves once the response's headers
+  are in") does not hold for this build; the unbounded shape of the old
+  code is precisely *headers + at least one body byte, then stall* —
+  `fetch()` resolves, and the old `response.text()` ran outside any
+  timeout.
+- Hence the corrected app run uses exactly that shape: the stub flushed the
+  success headers **and the first 194 of 389 bytes**, then withheld the
+  rest.
+
+On the Sync screen, real touches on the switch: off, on (13:10:06).
+
+- 13:10:07.203 the run starts; GET at 05:10:07.215Z → `200 PARTIAL (194 of
+  389 bytes flushed, rest withheld)`, request carrying
+  `cache-control="no-cache"` + conditional validators;
+- **`PARTIAL GET closed after 15007 ms (client gave up: true)`** — the
+  deadline's abort reached the socket;
 - Debug Log `switch-on: error (No reply from http://127.0.0.1:8765/fix2dav/
-  within 15 s.), … nothing uploaded` 15.0 s after the run began — one
-  deadline over headers and body, the run ended as a failure;
-- the Sync screen's status line switched to `Sync at 12:35 PM failed: No
-  reply … within 15 s.`;
-- **no PUT in the stall window** — nothing healed the partial file;
-- after `/__stall?on=0`, switch off and on again: PROPFIND, then a **new GET
-  0.04 s into the run** (`switch-on: ok … uploaded`, status `Synced at
-  12:36 PM.`). The single flight had been released: a queued run behind a
-  stuck one could not have sent that GET.
+  within 15 s.), … nothing uploaded` at 13:10:22.219 — **15.016 s** after
+  the run began, one deadline over the whole exchange;
+- status line `Sync at 1:10 PM failed: No reply … within 15 s.`;
+- **no PUT in the window** — nothing healed the partial file;
+- after `__halve on=0`, switch off and on again at 13:10:57: PROPFIND, then
+  a **new GET at 05:10:58.961Z** (0.05 s into the run) → `switch-on: ok …
+  1 place taken … uploaded`, status `Synced at 1:10 PM, 1 place taken from
+  other devices.` — the single flight had been released.
+
+What the stall variants add: the pure zero-byte stall (headers flushed, no
+body) now also ends at the deadline — bounded at the `fetch()` stage —
+while the partial-body shape is the one the old code could not bound.
 
 ## #177 — a failed sync, the correction, the switch-on inside the window
 
@@ -101,8 +137,10 @@ turned the switch back on, all inside one XCTest run:
 - 12:38:55 the failed line on the Sync screen: `The server rejected the
   username or password (HTTP 401).`;
 - 12:38:57 switch off; 12:39:15 the new password retyped; 12:39:17 switch on
-  — **22 s after the failure, inside the 60 s window** the old build spent
-  doing nothing;
+  — from the raw failure to the completed run: **12:38:50.562 → 12:39:16.007
+  = 25.445 s** (app Debug Log; the server's own 401→GET-200 pair: 25.47 s),
+  and the real-touch re-enable was confirmed at **26.735 s** — all inside
+  the 60 s window the old build spent doing nothing;
 - 04:39:15.913 PROPFIND (the check) → 04:39:16.002 **GET → 200** — the run
   itself, not only the check — and its PUT landed 5 ms later;
 - the status line became `Synced at 12:39 PM.`; after the probe's 45 s idle
@@ -115,9 +153,16 @@ turned the switch back on, all inside one XCTest run:
   transport (there is no switch to turn the header off in the shipped code);
   the stale-serving is the same native fetch, session and cache the
   transport uses, but the transport's own stale read is inferred from it.
+- The measured `fetch()` resolution point (first body chunk) is this expo
+  build's behaviour; other versions may differ, and the app-level bound
+  (one deadline over the whole exchange) is what the fix guarantees.
 - The stub answers a conditional GET with a full 200, never 304; production
   hosts mostly answer 304, which the client reads from its cached body —
   not exercised end to end here.
+- The superseded first #168 run and the pre-fix control-query log lines
+  (requests.log before 05:00:32Z) contain the stub's **throwaway**
+  password in `/__accept?list=…`; the raw logs are preserved as evidence
+  and the values are loopback-throwaway only.
 - #168 ran through the switch-on path, not Play's two-second wait (that
   bound is #106's, covered by its own probe; the deadline and the release
   under test are the same transport code).

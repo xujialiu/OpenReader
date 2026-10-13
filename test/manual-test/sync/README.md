@@ -135,12 +135,14 @@ typed while the switch is on, and a simulator has no way to lose its network.
 [cache-stall-and-recovery.md](cache-stall-and-recovery.md) — 2026-10-13,
 beta7 at 11a890c: the URL cache's stale Positions File defeated only by the
 request's `Cache-Control: no-cache` header (#166, with the negative control
-run on the app's own fetch through `cdp.cjs`), a GET that sends success
-headers and then never the body ending as a failure at the 15 s deadline
-with the single flight released (#168), and a switch-on 22 s after a 401
-failure running a real GET, not only the passing check (#177). The tools it
-added: `cacheable-dav.cjs` (cacheable answers, the one-shot stalled GET, the
-password list, header logging) and `SyncRecoveryProbe.swift`
+run on the app's own fetch through `cdp.cjs`), a GET that delivers success
+headers and the first half of the body and then stalls ending as a failure
+at the 15 s deadline with the flight released (#168 — first proven against
+a stub whose headers Node had buffered; the record says why that was
+inadequate), and a switch-on 25.445 s after a 401 failure running a real
+GET, not only the passing check (#177). The tools it added:
+`cacheable-dav.cjs` (cacheable answers, the flushing stalled/partial/slow
+GETs, the password list, header logging) and `SyncRecoveryProbe.swift`
 (`testFailThenRecoverInWindow`).
 
 ## A Play that waits past its Reading (#106)
