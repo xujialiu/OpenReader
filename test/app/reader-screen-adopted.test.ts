@@ -95,7 +95,6 @@ function library(entries: readonly LibraryEntry[], adoptedAt: Partial<Record<Doc
       opened: () => {},
       voiced: () => {},
       reached: () => {},
-      retitled: () => {},
     },
   };
 }

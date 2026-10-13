@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { readLocator, type DocumentId, type ReadingPosition } from '../core/document';
+import { documentNameProblem } from '../core/folders';
 import { spineIndexOf } from '../renderer';
 import { AppearanceControls, FontList } from './appearance-sheet';
 import { INK } from './controls';
@@ -45,7 +46,9 @@ const TITLES: Record<Exclude<Page, 'menu' | 'move'>, string> = { appearance: 'Ap
  * **Pages** (#117). The menu's rows are the drawer's plain list; a row that
  * opens a page has a chevron. Every page has a back button to the page it was
  * opened from (`BACK`), and a swipe down closes the drawer from any of them.
- * Rename is not a page but the phone's alert over the menu (`RenameAlert`).
+ * Rename is not a page but the phone's alert over the menu (`RenameAlert`). A
+ * name another Document in the same Folder has is refused there, as a Folder's
+ * is (#227).
  *
  * **Select** (#136) is granted like `onDelete`: only the Library has a list to
  * select in, so only it passes `onSelect`, and the row sits directly above Delete.
@@ -67,22 +70,23 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   const [page, setPage] = useState<Page>('menu');
   const [renaming, setRenaming] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [unshared, setUnshared] = useState<string | null>(null);
+  /** The menu page's one failure line: a Share that failed, or a name that could not be written (#215). */
+  const [failure, setFailure] = useState<string | null>(null);
   // Download's Select all, which only Download knows the rows for.
   const [selectAll, setSelectAll] = useState<DrawerAction | null>(null);
   const move = useMovePage({ target: { kind: 'document', id: document } }, { onMoved: onClose, onLeave: () => setPage(BACK.move) });
   // Another Document's `…`, touched in the Library behind the open drawer, opens that Document's menu afresh: a page kept from the last one, a move page above all, would act on the new Document unnoticed (#151).
   const [shown, setShown] = useState(document);
   if (shown !== document) {
-    setShown(document); setPage('menu'); setRenaming(false); setUnshared(null); setSelectAll(null); move.restart();
+    setShown(document); setPage('menu'); setRenaming(false); setFailure(null); setSelectAll(null); move.restart();
   }
   const current = settingsForDocument(settings, entry?.voice ?? null);
   const voice = { provider: current.provider, voice: current.voice, label: current.voice ? knownVoice(current)?.label ?? `${PROVIDER_LABELS[current.provider]} · ${current.voice}` : '' };
   if (!entry) return null;
   const share = () => {
     setSharing(true);
-    setUnshared(null);
-    shareDocument(entry).catch((problem: unknown) => setUnshared(problem instanceof Error ? problem.message : String(problem))).finally(() => setSharing(false));
+    setFailure(null);
+    shareDocument(entry).catch((problem: unknown) => setFailure(problem instanceof Error ? problem.message : String(problem))).finally(() => setSharing(false));
   };
   const back = BACK[page];
   const onAppearance = (next: typeof settings.appearance) => setSettings((was) => ({ ...was, appearance: next }));
@@ -94,7 +98,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
       {appearance ? <DrawerRow icon="appearance" onPress={() => setPage('appearance')} accessory={<DrawerChevron />}>
         <DrawerRowText>Appearance</DrawerRowText>
       </DrawerRow> : null}
-      <DrawerRow icon="rename" onPress={() => setRenaming(true)}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
+      <DrawerRow icon="rename" onPress={() => { setFailure(null); setRenaming(true); }}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
       {movable ? <DrawerRow icon="folder" onPress={() => { move.restart(); setPage('move'); }} accessory={<DrawerChevron />}>
         <DrawerRowText>Move to…</DrawerRowText>
       </DrawerRow> : null}
@@ -105,7 +109,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
       {onDelete ? <DrawerRow icon="trash" iconColour={INK.attention} onPress={onDelete}>
         <DrawerRowText style={{ color: INK.attention }}>Delete</DrawerRowText>
       </DrawerRow> : null}
-      {unshared ? <DrawerFooter attention>{unshared}</DrawerFooter> : null}
+      {failure ? <DrawerFooter attention>{failure}</DrawerFooter> : null}
     </DrawerScroll> : null}
     {page === 'move' ? move.body : null}
     {page === 'appearance' ? <AppearanceControls appearance={settings.appearance} onFonts={() => setPage('fonts')}
@@ -119,7 +123,13 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
         library.voiced(document, next); setSettings((was) => selectVoice(was, next.provider, next.voice));
       }} /> : null}
     {renaming ? <RenameAlert name={entry.title} onCancel={() => setRenaming(false)}
-      onSave={(name) => { setRenaming(false); library.rename(document, name); onClose(); }} /> : null}
+      validate={(name) => documentNameProblem(library.folderSnapshot.tree, library.entries, name, library.folderSnapshot.tree.documents[document] ?? null, document)}
+      onSave={(name) => {
+        // A name that cannot be written, as with the phone's storage full, is said under the rows, as a Folder's is (#215).
+        setRenaming(false);
+        try { library.rename(document, name); onClose(); }
+        catch (problem) { setFailure(problem instanceof Error ? problem.message : String(problem)); }
+      }} /> : null}
   </Drawer>;
 }
 /** The spine item a stored Reading Position is in, read off its locator (`spineIndexOf`), or null for none. */

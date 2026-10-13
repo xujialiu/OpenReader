@@ -165,7 +165,8 @@ export function OpenReader() {
     if (what === 'store') return storeCommand(command);
     if (what === 'add') {
       void library.add(new HxFile(HxPaths.document, 'Inbox', String(command.file)), { move: false }).then(
-        ({ entry }) => hlog(`added ${entry.id} "${entry.title}"`),
+        // Without `nameTaken` a name taken in the Folder is refused, never cancelled (#227).
+        (added) => hlog(added ? `added ${added.entry.id} "${added.entry.title}"` : 'add cancelled'),
         (problem: unknown) => hlog(`add refused: ${String(problem)}`),
       );
       return;

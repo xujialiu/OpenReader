@@ -53,7 +53,7 @@ describe('the move drawer (#151)', () => {
 
 describe('another entry touched behind the open drawer (#151)', () => {
   it("starts that entry's actions at their menu, with the move page's place forgotten", () => {
-    pin(code('reader-actions.tsx'), "setShown(document); setPage('menu'); setRenaming(false); setUnshared(null); setSelectAll(null); move.restart();", 'reader-actions.tsx subject');
+    pin(code('reader-actions.tsx'), "setShown(document); setPage('menu'); setRenaming(false); setFailure(null); setSelectAll(null); move.restart();", 'reader-actions.tsx subject');
     pin(code('folder-actions.tsx'), 'setShown(id); setMoving(false); setNaming(false); setFailure(null); move.restart();', 'folder-actions.tsx subject');
   });
 });

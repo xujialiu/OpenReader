@@ -25,20 +25,24 @@
  * Document is added (`add`), when speech in it is heard (`heard`), and when a
  * place heard on another device is adopted (`adopt`), and at nothing else. A
  * Document opened, looked at and left without Play stays where it was, and so
- * does one renamed or given its own title.
+ * does one renamed.
+ *
+ * A Document is called by the name of the file it was added from, without its
+ * extension, until the owner renames it (#226). The EPUB's own `dc:title` never
+ * names it: the owner knows a book by the file they chose.
  */
 
 import type { File } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { FolderId, FolderSnapshot, FolderStore } from '../core/folders';
+import { documentNameProblem, freeDocumentName, type FolderId, type FolderSnapshot, type FolderStore, type FolderTree } from '../core/folders';
 import { openFolderStore } from './folder-storage';
 
 import { APP_NAME } from '../../app-name';
 import { nextStamp, stampPlace, type DocumentId, type LibraryEntry, type ReadingPlace, type VoiceChoice } from '../core/document';
 import type { PositionsItem } from '../core/sync/positions-file';
 
-import { addDocument } from './document';
-import { displayNames, saveDisplayName } from './display-names';
+import { identifyFile, keepFile } from './document';
+import { displayNames, forgetDisplayName, saveDisplayName } from './display-names';
 import { migrateDocumentIds, readLibrary, thisDevice, writeLibrary, type LoadedLibrary } from './library';
 import { itemsOf, planAdoption, samePlace } from './sync-items';
 
@@ -57,8 +61,15 @@ export interface Library {
    * the app.
    */
   note: string | null;
-  /** Read a file, name it by its bytes, and put it in the Library. */
-  add(source: File, options: { move: boolean; folder?: FolderId | null }): Promise<{ entry: LibraryEntry; duplicate: boolean }>;
+  /**
+   * Read a file, name it by its bytes, and put it in the Library.
+   *
+   * When the Folder it goes to already holds a Document of its name (#227),
+   * `nameTaken` is asked whether to keep both, the new one under `free`; it
+   * resolves null when the owner cancels, and nothing is kept. Without
+   * `nameTaken` such an import is refused.
+   */
+  add(source: File, options: AddOptions): Promise<{ entry: LibraryEntry; duplicate: boolean } | null>;
   folders: FolderStore;
   folderSnapshot: FolderSnapshot;
   /**
@@ -68,8 +79,6 @@ export interface Library {
    * heard until 10:30 on the desktop.
    */
   heard(id: DocumentId): void;
-  /** What the document turned out to call itself, once epub.js has read its metadata. Ignored when it is empty or unchanged. */
-  retitled(id: DocumentId, title: string): void;
   rename(id: DocumentId, title: string): void;
   remove(id: DocumentId): void;
   /**
@@ -132,6 +141,12 @@ export interface Library {
    * the one nobody looks at.
    */
   report(note: string): void;
+}
+
+export interface AddOptions {
+  move: boolean;
+  folder?: FolderId | null;
+  nameTaken?(taken: { name: string; free: string; folder: FolderId | null }): Promise<boolean>;
 }
 
 const byNewestFirst = (a: LibraryEntry, b: LibraryEntry): number => b.stamp.at - a.stamp.at;
@@ -208,27 +223,63 @@ export function useLibrary(): Library {
   const stamp = useCallback(() => ({ at: Date.now(), device: deviceRef.current }), []);
 
   const add = useCallback(
-    async (source: File, options: { move: boolean; folder?: FolderId | null }): Promise<{ entry: LibraryEntry; duplicate: boolean }> => {
+    async (source: File, options: AddOptions): Promise<{ entry: LibraryEntry; duplicate: boolean } | null> => {
       if (!readyRef.current) throw new Error('The Library is still loading. Try again.');
       folders.writable();
       const destination = options.folder === undefined ? folders.getSnapshot().tree.current : options.folder;
-      const added = await addDocument(source, options);
-      folders.writable();
+      const added = await identifyFile(source);
+      // If its destination disappeared while the source was read, use root.
+      const parentOf = (tree: FolderTree) => destination !== null && !tree.folders.some((folder) => folder.id === destination) ? null : destination;
       /**
        * The same book added twice from two places is one entry (ADR 0019), and
        * the one it is is the one already in the Library: its Reading Position, its
-       * Voice and the title epub.js gave it are each worth more than a second
-       * reading of the same file name. A duplicate now asks before opening;
+       * Voice and its name are each worth more than a second reading of a file
+       * name. A duplicate now asks before opening;
        * cancelling that alert must not move the entry or its Stamp (#121).
+       *
+       * Its file is still kept over the one in the Library, which is how adding
+       * a book again brings back a file that has gone (`openDocument`).
        */
-      const existing = entriesRef.current.find((one) => one.id === added.identity.id);
-      if (existing) return { entry: existing, duplicate: true };
-      const entry: LibraryEntry = { ...added.identity, title: added.title, position: null, voice: null, stamp: stamp() };
-      // If its destination disappeared while the source was read, use root.
+      const duplicate = () => {
+        const existing = entriesRef.current.find((one) => one.id === added.identity.id);
+        if (existing) keepFile(added, source, options);
+        return existing ? { entry: existing, duplicate: true } : null;
+      };
+      folders.writable();
+      const held = duplicate();
+      if (held) return held;
+      /**
+       * Two Documents in one Folder are not called alike (#227). The owner is
+       * asked before a second of the name appears there, and Keep Both gives the
+       * new one the first free "name 2", "name 3"…. The Library can change while
+       * the alert is up, so everything is decided again after the answer.
+       */
+      let tree = folders.getSnapshot().tree;
+      const taken = documentNameProblem(tree, entriesRef.current, added.title, parentOf(tree));
+      if (taken) {
+        if (!options.nameTaken) throw new Error(`“${added.title}”: ${taken}`);
+        const parent = parentOf(tree);
+        if (!await options.nameTaken({ name: added.title, free: freeDocumentName(tree, entriesRef.current, added.title, parent), folder: parent })) return null;
+        folders.writable();
+        const meanwhile = duplicate();
+        if (meanwhile) return meanwhile;
+        tree = folders.getSnapshot().tree;
+      }
+      const parent = parentOf(tree);
+      const title = freeDocumentName(tree, entriesRef.current, added.title, parent);
+      /**
+       * A name given to this Document before it was deleted is not its name now
+       * (#180): it would stay off the screen until the next launch, then come
+       * back over the file's name, perhaps onto a namesake in the Folder. It is
+       * dropped here rather than at the deletion, so a name left by a deletion
+       * before this rule goes too, and before the file is kept, so a failed
+       * write refuses the import and keeps nothing.
+       */
+      if (displayNames()[added.identity.id] !== undefined) forgetDisplayName(added.identity.id);
+      keepFile(added, source, options);
+      const entry: LibraryEntry = { ...added.identity, title, position: null, voice: null, stamp: stamp() };
       // Membership is saved first: an interrupted import may leave an unused
       // mapping, but can never expose a successfully imported book in the wrong folder.
-      const tree = folders.getSnapshot().tree;
-      const parent = destination !== null && !tree.folders.some((folder) => folder.id === destination) ? null : destination;
       folders.place(entry.id, parent);
       commit((was) => [...was, entry], true);
       return { entry, duplicate: false };
@@ -244,17 +295,6 @@ export function useLibrary(): Library {
   );
 
   const heard = useCallback((id: DocumentId) => change(id, (entry) => ({ ...entry, stamp: stamp() })), [change, stamp]);
-
-  const retitled = useCallback(
-    (id: DocumentId, title: string) => {
-      const trimmed = title.trim();
-      if (!trimmed) return;
-      if (displayNames()[id]) return;
-      if (entriesRef.current.find((one) => one.id === id)?.title === trimmed) return;
-      change(id, (entry) => ({ ...entry, title: trimmed }));
-    },
-    [change],
-  );
 
   const reached = useCallback(
     (id: DocumentId, place: ReadingPlace) => {
@@ -302,14 +342,18 @@ export function useLibrary(): Library {
 
   const report = useCallback((said: string) => setNote(said), []);
 
+  /** Refused, as a Folder's rename is, when the Document's Folder holds another of the name (#227). */
   const rename = useCallback((id: DocumentId, title: string) => {
     if (title.trim()) {
+      const tree = folders.getSnapshot().tree;
+      const problem = documentNameProblem(tree, entriesRef.current, title, tree.documents[id] ?? null, id);
+      if (problem) throw new Error(problem);
       saveDisplayName(id, title.trim());
       change(id, (entry) => ({ ...entry, title: title.trim() }));
     }
-  }, [change]);
+  }, [change, folders]);
   const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id), true), [commit]);
-  return { folders, folderSnapshot, entries, loading, note, add, heard, retitled, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
+  return { folders, folderSnapshot, entries, loading, note, add, heard, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
 }
 
 /**

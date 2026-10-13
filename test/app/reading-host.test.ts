@@ -79,7 +79,7 @@ shell.current = {
     opened: (id: string) => { told.opened.push(id); },
     heard: (id: string) => { told.heard.push(id); },
     reached: (id: string) => { told.reached.push(id); },
-    voiced: () => {}, retitled: () => {},
+    voiced: () => {},
   },
 };
 

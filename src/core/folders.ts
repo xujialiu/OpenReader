@@ -53,13 +53,35 @@ export function directFolderCounts(tree: FolderTree, documents: readonly string[
   }
   return counts;
 }
-const nameKey = (name: string) => name.normalize('NFC').toLowerCase();
+/** Two names in one Folder are the same when they are after trimming, NFC and ignoring letter case: Folders' and Documents' alike. */
+const nameKey = (name: string) => name.trim().normalize('NFC').toLowerCase();
 export function folderNameProblem(tree: FolderTree, name: string, parent: FolderId | null, except?: FolderId): string | null {
   if (!name.trim()) return 'Enter a folder name.';
   if (tree.folders.some((folder) => folder.parent === parent && folder.id !== except && nameKey(folder.name) === nameKey(name.trim()))) {
     return 'A folder with this name already exists here. Rename it first.';
   }
   return null;
+}
+/**
+ * Two Documents in one Folder cannot share a name either (#227), as two
+ * Folders cannot; a Document and a Folder still may (design 0069). `documents`
+ * is the Library's entries, so a membership left by an import or a removal
+ * that never finished counts for nothing. Names already alike are left as they
+ * are: the rule refuses a new one.
+ */
+export function documentNameProblem(tree: FolderTree, documents: readonly { id: string; title: string }[], name: string, parent: FolderId | null, except?: string): string | null {
+  if (!name.trim()) return 'Enter a name.';
+  if (documents.some((document) => document.id !== except && (tree.documents[document.id] ?? null) === parent && nameKey(document.title) === nameKey(name))) {
+    return 'A document with this name already exists here. Rename it first.';
+  }
+  return null;
+}
+/** `name` if no Document in `parent` has it, otherwise the first of "name 2", "name 3", … free there: what Keep Both calls the new one, as Files does. */
+export function freeDocumentName(tree: FolderTree, documents: readonly { id: string; title: string }[], name: string, parent: FolderId | null): string {
+  const base = name.trim();
+  let next = base;
+  for (let n = 2; documentNameProblem(tree, documents, next, parent); n++) next = `${base} ${n}`;
+  return next;
 }
 function parentExists(tree: FolderTree, parent: FolderId | null): void { if (parent !== null) folderAt(tree, parent); }
 export function putFolder(tree: FolderTree, folder: Folder): FolderTree {
@@ -162,16 +184,28 @@ export function selectionPlan(tree: FolderTree, targets: readonly LibraryTarget[
   return { plans, folders, documents: new Set(plans.flatMap((plan) => plan.documents)) };
 }
 
-/** Build the complete move in memory; conflict or write failure never publishes an earlier subset. */
-export function moveSelection(tree: FolderTree, targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null): FolderTree {
+/**
+ * Build the complete move in memory; conflict or write failure never publishes an earlier subset.
+ *
+ * `titles` names the Library's Documents, by Document Id, so that a Document is
+ * not moved into a Folder already holding one of its name (#227); two of the
+ * selection with one name refuse each other. A Document it does not name is
+ * moved unchecked.
+ */
+export function moveSelection(tree: FolderTree, targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null, titles: Readonly<Record<string, string>> = {}): FolderTree {
   const plan = selectionPlan(tree, targets, documents);
   parentExists(tree, parent);
   if (parent === tree.current) throw new Error('Choose a different destination.');
   if (parent !== null && plan.folders.has(parent)) throw new Error('A selection cannot be moved into itself or its subfolders.');
+  const named = Object.entries(titles).map(([id, title]) => ({ id, title }));
   let next = tree;
   for (const target of targets) {
-    if (target.kind === 'document') next = placeDocument(next, target.id, parent);
-    else {
+    if (target.kind === 'document') {
+      const title: string | undefined = titles[target.id];
+      const problem = title === undefined ? null : documentNameProblem(next, named, title, parent, target.id);
+      if (problem) throw new Error(`“${title}”: ${problem}`);
+      next = placeDocument(next, target.id, parent);
+    } else {
       const folder = folderAt(next, target.id);
       const problem = folderNameProblem(next, folder.name, parent, target.id);
       if (problem) throw new Error(`“${folder.name}”: ${problem}`);
@@ -220,9 +254,9 @@ export function createFolderStore(io: { read(): string | null; write(text: strin
     rename(id: FolderId, name: string) { writable(); save(putFolder(snapshot.tree, { ...folderAt(snapshot.tree, id), name })); },
     moveFolder(id: FolderId, parent: FolderId | null) { writable(); save(putFolder(snapshot.tree, { ...folderAt(snapshot.tree, id), parent })); },
     place(document: string, parent: FolderId | null) { writable(); save(placeDocument(snapshot.tree, document, parent)); },
-    moveEntries(targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null) {
+    moveEntries(targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null, titles?: Readonly<Record<string, string>>) {
       writable();
-      save(moveSelection(snapshot.tree, targets, documents, parent));
+      save(moveSelection(snapshot.tree, targets, documents, parent, titles));
     },
     /** One lock covers the whole batch, including standalone Documents and gaps between Folders. */
     async deleteEntries(targets: readonly LibraryTarget[], documents: readonly string[], remove: (id: string) => Promise<void>, completed: (target: LibraryTarget) => void) {

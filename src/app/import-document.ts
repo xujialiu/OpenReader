@@ -4,9 +4,21 @@ import type { DocumentId } from '../core/document';
 import { folderPath, type FolderId } from '../core/folders';
 import type { Library } from './use-library';
 
-/** Both arrival paths ask the same duplicate question; Cancel never opens or relocates the existing entry. */
+/**
+ * Both arrival paths ask the same two questions. A file already in the Library
+ * asks whether to open it, and Cancel never opens or relocates the existing
+ * entry. A file whose name a Document in its Folder already has asks whether to
+ * keep both, and Cancel keeps nothing (#227).
+ */
 export async function importDocument(library: Library, source: File, options: { move: boolean; folder?: FolderId | null }, open: (id: DocumentId) => void): Promise<void> {
-  const { entry, duplicate } = await library.add(source, options);
+  const added = await library.add(source, { ...options, nameTaken: ({ name, free, folder }) => new Promise<boolean>((resolve) => {
+    Alert.alert('Name already exists', `“${name}”\nLocation: ${folderPath(library.folders.getSnapshot().tree, folder)}\nKeep Both adds this one as “${free}”.`, [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Keep Both', onPress: () => resolve(true) },
+    ], { cancelable: true, onDismiss: () => resolve(false) });
+  }) });
+  if (!added) return;
+  const { entry, duplicate } = added;
   if (!duplicate) { open(entry.id); return; }
   const tree = library.folders.getSnapshot().tree;
   await new Promise<void>((resolve) => {

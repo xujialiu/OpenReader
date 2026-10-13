@@ -16,10 +16,10 @@ final class DownloadConcurrencyProbe: XCTestCase {
     let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97))
     top.press(forDuration: 0.15, thenDragTo: bottom)
   }
-  // The Library named this entry after its file, "mvs-1-250", until this
-  // suite's own first real open retitled it from the EPUB's own metadata —
-  // the README's own documented pitfall ("The title `add` gives an entry
-  // lasts only until the book's first open"), measured here 2026-09-25.
+  // Measured 2026-09-25: the Library named this entry after its file,
+  // "mvs-1-250", until this suite's own first real open retitled it from the
+  // EPUB's own metadata. Since #226 nothing retitles an entry, so a fresh add
+  // stays "mvs-1-250"; this title holds for an entry already retitled before.
   let bookTitle = "My Vampire System — Chapters 1–250"
   /// The voice nav.102/nav.103's saved audio already exists under (downloaded
   /// earlier through the CDP-based `download-chapter.cjs`, which calls the

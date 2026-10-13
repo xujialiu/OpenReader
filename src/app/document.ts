@@ -82,16 +82,20 @@ export interface AddedDocument {
 }
 
 /**
- * Read a file, name it, and keep it.
+ * Read a file and name it. Nothing is kept: `keepFile` keeps it, once the
+ * Library has decided to (#227). An import the owner cancels because its name
+ * is taken in the Folder leaves no file behind, and the file the owner chose is
+ * not moved until then.
  *
  * The bytes are read once, here, and hashed here: `documentIdOf` is the only
  * thing that decides what a Document *is* (ADR 0004), and inventing a second
  * identity — a path, a name, a row id — is the mistake that makes two devices
  * disagree about which book they are holding.
  *
- * The title is the file's own name with its extension taken off. It is a
- * placeholder and is replaced the moment the book opens and epub.js reports the
- * EPUB's `dc:title`; a file named `9780571364039.epub` is not a title.
+ * The title is the file's own name with its extension taken off, and it is
+ * the Document's name from then on, until the owner renames it (#226). The
+ * EPUB's `dc:title` is not used: the owner knows a book by the file they chose,
+ * and a metadata title is whatever the EPUB's producer wrote.
  *
  * ## The publication's own `dc:identifier` is not filled in
  *
@@ -108,7 +112,7 @@ export interface AddedDocument {
  * bridge; a guessed source would make `matchIdentities` confident about the one
  * case ADR 0004 says it must not be.
  */
-export async function addDocument(source: File, options: { move: boolean }): Promise<AddedDocument> {
+export async function identifyFile(source: File): Promise<AddedDocument> {
   /**
    * The name is read **before** the file is kept, and that is a bug that was
    * found on the device rather than a precaution.
@@ -119,9 +123,7 @@ export async function addDocument(source: File, options: { move: boolean }): Pro
    * location" — while its copy does not. So reading `source.name` afterwards
    * gives the file's *new* name on the move path and its real one on the copy
    * path, and the Library ends up calling a book
-   * `sha256-e933d9c41d9db4d9…`. It did, for the 34 MB novel, whose title also
-   * takes long enough to arrive from epub.js that the placeholder is what the
-   * owner reads in the meantime.
+   * `sha256-e933d9c41d9db4d9…`. It did, for the 34 MB novel.
    */
   const named = titleFromFileName(source.name);
 
@@ -139,7 +141,7 @@ export async function addDocument(source: File, options: { move: boolean }): Pro
    *   opened in place — theirs, not ours (philosophy rule 8).
    * - The length comes from the `File` and not the handle: `File.size` is a
    *   `number`, while `FileHandle.size` and `.offset` are `number | null`.
-   * - The handle is closed **before** `keepDocument`, which moves or copies over
+   * - The handle is closed **before** `keepFile`, which moves or copies over
    *   the very file it is open on.
    */
   const handle = source.open(FileMode.ReadOnly);
@@ -159,8 +161,15 @@ export async function addDocument(source: File, options: { move: boolean }): Pro
     handle.close();
   }
 
-  keepDocument(identity.id, identity.format, source, options);
   return { identity, title: named };
+}
+
+/**
+ * Keep the file `identifyFile` read, under its Document Id, moved or copied as
+ * `options` says. Read `source.name` before this, never after (`identifyFile`).
+ */
+export function keepFile(added: AddedDocument, source: File, options: { move: boolean }): void {
+  keepDocument(added.identity.id, added.identity.format, source, options);
 }
 
 /**
@@ -179,7 +188,7 @@ export async function openDocument(identity: DocumentIdentity, title: string): P
   return { identity, title, base64: await file.base64() };
 }
 
-/** The file's name without its extension. What a Document is called until the EPUB says otherwise. */
+/** The file's name without its extension: what a Document is called until the owner renames it (#226). */
 function titleFromFileName(name: string): string {
   const dot = name.lastIndexOf('.');
   return dot > 0 ? name.slice(0, dot) : name;
