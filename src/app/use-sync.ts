@@ -140,7 +140,9 @@ export function useSync(settings: AppSettings, library: Library, deps: SyncDeps 
   useEffect(() => {
     const was = wasEnabledRef.current;
     wasEnabledRef.current = enabled;
-    if (!was && enabled) transport().poke('switch-on');
+    // An explicit retry after correcting the folder/password must not inherit
+    // the old failure's backoff. Ordinary lifecycle pokes remain rate-limited.
+    if (!was && enabled) void transport().flush('switch-on');
   }, [enabled, transport]);
 
   const poke = useCallback((trigger: string) => transport().poke(trigger), [transport]);
