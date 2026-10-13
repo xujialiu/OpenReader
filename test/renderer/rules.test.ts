@@ -1778,6 +1778,10 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     expect(dragged.indexOf('halt();')).toBeGreaterThan(-1);
     expect(dragged.indexOf('halt();')).toBeLessThan(dragged.indexOf('if (touch.identifier !== touchId) {'));
     pin(fn(program, 'adopt'), "contents.document.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, function adopt');
+    // epub.js's corrections that keep the text still move the finger's starting
+    // scroll with them (#198, run in finger-and-corrections.test.ts).
+    pin(program, 'keepFingerOnText(rendition.manager);', 'highlighter.ts, the install');
+    pin(fn(program, 'keepFingerOnText'), "['erase', 'counter'].forEach(function (name) {", 'highlighter.ts, function keepFingerOnText');
     // The margins between the section documents, heard once on the container.
     pin(program, "if (stage) stage.addEventListener('touchmove', dragged, { passive: true });", 'highlighter.ts, the install');
     expect(program.match(/addEventListener\('touchmove'/g)).toHaveLength(2);

@@ -2635,6 +2635,33 @@ ${constants}
     window.requestAnimationFrame(watchForRest);
   }
 
+  /* epub.js's two corrections that keep the text still are not a finger
+     dragging it (#198). \`erase()\`, from trim(), scrolls back by the height of
+     a section it erases above the page, and \`counter()\` scrolls on by what a
+     section prepended above has grown (both read out of the bundled epub.js).
+     The text, and a finger resting on it, stay where they were, and so does
+     the finger's \`clientY\` in its section document; dragged() would read the
+     scroll alone as a drag of the whole section's height, and the next
+     tremble of the finger turned the player's A to M. So each correction moves
+     the finger's starting scroll by what it actually scrolled, read before and
+     after, which leaves the finger's travel what it was: a resting finger
+     stays a tap's jitter, a drag under way keeps the distance it has covered,
+     and a correction iOS dropped (see holdStill) moves nothing. */
+  function keepFingerOnText(manager) {
+    if (!manager) return;
+    ['erase', 'counter'].forEach(function (name) {
+      var correct = manager[name];
+      if (typeof correct !== 'function') return;
+      manager[name] = function () {
+        var stage = scroller();
+        var before = stage ? stage.scrollTop : null;
+        var result = correct.apply(this, arguments);
+        if (stage && before !== null && touchTop !== null) touchTop += stage.scrollTop - before;
+        return result;
+      };
+    });
+  }
+
   function holdStill(manager) {
     if (!manager || !manager.q) return;
     var trim = manager.trim;
@@ -2789,6 +2816,7 @@ ${EPUB_GUARDS_SOURCE}
      manager whose trims and prepends wait for it to stop (#58). */
   if (stage) stage.addEventListener('scroll', noteScroll, { passive: true });
   holdStill(rendition.manager);
+  keepFingerOnText(rendition.manager);
   landBelowBar(rendition.manager);
   settleRemovedViews(rendition.manager);
   tickWithoutFrames(rendition.manager && rendition.manager.q);
