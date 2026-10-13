@@ -289,3 +289,47 @@ Record: [`sync/self-stop-writes-and-syncs.md`](sync/self-stop-writes-and-syncs.m
   '-x'", `-udid` with "Missing expected argument '--udid'"; the error names
   only the first missing flag. The working long press on a reader word is
   `axe touch -x X -y Y --down --up --delay 2.0 --udid UDID`, in points.
+
+### Verifying #226/#227/#180/#215: the Files picker, a wedged fresh device, and autocorrect in the Rename alert (2026-10-13)
+
+- **iOS autocorrect rewrites words typed per character into the Rename
+  alert's field.** `alert-input.py` typed `Unwritable Name` and the native
+  field read `Uneditable Name`; a retry with `Qzw Kxv` read `Wow Kxv` — each
+  time the first word was substituted, the per-character typing with pauses
+  giving QuickType a window to act, and the helper failed closed both times
+  (field left unsubmitted, as its contract requires). Fix: type a token
+  autocorrect will not touch (a non-word such as `Qzwkxv9`); the next round
+  then passed exact native readback. Real words that typed exactly earlier in
+  the same session (`School Copy`, `Gap Book`) are no guarantee for the next
+  word.
+- **A fresh simulator's AXe automation session took ~4–5 minutes to come up,
+  not the documented ~30 s.** After the app's first successful launch on a
+  device created that hour, `ax.py tree` answered `Timed out creating the
+  simulator remote automation session` twice and `snapshot_ui` answered `No
+  translation object returned for simulator` once across four minutes; every
+  read after that answered first try. Screenshots and `simctl` calls worked
+  throughout. Fix: retry over minutes before concluding automation is broken.
+- **A fresh device can wedge silently after a successful install: no error,
+  only hangs.** `simctl install` answered, then `simctl launch` hung past
+  120 s, and `spawn … launchctl list` and `io screenshot` hung too, with the
+  device shown `Booted` throughout — the same failure as the wedges recorded
+  above but with silence instead of `Mach error -308` or a bootstatus stall.
+  Fix, the same: `simctl shutdown` that one UDID (answered cleanly), boot
+  again, `silence.sh set` (the boot resets the volume), relaunch with
+  `-RCT_jsLocation`; every later call then answered first try.
+- **The document picker's back chevron from a staged subfolder opens the
+  Browse **Locations** list (iCloud Drive / On My iPhone), not the parent
+  folder grid.** Twice a tap aimed at the grid's middle column landed on
+  iCloud Drive in that list because the previous screen was assumed. The
+  picker otherwise matched the #121 recipe exactly: only its Cancel leaks
+  into the AX tree, it remembers its last folder across presentations, and
+  the file rows sit at the same fixed columns (points ≈ 70/201/331 on this
+  402 pt screen). Screenshot, points = px/3, verify each step by the next
+  screenshot.
+- **A handover or import name collides only when the folded names match —
+  punctuation is not folded.** Handing over `gap-book.epub` beside a
+  Document called `Gap Book` correctly asked nothing (hyphen ≠ space), which
+  reads as a miss if the fixture name was chosen expecting case-only
+  differences. Choose the file's name to differ from the sibling by letter
+  case alone (`Gap Book.epub`) when the `Name already exists` alert is the
+  target.
