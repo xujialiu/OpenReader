@@ -59,8 +59,19 @@ def axe_binary():
 
 
 def read_tree(udid):
-    out = subprocess.run([axe_binary(), 'describe-ui', '--udid', udid], capture_output=True, text=True, check=True).stdout
-    return json.loads(out)
+    recovery = 'For a pending Consent, use voices-and-providers/consent-recovery.md; a failed tree read is not NO ALERT.'
+    try:
+        result = subprocess.run([axe_binary(), 'describe-ui', '--udid', udid],
+                                capture_output=True, text=True, timeout=20)
+    except subprocess.TimeoutExpired:
+        sys.exit(f'AXe describe-ui exceeded 20 seconds. {recovery}')
+    if result.returncode:
+        detail = result.stderr.strip()[:600] or f'exit {result.returncode}'
+        sys.exit(f'AXe describe-ui failed: {detail}\n{recovery}')
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        sys.exit(f'AXe describe-ui returned invalid JSON. {recovery}')
 
 
 def walk(node, inside_sheet=False, depth=0):

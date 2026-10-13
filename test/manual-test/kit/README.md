@@ -56,6 +56,11 @@ python3 test/manual-test/kit/ax.py UDID scroll-touch LABEL # swipe a long list u
 python3 test/manual-test/kit/ax.py UDID scroll-to LABEL    # the same, without the touch
 ```
 
+A tree read has a 20-second deadline and preserves AXe's error in its failure
+message. An unavailable tree is not `NO ALERT`. If a first Play is held by
+Consent and remote automation fails, use the bounded native XCTest path in
+[Consent recovery](../voices-and-providers/consent-recovery.md).
+
 It uses the AXe inside mobilebuildmcp (`AXE` names another; unset, the newest
 under `~/.npm/_npx`). A touch is a down/up pair in one call with a 0.2 s delay,
 which is what an alert's Allow, a sheet's rows and the player's buttons answer

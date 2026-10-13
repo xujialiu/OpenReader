@@ -60,26 +60,40 @@ final class ReaderTouchProbe: XCTestCase {
   /// XCUITest's own alert query — the way ConsentProbe does — because a
   /// coordinate tap does not reach the alert's window (measured 2026-10-12,
   /// ADR 0077 verification: a tap at the Allow button's own centre left the
-  /// alert up). Reads OPENREADER_CONSENT_ANSWER: `Allow` (default) or
-  /// `Don't Allow`. Succeeds only when the alert is gone afterwards.
+  /// alert up). Requires OPENREADER_CONSENT_TITLE (the exact approved title)
+  /// and OPENREADER_CONSENT_ANSWER (`Allow` or `Don't Allow`). With
+  /// OPENREADER_CONSENT_PAUSE=1, also requires the Reading left paused.
+  /// Attaches only: cold-launching would lose the pending question.
   func testAnswerConsent() throws {
+    continueAfterFailure = false
     let env = ProcessInfo.processInfo.environment
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
-    if app.state == .runningBackground || app.state == .runningForeground {
-      app.activate()
-    } else {
-      let port = env["OPENREADER_METRO_PORT"] ?? "8081"
-      app.launchArguments = ["-RCT_jsLocation", "localhost:" + port]
-      app.launch()
-    }
-    let answer = env["OPENREADER_CONSENT_ANSWER"] ?? "Allow"
+    XCTAssertTrue(app.state == .runningBackground || app.state == .runningForeground, "Attach to the running app with its pending Consent")
+    app.activate()
+    let answer = try XCTUnwrap(env["OPENREADER_CONSENT_ANSWER"], "Choose the Consent answer explicitly")
+    XCTAssertTrue(["Allow", "Don't Allow"].contains(answer), "Unknown Consent answer")
+    let title = try XCTUnwrap(env["OPENREADER_CONSENT_TITLE"], "Name the exact approved recipient's alert title")
+    XCTAssertFalse(title.isEmpty)
     let alert = app.alerts.firstMatch
     XCTAssertTrue(alert.waitForExistence(timeout: 10), "No consent alert is up")
+    XCTAssertTrue(alert.staticTexts[title].exists, "The pending alert is not for the approved recipient")
+    let before = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    before.name = "consent-before"; before.lifetime = .keepAlways; add(before)
+    defer {
+      if env["OPENREADER_CONSENT_PAUSE"] == "1" && app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
+    }
     let button = alert.buttons[answer]
     XCTAssertTrue(button.exists, "The alert has no \(answer)")
     button.tap()
     Thread.sleep(forTimeInterval: 1)
     XCTAssertFalse(app.alerts.firstMatch.exists, "The alert stayed up after \(answer)")
+    if env["OPENREADER_CONSENT_PAUSE"] == "1" {
+      // A Pause issued while Consent was pending can already have cancelled Play.
+      if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
+      XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5), "Recovery did not leave the Reading paused")
+    }
+    let after = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    after.name = "consent-after"; after.lifetime = .keepAlways; add(after)
     print("READERTOUCH consent answered: \(answer)")
   }
 }
