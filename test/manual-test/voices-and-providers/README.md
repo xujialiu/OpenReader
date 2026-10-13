@@ -28,6 +28,9 @@ that names the script or probe you are about to run.
 - [fish-narration.md](fish-narration.md) (#73): a lookup and a pronunciation
   interrupting real Fish narration, and a selection handle's release.
   `FishNarrationProbe.swift`.
+- [consent-recovery.md](consent-recovery.md): first Play waiting on a question,
+  or remote automation unable to answer it; bounded exact-recipient XCTest
+  recovery and a verified paused state before resuming the scenario.
 - [consent.md](consent.md) (#109, with #108 and #110): the phone's alert before
   text leaves it, per Provider and per lookup service, its wording, what a
   refusal does to a Reading, a download and a lookup, the lock screen after one,

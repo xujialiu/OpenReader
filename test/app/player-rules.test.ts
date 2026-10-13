@@ -214,7 +214,7 @@ describe('a section that arrives mid-reading reaches the engine at once (notes/N
     const adopt = within(reading, 'const adopt = useCallback(', '}, [sectionOf]);');
     // A list that continues the one the engine holds goes over whole, and returns
     // before any `load` is reached.
-    const continued = within(adopt, 'if (samePrefix(held.utterances, next)) {', 'return;');
+    const continued = within(adopt, 'if (samePrefix(held.utterances.slice(0, heldEnd), next)) {', 'return;');
     expect(continued).toContain('engine?.extend(next);');
     expect(continued).not.toContain('load(');
     // The `load`s left are a renumbering's (#46): at the sentence carried across,
@@ -240,7 +240,7 @@ describe('a section that arrives mid-reading reaches the engine at once (notes/N
     // spine item would stop a reading that is about to be fed.
     expect(reading).toContain('onOutOfText: ranOutOfText,');
     const ranOut = within(reading, 'const ranOutOfText = useCallback(', '}, []);');
-    expect(ranOut).toContain('outOfTextSentence(furthestSectionRef.current, renderedRef.current?.spine ?? 0, {');
+    expect(ranOut).toContain('outOfTextSentence(extent.next === null ? spine - 1 : extent.next - 1, spine, {');
     expect(ranOut).toContain('if (ended) {');
     expect(ranOut).toContain('engineRef.current?.pause();');
     expect(ranOut).toContain('playing: ended ? false : was.playing');
@@ -297,12 +297,12 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
     pin(cleanup, 'else bridgeRef.current?.show(at, { reveal: false });', 'use-reading.ts, the identity cleanup');
   });
 
-  it('marks the furthest section reported, not the last one to report', () => {
+  it('records every reported section, including empty ones, for contiguous progress', () => {
     // Sections render out of order, so the last to report is routinely behind the
     // furthest — and a document's last spine items are where the sections that
     // render with no text in them live.
     const blocks = within(reading, 'const handleBlocks = useCallback(', '[adopt, walkForward, tryResume, seekTo, followRow, revealPendingPlace, stopWaitingIfArrived],');
-    expect(blocks).toContain('furthestSectionRef.current = Math.max(furthestSectionRef.current, section.index);');
+    expect(blocks).toContain('reportedSectionsRef.current.add(section.index);');
   });
 });
 

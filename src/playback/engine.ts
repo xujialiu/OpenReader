@@ -127,6 +127,9 @@ export interface PlaybackEngineDeps {
   synthesisTimeoutMs?: number;
   /** Document section containing an utterance; read lazily as more text arrives. */
   sectionOf?(utterance: number): number | null;
+  /** Exclusive end of contiguous text from this cursor; a later cached section
+   * beyond an unknown section is not a continuation (#153). */
+  availableThrough?(utterance: number): number;
   /**
    * The owner's bracket setting, for both of the engine's clip fetchers: the
    * reading one and a voice switch's (ADR 0028). It used to reach neither —
@@ -311,7 +314,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       publish();
       return;
     }
-    for (const index of pending?.armed ? [] : fetchWindow({ cursor, nextToEnqueue, total: utterances.length, inFlight: inFlight.size, stateOf })) {
+    for (const index of pending?.armed ? [] : fetchWindow({ cursor, nextToEnqueue, total: availableThrough(), inFlight: inFlight.size, stateOf })) {
       startFetch(index);
     }
     void drain();
@@ -321,12 +324,16 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   }
 
   /** Say, once, that there is nothing left to play. `read-ahead.ts` holds the four conditions and why each one is there. */
+  function availableThrough(): number {
+    return Math.min(utterances.length, deps.availableThrough?.(cursor) ?? utterances.length);
+  }
+
   function outOfText(): void {
     if (announced || disposed) return;
     const state = {
       playing,
       nextToEnqueue,
-      total: utterances.length,
+      total: availableThrough(),
       queued: timeline.pending(),
       fetching: inFlight.size,
     };
@@ -398,7 +405,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     draining = true;
     drainRequested = false;
     try {
-      while (!disposed && !pending?.armed && nextToEnqueue < utterances.length && nextToEnqueue <= enqueueCeiling(cursor)) {
+      while (!disposed && !pending?.armed && nextToEnqueue < availableThrough() && nextToEnqueue <= enqueueCeiling(cursor)) {
         if (!sectionReady(nextToEnqueue)) break;
         const clip = prepared.get(nextToEnqueue);
         if (!clip) {
@@ -739,7 +746,9 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       if (disposed) return;
       // A longer list is somewhere else to go, so running out of text becomes a
       // thing that can be said again if it happens again further on.
-      if (list.length > utterances.length) announced = false;
+      // A section can finish without adding text (#170). The caller has new
+      // knowledge of the extent, so exhaustion must be reconsidered as well.
+      announced = false;
       utterances = list;
       // No `restart`, no `generation++`: nothing the queue, the timeline or the
       // in-flight fetches are holding has been renumbered, so the read-ahead
@@ -750,6 +759,9 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     play() {
       if (disposed) return;
       trace('play.request');
+      // Play is a new request, including at the end of the Document (#156).
+      // Re-report exhaustion so the caller can stop or explain the wait.
+      announced = false;
       // The press is the explicit act a retry waits for, and it asks again for
       // every refused Utterance rather than the one the reading stopped on (#45).
       // The refusal it answers goes with them, so a stop after this press names
@@ -762,6 +774,11 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       // just below, or by `enqueue` when its Clip arrives.
       quiet = false;
       playing = true;
+      // A known end can be answered synchronously by the Reading. Ask before
+      // resuming an empty graph: even a same-turn suspend can leave iOS's
+      // Now Playing button showing Pause for audio that never existed (#156).
+      outOfText();
+      if (!playing) return;
       graph?.resume();
       const front = timeline.front();
       if (front) {

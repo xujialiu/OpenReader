@@ -586,6 +586,7 @@ function installRendererLog(env) {
 
   function traceRenderAhead(original) {
     return function rlogRenderAhead(section) {
+      var beforeAsked = new Set(env.asked);
       var before = { next: null, reason: null };
       safely(function () { before = aheadState(section); });
       var trace = { label: 'renderAhead(' + (before.next === null ? '?' : before.next) + ')', enqueued: null };
@@ -607,6 +608,13 @@ function installRendererLog(env) {
           }, function (error) {
             safely(function () { line('renderAhead: section ' + next + ' failed after ' + (now() - since) + ' ms: ' + cut(error)); });
           });
+          return;
+        }
+        var offscreen = [];
+        env.asked.forEach(function (index) { if (!beforeAsked.has(index)) offscreen.push(index); });
+        if (offscreen.length) {
+          lastSkip = '';
+          line('renderAhead: offscreen sections ' + offscreen.join(', ') + ' asked for, the voice is in section ' + section);
           return;
         }
         var reason = before.reason || 'it asked for nothing';

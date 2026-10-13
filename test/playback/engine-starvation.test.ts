@@ -219,16 +219,17 @@ describe('a Reading whose Clips each arrive after the one before has ended', () 
     expect(reading.notes).toEqual(['out of text']);
   });
 
-  it('is started again by Pause and Play', async () => {
+  it('reports exhaustion again on Play after the short passage ended, without fetching again (#156)', async () => {
     const reading = await read({ rate: 3, latency: everyFourTenths });
     await reading.run(10);
+    expect(reading.notes).toEqual(['out of text']);
     reading.engine.pause();
     await settle();
     reading.engine.play();
     await settle();
     await reading.run(60);
     expect(reading.sent, reading.told()).toEqual(all);
-    expect(reading.notes).toEqual(['out of text']);
+    expect(reading.notes).toEqual(['out of text', 'out of text']);
   });
 
   it('does not advance the cursor or cue a quiet preload, and keeps read-ahead bounded', async () => {

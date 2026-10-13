@@ -381,3 +381,92 @@ needs the owner's phone.
 - Rendering two sections ahead. This narrows the window and leaves both defects.
 - Preparing the next section's text outside the WebView, which would redraw
   this ADR's whole chain.
+
+## Amendment (2026-10-13, #153, #161, #170): known text is not necessarily continuous
+
+Browsing can replace the visible views with distant chapters while the Reading
+continues. The last-view guard above then prepares nothing. Sorting all reported
+Blocks does not repair the resulting gap: the Reading used to speak section 39
+straight after section 1 when Contents had displayed section 40. Browsing
+backwards instead exhausted the list with no work left that would extend it.
+
+**Continuity is checked before both fetching and queueing.** `readingExtent` in
+`src/app/segment.ts` finds the first unreported section after the Reading. The
+engine's `availableThrough` dependency bounds its read-ahead and drain there,
+although distant cached text remains available for an explicit seek. The end of
+the Document is determined from that contiguous extent, not the greatest section
+index ever seen. Empty section reports count as knowledge. The previous extent
+is kept beside the loaded list: filling its gap may renumber its unused tail,
+but must not clear the audible queue or repeat the current sentence.
+
+**Preparation must not move Browsing.** The ordinary contiguous append still uses
+the visible manager's queue. When the Reading is not its last view, one temporary
+epub.js View is attached to an offscreen host outside that list. It uses the
+same publication CSS, `walk`, Block ids and element CFIs as a visible section.
+Its settings and layout object are copied rather than sharing mutable layout
+state with the visible manager. After adoption its view and host are removed;
+only the durable Block records remain. Requests are deduplicated and serialized.
+An empty section leads to the next, without waiting for a Clip cue that cannot
+exist for empty text.
+
+Exhaustion also sends a preparation request through the bridge, independent of a
+stuck visible queue. Preparation has a 15-second deadline in the page and, for
+that explicit request, on the React Native side too. Failure stops the Reading
+with its reason rather than promising an automatic continuation with nothing
+running. A late failure concerning a section the Reading has left is ignored.
+
+A Play searching for its first text skips already reported empty sections
+(#161): the bridge deliberately suppresses unchanged reports, so requesting one
+again cannot be used as an acknowledgement. An `extend` reconsiders exhaustion
+even if no Utterance was added (#170); a late empty last section can therefore
+end the Reading.
+
+**Rejected:** dropping the last-view guard and appending disjoint chapters to the
+visible list; using a second text parser that could disagree on CSS Block
+boundaries or CFIs; forcing Browsing back to the Reading; and treating a maximum
+reported index as proof that every intervening section is known.
+
+Behavioral regressions live in `test/app/reading-continuity/`: real Reading,
+bridge, playback engine and injected page program, with an epub.js/DOM stand-in
+and doubled native audio. The original #153 cases were red at `9c5e245`; the
+six-section reduction read 0, 1, 3 rather than 0, 1, 2. These tests do not by
+themselves establish WebKit layout, native sound or locked-phone behaviour.
+
+**The first WebKit check found a disposal bug (2026-10-13 13:12).** The temporary
+view must be destroyed directly, not through `manager.views.destroy(view)`:
+epub.js's `Views.destroy` also calls its visible container's `removeChild`, and
+the temporary view belongs to our own host. That call threw `NotFoundError`,
+leaving one host and an unsettled preparation promise. Later offscreen requests
+never ran, and the native deadline could stop them but could not repair the
+queue. The behavioral double had omitted that container removal. It now rejects
+a wrong-parent removal, checks that hosts disappear, and reads across several
+successive offscreen sections. Cleanup releases the #112 pending-display guards
+directly, calls the view's own `destroy`, removes its host, and settles the
+preparation promise even if cleanup throws. Timeout/retry and a deliberately
+throwing cleanup are covered too. The initial tester's conditional PASS is not
+accepted as final verification; the corrected candidate requires a retest.
+
+## Amendment (2026-10-13, #156): Play must hear the engine's answer
+
+A press after the end used to clear the note and resume an empty graph, while
+`announced` suppressed the exhaustion report. Re-arming that report alone was
+not enough: `start()` overwrote the stopped state and note after `engine.play()`
+returned. Play now re-arms exhaustion, and the hook leaves the engine's state
+and exhaustion callbacks authoritative. At the end the Reading stays stopped
+with the end note; before the end it retains the explanation that text is being
+waited for. No implicit restart at the beginning is introduced. The same path
+serves the Player, Now Playing and headphones; a stopped Reading is not kept as
+playing when the reader is left. A timed-out preparation can be retried by Play.
+The Host/View regression in `reading-continuity/play-after-end.test.ts` covers
+both entry points and leaving the reader, with native boundaries doubled.
+
+The remote-Play retest exposed another part of #156: resuming the empty audio
+graph before answering exhaustion could make the system card show Pause despite
+the same-turn pause. Play now checks exhaustion before `graph.resume`; if the
+Reading synchronously stops it, no audio context is resumed. The hook also uses
+`restateNowPlaying`, the existing refused-Play path: iOS optimistically changes
+the card before JavaScript answers, and requires the measured 400 ms state pair
+to put it back (ADR 0075). The native regression sends only one remote Play,
+checks that the card has returned to Play after one second and stays there,
+and never sends an automatic Pause that could mask the failure. Raw app logs
+must prove the delivered Play caused no audio resume or synthesis.
