@@ -34,9 +34,11 @@ const world = vi.hoisted(() => ({
     queue: [] as string[],
     /** Whether the engine last asked the native graph to resume (true) or to pause (false). */
     running: false,
+    resumes: 0,
   },
   /** How many sentences the Provider was asked for. */
   asked: 0,
+  restated: 0,
   /** Now Playing, which the Lock Screen and the headphones reach: what it is told, and the handler a press there calls. */
   remote: null as null | { playing: boolean; press(intent: 'play' | 'pause'): void },
   player: null as null | { playing: boolean; buffering: boolean; notes: readonly { said: string }[]; onPlay(): void },
@@ -88,7 +90,7 @@ vi.mock('../../../src/playback/audio-graph', () => ({
         return [{ bufferId: id, speech: to - from, gap, offset: from, duration: audio.duration }];
       },
       remove() {}, setRate() {},
-      resume() { world.audio.running = true; },
+      resume() { world.audio.running = true; world.audio.resumes++; },
       pause() { world.audio.running = false; },
       clear() { world.audio.queue = []; }, dispose: async () => {},
     };
@@ -108,7 +110,7 @@ vi.mock('../../../src/offline/runtime', () => ({
 }));
 // Now Playing: the test presses its Play through the handler the view gave, and reads what it was told.
 vi.mock('../../../src/now-playing', () => ({
-  lockScreenPosition: () => {}, restateNowPlaying: () => {}, chapterOf: () => null,
+  lockScreenPosition: () => {}, restateNowPlaying: () => { world.restated++; }, chapterOf: () => null,
   useNowPlaying: (now: { playing: boolean; onIntent(intent: 'play' | 'pause'): void }) => { world.remote = { playing: now.playing, press: now.onIntent }; },
 }));
 // The Library's disk.
@@ -216,8 +218,8 @@ async function atTheEnd(spine = 1) {
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'], now: Date.UTC(2026, 9, 11, 9, 0, 0) });
   world.page = null; world.remote = null; world.player = null; world.held = null; world.leave = null;
-  world.audio.handlers = null; world.audio.queue = []; world.audio.running = false;
-  world.asked = 0;
+  world.audio.handlers = null; world.audio.queue = []; world.audio.running = false; world.audio.resumes = 0;
+  world.asked = 0; world.restated = 0;
   world.disk.entries = [{
     id: DOCUMENT, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A novel', position: null,
     voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: 1, device: 'iPhone-test0001' },
@@ -257,7 +259,11 @@ describe('after the last sentence of the Document has been spoken', () => {
   ] as const) {
     it(`${name}: ten minutes on, a sentence is waiting to be heard, or the Reading is stopped with a note saying why`, async () => {
       const reading = await atTheEnd();
+      const resumes = world.audio.resumes;
+      const restated = world.restated;
       await press(play);
+      expect(world.restated).toBe(restated + 1);
+      expect(world.audio.resumes, 'Play at the end must not start an empty audio session').toBe(resumes);
       await wait(10 * 60_000);
       const after = shown();
       const speaking = after.queued > 0;

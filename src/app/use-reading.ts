@@ -1476,6 +1476,10 @@ export function useReading(
       // The engine publishes its state, and may synchronously report exhaustion
       // and be paused by ranOutOfText. Do not overwrite that answer (#156).
       engineRef.current.play();
+      // iOS optimistically turns remote Play into Pause before JS answers.
+      // A synchronous end refusal must restore that card, as an Unlock refusal
+      // already does, without starting an empty audio graph (#156).
+      if (!playIntent.current) restateNowPlaying();
       return;
     }
     if (!buildingRef.current) {

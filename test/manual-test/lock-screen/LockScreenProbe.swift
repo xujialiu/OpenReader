@@ -62,49 +62,45 @@ final class LockScreenProbe: XCTestCase {
     }
   }
 
-  /// Play pressed on the lock-screen card at the END of a Document (#156).
-  ///
-  /// Preconditions, asserted here and by the caller: the Reader is open on a
-  /// Document whose reading has run out at the end (the player bar shows Play),
-  /// and the card shows Play. The press must NOT start playback: the button
-  /// stays "Play", the app stays stopped, and the caller proves from the Debug
-  /// Log and the provider log that the play attempt was answered with the end
-  /// note and no synthesis.
+  /// A remote Play at the end is refused without starting an audio graph.
+  /// iOS optimistically changes the label before JS answers; allow the existing
+  /// 400 ms restatement, then require stable Play. Never send a second command
+  /// here: an automatic Pause would hide a failure. Caller checks Debug Logs
+  /// for the delivered play, no audio resume/synthesis, and the retained note.
   func testPlayAtEndStaysStopped() throws {
-  let settings = Bundle(for: Self.self)
-  let target = try XCTUnwrap(settings.object(forInfoDictionaryKey: "ManualTargetBundleIdentifier") as? String)
-  let app = XCUIApplication(bundleIdentifier: target)
-  app.activate()
-  XCTAssertTrue(app.buttons["Play"].exists, "Precondition: the Reader's reading must be stopped (Play present)")
-  XCTAssertFalse(app.buttons["Pause"].exists, "Precondition: the Reader's reading must not be playing")
-  // The LEFT edge opens Notification Centre's lock-screen surface.
-  app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.01))
-    .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.7)))
-  let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-  let center = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
-  XCTAssertTrue(center.waitForExistence(timeout: 3), "Now Playing center button is missing")
-  XCTAssertTrue(center.isEnabled, "The centre button must be enabled")
-  XCTAssertEqual(center.label, "Play", "Precondition: the card must show Play (the reading is stopped)")
-  let tree = XCTAttachment(string: springboard.debugDescription)
-  tree.name = "lock-screen-accessibility"; tree.lifetime = .keepAlways; add(tree)
-  let before = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-  before.name = "lock-screen-before-tap"; before.lifetime = .keepAlways; add(before)
-  // The single press under test.
-  let tapMark = ISO8601DateFormatter().string(from: Date())
-  center.tap()
-  // At the end of a Document the reading must stay stopped: the button must
-  // not become "Pause" (that would mean playback started).
-  let becamePause = NSPredicate(format: "label == %@", "Pause")
-  let flipped = XCTNSPredicateExpectation(predicate: becamePause, object: center)
-  let started = XCTWaiter.wait(for: [flipped], timeout: 3) == .completed
-  let after = XCTAttachment(string: "tapMark=\(tapMark) startedPlayback=\(started) labelAfterWait=\(center.exists ? center.label : "gone")")
-  after.name = "after-tap"; after.lifetime = .keepAlways; add(after)
-  let image = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-  image.name = "lock-screen-after-tap"; image.lifetime = .keepAlways; add(image)
-  XCTAssertFalse(started, "Lock-screen Play started playback at the end of the document")
-  if started, center.exists, center.label == "Pause" { center.tap() }
-  app.activate()
-  XCTAssertTrue(app.buttons["Play"].exists, "The reading must remain stopped after the lock-screen Play press")
-  XCTAssertFalse(app.buttons["Pause"].exists, "The reading must remain stopped after the lock-screen Play press")
+    continueAfterFailure = false
+    let settings = Bundle(for: Self.self)
+    let target = try XCTUnwrap(settings.object(forInfoDictionaryKey: "ManualTargetBundleIdentifier") as? String)
+    let app = XCUIApplication(bundleIdentifier: target)
+    app.activate()
+    XCTAssertTrue(app.buttons["Play"].exists, "Precondition: Reader must be stopped")
+    XCTAssertFalse(app.buttons["Pause"].exists)
+    let endNote = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "That was the last of this document.")).firstMatch
+    XCTAssertTrue(endNote.exists, "Precondition: the Document must actually have ended")
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.01))
+      .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.7)))
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let center = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    XCTAssertTrue(center.waitForExistence(timeout: 3), "Now Playing button is missing")
+    XCTAssertTrue(center.isEnabled)
+    XCTAssertEqual(center.label, "Play")
+    let before = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    before.name = "lock-screen-before-tap"; before.lifetime = .keepAlways; add(before)
+    let tapMark = ISO8601DateFormatter().string(from: Date())
+    center.tap()
+    // The module's measured restatement delay is 400 ms. Check at one second,
+    // then two seconds later, with no input that could stop a phantom Reading.
+    Thread.sleep(forTimeInterval: 1)
+    XCTAssertEqual(center.label, "Play", "The card did not return to stopped after end refusal")
+    Thread.sleep(forTimeInterval: 2)
+    XCTAssertEqual(center.label, "Play", "The card did not stay stopped")
+    let after = XCTAttachment(string: "tapMark=\(tapMark) labelAfterWait=\(center.label) commandsSent=1")
+    after.name = "after-tap"; after.lifetime = .keepAlways; add(after)
+    let image = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    image.name = "lock-screen-after-tap"; image.lifetime = .keepAlways; add(image)
+    app.activate()
+    XCTAssertTrue(app.buttons["Play"].exists)
+    XCTAssertFalse(app.buttons["Pause"].exists)
+    XCTAssertTrue(endNote.exists, "The end explanation disappeared")
   }
 }

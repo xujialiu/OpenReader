@@ -459,3 +459,14 @@ serves the Player, Now Playing and headphones; a stopped Reading is not kept as
 playing when the reader is left. A timed-out preparation can be retried by Play.
 The Host/View regression in `reading-continuity/play-after-end.test.ts` covers
 both entry points and leaving the reader, with native boundaries doubled.
+
+The remote-Play retest exposed another part of #156: resuming the empty audio
+graph before answering exhaustion could make the system card show Pause despite
+the same-turn pause. Play now checks exhaustion before `graph.resume`; if the
+Reading synchronously stops it, no audio context is resumed. The hook also uses
+`restateNowPlaying`, the existing refused-Play path: iOS optimistically changes
+the card before JavaScript answers, and requires the measured 400 ms state pair
+to put it back (ADR 0075). The native regression sends only one remote Play,
+checks that the card has returned to Play after one second and stays there,
+and never sends an automatic Pause that could mask the failure. Raw app logs
+must prove the delivered Play caused no audio resume or synthesis.

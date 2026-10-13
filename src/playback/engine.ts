@@ -774,6 +774,11 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       // just below, or by `enqueue` when its Clip arrives.
       quiet = false;
       playing = true;
+      // A known end can be answered synchronously by the Reading. Ask before
+      // resuming an empty graph: even a same-turn suspend can leave iOS's
+      // Now Playing button showing Pause for audio that never existed (#156).
+      outOfText();
+      if (!playing) return;
       graph?.resume();
       const front = timeline.front();
       if (front) {
