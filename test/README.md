@@ -76,6 +76,31 @@ Node test environment simulates.
   so when ADR 0019 let another app hand this one a Document to **open**. The
   property it now states is that nothing in `src/` **opens** a URL.
 
+### Playback scheduling regressions
+
+`playback/engine-starvation.test.ts` runs the real engine, Clip fetcher, segmenter,
+OpenAI Provider and audio-graph wrapper against a clocked native-queue double.
+Five short, late Clips at 3× must all be requested and reach exhaustion (#157).
+Natural Pace, Word Timings, paired replies, bounded quiet preloading and a pause
+mid-reading are controls. The double models the native position dispatcher's
+rendered-frame cadence; it does not prove native audio timing or fidelity.
+
+`playback/engine-rate.test.ts` controls native position/end events and Provider
+replies. A speed change cannot re-cue an ended Clip after starvation, at a section
+boundary or while stopped on a refusal (#169). A current position still supplies
+the correction. The section pause uses a fake timer, not a wall-clock race.
+
+`app/reading-seek-during-decode.test.ts` keeps `useReading`, the offline runtime,
+engine and graph wrapper real, while holding native decode/session promises.
+A Skip with memory-cached Clips must resume without another action (#158).
+Repeated seeks, pause, silence, disposal and quiet reloads guard the scheduling
+boundary; these are state assertions, not a claim that native sound was heard.
+
+`playback/footguns.test.ts` scopes the `onBufferEnded`, `seek` and `play` guards
+to their own bodies. Mutation tests delete the guarded statement while leaving
+other occurrences in later functions and require the same guard to reject it
+(#181). They also check a statement moved out of Play and an unrelated duplicate.
+
 ## structural.ts — the one rule about reading source text
 
 Several of the files above guard a one-line invariant by reading the source and

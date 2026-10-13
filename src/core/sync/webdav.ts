@@ -159,8 +159,8 @@ export function createWebDAVClient(cfg: WebDAVConfig, deps: { fetch: typeof fetc
           if (response.status === 401 || response.status === 403) {
             throw new WebDAVError('auth', `The server rejected the username or password (HTTP ${response.status}).`, response.status);
           }
-          // fetch resolves at the headers. Keep the same deadline until the
-          // caller has its body, not a second timeout starting at the headers.
+          // fetch can resolve before the body is complete. Keep the same
+          // deadline through consumption, not a fresh timeout for the body.
           return consume(response);
         })(),
         timeoutMs,
