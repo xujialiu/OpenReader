@@ -3,6 +3,9 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 import { GestureDetector } from 'react-native-gesture-handler';
 import { chapterTextCount, descendants, fullyPrepared, speaks, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
+import { inFishModel, withFishModel } from '../offline/narration-voice';
+import { useShell } from './routes';
+import { PROVIDER_LABELS } from './settings';
 import { INK, useAccent, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
 import { downloadedChapters, listedInManage, marker, readingChapter, type Marker } from './download-rows';
@@ -57,6 +60,7 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
   onVoice?(voice: OfflineVoice): void; onStart?(): void;
 }) {
   downloads.useDownloads();
+  const { settings } = useShell();
   const borders = useBorders();
   const accent = useAccent();
   const link = [styles.link, { color: accent.reading }];
@@ -65,21 +69,23 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
   const [managedVoice, setManagedVoice] = useState<OfflineVoice | null>(null);
   // Going to Manage and back starts a fresh selection, in the download's own voice.
   const [page, setPage] = useState(manage);
-  if (page !== manage) {
+  const [shownModel, setShownModel] = useState(settings.fish.model);
+  if (page !== manage || shownModel !== settings.fish.model) {
     setPage(manage);
+    setShownModel(settings.fish.model);
     setSelected(new Set());
     setManagedVoice(null);
   }
-  const choice = manage && managedVoice ? managedVoice : voice;
+  const choice = withFishModel(manage && managedVoice ? managedVoice : voice, settings.fish.model);
   useEffect(() => { downloads.requestPlan(document, title); }, [document, title]);
   const plan = downloads.planOf(document);
   const task = downloads.downloadTasks(document).find((t) => downloads.sameVoice(t.voice, choice));
   const chapters = useMemo(() => plan?.chapters ?? [], [plan]);
   useEffect(()=>{
-    const selectedVoice={provider:choice.provider,voice:choice.voice,label:choice.label};
+    const selectedVoice={provider:choice.provider,voice:choice.voice,label:choice.label,model:choice.model};
     if(plan)downloads.requestProgress(document,selectedVoice);
     return ()=>downloads.releaseProgress(document,selectedVoice);
-  },[document,choice.provider,choice.voice,choice.label,plan]);
+  },[document,choice.provider,choice.voice,choice.label,choice.model,plan]);
   const progress=downloads.chapterProgress(document,choice);
   // The check's one rule, which Contents shares (#134).
   const downloaded = useMemo(() => downloadedChapters(chapters, progress), [chapters, progress]);
@@ -123,9 +129,9 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
   const completed = [...progress.values()].filter((p) => p.complete).length;
   const whole = !!plan && fullyPrepared(plan) && full > 0 && completed === full;
   const state = downloads.indexingState(document);
-  const otherVoices = downloads.savedVoices(document).filter((v) => !downloads.sameVoice(v, choice) && downloads.occupied(document, v) > 0);
+  const otherVoices = downloads.savedVoices(document).filter((v) => inFishModel(v, settings.fish.model) && !downloads.sameVoice(v, choice) && downloads.occupied(document, v) > 0);
   // Nothing saved for any voice and nothing under way: there is nothing to manage, so Manage is not offered (#37).
-  const manageable = downloads.occupied(document) > 0 || downloads.downloadTasks(document).some((t) => t.state !== 'done');
+  const manageable = downloads.occupied(document) > 0 || downloads.downloadTasks(document).some((t) => inFishModel(t.voice, settings.fish.model) && t.state !== 'done');
   const status = task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length && whole) ? task : null;
   const act = () => {
     try {
@@ -158,7 +164,7 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
    * document rather than on this.
    */
   const deleteEverything = () => Alert.alert('Delete all saved audio?',
-    `Everything saved for this document will be deleted, freeing ${downloads.formatBytes(downloads.occupied(document))}. The document and reading position will be kept.`, [
+    `All saved audio for this document, across all providers, models and voices, will be deleted, freeing ${downloads.formatBytes(downloads.occupied(document))}. The document and reading position will be kept.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => {
         void downloads.removeDownloads(document).then(() => {
@@ -212,7 +218,8 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
   const { ref: sweepRef, ...sweepList } = sweep.list;
   return <View style={styles.page}>
     <View style={styles.lines}>
-      <Text style={styles.voice} numberOfLines={2}>Voice · {choice.label || 'Choose a voice in the player'}</Text>
+      {choice.provider === 'fish' ? <Text style={styles.voice}>Model · {PROVIDER_LABELS.fish} · {choice.model}</Text> : null}
+      <Text style={styles.voice}>Voice · {choice.label || 'Choose a voice in the player'}</Text>
       {downloads.downloadError() ? <Text style={styles.error}>{downloads.downloadError()}</Text> : null}
       {plan && !progressReady ? <Text style={styles.secondary}>Checking saved downloads…</Text> : null}
       {plan ? <View style={styles.line}>
@@ -240,7 +247,7 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
         ListEmptyComponent={!manage ? <Text style={[styles.secondary, styles.empty]}>No readable text in this document.</Text> : null} />
     </GestureDetector>}
     {otherVoices.map((v) => <DrawerRow key={`${v.provider}/${v.voice}`}
-      onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.(v); }}>
+      onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.({ provider: v.provider, voice: v.voice, label: v.label }); }}>
       <DrawerRowText style={{ color: accent.reading }}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</DrawerRowText>
     </DrawerRow>)}
     {manage && downloads.occupied(document) > 0 ? <DrawerRow onPress={deleteEverything}>

@@ -49,7 +49,7 @@ import {
  * every provider below is handed a fake one.
  */
 
-const cfg: FishConfig = { apiKey: 'sk-fish-test', freeOnly: true, voices: '' };
+const cfg: FishConfig = { apiKey: 'sk-fish-test', model: MODEL_FREE, voices: '' };
 
 /** Every wait is skipped in the tests; `waits` keeps what was asked for. */
 let waits: number[] = [];
@@ -755,10 +755,10 @@ describe('synthesize', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it('names the paid model in the header when the switch is off, and sends no reference for the default voice', async () => {
+  it.each([MODEL_PAID, 'drama-3', 's2-pro', 'future-model'])('sends the selected Model %s and no reference for the default Voice', async (model) => {
     const fetchImpl = vi.fn(async () => stream(event(MP3_A, [['Hi', 0, 0.3]])));
-    await speaker(fetchImpl, { freeOnly: false }).synthesize('Hi', DEFAULT);
-    expect(call(fetchImpl).init.headers.model).toBe(MODEL_PAID);
+    await speaker(fetchImpl, { model }).synthesize('Hi', DEFAULT);
+    expect(call(fetchImpl).init.headers.model).toBe(model);
     expect(call(fetchImpl).body).toEqual({ text: 'Hi', format: 'mp3', mp3_bitrate: MP3_BITRATE, latency: 'normal' });
   });
 
@@ -871,7 +871,7 @@ describe('synthesize', () => {
     });
     const credit = 'Insufficient API credit. API credit is managed independently from platform credit.';
     await expect(
-      speaker(vi.fn(async () => refusal(402, credit, { 'x-fish-error-code': 'insufficient_balance' })), { freeOnly: false }).synthesize('Hi', NARRATOR),
+      speaker(vi.fn(async () => refusal(402, credit, { 'x-fish-error-code': 'insufficient_balance' })), { model: MODEL_PAID }).synthesize('Hi', NARRATOR),
     ).rejects.toMatchObject({ kind: 'quota', message: expect.stringContaining('Insufficient API credit') });
     await expect(speaker(vi.fn(async () => refusal(400, 'Reference not found'))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
       kind: 'unknown',

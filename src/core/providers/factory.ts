@@ -71,14 +71,12 @@ export type ProviderSettings = {
   /** `atOnce`: a download's Sentences at once (#64); absent, one at a time. `download`: the request is a Download's, behind a Reading's (#75). */
   speechify: { apiKey: string; atOnce?: number; download?: boolean };
   /**
-   * `freeOnly` is not optional and has no default here on purpose: a missing or
-   * unknown `model` header makes Fish fall back to the **paid** model, so the
-   * choice between `s2.1-pro-free` and `s2.1-pro` is the owner's money and is
-   * always stated (ADR 0002). The three `include…` flags are Fish's own
+   * The Model is explicit: silently defaulting can spend the owner's money.
+   * The three `include…` flags are Fish's own
    * "omitted means enabled", so a settings screen that does not offer them
    * still gets every source.
    */
-  fish: { apiKey: string; freeOnly: boolean; voices?: string; includeOfficial?: boolean; includeOwn?: boolean; includeManual?: boolean };
+  fish: { apiKey: string; model: string; voices?: string; includeOfficial?: boolean; includeOwn?: boolean; includeManual?: boolean };
   local: { engine: string; baseURL: string; headers?: string };
 };
 

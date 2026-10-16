@@ -12,6 +12,17 @@ vi.mock('expo-file-system', () => ({ Paths: { document: 'test' }, File: class {
 } }));
 
 describe('local settings persistence', () => {
+  it('upgrades the fixed free Fish Model, retains a selected Model and gives the engine a new identity', () => {
+    const read = (fish: unknown) => parseSettings({ version: 1, settings: { fish } });
+    for (const value of [undefined, '', '  ', null, 42]) expect(read({ model: value }).fish.model).toBe('s2.1-pro-free');
+    expect(read({}).fish.model).toBe('s2.1-pro-free');
+    for (const model of ['drama-3', 's2.1-pro', 'unlisted-model']) {
+      const settings = { ...read({ model }), provider: 'fish' as const };
+      writeSettings(settings);
+      expect(readSettings().fish.model).toBe(model);
+      expect(engineIdentity(settings)).not.toBe(engineIdentity({ ...settings, fish: DEFAULT_SETTINGS.fish }));
+    }
+  });
   it('retains configuration but never enables migrated settings', () => {
     const migrated = parseSettings({ ...DEFAULT_SETTINGS, enabledProviders: ['fish'], local: { engine: 'kokoro', baseURL: 'https://owner.example' } });
     expect(migrated.enabledProviders).toEqual([]);
@@ -19,7 +30,7 @@ describe('local settings persistence', () => {
   });
   it('roundtrips enablement, voice history, sources and appearance across reloads', () => {
     const settings = selectVoice({ ...DEFAULT_SETTINGS, enabledProviders: ['fish', 'azure'], azure: { region: 'East Asia' },
-      appearance: { font: 'helvetica', size: 20, margins: 28, textAlignment: 'left', highlight: HIGHLIGHT_PRESETS.amber }, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
+      appearance: { font: 'helvetica', size: 20, margins: 28, textAlignment: 'left', highlight: HIGHLIGHT_PRESETS.amber }, fish: { ...DEFAULT_SETTINGS.fish, includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
     writeSettings(settings);
     expect(readSettings()).toEqual(settings);
   });

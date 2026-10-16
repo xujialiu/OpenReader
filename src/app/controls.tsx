@@ -17,7 +17,7 @@
  */
 
 import { Host, Menu, RNHostView, Toggle, type ToggleProps } from '@expo/ui/swift-ui';
-import { accessibilityAddTraits, accessibilityElement, accessibilityLabel, menuOrder } from '@expo/ui/swift-ui/modifiers';
+import { accessibilityAddTraits, accessibilityElement, accessibilityLabel, disabled as nativeDisabled, menuOrder } from '@expo/ui/swift-ui/modifiers';
 import { Children, createContext, isValidElement, useContext, useMemo, useState, type ReactNode } from 'react';
 import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import type { ColorValue } from 'react-native';
@@ -296,12 +296,12 @@ export function SettingsGroup({ title, footer, children }: {
  * label, what it says now, and the two chevrons iOS puts on a row that opens a
  * menu — which is what it opens (`ChoiceMenu`, #33).
  */
-export function ValueRow<T extends string | number>({ label, choices, chosen, onChoose }: {
-  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
+export function ValueRow<T extends string | number>({ label, choices, chosen, onChoose, disabled = false }: {
+  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void; disabled?: boolean;
 }) {
   return (
-    <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose}>
-      <View style={styles.settingRow}>
+    <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose} disabled={disabled}>
+      <View style={[styles.settingRow, disabled && styles.disabled]}>
         <RowWords label={label} value={choices.find((choice) => choice.value === chosen)?.label} />
         <Icon name="menu" color={INK.secondary} size={18} />
       </View>
@@ -561,8 +561,8 @@ export interface Choice<T extends string | number> {
  * replaces them starts with no traits at all — measured, XCTest saw it as an
  * `Other` until `isButton` was added back.
  */
-export function ChoiceMenu<T extends string | number>({ label, choices, chosen, onChoose, children }: {
-  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void; children: ReactNode;
+export function ChoiceMenu<T extends string | number>({ label, choices, chosen, onChoose, children, disabled = false }: {
+  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void; children: ReactNode; disabled?: boolean;
 }) {
   const current = choices.find((choice) => choice.value === chosen)?.label ?? '';
   const { fontScale } = useWindowDimensions();
@@ -577,11 +577,11 @@ export function ChoiceMenu<T extends string | number>({ label, choices, chosen, 
       <Host style={[StyleSheet.absoluteFill, { height }]}>
       <Menu
         label={<RNHostView><View style={styles.menuRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{children}</View></RNHostView>}
-        modifiers={[menuOrder('fixed'), accessibilityElement('ignore'), accessibilityLabel(`${label}, ${current}`), accessibilityAddTraits(['isButton'])]}
+        modifiers={[nativeDisabled(disabled), menuOrder('fixed'), accessibilityElement('ignore'), accessibilityLabel(`${label}, ${current}`), accessibilityAddTraits(['isButton'])]}
       >
         {choices.map((choice) => (
           <Toggle key={choice.value} label={choice.label} systemImage={choice.icon} isOn={choice.value === chosen}
-            onIsOnChange={() => onChoose(choice.value)} />
+            onIsOnChange={() => { if (!disabled) onChoose(choice.value); }} />
         ))}
       </Menu>
       </Host>

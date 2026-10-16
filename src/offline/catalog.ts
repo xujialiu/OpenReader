@@ -68,7 +68,7 @@ export class OfflineCatalog {
     const [version] = await this.db.getAllAsync<{ user_version: number }>(
       "PRAGMA user_version",
     );
-    if (version.user_version > 1)
+    if (version.user_version > 2)
       throw new Error("Update the app to read this offline database.");
     await this.db.execAsync(`
       PRAGMA journal_mode = WAL;
@@ -92,8 +92,12 @@ export class OfflineCatalog {
       CREATE TABLE IF NOT EXISTS writes(document TEXT NOT NULL,voice TEXT NOT NULL,key TEXT NOT NULL,cancelled INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(document,voice,key));
       CREATE TABLE IF NOT EXISTS voices(document TEXT NOT NULL,key TEXT NOT NULL,provider TEXT NOT NULL,voice_id TEXT NOT NULL,label TEXT NOT NULL,PRIMARY KEY(document,key));
       CREATE TABLE IF NOT EXISTS removals(document TEXT PRIMARY KEY);
-      PRAGMA user_version = 1;
     `);
+    // Existing voices and audio keep their keys; NULL means the formerly fixed
+    // free Fish Model. Bump atomically so a restart cannot repeat ALTER (#229).
+    if (version.user_version < 2) await this.write(async (tx) => {
+      await tx.execAsync('ALTER TABLE voices ADD COLUMN model TEXT; PRAGMA user_version = 2;');
+    });
   }
   private write<T>(run: (transaction: SqlSession) => Promise<T>): Promise<T> {
     const result = this.writes.then(async () => {
@@ -543,21 +547,23 @@ export class OfflineCatalog {
   async rememberVoice(document: string, key: string, voice: OfflineVoice) {
     await this.write((tx) =>
       tx.runAsync(
-        `INSERT INTO voices VALUES(?,?,?,?,?) ON CONFLICT(document,key) DO UPDATE SET
-      label=CASE WHEN excluded.label<>excluded.voice_id THEN excluded.label ELSE voices.label END`,
+        `INSERT INTO voices(document,key,provider,voice_id,label,model) VALUES(?,?,?,?,?,?) ON CONFLICT(document,key) DO UPDATE SET
+      label=CASE WHEN excluded.label<>excluded.voice_id THEN excluded.label ELSE voices.label END, model=excluded.model`,
         document,
         key,
         voice.provider,
         voice.voice,
         voice.label,
+        voice.model ?? null,
       ),
     );
   }
-  savedVoices(document: string): Promise<OfflineVoice[]> {
-    return this.db.getAllAsync(
-      `SELECT v.provider,v.voice_id AS voice,v.label FROM voices v
+  async savedVoices(document: string): Promise<OfflineVoice[]> {
+    const rows = await this.db.getAllAsync<Omit<OfflineVoice, 'model'> & { model: string | null }>(
+      `SELECT v.provider,v.voice_id AS voice,v.label,v.model FROM voices v
       WHERE v.document=? AND EXISTS(SELECT 1 FROM clips c WHERE c.document=v.document AND c.voice=v.key AND c.state='ready') ORDER BY v.key`,
       document,
     );
+    return rows.map(({ model, ...voice }) => model === null ? voice : { ...voice, model });
   }
 }

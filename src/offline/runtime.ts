@@ -18,7 +18,6 @@ import type {
 import { withTimeout } from "../core/timeout";
 import { readGatewayHeaders, readProviderKey } from "../keys/store";
 import {
-  clipCacheKey,
   toStored,
   type StoredClip,
 } from "../playback/clip-cache";
@@ -56,6 +55,8 @@ import { cutText, debugLog, describeProblem, shortId } from "../debug/debug-log"
 import { DEBUG_MODE } from "../debug/mode";
 import { offlineRepository } from "./database";
 import { audioKey, voiceKey } from "./catalog-keys";
+import { fishModelOf, inFishModel, narrationIdentity, withFishModel } from "./narration-voice";
+import { DEFAULT_FISH_MODEL } from "../core/providers/fish-models";
 import { downloadSpeech, speechKeying } from "./speech";
 import type { ChapterProgress, VoiceInventory } from "./catalog";
 import { BLOCK_WALK } from "../renderer/highlighter";
@@ -64,6 +65,7 @@ let revision = 0;
 let tasks: DownloadTask[] = [];
 let settings: AppSettings;
 let loaded = false;
+let fishModelChangedBeforeLoad = false;
 let online = true;
 let foreground = AppState.currentState === "active";
 let expired = false;
@@ -149,10 +151,10 @@ function abandonPreparation() {
   abandoned.reject(new PreparationInterrupted());
 }
 const keyOf = (document: string, voice: OfflineVoice, text: string) =>
-  JSON.stringify([document, clipCacheKey(voice.provider, voice.voice, text)]);
+  JSON.stringify([document, narrationIdentity(voice), text]);
 const emit = () => {
   revision++;
-  listeners.forEach((listener) => listener());
+  listeners.forEach((listener) => { listener(); });
 };
 async function persist() {
   cancelInactivePreparation();
@@ -200,14 +202,12 @@ export const downloadTasks = (document: string) =>
   tasks.filter((t) => t.document === document);
 export const planOf = (document: string): NarrationPlan | null =>
   plans.get(document) ?? null;
-const voiceIdentity = (voice: Pick<OfflineVoice, "provider" | "voice">) =>
-  JSON.stringify([voice.provider, voice.voice]);
-const registerVoice = (voice: Pick<OfflineVoice, "provider" | "voice">) => {
-  const identity = voiceIdentity(voice);
+const registerVoice = (voice: Pick<OfflineVoice, "provider" | "voice" | "model">) => {
+  const identity = narrationIdentity(voice);
   if (!voiceHashes.has(identity)) voiceHashes.set(identity, voiceKey(voice));
 };
 const progressKey = (document: string, voice: OfflineVoice) =>
-  JSON.stringify([document, voice.provider, voice.voice]);
+  JSON.stringify([document, narrationIdentity(voice)]);
 /** Said once: a store that fails on every utterance would otherwise re-render the reader on every utterance. */
 const reportStore = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
@@ -223,7 +223,7 @@ export const inventoryError = (document: string) =>
   inventoryErrors.get(document) ?? null;
 export async function requestInventory(
   document: string,
-  voice?: Pick<OfflineVoice, "provider" | "voice">,
+  voice?: Pick<OfflineVoice, "provider" | "voice" | "model">,
 ): Promise<void> {
   if (voice) registerVoice(voice);
   if (inventories.has(document)) return;
@@ -336,13 +336,14 @@ async function refresh(document: string) {
   emit();
 }
 export const sameVoice = (a: OfflineVoice, b: OfflineVoice) =>
-  a.provider === b.provider && a.voice === b.voice;
+  narrationIdentity(a) === narrationIdentity(b);
 export function hasSavedVoice(
   document: string,
   provider: ProviderId,
   voice: string,
+  model = settings?.fish.model ?? DEFAULT_FISH_MODEL,
 ): boolean {
-  const key = voiceHashes.get(voiceIdentity({ provider, voice }));
+  const key = voiceHashes.get(narrationIdentity(withFishModel({ provider, voice }, model)));
   return !!inventories
     .get(document)
     ?.some((item) => item.voice === key && item.count > 0);
@@ -351,7 +352,7 @@ export function savedVoices(document: string): OfflineVoice[] {
   return savedVoiceSnapshots.get(document) ?? [];
 }
 export function occupied(document: string, voice?: OfflineVoice): number {
-  const key = voice ? voiceHashes.get(voiceIdentity(voice)) : null;
+  const key = voice ? voiceHashes.get(narrationIdentity(voice)) : null;
   return (inventories.get(document) ?? [])
     .filter((item) => !voice || item.voice === key)
     .reduce((sum, item) => sum + item.bytes, 0);
@@ -490,6 +491,8 @@ async function synthesize(
   /** A Download's own Sentences at once; absent for a Reading. */
   download?: { atOnce: number },
 ): Promise<SynthesisResult> {
+  // The request owns its Model, even if Settings changes while it is out.
+  if (voice.provider === 'fish') current = { ...current, fish: { ...current.fish, model: fishModelOf(voice) ?? DEFAULT_FISH_MODEL } };
   const saved = await savedClip(document, voice, text);
   if (saved) {
     if (online) keepWarm(synthesisOrigin(current, voice.provider));
@@ -570,11 +573,11 @@ export function offlineProvider(
   document: string,
   current: AppSettings,
 ): ClipProvider {
-  const voiceOf = (voice: string): OfflineVoice => ({
+  const voiceOf = (voice: string): OfflineVoice => withFishModel({
     provider: current.provider,
     voice,
     label: voice,
-  });
+  }, current.fish.model);
   return {
     id: current.provider,
     capabilities: {
@@ -680,8 +683,7 @@ const scheduler = createScheduler({
   fetch: async (task, text, chapter) => {
     const key = JSON.stringify([
       task.document,
-      task.voice.provider,
-      task.voice.voice,
+      narrationIdentity(task.voice),
       chapter,
     ]);
     const epoch = deletionEpochs.get(key) ?? 0;
@@ -893,9 +895,17 @@ const kick = () => {
         void offlineNative?.endBackground();
     });
 };
+/** A settings change cannot resume an old Model, including through a stale UI callback. */
+const usesCurrentModel = (voice: OfflineVoice) => inFishModel(voice, settings?.fish.model ?? DEFAULT_FISH_MODEL);
 export function configureDownloads(next: AppSettings): void {
   const rekey = !!settings && speechKeying(settings) !== speechKeying(next);
+  const changedModel = !!settings && settings.fish.model !== next.fish.model;
   settings = next;
+  if (changedModel) {
+    if (!loaded) fishModelChangedBeforeLoad = true;
+    for (const task of tasks) if (task.voice.provider === 'fish' && task.state !== 'done') pausing.pauseAll(task);
+    fire(persist().then(kick));
+  }
   if (rekey) void ensureSpeechKeys();
 }
 let keying: Promise<void> = Promise.resolve();
@@ -953,7 +963,13 @@ export function startDownloads(): () => void {
   if (!loaded && !starting) {
     starting = (async () => {
       tasks = await (await offlineRepository()).tasks();
-      tasks.forEach((task) => registerVoice(task.voice));
+      tasks.forEach((task) => {
+        registerVoice(task.voice);
+        // Settings may have changed before async task loading finished.
+        if (task.voice.provider === 'fish' && task.state !== 'done' &&
+          (fishModelChangedBeforeLoad || !usesCurrentModel(task.voice))) pausing.pauseAll(task);
+      });
+      fishModelChangedBeforeLoad = false;
       for (const task of tasks)
         if (
           ["preparing", "downloading", "interrupted", "waiting"].includes(
@@ -1096,6 +1112,8 @@ export async function startDownload(
   chapters: string[],
 ): Promise<boolean> {
   if (!chapters.length || !settings) return false;
+  voice = withFishModel(voice, voice.model ?? settings.fish.model);
+  if (!usesCurrentModel(voice)) return false;
   const found = keyIsOffered(voice.provider)
     ? (await readProviderKey(voice.provider)).outcome === "found"
     : false;
@@ -1109,6 +1127,7 @@ export async function startDownload(
   if (!(await purchases.askForSpeech())) return false;
   consent.again(recipient.key);
   if (!(await consent.ensure(recipient))) return false;
+  if (!usesCurrentModel(voice)) return false;
   enqueue(document, voice, chapters);
   return true;
 }
@@ -1118,6 +1137,8 @@ export function enqueue(
   chapters: string[],
 ): void {
   if (!chapters.length) return;
+  voice = withFishModel(voice, voice.model ?? settings?.fish.model ?? DEFAULT_FISH_MODEL);
+  if (!usesCurrentModel(voice)) return;
   const task = tasks.find(
     (t) => t.document === document && sameVoice(t.voice, voice),
   );
@@ -1158,6 +1179,7 @@ export const goesOn = (task: DownloadTask) =>
   pausing.goesOn(task, completeIn(task));
 /** Pause all while any chapter goes on by itself; otherwise Resume all, which is also Retry failed. */
 export function toggleTask(task: DownloadTask): void {
+  if (!usesCurrentModel(task.voice)) return;
   if (goesOn(task)) pausing.pauseAll(task);
   else {
     // Resuming is asking for speech: while read-aloud is locked, the person is
@@ -1176,6 +1198,7 @@ export function toggleTask(task: DownloadTask): void {
 }
 /** A tap on one chapter's ring (#56); one that resumes may go on away from the screen. */
 export function toggleChapter(task: DownloadTask, chapter: string): void {
+  if (!usesCurrentModel(task.voice)) return;
   const resumes =
     !pausing.GOES_ON.includes(task.state) || pausing.isPaused(task, chapter);
   // A ring that resumes is asking for speech, as Resume all is (#148).
@@ -1201,8 +1224,7 @@ export async function deleteDownloaded(
   for (const chapter of selected) {
     const key = JSON.stringify([
       document,
-      voice.provider,
-      voice.voice,
+      narrationIdentity(voice),
       chapter,
     ]);
     deletionEpochs.set(key, (deletionEpochs.get(key) ?? 0) + 1);

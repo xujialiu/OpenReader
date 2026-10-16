@@ -12,10 +12,11 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import type { ProviderId } from '../core/providers/types';
+import { fishModelLabel, fishModels, sharedFishModels, type FishSpeechModel } from '../core/providers/fish-models';
 import { ActionRow, FieldRow, Footnote, HeaderButton, SettingsGroup, SettingsPage, SwitchRow, TextRow, ValueRow, type Choice } from './controls';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
-import { headersAreOffered, keyIsOffered, PROVIDER_LABELS, SENTENCES_AT_ONCE } from './settings';
+import { headersAreOffered, keyIsOffered, providerDeps, PROVIDER_LABELS, SENTENCES_AT_ONCE } from './settings';
 import { useProviderKey, useGatewayHeaders, type ProviderSecret } from './use-provider-secrets';
 import { useSecretInput } from './use-secret-input';
 import { useProviderConnection } from './use-provider-connection';
@@ -50,6 +51,19 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
   const connection = useProviderConnection(id);
   const key = useProviderKey(id), headers = useGatewayHeaders(id);
   const locked = connection.enabled || connection.busy;
+  const [discoveredModels, setDiscoveredModels] = useState<readonly FishSpeechModel[]>([]);
+  const [modelError, setModelError] = useState<string | null>(null);
+  useEffect(() => {
+    if (id !== 'fish') return;
+    let active = true;
+    setModelError(null);
+    void sharedFishModels.load(providerDeps.fetch).then(
+      (models) => { if (active) setDiscoveredModels(models); },
+      () => { if (active) setModelError('Additional Models could not be loaded. Reopen this page to try again.'); },
+    );
+    return () => { active = false; };
+  }, [id]);
+  const modelChoices = fishModels(discoveredModels, settings.fish.model).map((model) => ({ value: model.id, label: fishModelLabel(model) }));
   const [secretErrors, setSecretErrors] = useState<Readonly<Record<string, string | null>>>({});
   const reportSecretError = useCallback((label: string, error: string | null) => {
     setSecretErrors((was) => (was[label] ?? null) === error ? was : { ...was, [label]: error });
@@ -67,12 +81,21 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
         note={connection.busy ? 'Testing…' : connection.enabled ? 'Turn off to edit.' : undefined} />
       <ActionRow label="Test connection" disabled={connection.busy} onPress={() => void connection.test()} />
     </SettingsGroup>
-    <SettingsGroup footer={failures.length ? <>{failures.map((line) => <Footnote key={line} attention>{line}</Footnote>)}</> : undefined}>
+    <SettingsGroup footer={<>
+      {failures.map((line) => <Footnote key={line} attention>{line}</Footnote>)}
+      {id === 'fish' ? <>
+        <Footnote>Fish Audio determines the free Model’s availability and terms. It retains your text and has no speed guarantee. Paid Models use your Fish Audio credit.</Footnote>
+        {modelError ? <Footnote attention>{modelError}</Footnote> : null}
+      </> : null}
+    </>}>
       {id === 'local' || id === 'compatible' ? <FieldRow label="Address" value={settings[id].baseURL}
         onChangeText={(baseURL) => setSettings((previous) => ({ ...previous, [id]: { ...previous[id], baseURL } }))}
         editable={!locked} keyboard="url" placeholder="https://" /> : null}
       {keyIsOffered(id) ? <SecretField key={`${id}:key`} id={id} label="API key" secret={key} locked={locked}
         placeholder="Not set" onError={reportSecretError} /> : null}
+      {id === 'fish' ? <ValueRow label="Model" choices={modelChoices} chosen={settings.fish.model} disabled={locked}
+        onChoose={(model) => setSettings((previous) => previous.enabledProviders.includes('fish') ? previous :
+          { ...previous, fish: { ...previous.fish, model } })} /> : null}
       {id === 'azure' ? <FieldRow label="Region" value={settings.azure.region} editable={!locked} placeholder="eastasia"
         onChangeText={(region) => setSettings((previous) => ({ ...previous, azure: { region } }))} /> : null}
       {id === 'openai-official' || id === 'compatible' ? <FieldRow label="Model" value={model} editable={!locked}

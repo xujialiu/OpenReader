@@ -20,8 +20,8 @@ import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type Synth
  *   replaced per `chunk_seq`, not appended, and moved by the chunk's offset;
  *   the words are aligned to the segment text by their text (`core/align.ts`);
  * - the model is an HTTP header, and a missing or unknown one falls back to
- *   the **paid** model, so a typo costs money and only the two names below are
- *   ever sent;
+ *   the **paid** model, so a typo costs money. The app's Model list (#229)
+ *   avoids a typed name; this provider sends the selection unchanged;
  * - the free model needs no API credit; the paid one on an empty credit is
  *   a 402 with `x-fish-error-code: insufficient_balance`, the quota shape;
  *   a wrong key is 401 on every route; a wrong id is 400 "Reference not
@@ -75,8 +75,8 @@ import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type Synth
  */
 export type FishConfig = {
   apiKey: string;
-  /** Every request goes to the free model; off, to the paid one. */
-  freeOnly: boolean;
+  /** The owner's explicit speech Model, shared by every reference Voice. */
+  model: string;
   /** What the owner pasted: ids or links, any separators. */
   voices: string;
   /** Include the Fish Official account's voices; omitted means enabled. */
@@ -110,7 +110,7 @@ export type FishDeps = {
 };
 
 export const FISH_API = 'https://api.fish.audio';
-/** The same model either way: the free one wants no API credit, the paid one bills per UTF-8 byte (docs, 2026-09-10). */
+/** The two original Models; the complete selectable list lives in fish-models.ts (#229). */
 export const MODEL_FREE = 's2.1-pro-free';
 export const MODEL_PAID = 's2.1-pro';
 /** What is asked for, and what the bytes are therefore declared as. Not `pcm`: see the note on the contract at the top of this file. */
@@ -444,7 +444,7 @@ const OFFICIAL_WHAT = 'Fish Audio official voice list';
 
 export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider {
   const apiKey = () => cfg.apiKey.trim();
-  const model = () => (cfg.freeOnly ? MODEL_FREE : MODEL_PAID);
+  const model = () => cfg.model;
   const pause = deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const headers = (extra: Record<string, string> = {}, key = apiKey()): Record<string, string> => ({ Authorization: `Bearer ${key}`, ...extra });
   const cache = deps.cache ?? sharedVoiceCache;

@@ -68,6 +68,7 @@ import { useVoiceLists } from './use-voices';
 import { voiceInList } from './voices';
 import { knownVoice } from './voice-catalog';
 import { VoiceSheet } from './voice-sheet';
+import { withFishModel } from '../offline/narration-voice';
 import { chapterProgress, hasSavedVoice, inventoryReady, inventoryError, planOf, releaseProgress, requestInventory, requestProgress, useDownloads } from '../offline/runtime';
 import type { OfflineVoice } from '../offline/model';
 
@@ -283,8 +284,8 @@ export function ReadingView({
   const pauseForLookup = useCallback(() => pauseRef.current(), []);
   const lookup = useLookup(settings.lookup, reading, shown, pauseForLookup);
   useDownloads();
-  useEffect(()=>{void requestInventory(document.identity.id,{provider:settings.provider,voice:settings.voice}).catch(()=>{});},[document.identity.id,settings.provider,settings.voice]);
-  const savedVoice = hasSavedVoice(document.identity.id, settings.provider, settings.voice);
+  useEffect(()=>{void requestInventory(document.identity.id,withFishModel({provider:settings.provider,voice:settings.voice}, settings.fish.model)).catch(()=>{});},[document.identity.id,settings.provider,settings.voice,settings.fish.model]);
+  const savedVoice = hasSavedVoice(document.identity.id, settings.provider, settings.voice, settings.fish.model);
   useEffect(() => { onState(reading.status.playing, reading.status.buffering); }, [reading.status.playing, reading.status.buffering, onState]);
   const voices = useVoiceLists(settings);
   const [displayError, setDisplayError] = useState<string | null>(null);
@@ -472,8 +473,8 @@ export function ReadingView({
    * saved or deleted.
    */
   const playerVoice = useMemo<OfflineVoice | null>(
-    () => (settings.voice.trim() ? { provider: settings.provider, voice: settings.voice, label: settings.voice } : null),
-    [settings.provider, settings.voice],
+    () => (settings.voice.trim() ? withFishModel({ provider: settings.provider, voice: settings.voice, label: settings.voice }, settings.fish.model) : null),
+    [settings.provider, settings.voice, settings.fish.model],
   );
   useEffect(() => {
     if (!contentsOpen || !playerVoice) return;
