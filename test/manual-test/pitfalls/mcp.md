@@ -296,3 +296,30 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 - **After a reboot, every AXe input form was dead at once — coordinate `tap` in all three `--tap-style`s, `touch --down --up`, and `ax.py`'s label-resolved touch (the same axe invocation) — on the reader's WebView text AND on native buttons, each answering "completed successfully" while nothing moved; a touch probe installed in the page recorded zero events.** The state survived a simulator reboot. XCUITest coordinate taps through `run-probe.sh` landed every time (`library-and-reader/ReaderTouchProbe.swift`, kept: env-pointed `tap`/`press` at app points). When axe input no-ops on everything, stop retrying axe and drive the touches through an XCTest probe.
 - **An XCUITest coordinate tap does not reach a system alert's buttons, but the alert query does.** A tap at the consent alert's Allow button's own centre left the alert up; `app.alerts.firstMatch.buttons["Allow"].tap()` answered it first try (`ReaderTouchProbe.testAnswerConsent`). Answer alerts through the alert query, not coordinates.
 - **Two caveats when aiming XCUITest taps on the reader's page from screenshots.** The tap's point is in app points, and the section document's own client coordinates sit 100–120 pt above them (nav bar, margins) and vary with the manager's scroll: a tap aimed at a line's top edge landed in the gap between two blocks, where the app deliberately does nothing (`highlighter.ts`'s `inside()` — "tapping blank space does nothing"), reading as a dead tap. Compute the target from the section's own geometry through a harness `js` probe (`getBoundingClientRect` of the paragraph, plus `scrollY`/`innerHeight`) and aim mid-paragraph, then confirm by the app's own report (harness `utterance=`), not the tool's success line.
+
+## The #229 run: a stale AXe window, silenced touches, and `key` flags (2026-10-17, iPhone 17, iOS 26.5)
+
+- **`ax.py tree` can describe a settings page holding a state the app never
+  had.** After a fast touch sequence on the Fish Audio provider page, a tree
+  read reported "Connection successful" and `Model, s2.1-pro-free — free`
+  while the app's own state — `saysettings`, `settings.json`, and the debug
+  log's missing `[provider]` connection-test lines — proved none of the
+  three touches (menu select, Enable) had reached it, and the previous
+  Model/disable state stood. The identical gestures, redone slowly with a
+  tree read and a `saysettings` after every step, worked first try. When a
+  settings screen reads differently from the app's own account of itself,
+  believe the app, and re-drive the sequence one step at a time with a
+  state check (`saysettings`, a debug-log line) between touches.
+- **`>/dev/null` on `ax.py touch` during a state-changing sequence turned the
+  whole sequence into ghosts.** The app was on the reader; every touch in the
+  chain answered "no element" into the void, the screenshot later showed no
+  step had landed, and `saysettings` was unchanged. A silenced failure is
+  indistinguishable from a landed touch until the state disagrees. Never
+  bury touch output while establishing that a change happened (the ADR 0077
+  entry below, one level up: it was axe's usage errors then, it is ax.py's
+  missed labels now).
+- **The standalone `axe key` does not take `--keycodes`.** `axe key --udid
+  UDID --keycodes 29` exits with a usage error; `--keycodes` belongs to
+  `batch`'s `key-sequence` steps (#191). The standalone command's own help
+  shows its positional examples, and the two parsers differ exactly as the
+  #191 entry says for `type`.
