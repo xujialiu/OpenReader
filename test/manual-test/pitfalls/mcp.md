@@ -299,6 +299,13 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 
 ## The #229 run: a stale AXe window, silenced touches, and `key` flags (2026-10-17, iPhone 17, iOS 26.5)
 
+- **A tree read while the API key was revealed leaked it into the tool
+  transcript again.** This is the already-documented revealed-field behavior,
+  not an app logging defect. Compare the field with the local credential in
+  memory and emit only match/no-match; re-mask it before any tree dump or
+  screenshot. Local transcript redaction cannot retract a value already sent
+  to a model provider, so recommend rotating the exposed key.
+
 - **`ax.py tree` can describe a settings page holding a state the app never
   had.** After a fast touch sequence on the Fish Audio provider page, a tree
   read reported "Connection successful" and `Model, s2.1-pro-free — free`

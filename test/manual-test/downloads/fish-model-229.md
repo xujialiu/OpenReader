@@ -2,8 +2,8 @@
 
 Record of the iOS verification of 57b23ae (`feat: choose Fish Models and keep
 their Downloads separate`), on a session-created iPhone 17 simulator
-(iOS 26.5, UDID in the run's report), app from the worktree's own Metro
-(port 8082). The owner's API key came from `~/.secrets/openreader` and was
+(iOS 26.5, UDID in the run's report), first from the worktree's own Metro
+(port 8082), then as a standalone Release build of the same app code. The owner's API key came from `~/.secrets/openreader` and was
 typed through the masked field per the #228 recipe; no paid synthesis ran:
 every `drama-3` observation used seeded audio or request-shaped evidence, and
 each play was preceded by `silence.sh check` and stopped once established.
@@ -83,7 +83,8 @@ drawer; the only picker in the app is the Settings row.
 
 `catalog.sqlite` was seeded (app terminated) by copying the free voice's
 directory and rows under the drama-3 identity — `voiceKey` computed with
-**JavaScript** separators (see the pitfall below), a `voices` row with
+**JavaScript** separators (`JSON.stringify` adds no spaces; Python's default
+JSON separators produce a different hash), a `voices` row with
 `model='drama-3'`, and a matching `done` entry in the `state` table's `tasks`
 JSON (without the task row the drawer's marks stay at zero by the #146 rule:
 a chapter counts only inside its voice's own download). All of what follows
@@ -104,8 +105,10 @@ download's, never a paid synthesis.
   `drama-3` selected, a 5 s play (silence checked immediately before) advanced
   to utterance 3 with word-level highlighting from the seeded clips while a
   `watchfetch` wrapper logged zero TTS requests — one keep-warm `GET /` only.
-  Had isolation failed, this play would have gone to the network under a paid
-  Model; it did not.
+  This proves playback used saved audio with the paid Model selected, not
+  that those bytes were synthesized by drama-3: the fixture reused free-model
+  bytes. Model identity is separately checked by the scoped deletion and the
+  automated tests' distinct replies.
 - **Delete all saved audio names its whole scope.** The confirmation read
   "All saved audio for this document, across all providers, models and
   voices, will be deleted, freeing 0.6 MB. The document and reading position
@@ -128,5 +131,8 @@ the address a pre-#229 build wrote.
   (from a `breakfetch` run) does name the selected Model at the synthesis
   call.
 - **Another Provider's download unaffected by the switch** (unit-only, above).
+- **A complete v1-schema upgrade on iOS.** The device check seeds the NULL-Model
+  result of migration; the actual ALTER/transaction and repeated initialization
+  run against real SQLite in the automated test, not a pre-feature app on iOS.
 - **Fish Speech on the phone** does not exist as a provider page in this app;
   nothing there could change.

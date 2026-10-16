@@ -171,11 +171,10 @@
 
 ## The #229 run (2026-10-17)
 
-- **A `grep` with no match exits 1, and inside `$( … )` or a polling tail it
-  reads like a failure of the thing being watched.** `ps aux | grep -c
-  "[x]codebuild"` returning `1` after a finished build, and a `grep BUILD`
-  poll coming up empty while the log was still mid-write, both presented as
-  non-zero exits from commands that had done their job. Fix: end watch
-  pipelines with `|| true` (or `|| echo 0` for counts, accepting the double
-  print noted above), and let the polled file's own marker line — `BUILD
-  SUCCEEDED`, `Executed …` — be the only success signal.
+- **A `grep` with no match exits 1, which can look like failure of the thing
+  being watched.** `ps aux | grep -c "[x]codebuild"` printed `0` and exited 1
+  when no build matched; a `grep BUILD` poll also exited 1 while the log was
+  still mid-write. Neither exit is xcodebuild's. For an informational watch,
+  use `|| true` to tolerate no match; do not append `|| echo 0` to `grep -c`,
+  which already prints zero. Decide a build's result from its own exit status
+  and marker (`BUILD SUCCEEDED` or `BUILD FAILED`), not the watch command.
