@@ -168,3 +168,14 @@
 ## The #148 run (2026-10-09)
 
 - **In zsh, `local a=$1 b=$a` expands `$a` before it is assigned.** A helper that built its evidence file name from a `local` declared on the same line wrote every pass to `settings--.txt`, one file overwritten six times, while the screenshots (named from the arguments) were right. Declare on one line, use on the next. A `grep -c … || echo 0` prints `0` twice when nothing matches (grep prints the count and exits 1): use `|| true`.
+
+## The #229 run (2026-10-17)
+
+- **A `grep` with no match exits 1, and inside `$( … )` or a polling tail it
+  reads like a failure of the thing being watched.** `ps aux | grep -c
+  "[x]codebuild"` returning `1` after a finished build, and a `grep BUILD`
+  poll coming up empty while the log was still mid-write, both presented as
+  non-zero exits from commands that had done their job. Fix: end watch
+  pipelines with `|| true` (or `|| echo 0` for counts, accepting the double
+  print noted above), and let the polled file's own marker line — `BUILD
+  SUCCEEDED`, `Executed …` — be the only success signal.
