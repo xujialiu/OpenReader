@@ -46,6 +46,11 @@ After restoration, launch the app again before testing.
 - [two-finger.md](two-finger.md) (#57, ADR 0045): two-finger sweeps in Files
   and in the Download drawer, holding at the list's edges, and what one finger
   does there. `two-finger.sh`, `TwoFingerProbe.swift`.
+- [fish-model-229.md](fish-model-229.md) (#229): the Settings Model list and
+  its lock, the two Model/Voice rows, the pause on a Model change (live flip
+  and the startup path), seeded per-Model audio for isolation, deletion and
+  playback, and the model-less free address. Seeding recipe and its
+  `JSON.stringify` hashing pitfall included.
 - [download-concurrency.md](download-concurrency.md) (#64, #65): how fast a
   provider answers several requests at once, measured from the Mac; timing a
   chapter download on the simulator; OpenAI Compatible's fallback to MP3 and
