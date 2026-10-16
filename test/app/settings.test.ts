@@ -261,7 +261,7 @@ describe('explicit provider enablement', () => {
   });
   it('only includes official Fish voices by default and forwards changes', () => {
     expect(providerSettings(DEFAULT_SETTINGS, { key: '', headers: '' }).fish).toMatchObject({ includeOfficial: true, includeOwn: false, includeManual: false });
-    const settings = { ...DEFAULT_SETTINGS, fish: { includeOfficial: false, includeOwn: true, includeManual: true, voices: 'abc' } };
+    const settings = { ...DEFAULT_SETTINGS, fish: { ...DEFAULT_SETTINGS.fish, includeOfficial: false, includeOwn: true, includeManual: true, voices: 'abc' } };
     expect(providerSettings(settings, { key: '', headers: '' }).fish).toMatchObject(settings.fish);
   });
 });

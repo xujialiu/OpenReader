@@ -17,7 +17,11 @@ export interface NarrationPlan {
   version: 2; chapters: Chapter[];
   sections?: DocumentNavigation['sections']; preparedSections?: number[];
 }
-export interface OfflineVoice { provider: ProviderId; voice: string; label: string }
+export interface OfflineVoice {
+  provider: ProviderId; voice: string; label: string;
+  /** Fish speech Model; absent in existing records means s2.1-pro-free (#229). */
+  model?: string;
+}
 export type TaskState = 'queued' | 'preparing' | 'downloading' | 'paused' | 'waiting' | 'blocked' | 'interrupted' | 'done';
 export interface DownloadTask {
   id: string; document: string; voice: OfflineVoice; chapters: string[];

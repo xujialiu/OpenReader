@@ -31,6 +31,7 @@ import { DEFAULT_GAP, type GapSettings } from '../playback/gap';
 import { azureRegion, type HeaderWebSocket } from '../core/providers/azure';
 import type { ProviderDeps, ProviderSettings } from '../core/providers/factory';
 import { FISH_API } from '../core/providers/fish';
+import { DEFAULT_FISH_MODEL } from '../core/providers/fish-models';
 import { getLocalEngine, LOCAL_ENGINES } from '../core/providers/local/registry';
 import { OPENAI_URL } from '../core/providers/openai';
 import { SPEECHIFY_API } from '../core/providers/speechify';
@@ -189,7 +190,7 @@ export interface AppSettings {
   provider: ProviderId;
   enabledProviders: readonly ProviderId[];
   recentVoices: readonly DocumentVoice[];
-  fish: { includeOfficial: boolean; includeOwn: boolean; includeManual: boolean; voices: string };
+  fish: { model: string; includeOfficial: boolean; includeOwn: boolean; includeManual: boolean; voices: string };
   openai: {
     /** A speech model id. Empty by default: OpenAI publishes the list and `listModels()` asks for it, so the app does not guess one. */
     model: string;
@@ -466,7 +467,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'openai-official',
   enabledProviders: [],
   recentVoices: [],
-  fish: { includeOfficial: true, includeOwn: false, includeManual: false, voices: '' },
+  fish: { model: DEFAULT_FISH_MODEL, includeOfficial: true, includeOwn: false, includeManual: false, voices: '' },
   openai: { model: '' },
   compatible: { baseURL: '', model: '' },
   // Empty rather than the plugin's `eastasia`: a key belongs to one region, and
@@ -782,11 +783,8 @@ export function providerSettings(settings: AppSettings, secrets: ProviderSecrets
     // any request, so the key is never sent to a host it did not name.
     azure: { apiKey: keyFor('azure'), region: settings.azure.region },
     speechify: { apiKey: keyFor('speechify') },
-    // `freeOnly` is on and is not yet a setting: a missing or unknown `model`
-    // header makes Fish fall back to the **paid** model, so the value that
-    // spends nothing remains fixed (philosophy rule 4). Source choices and
-    // manual ids now come from the provider's configuration screen.
-    fish: { apiKey: keyFor('fish'), freeOnly: true, ...settings.fish },
+    // The Model is the owner's choice, for all Fish Voices on this device (#229).
+    fish: { apiKey: keyFor('fish'), ...settings.fish },
     // No key — a server of the owner's own is reached by address (ADR 0014) —
     // but headers, because that address can be behind a gateway that wants a
     // service token of its own, and `factory.ts` has passed

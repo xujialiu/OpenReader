@@ -2,10 +2,11 @@ import { strToU8 } from "fflate";
 import { sha256Hex } from "../core/document/sha256";
 import type { OfflineVoice } from "./model";
 import type { AudioAddress } from "./catalog";
+import { narrationIdentity } from "./narration-voice";
 const digest = (text: string) => sha256Hex(strToU8(text));
 export const documentKey = (id: string) => digest(id);
-export const voiceKey = (voice: Pick<OfflineVoice, "provider" | "voice">) =>
-  digest(JSON.stringify([voice.provider, voice.voice]));
+export const voiceKey = (voice: Pick<OfflineVoice, "provider" | "voice" | "model">) =>
+  digest(narrationIdentity(voice));
 /** Voice already has its own directory/key column. Membership is shared across voices. */
 export const audioKey = (text: string) => digest(text);
 export const audioAddress = (

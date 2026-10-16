@@ -299,3 +299,22 @@
 
 - **A freshly created simulator wedged mid-setup: `simctl install` hung past two minutes, a later `launch` answered `Mach error -308 (ipc/mig) server died`, and the next `simctl launch` found the device `Shutdown`.** The device's own `installd` was the stuck service; `simctl list` and screenshots also hung. Fix (the mcp.md #?-shaped one, confirmed for the launch path): `simctl shutdown` **that one UDID**, boot it again, `silence.sh set` (the boot resets the volume), reinstall — install, launch and every later `simctl` call then answered first try. Bound every `simctl` call while a device is in this state (`timeout` is missing on this Mac; use `perl -e 'alarm N; exec @ARGV' …`); the long `bootstatus -b` wait on a fresh device is the bullet above.
 - **Restarting `fake-kokoro.cjs` on its port while an old instance lives starts the new one into `EADDRINUSE` and leaves the OLD server serving silently.** The `$!` printed by the starting shell is the wrapper's PID, not the listening node's; `kill` on it kills nothing, the replacement dies at bind, and the run continues against the old server's clip length and log path (here: default 2.5 s and `/tmp/openreader-issue86/fake-tts.log` instead of the intended 0.3 s and a run-specific log). Fix: find the listener with `lsof -nP -iTCP:PORT -sTCP:LISTEN` and kill **that** PID, then verify `curl` answers AND the intended log file grows before the first play.
+## The #229 run's setup: npx from the wrong cwd, and `pod install` without a Gemfile (2026-10-17, iOS 26.5)
+
+- **An `npx expo` invocation run from a directory without the repo's
+  package.json does not just fail — it downloads a wrong major of Expo
+  first.** `npx expo prebuild --platform ios` launched from a scratch
+  directory (a `cd` intended for the build artifacts leaked into the same
+  command) fetched `expo@58.0.13` from the registry because the local
+  `node_modules/.bin` was not on its resolution path, then failed with
+  `ConfigError: The expected package.json path: /private/tmp/…/package.json
+  does not exist`. The wrong-version download is the dangerous part: it is
+  easy to miss behind the ConfigError and it is not the project's SDK. Fix:
+  give every npx/pod invocation an explicit cwd in the same command
+  (`cd "$REPO" && npx expo …`), and treat any "installed expo@58"-style npm
+  warning as a stop, not noise — the project's SDK here is 57.
+- **The generated `ios/` has no Gemfile, so `bundle exec pod install` fails
+  with "Could not locate Gemfile or .bundle/ directory".** expo prebuild
+  does not vendor one; plain `pod install` in `ios/` is the working form
+  (106 dependencies / 105 pods installed for this tree). Reach for
+  `bundle exec` only when a Gemfile actually exists at that cwd.

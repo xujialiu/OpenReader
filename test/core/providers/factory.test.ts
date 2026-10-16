@@ -20,10 +20,10 @@ const SETTINGS: ProviderSettings = {
   compatible: { baseURL: 'http://localhost:8004', apiKey: '', model: 'tts-1', voices: '', headers: '' },
   azure: { apiKey: '', region: 'eastasia' },
   speechify: { apiKey: '' },
-  // `freeOnly` on, because an absent or unknown `model` header makes Fish fall
+  // The free Model, because an absent or unknown `model` header makes Fish fall
   // back to the paid model: the default that costs nothing is the one a test
   // fixture should carry.
-  fish: { apiKey: '', freeOnly: true, voices: '' },
+  fish: { apiKey: '', model: 's2.1-pro-free', voices: '' },
   local: { engine: 'kokoro', baseURL: 'http://localhost:8880', headers: '' },
 };
 
@@ -136,7 +136,7 @@ describe('the OpenAI and OpenAI Compatible sections', () => {
 });
 
 describe('the Fish Audio section', () => {
-  it('sends its own key and its own free-model switch, and no other section’s key', async () => {
+  it('sends its own key and its own Model, and no other section’s key', async () => {
     const stream = () =>
       new Response(`data: ${JSON.stringify({ audio_base64: btoa('\xff\xfb\x90\x01'), chunk_seq: 0, alignment: null })}\n\n`, {
         status: 200,
@@ -145,12 +145,12 @@ describe('the Fish Audio section', () => {
     const fetchImpl = vi.fn(async () => stream());
     const s = settings({
       'openai-official': { ...SETTINGS['openai-official'], apiKey: 'sk-openai' },
-      fish: { apiKey: 'sk-fish', freeOnly: false, voices: '' },
+      fish: { apiKey: 'sk-fish', model: 's2.1-pro', voices: '' },
     });
     await createProvider('fish', s, { ...deps, fetch: fetchImpl as unknown as typeof fetch }).synthesize('Hello', { ...opts, voice: `mul/default` });
     const [url, init] = (fetchImpl as any).mock.calls[0];
     expect(url).toBe('https://api.fish.audio/v1/tts/stream/with-timestamp');
-    // `freeOnly: false` is the paid model, and it is named rather than left to
+    // The chosen Model is named explicitly rather than left to
     // Fish's own fallback — which is the paid one whatever was meant.
     expect(init.headers).toMatchObject({ Authorization: 'Bearer sk-fish', model: 's2.1-pro' });
   });
@@ -158,7 +158,7 @@ describe('the Fish Audio section', () => {
   it('takes the pasted model ids from its own field, links and all', async () => {
     const id = 'a'.repeat(32);
     const fetchImpl = vi.fn(async () => Response.json({ _id: id, title: 'Pasted', languages: ['en'], type: 'tts', state: 'trained' }));
-    const s = settings({ fish: { apiKey: 'sk-fish', freeOnly: true, voices: `https://fish.audio/m/${id}/`, includeOfficial: false, includeOwn: false } });
+    const s = settings({ fish: { apiKey: 'sk-fish', model: 's2.1-pro-free', voices: `https://fish.audio/m/${id}/`, includeOfficial: false, includeOwn: false } });
     const voices = await createProvider('fish', s, { ...deps, fetch: fetchImpl as unknown as typeof fetch }).listVoices();
     expect((fetchImpl as any).mock.calls[0][0]).toBe(`https://api.fish.audio/model/${id}`);
     expect(voices.map((v) => v.label)).toEqual(['Pasted']);

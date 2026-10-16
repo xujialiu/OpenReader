@@ -1349,7 +1349,7 @@ export function useReading(
     // state. Offline construction no longer awaits a credential lookup.
     await Promise.resolve();
     const ready = readiness(settings, hasKey);
-    if (!ready.ready && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
+    if (!ready.ready && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice, settings.fish.model)) {
       setStatus((was) => ({ ...was, note: readinessNote(settings.provider, ready) }));
       return null;
     }
@@ -1414,7 +1414,7 @@ export function useReading(
     // asked about again rather than refused in silence (#109).
     consent.again();
     bridgeRef.current?.resumeFollowing();
-    if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice)) {
+    if (!settings.enabledProviders.includes(settings.provider) && inventoryReady(document) && !hasSavedVoice(document, settings.provider, settings.voice, settings.fish.model)) {
       playIntent.current = false;
       engineRef.current?.pause();
       // What `readiness` says, not `enabling` alone: with nothing enabled that

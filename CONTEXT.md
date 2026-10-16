@@ -65,6 +65,11 @@ _Avoid_: engine, backend, service, vendor, TTS
 A provider the owner has made available for selection in the player.
 _Avoid_: configured provider, in-use provider, default provider
 
+**Model**:
+One named system a Provider offers for turning text into speech, distinct from
+its Voices: the same Voice can be spoken by different Models.
+_Avoid_: voice, speaker, provider, engine
+
 **Voice**:
 One named speaker a provider offers. A voice belongs to exactly one provider.
 _Avoid_: model, speaker, persona
@@ -100,19 +105,20 @@ without a network connection.
 _Avoid_: downloaded book, audiobook export, document download
 
 **Download**:
-The preparation of one document's offline narration in one voice, for the
-chapters the owner chose, worked through one chapter at a time. Each chapter in
-it is waiting its turn, being written, paused, failed or saved.
+The preparation of one document's offline narration in one voice and, for Fish
+Audio, one Model, for the chapters the owner chose, worked through one chapter
+at a time. Each chapter in it is waiting its turn, being written, paused, failed
+or saved.
 _Avoid_: task, job, queue
 
 **Downloaded**:
-Said of a chapter in the Download of one voice whose Offline Narration in that
-voice is complete: a Clip saved for every one of its Utterances, of the Speech
-Text the owner's settings now make of it. A chapter with only some of them
+Said of a chapter in a Download whose Offline Narration in that Voice and, for
+Fish Audio, that Model is complete: a Clip saved for every one of its
+Utterances, of the Speech Text the owner's settings now make of it. A chapter with only some of them
 saved is not downloaded, and a part with nothing to speak never is. A chapter
 deleted from the Download is not downloaded, even while other chapters keep
-the Clips it shared with them. Downloaded in one voice says nothing about
-another.
+the Clips it shared with them. Downloaded in one Voice or Fish Audio Model
+says nothing about another.
 _Avoid_: offline, saved, cached, available offline
 
 **Sentences at once**:

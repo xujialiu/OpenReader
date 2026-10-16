@@ -103,7 +103,7 @@ export function loadSettings(): ProviderSettings {
     compatible: { baseURL: get('compatible.baseURL'), apiKey: get('compatible.apiKey'), model: get('compatible.model'), headers: get('compatible.headers') },
     azure: { apiKey: get('azure.apiKey'), region: get('azure.region') },
     speechify: { apiKey: get('speechify.apiKey') },
-    fish: { apiKey: get('fish.apiKey'), freeOnly: flat['fish.freeOnly'] !== false, voices: get('fish.voices'), includeOfficial: true, includeOwn: false, includeManual: true },
+    fish: { apiKey: get('fish.apiKey'), model: get('fish.model') || (flat['fish.freeOnly'] === false ? 's2.1-pro' : 's2.1-pro-free'), voices: get('fish.voices'), includeOfficial: true, includeOwn: false, includeManual: true },
     local: { engine: get('local.engine') || 'kokoro', baseURL: get('local.baseURL'), headers: get('local.headers') },
   };
 }

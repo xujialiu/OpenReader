@@ -34,5 +34,5 @@ export function testCatalog(observe?: { transaction?(): void }) {
       }
     },
   };
-  return { catalog: new OfflineCatalog(connection), close: () => db.close() };
+  return { catalog: new OfflineCatalog(connection), connection, close: () => db.close() };
 }

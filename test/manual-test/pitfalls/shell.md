@@ -168,3 +168,13 @@
 ## The #148 run (2026-10-09)
 
 - **In zsh, `local a=$1 b=$a` expands `$a` before it is assigned.** A helper that built its evidence file name from a `local` declared on the same line wrote every pass to `settings--.txt`, one file overwritten six times, while the screenshots (named from the arguments) were right. Declare on one line, use on the next. A `grep -c … || echo 0` prints `0` twice when nothing matches (grep prints the count and exits 1): use `|| true`.
+
+## The #229 run (2026-10-17)
+
+- **A `grep` with no match exits 1, which can look like failure of the thing
+  being watched.** `ps aux | grep -c "[x]codebuild"` printed `0` and exited 1
+  when no build matched; a `grep BUILD` poll also exited 1 while the log was
+  still mid-write. Neither exit is xcodebuild's. For an informational watch,
+  use `|| true` to tolerate no match; do not append `|| echo 0` to `grep -c`,
+  which already prints zero. Decide a build's result from its own exit status
+  and marker (`BUILD SUCCEEDED` or `BUILD FAILED`), not the watch command.
