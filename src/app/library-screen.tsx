@@ -51,7 +51,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const [folderActions, setFolderActions] = useState<FolderId | null>(null);
   const importLocation = useRef<FolderId | null>(null);
   const currentFolder = tree.current === null ? null : folderAt(tree, tree.current);
-  const report = (error: unknown) => library.report(error instanceof Error ? error.message : String(error));
+  const reportDeletion = (error: unknown) => library.report(error instanceof Error ? error.message : String(error), 'delete');
 
   const removeDocument = async (id: string) => {
     const document = asDocumentId(id);
@@ -84,9 +84,10 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
       `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
         { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => {
           setActions(null);
-          void removeDocument(entry.id).catch(report);
+          const complete = library.beginOperation('delete');
+          void removeDocument(entry.id).then(complete).catch(reportDeletion);
         } },
-      ]), report);
+      ]), reportDeletion);
   };
   const removeFolder = (id: FolderId) => {
     const snapshot = library.folders.getSnapshot().tree;
@@ -94,12 +95,14 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     const documents = library.entries.filter((entry) => subtree.has(snapshot.documents[entry.id]));
     confirmFolderDeletion(folderAt(snapshot, id).name, subtree.size - 1, documents.length, () => {
       if (library.folders.getSnapshot().tree !== snapshot) {
-        library.report('The folder contents changed. Review them and confirm deletion again.');
+        library.report('The folder contents changed. Review them and confirm deletion again.', 'delete');
         return;
       }
       setFolderActions(null);
+      const complete = library.beginOperation('delete');
       void library.folders.deleteTree(id, documents.map((entry) => entry.id), removeDocument)
-        .catch((error: unknown) => library.report(`The folder could not be completely deleted. Remaining contents have been kept. ${error instanceof Error ? error.message : String(error)}`));
+        .then(complete)
+        .catch((error: unknown) => library.report(`The folder could not be completely deleted. Remaining contents have been kept. ${error instanceof Error ? error.message : String(error)}`, 'delete'));
     });
   };
 
@@ -115,16 +118,17 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
           navigation.navigate('Reader', { id });
         });
       } catch (refused) {
-        library.report(`“${sourceName}” was not added: ${refused instanceof Error ? refused.message : String(refused)}`);
+        library.report(`“${sourceName}” was not added: ${refused instanceof Error ? refused.message : String(refused)}`, 'import');
       }
     } catch (error) {
-      library.report(error instanceof Error ? error.message : String(error));
+      library.report(error instanceof Error ? error.message : String(error), 'import');
     } finally { setPicking(false); }
   }, [library, navigation, sync]);
 
   const visit = useCallback((id: FolderId | null) => {
-    try { library.folders.visit(id); }
-    catch (error) { library.report(error instanceof Error ? error.message : String(error)); }
+    const complete = library.beginOperation('visit');
+    try { library.folders.visit(id); complete(); }
+    catch (error) { library.report(error instanceof Error ? error.message : String(error), 'visit'); }
   }, [library]);
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -179,7 +183,10 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
           onPress={() => selection.active ? selection.toggle(rowTarget(item)) : navigation.navigate('Reader', { id: item.entry.id })} onActions={() => setActions(item.entry)} />}
       ListHeaderComponent={problem || library.note || busy ? <View style={styles.banner}>
         {problem ? <Note attention>{problem}</Note> : null}
-        {library.note ? <Note attention>{library.note}</Note> : null}
+        {library.note ? <View style={styles.message}>
+          <View style={styles.messageText}><Note attention>{library.note}</Note></View>
+          {library.dismissNote ? <HeaderButton icon="close" label="Dismiss Library message" onPress={library.dismissNote} /> : null}
+        </View> : null}
         {busy && !selection.working ? <Note>Deleting folder…</Note> : null}
       </View> : null}
       ListEmptyComponent={library.loading ? null : <View style={styles.empty}>
@@ -220,6 +227,8 @@ const styles = StyleSheet.create({
   selectionActions: { position: 'absolute', left: 22, right: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   banner: { paddingHorizontal: 16, paddingTop: 12 },
+  message: { flexDirection: 'row', alignItems: 'flex-start' },
+  messageText: { flex: 1 },
   empty: { alignItems: 'flex-start', gap: 12, padding: 24 },
   emptyTitle: { ...TEXT_EMPHASIZED.title3, color: INK.text },
   screen: { backgroundColor: INK.page, flex: 1 },

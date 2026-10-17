@@ -271,7 +271,7 @@ export function OpenReader() {
       sync.poke('add');
       navigationRef.navigate('Reader', { id });
     }).catch((problem: unknown) => {
-      library.report(`That document could not be opened: ${problem instanceof Error ? problem.message : String(problem)}`);
+      library.report(`That document could not be opened: ${problem instanceof Error ? problem.message : String(problem)}`, 'import');
     }).finally(() => {
       importing.current = false;
       setArrival((n) => n + 1);

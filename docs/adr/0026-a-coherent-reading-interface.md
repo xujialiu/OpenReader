@@ -51,6 +51,20 @@ theme corrects the icons and glass together. Lost or changed resume positions
 carry `resumeNeedsAttention`; hiding successful-resume text must not hide those
 warnings. Problems render even when the player was previously collapsed.
 
+The Library's note has separate load, operation and persistence ownership
+(#179). `useLibrary.commit` clears only its own write-failure state; it does not
+clear a reported import/deletion/Folder-visit failure or a startup warning.
+The displayed note prefers a write failure, then the latest reported failure,
+then the startup warning. Clearing a higher-priority note reveals the lower one
+rather than having destroyed it. `beginOperation` captures the reported note by
+identity and returns a completion callback that clears it only if its operation
+kind matches and no later report has replaced it. Import cancellation and
+partial batch deletion never call that callback; it belongs to the whole
+operation, not each child's write. The explicit dismissal similarly targets
+only the note rendered with its button. Write failures have no dismissal
+control and disappear only after persistence succeeds. No timer or background
+write resolves an unrelated note.
+
 ## Speed adjustment leaves the transport row
 
 Contents and a pressable rate caption flank the five transport buttons in
