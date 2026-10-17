@@ -1419,8 +1419,8 @@ export function useReading(
       sectionOf,
       availableThrough: (from) => readingExtent(loadedRef.current, loadedBlocksRef.current, from, reportedSectionsRef.current, renderedRef.current?.spine ?? 0).end,
       rate: settings.rate,
-      // Read once, here: the pauses change only in General, where no reader is
-      // mounted, so every engine is built after the owner's latest choice (#60).
+      // The pauses it starts with; the effect beside the speed's hands it every
+      // later choice, because General is reachable over a held Reading (#159).
       gap: settings.pauses,
       brackets: { strip: settings.stripBrackets, pairs: settings.bracketPairs },
     });
@@ -1687,6 +1687,17 @@ export function useReading(
   useEffect(() => {
     engineRef.current?.setRate(settings.rate);
   }, [settings.rate]);
+
+  /**
+   * The pauses, live (#159, ADR 0047's amendment). A Reading left playing keeps
+   * this engine behind the Library (#68), where Settings opens General, so a
+   * pair read once when the engine was built was the old one until the Reading
+   * ended. Like the speed, not in `engineIdentity`: a rebuild would stop the
+   * Reading and fetch its queued sentences again. From the next Clip queued.
+   */
+  useEffect(() => {
+    engineRef.current?.setGap(settings.pauses);
+  }, [settings.pauses]);
 
   /**
    * How the text is set, live (ADR 0019).

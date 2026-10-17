@@ -23,8 +23,8 @@ Issue #60. The plugin's side is xujialiu/Zotero-TTS#142._
   returned as it is.
 - `use-reading.ts` passes `gap: settings.pauses` to `createPlaybackEngine`.
   That option existed from the start but was never passed, so `DEFAULT_GAP`
-  always applied. The pauses are **not** in `engineIdentity`, and the engine
-  has no `setGap`.
+  always applied. The pauses are **not** in `engineIdentity`. The engine had
+  no `setGap` until #159 (amendment below).
 - General has two `ValueRow`s in a card titled `Reading aloud`. The bracket rows
   moved to a card without a title below it and kept their footnote. `Choice`
   and the two menus are generic over `string | number`, and `Choice.icon` is
@@ -90,7 +90,8 @@ Issue #60. The plugin's side is xujialiu/Zotero-TTS#142._
 - A pause change takes effect at the next engine build. If Settings ever
   becomes reachable over a mounted Reader, the pauses need a live path (a
   `setGap` that re-queues what is queued) or a place in `engineIdentity`,
-  which would re-spend synthesis.
+  which would re-spend synthesis. Since #68 it is; #159 added a `setGap` that
+  re-queues nothing (amendment below).
 - `UNSPEAKABLE_MS` (300) stays fixed. It is a beat for text that is not
   Speakable, not one of the two pauses.
 
@@ -108,3 +109,11 @@ Issue #60. The plugin's side is xujialiu/Zotero-TTS#142._
   See design 0047.
 - **A number field or a stepper.** The system menu is one tap and has no
   keyboard (ADR 0035).
+
+## Amendment (#159): the pauses reach a held Reading live
+
+The Consequences above rest on "No reader is mounted while the pauses can change". One day later #68 (ADR 0049) kept a playing Reading's view and engine mounted behind the Library, from where Settings opens General, and neither of the two paths named above was added. The engine read `deps.gap` once, when it was built, and computed each Clip's pause from that object as it queued the Clip (`queueAudio(audio, gapContentSeconds(gap, …))`, on the ordinary path and when a Voice handover arms its first Clip). So a length chosen while a Reading was held was not heard in it, through returning to the Reader and through Pause and Play, until that Reading ended. Run over the real `ReadingHost`, `GeneralScreen`, `ReadingView`, `useReading` and engine, a Pause between paragraphs of 2000 ms chosen while the Reading played in the Library gave the Clips queued afterwards 0.2 s each.
+
+`PlaybackEngine.setGap(gap)` now replaces the engine's pair, and `use-reading.ts` hands it `settings.pauses` from an effect beside the speed's. A Clip queued from then on carries the new silence. A Clip already queued keeps its own: the pause is zeroed frames written into its buffer (`audio-graph.ts`), and nothing is queued again for it, so the new length is heard after the read-ahead already queued, at most four Clips (the one playing and `READ_AHEAD_UTTERANCES`, 3, after it). The pauses stay out of `engineIdentity`. Measured in the same harness with them put in it, the choice stopped the Reading playing in the Library and closed its audio context, and the next Play built a second one and fetched the queued sentences again.
+
+`test/playback/engine-gap.test.ts` pins the engine's half over a double of the audio module: the pair given is the silence after every Clip queued afterwards, through Pause and Play, and the Clips already queued are not queued again. `test/app/held-reading-pauses.test.ts` pins the app's: chosen while the Reading plays in the Library, the new pause is on the Clips queued with nothing pressed and after Pause and Play in the Reader, on the same engine.

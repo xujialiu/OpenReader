@@ -114,6 +114,7 @@ export interface PlaybackEngineDeps {
   cache?: ClipCache;
   /** The owner's reading speed. Applied here and nowhere else (ADR 0009); a Provider is never asked for it. */
   rate?: number;
+  /** The pauses the engine starts with; `setGap` gives it the owner's next pair. */
   gap?: GapSettings;
   /**
    * The output device's latency in heard seconds, subtracted from the position
@@ -207,6 +208,14 @@ export interface PlaybackEngine {
    */
   silence(): void;
   setRate(rate: number): void;
+  /**
+   * The **Pause between sentences** and the **Pause between paragraphs**, live
+   * (#159, ADR 0047's amendment): every Clip queued from now on carries the new
+   * silence. A Clip already queued keeps its own, because its pause is frames
+   * written into its buffer, and nothing is queued again for it: what is queued
+   * ahead is the read-ahead, a few sentences.
+   */
+  setGap(gap: GapSettings): void;
   switchVoice(provider: ClipProvider, voice: string, selected: () => void, failed: (error: unknown) => void): void;
   cancelVoiceSwitch(): void;
   snapshot(): PlaybackSnapshot;
@@ -215,7 +224,7 @@ export interface PlaybackEngine {
 }
 
 export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
-  const gap = deps.gap ?? DEFAULT_GAP;
+  let gap = deps.gap ?? DEFAULT_GAP;
   const latency = Math.max(0, deps.outputLatencySeconds ?? 0);
   const cache = deps.cache ?? createMemoryCache<StoredClip>({ maxBytes: DEFAULT_CACHE_BYTES });
   let fetcher = createClipFetcher({
@@ -808,6 +817,10 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       restart(cursor);
       waiting = true;
       pump();
+    },
+
+    setGap(next) {
+      gap = next;
     },
 
     setRate(next) {

@@ -56,9 +56,11 @@ both. A pause set on the desktop now has a place on the phone as well.
   lengthens every other voice's pause too. Adding three tenths of a second
   brings Fish Audio to about four tenths and the others to about seven. An
   owner who moves a book to a different voice may want to change it back.
-- **The pause is chosen away from the book.** Settings opens from the Library,
-  so trying a new length means leaving the book, choosing it, and coming back
-  to listen.
+- **The pause is chosen away from the book.** Settings opens from the Library.
+  A book left playing goes on there, so a new length can be tried while it is
+  heard. It starts after the sentences already lined up, at most four, and
+  stays when the owner goes back into the book. A book left paused closes, and
+  plays the new length when it is opened again.
 - **The desktop means something else by the paragraph number, for now.** There
   it is an extra on top of the sentence pause. The plugin has been asked to
   follow the phone. Until it does, the same two numbers give the same pauses

@@ -59,8 +59,8 @@ bash test/manual-test/kit/run-probe.sh BracketsProbe SIMULATOR_UDID /tmp/openrea
   all, Download selected, and `1 chapters downloaded` within 90 s. Real Fish
   requests on the free model; no playback.
 - `testFlipBracketSwitch`: attaches to the running app, which must already be
-  on General. The UI never puts General over an open reader, so push it with
-  the harness: `{"do":"go","route":"General"}` while the reader is open. It
+  on General. The UI reaches General only from the Library, so push it over
+  the reader with the harness: `{"do":"go","route":"General"}`. It
   flips "Remove enclosing brackets when reading" once and goes back to the
   paused reader.
 - `testReadDownloadCount`: attaches to an open reader and prints the Download

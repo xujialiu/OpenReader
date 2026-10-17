@@ -267,9 +267,10 @@ export interface AppSettings {
    *
    * App-wide, as in the desktop plugin, and for the same reason as the
    * brackets: one pair is true of every Voice, so the same number means the
-   * same pause on the phone and on the desktop. Not in `engineIdentity`: it is
-   * set in General, which is reached only from the Library, so the engine it
-   * would rebuild is already gone and the next one is built with it.
+   * same pause on the phone and on the desktop. Not in `engineIdentity`: a
+   * Reading left playing is held behind the Library while General is open
+   * (#68), and the pair reaches its engine live, from the next Clip queued, as
+   * the speed does (`setGap`, #159). A rebuild would stop that Reading.
    */
   pauses: GapSettings;
   /**
