@@ -31,33 +31,39 @@
 // The wrapper sits on the app's own production path and adds one array push per
 // call; the RAF sampler is the same convention as continuous-follow.cjs. Neither
 // changes the page's layout or the drift's arithmetic. A read only trims.
+/* global rendition */
+// eslint-disable-next-line no-unused-vars
 function probe() {
-  var C = window.__scrollby;
+  let C = window.__scrollby;
   if (!C) {
-    C = window.__scrollby = { log: [], frames: [], on: true, t0: performance.now() };
-    var m = rendition.manager;
-    var raw = m.scrollBy.bind(m);
+    const now = performance.now();
+    C = window.__scrollby = { log: [], frames: [], on: true, t0: now, lastRead: now };
+    const m = rendition.manager;
+    const raw = m.scrollBy.bind(m);
     m.scrollBy = function (x, y, smooth) {
-      var stage = m.container;
-      var before = stage ? stage.scrollTop : null;
+      const stage = m.container;
+      const before = stage ? stage.scrollTop : null;
       raw(x, y, smooth);
-      var after = stage ? stage.scrollTop : null;
+      const after = stage ? stage.scrollTop : null;
       C.log.push([Math.round(performance.now() - C.t0), y, before, after]);
     };
-    var sample = function () {
+    const sample = function () {
       if (!C.on) return;
-      var stage = m.container;
+      const stage = m.container;
       C.frames.push([Math.round(performance.now() - C.t0), stage ? stage.scrollTop : null]);
       requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);
     return JSON.stringify({ armed: true, scroller: !!m.container });
   }
-  var log = C.log.splice(0, C.log.length);
-  var frames = C.frames.splice(0, C.frames.length);
-  var span = log.length ? log[log.length - 1][0] - log[0][0] : 0;
-  var asked = 0, moved = 0, failed = 0, upFailed = 0, downFailed = 0;
-  for (var i = 0; i < log.length; i++) {
+  const log = C.log.splice(0, C.log.length);
+  const frames = C.frames.splice(0, C.frames.length);
+  const now = performance.now();
+  const windowMs = Math.round(now - C.lastRead);
+  C.lastRead = now;
+  const span = log.length ? log[log.length - 1][0] - log[0][0] : 0;
+  let asked = 0, moved = 0, failed = 0, upFailed = 0, downFailed = 0;
+  for (let i = 0; i < log.length; i++) {
     asked += Math.abs(log[i][1]);
     if (log[i][3] !== null && log[i][2] !== null && log[i][3] === log[i][2]) {
       failed++;
@@ -67,19 +73,20 @@ function probe() {
       moved += Math.abs(log[i][3] - log[i][2]);
     }
   }
-  var fMoved = 0, fStill = 0;
-  for (var j = 1; j < frames.length; j++) {
+  let fMoved = 0, fStill = 0;
+  for (let j = 1; j < frames.length; j++) {
     if (frames[j][1] === null || frames[j - 1][1] === null) continue;
     if (frames[j][1] !== frames[j - 1][1]) fMoved++; else fStill++;
   }
-  var stage = rendition.manager.container;
-  var geom = stage
+  const stage = rendition.manager.container;
+  const geom = stage
     ? { scrollTop: stage.scrollTop, scrollHeight: stage.scrollHeight, clientHeight: stage.clientHeight,
         atTop: stage.scrollTop <= 0, atBottom: stage.scrollTop >= stage.scrollHeight - stage.clientHeight }
     : null;
-  var rate = frames.length > 1 ? Math.round((frames.length / (frames[frames.length - 1][0] - frames[0][0])) * 1000) / 1000 : null;
+  const frameMs = frames.length > 1 ? frames[frames.length - 1][0] - frames[0][0] : 0;
+  const rate = frameMs > 0 ? Math.round((frames.length - 1) * 1000 / frameMs) : null;
   return JSON.stringify({
-    windowMs: span,
+    windowMs: windowMs, scrollSpanMs: span,
     scrollByCalls: log.length,
     pxRequested: asked,
     pxActuallyMoved: moved,

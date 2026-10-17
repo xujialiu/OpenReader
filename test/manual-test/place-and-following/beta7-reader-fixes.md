@@ -98,7 +98,8 @@ server journal) advanced and saved "A measure of power…", stamp
   `1792265029558`; the next `open` sync log said `1 places taken`, the reading
   resumed at the remote sentence, and library.json held **exactly the remote
   stamp** — both `position.stamp` and the entry stamp — with no local re-stamp.
-  The stub's newest PUT is schema-identical to the pre-fix upload (`format`,
+  The stub's newest PUT has the same shape as the earlier upload in this run
+  and the existing version-1 contract (`format`,
   `version: 1`, item keys `anchor/format/id/locator/publicationId/stamp`,
   anchor `exact/prefix/suffix`, stamp `at/device`).
 
@@ -122,10 +123,14 @@ page's `born`, after a first awk picked a stale PID and killed nothing):
   not reported the reading's section)`, the page displayed 139, reported it,
   and painted "The castle receptionist flinched…" — `note=null` throughout,
   no "The highlight could not be drawn".
-- **Latest target wins**: `seek 450` then `seek 470` 0.77 s apart (one display
-  request for section 119); the painted sentence is 470's ("Sunny had never
-  expected to find a human"). A first attempt sent both seeks back-to-back and
-  only the second ran — the harness's own ≥300 ms rule; redone properly.
+- **Sequential same-section targets**: `seek 450` then `seek 470` 0.77 s
+  apart (one display request for section 119); the painted sentence is 470's
+  ("Sunny had never expected to find a human"). The raw log shows section 119
+  finished displaying before the second seek, so this is not evidence of
+  replacing a still-pending display. Pending-target replacement, including
+  cross-section replacement, remains covered by the host bridge tests. A
+  first attempt sent both seeks back-to-back and only the second ran — the
+  harness's own ≥300 ms rule; redone with both handler calls observed.
 - **Browsing is not stolen (playing)**: playing while browsed to section 160,
   the page stayed on 159/160 with no highlight while the reading moved on;
   the only display request since the browse was the browse itself. The M
@@ -169,7 +174,7 @@ there the paused show glides and self-terminates regardless of this fix.
 converged the drift normally (the reveal placed its line at the Line Position
 with 79 px of clamp slack left, `atBottom: false`, zero ongoing calls —
 convergence rest, not boundary rest); a play through the front matter moved
-1,581 px on 233 sparse calls with no boundary failures (reachable drift); and
+1,581 px on 233 calls with one failed down-call (reachable drift); and
 the wake control below shows a new target moving the page again.
 
 - **Control, not acceptance — the end-of-book stop**: playing the last
@@ -189,6 +194,18 @@ the wake control below shows a new target moving the page again.
   `continuous-boundary-rest` test, which builds the geometry; on device the
   downward direction and the paused rest are measured.
 
+## Parent audit of the recorder
+
+The saved raw probe output predates a diagnostic-only correction to
+`scrollby-probe.js`: its `framesPerSecond: 0.06` was frames per millisecond,
+not per second, and `windowMs` was the span between the first and last scroll
+calls (zero when none), not the observation duration. The nine-second rest
+above is measured between the two timestamped probe lines, with 539 sampled
+frames and zero calls; neither mistaken field is used as acceptance evidence.
+The recorder now reports elapsed `windowMs`, a separate `scrollSpanMs`, and
+frames per second. Two deterministic host tests cover idle and moving windows.
+This changes no app code and does not alter the raw run's counts or verdict.
+
 ## What else was learned
 
 - `rendered=` in the harness status line reports the last epub.js `display()`
@@ -197,7 +214,7 @@ the wake control below shows a new target moving the page again.
   page correctly showed section 2 with the right highlight (page probe).
   Pre-existing status-line semantics, noted for the next person it confuses.
 - The sim volume returned to 60 four times in one hour on this fresh device
-  with no boot and no app relaunch — the #390 pattern, faster. Every play's
+  with no boot and no app relaunch — the documented volume-reset pattern. Every play's
   `silence.sh check` in the same `&&` chain is what kept each one honest; one
   chain's Play was skipped by a caught reset and simply re-run after `set`.
 - Finding the reader's WebContent process by the first `launchd_sim` awk match
