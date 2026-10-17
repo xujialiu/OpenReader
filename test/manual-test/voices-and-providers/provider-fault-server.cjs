@@ -19,9 +19,17 @@
 // container), cut (headers + partial body, then socket destroyed), stall
 // (headers + partial body, then held — bounded only by the client),
 // json-error / html-error / text-error (complete 200 non-audio bodies),
-// 502 / 503 / 429 / 404.  Modes (voices): ok (fixture voices), junk (a
-// complete 200 with no usable list — the documented-fallback control),
-// 502 / 503 / 429 / 404.  Unknown mode names are refused, never guessed.
+// refuse-pcm (a request naming response_format pcm is refused 422 with
+// FastAPI's literal_error body, any other format gets complete WAV — the
+// #202 PCM-memory scenario; each speech request's response_format is
+// journaled on /__speech), 502 / 503 / 429 / 404.  Modes (voices): ok
+// (fixture voices), junk (a complete 200 with no usable list — the
+// documented-fallback control), 502 / 503 / 429 / 404.  Modes (models): ok
+// (the fixture model, the default), 404 (publishes no model list — #209).
+// A POST without a text `input` — the #209 connection probe's `{}` — is
+// journaled and answered by its mode: a status mode answers that status,
+// anything else answers 422 like FastAPI refusing required fields. Unknown
+// mode names are refused, never guessed.
 //
 // Plain boundary endpoints (no provider logic; each cut every request):
 //   /cut/text /cut/bytes /cut/json — 200 + Content-Length + ~200 body bytes,
@@ -41,9 +49,11 @@ if (!Number.isInteger(port) || port <= 0) {
   process.exit(2);
 }
 
-const SPEECH_MODES = ['ok-pcm', 'ok-wav', 'cut', 'stall', 'json-error', 'html-error', 'text-error', '502', '503', '429', '404'];
+const SPEECH_MODES = ['ok-pcm', 'ok-wav', 'cut', 'stall', 'json-error', 'html-error', 'text-error', 'refuse-pcm', '502', '503', '429', '404'];
 const VOICES_MODES = ['ok', 'junk', '502', '503', '429', '404'];
-const state = { speech: 'ok-pcm', voices: 'ok' };
+const MODELS_MODES = ['ok', '404'];
+const STATUS_MODES = ['502', '503', '429', '404'];
+const state = { speech: 'ok-pcm', voices: 'ok', models: 'ok' };
 const journal = [];
 // Machine-readable assertions without keeping the Document text in this ledger.
 const speechRequests = [];
@@ -99,13 +109,13 @@ function cut(res, { contentType, total, slice, label, delayMs = 150 }) {
   res.on('close', () => log(`CLOSED ${label} at +${Date.now() - t0} ms (ended=${res.writableEnded})`));
 }
 
-function complete(res, contentType, body, label) {
+function complete(res, contentType, body, label, code = 200) {
   const t0 = Date.now();
   // A Date header on every cacheable answer: NSURLCache stores nothing without
   // one (sync/cache-stall-and-recovery.md), which would fake a cache probe.
-  res.writeHead(200, { 'Content-Type': contentType, 'Content-Length': String(body.length), 'Date': new Date().toUTCString(), 'Cache-Control': 'no-store' });
+  res.writeHead(code, { 'Content-Type': contentType, 'Content-Length': String(body.length), 'Date': new Date().toUTCString(), 'Cache-Control': 'no-store' });
   res.end(body);
-  log(`OK ${label} ${body.length} bytes at +${Date.now() - t0} ms`);
+  log(`HTTP ${code} OK ${label} ${body.length} bytes at +${Date.now() - t0} ms`);
 }
 
 function status(res, code, label) {
@@ -133,9 +143,28 @@ const server = http.createServer(async (req, res) => {
     const mode = state.speech;
     let request;
     try { request = JSON.parse(body); } catch { return status(res, 400, 'speech invalid JSON'); }
-    if (!request || typeof request.input !== 'string') return status(res, 400, 'speech missing input');
-    speechRequests.push({ at: Date.now(), mode, voice: request.voice,
+    if (!request || typeof request.input !== 'string') {
+      // No text to speak: the shape of a connection probe's `{}` (#209).
+      // The mode's own answer — a status mode answers that status, any
+      // other answers 422 like FastAPI refusing required fields.
+      speechRequests.push({ at: Date.now(), mode, voice: null, response_format: request?.response_format ?? null, probe: true });
+      if (STATUS_MODES.includes(mode)) return status(res, Number(mode), 'speech probe');
+      return complete(res, 'application/json', JSON.stringify({ detail: [
+        { type: 'missing', loc: ['body', 'model'], msg: 'Field required', input: {} },
+        { type: 'missing', loc: ['body', 'input'], msg: 'Field required', input: {} },
+        { type: 'missing', loc: ['body', 'voice'], msg: 'Field required', input: {} },
+      ] }), 'speech probe', 422);
+    }
+    speechRequests.push({ at: Date.now(), mode, voice: request.voice, response_format: request.response_format ?? null,
       text: createHash('sha256').update(String(request.input ?? '')).digest('hex') });
+    if (mode === 'refuse-pcm') {
+      if (request.response_format === 'pcm') {
+        return complete(res, 'application/json', JSON.stringify({ detail: [
+          { type: 'literal_error', loc: ['body', 'response_format'], msg: "Input should be 'wav', 'opus' or 'mp3'", input: 'pcm' },
+        ] }), 'speech refuse-pcm', 422);
+      }
+      return complete(res, 'audio/wav', wavBytes, 'speech refuse-pcm fallback');
+    }
     if (mode === 'ok-pcm') return complete(res, 'audio/pcm', pcmSamples, 'speech ok-pcm');
     if (mode === 'ok-wav') return complete(res, 'audio/wav', wavBytes, 'speech ok-wav');
     if (mode === 'cut') return cut(res, { contentType: 'audio/pcm', total: 65_536, slice: 8192, label: 'speech cut', delayMs: 1000 });
@@ -162,6 +191,7 @@ const server = http.createServer(async (req, res) => {
     return status(res, 500, 'voices unknown-mode');
   }
   if (req.method === 'GET' && path === '/v1/models') {
+    if (state.models === '404') return status(res, 404, 'models');
     return complete(res, 'application/json', JSON.stringify({ data: [{ id: 'fixture-tts' }] }), 'models');
   }
   if (req.method === 'POST' && path === '/v1/chat/completions') {
@@ -223,10 +253,13 @@ const server = http.createServer(async (req, res) => {
   if (path === '/__mode') {
     const speech = url.searchParams.get('speech');
     const voices = url.searchParams.get('voices');
+    const models = url.searchParams.get('models');
     if (speech !== null && !SPEECH_MODES.includes(speech)) { res.writeHead(400); res.end('unknown speech mode'); return; }
     if (voices !== null && !VOICES_MODES.includes(voices)) { res.writeHead(400); res.end('unknown voices mode'); return; }
+    if (models !== null && !MODELS_MODES.includes(models)) { res.writeHead(400); res.end('unknown models mode'); return; }
     if (speech) { state.speech = speech; log(`MODE speech=${speech}`); }
     if (voices) { state.voices = voices; log(`MODE voices=${voices}`); }
+    if (models) { state.models = models; log(`MODE models=${models}`); }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(state));
     return;

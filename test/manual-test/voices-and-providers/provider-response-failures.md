@@ -20,9 +20,17 @@ closure. `/__log` returns its journal. Its speech route accepts the app's real
 OpenAI Compatible requests; `/v1/models` answers a fixture Model.
 
 - Speech modes: `ok-pcm`, `ok-wav`, `cut`, `stall`, `json-error`, `html-error`,
-  `text-error`, and `502`/`503`/`429`/`404`.
+  `text-error`, `refuse-pcm` (a request naming `response_format: pcm` is
+  refused 422 with FastAPI's literal_error body; any other format gets
+  complete WAV — the #202 PCM-memory scenario, its per-request
+  `response_format` readable on `/__speech`), and `502`/`503`/`429`/`404`.
 - Voice modes: `ok` (Fixture Willow/Alto/Breeze), `junk` (complete unusable
   200), and `502`/`503`/`429`/`404`.
+- Models modes: `ok` (the fixture model, the default) and `404` (publishes no
+  model list — the #209 scenario). A POST to `/v1/audio/speech` without a text
+  `input` — the #209 connection probe's `{}` — is journaled on `/__speech`
+  (`probe: true`) and answered by its mode: a status mode answers that status,
+  anything else answers 422 like FastAPI refusing required fields.
 - Boundary routes: `/cut/text|bytes|json?prefix=N&delay=MS`, `/ok/*`,
   `/stall?prefix=N`, `/stallcut?hold=MS`, `/slow/MS`.
 
