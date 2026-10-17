@@ -184,7 +184,7 @@ final class GeneralFontsProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 3))
     app.buttons["Download"].tap()
 
-    let countLine = app.staticTexts.matching(NSPredicate(format: "label LIKE '* chapters downloaded'")).firstMatch
+    let countLine = app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded'")).firstMatch
     XCTAssertTrue(countLine.waitForExistence(timeout: 10), "Download did not open")
     XCTAssertTrue(app.buttons["Manage downloads"].waitForExistence(timeout: 5))
     app.buttons["Manage downloads"].tap()

@@ -142,7 +142,7 @@ final class PauseOrderProbe: XCTestCase {
     app.buttons["More actions"].tap()
     XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 3))
     app.buttons["Download"].tap()
-    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ENDSWITH 'chapters downloaded'")).firstMatch.waitForExistence(timeout: 20))
+    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded'")).firstMatch.waitForExistence(timeout: 20))
   }
 
   /// The ring on the row titled `chapterTitle` (`DownloadRingProbe.ring(beside:)`).

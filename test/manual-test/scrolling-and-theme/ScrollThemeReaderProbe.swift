@@ -353,7 +353,7 @@ final class ScrollThemeReaderProbe: XCTestCase {
     app.buttons["More actions"].tap()
     XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 3))
     app.buttons["Download"].tap()
-    let countLine = app.staticTexts.matching(NSPredicate(format: "label LIKE '* chapters downloaded'")).firstMatch
+    let countLine = app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded'")).firstMatch
     XCTAssertTrue(countLine.waitForExistence(timeout: 15), "Download did not open or list chapters")
     capture("download-01-list-top", app)
     app.swipeUp()

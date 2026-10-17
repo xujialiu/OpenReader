@@ -3,13 +3,22 @@ import { playerLayout } from '../../src/app/player-layout';
 it('keeps the compact transport at default size on a 402-point phone', () => {
   expect(playerLayout(402, 1)).toMatchObject({ split: false, endWidth: 58, rateHeight: 44 });
 });
+it('keeps the compact transport at default size on a 390-point phone, as on a 393-point one (#218)', () => {
+  // The iPhone 12, 13, 14 and 16e. The seven controls take 2 × 58 + 4 × 44 + 52
+  // = 344 of the 366 points inside the padding: six gaps of 3.67.
+  expect(playerLayout(390, 1)).toMatchObject({ split: false, endWidth: 58 });
+  expect(playerLayout(393, 1).split).toBe(false);
+  // The SE and the mini: 351 points, gaps of 1.17, so the ends get their own row.
+  expect(playerLayout(375, 1).split).toBe(true);
+});
 it('grows both labelled controls and moves crowded ends to their own row', () => {
   for (const scale of [0.823, 0.882, 0.941, 1, 1.118, 1.235, 1.353, 1.786, 2.143, 2.643, 3.143, 3.571]) {
-    for (const width of [320, 375, 402, 440, 768]) {
+    for (const width of [320, 375, 390, 393, 402, 440, 768]) {
       const layout = playerLayout(width, scale);
       expect(layout.endWidth).toBeGreaterThanOrEqual(58 * Math.max(1, scale));
       expect(layout.rateHeight).toBeGreaterThanOrEqual(24 * Math.max(1, scale) + 12);
-      if (!layout.split) expect(2 * layout.endWidth + 228 + 24).toBeLessThanOrEqual(width - 24);
+      // Compact only with six gaps of at least 3 points between the seven controls.
+      if (!layout.split) expect(2 * layout.endWidth + 228 + 6 * 3).toBeLessThanOrEqual(width - 24);
     }
   }
   expect(playerLayout(402, 3.571).split).toBe(true);

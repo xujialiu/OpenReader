@@ -179,7 +179,7 @@ final class OfflineFixProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 5))
     app.buttons["Download"].tap()
 
-    if app.staticTexts["1 chapters downloaded"].waitForExistence(timeout: 3) {
+    if app.staticTexts["1 chapter downloaded"].waitForExistence(timeout: 3) {
       capture("mini-already-downloaded", app)
       return
     }
@@ -190,7 +190,7 @@ final class OfflineFixProbe: XCTestCase {
     let start = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected ('")).firstMatch
     XCTAssertTrue(start.isEnabled)
     start.tap()
-    XCTAssertTrue(app.staticTexts["1 chapters downloaded"].waitForExistence(timeout: 60), "Mini fixture did not finish downloading")
+    XCTAssertTrue(app.staticTexts["1 chapter downloaded"].waitForExistence(timeout: 60), "Mini fixture did not finish downloading")
     capture("mini-fixture-downloaded", app)
   }
 

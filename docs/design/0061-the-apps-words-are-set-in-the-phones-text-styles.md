@@ -101,6 +101,15 @@ can only be read enlarged on a long press was rejected: reading a control
 should not require an extra action. The lookup result's use of Appearance
 remains a separate issue.
 
+The narrowest iPhones, the SE and the minis, are the exception at every size:
+the playback buttons, Contents and the speed do not fit across them in one
+row, so Contents and the speed always have a row of their own there, and the
+player covers more of the page than on other phones. Every other iPhone keeps
+them on one row at the standard text size, with less space between the
+buttons on the narrower ones. Giving that space priority over the page put
+the player on four rows on the iPhone 12, 13, 14 and 16e, which have the room
+for two (#218).
+
 ## Turned down
 
 - **A smaller list of the app's own.** Fewer sizes would have been easier to

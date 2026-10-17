@@ -72,7 +72,7 @@ end_local=$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($
 end_utc=$(python3 -c "import datetime; print(datetime.datetime.fromtimestamp($ends/1000, datetime.timezone.utc).strftime('%H:%M:%S.%f')[:-3])")
 echo "DLEND the Trial ended at $end_local local ($end_utc UTC)"
 echo "DLEND the drawer's lines:"
-echo "$tree" | sed 's/^ *//' | grep -E 'chapters downloaded|Interrupted|Queued|Resume all|Pause all|Resume download|Pause download| / [0-9]+ \|' | awk '!seen[$0]++' | sed 's/^/DLEND   /'
+echo "$tree" | sed 's/^ *//' | grep -E 'chapters? downloaded|Interrupted|Queued|Resume all|Pause all|Resume download|Pause download| / [0-9]+ \|' | awk '!seen[$0]++' | sed 's/^/DLEND   /'
 if [[ -n $fake && -f $fake ]]; then
   echo "DLEND the last synthesis requests of $fake (UTC), the Trial's end at $end_utc:"
   grep 'text=' "$fake" | tail -4 | cut -c1-110 | sed 's/^/DLEND   /'

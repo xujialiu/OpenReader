@@ -8,7 +8,7 @@ import XCTest
 /// with stop-on-word.cjs between these methods.
 ///
 /// - `testDownloadStatLines`: a cold launch, the Library's `...`, Download,
-///   Select all, Download selected, and wait for `1 chapters downloaded`.
+///   Select all, Download selected, and wait for `1 chapter downloaded`.
 /// - `testFlipBracketSwitch`: attaches to the running app, which must be on
 ///   General (the harness's `{"do":"go","route":"General"}` pushes it over an
 ///   open reader, which the UI itself never does), flips the switch once, and
@@ -28,7 +28,7 @@ final class BracketsProbe: XCTestCase {
 
   var countLine: XCUIElementQuery {
     XCUIApplication(bundleIdentifier: "top.xujialiu.openreader").staticTexts
-      .matching(NSPredicate(format: "label LIKE '* chapters downloaded'"))
+      .matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded'"))
   }
 
   func testDownloadStatLines() throws {
@@ -49,10 +49,9 @@ final class BracketsProbe: XCTestCase {
     XCTAssertTrue(start.isEnabled)
     let began = Date()
     start.tap()
-    XCTAssertTrue(app.staticTexts["1 chapters downloaded"].waitForExistence(timeout: 90), "The fixture did not finish downloading")
+    XCTAssertTrue(app.staticTexts["1 chapter downloaded"].waitForExistence(timeout: 90), "The fixture did not finish downloading")
     print("PROBE downloaded in \(String(format: "%.1f", Date().timeIntervalSince(began))) s")
     capture("stat-lines-downloaded", app)
-    app.buttons["Close Download"].tap()
   }
 
   func testFlipBracketSwitch() throws {

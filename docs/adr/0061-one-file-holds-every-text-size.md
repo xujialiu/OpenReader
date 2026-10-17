@@ -162,3 +162,27 @@ background/re-entry check. The current shared LibraryRow already uses
 `useWindowDimensions().fontScale` to update its height (introduced by #121).
 No speculative Library layout change is made; live transitions and progress
 visibility remain required regression and owner-acceptance checks.
+
+### Six gaps of at least 3 points (#218)
+
+`playerLayout` keeps the transport on one row while its seven controls fit
+with six gaps of at least 3 points between them:
+`width − 24 ≥ 2 × endWidth + 4 × 44 + 52 + 6 × 3`. Until #218 it asked for
+4 points. At the default text size the controls take 2 × 58 + 4 × 44 + 52 =
+344 points, so 4-point gaps put the line at 392 points. A 390-point phone
+(iPhone 12, 12 Pro, 13, 13 Pro, 14 and 16e) has 366 points inside the
+Player's padding, gaps of 3.67, and was given the split Player: the Voice on
+a row of its own, and Contents and the speed on another below the transport.
+That is four rows where 393 and 402 points have two, and by the style sheet's
+heights (two 44-point rows, two 6-point gaps) 100 points taller than the
+134.67-point Player ADR 0050 measured.
+
+With 3 points, every width from 386 points up keeps two rows at the default
+size. A 375-point phone (SE, 12 mini, 13 mini) has 351 points, gaps of 1.17,
+and keeps the split Player at every size. At larger sizes the same rule
+leaves a few more widths on one row, each with gaps of at least 3 points: 402
+at xLarge (fontScale 1.118), 414 at xxLarge (1.235), 428 and 430 at xxxLarge
+(1.353). The 44-point targets and the 58-point ends do not shrink; only the
+space between them does. `test/app/player-layout.test.ts` pins 390 on one row
+and 375 split at fontScale 1, and checks the 3-point gaps across its sweep of
+widths and sizes.

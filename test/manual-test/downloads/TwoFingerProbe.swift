@@ -291,7 +291,7 @@ final class TwoFingerProbe: XCTestCase {
       Thread.sleep(forTimeInterval: 0.5)
       XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 3))
       app.buttons["Download"].tap()
-      XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ENDSWITH 'chapters downloaded'")).firstMatch.waitForExistence(timeout: 20))
+      XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded'")).firstMatch.waitForExistence(timeout: 20))
       return app
     }
     if !app.buttons["More actions"].waitForExistence(timeout: 3) {
@@ -305,7 +305,7 @@ final class TwoFingerProbe: XCTestCase {
     app.buttons["More actions"].tap()
     XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 3))
     app.buttons["Download"].tap()
-    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label ENDSWITH 'chapters downloaded'")).firstMatch.waitForExistence(timeout: 20))
+    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded'")).firstMatch.waitForExistence(timeout: 20))
     return app
   }
 
@@ -370,7 +370,7 @@ final class TwoFingerProbe: XCTestCase {
 
   /// The drawer's rows wholly inside the list: below the downloaded count, above the footer.
   func shownRows(_ app: XCUIApplication) -> [XCUIElement] {
-    let top = app.staticTexts.matching(NSPredicate(format: "label ENDSWITH 'chapters downloaded' OR label ENDSWITH ' saved'")).firstMatch.frame.maxY
+    let top = app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded' OR label ENDSWITH ' saved'")).firstMatch.frame.maxY
     let footer = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected (' OR label BEGINSWITH 'Delete selected (' OR label == 'Manage downloads' OR label == 'Back to downloads'")).allElementsBoundByIndex.map { $0.frame.minY }.min() ?? 874
     return drawerRows(app).filter { $0.frame.minY >= top && $0.frame.maxY <= footer }
   }

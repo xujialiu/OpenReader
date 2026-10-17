@@ -125,7 +125,7 @@ final class LibraryActionsProbe: XCTestCase {
 
     app.buttons["More actions"].tap()
     app.buttons["Download"].tap()
-    let countLine = app.staticTexts.matching(NSPredicate(format: "label LIKE '* chapters downloaded'")).firstMatch
+    let countLine = app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded'")).firstMatch
     XCTAssertTrue(countLine.waitForExistence(timeout: 10), "Download did not open from the reader")
     XCTAssertFalse(app.staticTexts["Whole document downloaded"].exists)
     XCTAssertFalse(app.staticTexts["Generating audio may incur speech service charges."].exists)

@@ -395,7 +395,7 @@ final class DownloadConcurrencyProbe: XCTestCase {
     capture("30-chapter-103-deleted", app)
 
     app.buttons["Back from Manage"].tap()
-    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'chapters downloaded'")).firstMatch.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded'")).firstMatch.waitForExistence(timeout: 5))
     capture("31-final-left-open", app)
     closeSheet(app)
     XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 5) || app.buttons["Play"].waitForExistence(timeout: 5), "Reader did not settle after closing Download")

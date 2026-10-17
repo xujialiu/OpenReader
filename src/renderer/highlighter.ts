@@ -2128,6 +2128,12 @@ ${constants}
     var box = boxOf(aimed.whole);
     if (!box) return null;
     var move = (box.top + box.bottom) / 2 - at;
+    /* Unless its end would then be behind the Player, which a Line Position
+       below the middle does to a long sentence: no word follows to move the page
+       again, so its last lines would be spoken out of sight (#197). Then it ends
+       at the top of the Player, what can be seen now. */
+    var seenTo = bounds.top + barCovered + visibleOf(view);
+    if (box.bottom - move > seenTo) move = box.bottom - seenTo;
     /* Unless the Utterance is taller than the screen, where holding its middle
        would push its opening words off the top — and those are the words about to
        be spoken. Then its start goes to the top of what can be seen instead,
