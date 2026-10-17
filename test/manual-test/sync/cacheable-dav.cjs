@@ -3,6 +3,8 @@
 // the three things the real-host stubs could not do, in one process.
 //
 //   node test/manual-test/sync/cacheable-dav.cjs [PORT]     # default 8765
+//   OPENREADER_FIX2_DAV_STATE=/tmp/OWN-DIR (the state directory; the default is
+//   the shared /tmp/openreader-fix2-dav — always set your own for a new run)
 //
 // - **Cacheable** (#166): every GET of the Positions File answers with
 //   `Cache-Control: public, max-age=3600`, a backdated `Last-Modified`
@@ -47,6 +49,10 @@ const http = require('node:http');
 const path = require('node:path');
 
 const PORT = Number(process.argv[2] ?? 8765);
+// The state directory is the OPENREADER_FIX2_DAV_STATE environment variable,
+// never a positional argument: a second positional is silently ignored, and a
+// caller who passes one lands on the default /tmp/openreader-fix2-dav, which
+// can be another session's state (measured 2026-10-18, pitfalls/shell.md).
 const STATE = process.env.OPENREADER_FIX2_DAV_STATE ?? `/tmp/openreader-fix2-dav`;
 const POSITIONS_NAME = 'xujialiu-positions.json';
 const SERVED = path.join(STATE, 'positions-served.json');
