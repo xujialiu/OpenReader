@@ -330,3 +330,23 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
   `batch`'s `key-sequence` steps (#191). The standalone command's own help
   shows its positional examples, and the two parsers differ exactly as the
   #191 entry says for `type`.
+
+## The #203 run: AXe on a loaded machine, and a harness command eaten at launch (2026-10-17, iOS 27.0)
+
+- **Every AXe `describe-ui` snapshot can take 20–40 s when another session's
+  simulator is running a heavy XCTest build on the same Mac**, and the session
+  creation itself alternates between first-try answers and
+  `Timed out creating the simulator remote automation session`. A 20 s
+  `waitForExistence` in an XCTest probe expires against nothing (run 1 of
+  `ProviderVoiceDrawerProbe` failed that way while the app's behaviour was
+  already correct — the sheet's fixture rows were on screen); 60 s waits and
+  retry-over-minutes for the session are the working shape. `ax.py find`
+  answered 45 s after a failed attempt with no action in between.
+- **A harness command written in the same breath as `simctl launch` is consumed
+  with no effect**: the poll fires once the bundle loads, `seq` is marked seen,
+  and `navigationRef.isReady()` is still false, so `open` navigates nowhere and
+  answers nothing (only `saysettings`/`navstate` ever answer, so the silence is
+  easy to misread as a broken pipeline). Re-send the command once the first
+  `[hx] playing=` status line reaches the Debug Log, and read answers there —
+  this session's Metro log stopped carrying new `HX` lines twice while the app
+  stayed connected (the documented quiet-Metro pitfall above).

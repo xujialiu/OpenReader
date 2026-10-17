@@ -40,3 +40,9 @@ that names the script or probe you are about to run.
   and found the finding fixed. `ConsentProbe.swift`, `consent-hold.sh`,
   `../kit/ax.py`, `../player-and-reading-held/fake-kokoro.cjs`,
   `../lock-screen/LockScreenProbe.swift`.
+- [provider-response-failures.md](provider-response-failures.md) (#203, #211,
+  #204): the controlled OpenAI-shaped fault server and the native-boundary CDP
+  probe for lost/stalled/error bodies on the app's own `expo/fetch`, the Voice
+  Drawer's re-ask after refused startup prefetches, and what a first attempt
+  on a wedge-prone fresh device did not get to. `provider-fault-server.cjs`,
+  `native-body-faults.cjs`, `ProviderVoiceDrawerProbe.swift`.
