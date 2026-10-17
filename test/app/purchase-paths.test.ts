@@ -40,7 +40,7 @@ describe('a Reading speaks only through the gate', () => {
 
   it('asks in play() before anything starts, and starts only when allowed', () => {
     const play = between(reading, '  const play = useCallback(() => {', '   * The section Play was looking for has arrived', 'play() in src/app/use-reading.ts');
-    pin(play, 'if (endedRef.current || purchases.allowsSpeech()) {', 'play()');
+    pin(play, 'if (endedRef.current || purchases.canStartSpeech()) {', 'play()');
     pin(play, 'void purchases.askForSpeech().then((yes) => {', 'play()');
     pin(play, 'if (yes) startRef.current();', 'play()');
   });
@@ -100,10 +100,10 @@ describe('a download speaks only through the gate', () => {
   it('asks before Resume all and a resuming ring', () => {
     const task = between(runtime, 'export function toggleTask(', 'export function toggleChapter(', 'toggleTask()');
     pin(task, 'void purchases.askForSpeech().then((yes) => { if (yes) toggleTask(task); });', 'toggleTask()');
-    expect(task.indexOf('purchases.allowsSpeech()')).toBeLessThan(task.indexOf('pausing.resumeAll(task);'));
+    expect(task.indexOf('purchases.canStartSpeech()')).toBeLessThan(task.indexOf('pausing.resumeAll(task);'));
     const ring = between(runtime, 'export function toggleChapter(', 'export async function deleteDownloaded(', 'toggleChapter()');
-    pin(ring, 'if (resumes && !purchases.allowsSpeech()) {', 'toggleChapter()');
-    expect(ring.indexOf('purchases.allowsSpeech()')).toBeLessThan(ring.indexOf('pausing.tapChapter('));
+    pin(ring, 'if (resumes && !purchases.canStartSpeech()) {', 'toggleChapter()');
+    expect(ring.indexOf('purchases.canStartSpeech()')).toBeLessThan(ring.indexOf('pausing.tapChapter('));
   });
 
   it('holds the scheduler back without a question', () => {

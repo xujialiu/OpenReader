@@ -182,7 +182,8 @@ production users `currentEntitlements` and `Transaction.all` both return empty
 for valid non-consumables, and `AppStore.sync()` does not help. The workaround
 discussed there is a local "unlocked" flag kept after the purchase, plus a
 Restore button. The flag is set on a verified Unlock transaction and cleared on
-its revocation.
+its revocation. The source-isolation amendment below limits this fallback to
+a matching verified source; the flag alone is not authority across installs.
 
 ### Not expo-iap
 
@@ -395,11 +396,11 @@ test. Where it differs from the plan above, this section is the code.
 
 ### The module
 
-`modules/open-reader-store/ios/OpenReaderStoreModule.swift` is 130 lines and
-its binding `modules/open-reader-store/index.ts` 34. It offers `products`,
-`purchase` (`purchased`, `pending` or `cancelled`; an unverified answer is a
-rejection), `entitlements`, `revoked`, `sync`, `environment` and a
-`transaction` event. `revoked` asks `Transaction.latest(for:)` for each
+The first module was 130 lines and its binding 34. Its current surface offers
+`products`, `purchase` (a verified transaction with `purchased`, or `pending`
+or `cancelled`), `snapshot`, `sync`, `environment` and a `transaction` event.
+An unverified purchase is a rejection. `snapshot` replaces the separate
+`entitlements` and `revoked` reads; its source contract is below. `revoked` asks `Transaction.latest(for:)` for each
 product and reports the ones whose latest verified transaction carries a
 `revocationDate`, so a refund made while the app was closed is seen at the next
 launch, not only by `Transaction.updates`. `purchase` uses
@@ -419,7 +420,8 @@ ExpoModulesCore brings SwiftUI into the module (notes 2026-10-09 15:10).
   - `mode.ts`: `PURCHASE_LOCK`;
   - `products.ts`;
   - `access.ts`: the states and the arithmetic;
-  - `record.ts`: the fallback record, kept as `{ unlocked, trialStartedAt }`;
+  - `record.ts`: merging the Unlock and the Trial's date within one source;
+  - `cache.ts`: the versioned, source-bound fallback records;
   - `store.ts`: the port;
   - `storekit.ts`: the module behind the port;
   - `fake-store.ts`;
@@ -428,17 +430,78 @@ ExpoModulesCore brings SwiftUI into the module (notes 2026-10-09 15:10).
 - `src/app/purchase-alert.ts`: the alert.
 - `src/app/purchase-setup.ts`: which store and record, configured by the shell
   before `startDownloads`.
-- `src/app/read-aloud-screen.tsx`, `src/app/use-purchases.ts`: Settings.
+- `src/app/purchase-screen.tsx`, `src/app/use-purchases.ts`: Settings.
 
 **The products are waited for 15 s.** After that, or when the App Store has
 neither product under this bundle ID, they count as out of reach until a later
 press asks again. A purchase that rejects also shows "Purchases Unavailable".
 
-**The fallback record** is kept in `Library/Application Support/purchase.json`,
-which the Files app never shows. Owning the Unlock, or the trial's purchase
-date, is taken from StoreKit whenever StoreKit reports it. A product StoreKit
-reports as revoked is forgotten. Anything StoreKit is silent about stays as it
-was.
+**The fallback records** are kept in `Library/Application Support/purchase.json`,
+which the Files app never shows. StoreKit's verified current ownership and
+purchase dates win. An omitted product is kept only within a matching verified
+source; a revocation clears that source's product. The format and unavailable
+case are defined below.
+
+### Purchase records are bound to verified sources (#162)
+
+The owner confirmed that TestFlight has only internal testers and the store
+copy has not shipped. The unversioned `{ unlocked, trialStartedAt }` cache is
+therefore not migrated as evidence of a production purchase. The app rebuilds
+it from StoreKit without removing Documents, settings, credentials, Reading
+Positions or Offline Narration. Apple-side purchases are not revoked.
+
+`purchase.json` now holds `version: 2` and `records`, each a versioned envelope
+with a `source` and the two purchase facts. A source is StoreKit's environment
+(`production`, `sandbox`, `xcode`) and a nonempty `appTransactionID`. The native
+module takes them only from verified app or purchase transactions, never from
+`DEBUG_MODE`, a receipt filename, a bundle flag, or a diagnostic string. Each
+source keeps its own record: switching to testing and back must not erase the
+production fallback. Sandbox and production Trial dates are independent.
+
+The native snapshot reads current verified entitlements and latest verified
+revocations for the two products. Live entitlements supply the source when
+available; otherwise a verified `AppTransaction.shared` can identify an empty
+read. A change between the app-source checks, multiple live sources, or an app
+and live entitlement from different environments is rejected rather than
+merged. Refunds are filtered to the selected source. A live verified purchase
+returns its signed date and source with the result, so granting it does not
+rely on a second entitlement read or the device clock.
+
+Apple documents [`appTransactionID`](https://developer.apple.com/documentation/storekit/apptransaction/apptransactionid)
+as unique to the Apple Account that downloaded the app, stable across devices,
+redownloads, refunds and storefront changes, and available without an IAP.
+The installed SDK back-deploys it before iOS 18.4; an empty sentinel is not a
+usable identity. This is an app-download identity, not an API for inspecting
+the account currently signed in for purchases. Tests changing this identifier
+prove cache isolation, not that signing into another purchasing account on a
+phone changes it. That part of #162 remains a native-verification limit.
+
+[`AppTransaction.shared`](https://developer.apple.com/documentation/storekit/apptransaction/shared)
+can throw when unavailable or unauthenticated and may need a network. A
+missing source is not production and is not equal to another missing source.
+A live verified entitlement can authorize the current run without a reusable
+identity, but is not cached. With no such entitlement, a kept record of unknown
+applicability stays on disk and authorizes nothing: `Access.unavailable` is not
+an expired Trial or a reset Trial. Play retries verification; Restore can
+re-establish it. Settings names the unavailable state and offers Restore rather
+than asking the person to buy again. A fresh installation with no reusable
+record may still ask for its first Trial; only a verified purchase can let
+that press speak.
+
+Verification is bounded to 15 seconds. The controller starts without trusting
+a cache, checks again on returning to the foreground, and ignores reads older
+than a newer read, verified purchase, refund, or controller disposal. New Play
+and Download-resume intents use `canStartSpeech` and wait for an in-progress
+check; `allowsSpeech` lets already-authorized work continue during that check.
+A Reading already playing is not stopped by a verification failure. An unknown
+result never erases the cached record. Same-source empty reads still retain
+verified ownership, preserving the FB22556883 protection.
+
+`test/app/purchase-source.test.ts` runs the actual startup, adapter, controller
+and cache across fresh JS runtimes with native StoreKit and files doubled.
+`test/purchase/source.test.ts` covers timeouts, unavailable/recovery, live
+unscoped proofs, refunds and stale replies. Neither is evidence of an App
+Store-over-TestFlight installation or a real purchasing-account switch.
 
 ### The gate
 
@@ -538,6 +601,17 @@ three refusals (notes and `test/manual-test/purchase/README.md`):
 - A control with the Unlock owned played from the Lock Screen, and the button
   followed the real state.
 
+A later regression (#163) was a second press joining the unanswered question
+from the foreground: it never reached the check that refuses to ask away from
+the screen, so its refusal and the state restatement waited for the alert.
+`askForSpeech()` now checks each locked caller before joining that shared
+question. Foreground callers still share one question; a remote caller with
+valid access is still allowed. `test/app/purchase-remote-play.test.ts` runs the
+real Reading and Now Playing hooks against an unanswered alert and a doubled
+native module: the no-alert control and the unanswered-alert case both send
+playing, then paused after 400 ms. This is not a measurement of the native
+Lock Screen's drawing.
+
 The kit's `play` test asserts that the button stays on Pause, so it now fails
 on a refused press. `lock-device.sh … play-refused` is the action for this case.
 No Swift change was needed. The hook loads the native module with `require`,
@@ -567,9 +641,26 @@ Mode, switched to StoreKit through the harness, with a Sandbox Apple Account
 When `AppStore.sync()` finishes and the Unlock is still not owned, the phone's
 alert says "No Purchase Found" / "There's no purchase to restore for this Apple
 Account." with OK. This applies whether Restore was pressed in the ended alert
-or on the Purchase page, and during the Trial too. A sync that rejects (a
-sign-in cancelled) says nothing, and Ask to Buy pending stays silent. It is
-`PurchaseAsker.nothingToRestore`, called from `restoring()` in `purchases.ts`.
+or on the Purchase page, and during the Trial too. Ask to Buy pending stays
+silent. It is `PurchaseAsker.nothingToRestore`, called from `restoring()` in
+`purchases.ts`.
+
+### Restore distinguishes cancellation from failure (#164)
+
+The native `sync()` returns `restored` after `AppStore.sync()` completes, or
+`cancelled` for `StoreKitError.userCancelled` or `SKError.paymentCancelled`.
+Other errors still reject. The distinction is made in Swift, before Expo
+reduces a thrown error to its localized description; matching English error
+text in JavaScript was rejected because it would change with the phone's
+language and with StoreKit's wrapping.
+
+Only explicit cancellation stays silent. A failed restore shows the existing
+Purchases Unavailable alert, from Settings and from the ended-Trial alert
+alike; it does not change what is owned or say No Purchase Found. A completed
+restore still refreshes what is owned before deciding whether there is nothing
+to restore. `test/app/purchase-restore.test.ts` exercises those outcomes through
+the real adapter, controller and alert with the native module doubled. The
+Swift classification and native UI still require device verification.
 
 ### The Purchase row (beta12)
 

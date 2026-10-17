@@ -1184,7 +1184,7 @@ export function toggleTask(task: DownloadTask): void {
   else {
     // Resuming is asking for speech: while read-aloud is locked, the person is
     // asked first, and the resume happens only once it is allowed (#148).
-    if (!purchases.allowsSpeech()) {
+    if (!purchases.canStartSpeech()) {
       void purchases.askForSpeech().then((yes) => { if (yes) toggleTask(task); });
       return;
     }
@@ -1202,7 +1202,7 @@ export function toggleChapter(task: DownloadTask, chapter: string): void {
   const resumes =
     !pausing.GOES_ON.includes(task.state) || pausing.isPaused(task, chapter);
   // A ring that resumes is asking for speech, as Resume all is (#148).
-  if (resumes && !purchases.allowsSpeech()) {
+  if (resumes && !purchases.canStartSpeech()) {
     void purchases.askForSpeech().then((yes) => { if (yes) toggleChapter(task, chapter); });
     return;
   }

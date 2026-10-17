@@ -1524,7 +1524,7 @@ export function useReading(
    * cuts one off: it meets the gate at the next press after a pause.
    */
   const play = useCallback(() => {
-    if (endedRef.current || purchases.allowsSpeech()) {
+    if (endedRef.current || purchases.canStartSpeech()) {
       start();
       return;
     }

@@ -4,6 +4,7 @@ import type { SynthesisResult } from '../../src/core/providers/types';
 import type { Chapter, NarrationPlan } from '../../src/offline/model';
 import { speechKeying } from '../../src/offline/speech';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import type { PurchaseCache } from '../../src/purchase/cache';
 
 /**
  * #148, ADR 0075: a download is speech, so it waits on the Trial and the
@@ -107,7 +108,7 @@ const answers: { trial: 'start' | 'not-now'; ended: 'unlock' | 'restore' | 'not-
 let store = createFakeStore({ ...FAKE_UNLOCKED, unlocked: false }, { now: () => clock.now });
 function configure(state: Parameters<typeof createFakeStore>[0]) {
   store = createFakeStore(state, { now: () => clock.now });
-  let record = { unlocked: false, trialStartedAt: null as number | null };
+  let record: PurchaseCache | null = null;
   configurePurchases(createPurchases({
     lockOn: true,
     store,

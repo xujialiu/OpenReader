@@ -1,41 +1,55 @@
-/**
- * The App Store as `purchases.ts` sees it (#148, ADR 0075): StoreKit in the app
- * (`storekit.ts`), and a fake one for tests and for a build with Debug Mode
- * (`fake-store.ts`).
- */
-
-/** One product: its name and its price in the person's own currency, as the App Store gives them. */
+/** The App Store seam: verified reads and transactions, not a device-wide unlocked flag. */
 export interface StoreProduct {
   readonly id: string;
   readonly displayName: string;
   readonly displayPrice: string;
 }
 
-/** Something owned, with when it was bought, in milliseconds since 1970. */
+/** Provenance from a verified AppTransaction or live StoreKit transaction, never a build flag. */
+export interface PurchaseSource {
+  readonly environment: 'production' | 'sandbox' | 'xcode';
+  readonly appTransactionId: string;
+}
+
+export function parseSource(value: unknown): PurchaseSource | null {
+  if (!value || typeof value !== 'object') return null;
+  const { environment, appTransactionId } = value as Record<string, unknown>;
+  if (environment !== 'production' && environment !== 'sandbox' && environment !== 'xcode') return null;
+  if (typeof appTransactionId !== 'string' || !appTransactionId.trim()) return null;
+  return { environment, appTransactionId };
+}
+export const sameSource = (a: PurchaseSource | null, b: PurchaseSource | null): boolean =>
+  a !== null && b !== null && a.environment === b.environment && a.appTransactionId === b.appTransactionId;
+
 export interface StoreEntitlement {
   readonly productId: string;
   readonly purchaseDate: number;
 }
-
-/** A transaction the App Store reported by itself: approved, bought on another device, or revoked. */
 export interface StoreTransaction extends StoreEntitlement {
   readonly revoked: boolean;
+  readonly source: PurchaseSource | null;
 }
 
-/** How a purchase ended: bought, waiting for a parent's approval (Ask to Buy), or cancelled. */
+/** A current read. A missing source is never permission to reuse a cached record. */
+export interface StoreSnapshot {
+  readonly source: PurchaseSource | null;
+  readonly owned: readonly StoreEntitlement[];
+  readonly revoked: readonly string[];
+}
+
+/** These strings also name outcomes in the pretend App Store's harness. */
 export type PurchaseOutcome = 'purchased' | 'pending' | 'cancelled';
+export type StorePurchase =
+  | { readonly outcome: 'purchased'; readonly transaction: StoreTransaction }
+  | { readonly outcome: 'pending' | 'cancelled' };
 
 export interface Store {
-  /** The products the App Store has under these identifiers; none, or a rejection, when it cannot be reached or has none. */
   products(ids: readonly string[]): Promise<StoreProduct[]>;
-  /** Shows the App Store's own sheet. Rejects when the purchase could not be made at all. */
-  purchase(id: string): Promise<PurchaseOutcome>;
-  /** What is owned now, verified and not revoked. */
-  entitlements(): Promise<StoreEntitlement[]>;
-  /** Which of these products were revoked: refunded, perhaps while the app was closed. */
-  revoked(ids: readonly string[]): Promise<string[]>;
-  /** Restore Purchase: asks the App Store for this Apple Account's purchases again. */
-  sync(): Promise<void>;
-  /** Transactions as they arrive by themselves. Returns the way to stop listening. */
+  /** A successful purchase carries the verified transaction, including its real purchase date. */
+  purchase(id: string): Promise<StorePurchase>;
+  /** Source, current entitlements and revocations read together by the native adapter. */
+  snapshot(ids: readonly string[]): Promise<StoreSnapshot>;
+  /** Explicit cancellation is silent; other restore failures reject. */
+  sync(): Promise<'restored' | 'cancelled'>;
   listen(listener: (transaction: StoreTransaction) => void): () => void;
 }

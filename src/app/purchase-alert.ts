@@ -1,7 +1,7 @@
 import { Alert, AppState } from 'react-native';
 
 import type { PurchaseAsker } from '../purchase/purchases';
-import { endedQuestion, NOTHING_TO_RESTORE, trialQuestion, UNAVAILABLE } from './purchase';
+import { endedQuestion, NOTHING_TO_RESTORE, trialQuestion, UNAVAILABLE, VERIFICATION_UNAVAILABLE } from './purchase';
 
 /**
  * The questions as the phone puts them (#148, ADR 0075): the system's own
@@ -33,9 +33,10 @@ export const alertAsker: PurchaseAsker = {
       { text: words.notNow, style: 'cancel', onPress: () => resolve('not-now') },
     ], { cancelable: false, onDismiss: () => resolve('not-now') });
   }),
-  unavailable: () => new Promise((resolve) => {
-    Alert.alert(UNAVAILABLE.title, UNAVAILABLE.message, [
-      { text: UNAVAILABLE.ok, onPress: () => resolve() },
+  unavailable: (reason) => new Promise((resolve) => {
+    const words = reason === 'verification' ? VERIFICATION_UNAVAILABLE : UNAVAILABLE;
+    Alert.alert(words.title, words.message, [
+      { text: words.ok, onPress: () => resolve() },
     ], { cancelable: false, onDismiss: () => resolve() });
   }),
   nothingToRestore: () => new Promise((resolve) => {

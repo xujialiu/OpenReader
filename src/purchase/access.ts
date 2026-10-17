@@ -15,7 +15,9 @@ export type Access =
   | { readonly kind: 'unlocked' }
   | { readonly kind: 'trial'; readonly endsAt: number }
   | { readonly kind: 'ended' }
-  | { readonly kind: 'not-started' };
+  | { readonly kind: 'not-started' }
+  /** Kept ownership exists, but its applicability cannot currently be verified. Not a revocation. */
+  | { readonly kind: 'unavailable' };
 
 /**
  * The Trial runs `TRIAL_DAYS` from its transaction's purchase date, against the

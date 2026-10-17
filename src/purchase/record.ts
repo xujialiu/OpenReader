@@ -11,8 +11,12 @@ import { TRIAL_PRODUCT, UNLOCK_PRODUCT } from './products';
  * from someone who paid. So what was seen is kept, and only a revocation, a
  * refund StoreKit reports, takes it back.
  *
+ * These merges apply within one verified source. `cache.ts` and the purchase
+ * controller enforce that scope before using a record; the facts alone do not
+ * authorize a later copy of the app (#162).
+ *
  * Kept on the device alone: never in Shared Settings and never in a Settings
- * Backup, which carry nothing of it (`src/app/purchase-storage.ts`).
+ * Backup, which carry nothing of it (`src/app/purchase-setup.ts`).
  */
 export interface PurchaseRecord {
   readonly unlocked: boolean;

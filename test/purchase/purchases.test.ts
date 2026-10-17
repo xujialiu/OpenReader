@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createFakeStore, FAKE_UNLOCKED, fakeStateFor, type FakeStoreState } from '../../src/purchase/fake-store';
+import { createFakeStore, FAKE_SOURCE, FAKE_UNLOCKED, fakeStateFor, type FakeStoreState } from '../../src/purchase/fake-store';
 import { DAY_MS, TRIAL_MS, TRIAL_PRODUCT, UNLOCK_PRODUCT } from '../../src/purchase/products';
 import { createPurchases, type PurchaseAsker } from '../../src/purchase/purchases';
-import { EMPTY_RECORD, type PurchaseRecord } from '../../src/purchase/record';
+import type { PurchaseRecord } from '../../src/purchase/record';
+import { purchaseCache } from '../../src/purchase/cache';
 import type { Store } from '../../src/purchase/store';
 
 /**
@@ -35,7 +36,7 @@ function setup(options: {
   const purchases = createPurchases({
     lockOn: options.lockOn ?? true,
     store: options.store ?? fake,
-    record: { load: () => options.record ?? EMPTY_RECORD, save: (record) => saved.push(record) },
+    record: { load: () => options.record ? purchaseCache(FAKE_SOURCE, options.record) : null, save: (cached) => saved.push(cached.record) },
     ask,
     now: () => clock.now,
     log: () => {},
@@ -51,7 +52,7 @@ describe('the gate in front of a press of Play or a download', () => {
     expect(purchases.allowsSpeech()).toBe(true);
     expect(await purchases.askForSpeech()).toBe(true);
     expect(asked).toEqual([]);
-    expect(fake.calls).toEqual({ products: 0, purchase: 0, entitlements: 0, sync: 0 });
+    expect(fake.calls).toEqual({ products: 0, purchase: 0, snapshot: 0, sync: 0 });
     expect(purchases.access()).toEqual({ kind: 'off' });
   });
 
@@ -98,7 +99,8 @@ describe('the gate in front of a press of Play or a download', () => {
   it('restores an Unlock StoreKit had not reported, from the alert', async () => {
     const store = createFakeStore({ ...FAKE_UNLOCKED, trialStartedAt: START - TRIAL_MS - DAY_MS }, { now: () => START });
     // Owned, but read back only once the App Store is asked again.
-    const hidden: Store = { ...store, entitlements: async () => (store.calls.sync ? store.entitlements() : []), listen: () => () => {} };
+    const hidden: Store = { ...store, snapshot: async (ids) => ({ ...await store.snapshot(ids),
+      ...(store.calls.sync ? {} : { owned: [] }) }), listen: () => () => {} };
     const { purchases, asked } = setup({ store: hidden, record: { unlocked: false, trialStartedAt: START - TRIAL_MS - DAY_MS }, answers: { ended: 'restore' } });
     await purchases.ready();
     expect(purchases.access()).toEqual({ kind: 'ended' });
@@ -134,12 +136,19 @@ describe('the gate in front of a press of Play or a download', () => {
     expect(asked).toEqual([]);
   });
 
+  it('lets an unlocked remote caller through without requiring a foreground question', async () => {
+    const { purchases, asked } = setup({ state: FAKE_UNLOCKED, canAsk: false });
+    await purchases.ready();
+    expect(await purchases.askForSpeech()).toBe(true);
+    expect(asked).toEqual([]);
+  });
+
   it('puts one question however many presses wait on it', async () => {
     let answer: (choice: 'start' | 'not-now') => void = () => {};
     const store = createFakeStore(NOT_STARTED, { now: () => START });
     const asked: string[] = [];
     const purchases = createPurchases({
-      lockOn: true, store, record: { load: () => EMPTY_RECORD, save: () => {} }, now: () => START, log: () => {},
+      lockOn: true, store, record: { load: () => null, save: () => {} }, now: () => START, log: () => {},
       ask: {
         canAsk: () => true,
         trial: () => { asked.push('trial'); return new Promise((resolve) => { answer = resolve; }); },
@@ -243,14 +252,15 @@ describe('Restore Purchase with nothing to restore', () => {
 
   it('says nothing when the restore did not finish, a sign-in cancelled', async () => {
     const store = createFakeStore(NOT_STARTED, { now: () => START });
-    const { purchases, asked } = setup({ store: { ...store, sync: () => Promise.reject(new Error('userCancelled')) } });
+    const { purchases, asked } = setup({ store: { ...store, sync: async () => 'cancelled' } });
     expect(await purchases.restore()).toBe(false);
     expect(asked).toEqual([]);
   });
 
   it('says nothing when the Unlock is found', async () => {
     const store = createFakeStore({ ...FAKE_UNLOCKED, unlocked: true }, { now: () => START });
-    const hidden: Store = { ...store, entitlements: async () => (store.calls.sync ? store.entitlements() : []), listen: () => () => {} };
+    const hidden: Store = { ...store, snapshot: async (ids) => ({ ...await store.snapshot(ids),
+      ...(store.calls.sync ? {} : { owned: [] }) }), listen: () => () => {} };
     const { purchases, asked } = setup({ store: hidden });
     expect(await purchases.restore()).toBe(true);
     expect(asked).toEqual([]);
@@ -280,7 +290,7 @@ describe('the harness\'s states for a build with Debug Mode', () => {
 
   it('owns the trial product once bought, as StoreKit would', async () => {
     const store = createFakeStore(NOT_STARTED, { now: () => START });
-    expect(await store.purchase(TRIAL_PRODUCT)).toBe('purchased');
-    expect(await store.entitlements()).toEqual([{ productId: TRIAL_PRODUCT, purchaseDate: START }]);
+    expect(await store.purchase(TRIAL_PRODUCT)).toMatchObject({ outcome: 'purchased' });
+    expect((await store.snapshot([TRIAL_PRODUCT])).owned).toEqual([{ productId: TRIAL_PRODUCT, purchaseDate: START }]);
   });
 });

@@ -33,9 +33,8 @@ public final class OpenReaderStoreModule: Module {
       return products.map { ["id": $0.id, "displayName": $0.displayName, "displayPrice": $0.displayPrice] }
     }
 
-    // purchased, pending (Ask to Buy) or cancelled. A verified purchase is
-    // finished here; its entitlement is read back with `entitlements`.
-    AsyncFunction("purchase") { (id: String) async throws -> String in
+    // Carry verified provenance and the signed date back with the purchase itself.
+    AsyncFunction("purchase") { (id: String) async throws -> [String: Any] in
       guard let product = try await Product.products(for: [id]).first else {
         throw Exception(name: "ProductMissing", description: "The App Store has no product \(id).")
       }
@@ -45,45 +44,53 @@ public final class OpenReaderStoreModule: Module {
           throw Exception(name: "Unverified", description: "The App Store's answer for \(id) could not be verified.")
         }
         await transaction.finish()
-        return "purchased"
+        return ["outcome": "purchased", "transaction": OpenReaderStoreModule.describe(transaction)]
       case .pending:
-        return "pending"
+        return ["outcome": "pending"]
       case .userCancelled:
-        return "cancelled"
+        return ["outcome": "cancelled"]
       @unknown default:
-        return "cancelled"
+        return ["outcome": "cancelled"]
       }
     }
 
-    // What the person owns now: verified, not revoked. Purchase dates in
-    // milliseconds since 1970, as JavaScript counts them.
-    AsyncFunction("entitlements") { () async -> [[String: Any]] in
+    AsyncFunction("snapshot") { (ids: [String]) async throws -> [String: Any] in
+      let before = await OpenReaderStoreModule.appSource()
       var owned: [[String: Any]] = []
+      var sources: [[String: String]] = []
       for await result in StoreKit.Transaction.currentEntitlements {
-        guard case .verified(let transaction) = result, transaction.revocationDate == nil else { continue }
-        owned.append([
-          "productId": transaction.productID,
-          "purchaseDate": transaction.purchaseDate.timeIntervalSince1970 * 1000,
-        ])
+        guard case .verified(let transaction) = result,
+              ids.contains(transaction.productID), transaction.revocationDate == nil else { continue }
+        owned.append(OpenReaderStoreModule.describe(transaction))
+        if let source = OpenReaderStoreModule.source(transaction.environment, transaction.appTransactionID),
+           !sources.contains(source) { sources.append(source) }
       }
-      return owned
-    }
-
-    // The products whose latest verified transaction was revoked (a refund),
-    // so that a revocation that happened while the app was closed is seen.
-    AsyncFunction("revoked") { (ids: [String]) async -> [String] in
-      var revoked: [String] = []
+      var refunds: [StoreKit.Transaction] = []
       for id in ids {
         if case .verified(let transaction)? = await StoreKit.Transaction.latest(for: id), transaction.revocationDate != nil {
-          revoked.append(id)
+          refunds.append(transaction)
         }
       }
-      return revoked
+      let after = await OpenReaderStoreModule.appSource()
+      guard sources.count <= 1, before == nil || after == nil || before == after else {
+        throw Exception(name: "PurchaseSourceChanged", description: "The purchase source changed while it was being read. Try again.")
+      }
+      // A live entitlement is authoritative. With none, the verified app transaction
+      // can still identify an empty read's source (including when an IAP is omitted).
+      let app = after ?? before
+      let source = sources.first ?? app
+      if let live = sources.first, let app, live["environment"] != app["environment"] {
+        throw Exception(name: "PurchaseSourceChanged", description: "The purchase and app environments do not agree. Try again.")
+      }
+      let revoked = refunds.filter {
+        OpenReaderStoreModule.source($0.environment, $0.appTransactionID) == source
+      }.map { $0.productID }
+      return ["source": source as Any? ?? NSNull(), "owned": owned, "revoked": revoked]
     }
 
-    // Restore Purchase. It may ask the person to sign in.
-    AsyncFunction("sync") { () async throws in
-      try await AppStore.sync()
+    // Keep cancellation typed before Expo turns thrown errors into descriptions (#164).
+    AsyncFunction("sync") { () async throws -> String in
+      try await StoreRestore.run { try await AppStore.sync() }
     }
 
     // For the Debug Log: production, sandbox or xcode.
@@ -120,11 +127,30 @@ public final class OpenReaderStoreModule: Module {
     return try await product.purchase()
   }
 
-  private static func describe(_ transaction: StoreKit.Transaction) -> [String: Any?] {
+  private static func source(_ environment: AppStore.Environment, _ appTransactionID: String) -> [String: String]? {
+    guard !appTransactionID.isEmpty else { return nil }
+    let name: String
+    switch environment {
+    case .production: name = "production"
+    case .sandbox: name = "sandbox"
+    case .xcode: name = "xcode"
+    default: return nil
+    }
+    return ["environment": name, "appTransactionId": appTransactionID]
+  }
+
+  private static func appSource() async -> [String: String]? {
+    guard let result = try? await AppTransaction.shared,
+          case .verified(let app) = result else { return nil }
+    return source(app.environment, app.appTransactionID)
+  }
+
+  private static func describe(_ transaction: StoreKit.Transaction) -> [String: Any] {
     [
       "productId": transaction.productID,
       "purchaseDate": transaction.purchaseDate.timeIntervalSince1970 * 1000,
       "revoked": transaction.revocationDate != nil,
+      "source": source(transaction.environment, transaction.appTransactionID) as Any? ?? NSNull(),
     ]
   }
 }

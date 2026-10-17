@@ -4,6 +4,7 @@ import type { SynthesisResult } from '../../src/core/providers/types';
 import type { Chapter, DownloadTask, NarrationPlan } from '../../src/offline/model';
 import { speechKeying } from '../../src/offline/speech';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import type { PurchaseCache } from '../../src/purchase/cache';
 
 /**
  * #148, ADR 0075: a launch with a download left going on. Whether read-aloud
@@ -84,8 +85,8 @@ async function launch(owned: { unlocked: boolean; trialStartedAt: number | null 
   const { createFakeStore, FAKE_UNLOCKED } = await import('../../src/purchase/fake-store');
   const store = createFakeStore({ ...FAKE_UNLOCKED, ...owned }, { now: () => NOW });
   // What is owned is read a few milliseconds late, as StoreKit may be.
-  const slow = { ...store, entitlements: () => new Promise<Awaited<ReturnType<typeof store.entitlements>>>((resolve) => setTimeout(() => resolve(store.entitlements()), 20)) };
-  let record = { unlocked: false, trialStartedAt: null as number | null };
+  const slow = { ...store, snapshot: (ids: readonly string[]) => new Promise<Awaited<ReturnType<typeof store.snapshot>>>((resolve) => setTimeout(() => resolve(store.snapshot(ids)), 20)) };
+  let record: PurchaseCache | null = null;
   configurePurchases(createPurchases({
     lockOn: true, store: slow, record: { load: () => record, save: (next) => { record = next; } },
     now: () => NOW, log: () => {},

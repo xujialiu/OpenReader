@@ -1,5 +1,7 @@
 import { DAY_MS, TRIAL_MS, TRIAL_PRODUCT, UNLOCK_PRODUCT } from './products';
-import type { PurchaseOutcome, Store, StoreProduct, StoreTransaction } from './store';
+import type { PurchaseOutcome, PurchaseSource, Store, StoreProduct, StoreTransaction } from './store';
+
+export const FAKE_SOURCE: PurchaseSource = { environment: 'xcode', appTransactionId: 'pretend-store' };
 
 /**
  * A pretend App Store (#148): for tests, and for a build with Debug Mode, where
@@ -14,6 +16,9 @@ export interface FakeStoreState {
   readonly unlocked: boolean;
   /** What the next purchase does: buys, waits for approval, is cancelled, or fails outright. */
   readonly outcome: PurchaseOutcome | 'failed';
+  /** Fault controls for device verification; neither changes Apple's real record. */
+  readonly verification?: 'available' | 'unavailable';
+  readonly restoreOutcome?: 'restored' | 'cancelled' | 'failed';
 }
 
 /** A build with Debug Mode starts here: as if the Unlock were owned, so every test that presses Play plays. */
@@ -54,6 +59,14 @@ export function fakeStateFor(was: FakeStoreState, command: Record<string, unknow
     if (outcome !== 'purchased' && outcome !== 'pending' && outcome !== 'cancelled' && outcome !== 'failed') return null;
     next = { ...next, outcome };
   }
+  if (command.verification !== undefined) {
+    if (command.verification !== 'available' && command.verification !== 'unavailable') return null;
+    next = { ...next, verification: command.verification };
+  }
+  if (command.restoreOutcome !== undefined) {
+    if (command.restoreOutcome !== 'restored' && command.restoreOutcome !== 'cancelled' && command.restoreOutcome !== 'failed') return null;
+    next = { ...next, restoreOutcome: command.restoreOutcome };
+  }
   return next;
 }
 
@@ -64,14 +77,16 @@ export interface FakeStore extends Store {
   /** A refund: the product is no longer owned, and listeners hear of the revocation. */
   revoke(id: string): void;
   /** Counts of what was asked of it, for tests. */
-  readonly calls: { products: number; purchase: number; entitlements: number; sync: number };
+  readonly calls: { products: number; purchase: number; snapshot: number; sync: number };
 }
 
 export function createFakeStore(initial: FakeStoreState, deps: { now(): number; save?(state: FakeStoreState): void }): FakeStore {
   let current = initial;
   const listeners = new Set<(transaction: StoreTransaction) => void>();
-  const calls = { products: 0, purchase: 0, entitlements: 0, sync: 0 };
-  const tell = (transaction: StoreTransaction) => { for (const listener of [...listeners]) listener(transaction); };
+  const calls = { products: 0, purchase: 0, snapshot: 0, sync: 0 };
+  const tell = (transaction: Omit<StoreTransaction, 'source'>) => {
+    for (const listener of [...listeners]) listener({ ...transaction, source: FAKE_SOURCE });
+  };
   function set(next: FakeStoreState): void {
     const was = current;
     current = next;
@@ -100,20 +115,27 @@ export function createFakeStore(initial: FakeStoreState, deps: { now(): number; 
       calls.purchase++;
       if (!current.products) throw new Error('The App Store cannot be reached (fake).');
       if (current.outcome === 'failed') throw new Error('The purchase failed (fake).');
-      if (current.outcome !== 'purchased') return current.outcome;
+      if (current.outcome !== 'purchased') return { outcome: current.outcome };
       if (id === UNLOCK_PRODUCT && !current.unlocked) set({ ...current, unlocked: true });
       if (id === TRIAL_PRODUCT && current.trialStartedAt === null) set({ ...current, trialStartedAt: deps.now() });
-      return 'purchased';
+      return { outcome: 'purchased', transaction: {
+        productId: id, purchaseDate: id === TRIAL_PRODUCT ? current.trialStartedAt! : deps.now(),
+        revoked: false, source: FAKE_SOURCE,
+      } };
     },
-    async entitlements() {
-      calls.entitlements++;
-      return [
+    async snapshot(ids) {
+      calls.snapshot++;
+      if (current.verification === 'unavailable') throw new Error('Purchase verification is unavailable (fake).');
+      return { source: FAKE_SOURCE, revoked: [], owned: [
         ...(current.unlocked ? [{ productId: UNLOCK_PRODUCT, purchaseDate: 0 }] : []),
         ...(current.trialStartedAt !== null ? [{ productId: TRIAL_PRODUCT, purchaseDate: current.trialStartedAt }] : []),
-      ];
+      ].filter((item) => ids.includes(item.productId)) };
     },
-    async revoked() { return []; },
-    async sync() { calls.sync++; },
+    async sync() {
+      calls.sync++;
+      if (current.restoreOutcome === 'failed') throw new Error('Restore failed (fake).');
+      return current.restoreOutcome ?? 'restored';
+    },
     listen(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };

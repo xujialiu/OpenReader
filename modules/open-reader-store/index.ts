@@ -1,34 +1,13 @@
 import { requireOptionalNativeModule } from 'expo';
+import type { StoreProduct, StorePurchase, StoreSnapshot, StoreTransaction } from '../../src/purchase/store';
 
-/** One product as the App Store describes it: its name and its price in the person's own currency. */
-export interface NativeProduct {
-  id: string;
-  displayName: string;
-  displayPrice: string;
-}
-
-/** Something the person owns, with when they bought it, in milliseconds since 1970. */
-export interface NativeEntitlement {
-  productId: string;
-  purchaseDate: number;
-}
-
-/** A transaction StoreKit reported by itself: approved, bought elsewhere, or revoked. */
-export interface NativeTransaction extends NativeEntitlement {
-  revoked: boolean;
-}
-
-/**
- * StoreKit 2, thinly (#148, ADR 0075). `src/purchase/storekit.ts` is its only
- * reader; what a transaction means is decided there and in `purchases.ts`.
- */
+/** Only verified transactions cross this native seam; source identifiers stay on the device. */
 interface StoreNative {
-  products(ids: string[]): Promise<NativeProduct[]>;
-  purchase(id: string): Promise<'purchased' | 'pending' | 'cancelled'>;
-  entitlements(): Promise<NativeEntitlement[]>;
-  revoked(ids: string[]): Promise<string[]>;
-  sync(): Promise<void>;
+  products(ids: string[]): Promise<StoreProduct[]>;
+  purchase(id: string): Promise<StorePurchase>;
+  snapshot(ids: string[]): Promise<StoreSnapshot>;
+  sync(): Promise<'restored' | 'cancelled'>;
   environment(): Promise<string>;
-  addListener(event: 'transaction', listener: (transaction: NativeTransaction) => void): { remove(): void };
+  addListener(event: 'transaction', listener: (transaction: StoreTransaction) => void): { remove(): void };
 }
 export const storeNative = requireOptionalNativeModule<StoreNative>('OpenReaderStore');

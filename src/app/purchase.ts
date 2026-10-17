@@ -43,6 +43,9 @@ export function endedQuestion(price: string): { title: string; message: string; 
 /** No product loads: offline, the App Store down, or a bundle ID with nothing to sell (decision of 2026-10-09). */
 export const UNAVAILABLE = { title: 'Purchases Unavailable', message: "The App Store can't be reached right now.", ok: 'OK' } as const;
 
+/** An unavailable source must not be presented as an expired Trial or a lost purchase (#162). */
+export const VERIFICATION_UNAVAILABLE = { title: 'Purchases Unavailable', message: 'Your purchase could not be verified. Try again or restore your purchase.', ok: 'OK' } as const;
+
 /** Restore finished and found no Unlock for this Apple Account (decision of 2026-10-09). */
 export const NOTHING_TO_RESTORE = { title: 'No Purchase Found', message: "There's no purchase to restore for this Apple Account.", ok: 'OK' } as const;
 
@@ -62,6 +65,7 @@ export function purchaseValue(access: Access | null, now: number): string | unde
   }
   if (access.kind === 'ended') return 'Trial ended';
   if (access.kind === 'unlocked') return 'Unlocked';
+  if (access.kind === 'unavailable') return 'Unavailable';
   return undefined;
 }
 
@@ -89,6 +93,7 @@ export function configurePurchases(next: Purchases | null): void {
  */
 export const purchases = {
   allowsSpeech: (): boolean => (current ? current.allowsSpeech() : !PURCHASE_LOCK),
+  canStartSpeech: (): boolean => (current ? current.canStartSpeech() : !PURCHASE_LOCK),
   /** Settles once what is owned has first been read; at once while nothing is configured. */
   ready: (): Promise<void> => current?.ready() ?? Promise.resolve(),
   /**

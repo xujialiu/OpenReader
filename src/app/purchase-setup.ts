@@ -20,6 +20,7 @@
  *   a relaunch keeps it.
  */
 import { Directory, File, Paths } from 'expo-file-system';
+import { AppState } from 'react-native';
 
 import { debugLog } from '../debug/debug-log';
 import { DEBUG_MODE } from '../debug/mode';
@@ -27,8 +28,8 @@ import { createFakeStore, FAKE_UNLOCKED, fakeStateFor, type FakeStoreState } fro
 import { PURCHASE_LOCK } from '../purchase/mode';
 import { TRIAL_PRODUCT, UNLOCK_PRODUCT } from '../purchase/products';
 import { createPurchases, type Purchases } from '../purchase/purchases';
-import { EMPTY_RECORD, parseRecord, type PurchaseRecord } from '../purchase/record';
-import type { Store } from '../purchase/store';
+import { purchaseCacheStore, type PurchaseCache } from '../purchase/cache';
+import type { PurchaseSource, Store } from '../purchase/store';
 import { storeEnvironment, storeKitStore } from '../purchase/storekit';
 import { configurePurchases, purchases } from './purchase';
 import { alertAsker } from './purchase-alert';
@@ -75,6 +76,8 @@ function readDebugChoice(): DebugChoice {
           trialStartedAt: typeof fake.trialStartedAt === 'number' ? fake.trialStartedAt : null,
           unlocked: fake.unlocked === true,
           outcome: ['purchased', 'pending', 'cancelled', 'failed'].includes(String(fake.outcome)) ? fake.outcome! : 'purchased',
+          verification: fake.verification === 'unavailable' ? 'unavailable' : 'available',
+          restoreOutcome: fake.restoreOutcome === 'cancelled' || fake.restoreOutcome === 'failed' ? fake.restoreOutcome : 'restored',
         }
       : FAKE_UNLOCKED,
   };
@@ -91,17 +94,17 @@ function configure(): void {
   }
   const choice = DEBUG_MODE ? readDebugChoice() : null;
   let store: Store;
-  let record: { load(): PurchaseRecord; save(next: PurchaseRecord): void };
+  let record: { load(source?: PurchaseSource): PurchaseCache | null; save(next: PurchaseCache): void };
   if (choice?.use === 'fake') {
     fake = createFakeStore(choice.fake, { now: () => Date.now(), save: (state) => writeJson(DEBUG_CHOICE, { use: 'fake', fake: state }) });
     store = fake;
     // The pretend App Store keeps what it owns itself; the real record is left alone.
-    let memory = EMPTY_RECORD;
+    let memory: PurchaseCache | null = null;
     record = { load: () => memory, save: (next) => { memory = next; } };
   } else {
     fake = null;
     store = storeKitStore();
-    record = { load: () => parseRecord(readJson(RECORD)), save: (next) => writeJson(RECORD, next) };
+    record = purchaseCacheStore(() => readJson(RECORD), (next) => writeJson(RECORD, next));
     if (DEBUG_MODE) void storeEnvironment().then((environment) => debugLog('purchase', `StoreKit environment: ${environment}`));
   }
   debugLog('purchase', `the lock is on; ${fake ? 'the pretend App Store of Debug Mode' : 'StoreKit'} decides`);
@@ -119,7 +122,11 @@ function configure(): void {
 
 export function startPurchases(): () => void {
   configure();
+  const foreground = AppState.addEventListener('change', (state) => {
+    if (state === 'active') void current?.refresh();
+  });
   return () => {
+    foreground.remove();
     current = null;
     fake = null;
     configurePurchases(null);
@@ -146,6 +153,8 @@ function say(): void {
  *   the pretend App Store owns and sells, and what its next purchase does
  *   (`fakeStateFor`). The app's controller is made afresh, as at a launch, so
  *   the products are loaded again;
+ * - `"verification": "unavailable"` / `"available"`: whether the purchase read works;
+ * - `"restoreOutcome": "restored"` / `"cancelled"` / `"failed"`: the next Restore's result;
  * - `"revoke": "unlock"` or `"trial"`: a refund, likewise;
  * - `"arrive": "unlock"`: the Unlock reported by itself while the app runs, as a
  *   purchase on another device or a parent's approval is, without a relaunch.
@@ -164,7 +173,8 @@ export function storeCommand(command: Record<string, unknown>): void {
     return say();
   }
   const was = readDebugChoice();
-  const changes = command.revoke !== undefined || command.state !== undefined || command.outcome !== undefined;
+  const changes = command.revoke !== undefined || command.state !== undefined || command.outcome !== undefined ||
+    command.verification !== undefined || command.restoreOutcome !== undefined;
   if (!changes) return say();
   if (was.use !== 'fake') return hlog('store: StoreKit decides; send {"do":"store","use":"fake"} first');
   let next: FakeStoreState | null;

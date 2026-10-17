@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 import { ActionRow, Footnote, SettingsGroup, SettingsPage } from './controls';
-import { purchases, UNAVAILABLE } from './purchase';
+import { purchases, UNAVAILABLE, VERIFICATION_UNAVAILABLE } from './purchase';
 import type { ScreenProps } from './routes';
 import { usePurchases } from './use-purchases';
 
@@ -28,9 +28,10 @@ export function PurchaseScreen({ navigation }: ScreenProps<'Purchase'>) {
   }, [done, navigation]);
   return (
     <SettingsPage>
-      <SettingsGroup footer={unavailable && !price ? <Footnote>{UNAVAILABLE.message}</Footnote> : undefined}>
+      <SettingsGroup footer={access?.kind === 'unavailable' ? <Footnote>{VERIFICATION_UNAVAILABLE.message}</Footnote>
+        : unavailable && !price ? <Footnote>{UNAVAILABLE.message}</Footnote> : undefined}>
         {access?.kind === 'not-started' ? <ActionRow label="Start Free Trial" onPress={() => void purchases.startTrial()} /> : null}
-        <ActionRow label={price ? `Unlock for ${price}` : 'Unlock'} onPress={() => void purchases.unlock()} />
+        {access?.kind !== 'unavailable' ? <ActionRow label={price ? `Unlock for ${price}` : 'Unlock'} onPress={() => void purchases.unlock()} /> : null}
         <ActionRow label="Restore Purchase" onPress={() => void purchases.restore()} />
       </SettingsGroup>
     </SettingsPage>

@@ -90,6 +90,30 @@ OpenReader is open source, and two other ways of getting it never ask for money:
   turns it off, so a copy the author builds for the store cannot go out unlocked
   by mistake.
 
+A test copy's Trial and Unlock belong to testing alone. Neither carries over
+to the App Store copy: someone who tried or unlocked a test copy can still
+start their own Trial in the store copy if they have no purchase there.
+
+Only internal testers have used the app, and the App Store copy has not
+shipped. Its earlier remembered purchase state may therefore be rebuilt from
+what Apple reports, rather than carried forward as proof of a real purchase.
+An internal tester may need to restore or make a free test purchase again.
+This leaves their Documents, settings, credentials, Reading Positions and
+Offline Narration alone, and cancels no purchase held by Apple. Preserving the
+old test state was turned down because no paying store customer depends on it.
+
+A previously verified purchase is kept when Apple temporarily omits it and the
+app can still confirm that it belongs to the same store copy. If Apple reports
+no current purchase and the app cannot confirm where the remembered purchase
+belongs, it keeps the record but does not start a new Reading or Download from
+it. The Purchase page says verification is unavailable and offers Restore,
+not another Trial or a purchase to replace the one that might already be owned.
+The person can try Play or Restore again; a Reading already allowed to start
+is not interrupted. Ordinary offline use still works when Apple's local
+information can confirm the purchase. Trusting the old record without knowing
+where it belongs was turned down because it could carry a test purchase into
+the store copy again.
+
 Those two ways are written down on the project's page on GitHub, and nowhere
 else. The App Store page says the app is open source and where its source is.
 The app itself never mentions a free way to get read-aloud: not in its alerts,

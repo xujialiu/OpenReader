@@ -13,8 +13,7 @@ export function storeKitStore(): Store {
     return {
       products: missing,
       purchase: missing,
-      entitlements: async () => [],
-      revoked: async () => [],
+      snapshot: missing,
       sync: missing,
       listen: () => () => {},
     };
@@ -22,8 +21,7 @@ export function storeKitStore(): Store {
   return {
     products: (ids) => native.products([...ids]),
     purchase: (id) => native.purchase(id),
-    entitlements: () => native.entitlements(),
-    revoked: (ids) => native.revoked([...ids]),
+    snapshot: (ids) => native.snapshot([...ids]),
     sync: () => native.sync(),
     listen(listener) {
       const subscription = native.addListener('transaction', listener);
