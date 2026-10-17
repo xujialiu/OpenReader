@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global __dirname, Buffer */
 // Seek the open Document to an Utterance, play, and pause the moment the
 // chosen Utterance becomes the one being spoken — for #197's placement check,
 // where the fact is where the page sits while the long sentence is
@@ -34,7 +35,6 @@ let seq = (() => { try { return Number(JSON.parse(fs.readFileSync(harnessFile, '
 const send = (command) => { seq += 1; fs.writeFileSync(harnessFile, JSON.stringify({ seq, ...command })); };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const mark = (() => { const t0 = Date.now(); return () => ((Date.now() - t0) / 1000).toFixed(2); })();
 
 (async () => {
   const pages = await fetch(new URL('/json/list', metro)).then(r => r.json());
@@ -68,7 +68,6 @@ const mark = (() => { const t0 = Date.now(); return () => ((Date.now() - t0) / 1
   };
   // The utterance index comes from the reading's status line in the Metro log,
   // which is the same value the status line prints every 500 ms.
-  const logSize = () => fs.statSync(metroLog).size;
   const utteranceNow = () => {
     const fd = fs.openSync(metroLog, 'r');
     try {
