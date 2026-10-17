@@ -118,3 +118,24 @@
 ## The #148 round 3: the kit's `play` fails once the app puts the button back, and hangs (beta13, 2026-10-09)
 
 - **`lock-device.sh UDID play` fails against an app that refuses the Play and puts the button back, and the failed run leaves xcodebuild in `simctl diagnose` for minutes.** Symptom (1.0.0 (7)-beta13, Trial ended): `play.log` ended `error: … DeviceLockProbe.swift:89 … XCTAssertEqual failed: ("XCTWaiterResult(rawValue: 2)") is not equal to ("XCTWaiterResult(rawValue: 1)")` and `Executed 1 test, with 1 failure` after 4.9 s, then nothing: `ps` showed `xcodebuild` with a child `simctl diagnose -l -b` and the wrapper still waiting 5 minutes later, and a caller timeout of 300 s did not stop them (the Bash tool moved the command to the background and left the processes running). Cause: the test waits for the centre button to turn to Pause and expects it to stay, but beta13 shows the reading playing for about 400 ms and then paused again (`mediaremoted`: `Paused to Playing` at 17:43:52.957, `Playing to Paused` at 17:43:53.365), and XCUITest's tap returns 1.5 s after the touch, so its first look finds Play; the failure then starts xcodebuild's diagnostics staging, the #128 `home` bullet above. It is the fix working, not a flaky gesture: the Debug Log has the refusal (`read-aloud still locked: nothing plays`), `mediaremoted` has the pair, and `LockScreenProbe` reads Play. Fix: `lock-device.sh UDID play-refused` (new) asserts only that the button reads Play before the tap and prints `LOCKPROBE label when the tap returned: …` and `… 2 s later: …`, so it passes (`Executed 1 test, with 0 failures`) and caught the transient (`Pause` 0.4 s after the tap started, `Play` 2 s later, twice). Wrap any XCTest call that can fail in a runner that kills the whole process group after a limit (`kill` the `xcodebuild`, its `simctl diagnose` and the `lock-device.sh` wrapper by PID otherwise). Keep the failing run's `play.log` and quote its `Executed … with 1 failure` line.
+## The beta20 run: the centre button has no identifier on iOS 26.5 (2026-10-17)
+
+- **On iOS 26.5 the lock screen's Now Playing centre button carries no accessibility identifier, so `play-refused`'s lookup fails and the failed run again sits in `simctl diagnose`.**
+  Symptom (1.0.0 (8)-beta20, iPhone 17 Pro, iOS 26.5): `lock-device.sh UDID play-refused` failed
+  in 6.5 s with `DeviceLockProbe.swift:88: XCTAssertTrue failed - No Now Playing centre button on
+  the lock screen` and `:89 … No matches found for Elements matching predicate
+  '"UIA.MediaControls.NowPlaying.CenterButton" IN identifiers' from input {(Button, identifier:
+  'ListCell'; Button; Button, label: 'Previous Track', Disabled; Button, label: 'Play'; Button,
+  label: 'Next Track', Disabled; Button, identifier: 'UIA.MediaControls.NowPlaying.RoutingButton',
+  label: 'Playback Destination')}`, `Executed 1 test, with 2 failures (0 unexpected) in 6.493` —
+  the intended tap never happened — and xcodebuild then sat in `simctl diagnose -l -b` exactly as
+  the #148 round 3 note says, until the whole process group was killed. Cause: iOS 27.0 names the
+  centre button `UIA.MediaControls.NowPlaying.CenterButton`; iOS 26.5 leaves it unnamed, and the
+  button is the only **enabled** Play/Pause button beside the disabled Previous/Next Track buttons
+  (the RoutingButton keeps its identifier). Fix: `DeviceLockProbe.swift` and `LockScreenProbe.swift`
+  try the iOS 27 identifier first and fall back to the enabled Play/Pause button; rebuild into a
+  NEW `OPENREADER_LOCK_DEVICE_WORK` directory so the failed build's logs survive (`lock-device.sh`
+  deletes the directory when its probe file is newer), and run lock-device phases through
+  `kit/ios_guard.py` so the diagnose hang is bounded by the guard's process-tree cleanup. After the
+  fix the same scenario passed: tap at 1792238286.98, `Pause` when the tap returned, `Play` 2 s
+  later, `Executed 1 test, with 0 failures in 3.222`.
