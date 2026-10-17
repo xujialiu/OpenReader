@@ -318,3 +318,29 @@
   does not vendor one; plain `pod install` in `ios/` is the working form
   (106 dependencies / 105 pods installed for this tree). Reach for
   `bundle exec` only when a Gemfile actually exists at that cwd.
+
+## The #203 run: a fresh iOS 27.0 device wedging four times in one session (2026-10-17)
+
+- **A freshly created iPhone 17 Pro (iOS 27.0) wedged four times in about 90
+  minutes while another session's simulator ran a heavy XCTest probe on the
+  same machine.** The shapes, in order of appearance: `simctl launch` hanging
+  past 120 s; `spawn … launchctl list` and `io screenshot` hanging while the
+  device read `Booted`; one boot refusing with "could not bind to session,
+  launchd_sim may have crashed or quit responding" (retry the boot after the
+  shutdown settles — the first retry still answered `(Booting)` and did not
+  stick); the whole UI freezing (a screenshot's status-bar clock minutes
+  behind the host's). Fix each time: `simctl shutdown` that one UDID, boot
+  again, `silence.sh set` (the boot resets the volume), relaunch with
+  `-RCT_jsLocation`. Bound every simctl call (`perl -e 'alarm N; exec @ARGV' …`)
+  while a device is in this state, and treat a screenshot whose clock lags the
+  host as a frozen frame, not app state.
+- **After a wedge, `simctl io screenshot` can answer quickly with STALE
+  FRAMES.** Three consecutive screenshots taken around a navigation each
+  showed the previous screen with a frozen status-bar clock (14:17 while the
+  host was at 14:21). Compare the screenshot's clock with `date` before
+  reading anything off it; the reading pipe (`[hx] playing=` lines in the app's
+  Debug Log) was the ground truth that the reader was in fact open.
+- **The volume comes back at 60 after an app relaunch that follows a boot, not
+  only after boots (#146/#148 again).** `silence.sh check` in the same breath
+  as every play remains the only safe pattern; this run caught one such reset
+  with `run-probe.sh`'s own pre-flight check refusing to start.
