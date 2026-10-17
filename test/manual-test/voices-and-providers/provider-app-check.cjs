@@ -21,13 +21,20 @@ function assertRetries(requests) {
   assert(counts.size && [...counts.values()].some(n => n === 3) && [...counts.values()].every(n => n <= 3),
     'Expected bounded retries of the same speech text, at most three requests');
 }
-module.exports = { assertPreflight, assertControl, assertRetries };
+function countSaved(inventory, key) {
+  assert(typeof key === 'string' && Array.isArray(inventory) && inventory.every(row => typeof row.voice === 'string' && Number.isSafeInteger(row.count) && row.count >= 0), 'Unexpected repository inventory schema');
+  return inventory.filter(row => row.voice === key).reduce((n,row) => n + row.count, 0);
+}
+module.exports = { assertPreflight, assertControl, assertRetries, countSaved };
 
 async function main() {
   const args = process.argv.slice(2);
   const preflightAt = args.indexOf('--preflight-only');
   const preflightOnly = preflightAt >= 0;
   if (preflightOnly) args.splice(preflightAt, 1);
+  const finishAt = args.indexOf('--finish-saved-run');
+  const savedPrefix = finishAt >= 0 ? args.splice(finishAt, 2)[1] : null;
+  if (finishAt >= 0) assert(/^fixture-check-[a-z0-9]+$/.test(savedPrefix ?? ''), 'A recorded fixture run prefix is required');
   const [device, readingId, downloadId, output, server = 'http://127.0.0.1:8765'] = args;
   assert(device && readingId && downloadId && output && readingId !== downloadId,
     'Usage: provider-app-check.cjs UDID READING_DOCUMENT_ID DOWNLOAD_DOCUMENT_ID OUTPUT [LOCAL_SERVER]');
@@ -83,7 +90,7 @@ async function main() {
     const expected=${expected};
     function mod(name) { let found; __r.getModules().forEach((m,id)=>{if(m.verboseName===name)found=__r(id);}); if(!found)throw Error(name); return found; }
     function find(name) { let found; function walk(f){if(!f)return;if(f.type?.name===name)found=f.memoizedProps;walk(f.child);walk(f.sibling);} const h=__REACT_DEVTOOLS_GLOBAL_HOOK__; for(const id of h.renderers.keys())for(const root of h.getFiberRoots(id))walk(root.current); if(!found)throw Error('Missing '+name);return found; }
-    const b={r:mod('src/offline/runtime.ts'), db:mod('src/offline/database.ts'), lists:mod('src/app/use-voices.ts').voiceLists, player:()=>find('Player'), timers:[], voices:[]};
+    const b={r:mod('src/offline/runtime.ts'), db:mod('src/offline/database.ts'), voiceKey:mod('src/offline/catalog-keys.ts').voiceKey, lists:mod('src/app/use-voices.ts').voiceLists, player:()=>find('Player'), timers:[], voices:[]};
     b.pause=()=>{clearTimeout(b.timer);b.player().onPause();};
     b.snapshot=()=>{const p=b.player(),v=find('ReadingView'),key=mod('src/app/consent.ts').providerRecipient(p.settings,'compatible',false).key;return {
       document:v.document.identity.id,provider:p.settings.provider,voice:p.settings.voice,endpoint:p.settings.compatible.baseURL===expected.server,
@@ -101,40 +108,41 @@ async function main() {
     originalVoice = initial.voice;
     record('preflight', initial);
     if (preflightOnly) return;
-    const nonce = Date.now().toString(36);
-    // Distinct local fixture Voice IDs keep prior attempts' memory Clips out.
-    const readingVoice = 'fixture-check-' + nonce;
-    await voice(readingVoice);
-    await mode('ok-pcm');
-    const before = (await requests()).length;
-    play();
-    const control = await until(async () => {
-      const s=snapshot(), n=(await requests()).length;
-      return n>before && s.playing && !s.buffering && {s,n};
-    });
-    assertControl(before, control.n, control.s);
-    pause();
-    record('normal-reading-control', { posts: control.n-before, playing: control.s.playing, buffering: control.s.buffering });
-
-    // Fresh Voice for fault cases; errors must never enter either Clip cache.
-    await voice(readingVoice + '-fault');
-    for (const [name, message] of [['cut', 'connection'], ['json-error', 'Insufficient balance'], ['html-error', 'text/html'], ['text-error', 'text/plain']]) {
-      await mode(name);
-      const mark = (await requests()).length, started = Date.now();
+    const readingVoice = savedPrefix ?? ('fixture-check-' + Date.now().toString(36));
+    if (!savedPrefix) {
+      await voice(readingVoice);
+      await mode('ok-pcm');
+      const before = (await requests()).length;
       play();
-      const state = await until(async () => {
-        const s=snapshot();
-        return (await requests()).length>mark && !s.playing && s.notes.includes(message) && s;
+      const control = await until(async () => {
+        const s=snapshot(), n=(await requests()).length;
+        return n>before && s.playing && !s.buffering && {s,n};
       });
+      assertControl(before, control.n, control.s);
       pause();
-      record('reading-' + name, { ms: Date.now()-started, posts: (await requests()).length-mark, note: state.notes });
+      record('normal-reading-control', { posts: control.n-before, playing: control.s.playing, buffering: control.s.buffering });
+
+      // Fresh Voice for fault cases; errors must never enter either Clip cache.
+      await voice(readingVoice + '-fault');
+      for (const [name, message] of [['cut', 'connection'], ['json-error', 'Insufficient balance'], ['html-error', 'text/html'], ['text-error', 'text/plain']]) {
+        await mode(name);
+        const mark = (await requests()).length, started = Date.now();
+        play();
+        const state = await until(async () => {
+          const s=snapshot();
+          return (await requests()).length>mark && !s.playing && s.notes.includes(message) && s;
+        });
+        pause();
+        record('reading-' + name, { ms: Date.now()-started, posts: (await requests()).length-mark, note: state.notes });
+      }
+      await mode('ok-wav');
+      const recoveryBefore = (await requests()).length;
+      play();
+      await until(async () => {const s=snapshot(); return (await requests()).length>recoveryBefore && s.playing && !s.buffering;});
+      pause();
+      record('reading-wav-recovery', { freshPosts: (await requests()).length-recoveryBefore });
+
     }
-    await mode('ok-wav');
-    const recoveryBefore = (await requests()).length;
-    play();
-    await until(async () => {const s=snapshot(); return (await requests()).length>recoveryBefore && s.playing && !s.buffering;});
-    pause();
-    record('reading-wav-recovery', { freshPosts: (await requests()).length-recoveryBefore });
 
     evaluate(`__providerCheck.r.requestPlan(${JSON.stringify(downloadId)}, 'Boundary Fixture'); true`);
     const chapter = await until(() => evaluate(`__providerCheck.r.planOf(${JSON.stringify(downloadId)})?.chapters[0]?.id`));
@@ -148,20 +156,52 @@ async function main() {
       const sent = (await requests()).slice(mark).filter(r => r.voice === id);
       assert(sent.length > 0, 'No request reached the fixture; this is not a Download test');
       const inventory = await appPromise(`__providerCheck.db.offlineRepository().then(r=>r.inventory(${JSON.stringify(downloadId)}))`);
-      const saved = inventory.filter(row => row.voice.voice === id).reduce((n,row) => n + row.count, 0);
+      const key = evaluate(`__providerCheck.voiceKey({provider:"compatible",voice:${JSON.stringify(id)}})`);
+      const saved = countSaved(inventory, key);
       if (shouldSave) assert(task.state === 'done' && task.failed.length === 0 && saved > 0, 'Valid recovery was not saved');
       else assert(task.state === 'done' && task.failed.length > 0 && saved === 0, 'Failed response was saved or did not finish as a failed chapter');
       if (name === 'cut') assertRetries(sent);
       if (name.endsWith('-error')) assert(new Set(sent.map(r=>r.text)).size === sent.length, 'A non-retriable error was retried');
       record('download-' + name, { ms:Date.now()-started, posts:sent.length, saved, task });
     }
-    await downloadCase('cut', readingVoice + '-download-cut', false);
     const jsonVoice = readingVoice + '-download-json';
-    await downloadCase('json-error', jsonVoice, false);
-    await downloadCase('html-error', readingVoice + '-download-html', false);
-    await downloadCase('text-error', readingVoice + '-download-text', false);
-    await downloadCase('ok-pcm', jsonVoice, true); // Same failed chapter/Voice: no cached bogus Clip.
-    await downloadCase('ok-wav', readingVoice + '-download-wav', true);
+    if (!savedPrefix) {
+      await downloadCase('cut', readingVoice + '-download-cut', false);
+      await downloadCase('json-error', jsonVoice, false);
+      await downloadCase('html-error', readingVoice + '-download-html', false);
+      await downloadCase('text-error', readingVoice + '-download-text', false);
+      await downloadCase('ok-pcm', jsonVoice, true);
+    } else {
+      // Recheck existing evidence with the corrected inventory schema. Do not
+      // resynthesize cases already run, especially the successful PCM recovery.
+      const inventory = await appPromise(`__providerCheck.db.offlineRepository().then(r=>r.inventory(${JSON.stringify(downloadId)}))`);
+      const history = await requests();
+      const key = id => evaluate(`__providerCheck.voiceKey({provider:"compatible",voice:${JSON.stringify(id)}})`);
+      const task = id => evaluate(`(() => {const t=__providerCheck.r.downloadTasks(${JSON.stringify(downloadId)}).find(t=>t.voice.voice===${JSON.stringify(id)});return t&&{state:t.state,failed:t.failed};})()`);
+      for (const [name, suffix] of [['cut', 'cut'], ['html-error', 'html'], ['text-error', 'text']]) {
+        const id = readingVoice + '-download-' + suffix;
+        const sent = history.filter(r => r.voice === id && r.mode === name);
+        const current = task(id), saved = countSaved(inventory, key(id));
+        assert(sent.length && current?.state === 'done' && current.failed.length && saved === 0, 'Recorded failed Download is not empty');
+        if (name === 'cut') assertRetries(sent);
+        record('rechecked-download-' + name, { posts: sent.length, saved, task: current });
+      }
+      const refused = history.filter(r => r.voice === jsonVoice && r.mode === 'json-error');
+      const recovered = history.filter(r => r.voice === jsonVoice && r.mode === 'ok-pcm');
+      assert(refused.length && refused.every(bad => recovered.some(good => good.text === bad.text && good.at > bad.at)),
+        'Same-text fresh requests must prove the JSON error was not reused as saved audio');
+      const current = task(jsonVoice), saved = countSaved(inventory, key(jsonVoice));
+      assert(current?.state === 'done' && current.failed.length === 0 && saved === new Set(recovered.map(r=>r.text)).size && saved > 0,
+        'The recorded PCM recovery is not complete');
+      const readable = await appPromise(`__providerCheck.db.offlineRepository().then(async r=>{const c=await r.chapter(${JSON.stringify(downloadId)},${JSON.stringify(chapter)});const clips=await Promise.all(c.texts.map(text=>r.readClip(${JSON.stringify(downloadId)},{provider:"compatible",voice:${JSON.stringify(jsonVoice)},label:${JSON.stringify(jsonVoice)}},text)));return clips.filter(x=>x.clip!==null).length;})`);
+      assert(readable === saved, 'Saved inventory has missing payloads');
+      record('rechecked-json-refusal-and-pcm-recovery', { refusedPosts:refused.length, freshRecoveryPosts:recovered.length, saved, readable });
+    }
+    const wavVoice = readingVoice + '-download-wav';
+    const existing = await appPromise(`__providerCheck.db.offlineRepository().then(r=>r.inventory(${JSON.stringify(downloadId)}))`);
+    assert(countSaved(existing, evaluate(`__providerCheck.voiceKey({provider:"compatible",voice:${JSON.stringify(wavVoice)}})`)) === 0,
+      'WAV case already has saved audio; do not replay completed work');
+    await downloadCase('ok-wav', wavVoice, true);
     // The core Drawer touch already has separate evidence. These are the
     // remaining app-loader fallback controls, not additional touch claims.
     try {

@@ -93,8 +93,17 @@ old memory Clips. The probe restores the selected Voice and pauses its work at
 exit. Its `/__speech` ledger groups retries by a hash of speech text; it does not
 infer retries from unrelated requests. No-save checks query the real offline
 repository's inventory, not the number of SQLite/sidecar files. Results and CDP
-expressions are retained in the output directory. These are app handler checks,
-not native touches or a claim about sound quality.
+expressions are retained in the output directory. Inventory rows name the hashed
+`voiceKey`, not an `OfflineVoice` object; a positive saved-count control guards
+that distinction. These are app handler checks, not native touches or a claim
+about sound quality.
+
+If a run reached and saved PCM recovery but its inventory assertion used the
+wrong schema, `--finish-saved-run fixture-check-RUN_PREFIX` rechecks the retained
+fault tasks and speech ledger, reads the saved payloads, and runs only the still
+missing WAV Download and Voice fallback controls. It refuses a WAV case already
+saved, rather than replaying completed work. Keep the failed run and its original
+results; this continuation is a new evidence record, not an edited pass.
 
 Complete [Consent preflight](consent-recovery.md), select the fixture Voice,
 and confirm the app is paused. Set/check the simulator's own volume before every
