@@ -345,3 +345,24 @@
   only after boots (#146/#148 again).** `silence.sh check` in the same breath
   as every play remains the only safe pattern; this run caught one such reset
   with `run-probe.sh`'s own pre-flight check refusing to start.
+
+## The beta7 reader-verification run (2026-10-18)
+
+- **Finding a simulator's WebContent by the first `launchd_sim` awk match can
+  match a transient process and kill nothing.**
+  `ps -axo pid,command | awk '/launchd_sim/ && index($0, u) {print $1; exit}'`
+  returned a PID that no longer existed by the time `kill -9` ran ("No such
+  process"), and the reader's page went on untouched (same `born` in the
+  page-alive probe). Two `launchd_sim` processes can also be alive at once
+  (one per booted device), so the first match may belong to the other
+  session's device. Fix: match the full bootstrap path
+  (`launchd_sim /Users/…/Devices/<UDID>/data/var/run/launchd_bootstrap.plist`),
+  pick the WebContent child whose start time agrees with the reader page's
+  `born`, and verify the kill by the page being replaced (a new `born`), not
+  by the absence of a kill error.
+- **The volume came back at 60 four times in one hour** on a session-created
+  iOS 27.0 device, with no boot and no app relaunch between the later ones —
+  the #390 pattern, faster. Every reset was caught by `silence.sh check` in
+  the same `&&` chain as its play, and one chain's Play was skipped by a
+  caught reset and simply re-run after `set`. A zero is only a zero in the
+  breath it was set; on this device that breath was short.
