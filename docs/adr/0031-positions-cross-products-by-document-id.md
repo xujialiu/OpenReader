@@ -178,6 +178,19 @@ which the specific name makes safe. All of it is the plugin's
 `position-transport.ts` shape, and `core/webdav.ts` comes across as a copy by
 ADR 0013's rule, with its tests.
 
+A malformed file is not an ordinary absent file in the result (#178).
+`SyncOutcome.warning` carries its parse reason through a successful repair, an
+empty local projection and a failed upload. `syncWarning` describes the completed
+run to the existing Sync status line, the Debug Log and the transport's gated
+report: a confirmed upload replaced the file; no local positions left it alone;
+a failed operation did not confirm replacement. A rejected PUT does not prove
+the old file survived, because its response can be lost after the server writes.
+The warning belongs to one outcome and does not linger into a later ordinary
+sync. No new popup, format change, retry rule or exception to newer-version
+protection is introduced. The real transport, hook and screen are exercised
+together in `test/app/sync-unreadable-file.test.ts`, with the server and platform
+controls doubled.
+
 ## When the phone syncs, and what it does with what arrives
 
 Launch, return to foreground, opening a book, adding a book, pause or stop,

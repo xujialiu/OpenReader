@@ -77,6 +77,18 @@ export interface SyncOutcome {
   /** Document Ids whose position moved on this device. */
   adopted: readonly string[];
   uploaded: boolean;
+  /** A damaged file is not an ordinary absent file, even when its repair succeeds. */
+  warning: { kind: 'unreadable-file'; reason: string } | null;
+}
+
+/** One account of the completed repair, shared by the status line and the log. */
+export function syncWarning(outcome: SyncOutcome): string | null {
+  if (!outcome.warning) return null;
+  const problem = `The positions file in the Sync Folder could not be read (${outcome.warning.reason}).`;
+  if (outcome.uploaded) return `${problem} It was replaced with this device's reading positions.`;
+  // A rejected PUT may have reached the server before its reply was lost.
+  if (outcome.result === 'error') return `${problem} Its replacement was not confirmed.`;
+  return `${problem} It was not replaced because this device has no reading positions.`;
 }
 
 export interface PositionsTransport {
@@ -122,6 +134,7 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
     if (!deps.enabled()) return null;
     if (!force && deps.now() - lastFailureAt < SYNC_RETRY_MS) return null;
     const at = deps.now();
+    let warning: SyncOutcome['warning'] = null;
     try {
       const client = await deps.client();
       let remoteText: string | null = null;
@@ -139,10 +152,10 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
         } else if (parsed.reason === 'newer') {
           const error = `The positions file on the server is version ${parsed.version}, which this version of the app does not read. It was left alone; update the app to sync again.`;
           reportGated(error);
-          return finish({ at, trigger, result: 'frozen', error, remote: 0, adopted: [], uploaded: false });
+          return finish({ at, trigger, result: 'frozen', error, remote: 0, adopted: [], uploaded: false, warning });
         } else {
-          // Treated as absent and healed by the upload below; said once.
-          reportGated(`The positions file on the server could not be read (${parsed.why}) and will be replaced.`);
+          // Repair as before, but report only what the completed run confirms.
+          warning = { kind: 'unreadable-file', reason: parsed.why };
           remoteText = null;
         }
       }
@@ -155,12 +168,17 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
         uploaded = true;
       }
       lastFailureAt = Number.NEGATIVE_INFINITY;
-      return finish({ at, trigger, result: 'ok', error: null, remote: remote.length, adopted, uploaded });
+      const outcome: SyncOutcome = { at, trigger, result: 'ok', error: null, remote: remote.length, adopted, uploaded, warning };
+      const said = syncWarning(outcome);
+      if (said) reportGated(said);
+      return finish(outcome);
     } catch (problem) {
       const error = problem instanceof Error ? problem.message : String(problem);
       lastFailureAt = deps.now();
-      reportGated(error);
-      return finish({ at, trigger, result: 'error', error, remote: 0, adopted: [], uploaded: false });
+      const outcome: SyncOutcome = { at, trigger, result: 'error', error, remote: 0, adopted: [], uploaded: false, warning };
+      const said = syncWarning(outcome);
+      reportGated(said ? `${said} ${error}` : error);
+      return finish(outcome);
     }
   }
 
