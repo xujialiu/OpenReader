@@ -57,5 +57,12 @@
   },
   "overrides": {
     "react-dom": "$react"
+  },
+  "expo": {
+    "autolinking": {
+      "ios": {
+        "buildFromSource": ["expo"]
+      }
+    }
   }
 }

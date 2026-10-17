@@ -3,6 +3,7 @@ import type { TimedWord } from '../../align';
 import { base64ToBytes, readClip } from '../audio';
 import { normalizeBaseURL } from '../base-url';
 import { SynthesisError } from '../errors';
+import { responseAudio, responseJSON, throwIfAborted } from '../response';
 import type { ListVoicesOptions, SynthesisOptions, SynthesisResult, TTSProvider, VoiceInfo } from '../types';
 
 /** Kokoro voice ids encode language and gender via a prefix, e.g. af_bella = American Female. */
@@ -69,6 +70,7 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
     try {
       return await deps.fetch(baseURL + path, { ...init, headers });
     } catch (e) {
+      throwIfAborted(init.signal, 'Kokoro');
       // fetch throws outright when the local server isn't up. This must be
       // distinguished here, otherwise the owner would just see a "network
       // error" and go check their own broadband. The message is shown as it
@@ -105,8 +107,9 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
       }
       let body: { voices?: unknown };
       try {
-        body = (await response.json()) as { voices?: unknown };
+        body = await responseJSON(response, 'Kokoro voices', options?.signal);
       } catch (e) {
+        if (e instanceof SynthesisError) throw e;
         throw new SynthesisError('decode-failed', `Kokoro voices response is not valid JSON: ${e}`);
       }
       // Older servers list plain ids; current Kokoro-FastAPI lists
@@ -139,8 +142,9 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
       if (captioned.ok) {
         let body: CaptionedResponse;
         try {
-          body = (await captioned.json()) as CaptionedResponse;
+          body = await responseJSON(captioned, 'Kokoro speech', o.signal);
         } catch (e) {
+          if (e instanceof SynthesisError) throw e;
           throw new SynthesisError('decode-failed', `Kokoro captioned response is not valid JSON: ${e}`);
         }
         if (typeof body.audio === 'string') {
@@ -177,8 +181,7 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
       if (!plain.ok) {
         throw statusError('Kokoro speech', plain.status);
       }
-      const bytes = new Uint8Array(await plain.arrayBuffer());
-      return { ...readClip(bytes, plain.headers.get('Content-Type')), note };
+      return { ...await responseAudio(plain, 'Kokoro speech', o.signal), note };
     },
 
     /**
@@ -203,8 +206,9 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
       }
       let body: CaptionedResponse;
       try {
-        body = (await captioned.json()) as CaptionedResponse;
-      } catch {
+        body = await responseJSON(captioned, 'Kokoro speech');
+      } catch (error) {
+        if (error instanceof SynthesisError) throw error;
         return { ok: false, detail: `the reply to /dev/captioned_speech is not captioned JSON — ${notKokoro}` };
       }
       return toTimedWords(body.timestamps).length

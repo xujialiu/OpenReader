@@ -3,6 +3,7 @@ import { countWords, fishLanguageHint, HINT_WORDS } from '../fish-language-hint'
 import { withTimeout } from '../timeout';
 import { PCM_SAMPLE_RATE, base64ToBytes, concatBytes, readClip } from './audio';
 import { SynthesisError } from './errors';
+import { responseErrorText, responseJSON, responseText, throwIfAborted } from './response';
 import { isSpeakable } from './speechify';
 import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type SynthesisResult, type TTSProvider, type VoiceInfo } from './types';
 
@@ -458,6 +459,7 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
     try {
       return await deps.fetch(`${FISH_API}${path}`, init);
     } catch (e) {
+      throwIfAborted(init.signal, what);
       throw new SynthesisError('network', `${what}: cannot reach api.fish.audio (${e})`);
     }
   }
@@ -479,7 +481,7 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
         const waited = waits ? ` after ${waits} rate-limit wait${waits === 1 ? '' : 's'}` : '';
         return { response, note: `${retried}${waited}` };
       }
-      const body = await response.text().catch(() => '');
+      const body = await responseErrorText(response, what, init.signal ?? undefined);
       if (response.status === 429 && waits < RATE_LIMIT_RETRIES && !isQuota(429, response.headers)) {
         waits++;
         const waitMs = retryAfterMs(response);
@@ -501,10 +503,11 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
     }
   }
 
-  async function readJSON<T>(response: Response, what: string): Promise<T> {
+  async function readJSON<T>(response: Response, what: string, signal?: AbortSignal): Promise<T> {
     try {
-      return (await response.json()) as T;
-    } catch {
+      return await responseJSON<T>(response, what, signal);
+    } catch (error) {
+      if (error instanceof SynthesisError) throw error;
       throw new SynthesisError('unknown', `${what}: the reply was not JSON`);
     }
   }
@@ -627,7 +630,7 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
   async function modelPages(path: (page: number) => string, read: (model: FishModel) => VoiceInfo | null, what: string, signal: AbortSignal | undefined, key: string, deadline: number): Promise<VoiceInfo[]> {
     const readPage = async (page: number): Promise<{ reply: ModelListReply; voices: VoiceInfo[] }> => {
       const { response } = await exchange(path(page), { headers: headers({}, key), ...(signal ? { signal } : {}) }, what, deadline);
-      const reply = await readJSON<ModelListReply>(response, what);
+      const reply = await readJSON<ModelListReply>(response, what, signal);
       if (!Array.isArray(reply?.items)) throw new SynthesisError('unknown', `${what}: the reply was not a model list`);
       return { reply, voices: mergeVoices(reply.items.map((item) => read(item as FishModel)).filter((voice): voice is VoiceInfo => voice !== null)) };
     };
@@ -649,8 +652,8 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
     const what = `Fish Audio voice ${id}`;
     const response = await request(`/model/${id}`, { headers: headers({}, key), ...(signal ? { signal } : {}) }, what);
     if (response.status === 404) return { id: `${MULTILINGUAL}/${id}`, label: `${id} (not found)`, locale: MULTILINGUAL };
-    if (!response.ok) throw refusal(response, await response.text().catch(() => ''), what);
-    return fishVoice(await readJSON<FishModel>(response, what)) ?? { id: `${MULTILINGUAL}/${id}`, label: id, locale: MULTILINGUAL };
+    if (!response.ok) throw refusal(response, await responseErrorText(response, what, signal), what);
+    return fishVoice(await readJSON<FishModel>(response, what, signal)) ?? { id: `${MULTILINGUAL}/${id}`, label: id, locale: MULTILINGUAL };
   }
 
   /**
@@ -754,7 +757,7 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
     const body = { text: hint + text, format: FISH_FORMAT, mp3_bitrate: MP3_BITRATE, latency: 'normal', ...(decoded.id === DEFAULT_VOICE ? {} : { reference_id: decoded.id }) };
     const init: RequestInit = { method: 'POST', headers: headers({ 'Content-Type': 'application/json', model: model() }), body: JSON.stringify(body), signal };
     const { response, note } = await exchange('/v1/tts/stream/with-timestamp', init, what);
-    const events = parseEventStream(await response.text());
+    const events = parseEventStream(await responseText(response, what, signal));
     let merged: MergedStream;
     try {
       merged = mergeEvents(events);
@@ -868,7 +871,7 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
       requireKey();
       const what = 'Fish Audio key check';
       const response = await request('/model?self=true&page_size=1', { headers: headers() }, what);
-      if (!response.ok) throw refusal(response, await response.text().catch(() => ''), what);
+      if (!response.ok) throw refusal(response, await responseErrorText(response, what), what);
     },
 
     /**

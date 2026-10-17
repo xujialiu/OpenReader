@@ -1,7 +1,11 @@
-import { base64ToBytes, readClip } from './audio';
+import { base64ToBytes } from './audio';
 import { normalizeBaseURL } from './base-url';
 import { SynthesisError } from './errors';
+import { responseAudio, responseErrorText, responseJSON, throwIfAborted } from './response';
+import { serverReason } from './server-reason';
 import { MULTILINGUAL, type ListVoicesOptions, type ProviderId, type SynthesisOptions, type SynthesisResult, type TTSProvider, type VoiceInfo } from './types';
+
+export { serverReason } from './server-reason';
 
 /**
  * The client the OpenAI and OpenAI Compatible sections share: OpenAI's speech
@@ -110,51 +114,10 @@ export function parseModelList(body: unknown): string[] {
   return out;
 }
 
-/**
- * FastAPI's `detail`: a sentence, or one entry per refused field whose `loc`
- * starts with where the field was (`body`, `query`), which is left out when a
- * field name follows it. `voice: Field required; speed: Input should be…`.
- */
-function fastApiDetail(detail: unknown): string {
-  if (typeof detail === 'string') return detail.trim();
-  if (!Array.isArray(detail)) return '';
-  return detail.flatMap((entry) => {
-    const { loc, msg } = (entry ?? {}) as { loc?: unknown; msg?: unknown };
-    if (typeof msg !== 'string' || !msg.trim()) return [];
-    const path = Array.isArray(loc) ? loc.map(String) : [];
-    const field = (path.length > 1 && ['body', 'query', 'path', 'header'].includes(path[0]!) ? path.slice(1) : path).join('.');
-    return [field ? `${field}: ${msg.trim()}` : msg.trim()];
-  }).join('; ');
-}
-
 function statusError(status: number, what: string): SynthesisError {
   if (status === 401 || status === 403) return new SynthesisError('auth', `${what}: the server rejected the API key (${status})`);
   if (status === 429) return new SynthesisError('rate-limit', `${what}: rate limited (429)`);
   return new SynthesisError('unknown', `${what}: HTTP ${status}`);
-}
-
-/**
- * What the server said, from an error body in OpenAI's shape — the longer
- * of `error.message` and `error.param`, since OpenAI puts the detail in the
- * message ("Invalid value: 'x'. Supported values are…", param "voice") and
- * other servers in the param ("Unknown voice: x. Available voices: […]",
- * message "Param Incorrect") — or in FastAPI's, which self-hosted servers
- * such as Chatterbox answer with (#65): `detail` as a sentence, or as a list
- * of fields and what is wrong with each. Empty for anything else.
- */
-export function serverReason(body: string): string {
-  try {
-    const parsed = JSON.parse(body) as { error?: unknown; detail?: unknown } | null;
-    const detail = fastApiDetail(parsed?.detail);
-    if (detail) return detail.slice(0, 300);
-    const error = parsed?.error;
-    if (typeof error === 'string') return error.trim().slice(0, 300);
-    const fields = error as { message?: unknown; param?: unknown } | null;
-    const texts = [fields?.message, fields?.param].filter((v): v is string => typeof v === 'string' && v.trim() !== '');
-    return texts.sort((a, b) => b.length - a.length)[0]?.trim().slice(0, 300) ?? '';
-  } catch {
-    return '';
-  }
 }
 
 /**
@@ -203,6 +166,7 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
     try {
       return await deps.fetch(`${base()}${path}`, { headers: authHeaders(), signal });
     } catch (e) {
+      throwIfAborted(signal, cfg.label);
       throw new SynthesisError('network', `Cannot reach ${base()}: ${e}`);
     }
   }
@@ -216,6 +180,7 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
         signal,
       });
     } catch (e) {
+      throwIfAborted(signal, cfg.label);
       throw new SynthesisError('network', String(e));
     }
   }
@@ -241,7 +206,7 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
     let note = refusesPcm ? 'the server does not do PCM; asked for MP3' : '';
 
     if (!response.ok && !refusesPcm) {
-      const refusal = refusalFrom(response.status, await response.text().catch(() => ''), what);
+      const refusal = refusalFrom(response.status, await responseErrorText(response, what, signal), what);
       if (!FORMAT_REFUSALS.includes(response.status)) throw refusal;
       const retry = await ask(FALLBACK_FORMAT);
       if (!retry.ok) throw refusal;
@@ -249,10 +214,9 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
       response = retry;
       note = 'the server refused PCM; asked for MP3';
     }
-    if (!response.ok) throw refusalFrom(response.status, await response.text().catch(() => ''), what);
+    if (!response.ok) throw refusalFrom(response.status, await responseErrorText(response, what, signal), what);
 
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const clip = readClip(bytes, response.headers.get('Content-Type'));
+    const clip = await responseAudio(response, what, signal);
     return note ? { ...clip, note } : clip;
   }
 
@@ -273,11 +237,12 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
   async function speakOnChatRoute(text: string, voice: string, signal?: AbortSignal): Promise<SynthesisResult> {
     const what = 'chat/completions audio';
     const response = await post('/v1/chat/completions', { model: cfg.model, messages: [{ role: 'assistant', content: text }], audio: { format: FALLBACK_FORMAT, voice } }, signal);
-    if (!response.ok) throw refusalFrom(response.status, await response.text().catch(() => ''), what);
+    if (!response.ok) throw refusalFrom(response.status, await responseErrorText(response, what, signal), what);
     let reply: unknown;
     try {
-      reply = await response.json();
-    } catch {
+      reply = await responseJSON(response, what, signal);
+    } catch (error) {
+      if (error instanceof SynthesisError) throw error;
       throw new SynthesisError('unknown', `${what}: the reply was not JSON`);
     }
     const data = chatAudioData(reply);
@@ -315,14 +280,19 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
       if (response.ok) {
         let body: unknown = null;
         try {
-          body = await response.json();
-        } catch {
+          body = await responseJSON(response, `${base()}/v1/audio/voices`, options?.signal);
+        } catch (error) {
+          if (error instanceof SynthesisError) throw error;
           // Not JSON: the route exists but is something else; fall through
         }
         const published = parseVoiceList(body);
         if (published.length) return published.map((v) => ({ ...v, locale: MULTILINGUAL }));
-      } else if (response.status === 401 || response.status === 403) {
-        throw statusError(response.status, `${base()}/v1/audio/voices`);
+      } else if (response.status !== 404 && response.status !== 405) {
+        // A missing listing route permits documented names. A gateway failure
+        // does not: caching those names would prevent the next open retrying.
+        const what = `${base()}/v1/audio/voices`;
+        if (response.status >= 500) throw new SynthesisError('network', `${what}: HTTP ${response.status}`);
+        throw statusError(response.status, what);
       }
       return (cfg.defaultVoices ?? []).map((id) => ({ id, label: id, locale: MULTILINGUAL }));
     },
@@ -338,8 +308,9 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
       if (response.status === 404 || response.status === 405) return [];
       if (!response.ok) throw statusError(response.status, url);
       try {
-        return parseModelList(await response.json());
-      } catch {
+        return parseModelList(await responseJSON(response, url));
+      } catch (error) {
+        if (error instanceof SynthesisError) throw error;
         return [];
       }
     },

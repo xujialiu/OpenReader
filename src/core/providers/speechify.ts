@@ -1,6 +1,7 @@
 import { alignWordsToText, type TimedWord } from '../align';
 import { PCM_SAMPLE_RATE, base64ToBytes, concatBytes, pcmSeconds } from './audio';
 import { SynthesisError } from './errors';
+import { responseErrorText, responseJSON, throwIfAborted } from './response';
 import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type SynthesisResult, type TTSProvider, type VoiceInfo } from './types';
 
 /**
@@ -280,6 +281,7 @@ export function createSpeechifyProvider(cfg: SpeechifyConfig, deps: SpeechifyDep
     try {
       return await deps.fetch(`${SPEECHIFY_API}${path}`, init);
     } catch (e) {
+      throwIfAborted(init.signal, what);
       throw new SynthesisError('network', `${what}: cannot reach api.speechify.ai (${e})`);
     }
   }
@@ -301,7 +303,7 @@ export function createSpeechifyProvider(cfg: SpeechifyConfig, deps: SpeechifyDep
           const waited = waits ? ` after ${waits} rate-limit wait${waits === 1 ? '' : 's'}` : '';
           return { response, note: `${retried}${waited}` };
         }
-        const body = await response.text().catch(() => '');
+        const body = await responseErrorText(response, what, signal);
         if (response.status === 429 && waits < RATE_LIMIT_RETRIES && !isQuota(429, speechifyReason(body))) {
           waits++;
           await pause(retryAfterMs(response));
@@ -317,10 +319,11 @@ export function createSpeechifyProvider(cfg: SpeechifyConfig, deps: SpeechifyDep
     }, signal, cfg.atOnce, cfg.download === true);
   }
 
-  async function readReply<T>(response: Response, what: string): Promise<T> {
+  async function readReply<T>(response: Response, what: string, signal?: AbortSignal): Promise<T> {
     try {
-      return (await response.json()) as T;
-    } catch {
+      return await responseJSON<T>(response, what, signal);
+    } catch (error) {
+      if (error instanceof SynthesisError) throw error;
       throw new SynthesisError('unknown', `${what}: the reply was not JSON`);
     }
   }
@@ -338,7 +341,7 @@ export function createSpeechifyProvider(cfg: SpeechifyConfig, deps: SpeechifyDep
   async function synthesizeOnce(body: Record<string, unknown>, what: string, signal?: AbortSignal): Promise<{ reply: SpeechReply; note: string }> {
     const init: RequestInit = { method: 'POST', headers: { ...headers(), 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal };
     const { response, note } = await exchange('/v1/audio/speech', init, what, signal);
-    return { reply: await readReply<SpeechReply>(response, what), note };
+    return { reply: await readReply<SpeechReply>(response, what, signal), note };
   }
 
   /** The result with the timings only when some word aligned — never the key with nothing behind it — and the note either way. */
@@ -411,7 +414,7 @@ export function createSpeechifyProvider(cfg: SpeechifyConfig, deps: SpeechifyDep
       for (let pages = 0; pages < MAX_PAGES; pages++) {
         const path = `/v1/voices?limit=${PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
         const { response } = await exchange(path, { headers: headers(), signal: options?.signal }, what, options?.signal);
-        const reply = await readReply<{ voices?: unknown; has_more?: unknown; next_cursor?: unknown }>(response, what);
+        const reply = await readReply<{ voices?: unknown; has_more?: unknown; next_cursor?: unknown }>(response, what, options?.signal);
         const list = reply?.voices;
         if (!Array.isArray(list)) throw new SynthesisError('unknown', `${what}: the reply was not a voice list`);
         raw.push(...(list as SpeechifyVoice[]));
