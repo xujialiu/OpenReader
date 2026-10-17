@@ -46,28 +46,48 @@ StoreKit results.
   (`text=` lines, `playing=true … level=word`), a real Pause left the Now
   Playing card paused. Then `state=ended`, Play in the Reader, the ended alert
   left unanswered, `lock-device.sh lock`, and (after `silence.sh check`)
-  `play-refused`: tap at 1792238286.98, `Pause` when the tap returned, **`Play`
-  2 s later**, `Executed 1 test, with 0 failures in 3.222`; `unlock` passed;
-  `LockScreenProbe/testLockScreen` (supplementary) read the centre button
-  `label: Play, enabled` centred on the card, `Executed 1 test, with 0
-  failures`. The Debug Log has `remote command=play playing=false`,
+  `play-refused`. The `lock` and this first `play-refused` attempt ran as
+  bounded bare commands before the parent's steering; the steering then required
+  the guard, and every later build/XCTest run (the rerun's `play-refused`,
+  `unlock`, `LockScreenProbe`) went through `kit/ios_guard.py`. The first
+  attempt **failed before any tap** — iOS 26.5's centre button has no
+  `CenterButton` identifier (`Executed 1 test, with 2 failures in 6.493`, then
+  the documented `simctl diagnose` hang, killed) — so it is evidence that the
+  lookup failed, **not** evidence of a refusal: no remote command reached the
+  app and no refusal line exists from that run. The refusal evidence is the
+  guarded 19:58 rerun's alone: tap at 1792238286.98, `Pause` when the tap
+  returned, **`Play` 2 s later**, `Executed 1 test, with 0 failures in 3.222`;
+  `unlock` passed; `LockScreenProbe/testLockScreen` (supplementary) read the
+  centre button `label: Play, enabled` centred on the card, `Executed 1 test,
+  with 0 failures`. The Debug Log has `remote command=play playing=false`,
   `play while read-aloud is locked: asking (#148)`, `read-aloud still locked:
   nothing plays`, `playing=false app=background` throughout, and the fake
   server's count did not move (18 → 18). The alert was still up after the
   unlock. The unlocked control then reached the provider again (18 → 21) and
-  was paused. The first `play-refused` attempt on this runtime **failed** —
-  iOS 26.5's centre button has no `CenterButton` identifier
-  (`Executed 1 test, with 2 failures in 6.493`, then the documented
-  `simctl diagnose` hang, killed) — see `../pitfalls/lock-and-background.md`
-  for the locator fix and the rerun.
+  was paused. The locator fix and the failed run are kept in
+  `../pitfalls/lock-and-background.md`.
 - **A Download start is denied with the Trial over (#163).** With `state=ended`
   and two chapters selected, `Download selected (2)` raised the ended alert and
-  sent nothing (21 → 21). The mid-flight pause → Resume-all denial was not
-  reachable on this fixture: the two chapters download in under a second, so no
-  running task could be caught; that resume gate is the same
-  `canStartSpeech`/`askForSpeech` path the Play and verification checks
-  exercised, and is covered by the host suite (`test/app/purchase-remote-play.test.ts`,
-  `test/offline/runtime-purchase.test.ts`).
+  sent nothing (21 → 21).
+- **A paused Download's denied Resume all and its explicit resume, observed
+  (follow-up the same day, fake Kokoro restarted at
+  `OPENREADER_FAKE_TTS_DELAY_MS=1500`, Kokoro's Sentences at once 1, saved
+  audio deleted and a noop relaunch to clear memory clips).** The download ran
+  against the delayed server (fresh-run count 44 → 67, requests ~1.6 s apart);
+  a real-touch **Pause all** in the drawer left it paused with work remaining
+  (First Chapter 5/10, Second untouched; count 67 → 68 → 68: the in-flight
+  answer settled, then nothing). Under `state=ended`, real-touch **Resume all**
+  raised the ended alert (49 → 49 → 49 around the press) and Not Now left it
+  paused; under `state=unlocked,verification=unavailable` it raised the
+  verification explanation (49 → 49 → 49); after
+  `verification=available` nothing auto-resumed for 8 s (still `Resume all`,
+  count 49). An explicit **Resume all** then sent new requests (49 → 53, and in
+  a fresh single-invocation cycle 68 → 71, logged ~1.6 s apart), and a prompt
+  second Pause all stopped it again (73 → 73 stable), leaving a genuinely
+  unfinished paused task (1 chapter downloaded, the Second not started). Every
+  press was a real coordinate touch with the drawer's link position measured
+  from the same invocation's screenshot; every assertion pairs the request
+  count with the drawer state (`attempt/shots/29–44` of the follow-up run).
 - **The Fish Model list keeps its choices and clears a failed load on a new
   visit (#230).** With `breakfetch … "from":1` armed before the first visit, the
   page logged the refused request shape, showed "Additional Models could not be
