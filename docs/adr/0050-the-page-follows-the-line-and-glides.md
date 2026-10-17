@@ -34,7 +34,9 @@ All of it is in the WebView program, `src/renderer/highlighter.ts`, and
   begins on the line being read moves nothing, and one that begins a paragraph
   starts moving at its Clip cue, 84–118 ms before its first word is drawn. A Clip
   without Word Timings (`words: null`, `durationMs > 0`) is aimed at whole: the
-  middle of `boxOf(built)`, with ADR 0011's tall-Utterance rule. A sentence the
+  middle of `boxOf(built)`, with ADR 0011's tall-Utterance rule. _Its end is kept
+  above the Player since #197, "A whole Utterance ends above the Player" below._
+  A sentence the
   bridge shows with no Clip (`words: null`, `durationMs: 0`, a tap or skip while
   paused) is aimed at its first line, where Play's first word will be.
 - **Where it is held, `moveFor(aimed)`.** `bounds.top + visibleOf(view) *
@@ -539,3 +541,31 @@ with `test/manual-test/place-and-following/follow-fixes.cjs`; raw lines in
 
 Collapsing the player while paused was confirmed by the owner as it is (the
 batch 3 section above).
+
+## A whole Utterance ends above the Player (#197)
+
+A Clip without Word Timings is aimed at whole, its middle at the Line Position.
+Batch 2 made that position a setting, and below the middle it put a long
+sentence's last lines behind the open Player: at a share p, every sentence
+taller than 2(1 − p) of the visible page, which on the 623 px measured above is
+249 px at 80 %, 374 px at 70 % and 499 px at 60 %. No word follows, so nothing
+moved the page again until the next sentence, and those lines were spoken out
+of sight. The tall-Utterance rule did not help: at a share p it applies only
+to a sentence taller than 2p of the page, 997 px at 80 %, so a 720 px sentence
+there started 138.66 px down with its last 6.5 lines (36 px each) out of sight.
+
+`moveFor` now raises such a sentence until its end is at the bottom of what can
+be seen now, `bounds.top + barCovered + visibleOf(view)`: the Player as it is,
+its notes and its collapsed state included. The Line Position is still measured
+against the open Player without notes (`lineAt`, #71), because it is the
+owner's choice and must not move with a note; what a sentence must clear is
+whatever covers the page at the moment it is placed. The tall-Utterance rule
+runs after it, so a sentence taller than what can be seen starts at the top,
+below the bar while the bar is shown. The `line` path, for Clips with Word
+Timings, is unchanged, and so is "the one limit" of batch 2 for it.
+
+`test/renderer/untimed-sentence-placement.test.ts` runs the program's own
+`boxOf`, `visibleOf`, `lineAt` and `moveFor` in node:vm over a 758 px container
+and a 134.67 px open Player: 8, 10 and 14 lines at 80 %, 14 at 70 % and 17 at
+60 % end at the Player's top; 14 and 17 lines at 50 % and 6 at 80 % keep their
+middle at the Line Position; 20 lines start at the top at 50 % and at 80 %.

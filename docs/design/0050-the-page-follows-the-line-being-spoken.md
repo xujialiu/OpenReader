@@ -173,7 +173,12 @@ Turned down with it:
   down, which the reader deliberately never does, so that pressing and holding on
   text stays the phone's own.
 - **With a voice that gives no word-by-word timing,** the whole sentence is held
-  in the middle, since there is no word to follow. A sentence the owner taps while
+  at the line position, since there is no word to follow, unless that would leave
+  its last lines behind the player: then it ends just above the player (#197).
+  With the line position low on the screen, a long sentence was otherwise read to
+  its end out of sight, because nothing moves the page again until the next
+  sentence. A sentence taller than the screen starts at its top, so the words
+  about to be spoken are in view. A sentence the owner taps while
   paused is first placed by its first line, which is right for the voices that do
   give timing. With a voice that does not, pressing Play moves the page once more,
   by half the sentence.
