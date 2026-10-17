@@ -64,15 +64,18 @@ that catches the rest.
 
 ## Consequences
 
-`core/wav.ts` comes across even though the PCM path bypasses most of it.
-`wavDataLength()` walks RIFF chunks instead of assuming the data starts at offset
-44 — it was written that way because macOS's `say` inserts a 4044-byte `FLLR`
-pad — and it is still needed to parse the WAV that at least one provider returns
-while documenting MP3.
+`core/wav.ts` comes across, though nothing in the app calls it. A WAV a
+Provider returns is recognised by its `RIFF`/`WAVE` header and handed to the
+decoder whole, as `encoded` bytes; the tests and the manual-test kit use the
+module to write `.wav` files. `wavDataLength()` walks RIFF chunks instead of
+assuming the data starts at offset 44 — it was written that way because macOS's
+`say` inserts a 4044-byte `FLLR` pad (#208).
 
 ## Amendment (2026-09-25, #65): a 422 is a refusal of the format too
 
 The fallback asked again for MP3 only when the PCM request was refused with a `400`. The owner's Chatterbox server, a FastAPI app, refuses a value outside its `Literal` with a `422`: `{"detail":[{"type":"literal_error","loc":["body","response_format"],"msg":"Input should be 'wav', 'opus' or 'mp3'","input":"pcm"}]}` (notes/NOTES_2026-09-25.md, 14:54). Every sentence failed as "HTTP 422", so the app could not read with that server at all. `speakOnSpeechRoute` now treats `400` and `422` alike (`FORMAT_REFUSALS`); the rest is unchanged: MP3 is asked once, the provider remembers a server that refused PCM only after the MP3 request succeeded, and if MP3 fails too the first refusal is what surfaces. Other statuses still never ask twice.
+
+That memory lived in one Provider object, and a Reading and a Download build a Provider for every sentence they send (`synthesize` in `src/offline/runtime.ts`), so every sentence paid the refusal again: three sentences sent `pcm,mp3,pcm,mp3,pcm,mp3` (#202). It is now one memory for the running app, `sharedPcmRefusals`, kept by Provider id, Address and Model, the arrangement of Fish's `sharedVoiceCache` and Speechify's `sharedQueue`; a test hands in its own. Three sentences send `pcm,mp3,mp3,mp3`, in a Reading and in a Download (`test/offline/pcm-refusal-remembered.test.ts`). It lasts until the app is closed, and another Address or Model is asked for PCM again. A Download with several Sentences at once can pay the refusal once for each request already out when the first one is answered.
 
 `serverReason` also reads FastAPI's error shape, `detail` as a sentence or as a list of `loc`/`msg` entries, with the leading `body`/`query`/`path`/`header` dropped when a field name follows it, so a 422 about something else reads "HTTP 422 — voice: Field required" rather than the status alone. Measured after the change against the same server, with nothing rewritten: the PCM request answered 422, the MP3 request returned `audio/mpeg`, and the clip's note read "the server refused PCM; asked for MP3".
 

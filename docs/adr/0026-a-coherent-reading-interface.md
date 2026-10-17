@@ -298,3 +298,11 @@ path. Measurements and the diagnostic-receiver limitation are recorded in the
 engineering log at 2026-09-20 16:37, 16:38 and 22:41. Text taps continue to
 select an Utterance start, not a word offset. A Release build installed on a
 physical iPhone before that commit keeps the animation until it is reinstalled.
+
+## Amendment (2026-10-18, #209): a server that publishes no list is asked whether its speech route is there
+
+For OpenAI Compatible, `checkConnection` was `listModels`, which answered `[]` for a 404, a 405 and a 200 that was not JSON, and `listVoices` then gave OpenAI's documented names for a 404 or a 405. An Address with no speech API under it, such as a blog or a pasted `/v1/audio/speech` endpoint, passed Test connection and Enable, and the first sentence failed with `HTTP 404`.
+
+The owner chose on 2026-10-18 that a server with only the speech route still passes. `checkConnection` now reads `/v1/models`; when the server publishes no model list it reads `/v1/audio/voices`; when it publishes no voices either, it POSTs `{}` to `/v1/audio/speech`. A 404 or a 405, or a 200 that is a web page, fails with "OpenAI Compatible: nothing at <Address> answers /v1/audio/speech (HTTP 404). Check the Address."; a 401 or a 403 fails as a rejected key; any other answer shows the route is there. A server that publishes either list is sent no probe, and OpenAI's own connection check is unchanged.
+
+The probe carries no text, so nothing is synthesized or billed, and "Tests make no audio playback or synthesis requests" still holds. `{}` rather than a body naming a voice, because a real route can answer 404 to a voice it does not have: Chatterbox-TTS-Server's handler does, after its validation. Measured on 2026-10-18 with a FastAPI 0.143.3 app (pydantic 2.14.1) declaring Chatterbox-TTS-Server's `OpenAISpeechRequest` and such a handler: `{}` was answered 422 with `Field required` for `model`, `input` and `voice`; a body naming an empty voice 404; a path the app does not have 404 `Not Found`; a GET to the POST-only route 405. `checkSynthesis`, which speaks two characters, stays unused. Tests: `test/core/providers/openai-compatible.test.ts` and `test/app/provider-connection-compatible.test.ts`.

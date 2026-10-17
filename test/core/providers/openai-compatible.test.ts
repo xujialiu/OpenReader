@@ -27,8 +27,9 @@ const cfg: OpenAICompatibleConfig = {
   defaultVoices: OPENAI_DEFAULT_VOICES,
 };
 
+/** A memory of PCM refusals of its own for each Provider, so no test inherits another's (#202). */
 function provider(fetchImpl: unknown, over: Partial<OpenAICompatibleConfig> = {}) {
-  return createOpenAICompatibleProvider({ ...cfg, ...over }, { fetch: fetchImpl as typeof fetch });
+  return createOpenAICompatibleProvider({ ...cfg, ...over }, { fetch: fetchImpl as typeof fetch, pcmRefusals: new Set() });
 }
 
 const signalController = new AbortController();
@@ -107,6 +108,31 @@ describe('createOpenAICompatibleProvider', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(formatOf(fetchImpl, 2)).toBe(FALLBACK_FORMAT);
     expect(result).toMatchObject({ audio: 'encoded', note: expect.stringMatching(/does not do PCM/) });
+  });
+
+  // #202. A Reading and a Download build a Provider for every sentence
+  // (`synthesize` in src/offline/runtime.ts), so what one learned has to
+  // outlive it: the module's memory, as Fish's voice cache and Speechify's
+  // queue are. Each test here has an Address of its own, since the memory is shared.
+  it('remembers the refusal across Provider objects built for the same Address and Model (#202)', async () => {
+    const fetchImpl = vi.fn(async () => (formatOf(fetchImpl, (fetchImpl as any).mock.calls.length - 1) === PCM_FORMAT ? new Response('', { status: 422 }) : mp3()));
+    const build = () => createOpenAICompatibleProvider({ ...cfg, id: 'compatible', baseURL: 'https://tts.home.example', model: 'm' }, { fetch: fetchImpl as unknown as typeof fetch });
+    await build().synthesize('One', opts);
+    await build().synthesize('Two', opts);
+    await build().synthesize('Three', opts);
+    expect((fetchImpl as any).mock.calls.map((_call: unknown, index: number) => formatOf(fetchImpl, index))).toEqual([PCM_FORMAT, FALLBACK_FORMAT, FALLBACK_FORMAT, FALLBACK_FORMAT]);
+  });
+
+  it('asks another Address, or another Model at the same one, for PCM again (#202)', async () => {
+    const fetchImpl = vi.fn(async (url: string, init: { body: string }) =>
+      JSON.parse(init.body).response_format === PCM_FORMAT && url.startsWith('https://mp3-only.example') && JSON.parse(init.body).model === 'm'
+        ? new Response('', { status: 422 })
+        : JSON.parse(init.body).response_format === PCM_FORMAT ? samples(1, 2) : mp3());
+    const build = (baseURL: string, model: string) => createOpenAICompatibleProvider({ ...cfg, id: 'compatible', baseURL, model }, { fetch: fetchImpl as unknown as typeof fetch });
+    await build('https://mp3-only.example', 'm').synthesize('One', opts);
+    await build('https://pcm.example', 'm').synthesize('Two', opts);
+    await build('https://mp3-only.example', 'other').synthesize('Three', opts);
+    expect((fetchImpl as any).mock.calls.map((_call: unknown, index: number) => formatOf(fetchImpl, index))).toEqual([PCM_FORMAT, FALLBACK_FORMAT, PCM_FORMAT, PCM_FORMAT]);
   });
 
   // FastAPI answers a value outside a Literal with 422, not 400: the owner's
@@ -283,6 +309,78 @@ describe('listModels / checkConnection', () => {
 
   it('tolerates a model list that is not JSON', async () => {
     expect(await provider(vi.fn(async () => new Response('ok', { status: 200 }))).listModels!()).toEqual([]);
+  });
+});
+
+/**
+ * #209. A 404 to both lists is what a server with only the speech route
+ * answers, and what a web server with no speech API under the Address answers
+ * too. So when neither list is published, the check asks the speech route
+ * whether it is there, with a body that has nothing to speak: `{}`, which
+ * FastAPI refuses with 422 before its handler runs (measured with a FastAPI
+ * 0.143.3 app declaring Chatterbox-TTS-Server's request model, 2026-10-18).
+ * A body naming a voice can be answered 404 by a real route: Chatterbox's
+ * handler does so for a voice file it does not have.
+ */
+describe('checkConnection on a server that publishes neither list (#209)', () => {
+  type Answer = (url: string, init: RequestInit) => Response;
+  const server = (speech: Answer, lists: Answer = () => notFound()) => {
+    const asked: string[] = [];
+    const fetchImpl = vi.fn(async (url: string, init: RequestInit = {}) => {
+      asked.push(`${init.method ?? 'GET'} ${url}${init.body ? ` ${init.body}` : ''}`);
+      return url.endsWith('/v1/audio/speech') ? speech(url, init) : lists(url, init);
+    });
+    return { fetchImpl, asked };
+  };
+  const compatible = (fetchImpl: unknown, baseURL = 'https://my-blog.example.com') => provider(fetchImpl, { id: 'compatible', label: 'OpenAI Compatible', apiKey: '', keyRequired: false, baseURL });
+
+  it('fails at an Address with no speech API under it, naming the Address', async () => {
+    const { fetchImpl, asked } = server(() => new Response('<h1>Not Found</h1>', { status: 404 }));
+    await expect(compatible(fetchImpl).checkConnection!()).rejects.toMatchObject({
+      message: 'OpenAI Compatible: nothing at https://my-blog.example.com answers /v1/audio/speech (HTTP 404). Check the Address.',
+    });
+    expect(asked).toEqual([
+      'GET https://my-blog.example.com/v1/models',
+      'GET https://my-blog.example.com/v1/audio/voices',
+      'POST https://my-blog.example.com/v1/audio/speech {}',
+    ]);
+  });
+
+  it('fails for a pasted speech endpoint, whose Address the message shows', async () => {
+    const { fetchImpl } = server(() => notFound());
+    await expect(compatible(fetchImpl, 'https://tts.example.com/v1/audio/speech').checkConnection!()).rejects.toThrow(
+      'nothing at https://tts.example.com/v1/audio/speech answers /v1/audio/speech (HTTP 404)',
+    );
+  });
+
+  it('fails when the speech route is not one a POST can reach, or is a web page', async () => {
+    for (const answer of [new Response('', { status: 405 }), new Response('<html></html>', { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } })]) {
+      const { fetchImpl } = server(() => answer);
+      await expect(compatible(fetchImpl).checkConnection!()).rejects.toThrow(/nothing at https:\/\/my-blog\.example\.com answers \/v1\/audio\/speech/);
+    }
+  });
+
+  it('passes a server whose only route is the speech route, which refuses a body with nothing in it', async () => {
+    const missing = { detail: [{ type: 'missing', loc: ['body', 'model'], msg: 'Field required', input: {} }] };
+    for (const answer of [Response.json(missing, { status: 422 }), new Response('{"error":{"message":"you must provide a model parameter"}}', { status: 400 })]) {
+      const { fetchImpl } = server(() => answer);
+      await expect(compatible(fetchImpl).checkConnection!()).resolves.toBeUndefined();
+    }
+  });
+
+  it('reports a key the speech route rejects', async () => {
+    const { fetchImpl } = server(() => new Response('', { status: 401 }));
+    await expect(compatible(fetchImpl).checkConnection!()).rejects.toMatchObject({ kind: 'auth' });
+  });
+
+  it('sends no probe to a server that publishes a model list or a voice list', async () => {
+    const models = server(() => notFound(), (url) => (url.endsWith('/v1/models') ? Response.json({ data: [{ id: 'm' }] }) : notFound()));
+    await compatible(models.fetchImpl).checkConnection!();
+    expect(models.asked).toEqual(['GET https://my-blog.example.com/v1/models']);
+
+    const voices = server(() => notFound(), (url) => (url.endsWith('/v1/audio/voices') ? Response.json({ voices: ['Emily.wav'] }) : notFound()));
+    await compatible(voices.fetchImpl).checkConnection!();
+    expect(voices.asked).toEqual(['GET https://my-blog.example.com/v1/models', 'GET https://my-blog.example.com/v1/audio/voices']);
   });
 });
 

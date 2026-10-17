@@ -61,6 +61,18 @@ export const FALLBACK_FORMAT = 'mp3';
 /** The statuses a server refuses an unknown `response_format` with: 400, and FastAPI's 422 for a value outside a `Literal` (#65). */
 const FORMAT_REFUSALS: readonly number[] = [400, 422];
 
+/**
+ * The servers that have *proved* they cannot do PCM, by answering the MP3
+ * request that followed their refusal: one for the running app, whatever the
+ * number of Provider objects (#202). A Reading and a Download build a Provider
+ * for every sentence they send (`synthesize` in `src/offline/runtime.ts`), so a
+ * memory inside one was gone by the next sentence, and every sentence paid the
+ * refusal again. Kept by Provider, Address and Model, the same arrangement as
+ * Fish's `sharedVoiceCache` and Speechify's `sharedQueue`; a test hands in its
+ * own and stays isolated.
+ */
+export const sharedPcmRefusals = new Set<string>();
+
 /** "alloy, nova" or one per line → ['alloy', 'nova']. */
 export function parseVoiceIds(text: string): string[] {
   return [...new Set(text.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean))];
@@ -144,7 +156,13 @@ export function chatAudioData(reply: unknown): string | null {
   return typeof data === 'string' && data ? data : null;
 }
 
-export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps: { fetch: typeof fetch }): TTSProvider {
+export type OpenAICompatibleDeps = {
+  fetch: typeof fetch;
+  /** The servers known to refuse PCM; the module's shared one when absent. */
+  pcmRefusals?: Set<string>;
+};
+
+export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps: OpenAICompatibleDeps): TTSProvider {
   // Tolerates the SDK's `/v1` suffix and trailing slashes
   const base = () => normalizeBaseURL(cfg.baseURL);
   const authHeaders = (): Record<string, string> => ({
@@ -155,12 +173,14 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
   const noKey = () => new SynthesisError('no-key', `${cfg.label} API key is not set`);
 
   /**
-   * Set once a server has *proved* it cannot do PCM, by answering the MP3
-   * request that followed its refusal. Only a successful fallback sets it, so a
-   * 400 about anything else — a voice id the server does not have is the common
-   * one — cannot latch a server into MP3 for the rest of its life.
+   * Whether this server has *proved* it cannot do PCM, by answering the MP3
+   * request that followed its refusal. Only a successful fallback records it,
+   * so a 400 about anything else — a voice id the server does not have is the
+   * common one — cannot latch a server into MP3. It is kept until the app is
+   * closed; another Address or Model is asked for PCM again.
    */
-  let refusesPcm = false;
+  const pcmRefusals = deps.pcmRefusals ?? sharedPcmRefusals;
+  const server = () => `${cfg.id} ${base()} ${cfg.model}`;
 
   async function get(path: string, signal?: AbortSignal): Promise<Response> {
     try {
@@ -202,6 +222,7 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
     const what = `${cfg.label} speech`;
     const ask = async (format: string): Promise<Response> => post('/v1/audio/speech', { model: cfg.model, voice, input: text, response_format: format }, signal);
 
+    const refusesPcm = pcmRefusals.has(server());
     let response = refusesPcm ? await ask(FALLBACK_FORMAT) : await ask(PCM_FORMAT);
     let note = refusesPcm ? 'the server does not do PCM; asked for MP3' : '';
 
@@ -210,7 +231,7 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
       if (!FORMAT_REFUSALS.includes(response.status)) throw refusal;
       const retry = await ask(FALLBACK_FORMAT);
       if (!retry.ok) throw refusal;
-      refusesPcm = true;
+      pcmRefusals.add(server());
       response = retry;
       note = 'the server refused PCM; asked for MP3';
     }
@@ -257,6 +278,72 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
   const speak = (text: string, voice: string, signal?: AbortSignal): Promise<SynthesisResult> =>
     cfg.route === 'chat' ? speakOnChatRoute(text, voice, signal) : speakOnSpeechRoute(text, voice, signal);
 
+  /**
+   * The voices the server publishes on /v1/audio/voices (a common extension
+   * of OpenAI-compatible servers — OpenAI itself answers 404), or null when
+   * it publishes none: a 404 or a 405, or a reply with no voices in it. Any
+   * other refusal is an error (ADR 0079).
+   */
+  async function publishedVoices(signal?: AbortSignal): Promise<VoiceInfo[] | null> {
+    const response = await get('/v1/audio/voices', signal);
+    if (response.ok) {
+      let body: unknown = null;
+      try {
+        body = await responseJSON(response, `${base()}/v1/audio/voices`, signal);
+      } catch (error) {
+        if (error instanceof SynthesisError) throw error;
+        // Not JSON: the route exists but is something else; fall through
+      }
+      const published = parseVoiceList(body);
+      return published.length ? published.map((v) => ({ ...v, locale: MULTILINGUAL })) : null;
+    }
+    if (response.status !== 404 && response.status !== 405) {
+      // A missing listing route permits documented names. A gateway failure
+      // does not: caching those names would prevent the next open retrying.
+      const what = `${base()}/v1/audio/voices`;
+      if (response.status >= 500) throw new SynthesisError('network', `${what}: HTTP ${response.status}`);
+      throw statusError(response.status, what);
+    }
+    return null;
+  }
+
+  /**
+   * The model ids the server offers, or null when it publishes no model list:
+   * a 404 or a 405 (Chatterbox-TTS-Server answers 404), or a reply that is not
+   * JSON. A refused key is an error.
+   */
+  async function publishedModels(): Promise<string[] | null> {
+    const url = `${base()}/v1/models`;
+    const response = await get('/v1/models');
+    if (response.status === 404 || response.status === 405) return null;
+    if (!response.ok) throw statusError(response.status, url);
+    try {
+      return parseModelList(await responseJSON(response, url));
+    } catch (error) {
+      if (error instanceof SynthesisError) throw error;
+      return null;
+    }
+  }
+
+  /**
+   * Whether the synthesis route is there, asked without asking it to speak
+   * (#209, ADR 0026): a POST of `{}`, which carries no text, so nothing is
+   * synthesized or billed. A server refuses a body missing `model`, `input` and
+   * `voice` before it looks at any of them — FastAPI with 422, OpenAI with 400
+   * — while a body naming a voice can be answered 404 by a real route
+   * (Chatterbox-TTS-Server's, for a voice file it does not have). So a 404 or
+   * a 405 here, or a web page, says there is no speech API at the Address.
+   */
+  async function synthesisRouteAnswers(): Promise<void> {
+    const route = cfg.route === 'chat' ? '/v1/chat/completions' : '/v1/audio/speech';
+    const response = await post(route, {});
+    if (response.status === 401 || response.status === 403) throw statusError(response.status, `${base()}${route}`);
+    const page = response.ok && /text\/html/i.test(response.headers.get('Content-Type') ?? '');
+    if (response.status === 404 || response.status === 405 || page) {
+      throw new SynthesisError('unknown', `${cfg.label}: nothing at ${base()} answers ${route} (HTTP ${response.status}${page ? ', a web page' : ''}). Check the Address.`);
+    }
+  }
+
   const provider: TTSProvider = {
     id: cfg.id,
     // OpenAI's speech endpoint returns no timing information at all, and
@@ -275,48 +362,29 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
     async listVoices(options?: ListVoicesOptions): Promise<VoiceInfo[]> {
       const custom = parseVoiceIds(cfg.voices ?? '');
       if (custom.length) return custom.map((id) => ({ id, label: id, locale: MULTILINGUAL }));
-
-      const response = await get('/v1/audio/voices', options?.signal);
-      if (response.ok) {
-        let body: unknown = null;
-        try {
-          body = await responseJSON(response, `${base()}/v1/audio/voices`, options?.signal);
-        } catch (error) {
-          if (error instanceof SynthesisError) throw error;
-          // Not JSON: the route exists but is something else; fall through
-        }
-        const published = parseVoiceList(body);
-        if (published.length) return published.map((v) => ({ ...v, locale: MULTILINGUAL }));
-      } else if (response.status !== 404 && response.status !== 405) {
-        // A missing listing route permits documented names. A gateway failure
-        // does not: caching those names would prevent the next open retrying.
-        const what = `${base()}/v1/audio/voices`;
-        if (response.status >= 500) throw new SynthesisError('network', `${what}: HTTP ${response.status}`);
-        throw statusError(response.status, what);
-      }
-      return (cfg.defaultVoices ?? []).map((id) => ({ id, label: id, locale: MULTILINGUAL }));
+      const published = await publishedVoices(options?.signal);
+      return published ?? (cfg.defaultVoices ?? []).map((id) => ({ id, label: id, locale: MULTILINGUAL }));
     },
 
-    /** The model ids the server offers; the cheapest authenticated request the API has, so also the connection probe. */
+    /** The model ids the server offers, none when it publishes no list; the cheapest authenticated request the API has. */
     async listModels(): Promise<string[]> {
       if (missingKey()) throw noKey();
-      const url = `${base()}/v1/models`;
-      const response = await get('/v1/models');
-      // Not every OpenAI-compatible server has a model list (Chatterbox-TTS-
-      // Server answers 404); that is "no models published", not a failure —
-      // the voice list and the synthesis probe still prove the connection.
-      if (response.status === 404 || response.status === 405) return [];
-      if (!response.ok) throw statusError(response.status, url);
-      try {
-        return parseModelList(await responseJSON(response, url));
-      } catch (error) {
-        if (error instanceof SynthesisError) throw error;
-        return [];
-      }
+      return (await publishedModels()) ?? [];
     },
 
+    /**
+     * That an API is at the Address and takes the key, without synthesizing
+     * (ADR 0026). A model list proves it, and a voice list of the server's own
+     * does. A server that publishes neither (#209) has only the speech route,
+     * or no speech API at all, and the documented voices `listVoices` would
+     * then give say nothing about which: so the speech route is asked whether
+     * it is there.
+     */
     async checkConnection(): Promise<void> {
-      await provider.listModels!();
+      if (missingKey()) throw noKey();
+      if (await publishedModels()) return;
+      if (await publishedVoices()) return;
+      await synthesisRouteAnswers();
     },
 
     /**
