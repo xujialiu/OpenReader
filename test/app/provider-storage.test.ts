@@ -6,9 +6,13 @@ import { DEFAULT_HIGHLIGHT_COLOURS, HIGHLIGHT_PRESETS } from '../../src/renderer
 const disk = vi.hoisted(() => new Map<string, string>());
 vi.mock('expo-file-system', () => ({ Paths: { document: 'test' }, File: class {
   constructor(_directory: string, private name: string) {}
+  get uri() { return this.name; }
   get exists() { return disk.has(this.name); }
   textSync() { return disk.get(this.name); }
   write(value: string) { disk.set(this.name, value); }
+} }));
+vi.mock('../../modules/open-reader-offline', () => ({ offlineNative: {
+  writeJson: (uri: string, text: string) => { disk.set(uri, text); },
 } }));
 
 describe('local settings persistence', () => {

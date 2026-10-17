@@ -75,7 +75,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export function OpenReader() {
   const [settings, updateSettings] = useState<AppSettings>(() => {
     try { return readSettings(); } catch {
-      Alert.alert('Settings could not be loaded', 'Your saved file has been kept. Check device storage before editing settings.');
+      Alert.alert('Settings could not be loaded', 'The settings file could not be read. Check device storage before editing settings.');
       return DEFAULT_SETTINGS;
     }
   });

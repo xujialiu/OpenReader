@@ -98,6 +98,19 @@ The parser projects known non-secret fields and migrates unversioned settings
 with all providers disabled. New documents use `recentVoices`, ordered by the
 owner's selections, skipping disabled providers.
 
+A settings write uses the existing synchronous `OpenReaderOffline.writeJson`
+primitive, whose Foundation call writes atomically (#186). `File.write` in the
+installed Expo SDK 57 writes in place and can truncate the old file before a
+storage failure; `moveSync` with overwrite removes the destination before moving,
+so a pending file followed by that operation is not an atomic replacement either.
+`writeSettings` keeps the same non-secret projection and format, and refuses a
+write if the native atomic writer is unavailable rather than falling back to
+those operations. The shell still updates memory only after a successful write.
+A load failure says the file could not be read, not that its earlier contents
+are intact. The regression at `test/app/settings-storage-failure.test.ts` models
+both truncation and partial writes, reload after failure, first-save failure and
+recovery; it doubles the filesystem boundary, not the settings parser.
+
 Fish configuration explicitly passes `includeOfficial: true`, `includeOwn: false`
 and `includeManual: false` by default. The provider layer's own omitted flags
 mean enabled, so leaving them out would fetch all three sources. Manual ids are
