@@ -57,7 +57,8 @@ page (`test/manual-test/library-and-reader/webcontent-killed.sh`).
    and a pause's hold instead of sending them, and sends them once, the cue with
    `reveal`, when the new page has reported the sentence's section. If the
    Reading moved into another section meanwhile, that section is displayed
-   first.
+   first. This gate applies to every subsequent cue and explicit show as well,
+   not only the initial repaint (#195, below).
 5. Everything else the page is told after it installs was already sent again on
    its document message (inset, bar, line position, Appearance, theme, lookup,
    follow-only). The decided body text size joins them as `measured`, so the new
@@ -88,6 +89,35 @@ opens again at <CFI>` to the Debug Log.
   1.6 s after the kill, showed Utterance 305's sentence and word highlighted.
 - Four kills within a minute: three restarts, then `the page's web content
   process ended, 4 times in a minute: the page is not opened again`.
+
+## The new page's section knowledge lasts beyond the first repaint (#195)
+
+The Reading retains sections the old page reported. Clearing `awaiting` after
+one repaint therefore does not mean every later cue is safe to send: a Skip or
+remote resume may name a different retained section the new page has never
+seen. `paintAgain` now gates both `show` and `onClip` against `reportedSince`
+throughout the new page's lifetime. It requests a missing section once, then
+sends only the latest cue when that section reports, followed by its latest
+correction and hold (including `stop`). A newer target replaces the pending
+one; reporting an earlier target cannot repaint it.
+
+Display requests wait until the new page has installed or reported a section.
+The initial section is already requested by the Reader's `initialLocation`, so
+it is not requested twice. Each restart clears readiness again, including when
+no sentence was cued at the time of restart. Clearing the highlight retires a
+pending repaint too.
+
+Only the initial recovery forces a reveal. Afterwards the cue's original
+reveal/recover intent stands. The bridge tracks the page's Following reports
+and explicit Browsing: an unrevealed cue during Browsing waits for its chapter
+without displaying it or taking the page back. M or an explicit show can then
+request that chapter. No Reading or audio engine is restarted by this gate.
+
+`reader-bridge-restart.test.ts` exercises the real bridge over a doubled page:
+show and playing cues after recovery, correction/stop retention, replacement
+by an unknown or already reported target, unrelated reports, Browsing and M,
+and repeated restarts with delayed installation. It proves bridge messages and
+display requests, not native layout or audio continuity.
 
 ## Not covered
 
