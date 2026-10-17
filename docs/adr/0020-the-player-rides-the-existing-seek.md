@@ -525,7 +525,10 @@ coarse it is:
   above it would be the confident wrong answer this ADR calls the expensive
   defect; the coarse answer that contains the reading is the right trade. The
   owner's book has **zero** fragments so this never arises there — and a book that
-  puts a part's title and its chapters in one file is ordinary.
+  puts a part's title and its chapters in one file is ordinary. _Refined below,
+  "Inside a shared file, once the page has said" (#212): the first row does not
+  contain the reading when the rows are sibling chapters, and the page now says
+  where each starts._
 - `before` — no row names it, so the nearest row before it is reported. Happens on
   the owner's book exactly once: 2,077 spine items, 2,076 entries, and the one with
   no entry is spine item 1, `Text/copyright.xhtml`. Reading it reports the cover.
@@ -535,6 +538,65 @@ the mark on the row is already the whole answer, and a sentence repeating it is 
 one the owner reads twice. `precisionLine` therefore takes the two coarse values
 and the caller renders no note at all for the third — the coarseness is what needed
 saying, never the mark.
+
+### Inside a shared file, once the page has said (#212)
+
+`shared` turned out to be the common case rather than the rare one, and the
+answer it gave was not the one this ADR argued for. The coarse row "contains the
+reading" when the rows sharing a file are a part and its chapters. When they are
+sibling chapters, the first of them is one chapter among several, and naming it
+is the confident wrong answer the rule was written to avoid. The Gutenberg Pride
+and Prejudice (SHA-256 above) puts its 63 rows, all at one level, into 7 of its 9
+files; the lock screen named the first chapter of the file for 46 of its 61
+chapters and the title heading's row for 10. Of 193 EPUBs on the development Mac,
+70 have Contents entries with a fragment (#190).
+
+So the rows of a shared file are now told apart, by the page, which is the only
+side that can place an element:
+
+- **The page reports where each fragment starts.** With a section's Blocks,
+  `BlocksMessage.anchors` carries, for every Contents fragment found in that
+  section's document, the ordinal of the first Block whose first text lies
+  inside the fragment's element or after it. It is the rule a Download cuts
+  chapters by (`anchorBlock` in `highlighter.ts`, ADR 0027), so the Contents,
+  the lock screen and the Download drawer cannot name different chapters. The
+  page reads the fragments from `book.navigation.toc`, which `book.ready` loads
+  before anything is displayed; a book whose Contents names no fragment sends
+  nothing new. Pairs, not an object: a fragment is the Document's own string, and
+  `constructor` would read back from a parsed object as a function.
+- **The reading carries its Block.** `ReadingStatus.block` is the ordinal of the
+  current Utterance's first Block among its own section's Blocks, counted from
+  the reported Blocks (`blockInSection`), never parsed out of the Block id.
+- **The rule refines `shared` and nothing else.** Among the rows naming the
+  reading's file, the current one is the row whose fragment starts latest at or
+  before the reading's Block, `exact`. A row without a fragment starts at Block
+  0; of two rows starting at one Block the later in document order wins, which is
+  a chapter under its part; a row whose fragment the page did not find is passed
+  over. Reading above every placed row gives `before`, naming the last row of
+  the latest file before, since the reading is past all of them. With no row
+  placed, or before the page has said, the answer stays `shared`. One row naming
+  a file stays `exact` wherever its fragment starts.
+- **The lock screen names a `shared` row only when it holds the others**: every
+  other row naming the file sits under it. Otherwise the line is empty.
+- **The place handed on settles per chapter.** `anchoredStart` moves the
+  reading's Block back to the latest anchor at or before it. The rule compares
+  the reading only with where rows start, so the answer is the same, and the
+  place the reader hands to the host (and so to the Download drawer) changes
+  when the reading crosses a chapter rather than at every sentence.
+
+Run over that book's own files on the stand-in page (tag-default `display`, the
+book's stylesheets not applied, `notes/NOTES_2026-10-17.md`): every one of the 63
+rows is named when the reading is two Blocks into it. Without the page's answer,
+the lock screen now names only the licence's row, the one file a single row
+names, and leaves the other lines empty.
+
+Not changed: a row is still opened at the top of its file. Following the fragment
+would need the page to scroll to an element it may not have laid out yet, and is
+a change of its own.
+
+The `shared` sentence under the Contents list said the marked row was "the part
+being read". With sibling chapters that was false, and it now says only that the
+first row is marked and that the one being read may come after it.
 
 Two facts about the library's own data that the list must not trust. Its `Section`
 type says `id: string`; `ncxItem` computes `getAttribute('id') || false`, so a

@@ -142,11 +142,23 @@ On the owner's novel every chapter is its own piece of the book, so the answer i
 exact: one row, the one you are reading. Two other things can happen in other
 books, and in both the list is deliberately vaguer rather than confidently wrong.
 
-**Some books put several chapters into one piece.** Then the list can tell which
-piece you are in but not which of its chapters, and it marks the part rather than
-guessing at the chapter. Guessing would mean sometimes saying "chapter four" while
-you are reading chapter three — and a wrong answer to "where am I" is worse than a
-broad one, because you would have no way to tell it was wrong.
+**Some books put several chapters into one piece.** Free classics often do: Pride
+and Prejudice keeps its sixty-one chapters in seven. Once that piece is on the
+page, the app sees where each chapter's heading sits in it, so the list marks the
+chapter you are reading, and the lock screen and the download list name the same
+one. Before that, when you open the list before anything has been read, it can
+tell which piece you are in but not which of its chapters, so it marks the first
+of them and says that the one you are reading may come after it. The lock screen
+then says nothing rather than name a chapter, unless the first row is a part that
+holds the others, which does contain where you are.
+
+At first the app marked the first chapter of the piece and said nothing more,
+taking it for the part the others sit under. In books like Pride and Prejudice
+there is no such part, and the lock screen said "Chapter XXI" while chapter thirty
+was read. A wrong answer to "where am I" is worse than a broad one, because you
+would have no way to tell it was wrong. Leaving the lock screen blank for such
+books was turned down: it would have been honest, and blank for nearly every
+chapter of the book the app's reviewers are asked to try.
 
 **Some pages are not in the contents at all** — this book's copyright page is one.
 Reading such a page marks the nearest thing before it that the contents does list.
