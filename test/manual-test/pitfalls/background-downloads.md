@@ -152,3 +152,5 @@
   window accordingly. Never diagnose a stalled `waiting` download from the
   Mac's own reachability; check the app's flows with `xcrun simctl spawn UDID
   log show`.
+
+- **A download task reads `downloading` with `current: null` before its chapter reaches `preparing`** (2026-10-17, #182/#185). A pause-at-preparing watcher in the shape of `download-prepare.cjs` that also treats `downloading` as the clip-fetch phase and aborts on it stopped itself at the very first 15 ms poll: the task answers `downloading`/`current: null` in the umbrella sense while it starts, then `preparing`/`current: <chapter>` once the renderer preparation begins, and only the `preparing`+`current` combination is the moment to `toggleChapter`. A watcher that died early is not a failed pause: re-arm and check the live task state (`downloadTasks(doc)[0].state`) before concluding anything; the in-flight preparation still completes and saves its texts when the pause lands late, and an unconfigured Provider is refused locally at `sendable` (no-key) with nothing sent.
