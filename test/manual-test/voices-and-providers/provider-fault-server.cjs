@@ -32,6 +32,8 @@
 // /__log dumps the request/close journal as JSON; the journal lives in memory
 // only. Logs go to stdout with elapsed times; redirect them to a file.
 const http = require('node:http');
+const { Buffer } = require('node:buffer');
+const { createHash } = require('node:crypto');
 
 const port = Number(process.argv[2] ?? 8765);
 if (!Number.isInteger(port) || port <= 0) {
@@ -43,6 +45,8 @@ const SPEECH_MODES = ['ok-pcm', 'ok-wav', 'cut', 'stall', 'json-error', 'html-er
 const VOICES_MODES = ['ok', 'junk', '502', '503', '429', '404'];
 const state = { speech: 'ok-pcm', voices: 'ok' };
 const journal = [];
+// Machine-readable assertions without keeping the Document text in this ledger.
+const speechRequests = [];
 
 const log = (line) => {
   journal.push(`${new Date().toISOString()} ${line}`);
@@ -127,6 +131,11 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     log(`SPEECH body: ${body.slice(0, 300)}`);
     const mode = state.speech;
+    let request;
+    try { request = JSON.parse(body); } catch { return status(res, 400, 'speech invalid JSON'); }
+    if (!request || typeof request.input !== 'string') return status(res, 400, 'speech missing input');
+    speechRequests.push({ at: Date.now(), mode, voice: request.voice,
+      text: createHash('sha256').update(String(request.input ?? '')).digest('hex') });
     if (mode === 'ok-pcm') return complete(res, 'audio/pcm', pcmSamples, 'speech ok-pcm');
     if (mode === 'ok-wav') return complete(res, 'audio/wav', wavBytes, 'speech ok-wav');
     if (mode === 'cut') return cut(res, { contentType: 'audio/pcm', total: 65_536, slice: 8192, label: 'speech cut', delayMs: 1000 });
@@ -225,6 +234,11 @@ const server = http.createServer(async (req, res) => {
   if (path === '/__state') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ...state, requests: journal.length }));
+    return;
+  }
+  if (path === '/__speech') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(speechRequests));
     return;
   }
   if (path === '/__log') {

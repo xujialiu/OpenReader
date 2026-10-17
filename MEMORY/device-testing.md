@@ -85,6 +85,15 @@ The cost is not the audio, it is the transcript: a reading that keeps going keep
 producing clip fetches, position corrections and log lines, and an agent watching
 the device reads all of them. That is the owner's tokens spent on nothing.
 
+## A fault scenario needs a working control
+
+Before injecting a failure, assert that the intended Document, Provider and
+Voice are selected, Consent is answered, and a normal request actually reaches
+the controlled service. A spinner or `playing=true` is not enough. If that
+control fails, stop the scenario sequence as BLOCKED; printing the failure and
+continuing produces no valid fault evidence. The checked Provider probe is in
+[`provider-response-failures.md`](../test/manual-test/voices-and-providers/provider-response-failures.md).
+
 ## The length of a test comes from what it establishes
 
 **Derive the duration; do not pick a safe one.** Five seconds is enough to show

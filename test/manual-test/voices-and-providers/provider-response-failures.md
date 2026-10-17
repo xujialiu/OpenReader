@@ -70,6 +70,32 @@ exercise that control, so give it a fresh scope/launch.
 
 ## Reading, Downloads and invalid audio
 
+`provider-app-check.cjs` is the checked handler/runtime/catalogue probe for this
+batch. Prepare two disposable fixture Documents (a Reading and a separate
+Download), select a Voice, and answer the actual local-server Consent first:
+
+```sh
+OPENREADER_METRO=http://127.0.0.1:METRO_PORT \
+python3 test/manual-test/kit/ios_guard.py run --timeout 180 -- \
+  node test/manual-test/voices-and-providers/provider-app-check.cjs \
+  SIMULATOR_UDID READING_DOCUMENT_ID DOWNLOAD_DOCUMENT_ID /tmp/THIS-RUN/app-check \
+  http://127.0.0.1:SERVER_PORT
+```
+
+Add `--preflight-only` to check setup without starting the measurement. The
+probe refuses a missing Voice, ungranted Consent, wrong Document/endpoint,
+locked speech or running work. A normal request and unbuffered playback must
+succeed before fault cases. Every assertion stops the sequence; a line saying
+NOT-STARTED or zero requests is never followed by another fault scenario.
+
+The controlled server accepts generated fixture Voice IDs so each run avoids
+old memory Clips. The probe restores the selected Voice and pauses its work at
+exit. Its `/__speech` ledger groups retries by a hash of speech text; it does not
+infer retries from unrelated requests. No-save checks query the real offline
+repository's inventory, not the number of SQLite/sidecar files. Results and CDP
+expressions are retained in the output directory. These are app handler checks,
+not native touches or a claim about sound quality.
+
 Complete [Consent preflight](consent-recovery.md), select the fixture Voice,
 and confirm the app is paused. Set/check the simulator's own volume before every
 Play. Use the repository's Reading and Download harness for state assertions;
