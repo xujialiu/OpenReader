@@ -46,7 +46,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { readLocator, type ReadingPlace, type ReadingPosition } from '../core/document';
-import { anchoredStart, contentsOf, type NavigationEntry, type ReadingSpineItem } from '../core/document/contents';
+import { anchoredStart, contentsOf, currentRow, type NavigationEntry, type ReadingSpineItem } from '../core/document/contents';
 import { cutText, debugLog } from '../debug/debug-log';
 import { DEBUG_MODE } from '../debug/mode';
 import { chapterOf, useNowPlaying } from '../now-playing';
@@ -722,6 +722,13 @@ export function ReadingView({
           `rendered=${status.rendered?.index ?? null}/${status.rendered?.spine ?? null} level=${status.level} ` +
           `reportsWordTimings=${status.reportsWordTimings} seeking=${status.seeking} spine=${status.spineHrefs.length} ` +
           `lang=${JSON.stringify(status.language)} collapsed=${collapsed} at=${at} contents=${contents.rows.length}`,
+      );
+      // Where Contents, the Lock Screen and Download mark (#212).
+      const mark = contentsPlace ? currentRow(contents, contentsPlace) : null;
+      hlog(
+        `place block=${status.block} settled=${contentsPlace?.block ?? null} anchors=${anchors ? anchors.size : null} ` +
+          `mark=${mark ? `${mark.row}:${mark.precision}:${JSON.stringify(contents.rows[mark.row]?.label ?? '')}` : null} ` +
+          `chapter=${JSON.stringify(chapterOf(contents, status.section === null ? null : contentsPlace))}`,
       );
       hlog(`line=${JSON.stringify(readingLine(status, settings))} highlight=${JSON.stringify(highlightLine(status))}`);
       hlog(`voiceInUse=${JSON.stringify(voiceInUse)} provider=${settings.provider} voice=${settings.voice} rate=${settings.rate}`);
