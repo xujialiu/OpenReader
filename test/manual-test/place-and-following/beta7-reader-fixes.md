@@ -1,7 +1,11 @@
 # The reader fixes #96/#195/#196 (1.0.0 (9)-beta7) on the simulator (2026-10-18)
 
 Revision `bb43c22` (scope `0665d55..bb43c22`), Settings showing **Version
-1.0.0 (9)-beta7-debug** on the device. Simulator `openreader-fix3-ioscheck`
+1.0.0 (9)-beta7-debug** on the device. No XCTest probe ran in this
+verification — none; every check is harness handler probes, real touches via
+axe/AXe, page probes through the harness's `js` command, screenshots, and
+host-side file reads, as labelled per scenario below. Simulator
+`openreader-fix3-ioscheck`
 (iPhone 17 Pro, iOS 27.0, UDID `D066DF98-E7A9-4AE4-AB0A-898900AE4AD9`), Metro
 8085 from this worktree, the controlled Provider pointed at
 `provider-fault-server.cjs` on 127.0.0.1:8811 (speech `ok-pcm`, fixture
@@ -14,7 +18,37 @@ simulator's own volume was set and checked in the same breath as every play —
 the check caught it back at 60 **four times** in the hour, each time before
 the touch, so no chain ever played unsilenced. Playback windows: 5–14 s, each
 sized to the fact it establishes (sentence advance, a stall hold, a
-chapter-crossing), stopped right after.
+chapter-crossing), stopped right after. No old-code build was run on device:
+pre-fix shapes are the host suite's constructions, not measured baselines.
+
+**Raw evidence, by scenario** (attempt dir `/tmp/fix3-ioscheck-01/`;
+`ATTEMPT` below is that directory):
+
+- Build/admission: `ATTEMPT/logs/admission-1-first-2026-10-18T0234.log` (the
+  BLOCKED first wait), `ATTEMPT/logs/admission-2-build.log`,
+  `ATTEMPT/build-phase.json` (exit record), `ATTEMPT/logs/xcodebuild.log`,
+  `ATTEMPT/readiness/`.
+- Every Play/synthesis claim: `ATTEMPT/artifacts/fault-server-journal.json`
+  (snapshot of the server's in-memory `/__log`, 1,248 lines, taken 03:44
+  before it could rotate with the process) and the live server log
+  `ATTEMPT/logs/fault-server-8811.log`.
+- Cursor/status/`[hx]`/`[probe]`/`[renderer]` lines for every scenario: the
+  app's Debug Log, snapshotted at `ATTEMPT/artifacts/debug-log-snapshot/`
+  (03:44, covers #96/#195 and the end-of-book #196 control) and
+  `ATTEMPT/artifacts/debug-log-snapshot-final/` (03:53, adds the paused-show
+  #196 acceptance, the 505 convergence control, and the M/browse window);
+  mirrored live in `ATTEMPT/logs/metro-8085.log`.
+- #96 persistence values: quoted verbatim in this record from the container's
+  `Documents/library.json` reads via `entry-place.cjs` (a transient file; the
+  reads' outputs are the record's evidence).
+- Sync/adoption: `ATTEMPT/artifacts/davstate-snapshot/` and the live
+  `ATTEMPT/davstate/` (`access.log`, `puts/PUT-001.json`, `PUT-002.json`,
+  `positions-served.json`), `ATTEMPT/logs/dav-8790.log`.
+- Screenshots: `ATTEMPT/consent-alert.png`, `reader-baseline.png`,
+  `after-reopen.png`, `pp-open.png`, `final-state.png`, `delivery-state.png`.
+- Page instrumentation: `ATTEMPT/artifacts/line-geometry.js` (the one-off
+  viewport-vs-Line-Position probe used for the #196 acceptance) and the
+  committed `scrollby-probe.js`.
 
 Every persisted-position claim was read from the app container's
 `Documents/library.json` with [`entry-place.cjs`](entry-place.cjs) — the file
@@ -105,18 +139,46 @@ page's `born`, after a first awk picked a stale PID and killed nothing):
 
 `following: continuous`, Line Position 50, the kit's new
 [`scrollby-probe.js`](scrollby-probe.js) wrapped on the drift's own
-`rendition.manager.scrollBy` with a per-frame scrollTop sampler:
+`rendition.manager.scrollBy` with a per-frame scrollTop sampler.
 
-- **The true bottom**: playing the last chapter to the end-of-book stop
-  (14 s: 304 scrollBy calls, 15,006 px requested, 8,661 px moved, 56 failed
-  down-calls once `atBottom`) — then, **26 s after the last cue settled, a
-  9 s window at the pinned bottom: `scrollByCalls: 0, pxRequested: 0,
-  pxActuallyMoved: 0, failedCalls: 0`, 0 of 557 sampled frames moved,
-  `atBottom: true`, scrollTop frozen at 12548**. The paused boundary page
-  requests no ongoing drift or scroll work — the requested outcome, not a low
-  rate while playing.
-- **Reachable control**: the same session's play through the front matter
-  moved 1,581 px on 233 sparse calls with no boundary failures — normal drift.
+**The bug-specific acceptance — the real paused show path at the clamped
+bottom (03:52):** the Reading reopened fresh (engine idle, never played
+since), Continuous on, **no Play and no Pause touched**; a paused `seek` to
+the book's last sentence (utterance 510 — a handler probe, no touch) went
+through `show(durationMs=0)`, whose line-following aim (`highlighter.ts`
+`aim()`, `!state.durationMs`) is the drift this fix governs. The approach
+clamped the page at the true bottom and the drift's whole-pixel down-requests
+failed there — **14 failed down-calls, `scrollTop` 12548 = `scrollHeight` −
+`clientHeight` exactly, `atBottom: true`** — and then the boundary check
+rested it: the following **9 s window measured `scrollByCalls: 0,
+pxRequested: 0, pxActuallyMoved: 0, 0 of 539 sampled frames moved`,
+`scrollTop` frozen at 12548**. The geometry probe pinned the discriminator:
+the aimed sentence still sat at viewport y 722.5 against a Line Position of
+406 (`belowLinePosition: true`) at the clamp — a permanent ≈ 316 px of
+unresolvable error. No engine event could have silenced the drift instead:
+from the seek to the last probe, zero `[provider] synthesis` lines, zero
+`playback received` clip cues, zero `hold.request`/pause lines, `level=null`,
+`playing=false`, `note=null` — the only page-mover was the show itself. A
+pre-fix drift with an unresolved 316 px error does not rest (it re-requests a
+pixel every frame); that old-code shape is the host test's construction and
+was **not** measured on device here. A first redo of this seek under the
+restored **By line** setting (03:49) was discarded as non-distinguishing —
+there the paused show glides and self-terminates regardless of this fix.
+
+**Controls, same session:** a seek to utterance 505, five sentences earlier,
+converged the drift normally (the reveal placed its line at the Line Position
+with 79 px of clamp slack left, `atBottom: false`, zero ongoing calls —
+convergence rest, not boundary rest); a play through the front matter moved
+1,581 px on 233 sparse calls with no boundary failures (reachable drift); and
+the wake control below shows a new target moving the page again.
+
+- **Control, not acceptance — the end-of-book stop**: playing the last
+  chapter to the end-of-book stop (14 s: 304 scrollBy calls, 15,006 px
+  requested, 8,661 px moved, 56 failed down-calls once `atBottom`) left a 9 s
+  stationary window (`scrollByCalls: 0`, 0 of 557 frames moved). That window
+  is a control only: the stop path's own `hold({stop: true})`/`halt()` also
+  silences the drift, so it cannot distinguish this fix — the paused-show
+  measurement above is the acceptance.
 - **Wake**: from the pinned bottom, a seek glided the page to the new target
   (744 px requested, 469 moved within 326 ms) — a new target wakes the page.
 - **The top boundary is not constructible in this book**: the tall cover

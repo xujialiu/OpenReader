@@ -16,14 +16,17 @@
 //                 trimming both series, so consecutive calls are consecutive
 //                 windows.
 //
-// What each shape means (see the #196 fix in src/renderer/highlighter.ts):
+// What each shape means (see the #196 fix in src/renderer/highlighter.ts).
+// The pre-fix shape is the host test's construction and design intent — it was
+// NOT measured on a device here:
 //   - A healthy drift calls scrollBy sparsely (about one 1 px step per 100 ms,
 //     measured on #71) and the sampled scrollTop actually moves.
-//   - Drifting at an unreachable boundary BEFORE the fix: a call every drawn
+//   - Expected pre-fix drift at an unreachable boundary: a call every drawn
 //     frame (rate ~= frame rate), zero movement, never resting.
-//   - AFTER the fix: the first whole-pixel call that fails to move an edge
-//     rests the drift — the call rate collapses to a few per second (one per
-//     cue/kick), scrollTop flat, and `failedCalls` stops growing between words.
+//   - AFTER the fix (measured 2026-10-18): the first whole-pixel call that
+//     fails to move an edge rests the drift — the call rate collapses (14
+//     failed calls in the approach, then zero) and a paused boundary page
+//     requests no scroll work at all.
 //
 // The wrapper sits on the app's own production path and adds one array push per
 // call; the RAF sampler is the same convention as continuous-follow.cjs. Neither
