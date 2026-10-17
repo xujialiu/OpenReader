@@ -83,7 +83,7 @@ async function main() {
     const expected=${expected};
     function mod(name) { let found; __r.getModules().forEach((m,id)=>{if(m.verboseName===name)found=__r(id);}); if(!found)throw Error(name); return found; }
     function find(name) { let found; function walk(f){if(!f)return;if(f.type?.name===name)found=f.memoizedProps;walk(f.child);walk(f.sibling);} const h=__REACT_DEVTOOLS_GLOBAL_HOOK__; for(const id of h.renderers.keys())for(const root of h.getFiberRoots(id))walk(root.current); if(!found)throw Error('Missing '+name);return found; }
-    const b={r:mod('src/offline/runtime.ts'), db:mod('src/offline/database.ts'), player:()=>find('Player'), timers:[], voices:[]};
+    const b={r:mod('src/offline/runtime.ts'), db:mod('src/offline/database.ts'), lists:mod('src/app/use-voices.ts').voiceLists, player:()=>find('Player'), timers:[], voices:[]};
     b.pause=()=>{clearTimeout(b.timer);b.player().onPause();};
     b.snapshot=()=>{const p=b.player(),v=find('ReadingView'),key=mod('src/app/consent.ts').providerRecipient(p.settings,'compatible',false).key;return {
       document:v.document.identity.id,provider:p.settings.provider,voice:p.settings.voice,endpoint:p.settings.compatible.baseURL===expected.server,
@@ -162,6 +162,20 @@ async function main() {
     await downloadCase('text-error', readingVoice + '-download-text', false);
     await downloadCase('ok-pcm', jsonVoice, true); // Same failed chapter/Voice: no cached bogus Clip.
     await downloadCase('ok-wav', readingVoice + '-download-wav', true);
+    // The core Drawer touch already has separate evidence. These are the
+    // remaining app-loader fallback controls, not additional touch claims.
+    try {
+      for (const failure of ['404', 'junk']) {
+        await http('/__mode?voices=' + failure);
+        const list = await appPromise('__providerCheck.lists.load(__providerCheck.player().settings, "compatible")');
+        const ids = list.map(v => v.id);
+        assert(ids.includes('alloy') && ids.includes('verse') && !ids.includes('fixture-willow'), 'Documented Voice fallback changed');
+        record('voice-fallback-' + failure, { ids });
+      }
+    } finally {
+      await http('/__mode?voices=ok');
+      await appPromise('__providerCheck.lists.load(__providerCheck.player().settings, "compatible")');
+    }
     accepted = true;
   } finally {
     try {
