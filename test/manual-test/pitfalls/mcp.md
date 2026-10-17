@@ -356,3 +356,5 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
   for 400 s and the tool call's own 60 s timeout only saw a hang. Fix: the flag's default is
   `0.6` (seconds); pass `--duration 0.5` for a sheet-dismiss drag. A drag that "does nothing"
   with an enormous duration is the same mistake.
+
+- **`ax.py UDID tree` can exit 0 with a completely empty output** (2026-10-17, #212, iOS 26.5). Twice back-to-back on the reader with the Contents drawer up, `python3 kit/ax.py UDID tree` wrote 0 lines and exited 0 — no error, no `NO ALERT`-style marker — while the next screenshot showed the drawer and its rows exactly as expected. An empty-but-successful read is a failed read, not an empty screen: take one screenshot alongside the read, and on 0 lines re-read once (it answered first try a minute later) before concluding anything about rows, marks or notes.
