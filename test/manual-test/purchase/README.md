@@ -38,11 +38,13 @@ HX store use=fake access={"kind":"trial","endsAt":1791734400000} allows=true pri
 | `{"do":"store","state":"unlocked"}` | the Unlock owned |
 | `{"do":"store","state":"unavailable"}` / `"available"` | whether products load; with them out, a gated press raises "Purchases Unavailable" |
 | `{"do":"store","outcome":"cancelled"}` | the next purchase: `purchased` (default), `pending` (Ask to Buy), `cancelled`, or `failed` (raises "Purchases Unavailable") |
+| `{"do":"store","verification":"unavailable"}` / `"available"` | fail or restore purchase verification, independently of product loading |
+| `{"do":"store","restoreOutcome":"failed"}` | the next Restore: `restored` (default), `cancelled` (silent), or `failed` (raises "Purchases Unavailable") |
 | `{"do":"store","revoke":"unlock"}` | a refund of the Unlock (or `"trial"`) |
 | `{"do":"store","arrive":"unlock"}` | the Unlock reported by itself while the app runs, as a purchase on another device or a parent's approval is. Since beta12 it resumes nothing: a download the lock paused stays Paused until Resume all or a ring |
 | `{"do":"store","use":"real"}` / `"fake"` | StoreKit instead of the pretend App Store, kept across launches |
 
-`state`, `outcome` and `revoke` make the app's controller afresh, as a launch
+`state`, `outcome`, `verification`, `restoreOutcome` and `revoke` make the app's controller afresh, as a launch
 does, so the products load again and a press asks from the new state. `arrive`
 does not: it is the one that tests what the running app hears by itself.
 
@@ -99,12 +101,21 @@ with `"use":"real"`.
 8. Restore with nothing to restore: `{"do":"store","state":"ended"}`, Play,
    Restore Purchase raises **No Purchase Found** / "There's no purchase to
    restore for this Apple Account." with OK, and nothing plays. The same from
-   Purchase → Restore Purchase. The pretend App Store's restore always finishes,
-   so a cancelled sign-in, which says nothing, is reached only with
-   `"use":"real"`.
+   Purchase → Restore Purchase. The pretend App Store's `restoreOutcome` also
+   exercises cancellation and failure; only `"use":"real"` reaches Apple's
+   actual sign-in sheet.
 9. Leave the simulator with `{"do":"store","state":"unlocked"}`.
 
 Play only while measuring, then stop (MEMORY/device-testing.md).
+
+## Source verification and Restore failures
+
+[Source and Restore checks](source-and-restore.md) covers #162, #163 and #164,
+the additional fault controls, the native classification test and their limits.
+The beta20 device record is [beta20-source-restore.md](beta20-source-restore.md)
+(2026-10-17). After using those controls, reset all of them, not only `state`:
+`{"do":"store","use":"fake"}`, then
+`{"do":"store","state":"unlocked","verification":"available","restoreOutcome":"restored","outcome":"purchased"}`.
 
 ## Scripts
 
