@@ -26,8 +26,13 @@
  */
 declare module 'sentencex' {
   /**
-   * The sentences of `text`, in order. An unknown `language` falls back through
-   * the package's own `fallbacks.json` and finally to `en`; it never throws.
+   * The sentences of `text`, in order. `language` is matched as an exact key:
+   * one of 30 bare lowercase codes, else a key of the package's own
+   * `fallbacks.json` walked recursively, else `en`. It can throw: `nan` and
+   * `cdo` fall back to each other until the stack runs out, and a name on
+   * `Object.prototype` passes its `in` test and fails as a class.
+   * `splitWithSentencex`, the one caller, resolves the tag first
+   * (`sentencexLanguage`) and never meets either.
    *
    * The pieces do **not** concatenate back to the input: the whitespace between
    * sentences is dropped. `sentences.ts` recovers exact offsets anyway.

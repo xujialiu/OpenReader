@@ -59,9 +59,12 @@ slower, not needing work: the app would not start.
 The older release handles thirty languages rather than every language, and it
 disagrees with the newer one about a handful of abbreviations, in both directions.
 So an owner reading in one of those thirty languages gets sentence splitting as
-good as the desktop's. An owner reading outside that set will hear the voice break
-where the text does not — a pause mid-thought, or two sentences run together — and
-will see the mark cover the wrong stretch while it happens. That is a real limit
+good as the desktop's, however the document spells its language: a book that
+says it is in the German of Germany is split as German, just as one that says
+only German is, and does not pause after the "3." of "3. Oktober". An owner
+reading outside that set will hear the voice break where the text does not — a
+pause mid-thought, or two sentences run together — and will see the mark cover
+the wrong stretch while it happens. That is a real limit
 on who the app reads well for, and it is a smaller limit than the alternative,
 which is an app that does not run.
 

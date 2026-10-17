@@ -27,6 +27,9 @@ npx tsx test/manual-test/fixtures/NAME.ts OUTPUT_DIRECTORY
 - `script-and-quote-fixture.ts`: a chapter with seven forms of a Document's own
   script, each posting `SCRIPT RAN: …` as a problem if it runs, and a chapter whose
   heading id holds an apostrophe, for ADR 0077.
+- `declared-language-fixture.ts`: two one-chapter books declared `de-DE` and
+  `nan`, for splitting by a declared language however it is written (#182,
+  #185).
 - `issue86-fixture.ts`: five short chapters and a text-less volume page, for
   the #86 skip/Contents measurements (`../player-and-reading-held/skips-while-playing.md`). Its contents
   are an **NCX on purpose**: epub.js spells an xhtml nav's hrefs with the nav

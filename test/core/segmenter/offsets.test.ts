@@ -230,8 +230,9 @@ describe('the pinned package', () => {
   });
 
   it('never throws on a language it does not know, however the tag is shaped', () => {
-    // 0.4.2 knows 29 languages and falls back through its own fallbacks.json to
-    // English. `ro` and `zh` are both among the ones that fall back.
+    // 0.4.2 knows 30 languages and falls back through its own fallbacks.json to
+    // English. `ro` and `zh` are both among the ones that fall back. The tags
+    // the package itself cannot take are in language.test.ts (#182, #185).
     for (const tag of ['ro', 'zh', 'xx', '', 'und', 'mul', 'en-US']) {
       expect(splitWithSentencex(tag, 'One sentence. Another one.')).toEqual(['One sentence.', 'Another one.']);
     }

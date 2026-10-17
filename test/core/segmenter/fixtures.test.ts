@@ -23,7 +23,7 @@ const texts = (text: string, language: string) => segmentBlock(text, language, o
  * baseline that flatters the splitter is worse than none.
  *
  * The pin is 0.4.2, the last release before the Rust cutover (see
- * `src/core/segmenter/sentencex.ts`). It knows 29 languages and falls back to
+ * `src/core/segmenter/sentencex.ts`). It knows 30 languages and falls back to
  * English for everything else, `ro` and `zh` included, so a Chinese or Romanian
  * book here is split by the English rules over a terminator list that does
  * include `。` and its relatives. Where that costs something the case below says
@@ -309,7 +309,7 @@ describe('where sentencex disagrees with a reader', () => {
   });
 
   /**
-   * Chinese quoted speech. `zh` is not one of 0.4.2's 29 languages, so it is
+   * Chinese quoted speech. `zh` is not one of 0.4.2's 30 languages, so it is
    * split by the English rules, and the English quote-pair handling protects
    * everything between `“` and `”` from being cut — which is right for
    * English and wrong here, where the `。` inside the quotation really does
