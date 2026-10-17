@@ -125,6 +125,14 @@ says why, in the one line the screen has for saying anything.
 The password is kept where the app keeps its other secrets, not in the folder it
 opens.
 
+If the Positions File could not be read, that same status line says so rather
+than presenting the sync as an ordinary first use of an empty folder. It says
+whether the file was replaced with this device's Reading Positions, left alone
+because this device has none, or whether replacement could not be confirmed.
+Repairing the damaged file stays automatic; adding a question or an alert over
+the Reading was turned down because the existing status line can carry the fact
+without interrupting speech. A later ordinary sync shows its own result instead.
+
 ## What the place knows about itself
 
 The time a place was written used to be the time the owner last touched the

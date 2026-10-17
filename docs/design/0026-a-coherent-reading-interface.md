@@ -65,6 +65,25 @@ a percentage, folders, recommendations or new navigation destinations.
 
 The owner approved implementation after the interview.
 
+## Library failures stay until they are resolved or dismissed
+
+A refused import, a stopped deletion or a failed Folder visit stays visible
+while a Reading saves its place and while sync takes a newer place. A later
+successful operation of the same kind clears its earlier failure; a cancelled
+or partly completed operation does not. The owner can also close the message.
+An older operation finishing late cannot clear a more recent failure.
+
+A warning found when the Library is opened stays until the owner closes it.
+The Library still shows one message at a time: a failure to save takes priority,
+because closing the app in that state can lose the changes on screen. When
+saving works again, that message goes and any earlier unresolved message
+returns. The save failure has no close button; saving successfully is what
+resolves it. Closing a message never changes the Documents or Reading Positions.
+
+The owner chose this over requiring a manual dismissal after every successful
+retry. Clearing all messages whenever any save succeeds was rejected because
+background Reading and sync can erase a failure before it has been read.
+
 ## Speed adjustment opens when needed
 
 _Revised in [decision 0041](0041-one-look-for-settings-and-the-speed-control.md):

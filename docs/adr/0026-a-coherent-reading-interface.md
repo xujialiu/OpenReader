@@ -51,6 +51,20 @@ theme corrects the icons and glass together. Lost or changed resume positions
 carry `resumeNeedsAttention`; hiding successful-resume text must not hide those
 warnings. Problems render even when the player was previously collapsed.
 
+The Library's note has separate load, operation and persistence ownership
+(#179). `useLibrary.commit` clears only its own write-failure state; it does not
+clear a reported import/deletion/Folder-visit failure or a startup warning.
+The displayed note prefers a write failure, then the latest reported failure,
+then the startup warning. Clearing a higher-priority note reveals the lower one
+rather than having destroyed it. `beginOperation` captures the reported note by
+identity and returns a completion callback that clears it only if its operation
+kind matches and no later report has replaced it. Import cancellation and
+partial batch deletion never call that callback; it belongs to the whole
+operation, not each child's write. The explicit dismissal similarly targets
+only the note rendered with its button. Write failures have no dismissal
+control and disappear only after persistence succeeds. No timer or background
+write resolves an unrelated note.
+
 ## Speed adjustment leaves the transport row
 
 Contents and a pressable rate caption flank the five transport buttons in
@@ -97,6 +111,19 @@ This is a local preferences file, not the unimplemented shared sync format.
 The parser projects known non-secret fields and migrates unversioned settings
 with all providers disabled. New documents use `recentVoices`, ordered by the
 owner's selections, skipping disabled providers.
+
+A settings write uses the existing synchronous `OpenReaderOffline.writeJson`
+primitive, whose Foundation call writes atomically (#186). `File.write` in the
+installed Expo SDK 57 writes in place and can truncate the old file before a
+storage failure; `moveSync` with overwrite removes the destination before moving,
+so a pending file followed by that operation is not an atomic replacement either.
+`writeSettings` keeps the same non-secret projection and format, and refuses a
+write if the native atomic writer is unavailable rather than falling back to
+those operations. The shell still updates memory only after a successful write.
+A load failure says the file could not be read, not that its earlier contents
+are intact. The regression at `test/app/settings-storage-failure.test.ts` models
+both truncation and partial writes, reload after failure, first-save failure and
+recovery; it doubles the filesystem boundary, not the settings parser.
 
 Fish configuration explicitly passes `includeOfficial: true`, `includeOwn: false`
 and `includeManual: false` by default. The provider layer's own omitted flags

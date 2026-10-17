@@ -1,6 +1,7 @@
 import { parseLookupSettings } from '../translation/settings';
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
+import { offlineNative } from '../../modules/open-reader-offline';
 import { FONT_SIZES, MARGINS, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type Margin, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
 import { readHighlightColours } from '../renderer/highlight-colours';
 import { CONSENT_KEY } from './consent';
@@ -138,5 +139,8 @@ export function readSettings(): AppSettings {
 }
 export function writeSettings(settings: AppSettings): void {
   const clean = parseSettings({ version: 1, settings });
-  new File(Paths.document, 'settings.json').write(JSON.stringify({ version: 1, settings: clean }));
+  // File.write truncates before a failed write; moveSync(overwrite) deletes the
+  // destination first. Neither preserves the last saved settings on failure (#186).
+  if (!offlineNative) throw new Error('Atomic settings storage is unavailable.');
+  offlineNative.writeJson(new File(Paths.document, 'settings.json').uri, JSON.stringify({ version: 1, settings: clean }));
 }

@@ -8,6 +8,7 @@ import { DEFAULT_LOOKUP } from '../../src/translation/settings';
 
 // The settings file's projection is what is tested, not the file.
 vi.mock('expo-file-system', () => ({ Paths: { document: 'test' }, File: class {} }));
+vi.mock('../../modules/open-reader-offline', () => ({ offlineNative: null }));
 
 /**
  * #109, ADR 0064: who a service is to the person, and what they are asked

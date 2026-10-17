@@ -31,7 +31,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { withTimeout } from '../core/timeout';
-import { createPositionsTransport, type PositionsTransport, type SyncClient, type SyncOutcome } from '../core/sync/transport';
+import { createPositionsTransport, syncWarning, type PositionsTransport, type SyncClient, type SyncOutcome } from '../core/sync/transport';
 import { createWebDAVClient, WebDAVError, type WebDAVClient } from '../core/sync/webdav';
 import { forbidCredential } from '../debug/credentials';
 import { cutAddress, debugLog } from '../debug/debug-log';
@@ -118,7 +118,8 @@ export function useSync(settings: AppSettings, library: Library, deps: SyncDeps 
           debugLog(
             'sync',
             `${outcome.trigger}: ${outcome.result}${outcome.error ? ` (${outcome.error})` : ''}, ${outcome.remote} items in the file, ` +
-              `${outcome.adopted.length} places taken, ${outcome.uploaded ? 'uploaded' : 'nothing uploaded'}`,
+              `${outcome.adopted.length} places taken, ${outcome.uploaded ? 'uploaded' : 'nothing uploaded'}` +
+              (outcome.warning ? `; ${syncWarning(outcome)}` : ''),
           );
           setLast(outcome);
         },

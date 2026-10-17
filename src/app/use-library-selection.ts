@@ -58,7 +58,7 @@ export function useLibrarySelection(navigation: Pick<ScreenProps<'Library'>['nav
     const documentIds = library.entries.map((entry) => entry.id);
     let plan: ReturnType<typeof selectionPlan>;
     try { plan = selectionPlan(snapshot, batch, documentIds); }
-    catch (error) { library.report(describe(error)); return; }
+    catch (error) { library.report(describe(error), 'delete'); return; }
     setConfirming(true);
     Alert.alert('Delete selected entries?',
       `This will delete ${plan.documents.size} document${plan.documents.size === 1 ? '' : 's'} and ${plan.folders.size} folder${plan.folders.size === 1 ? '' : 's'}. ` +
@@ -74,7 +74,8 @@ export function useLibrarySelection(navigation: Pick<ScreenProps<'Library'>['nav
                 [...currentPlan.documents].some((id) => !plan.documents.has(id))) {
               throw new Error('The selected contents changed. Review them and confirm deletion again.');
             }
-          } catch (error) { now.report(describe(error)); return; }
+          } catch (error) { now.report(describe(error), 'delete'); return; }
+          const complete = now.beginOperation('delete');
           locked.current = true; setWorking(true);
           let completed = 0;
           void now.folders.deleteEntries(batch, now.entries.map((entry) => entry.id), async (id) => {
@@ -85,11 +86,12 @@ export function useLibrarySelection(navigation: Pick<ScreenProps<'Library'>['nav
             completed++;
             if (token === generation.current) setKeys((was) => { const next = new Set(was); next.delete(targetKey(target)); return next; });
           }).then(() => {
+            complete();
             if (token === generation.current) clear();
           }).catch((error: unknown) => {
             now.report(`Deletion stopped at “${names[completed]}”. ${describe(error)} ` +
               `Completed: ${names.slice(0, completed).join(', ') || 'none'}. Not attempted: ${names.slice(completed + 1).join(', ') || 'none'}. ` +
-              'The failed entry may already have lost some contents or downloaded audio. Remaining entries have been kept.');
+              'The failed entry may already have lost some contents or downloaded audio. Remaining entries have been kept.', 'delete');
           }).finally(() => { locked.current = false; setWorking(false); });
         } },
       ]);

@@ -11,6 +11,7 @@ import type { Library } from './use-library';
  * keep both, and Cancel keeps nothing (#227).
  */
 export async function importDocument(library: Library, source: File, options: { move: boolean; folder?: FolderId | null }, open: (id: DocumentId) => void): Promise<void> {
+  const complete = library.beginOperation('import');
   const added = await library.add(source, { ...options, nameTaken: ({ name, free, folder }) => new Promise<boolean>((resolve) => {
     Alert.alert('Name already exists', `“${name}”\nLocation: ${folderPath(library.folders.getSnapshot().tree, folder)}\nKeep Both adds this one as “${free}”.`, [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
@@ -19,14 +20,14 @@ export async function importDocument(library: Library, source: File, options: { 
   }) });
   if (!added) return;
   const { entry, duplicate } = added;
-  if (!duplicate) { open(entry.id); return; }
+  if (!duplicate) { open(entry.id); complete(); return; }
   const tree = library.folders.getSnapshot().tree;
   await new Promise<void>((resolve) => {
     Alert.alert('Document already exists', `“${entry.title}”\nLocation: ${folderPath(tree, tree.documents[entry.id] ?? null)}`, [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve() },
       { text: 'Open existing document', onPress: () => {
-        if (library.current(entry.id)) open(entry.id);
-        else library.report('That document is no longer in the Library. Import it again.');
+        if (library.current(entry.id)) { open(entry.id); complete(); }
+        else library.report('That document is no longer in the Library. Import it again.', 'import');
         resolve();
       } },
     ], { cancelable: true, onDismiss: resolve });

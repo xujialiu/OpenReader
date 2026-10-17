@@ -24,7 +24,7 @@
 import { useEffect, useState } from 'react';
 
 import { forgetSyncPassword, readSyncPassword, saveSyncPassword } from '../keys/store';
-import type { SyncOutcome } from '../core/sync/transport';
+import { syncWarning, type SyncOutcome } from '../core/sync/transport';
 
 import { FieldRow, Footnote, SettingsGroup, SettingsPage, SwitchRow } from './controls';
 import { useShell } from './routes';
@@ -35,11 +35,13 @@ function statusLine(last: SyncOutcome | null, refused: string | null, folderMiss
   if (folderMissing) return 'The folder is not there yet. It is created at the first sync.';
   if (!last) return null;
   const when = new Date(last.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const warning = syncWarning(last);
+  const detail = warning ? ` ${warning}` : '';
   if (last.result === 'ok') {
     const moved = last.adopted.length;
-    return `Synced at ${when}${moved ? `, ${moved} place${moved === 1 ? '' : 's'} taken from other devices` : ''}.`;
+    return `Synced at ${when}${moved ? `, ${moved} place${moved === 1 ? '' : 's'} taken from other devices` : ''}.${detail}`;
   }
-  return `Sync at ${when} failed: ${last.error}`;
+  return `Sync at ${when} failed: ${last.error}${detail}`;
 }
 
 export function SyncScreen() {
@@ -114,7 +116,7 @@ export function SyncScreen() {
   return (
     <SettingsPage>
       <SettingsGroup footer={line
-        ? <Footnote attention={!!refused || syncLast?.result === 'error' || syncLast?.result === 'frozen'}>{line}</Footnote> : undefined}>
+        ? <Footnote attention={!!refused || !!syncLast?.warning || syncLast?.result === 'error' || syncLast?.result === 'frozen'}>{line}</Footnote> : undefined}>
         <SwitchRow label="Keep my place across devices" value={settings.sync.enabled} disabled={checking}
           onChange={(on) => void toggle(on)}
           note={checking ? 'Checking the folder…' : settings.sync.enabled ? 'Turn off to edit.' : undefined} />

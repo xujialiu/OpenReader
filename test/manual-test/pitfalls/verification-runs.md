@@ -1,5 +1,47 @@
 # Merges, seeding and past verification runs
 
+## Verifying #186/#178/#179 on beta18 (2026-10-17)
+
+- **A harness `settings` patch replaces nested objects wholesale.**
+  `{"do":"settings","patch":{"sync":{"enabled":true}}}` wiped `sync.url` and
+  `sync.username` (the run then failed `Cannot read property 'trim' of
+  undefined`), because `setSettings` spreads the patch at the top level only.
+  Always patch the whole nested object (`url`, `username` and `enabled`
+  together).
+- **`debugLog` lines never reach the Metro console.** The Debug Log writes
+  `os_log` plus its own files — `Library/Application Support/debug-log/` in the
+  app container — while only harness `hlog` lines appear as `LOG  HX …` in
+  Metro. Reading sync outcomes from the Metro log alone shows nothing; read
+  the newest `debug-log-*.txt` from the container instead.
+- **The switch-on sync moment is a free forced-run trigger.** Patching
+  `sync.enabled` false→true through the harness flushes `switch-on` forced,
+  which bypasses the 60 s retry window a failed run just set — no Sync screen
+  typing and no switch tap needed to drive the transport against a local stub.
+- **A backgrounded `silence.sh set && nohup … &` list can launch nothing at
+  all.** The whole `&&` list backgrounds; if that subshell dies before `nohup`
+  starts, the log file is never created and a poller waits on it forever. Run
+  the silence check in the foreground, then `nohup` the run as its own
+  command.
+- **The grep for Metro's bundling line must match its actual text.** Metro
+  prints `iOS Bundled 39468ms index.ts (1731 modules)` — waiting on
+  `grep Bundling` spins a full timeout window after the bundle was ready.
+- **run-probe.sh's generated project scheme is always `LockScreenProbe`,
+  whatever PROBE was passed.** The probe class is chosen by the compiled
+  sources and `probe.txt` (`SyncSetupProbe from <worktree>`), not the scheme
+  name. `-scheme LockScreenProbe` in the xcodebuild line is not a wrong-probe
+  signal; killing the run over it loses a legitimate 16-minute build.
+- **A harness command replays once at every relaunch**, so a refused save
+  re-fires: the `settings` patch that hit an immutable `settings.json`
+  replayed at the next launch, raised the save-failure alert again, and that
+  stale alert then sat over the later successful save's screenshots. Neutralize
+  `harness.json` with a harmless command (`shelf`) before terminating the app.
+- **AXe's remote automation session flapped for ~10 minutes** (`Timed out
+  creating the simulator remote automation session` on every CLI call and
+  finally the MCP server's snapshot too) while another mobilebuildmcp session
+  ran elsewhere on the machine, then recovered on its own. Treated as a
+  symptom only: the harness (file-based, no AX) kept all state setup moving,
+  and `xcrun simctl openurl` handovers and screenshots never needed it.
+
 ## Verifying #136: Select from an entry's own actions (2026-10-07)
 
 - `mobilebuildmcp build_sim` hit the known 60 s MCP transport timeout again

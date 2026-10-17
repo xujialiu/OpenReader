@@ -21,6 +21,8 @@ async function mount() {
   let serial = 0;
   const folders = createFolderStore({ read: () => null, write: () => {}, id: () => `folder-${++serial}` });
   const report = vi.fn();
+  const complete = vi.fn();
+  const beginOperation = vi.fn(() => complete);
   let blur = () => {};
   const navigation = { addListener: vi.fn((_event: string, callback: () => void) => { blur = callback; return () => {}; }) };
   const remove = vi.fn(async (id: string) => { live = live.filter((entry) => entry.id !== id); });
@@ -28,7 +30,7 @@ async function mount() {
   let renderer!: ReactTestRenderer;
   function Probe() {
     const folderSnapshot = useSyncExternalStore(folders.subscribe, folders.getSnapshot);
-    mock.shell = { library: { entries: live, folders, folderSnapshot, current: (id: string) => live.find((entry) => entry.id === id), report } };
+    mock.shell = { library: { entries: live, folders, folderSnapshot, current: (id: string) => live.find((entry) => entry.id === id), report, beginOperation } };
     const rows: LibraryTarget[] = [
       ...folderSnapshot.tree.folders.filter((folder) => folder.parent === folderSnapshot.tree.current).map((folder): LibraryTarget => ({ kind: 'folder', id: folder.id })),
       ...live.filter((entry) => (folderSnapshot.tree.documents[entry.id] ?? null) === folderSnapshot.tree.current).map((entry): LibraryTarget => ({ kind: 'document', id: entry.id })),
@@ -38,7 +40,7 @@ async function mount() {
   }
   await act(async () => { renderer = create(createElement(Probe)); });
   return {
-    get selection() { return selection; }, folders, report, remove,
+    get selection() { return selection; }, folders, report, remove, complete, beginOperation,
     run: async (fn: () => void) => { await act(async () => { fn(); }); },
     blur: () => blur(),
     refresh: () => renderer.update(createElement(Probe)),
@@ -108,6 +110,7 @@ it('preserves selection on move/deletion cancellation, but clears it on page blu
   await h.run(() => h.selection.closeMove());
   await h.run(() => h.selection.deleteSelected());
   await h.run(() => answer(0));
+  expect(h.complete).not.toHaveBeenCalled();
   expect(h.selection.selected).toEqual([targets[0]]);
   await h.run(h.refresh); // a re-render, unlike navigation away, preserves the selection
   expect(h.selection.selected).toEqual([targets[0]]);
@@ -133,6 +136,8 @@ it('counts recursive contents in one confirmation and exits only after full succ
   expect(h.remove).toHaveBeenCalledTimes(3);
   expect(h.selection.active).toBe(false);
   expect(h.folders.getSnapshot().tree.folders).toEqual([]);
+  expect(h.beginOperation).toHaveBeenCalledWith('delete');
+  expect(h.complete).toHaveBeenCalledOnce();
   await h.close();
 });
 
@@ -146,8 +151,9 @@ it('retains failed and unprocessed selections, not successful entries, and repor
   expect(h.remove.mock.calls.map(([id]) => id)).toEqual(ids.slice(0, 2));
   expect(h.selection.active).toBe(true);
   expect(h.selection.selected).toEqual(targets.slice(1));
-  expect(h.report).toHaveBeenCalledWith(expect.stringContaining('Deletion stopped at “Document 2”'));
-  expect(h.report).toHaveBeenCalledWith(expect.stringContaining('may already have lost'));
+  expect(h.report).toHaveBeenCalledWith(expect.stringContaining('Deletion stopped at “Document 2”'), 'delete');
+  expect(h.report).toHaveBeenCalledWith(expect.stringContaining('may already have lost'), 'delete');
+  expect(h.complete).not.toHaveBeenCalled();
   expect(h.selection.working).toBe(false);
   await h.close();
 });
@@ -160,7 +166,7 @@ it('refuses a confirmation after the folder contents change', async () => {
   await h.run(() => h.folders.create('Changed', null));
   await h.run(() => answer(1));
   expect(h.remove).not.toHaveBeenCalled();
-  expect(h.report).toHaveBeenCalledWith(expect.stringContaining('changed'));
+  expect(h.report).toHaveBeenCalledWith(expect.stringContaining('changed'), 'delete');
   expect(h.selection.selected).toHaveLength(3);
   await h.close();
 });
@@ -174,7 +180,7 @@ it('detects added documents in a selected folder even when its tree does not cha
   await h.run(() => { h.add(); h.refresh(); });
   await h.run(() => answer(1));
   expect(h.remove).not.toHaveBeenCalled();
-  expect(h.report).toHaveBeenCalledWith(expect.stringContaining('changed'));
+  expect(h.report).toHaveBeenCalledWith(expect.stringContaining('changed'), 'delete');
   await h.close();
 });
 
@@ -193,11 +199,13 @@ it('ignores stale confirmation after blur and blocks duplicate submission while 
   h.remove.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
   await h.run(() => { answer(1); answer(1); });
   expect(h.selection.working).toBe(true);
+  expect(h.complete).not.toHaveBeenCalled();
   await h.run(() => { h.selection.cancel(); h.selection.toggle(targets[0]); h.selection.selectAll(); h.selection.sweepTo(new Set()); });
   expect(h.selection.active).toBe(true);
   expect(h.selection.selected).toHaveLength(3);
   await h.run(h.blur);
   await h.run(() => finish());
+  expect(h.complete).toHaveBeenCalledOnce();
   expect(h.remove).toHaveBeenCalledTimes(3);
   expect(h.selection.active).toBe(false);
   await h.close();

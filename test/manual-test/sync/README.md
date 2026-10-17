@@ -145,6 +145,11 @@ GET, not only the passing check (#177). The tools it added:
 GETs, the password list, header logging) and `SyncRecoveryProbe.swift`
 (`testFailThenRecoverInWindow`).
 
+## An unreadable Positions File is not an ordinary sync (#178)
+
+[unreadable-positions.md](unreadable-positions.md) — isolated local WebDAV setup,
+malformed/absent/newer-file cases, failed replacement, and the visible warning.
+
 ## A Play that waits past its Reading (#106)
 
 `reading-view.tsx`'s `play` waits for the pre-Play sync for at most

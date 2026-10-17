@@ -46,6 +46,9 @@ import { displayNames, forgetDisplayName, saveDisplayName } from './display-name
 import { migrateDocumentIds, readLibrary, thisDevice, writeLibrary, type LoadedLibrary } from './library';
 import { itemsOf, planAdoption, samePlace } from './sync-items';
 
+type LibraryOperation = 'import' | 'delete' | 'visit';
+type ReportedNote = { text: string; operation: LibraryOperation | null };
+
 /** What the Library screen shows and what the Reader route resolves a Document Id against. */
 export interface Library {
   /** Most recent first. */
@@ -61,6 +64,14 @@ export interface Library {
    * the app.
    */
   note: string | null;
+  /** Dismiss only the note currently shown. Write failures must be resolved by a successful write. */
+  dismissNote: (() => void) | null;
+  /**
+   * Capture an operation's prior note. Call the returned function only when the
+   * whole operation succeeds; cancellation, partial success and newer failures
+   * cannot clear it. An unrelated operation never clears it either (#179).
+   */
+  beginOperation(operation: LibraryOperation): () => void;
   /**
    * Read a file, name it by its bytes, and put it in the Library.
    *
@@ -140,7 +151,7 @@ export interface Library {
    * to put a sentence the owner has to read, and two would mean one of them is
    * the one nobody looks at.
    */
-  report(note: string): void;
+  report(note: string, operation?: LibraryOperation): void;
 }
 
 export interface AddOptions {
@@ -159,7 +170,14 @@ export function useLibrary(): Library {
   const readyRef = useRef(false);
   const [entries, setEntries] = useState<readonly LibraryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [note, setNote] = useState<string | null>(null);
+  const [loadNote, setLoadNote] = useState<string | null>(null);
+  const [writeNote, setWriteNote] = useState<string | null>(null);
+  const [reportedNote, setReportedNote] = useState<ReportedNote | null>(null);
+  const reportedRef = useRef<ReportedNote | null>(null);
+  const putReport = useCallback((next: ReportedNote | null) => {
+    reportedRef.current = next;
+    setReportedNote(next);
+  }, []);
   const [adoptedAt, setAdoptedAt] = useState<Partial<Record<DocumentId, number>>>({});
   const [device, setDevice] = useState('');
 
@@ -195,9 +213,9 @@ export function useLibrary(): Library {
       const names = displayNames();
       entriesRef.current = migration.entries.map((entry) => names[entry.id] ? { ...entry, title: names[entry.id] } : entry).sort(byNewestFirst);
       setEntries(entriesRef.current);
-      setNote(migration.note ?? loaded.note ?? problemSentence(loaded));
+      setLoadNote(migration.note ?? loaded.note ?? problemSentence(loaded));
     } catch (problem) {
-      setNote(`The Library could not be opened: ${describe(problem)}`);
+      setLoadNote(`The Library could not be opened: ${describe(problem)}`);
     } finally {
       readyRef.current = true;
       setLoading(false);
@@ -214,9 +232,9 @@ export function useLibrary(): Library {
     setEntries(next);
     try {
       if (!durable) writeLibrary(next, loadedRef.current);
-      setNote(null);
+      setWriteNote(null);
     } catch (problem) {
-      setNote(`${describe(problem)} The Library on screen and the file on disk have stopped agreeing.`);
+      setWriteNote(`${describe(problem)} The Library on screen and the file on disk have stopped agreeing.`);
     }
   }, []);
 
@@ -340,7 +358,20 @@ export function useLibrary(): Library {
     [change],
   );
 
-  const report = useCallback((said: string) => setNote(said), []);
+  const report = useCallback((text: string, operation: LibraryOperation | null = null) => {
+    putReport({ text, operation });
+  }, [putReport]);
+  const beginOperation = useCallback((operation: LibraryOperation) => {
+    const previous = reportedRef.current;
+    return () => {
+      if (previous?.operation === operation && reportedRef.current === previous) putReport(null);
+    };
+  }, [putReport]);
+  // One visible note, without making a later write destroy an earlier failure.
+  const note = writeNote ?? reportedNote?.text ?? loadNote;
+  const dismissNote = writeNote !== null ? null : reportedNote ? () => {
+    if (reportedRef.current === reportedNote) putReport(null);
+  } : loadNote !== null ? () => setLoadNote((was) => was === loadNote ? null : was) : null;
 
   /** Refused, as a Folder's rename is, when the Document's Folder holds another of the name (#227). */
   const rename = useCallback((id: DocumentId, title: string) => {
@@ -353,7 +384,7 @@ export function useLibrary(): Library {
     }
   }, [change, folders]);
   const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id), true), [commit]);
-  return { folders, folderSnapshot, entries, loading, note, add, heard, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
+  return { folders, folderSnapshot, entries, loading, note, dismissNote, beginOperation, add, heard, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
 }
 
 /**
