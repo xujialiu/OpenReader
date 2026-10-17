@@ -2,15 +2,16 @@
  * The Voice list, as two levels (ADR 0020).
  *
  * The picker is provider → locale → Voice, and the middle level is the reason this
- * file exists. Half the Providers do not have one: measured in ADR 0020, Speechify
- * and Fish Audio report a real locale per Voice, while OpenAI, any
- * OpenAI-compatible server and Kokoro report `MULTILINGUAL` for every one of
- * theirs — a voice that speaks whatever it is given.
+ * file exists. Two of the six Providers do not have one: Fish Audio, Speechify
+ * and Azure report a locale per Voice, and Kokoro's comes from the first letter
+ * of its Voice id (ADR 0020), while OpenAI and an OpenAI Compatible server report
+ * `MULTILINGUAL` for every one of theirs — a voice that speaks whatever it is
+ * given.
  *
  * So the level is built either way, and where a Provider has no locale it is **one
  * entry reading "multilingual"**. The alternative was to skip the level for those
- * Providers, which would have made the picker two screens deep for two of them and
- * one screen deep for three, so that choosing a Voice was a different act
+ * Providers, which would have made the picker one screen shallower for two of them
+ * than for the other four, so that choosing a Voice was a different act
  * depending on who was speaking. One extra tap on the Providers that cannot answer
  * the question is the cheaper half of that trade.
  *

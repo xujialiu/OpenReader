@@ -26,7 +26,7 @@ plugin, so their relative imports need no editing.
 
 ### What has landed so far
 
-The OpenAI-compatible client and the three sections built on it (`openai.ts`,
+The OpenAI-compatible client and the two sections built on it (`openai.ts`,
 `compatible.ts`), **Azure** (`azure.ts`, `azure-ws.ts`), Speechify, **Fish
 Audio**, the local-engine registry with Kokoro-FastAPI, and the factory,
 errors, base-URL and audio-bytes pieces they share.
@@ -98,10 +98,12 @@ its whole `Settings` type, which reaches `createZoteroPrefs()`: type-only, so it
 erased, but one change to a value import would have pulled XPCOM in here without
 the lint boundary noticing.
 
-`core/wav.ts` comes across too, even though the PCM path bypasses most of it:
-`wavDataLength()` walks RIFF chunks instead of assuming data starts at offset
-44, because macOS's `say` inserts a 4044-byte `FLLR` pad, and it is still needed
-to parse the WAV that at least one provider returns while documenting MP3.
+`core/wav.ts` comes across too, though nothing in the app calls it: a WAV a
+Provider returns is recognised by its `RIFF`/`WAVE` header and handed to the
+decoder whole (`readClip` in `audio.ts`). The tests and the manual-test kit use
+it to write `.wav` files. `wavDataLength()` walks RIFF chunks instead of
+assuming data starts at offset 44, because macOS's `say` inserts a 4044-byte
+`FLLR` pad (#208).
 
 ## The contract changes: PCM, not a blob
 

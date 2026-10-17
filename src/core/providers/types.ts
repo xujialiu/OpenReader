@@ -107,7 +107,8 @@ export type SynthesisOptions = {
 
 /**
  * The signal a caller that bounds the listing hands over. Providers may use it
- * to cancel a request. Optional: a connection check lists without one.
+ * to cancel a request. Optional, though the app's callers, the Voice lists and
+ * the connection test, always hand one.
  */
 export type ListVoicesOptions = {
   signal?: AbortSignal;
@@ -138,7 +139,8 @@ export interface TTSProvider {
   checkSynthesis?(voice: string): Promise<void>;
   /**
    * Whether this configuration yields word timings, proven with a tiny real
-   * synthesis (a connection check runs it with the first listed voice).
+   * synthesis. Nothing in the app calls it: a connection test calls
+   * `checkConnection` and `listVoices` only, and synthesizes nothing (ADR 0026).
    * ok=false with a human-readable detail when the server answers but without
    * timings — a wrong server behind the Kokoro provider looks exactly like
    * that. Rejects like synthesize (auth, server down).

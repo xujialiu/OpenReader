@@ -4,8 +4,8 @@ import type { TTSProvider } from './types';
 /**
  * The OpenAI section: OpenAI itself and nothing else. The address is fixed — a
  * proxy or a mirror is an OpenAI Compatible server (`compatible.ts`) — a key is
- * required, and the voices are OpenAI's documented ones unless the owner types
- * newer names. Its id is `openai-official`, never `openai`.
+ * required, and the voices are OpenAI's documented ones: the settings give it
+ * only a key and a Model. Its id is `openai-official`, never `openai`.
  */
 
 export const OPENAI_URL = 'https://api.openai.com';

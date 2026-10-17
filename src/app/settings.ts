@@ -192,7 +192,7 @@ export interface AppSettings {
   recentVoices: readonly DocumentVoice[];
   fish: { model: string; includeOfficial: boolean; includeOwn: boolean; includeManual: boolean; voices: string };
   openai: {
-    /** A speech model id. Empty by default: OpenAI publishes the list and `listModels()` asks for it, so the app does not guess one. */
+    /** A speech model id, typed by the owner. Empty by default, so the app does not guess one: a wrong guess can spend the owner's money. */
     model: string;
   };
   compatible: {
