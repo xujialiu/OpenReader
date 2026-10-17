@@ -275,9 +275,11 @@ them with everything else, which is what collapsing is for.
 
 ### One more thing the engine had to be told
 
-`build()` loads the engine at the Reading Position rather than at 0. A word tapped
-or a chapter chosen **before Play was ever pressed** has already moved it, and
-loading at 0 would silently read the book from its beginning instead.
+`build()` loads the engine at the playback cursor rather than at 0. A word
+tapped or a chapter chosen **before Play was ever pressed** has already moved
+that cursor, and loading at 0 would silently read the book from its beginning
+instead. The cursor is not necessarily a Reading Position: #96 (ADR 0044)
+keeps a paused choice only as Play's start, saving it once speech starts there.
 
 ## Tap-to-seek, and why it cannot be a long press
 

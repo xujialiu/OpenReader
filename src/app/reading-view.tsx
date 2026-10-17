@@ -280,7 +280,9 @@ export function ReadingView({
   /** Where the Reading reports a stop; filled in below, beside the place it writes. */
   const stoppedRef = useRef<(place: ReadingPlace | null) => void>(() => {});
   const onStopped = useCallback((place: ReadingPlace | null) => stoppedRef.current(place), []);
-  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id, onStopped);
+  const speechRef = useRef<(place: ReadingPlace | null) => void>(() => {});
+  const onSpeech = useCallback((place: ReadingPlace | null) => speechRef.current(place), []);
+  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id, onStopped, onSpeech);
   /** The lookup's pause is this screen's `pause`, defined below (#216). */
   const pauseRef = useRef<() => void>(() => {});
   const pauseForLookup = useCallback(() => pauseRef.current(), []);
@@ -395,24 +397,20 @@ export function ReadingView({
   }, [onReached]);
   const writtenAtRef = useRef(0);
 
-  const readingPosition = reading.readingPosition;
   useEffect(() => {
-    const position = readingPosition();
-    if (!position) {
-      // A cursor that yields no place is the sentence a resume landed on: the
-      // stored position already is that place, with its true Stamp, and the
-      // place held here for the way out must not overwrite it with an older one.
-      if (status.utterance !== null) positionRef.current = null;
-      return;
-    }
-    positionRef.current = position;
-    const now = Date.now();
-    if (now - writtenAtRef.current < POSITION_INTERVAL_MS) return;
-    writtenAtRef.current = now;
-    onReachedRef.current(position);
-    // Once per Utterance, not once per render: `reading` is a fresh object every
-    // render and depending on it would run this on every one of them.
-  }, [status.utterance, readingPosition]);
+    speechRef.current = (place) => {
+      // Speech, not the displayed cursor (#96). A paused tap may show the same
+      // Utterance that Play later starts, so an effect on status.utterance would
+      // both write the tap and miss that actual start. Null is a remote adoption:
+      // its true Stamp already lives in the Library and retires local writeback.
+      positionRef.current = place;
+      if (!place) return;
+      const now = Date.now();
+      if (now - writtenAtRef.current < POSITION_INTERVAL_MS) return;
+      writtenAtRef.current = now;
+      onReachedRef.current(place);
+    };
+  }, []);
 
   const syncRef = useRef(sync);
   useEffect(() => {
@@ -460,7 +458,7 @@ export function ReadingView({
   const takePlace = reading.resumeAt;
   useEffect(() => {
     // Taken, so the place held for the way out is the adopted one — which is
-    // already stored and is not written again (`use-reading.ts`, `resumedAtRef`).
+    // already stored and is not written again (`use-reading.ts`, `reachedRef`).
     if (adopted && takePlace(adopted.position)) positionRef.current = null;
   }, [adopted, takePlace]);
 

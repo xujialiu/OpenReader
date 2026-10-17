@@ -63,14 +63,15 @@ vi.mock('../../src/renderer', async () => {
 vi.mock('../../src/playback', async () => ({
   ...(await vi.importActual<typeof import('../../src/playback/navigation')>('../../src/playback/navigation')),
   createPlaybackEngine: (deps: (typeof world.engines)[number]['deps']) => {
+    let playing = false;
     const engine = { deps, calls: [] as string[] };
     world.engines.push(engine);
     return {
       load(_list: unknown, from = 0) { engine.calls.push(`load:${from}`); }, extend() {}, silence() {}, setRate() {}, switchVoice() {}, cancelVoiceSwitch() {},
-      play() { engine.calls.push('play'); deps.onState?.({ playing: true, buffering: false }); },
-      pause() { engine.calls.push('pause'); deps.onState?.({ playing: false, buffering: false }); },
+      play() { playing = true; engine.calls.push('play'); deps.onState?.({ playing: true, buffering: false }); },
+      pause() { playing = false; engine.calls.push('pause'); deps.onState?.({ playing: false, buffering: false }); },
       seek(at: number) { engine.calls.push(`seek:${at}`); },
-      snapshot: () => ({ playing: false, utterance: 0, rate: 1, queued: 1, fetching: 0 }),
+      snapshot: () => ({ playing, utterance: 0, rate: 1, queued: 1, fetching: 0 }),
       dispose: async () => {},
     };
   },

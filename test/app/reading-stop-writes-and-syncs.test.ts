@@ -26,14 +26,15 @@ import { useSync, type SyncDeps } from '../../src/app/use-sync';
  * and the view's own child controls. The clock is pinned.
  */
 const world = vi.hoisted(() => ({
-  page: null as null | { onBlocks?(blocks: readonly unknown[], section: { index: number; href: string; spine: number }): void },
+  page: null as null | { onTap?(utterance: number): void; onBlocks?(blocks: readonly unknown[], section: { index: number; href: string; spine: number }): void },
   audio: {
     handlers: null as null | { onBufferEnded(id: string): void; onOutputLost(): void },
     queue: [] as string[],
   },
-  provider: { refuse: null as string | null },
+  provider: { refuse: null as string | null, hold: null as string | null, answer: null as (() => void) | null },
+  shown: [] as number[],
   remote: null as null | ((intent: 'play' | 'pause') => void),
-  player: null as null | { playing: boolean; onPlay(): void },
+  player: null as null | { playing: boolean; onPlay(): void; onSkip(target: 'next-sentence' | 'previous-sentence' | 'next-paragraph' | 'previous-paragraph'): void },
   disk: { entries: [] as unknown[] },
   folder: { file: null as string | null },
   /** The shell's sync handle, for the one sync moment the shell itself owns: the app going to the background. */
@@ -60,7 +61,7 @@ vi.mock('../../src/renderer', async () => {
       world.page = options;
       const nothing = () => {};
       return {
-        goTo: nothing, goToSection: nothing, prepareSection: nothing, browse: nothing, show: nothing, clock: { onClip: nothing, onPosition: nothing },
+        goTo: nothing, goToSection: nothing, prepareSection: nothing, browse: nothing, show: (at: number) => world.shown.push(at), clock: { onClip: nothing, onPosition: nothing },
         setUtterances: nothing, setInset: nothing, setOpenPlayer: nothing, setLinePosition: nothing, setScrolling: nothing, setBar: nothing,
         setAppearance: nothing, setTheme: nothing, resumeFollowing: nothing, snapshot: nothing, hold: nothing, clear: nothing,
         returnToReading: nothing, setFollowOnly: nothing, releaseSelection: nothing, restart: () => null, readerProps: {},
@@ -94,6 +95,7 @@ vi.mock('../../src/offline/runtime', async () => {
     offlineProvider: () => ({
       id: 'local', capabilities: { wordTimestamps: false }, listVoices: async () => [],
       synthesize: async (text: string) => {
+        if (text === world.provider.hold) await new Promise<void>((resolve) => { world.provider.answer = resolve; });
         if (text === world.provider.refuse) throw new SynthesisError('network', 'local: the server did not answer');
         return { audio: 'pcm' as const, samples: new Uint8Array(4800), sampleRate: 24000 };
       },
@@ -190,14 +192,16 @@ const settle = async () => {
 };
 
 /** The Document open, its section reported and Play pressed: the Reading plays, on the first sentence. */
-async function playing(sentences: readonly string[] = TWO) {
+async function playing(sentences: readonly string[] = TWO, start = true) {
   let tree!: ReactTestRenderer;
   await act(async () => { tree = create(createElement(ShellProbe)); });
   await settle();
   await act(async () => { world.page!.onBlocks!(blocks(sentences), { index: 0, href: 's0.xhtml', spine: 1 }); });
   await settle();
-  await act(async () => { world.player!.onPlay(); });
-  await settle();
+  if (start) {
+    await act(async () => { world.player!.onPlay(); });
+    await settle();
+  }
   return {
     /** The native queue finishes its front buffer: a sentence has been heard, `ms` later, and speech is on the next. */
     async hear(ms = 0) {
@@ -215,7 +219,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: Date.UTC(2026, 9, 11, 9, 0, 0) });
   world.page = null; world.remote = null; world.player = null;
   world.audio.handlers = null; world.audio.queue = [];
-  world.provider.refuse = null;
+  world.provider.refuse = null; world.provider.hold = null; world.provider.answer = null;
+  world.shown = [];
   world.disk.entries = [{
     id: DOCUMENT, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A novel', position: null,
     voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: 1, device: 'iPhone-test0001' },
@@ -261,7 +266,83 @@ describe('a Reading that stops on its second sentence: the place is written to t
     const reading = await playing();
     await reading.hear();
     expect(world.player!.playing).toBe(false);
-    expect(held()).toEqual(STOPPED);
+    // The refused sentence was cued to explain the stop, but never spoken (#96).
+    expect(held()).toEqual({ library: 'Sentence one.', folder: 'Sentence one.' });
+    await reading.down();
+  });
+});
+
+describe('only speech moves the Reading Position (#96)', () => {
+  it.each(['tap', 'next-sentence', 'previous-sentence', 'next-paragraph', 'previous-paragraph'] as const)(
+    'a paused %s, another Pause, background sync and leaving keep the last spoken place and Stamp', async (action) => {
+      const reading = await playing(SIX);
+      await reading.hear();
+      await act(async () => { world.remote!('pause'); });
+      await settle();
+      const stored = world.disk.entries;
+      const uploaded = world.folder.file;
+      vi.setSystemTime(Date.now() + 20_000);
+      await act(async () => {
+        if (action === 'tap') world.page!.onTap!(4);
+        else world.player!.onSkip(action);
+      });
+      await settle(); // Includes the paused seek's Clip arriving.
+      await act(async () => { world.remote!('pause'); world.sync!.poke('background'); });
+      await settle();
+      await reading.down();
+      await settle();
+      expect(world.disk.entries).toEqual(stored);
+      expect(world.folder.file).toBe(uploaded);
+      const reopened = await playing(SIX, false);
+      expect(world.shown.at(-1)).toBe(1);
+      await reopened.down();
+    },
+  );
+
+  it('a never-played Document stores no position after a tap and leave', async () => {
+    const reading = await playing(SIX, false);
+    await act(async () => { world.page!.onTap!(4); });
+    await settle();
+    await reading.down();
+    await settle();
+    expect(held()).toEqual({ library: null, folder: null });
+  });
+
+  it('a pending Play paused before its Clip arrives writes no unheard sentence, even after the late reply', async () => {
+    const reading = await playing(SIX);
+    await act(async () => { world.remote!('pause'); });
+    await settle();
+    world.provider.hold = SIX[4];
+    vi.setSystemTime(Date.now() + 20_000);
+    await act(async () => { world.page!.onTap!(4); });
+    await settle();
+    await act(async () => { world.player!.onPlay(); });
+    await settle();
+    expect(world.provider.answer).not.toBeNull();
+    expect(held().library).toBe(SIX[0]);
+    await act(async () => { world.remote!('pause'); });
+    await settle();
+    await act(async () => { world.provider.answer!(); });
+    await settle();
+    await reading.down();
+    await settle();
+    expect(held()).toEqual({ library: SIX[0], folder: SIX[0] });
+  });
+
+  it('Play after a paused tap establishes that sentence, even though the displayed cursor does not change', async () => {
+    const reading = await playing(SIX);
+    await act(async () => { world.remote!('pause'); });
+    await settle();
+    await act(async () => { world.page!.onTap!(4); });
+    await settle();
+    expect(held().library).toBe(SIX[0]);
+    vi.setSystemTime(Date.now() + 20_000);
+    await act(async () => { world.player!.onPlay(); });
+    await settle();
+    expect(held().library).toBe(SIX[4]); // Periodic write without another cursor change.
+    await act(async () => { world.remote!('pause'); });
+    await settle();
+    expect(held()).toEqual({ library: SIX[4], folder: SIX[4] });
     await reading.down();
   });
 });
