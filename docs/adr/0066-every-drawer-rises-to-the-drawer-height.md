@@ -366,3 +366,9 @@ selection while the note stays editable.
   `presentationBackgroundInteraction`. The page could not be judged, nor
   highlight colours chosen, under a 48 % overlay in the dark.
 - **The system's glass background.** The owner chose the app's palette.
+
+## Amendment (#213): the end of a dismissal always reaches the queue
+
+`useDrawerTurn`'s `dismissed()` called `gone` only when the drawer's owner no longer wanted it. A drawer that the app closed (a row's `onClose`, or the queue for another drawer) and that was asked for again before its `onDismiss` was wanted again by then, so `gone` never came. The queue kept it up but not wanted, with itself waiting behind it, and `presented` (`visible && up`) stayed false: no drawer, and every further press of its button set the same `true` and did nothing, until a different drawer was asked for. `@expo/ui`'s `BottomSheetView` sends `onIsPresentedChange` only when its own state differs from `isPresented` (`node_modules/@expo/ui/ios/BottomSheetView.swift:112-119`), so `onDismiss` is the only report of a dismissal the app started.
+
+`dismissed()` now always calls `gone`. `gone` already passes over a drawer that is up and wanted, which is what keeps the swipe (dismissal reported before `onClose`) and iOS's second report of one dismissal harmless, so the hook's condition protected nothing the queue did not. `test/app/drawer-turn.test.ts` runs the hook over the real queue: the drawer asked for again within its own slide, the same after another drawer closed it, the double report after it came back up, and the swipe order.

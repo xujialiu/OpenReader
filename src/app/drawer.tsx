@@ -201,6 +201,13 @@ const DRAWER_TURNS = createDrawerTurns();
  * no animation of its own (`animated: false`, the lookup drawer) is gone as
  * soon as it is closed. A drawer swiped away reports its dismissal before its
  * owner closes it, so it is gone at whichever of the two comes second.
+ *
+ * The end of a dismissal always reaches the queue, wanted or not: `gone`
+ * passes over a drawer that is up and wanted, which is the swipe above and
+ * iOS's second report of one dismissal. A drawer asked for again while it was
+ * still sliding away is up, not wanted, and waiting behind itself, and only
+ * this `gone` brings it back up; holding it back here for being wanted again
+ * left it never presented and its button dead (#213).
  */
 export function useDrawerTurn(visible: boolean, close: () => void, { animated = true }: { animated?: boolean } = {}): {
   presented: boolean;
@@ -208,13 +215,11 @@ export function useDrawerTurn(visible: boolean, close: () => void, { animated = 
 } {
   const id = useId();
   const closing = useRef(close);
-  const wanted = useRef(visible);
   const down = useRef(false);
   const up = useSyncExternalStore(DRAWER_TURNS.subscribe, () => DRAWER_TURNS.isUp(id));
   useEffect(() => { closing.current = close; });
   useEffect(() => { if (up) down.current = false; }, [up]);
   useEffect(() => {
-    wanted.current = visible;
     if (visible) DRAWER_TURNS.ask(id, () => closing.current());
     else {
       DRAWER_TURNS.leave(id);
@@ -224,7 +229,7 @@ export function useDrawerTurn(visible: boolean, close: () => void, { animated = 
   useEffect(() => () => { DRAWER_TURNS.leave(id); DRAWER_TURNS.gone(id); }, [id]);
   const dismissed = useCallback(() => {
     down.current = true;
-    if (!wanted.current) DRAWER_TURNS.gone(id);
+    DRAWER_TURNS.gone(id);
   }, [id]);
   return { presented: visible && up, dismissed };
 }
