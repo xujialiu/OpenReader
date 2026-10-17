@@ -52,7 +52,6 @@ final class BracketsProbe: XCTestCase {
     XCTAssertTrue(app.staticTexts["1 chapter downloaded"].waitForExistence(timeout: 90), "The fixture did not finish downloading")
     print("PROBE downloaded in \(String(format: "%.1f", Date().timeIntervalSince(began))) s")
     capture("stat-lines-downloaded", app)
-    app.buttons["Close Download"].tap()
   }
 
   func testFlipBracketSwitch() throws {
