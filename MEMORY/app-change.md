@@ -52,7 +52,9 @@ After every app change, update and launch the app in the simulator from the
 latest working-tree code, including uncommitted changes. Reload the current
 bundle or rebuild and reinstall as needed; verify that the running app contains
 the final change, then exercise the changed interaction. Leave that latest app
-open for the owner to inspect, with playback stopped.
+open for the owner to inspect, with playback stopped. Under
+[finish worktree](finish-worktree.md), complete and verify this delivery first;
+that workflow's final cleanup then releases the simulator and Metro.
 
 This is a completion requirement regardless of which agent made the change,
 whether it runs tests, or whether it considers simulator testing necessary.

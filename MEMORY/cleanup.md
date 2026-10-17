@@ -10,7 +10,9 @@ So keep a list, as you go, of every port, PID, simulator UDID and directory
 the session starts. When all the tasks are done and committed, ask the owner
 whether to clean up. The recommended option, first, is to release everything
 on the list (the owner's default, 2026-10-08); keeping the delivery for
-inspection is the alternative.
+inspection is the alternative. When the owner invokes
+[finish worktree](finish-worktree.md), release is already authorized: follow its
+ordering without another cleanup question.
 
 - **What release covers**: the Metros (with their `npm exec` parent and
   `esbuild` child) and helper servers, stopped; the simulators the session
