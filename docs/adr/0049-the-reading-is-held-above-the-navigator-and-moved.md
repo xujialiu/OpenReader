@@ -122,3 +122,10 @@ Measured on the iPhone 17 simulator, iOS 27.0 (notes, 2026-09-25 23:38–23:41).
 - **A reparent module of our own.** Fabric owns the view hierarchy, and a view
   moved behind its back has to be reconciled on every mount and unmount. That
   is what `react-native-teleport`'s `PortalView` does, in about 300 lines.
+
+## Amendment (#214, #159): what a parked view lets go of
+
+Holding the view kept two things working on a premise that dated from before this ADR, that leaving the Reader unmounts it.
+
+- **Its Drawers.** Contents and Voice are presented from inside the view, and only their own `onClose` closed them. Left while the Reading played with either open at the Drawer Height, the view went on passing `visible: true`, so the app went on asking the phone to present it over the Library. `reading-view.tsx` now closes both when `shown` goes false, as `useLookup` already closed the lookup Drawer. The close takes each Drawer's ordinary path, `leave` and then the native dismissal's `gone` (ADR 0066), and the parked page is still in the window, so the queue is free once the Drawer is down; a Drawer the Library asks for meanwhile waits for it. Coming back to the Reader opens neither again. `test/app/held-reading-drawers.test.ts` runs the real `ReadingHost`, `ReadingView`, `useReading` and engine.
+- **The pauses.** ADR 0047 read them once, when the engine was built, because Settings was reachable only with no Reader mounted. Its amendment for #159 gives them the live path.

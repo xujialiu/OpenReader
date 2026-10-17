@@ -295,6 +295,19 @@ export function ReadingView({
   const [voicesOpen, setVoicesOpen] = useState(false);
   const closeContents = useCallback(() => setContentsOpen(false), []);
   const closeVoices = useCallback(() => setVoicesOpen(false), []);
+  /**
+   * Parked, the view closes its Drawers (#214, ADR 0049). A Reading left
+   * playing keeps this view behind the navigator, and a Drawer still asked for
+   * would go on being presented over the Library. Closed through each Drawer's
+   * ordinary path, so the one-at-a-time queue is free once it is down;
+   * `useLookup` closes the lookup Drawer on the same `shown`.
+   */
+  useEffect(() => {
+    if (shown) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setContentsOpen(false);
+    setVoicesOpen(false);
+  }, [shown]);
   /** Down to the Reading Button, or the whole strip and the navigation bar with it (#67). Here rather than in the player because pausing re-opens both, and the pause is this screen's. */
   const [collapsed, setCollapsed] = useState(false);
   /**
