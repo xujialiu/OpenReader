@@ -350,3 +350,9 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
   `[hx] playing=` status line reaches the Debug Log, and read answers there —
   this session's Metro log stopped carrying new `HX` lines twice while the app
   stayed connected (the documented quiet-Metro pitfall above).
+- **`axe drag --duration` is seconds, not milliseconds: `--duration 400` is a 400-second drag.**
+  Verifying #162/#163 (2026-10-17, beta20): dismissing the reader's Voice sheet with
+  `axe drag … --duration 400` answered nothing and the sheet stayed up — the call was dragging
+  for 400 s and the tool call's own 60 s timeout only saw a hang. Fix: the flag's default is
+  `0.6` (seconds); pass `--duration 0.5` for a sheet-dismiss drag. A drag that "does nothing"
+  with an enormous duration is the same mistake.

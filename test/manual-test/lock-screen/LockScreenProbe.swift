@@ -12,7 +12,7 @@ final class LockScreenProbe: XCTestCase {
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.01))
       .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.7)))
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-    let center = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    let center = centreButton(in: springboard)
     if settings.object(forInfoDictionaryKey: "ManualExpectPlayer") as? String == "YES" {
       XCTAssertTrue(center.waitForExistence(timeout: 3), "Now Playing center button is missing")
     }
@@ -62,6 +62,18 @@ final class LockScreenProbe: XCTestCase {
     }
   }
 
+  /// The lock screen's Now Playing centre button. iOS 27 names it
+  /// `UIA.MediaControls.NowPlaying.CenterButton`; iOS 26.5 leaves it unnamed,
+  /// where it is the only enabled Play/Pause button beside the disabled
+  /// Previous/Next Track buttons (its RoutingButton keeps an identifier).
+  /// Measured 2026-10-17 from a refused-Play run's own snapshot on iOS 26.5.
+  private func centreButton(in springboard: XCUIApplication) -> XCUIElement {
+    let identified = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    if identified.exists { return identified }
+    return springboard.buttons.matching(NSPredicate(
+      format: "(label == 'Play' OR label == 'Pause') AND isEnabled == true")).firstMatch
+  }
+
   /// A remote Play at the end is refused without starting an audio graph.
   /// iOS optimistically changes the label before JS answers; allow the existing
   /// 400 ms restatement, then require stable Play. Never send a second command
@@ -80,7 +92,7 @@ final class LockScreenProbe: XCTestCase {
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.01))
       .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.7)))
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-    let center = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    let center = centreButton(in: springboard)
     XCTAssertTrue(center.waitForExistence(timeout: 3), "Now Playing button is missing")
     XCTAssertTrue(center.isEnabled)
     XCTAssertEqual(center.label, "Play")

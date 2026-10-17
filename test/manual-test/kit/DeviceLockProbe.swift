@@ -80,7 +80,7 @@ final class DeviceLockProbe: XCTestCase {
   /// system's own state from `mediaremoted` and `LockScreenProbe`.
   func testLockScreenPlayRefused() throws {
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-    let centre = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    let centre = centreButton(in: springboard)
     if !(centre.exists && centre.isHittable) {
       XCUIDevice.shared.press(.home)
       _ = centre.waitForExistence(timeout: 3)
@@ -94,11 +94,22 @@ final class DeviceLockProbe: XCTestCase {
     Thread.sleep(forTimeInterval: 2)
     print("LOCKPROBE label 2 s later: \(centre.label) at \(Date().timeIntervalSince1970)")
   }
+  /// The lock screen's Now Playing centre button. iOS 27 names it
+  /// `UIA.MediaControls.NowPlaying.CenterButton`; iOS 26.5 leaves it unnamed,
+  /// where it is the only enabled Play/Pause button beside the disabled
+  /// Previous/Next Track buttons (its RoutingButton keeps an identifier).
+  /// Measured 2026-10-17 from a refused-Play run's own snapshot on iOS 26.5.
+  private func centreButton(in springboard: XCUIApplication) -> XCUIElement {
+    let identified = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    if identified.exists { return identified }
+    return springboard.buttons.matching(NSPredicate(
+      format: "(label == 'Play' OR label == 'Pause') AND isEnabled == true")).firstMatch
+  }
   /// A dark screen is woken by one Home press, and only one: on the lock screen
   /// of a device with no passcode a second would open it.
   private func pressCentre(reading label: String, becomes next: String) throws {
     let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-    let centre = springboard.buttons["UIA.MediaControls.NowPlaying.CenterButton"]
+    let centre = centreButton(in: springboard)
     if !(centre.exists && centre.isHittable) {
       XCUIDevice.shared.press(.home)
       _ = centre.waitForExistence(timeout: 3)

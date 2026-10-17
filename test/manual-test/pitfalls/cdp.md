@@ -106,3 +106,13 @@
   every 0.3 s until `scrollToIndex` stops throwing (5 to 7 tries for that
   book); `download-drawer.sh` does it with `SCROLL_TO=CHAPTER_ID`, and a
   screenshot shows where it landed.
+- **`breakfetch` without `"from"` refuses nothing, and an already-loaded shared list hides the refusal afterwards.**
+  Verifying #230 (2026-10-17, beta20): `{"do":"breakfetch","host":"api.fish.audio"}` logged
+  `[hx] fetch broken for api.fish.audio from request NaN`, yet the Fish Audio page's Model menu
+  still listed the discovered `s1 — paid` — no request was ever refused. Cause: `shell.tsx` passes
+  `Number(command.from)`, and `seen >= NaN` is false for every count, so the wrapper passes
+  everything through. Fix: always pass `"from":1` to refuse from the first request. Also: the
+  Fish Model discovery is a shared module cached for the app's lifetime, so a page that loaded
+  once keeps its list even once `breakfetch` is armed correctly — relaunch the app for a fresh
+  first visit (and remember `harness.json` replays its last command at launch, which here is a
+  convenient way to arm it before the first visit).

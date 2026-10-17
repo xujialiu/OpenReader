@@ -112,7 +112,8 @@ Play only while measuring, then stop (MEMORY/device-testing.md).
 
 [Source and Restore checks](source-and-restore.md) covers #162, #163 and #164,
 the additional fault controls, the native classification test and their limits.
-After using those controls, reset all of them, not only `state`:
+The beta20 device record is [beta20-source-restore.md](beta20-source-restore.md)
+(2026-10-17). After using those controls, reset all of them, not only `state`:
 `{"do":"store","use":"fake"}`, then
 `{"do":"store","state":"unlocked","verification":"available","restoreOutcome":"restored","outcome":"purchased"}`.
 
