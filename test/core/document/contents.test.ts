@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_CONTENTS,
+  anchoredStart,
   contentsOf,
   currentRow,
+  fragmentOf,
+  rowOfPlace,
   rowOfSection,
   type Contents,
   type NavigationEntry,
@@ -459,5 +462,124 @@ describe('at the book’s full size', () => {
     expect(currentRow(contents, reading(2))).toEqual({ row: 1, precision: 'exact' });
     expect(currentRow(contents, reading(1039))).toEqual({ row: 1038, precision: 'exact' });
     expect(currentRow(contents, reading(2076))).toEqual({ row: 2075, precision: 'exact' });
+  });
+});
+
+/**
+ * #212: a file that several rows share, once the page has said where each of
+ * their fragments starts. The Gutenberg Pride and Prejudice puts its 61
+ * chapters into 7 files, all at one level, and the rule by file alone named the
+ * first chapter of the file for 56 of them.
+ */
+describe('a file several rows share, once the page has said where each starts (#212)', () => {
+  /** Gutenberg-shaped: three sibling chapters in one file, rooted with '/' as the EPUB 3 parser roots them (#125), then a file of its own. */
+  const book = contentsOf(
+    [
+      { id: 'a', href: '/f0.xhtml#a', label: 'Chapter I.' },
+      { id: 'b', href: '/f0.xhtml#b', label: 'Chapter II.' },
+      { id: 'c', href: '/f0.xhtml#c', label: 'Chapter III.' },
+      { id: 'd', href: '/f1.xhtml', label: 'Chapter IV.' },
+    ],
+    ['f0.xhtml', 'f1.xhtml'],
+  );
+  const placed = new Map([['a', 0], ['b', 5], ['c', 9]]);
+  const at = (block: number | null, anchors: ReadonlyMap<string, number> | null = placed) => ({ sectionIndex: 0, block, anchors });
+
+  it('keeps each row\'s fragment beside its target', () => {
+    expect(book.rows.map((row) => [row.target, row.fragment])).toEqual([[0, 'a'], [0, 'b'], [0, 'c'], [1, '']]);
+  });
+
+  it('names the chapter the reading is in, exactly', () => {
+    expect(currentRow(book, at(0))).toEqual({ row: 0, precision: 'exact' });
+    expect(currentRow(book, at(4))).toEqual({ row: 0, precision: 'exact' });
+    expect(currentRow(book, at(5))).toEqual({ row: 1, precision: 'exact' });
+    expect(currentRow(book, at(8))).toEqual({ row: 1, precision: 'exact' });
+    expect(currentRow(book, at(30))).toEqual({ row: 2, precision: 'exact' });
+  });
+
+  it('stays coarse until the page has said, or while no Block is known', () => {
+    expect(currentRow(book, { sectionIndex: 0 })).toEqual({ row: 0, precision: 'shared' });
+    expect(currentRow(book, at(6, null))).toEqual({ row: 0, precision: 'shared' });
+    expect(currentRow(book, at(null))).toEqual({ row: 0, precision: 'shared' });
+  });
+
+  it('passes over a row whose anchor the page did not find, as the download does (#167)', () => {
+    const noB = new Map([['a', 0], ['c', 9]]);
+    expect(currentRow(book, at(6, noB))).toEqual({ row: 0, precision: 'exact' });
+    expect(currentRow(book, at(9, noB))).toEqual({ row: 2, precision: 'exact' });
+    // None of the file's rows found: nothing to place them by, so the coarse answer.
+    expect(currentRow(book, at(6, new Map()))).toEqual({ row: 0, precision: 'shared' });
+  });
+
+  it('says `before` for text above every row of the file, and names the rows of the file before it', () => {
+    const late = new Map([['a', 2], ['b', 5], ['c', 9]]);
+    expect(currentRow(book, at(1, late))).toBeNull();
+    const second = contentsOf(
+      [
+        { id: 'x', href: 'f0.xhtml', label: 'Part One' },
+        { id: 'y', href: 'f1.xhtml#y', label: 'Chapter 1' },
+        { id: 'z', href: 'f1.xhtml#z', label: 'Chapter 2' },
+      ],
+      ['f0.xhtml', 'f1.xhtml'],
+    );
+    expect(currentRow(second, { sectionIndex: 1, block: 0, anchors: new Map([['y', 1], ['z', 4]]) })).toEqual({ row: 0, precision: 'before' });
+    // After a file of sibling chapters, the nearest row before is its last chapter, not its first.
+    const after = contentsOf(
+      [
+        ...['a', 'b', 'c'].map((id) => ({ id, href: `f0.xhtml#${id}`, label: id })),
+        { id: 'y', href: 'f1.xhtml#y', label: 'y' },
+        { id: 'z', href: 'f1.xhtml#z', label: 'z' },
+      ],
+      ['f0.xhtml', 'f1.xhtml'],
+    );
+    expect(currentRow(after, { sectionIndex: 1, block: 0, anchors: new Map([['y', 1], ['z', 4]]) })).toEqual({ row: 2, precision: 'before' });
+  });
+
+  it('gives a row with no fragment the top of the file, and a later row starting at the same Block the narrower answer', () => {
+    // A part's title page and its first chapter in one file: the part until the chapter's heading.
+    const part = contentsOf(
+      [
+        { id: 'p', href: 'f0.xhtml', label: 'Part One', subitems: [
+          { id: 'c1', href: 'f0.xhtml#c1', label: 'Chapter 1' },
+          { id: 'c2', href: 'f0.xhtml#c2', label: 'Chapter 2' },
+        ] },
+      ],
+      ['f0.xhtml'],
+    );
+    const anchors = new Map([['c1', 1], ['c2', 6]]);
+    expect(currentRow(part, { sectionIndex: 0, block: 0, anchors })).toEqual({ row: 0, precision: 'exact' });
+    expect(currentRow(part, { sectionIndex: 0, block: 1, anchors })).toEqual({ row: 1, precision: 'exact' });
+    expect(currentRow(part, { sectionIndex: 0, block: 7, anchors })).toEqual({ row: 2, precision: 'exact' });
+    // The chapter's anchor on the file's first Block: the chapter, not the part.
+    expect(currentRow(part, { sectionIndex: 0, block: 0, anchors: new Map([['c1', 0], ['c2', 6]]) })).toEqual({ row: 1, precision: 'exact' });
+  });
+
+  it('leaves a file one row names as it was, wherever its fragment starts', () => {
+    expect(currentRow(book, { sectionIndex: 1, block: 0, anchors: new Map() })).toEqual({ row: 3, precision: 'exact' });
+    const lone = contentsOf([{ id: 'a', href: 'f0.xhtml#a', label: 'Chapter I.' }], ['f0.xhtml']);
+    expect(currentRow(lone, { sectionIndex: 0, block: 0, anchors: new Map([['a', 3]]) })).toEqual({ row: 0, precision: 'exact' });
+  });
+
+  it('answers the same for the first Block of the stretch as for the Block itself', () => {
+    for (let block = 0; block < 20; block++) {
+      expect(currentRow(book, at(anchoredStart(placed, block)))).toEqual(currentRow(book, at(block)));
+    }
+    expect([0, 4, 5, 8, 9, 30].map((block) => anchoredStart(placed, block))).toEqual([0, 0, 5, 5, 9, 9]);
+  });
+
+  it('is the rule any list of places gets: the download drawer\'s chapters agree with the Contents', () => {
+    const chapters = [{ s: 0, f: 'a' }, { s: 0, f: 'b' }, { s: 0, f: 'c' }, { s: 1, f: '' }];
+    for (const block of [0, 5, 6, 12]) {
+      expect(rowOfPlace(chapters, (c) => c.s, (c) => c.f, at(block))).toEqual(currentRow(book, at(block)));
+    }
+  });
+});
+
+describe('fragmentOf: one spelling of a fragment for the Contents, the plan and the page (#201)', () => {
+  it('decodes, and keeps as written what does not decode', () => {
+    expect(fragmentOf('text/one.xhtml#caf%C3%A9')).toBe('café');
+    expect(fragmentOf('text/two.xhtml#save-50%')).toBe('save-50%');
+    expect(fragmentOf('text/two.xhtml')).toBe('');
+    expect(fragmentOf('#a#b')).toBe('a#b');
   });
 });

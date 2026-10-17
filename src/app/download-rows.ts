@@ -1,4 +1,4 @@
-import { rowOfSection, type ContentsRow } from '../core/document/contents';
+import { fragmentOf, rowOfPlace, type ContentsRow, type ReadingSpineItem } from '../core/document/contents';
 import type { ChapterProgress } from '../offline/catalog';
 import { chapterTextCount, speaks, type Chapter, type DownloadTask, type TaskState } from '../offline/model';
 import { isPaused } from '../offline/pausing';
@@ -71,20 +71,22 @@ export function marker(
  * The shown row the reading is in, marked and opened at as Contents marks and
  * opens at its own (#88), or null when no shown row can contain it.
  *
- * `section` is the spine item the reading is in, as the Contents is given it.
- * The rule is the Contents' own (`rowOfSection`), applied to the rows the
- * download view shows rather than to every chapter, so what it names is on
- * screen there: a file the drawer hides, a cover or a copyright page with
- * nothing to say, gives the nearest shown row before it; chapters sharing one
- * file give the first of them; a folded volume gives its heading. Nothing
- * before the reading, as for a document not started, gives null, and the list
- * opens at its top. Manage downloads, which lists fewer rows, marks the answer
- * only where it lists it, rather than asking again among its own rows and
- * marking a chapter that is not being read.
+ * `reading` is where the reading is, as the Contents is given it. The rule is
+ * the Contents' own (`rowOfPlace`), applied to the rows the download view shows
+ * rather than to every chapter, so what it names is on screen there: a file the
+ * drawer hides, a cover or a copyright page with nothing to say, gives the
+ * nearest shown row before it; chapters sharing one file give the one the
+ * reading is in once the page has said where each starts (#212), and the first
+ * of them until then, or when only the stored Reading Position is known; a
+ * folded volume gives its heading. Nothing before the reading, as for a
+ * document not started, gives null, and the list opens at its top. Manage
+ * downloads, which lists fewer rows, marks the answer only where it lists it,
+ * rather than asking again among its own rows and marking a chapter that is not
+ * being read.
  */
-export function readingChapter(shown: readonly Chapter[], section: number | null): string | null {
-  if (section === null) return null;
-  const at = rowOfSection(shown.map((c) => c.section ?? null), section);
+export function readingChapter(shown: readonly Chapter[], reading: ReadingSpineItem | null): string | null {
+  if (reading === null) return null;
+  const at = rowOfPlace(shown, (c) => c.section ?? null, (c) => c.fragment ?? '', reading);
   return at ? shown[at.row].id : null;
 }
 
@@ -167,15 +169,6 @@ export function downloadedRows(
   return checked;
 }
 const place = (section: number, fragment: string) => `${section}#${fragment}`;
-/** As the plan records a fragment: decoded (`navigation.ts`), and as written when it does not decode. */
-function fragmentOf(href: string): string {
-  const written = href.split('#')[1] ?? '';
-  try {
-    return decodeURIComponent(written);
-  } catch {
-    return written;
-  }
-}
 
 /**
  * What Manage downloads lists: every chapter with a marker, and every heading

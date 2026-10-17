@@ -978,6 +978,99 @@ ${constants}
     return block.item === null ? undefined : block.item;
   }
 
+  /* ---- where a Contents entry starts (#212, #190, #167) ---- */
+
+  /* The one rule, for the Reading's Contents, the Lock Screen and a Download's
+     chapters alike: an entry starts at the first Block whose first text lies
+     inside its anchor element or after it. That places an id on the heading, an
+     empty <a id> or a <span id> inside the heading (#190), an anchor before the
+     heading and an id on a <div> around the chapter. A heading that holds its
+     anchor is the chapter's first Block; a paragraph whose text begins before an
+     anchor in its middle is not, and the entry starts at the Block after it.
+     compareDocumentPosition answers FOLLOWING (4) for a node after the anchor
+     and for one inside it (CONTAINED_BY is given with FOLLOWING). Past every
+     Block, the entry starts at the end: found.length.
+
+     A binary search: the Blocks are in document order, so their first texts
+     are too, and once one lies inside the anchor or after it every later one
+     does. A section of thousands of Blocks with every chapter's anchor in it
+     asks a dozen comparisons per anchor rather than thousands. */
+  function anchorBlock(found, anchor) {
+    var low = 0;
+    var high = found.length;
+    while (low < high) {
+      var middle = (low + high) >> 1;
+      var first = firstText(found[middle]);
+      if (first && (anchor.compareDocumentPosition(first) & 4)) high = middle;
+      else low = middle + 1;
+    }
+    return low;
+  }
+
+  /* A Block's first text node with something in it: the white space a source
+     file puts before a heading's anchor is not where the heading starts. */
+  function firstText(block) {
+    for (var i = 0; i < block.parts.length; i++) {
+      if (/\\S/.test(block.parts[i].node.data)) return block.parts[i].node;
+    }
+    return block.parts.length ? block.parts[0].node : null;
+  }
+
+  /* A fragment as the app spells it (fragmentOf in core/document/contents.ts):
+     decoded, and as written when it does not decode. */
+  function decodedFragment(written) {
+    try {
+      return decodeURIComponent(written);
+    } catch (error) {
+      return written;
+    }
+  }
+
+  /* Every fragment the Document's Contents names, once per program: the page
+     reports where each starts in every section it lays out, and the app finds a
+     row's own among them by its spine item. Null until epub.js has the
+     navigation, which book.ready waits for before anything is displayed. */
+  var contentsFragments = null;
+  function fragmentsOfContents() {
+    if (contentsFragments) return contentsFragments;
+    var toc = book && book.navigation && book.navigation.toc;
+    if (!toc) return null;
+    var seen = new Set();
+    var list = [];
+    (function visit(items) {
+      for (var i = 0; items && i < items.length; i++) {
+        var item = items[i];
+        if (!item) continue;
+        var href = String(item.href || '');
+        var hash = href.indexOf('#');
+        var fragment = hash < 0 ? '' : decodedFragment(href.slice(hash + 1));
+        if (fragment && !seen.has(fragment)) {
+          seen.add(fragment);
+          list.push(fragment);
+        }
+        visit(item.subitems);
+      }
+    })(toc);
+    contentsFragments = list;
+    return list;
+  }
+
+  /* Where each Contents fragment found in this section starts, as [fragment,
+     Block ordinal] pairs; undefined when the Contents names no fragment at all,
+     which is every book whose chapters each have a file of their own, so their
+     Blocks messages carry nothing new. A fragment not found here is left out:
+     it is another file's, or the Document lacks it (#167). */
+  function anchorsOf(doc, found) {
+    var fragments = fragmentsOfContents();
+    if (!fragments || !fragments.length) return undefined;
+    var anchors = [];
+    for (var i = 0; i < fragments.length; i++) {
+      var anchor = doc.getElementById(fragments[i]);
+      if (anchor) anchors.push([fragments[i], anchorBlock(found, anchor)]);
+    }
+    return anchors;
+  }
+
   /* This section's characters by the size the **Document** set them in, for the
      bridge to decide its body text size from (ADR 0030). Reads only: the walk has
      already found the text nodes, and each costs one computed style of its
@@ -1038,14 +1131,11 @@ ${constants}
       (navigationPoints || []).forEach(function(entry) {
             var fragment = entry.fragment || '';
             var anchor = fragment ? contents.document.getElementById(fragment) : null;
-            if (fragment && !anchor) throw new Error('A chapter anchor could not be found: ' + entry.title);
-            var at = 0;
-            if (anchor) {
-              at = found.findIndex(function(b) {
-                return b.element === anchor || anchor.contains(b.element) || !!(anchor.compareDocumentPosition(b.element) & 4);
-              });
-              if (at < 0) at = found.length;
-            }
+            /* An anchor the Document lacks places nothing (#167): the entry's
+               text stays with the entry before it, and the rest of the file is
+               still prepared, where throwing here stopped the Download at this
+               file at every try. */
+            var at = !fragment ? 0 : anchor ? anchorBlock(found, anchor) : null;
             points.push({id:entry.id, title:entry.title, depth:entry.depth, parent:entry.parent, block:at});
       });
       post({type:'openreader:offline-section', token:token, index:index, total:book.spine.length,
@@ -1458,7 +1548,7 @@ ${constants}
     }
     maps.set(contents.document, map);
     bySection.set(index, ids);
-    post({ type: BLOCKS, sectionIndex: index, section: href, blocks: reported, sizes: MEASURE ? sizesOf(contents, found) : null });
+    post({ type: BLOCKS, sectionIndex: index, section: href, blocks: reported, sizes: MEASURE ? sizesOf(contents, found) : null, anchors: anchorsOf(contents.document, found) });
   }
 
   /* The rendered Contents for a section, or null — which is the ordinary "the

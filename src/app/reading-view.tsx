@@ -46,7 +46,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
 import { readLocator, type ReadingPlace, type ReadingPosition } from '../core/document';
-import { contentsOf, type NavigationEntry } from '../core/document/contents';
+import { anchoredStart, contentsOf, type NavigationEntry, type ReadingSpineItem } from '../core/document/contents';
 import { cutText, debugLog } from '../debug/debug-log';
 import { DEBUG_MODE } from '../debug/mode';
 import { chapterOf, useNowPlaying } from '../now-playing';
@@ -177,11 +177,13 @@ export interface ReadingViewProps {
    */
   onState(playing: boolean, buffering: boolean): void;
   /**
-   * The section the contents list marks (`at` below), for the download drawer to
-   * mark and open at the same chapter (#88). The drawer is the screen's, not
-   * this view's, so it hears it through the shell as the Reading Button does.
+   * Where the contents list marks (`contentsPlace` below), for the download drawer to
+   * mark and open at the same chapter (#88, #212). The drawer is the screen's,
+   * not this view's, so it hears it through the shell as the Reading Button does.
+   * It changes when the reading enters another spine item or, in a file several
+   * chapters share, another chapter, and not at every sentence.
    */
-  onSection(section: number | null): void;
+  onSection(place: ReadingSpineItem | null): void;
 }
 
 /**
@@ -463,6 +465,29 @@ export function ReadingView({
   const contents = useMemo(() => contentsOf(toc as readonly NavigationEntry[], status.spineHrefs), [toc, status.spineHrefs]);
 
   /**
+   * Where the contents list marks: the section the **reading** is in, or the last
+   * one the renderer put on the page when nothing has been read yet. The second is
+   * coarser and is said to be — it is the page's answer, not the voice's — and it is
+   * better than opening the list at the top of a two-thousand-chapter book.
+   */
+  const at = status.section ?? status.rendered?.index ?? null;
+  /**
+   * The same, with what tells apart the rows of a file that several share
+   * (#212): where the page says each Contents fragment there starts, and the
+   * Block the reading is in, moved back to the first Block of its chapter
+   * (`anchoredStart`), which gives the same answer and changes only when the
+   * reading crosses into another chapter. No Block for the page's answer: a
+   * section on the page is not a sentence in it.
+   */
+  const anchors = at === null ? null : status.anchors.get(at) ?? null;
+  const settled = anchors && status.section === at && status.block !== null ? anchoredStart(anchors, status.block) : null;
+  const contentsPlace = useMemo<ReadingSpineItem | null>(
+    () => (at === null ? null : { sectionIndex: at, block: settled, anchors }),
+    [at, settled, anchors],
+  );
+  useEffect(() => { onSection(contentsPlace); }, [contentsPlace, onSection]);
+
+  /**
    * The Contents rows that carry the Downloaded check (#134), counted in the
    * Player's Voice, the one Play would read from the phone, and none while no
    * Voice is chosen. The Download drawer counts in the same Voice
@@ -575,7 +600,8 @@ export function ReadingView({
   const cover = useDocumentCover(document.identity);
   useNowPlaying({
     title: document.title,
-    chapter: chapterOf(contents, status.section),
+    // The reading's own place: the page's section is not where the voice is.
+    chapter: chapterOf(contents, status.section === null ? null : contentsPlace),
     cover,
     playing: status.playing,
     rate: settings.rate,
@@ -647,15 +673,6 @@ export function ReadingView({
     const found = voiceInList(voices.voicesOf(settings.provider), settings.voice) ?? knownVoice(settings);
     return found ? { label: found.label, locale: found.locale === MULTILINGUAL ? '' : found.locale } : null;
   }, [voices, settings]);
-
-  /**
-   * Where the contents list marks: the section the **reading** is in, or the last
-   * one the renderer put on the page when nothing has been read yet. The second is
-   * coarser and is said to be — it is the page's answer, not the voice's — and it is
-   * better than opening the list at the top of a two-thousand-chapter book.
-   */
-  const at = status.section ?? status.rendered?.index ?? null;
-  useEffect(() => { onSection(at); }, [at, onSection]);
 
   const selectReadingVoice = reading.chooseVoice;
   const chooseVoice = useCallback(
@@ -791,7 +808,7 @@ export function ReadingView({
         onClose={closeContents}
         contents={contents}
         spineKnown={status.spineHrefs.length > 0}
-        section={at}
+        place={contentsPlace}
         onGo={reading.goToSection}
         downloaded={downloaded}
       />

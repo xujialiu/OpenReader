@@ -35,12 +35,24 @@ export interface DownloadTask {
   /** The chapter the scheduler is preparing or fetching right now; null between passes. Read only while the task runs (ADR 0027). */
   current?: string | null;
 }
-export interface NavPoint { id: string; title: string; depth: number; parent: string | null; block: number }
+/**
+ * A Contents entry of one section, placed by the page: the Block its anchor
+ * starts at (`anchorBlock` in `highlighter.ts`), or null when the section has no
+ * element with the entry's fragment (#167).
+ */
+export interface NavPoint { id: string; title: string; depth: number; parent: string | null; block: number | null }
 
 /** Segment the section once, exactly as playback does; chapter boundaries never
- * change synthesis text, even when a sentence crosses a navigation anchor. */
+ * change synthesis text, even when a sentence crosses a navigation anchor.
+ *
+ * An entry whose anchor the section lacks (#167) marks no boundary: its text, if
+ * it has any, is read with the entry before it, so every sentence of the section
+ * is still prepared, and the entry is returned with nothing to speak, as a cover
+ * page is. */
 export function sectionChapters(section: number, blocks: Block[], points: NavPoint[], language: string): Chapter[] {
-  const ordered = [...points].sort((a, b) => a.block - b.block);
+  const ordered = points
+    .filter((point): point is NavPoint & { block: number } => point.block !== null)
+    .sort((a, b) => a.block - b.block);
   if (!ordered.length || ordered[0].block > 0) ordered.unshift({
     id: `section-${section}`, title: blocks.slice(0, ordered[0]?.block ?? blocks.length).find((b) => b.role === 'heading')?.text.trim().replace(/\s+/g, ' ') || `Part ${section + 1}`,
     depth: 0, parent: null, block: 0,
@@ -53,6 +65,7 @@ export function sectionChapters(section: number, blocks: Block[], points: NavPoi
     while (at + 1 < ordered.length && ordered[at + 1].block <= block) at++;
     chapters[at].texts.push(utterance.text);
   }
+  for (const { block, ...point } of points) if (block === null) chapters.push({ ...point, texts: [] });
   return chapters;
 }
 

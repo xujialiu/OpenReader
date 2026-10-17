@@ -38,7 +38,10 @@
  * lives in the WebView. So `ContentsRow.target` is a spine index or null, and a
  * union with an unreachable CFI branch would be a stub that pretends to work.
  *
- * The cost is stated where it falls: `#fragment` is dropped. See `targetOf`.
+ * The cost is stated where it falls: a row is opened at the top of its spine
+ * item and `#fragment` is not followed. See `targetOf`. The fragment is kept as
+ * `ContentsRow.fragment` all the same, because it is what tells the rows of one
+ * file apart once the page has said where each fragment starts (#212).
  */
 
 /**
@@ -86,6 +89,12 @@ export interface ContentsRow {
   section: number;
   /** The spine item to seek to, for `goToSection`, or null when the href names nothing in the spine. */
   target: number | null;
+  /**
+   * The href's fragment as the download plan spells it (`fragmentOf`), or the
+   * empty string when it has none. Never followed; read only by `currentRow`, to
+   * tell apart rows that share a spine item.
+   */
+  fragment: string;
   /**
    * The href exactly as it arrived, fragment and all.
    *
@@ -176,6 +185,7 @@ export function contentsOf(navigation: readonly NavigationEntry[], spine: readon
       heading,
       section: sections.length - 1,
       target,
+      fragment: fragmentOf(href),
       href,
     });
 
@@ -289,16 +299,71 @@ function targetOf(byHref: Map<string, number>, href: string): number | null {
 }
 
 /**
+ * An href's fragment as the download plan spells it: decoded, as
+ * `navigation.ts` decodes it, and as written when it does not decode (#201).
+ * The empty string when there is none.
+ *
+ * One spelling for the three places that compare fragments: a Contents row, a
+ * chapter of the plan, and the page's report of where each fragment starts
+ * (`BlocksMessage.anchors`), which decodes the same way.
+ */
+export function fragmentOf(href: string): string {
+  const hash = href.indexOf('#');
+  if (hash === -1) return '';
+  const written = href.slice(hash + 1);
+  try {
+    return decodeURIComponent(written);
+  } catch {
+    return written;
+  }
+}
+
+/**
  * Where the reading is, as much of it as the contents can use.
  *
- * `ReportedBlock` satisfies this, so the Block the reading is on goes straight
- * in. That is the point of taking an object rather than a number: a spine index,
- * a row index and a Block's ordinal are all numbers, and passing the wrong one
- * would type-check and answer confidently.
+ * `ReportedBlock` satisfies the first field, so the Block the reading is on goes
+ * straight in. That is the point of taking an object rather than a number: a
+ * spine index, a row index and a Block's ordinal are all numbers, and passing the
+ * wrong one would type-check and answer confidently.
+ *
+ * The other two are what tell apart the rows that share a spine item (#212). A
+ * fragment names an element, and where an element falls needs the rendered
+ * document, so only the page can say it: when it reports a section's Blocks it
+ * says at which Block each of the Document's Contents fragments in that section
+ * starts. With both fields the rule resolves inside the file; without either it
+ * answers by the spine item alone, as ADR 0020 first had it.
  */
 export interface ReadingSpineItem {
   /** The spine index of the section the reading is in — `ReportedBlock.sectionIndex`. */
   sectionIndex: number;
+  /**
+   * The ordinal, within its spine item, of the Block the reading is in, or of
+   * the first Block of the stretch it is in (`anchoredStart`). Absent or null
+   * when only the spine item is known.
+   */
+  block?: number | null;
+  /**
+   * Where each of the Document's Contents fragments found in this spine item
+   * starts, as a Block ordinal, keyed by `fragmentOf`'s spelling. A fragment
+   * that is not here is not in this spine item. Absent or null when the page has
+   * not said.
+   */
+  anchors?: ReadonlyMap<string, number> | null;
+}
+
+/**
+ * The first Block of the stretch `block` is in: the latest anchor at or before
+ * it, or the top of the spine item.
+ *
+ * `currentRow` gives the same answer for this as for `block` itself, because the
+ * rule only ever compares the reading with where rows start. So a caller that
+ * hands the place on can pass this instead, and the place then changes when the
+ * reading crosses into another chapter rather than at every sentence.
+ */
+export function anchoredStart(anchors: ReadonlyMap<string, number>, block: number): number {
+  let start = 0;
+  for (const at of anchors.values()) if (at <= block && at > start) start = at;
+  return start;
 }
 
 /**
@@ -310,14 +375,15 @@ export type RowPrecision =
   /** Exactly one row names the spine item the reading is in. Nothing is being guessed. */
   | 'exact'
   /**
-   * More than one row names it, and the **first** of them is reported.
+   * More than one row names it, the page has not said where their fragments
+   * start, and the **first** of them is reported.
    *
-   * Not resolvable from this data: rows sharing a spine item differ only by their
-   * fragment, a fragment names an element, and where an element falls needs the
-   * rendered document. The first row is the coarse answer that contains the
-   * reading rather than the precise one that might not — naming a later sibling
-   * while the reading is above it would be the confident wrong answer ADR 0020
-   * calls the expensive defect.
+   * Rows sharing a spine item differ only by their fragment, a fragment names
+   * an element, and where an element falls needs the rendered document. Until
+   * the page has said (`ReadingSpineItem.anchors`), the first row is the coarse
+   * answer: it contains the reading when it is a part and the others are its
+   * chapters, and it may not when they are siblings, which is why the lock
+   * screen names it only in the first case (`chapterOf`, #212).
    */
   | 'shared'
   /**
@@ -354,9 +420,26 @@ export interface CurrentRow {
  * and when every row that did resolve points past the reading — a book whose
  * navigation begins at spine item 3 while the reading is in item 0.
  *
+ * **Inside a spine item that several rows share** (#212), and once the page has
+ * said where their fragments start: the row whose fragment starts latest at or
+ * before the reading's Block, `'exact'`. A row with no fragment starts at the
+ * top of the spine item; of two rows that start at one Block, the later in
+ * document order is the narrower one (a chapter under its part) and wins; a row
+ * whose fragment the page did not find in that spine item is passed over, as the
+ * download passes it over (#167). A reading above every row it could place is in
+ * what comes before the first of them, and the answer is the nearest row before
+ * it, `'before'`: the last row of the latest spine item before, all of whose rows
+ * the reading is past. With no row it could place, or without the page's answer,
+ * it stays `'shared'`.
+ *
+ * Only a shared spine item is resolved this way. One row naming a spine item is
+ * `'exact'` wherever its fragment starts, as it always was: text above a lone
+ * chapter's heading is still that chapter's file.
+ *
  * What it cannot do, in one place:
  *
- * - **It works at spine-item granularity and no finer.** `'shared'` above.
+ * - **It resolves no finer than a Block**, and only where the page has reported
+ *   the spine item.
  * - **It does not read a CFI.** A CFI's first component does encode the spine
  *   position, but decoding it would put epub.js's CFI dialect inside `src/core/`,
  *   which is precisely what ADR 0008 keeps out — Zotero's generator and resolver
@@ -368,17 +451,59 @@ export interface CurrentRow {
  *   with one that already crosses the bridge.
  */
 export function currentRow(contents: Contents, reading: ReadingSpineItem): CurrentRow | null {
-  return rowOfSection(
-    contents.rows.map((row) => row.target),
-    reading.sectionIndex,
-  );
+  return rowOfPlace(contents.rows, (row) => row.target, (row) => row.fragment, reading);
 }
 
 /**
- * `currentRow`'s rule over a bare list of spine items, one per row and null for
- * a row that names none, for a list that is not the Contents but names its
- * rows' places the same way: the download drawer's chapters (#88). One rule,
- * so the two drawers never mark different rows for one reading.
+ * `currentRow`'s rule over any list whose rows name a spine item and a fragment
+ * the same way, for a list that is not the Contents: the download drawer's
+ * chapters (#88). One rule, so the two drawers and the lock screen never name
+ * different rows for one reading.
+ */
+export function rowOfPlace<Row>(
+  rows: readonly Row[],
+  sectionOf: (row: Row) => number | null,
+  fragmentOfRow: (row: Row) => string,
+  reading: ReadingSpineItem,
+): CurrentRow | null {
+  const targets = rows.map(sectionOf);
+  const coarse = rowOfSection(targets, reading.sectionIndex);
+  const { block, anchors } = reading;
+  if (coarse?.precision !== 'shared' || !anchors || block === null || block === undefined) return coarse;
+  let row = -1;
+  let start = -1;
+  let placed = false;
+  for (let index = 0; index < rows.length; index++) {
+    if (targets[index] !== reading.sectionIndex) continue;
+    const fragment = fragmentOfRow(rows[index]);
+    const at = fragment === '' ? 0 : anchors.get(fragment);
+    if (at === undefined) continue;
+    placed = true;
+    // `>=`: of two rows starting at one Block, the later is the narrower.
+    if (at <= block && at >= start) {
+      row = index;
+      start = at;
+    }
+  }
+  if (!placed) return coarse;
+  if (row >= 0) return { row, precision: 'exact' };
+  // Above every row of its file: the nearest row before is the last of the
+  // latest spine item before, since the reading is past all of them.
+  let before = -1;
+  let latest = -1;
+  for (let index = 0; index < rows.length; index++) {
+    const target = targets[index];
+    if (target === null || target >= reading.sectionIndex || target < latest) continue;
+    latest = target;
+    before = index;
+  }
+  return before >= 0 ? { row: before, precision: 'before' } : null;
+}
+
+/**
+ * `currentRow`'s rule by spine item alone, over a bare list of spine items, one
+ * per row and null for a row that names none: the coarse answer `rowOfPlace`
+ * refines.
  */
 export function rowOfSection(targets: readonly (number | null)[], sectionIndex: number): CurrentRow | null {
   const at = sectionIndex;

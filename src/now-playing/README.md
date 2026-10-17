@@ -70,6 +70,16 @@ and 2,076 entries, and reading the one with no entry reports the **cover**.
 Marking the cover in an open list is coarse; printing "封面" on a lock screen
 while chapter 41 is being read is wrong.
 
+A `'shared'` precision — several rows name the file being read and the page has
+not said where each of them starts — produces the first row only when the
+others sit under it: a part's title and its chapters in one file, where the part
+does contain the reading. When they are siblings, as the 61 chapters of the
+Gutenberg Pride and Prejudice are across its 7 files, the first is one chapter
+among several, and the line said "CHAPTER XXI." while Chapter XXX was read
+(#212). It is empty then instead. Once the page has said where each of the
+file's chapters starts, `currentRow` answers `'exact'` and the line names the
+chapter being read.
+
 **A toggle is resolved here and nowhere else.** `togglePlayPause` carries no
 direction, so `intentOf` resolves it against whether the reading is running —
 the one place the lock screen and the screen could disagree about what a press

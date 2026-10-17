@@ -1,5 +1,6 @@
 import { DOMParser, type Element, type Document } from '@xmldom/xmldom';
 import { strFromU8 } from 'fflate';
+import { fragmentOf } from './contents';
 import { readArchiveMember, resolveArchivePath } from './cover';
 import { readZipDirectory, type ArchiveBytes } from './zip';
 
@@ -41,11 +42,24 @@ export function readDocumentNavigation(archive: ArchiveBytes): DocumentNavigatio
   });
   const byPath = new Map(sections.map((section, index) => [section.path, index]));
   const chapters: ChapterMetadata[] = [];
+  /**
+   * Each entry on its own (#201): a link that cannot be read names no file
+   * rather than losing every other entry with it. A `%` that is not an escape
+   * leaves the fragment as written, as Contents and the drawers spell it
+   * (`fragmentOf`); a path that leaves the archive or does not decode names no
+   * spine item, as Contents' own lookup gives that row no target.
+   */
   function target(base: string, href: string) {
     if (!href || /^[a-z][a-z\d+.-]*:|^\/\//i.test(href)) return { section: null, fragment: '' };
     const bare = href.split('#')[0];
-    const path = bare ? resolveArchivePath(base, bare) : base;
-    return { section: byPath.get(path) ?? null, fragment: decodeURIComponent(href.split('#')[1] ?? '') };
+    const fragment = fragmentOf(href);
+    let path: string;
+    try {
+      path = bare ? resolveArchivePath(base, bare) : base;
+    } catch {
+      return { section: null, fragment };
+    }
+    return { section: byPath.get(path) ?? null, fragment };
   }
   const nav = [...manifest.values()].find((item) => item.getAttribute('properties')?.split(/\s+/).includes('nav'));
   if (nav?.getAttribute('href')) {

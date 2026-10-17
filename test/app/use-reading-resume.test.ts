@@ -38,7 +38,10 @@ const bridge = vi.hoisted(() => ({
   clear: vi.fn<() => void>(),
   hold: vi.fn<(options?: { stop?: boolean }) => void>(),
   returnToReading: vi.fn<(utterance: number | null) => void>(),
-  options: null as null | { onBlocks?(blocks: readonly ReportedBlock[], section: { index: number; href: string; spine: number }): void },
+  options: null as null | {
+    onBlocks?(blocks: readonly ReportedBlock[], section: { index: number; href: string; spine: number }): void;
+    onAnchors?(section: number, anchors: ReadonlyMap<string, number>): void;
+  },
 }));
 
 /**
@@ -300,6 +303,36 @@ describe('an adopted place in a section not yet reported (defect 3)', () => {
     expect(bridge.goTo).not.toHaveBeenCalled();
     // And the place it landed on is not a place to write again (observation b).
     expect(m.reading.readingPosition()).toBeNull();
+    await m.down();
+  });
+});
+
+describe('where the reading is, for the Contents, the Lock Screen and the Download drawer (#212)', () => {
+  it('names the Block within its section beside the section, counted as the page counts it', async () => {
+    const m = mount();
+    await m.up();
+    await m.report([...CHAPTER_ONE, ...CHAPTER_THREE], 2);
+    await act(async () => { m.reading.resumeAt(desktopPlace); });
+    // The desktop's place is the second Block of section 2, behind the two of section 0.
+    expect(m.reading.status.utterance).toBe(3);
+    expect(m.reading.status.section).toBe(2);
+    expect(m.reading.status.block).toBe(1);
+    await act(async () => { m.reading.seekTo(1); });
+    expect([m.reading.status.section, m.reading.status.block]).toEqual([0, 1]);
+    await m.down();
+  });
+
+  it('keeps where the page says each Contents fragment starts, per section, and renders nothing for an answer it already holds', async () => {
+    const m = mount();
+    await m.up();
+    await m.report(CHAPTER_ONE, 0);
+    await act(async () => { bridge.options!.onAnchors!(0, new Map([['one', 0], ['two', 1]])); });
+    const held = m.reading.status;
+    expect(held.anchors.get(0)).toEqual(new Map([['one', 0], ['two', 1]]));
+    await act(async () => { bridge.options!.onAnchors!(0, new Map([['one', 0], ['two', 1]])); });
+    expect(m.reading.status).toBe(held);
+    await act(async () => { bridge.options!.onAnchors!(2, new Map([['three', 0]])); });
+    expect([...m.reading.status.anchors.keys()]).toEqual([0, 2]);
     await m.down();
   });
 });

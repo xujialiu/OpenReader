@@ -168,7 +168,7 @@ final class LibraryActionsProbe: XCTestCase {
       app.buttons["Contents"].tap()
       XCTAssertTrue(markedRow.waitForExistence(timeout: 5), "No row is marked as the current position, even after a retry")
     }
-    XCTAssertFalse(app.staticTexts["Several rows share this file, so the marked one is the part being read rather than the chapter within it."].exists)
+    XCTAssertFalse(app.staticTexts["Several rows share this file, so the first of them is marked; the one being read may come after it."].exists)
     XCTAssertFalse(app.staticTexts["This page is not in the contents, so the nearest row before it is marked."].exists)
     capture("contents-exact-no-note", app)
     app.buttons["Close Contents"].tap()

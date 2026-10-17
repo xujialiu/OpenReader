@@ -16,14 +16,19 @@ function xml(bytes: Uint8Array): XmlDocument {
     .parseFromString(text, 'application/xml');
 }
 
-/** EPUB paths are URI references relative to the package, not filesystem paths. */
+/**
+ * EPUB paths are URI references relative to the package, not filesystem paths.
+ *
+ * Shared with `navigation.ts`, which reads the package, the `nav` document and
+ * the NCX through it, so its messages name no Cover (#201).
+ */
 export function resolveArchivePath(base: string, href: string): string {
-  if (/^[a-z][a-z\d+.-]*:|^\/\//i.test(href)) throw new Error('A cover must be inside its document.');
+  if (/^[a-z][a-z\d+.-]*:|^\/\//i.test(href)) throw new Error('A path must point inside its document.');
   const path = decodeURIComponent(href.split(/[?#]/, 1)[0]);
   const parts: string[] = path.startsWith('/') ? [] : base.split('/').slice(0, -1);
   for (const part of path.split('/')) {
     if (!part || part === '.') continue;
-    if (part === '..') { if (!parts.length) throw new Error('Cover path leaves the archive.'); parts.pop(); }
+    if (part === '..') { if (!parts.length) throw new Error('A path in the document leaves its archive.'); parts.pop(); }
     else parts.push(part);
   }
   return parts.join('/');
@@ -32,20 +37,20 @@ export function resolveArchivePath(base: string, href: string): string {
 export function readArchiveMember(archive: ArchiveBytes, member: LocatedZipMember, limit: number): Uint8Array {
   const { offset, compressedSize, uncompressedSize, method, flags } = member;
   if (flags & 1 || ![0, 8].includes(method) || compressedSize > limit || uncompressedSize > limit)
-    throw new Error('Cover member is encrypted, unsupported or too large.');
+    throw new Error('A document member is encrypted, unsupported or too large.');
   const read = (at: number, length: number) => {
-    if (at < 0 || at + length > archive.size) throw new Error('Cover member is outside the archive.');
+    if (at < 0 || at + length > archive.size) throw new Error('A document member is outside the archive.');
     const bytes = archive.read(at, length);
-    if (bytes.length !== length) throw new Error('Cover member is truncated.');
+    if (bytes.length !== length) throw new Error('A document member is truncated.');
     return bytes;
   };
   const header = read(offset, 30);
   const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
-  if (view.getUint32(0, true) !== 0x04034b50) throw new Error('Cover member has no ZIP header.');
+  if (view.getUint32(0, true) !== 0x04034b50) throw new Error('A document member has no ZIP header.');
   const at = offset + 30 + view.getUint16(26, true) + view.getUint16(28, true);
   const data = read(at, compressedSize);
   const result = method === 0 ? data : inflateSync(data, { out: new Uint8Array(uncompressedSize) });
-  if (result.length !== uncompressedSize) throw new Error('Cover member has an invalid size.');
+  if (result.length !== uncompressedSize) throw new Error('A document member has an invalid size.');
   return result;
 }
 

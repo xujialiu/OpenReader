@@ -18,6 +18,22 @@ it('covers unlisted text and keeps shared-file chapter boundaries without changi
   expect(chapters.map((c) => c.title)).toEqual(['Part 1', 'One', 'Two']);
   expect(chapters.flatMap((c) => c.texts)).toEqual(segmentBlocks(blocks, 'en', { splitSentences: splitWithSentencex }).filter((u) => u.speakable).map((u) => u.text));
 });
+it('reads the text of an entry whose anchor the section lacks with the entry before it, and prepares the rest (#167)', () => {
+  const blocks: Block[] = [
+    { text: 'B one', role: 'heading', section: 'b' },
+    { text: 'Text of B one.', role: 'paragraph', section: 'b' },
+    { text: 'B two', role: 'heading', section: 'b' },
+    { text: 'Text of B two.', role: 'paragraph', section: 'b' },
+  ];
+  const chapters = sectionChapters(1, blocks, [
+    { id: 'nav.1', title: 'B one', depth: 0, parent: null, block: 0 },
+    { id: 'nav.2', title: 'B two', depth: 0, parent: null, block: null },
+  ], 'en');
+  expect(chapters.map((c) => [c.id, c.texts])).toEqual([
+    ['nav.1', ['B one', 'Text of B one.', 'B two', 'Text of B two.']],
+    ['nav.2', []],
+  ]);
+});
 it('selects a volume and nested descendants, but not sibling volumes or empty headings', () => {
   const chapters = [
     { id: 'v', title: 'Volume', depth: 0, parent: null, texts: [] },

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
+import type { ReadingSpineItem } from '../core/document/contents';
 import { chapterTextCount, descendants, fullyPrepared, speaks, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
 import { inFishModel, withFishModel } from '../offline/narration-voice';
@@ -46,12 +47,12 @@ const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.le
  * (#37), and is reached from Download's count line, since it manages what the
  * count counts.
  *
- * @param section The spine item the reading is in, as the Contents is given it,
- * or null when there is none: the row it names is marked, and the list opens at
- * it (#88).
+ * @param place Where the reading is, as the Contents is given it, or null when
+ * there is none: the row it names is marked, and the list opens at it (#88,
+ * #212).
  */
-export function DownloadContent({ document, title, voice, section, manage, onManage, onSelectAll, onVoice, onStart }: {
-  document: string; title: string; voice: OfflineVoice; section: number | null;
+export function DownloadContent({ document, title, voice, place, manage, onManage, onSelectAll, onVoice, onStart }: {
+  document: string; title: string; voice: OfflineVoice; place: ReadingSpineItem | null;
   manage: boolean;
   /** Go to Manage (`true`), or back to Download. */
   onManage(open: boolean): void;
@@ -113,7 +114,7 @@ export function DownloadContent({ document, title, voice, section, manage, onMan
   const sweep = useSweep({ shown: visible, chapters, collapsed, choosable: eligibleIds, selected }, setSelected);
   // Found among Download's rows even in Manage, which marks it only if it
   // lists it: its nearest listed row would be another chapter.
-  const here = readingChapter(rows, section);
+  const here = readingChapter(rows, place);
   const hereIndex = here === null ? -1 : visible.findIndex((c) => c.id === here);
 
   // The header's Select all, whose press always reads the rows as they are now.

@@ -35,7 +35,7 @@ afterEach(() => {
   renderer = null;
 });
 
-const callbacks = () => ({ onBlocks: vi.fn(), onDocument: vi.fn(), onProblem: vi.fn(), onFollowing: vi.fn(), onTap: vi.fn() });
+const callbacks = () => ({ onBlocks: vi.fn(), onAnchors: vi.fn(), onDocument: vi.fn(), onProblem: vi.fn(), onFollowing: vi.fn(), onTap: vi.fn() });
 
 function mount(options: ReaderBridgeOptions) {
   let latest: ReaderBridge | null = null;
@@ -78,6 +78,8 @@ describe('a message with a known type is taken only whole', () => {
     ['a Blocks message whose Block names its list item by anything but a count', { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [{ ...BLOCK, item: 'first' }], sizes: null }],
     ['a Blocks message with no section index', { type: BLOCKS_MESSAGE, section: 'a.xhtml', blocks: [BLOCK], sizes: null }],
     ['a Blocks message with sizes that are not sizes', { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [BLOCK], sizes: 'many' }],
+    ['a Blocks message whose anchors are an object', { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [BLOCK], sizes: null, anchors: { c1: 0 } }],
+    ['a Blocks message whose anchor has no Block', { type: BLOCKS_MESSAGE, sectionIndex: 0, section: 'a.xhtml', blocks: [BLOCK], sizes: null, anchors: [['c1', -1]] }],
     ['a document message with no hrefs', { type: DOCUMENT_MESSAGE, spine: 1 }],
     ['a problem with no detail', { type: PROBLEM_MESSAGE }],
     ['a following state that is not a boolean', { type: FOLLOWING_STATE_MESSAGE, following: 'yes' }],
@@ -87,6 +89,19 @@ describe('a message with a known type is taken only whole', () => {
     const bridge = mount(seen);
     expect(() => arrive(bridge, message)).not.toThrow();
     for (const callback of Object.values(seen)) expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('hands on where each Contents fragment starts, whether or not the Blocks changed (#212)', () => {
+    const seen = callbacks();
+    const bridge = mount(seen);
+    const message = { type: BLOCKS_MESSAGE, sectionIndex: 4, section: 'a.xhtml', blocks: [{ ...BLOCK, sectionIndex: 4 }], sizes: null, anchors: [['constructor', 0], ['c2', 3]] };
+    arrive(bridge, message);
+    arrive(bridge, message);
+    expect(seen.onBlocks).toHaveBeenCalledTimes(1);
+    expect(seen.onAnchors).toHaveBeenCalledTimes(2);
+    expect(seen.onAnchors).toHaveBeenLastCalledWith(4, new Map([['constructor', 0], ['c2', 3]]));
+    arrive(bridge, { type: BLOCKS_MESSAGE, sectionIndex: 5, section: 'b.xhtml', blocks: [], sizes: null });
+    expect(seen.onAnchors).toHaveBeenCalledTimes(2);
   });
 
   it('drops a selection with no text while Look Up is on', () => {

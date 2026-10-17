@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Block } from '../../src/core/segmenter';
 import {
+  blockInSection,
   carryUtterance,
   documentLanguage,
   firstUtteranceOfSection,
@@ -211,6 +212,22 @@ describe('readingFromRow', () => {
 
   it('names only the row itself when it is not to read on', () => {
     expect(readingFromRow(utterances, sectioned, rendered([1, 2, 3]), 2, false)).toEqual({ kind: 'nothing' });
+  });
+});
+
+describe('blockInSection', () => {
+  // As the bridge keeps them: each section's Blocks together, in the page's order (`withSection`).
+  const reported = [{ sectionIndex: 2 }, { sectionIndex: 2 }, { sectionIndex: 3 }, { sectionIndex: 3 }, { sectionIndex: 3 }, { sectionIndex: 7 }];
+  it('counts a Block among its own section\'s Blocks, as the page counts it when it places a fragment (#212)', () => {
+    expect([0, 1, 2, 3, 4, 5].map((at) => blockInSection(reported, at))).toEqual([
+      { sectionIndex: 2, ordinal: 0 }, { sectionIndex: 2, ordinal: 1 },
+      { sectionIndex: 3, ordinal: 0 }, { sectionIndex: 3, ordinal: 1 }, { sectionIndex: 3, ordinal: 2 },
+      { sectionIndex: 7, ordinal: 0 },
+    ]);
+  });
+  it('is null for an index with no Block', () => {
+    expect(blockInSection(reported, 6)).toBeNull();
+    expect(blockInSection([], 0)).toBeNull();
   });
 });
 

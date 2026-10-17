@@ -89,7 +89,7 @@ describe('a place a resume landed on is never written again (observation b, ADR 
   it('remembers the landing after the seek that made it, and forgets it when the cursor moves for any other reason', () => {
     const attempt = within(reading, 'const tryResume = useCallback(', '[seekTo],');
     expect(attempt.indexOf('seekTo(found.utterance);')).toBeLessThan(attempt.indexOf('resumedAtRef.current = found.utterance;'));
-    const seek = within(reading, 'const seekTo = useCallback(', '[sectionOf, abandonResume]);');
+    const seek = within(reading, 'const seekTo = useCallback(', '[placeOf, abandonResume]);');
     pin(seek, 'resumedAtRef.current = null;', 'use-reading.ts, seekTo');
     const clip = within(reading, 'onClip(cue) {', 'atRef.current = cue.utterance;');
     expect(within(reading, 'onClip(cue) {', 'resumedAtRef.current = null;')).toContain('if (cue.utterance !== resumedAtRef.current) resumedAtRef.current = null;');

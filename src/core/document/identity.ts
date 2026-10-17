@@ -299,10 +299,11 @@ const unambiguous = (identity: DocumentIdentity): boolean =>
  * The `dc:identifier`s of an EPUB package document, read out of its text with
  * regular expressions.
  *
- * Regular expressions and not a DOM, for the reason `core/webdav.ts` parses
- * PROPFIND replies the same way (ADR 0003, and `src/core/README.md` names it
- * the house pattern): there is no DOM under `src/core/`, and an XML parser
- * would be a dependency and a platform question for four attributes.
+ * Regular expressions and not a DOM, the way `core/webdav.ts` parses PROPFIND
+ * replies (ADR 0003, and `src/core/README.md` names it the house pattern). Its
+ * neighbours `cover.ts` and `navigation.ts` do parse with `@xmldom/xmldom`,
+ * because they walk the whole package and the navigation; this reads four
+ * attributes of one element, and a parse would buy it nothing.
  *
  * The cost is stated rather than hidden: an attribute value containing a `>`
  * would defeat the element scan. Nothing in EPUB's metadata has a reason to

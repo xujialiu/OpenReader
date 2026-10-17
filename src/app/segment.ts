@@ -47,6 +47,24 @@ export interface SectionedBlock {
 }
 
 /**
+ * A reported Block's spine item, and its ordinal among that spine item's
+ * Blocks; null for an index with no Block.
+ *
+ * The bridge keeps each section's Blocks together and in the page's order
+ * (`withSection`), so the ordinal is the count of the same section's Blocks
+ * before it: the number the page counts in when it says where each Contents
+ * fragment starts (`BlocksMessage.anchors`, #212). Counted, not read out of the
+ * Block's id, which ADR 0020 keeps opaque.
+ */
+export function blockInSection(blocks: readonly SectionedBlock[], index: number): { sectionIndex: number; ordinal: number } | null {
+  const block = blocks[index];
+  if (!block) return null;
+  let first = index;
+  while (first > 0 && blocks[first - 1].sectionIndex === block.sectionIndex) first--;
+  return { sectionIndex: block.sectionIndex, ordinal: index - first };
+}
+
+/**
  * The first Utterance of a spine item, or null when it has none.
  *
  * The second half of a contents tap (ADR 0020). `goToSection` moves the **page**

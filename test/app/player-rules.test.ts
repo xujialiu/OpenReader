@@ -62,7 +62,7 @@ describe('a tap, a skip or a Contents row stops the sound at the press (#86)', (
    */
   it('seeks from the press itself, with no timer in between', () => {
     const reading = code('use-reading.ts');
-    const seekTo = within(reading, 'const seekTo = useCallback(', '}, [sectionOf');
+    const seekTo = within(reading, 'const seekTo = useCallback(', '}, [placeOf');
     // Three calls into the engine's seek in the whole file: this one, and the two
     // that end a Contents row's silenced wait at the sentence the reading is on.
     expect(reading.match(/\.seek\(/g)).toHaveLength(3);
@@ -136,7 +136,7 @@ describe('the contents open at the chapter being read (ADR 0020)', () => {
     expect(list).toContain('data.slice(from)');
     expect(list).toContain('{ minIndexForVisible: 0 }');
     expect(sheet).not.toMatch(/initialScrollIndex=\{0\}/);
-    expect(sheet).toContain('currentRow(contents, { sectionIndex: section })');
+    expect(sheet).toContain('currentRow(contents, place)');
   });
 });
 
@@ -183,7 +183,7 @@ describe('coming back to a book resumes the reading, not only the page (ADR 0008
     // away from wherever the owner had just put it — ADR 0008's "silent landing
     // three paragraphs away", arriving late instead of wrong.
     const reading = code('use-reading.ts');
-    expect(within(reading, 'const seekTo = useCallback(', '}, [sectionOf')).toContain('abandonResume();');
+    expect(within(reading, 'const seekTo = useCallback(', '}, [placeOf')).toContain('abandonResume();');
     expect(within(reading, 'const start = useCallback(', '}, [settings, build, report, walkForward')).toContain('abandonResume();');
     expect(within(reading, 'const abandonResume = useCallback(', '}, []);')).toContain('resumeRef.current = null;');
   });
@@ -211,7 +211,7 @@ describe('a section that arrives mid-reading reaches the engine at once (notes/N
   const reading = code('use-reading.ts');
 
   it('hands a longer list over through extend, not load', () => {
-    const adopt = within(reading, 'const adopt = useCallback(', '}, [sectionOf]);');
+    const adopt = within(reading, 'const adopt = useCallback(', '}, [placeOf]);');
     // A list that continues the one the engine holds goes over whole, and returns
     // before any `load` is reached.
     const continued = within(adopt, 'if (samePrefix(held.utterances.slice(0, heldEnd), next)) {', 'return;');
@@ -283,7 +283,7 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
     // sentence again, because that sentence's own section changed (#46): every
     // other renumbering carries the cursor across (`carryUtterance`).
     expect(reading.match(/atRef\.current = null;/g)).toHaveLength(1);
-    pin(within(reading, 'const adopt = useCallback(', '}, [sectionOf]);'), 'atRef.current = null;', 'use-reading.ts, adopt');
+    pin(within(reading, 'const adopt = useCallback(', '}, [placeOf]);'), 'atRef.current = null;', 'use-reading.ts, adopt');
   });
 
   it('leaves the highlight on the sentence the cursor names, rather than clearing it', () => {

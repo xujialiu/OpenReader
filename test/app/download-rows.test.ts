@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { downloadedRows, listedInManage, marker, readingChapter, type Marker } from '../../src/app/download-rows';
-import type { ContentsRow } from '../../src/core/document/contents';
+import { fragmentOf, type ContentsRow } from '../../src/core/document/contents';
 import type { Chapter, DownloadTask } from '../../src/offline/model';
 
 const chapter = (id: string, textCount = 17, prepared = true): Chapter => ({ id, title: id, depth: 0, parent: null, texts: [], textCount, prepared });
@@ -96,33 +96,40 @@ describe('which row the download drawer marks and opens at (#88)', () => {
   // two chapters sharing one file, and a copyright page the drawer hides too.
   const shown = [at('Volume 1', 2), at('c1', 3), at('c2a', 4, 'one'), at('c2b', 4, 'two'), at('c3', 6), at('unlisted', null)];
   it('marks the chapter whose file the reading is in', () => {
-    expect(readingChapter(shown, 3)).toBe('c1');
-    expect(readingChapter(shown, 6)).toBe('c3');
+    expect(readingChapter(shown, { sectionIndex: 3 })).toBe('c1');
+    expect(readingChapter(shown, { sectionIndex: 6 })).toBe('c3');
   });
   it('marks the volume heading when the reading is on its own page', () => {
-    expect(readingChapter(shown, 2)).toBe('Volume 1');
+    expect(readingChapter(shown, { sectionIndex: 2 })).toBe('Volume 1');
   });
-  it('marks the first of the chapters sharing a file, as Contents does', () => {
-    expect(readingChapter(shown, 4)).toBe('c2a');
+  it('marks the first of the chapters sharing a file while only the file is known, as Contents does', () => {
+    expect(readingChapter(shown, { sectionIndex: 4 })).toBe('c2a');
   });
   it('marks the nearest shown row before a file with no row of its own', () => {
-    expect(readingChapter(shown, 5)).toBe('c2a');
-    expect(readingChapter(shown, 40)).toBe('c3');
+    expect(readingChapter(shown, { sectionIndex: 5 })).toBe('c2a');
+    expect(readingChapter(shown, { sectionIndex: 40 })).toBe('c3');
   });
   it('marks nothing before the first shown row, or with no reading at all', () => {
-    expect(readingChapter(shown, 0)).toBeNull();
+    expect(readingChapter(shown, { sectionIndex: 0 })).toBeNull();
     expect(readingChapter(shown, null)).toBeNull();
-    expect(readingChapter([], 3)).toBeNull();
+    expect(readingChapter([], { sectionIndex: 3 })).toBeNull();
   });
   it('marks the heading of a folded volume, whose chapters are not shown', () => {
-    expect(readingChapter([at('Volume 1', 2), at('Volume 2', 7)], 4)).toBe('Volume 1');
+    expect(readingChapter([at('Volume 1', 2), at('Volume 2', 7)], { sectionIndex: 4 })).toBe('Volume 1');
+  });
+  it('marks the chapter the reading is in, in a shared file, once the page has said where each starts (#212)', () => {
+    const anchors = new Map([['one', 0], ['two', 4]]);
+    expect(readingChapter(shown, { sectionIndex: 4, block: 2, anchors })).toBe('c2a');
+    expect(readingChapter(shown, { sectionIndex: 4, block: 4, anchors })).toBe('c2b');
+    // A folded volume still answers for its chapters.
+    expect(readingChapter([at('Volume 1', 2), at('Volume 2', 7)], { sectionIndex: 4, block: 4, anchors })).toBe('Volume 1');
   });
 });
 
 describe('which Contents rows carry the Downloaded check (#134)', () => {
   /** A Contents row as the renderer's navigation gives it: the href as written, and the spine item it resolved to. */
   const row = (href: string, target: number | null, depth = 0, heading = false): ContentsRow =>
-    ({ id: href, label: href, depth, heading, section: 0, target, href });
+    ({ id: href, label: href, depth, heading, section: 0, target, fragment: fragmentOf(href), href });
   /** The download plan's chapter for one navigation entry, as the app's own reading of the navigation makes it. */
   const entry = (id: string, section: number | null, fragment = '', extra: Partial<Chapter> = {}): Chapter =>
     ({ id, title: id, depth: 0, parent: null, texts: [], textCount: 17, prepared: true, section, fragment, ...extra });

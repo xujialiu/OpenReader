@@ -71,6 +71,7 @@ import {
 
 import { readBodyTextSize, writeBodyTextSize } from './body-text-sizes';
 import {
+  blockInSection,
   carryUtterance,
   documentLanguage,
   firstUtteranceOfSection,
@@ -136,9 +137,24 @@ export interface ReadingStatus {
    * under a continuous layout that is routinely a section ahead of or behind the
    * one being spoken. This is the section of the Block the current Utterance's
    * first span came from, which is the number `contentsOf`'s `currentRow` takes
-   * (ADR 0020), and it is the only granularity the contents can resolve at.
+   * (ADR 0020). On its own it resolves the contents only to a spine item; with
+   * `block` and `anchors` below it resolves a file that several rows share (#212).
    */
   section: number | null;
+  /**
+   * The ordinal, within `section`, of that same Block, or null before a Clip
+   * has played. A position among the reported Blocks of one spine item, counted
+   * as the page counts them, never read out of a Block id (ADR 0020).
+   */
+  block: number | null;
+  /**
+   * Where each Contents fragment starts in each spine item the page has laid
+   * out, as a Block ordinal by fragment (`BlocksMessage.anchors`, #212). Empty
+   * for a Document whose Contents names no fragment. Kept for the whole Reading:
+   * a section's anchors do not change while its text does not, and a page opened
+   * again (#120) reports the same ones.
+   */
+  anchors: ReadonlyMap<number, ReadonlyMap<string, number>>;
   /**
    * Every spine item's href, in spine order, from the document message.
    *
@@ -186,6 +202,8 @@ const NOTHING_YET: ReadingStatus = {
   reportsWordTimings: null,
   language: null,
   section: null,
+  block: null,
+  anchors: new Map(),
   spineHrefs: [],
   note: null,
   resume: null,
@@ -547,18 +565,24 @@ export function useReading(
   }, []);
 
   /**
-   * The spine item an Utterance is in, or null.
+   * The spine item an Utterance is in, and the ordinal within it of the Block it
+   * starts in; both null when it is not known.
    *
    * The Block its first span came from, and that Block's `sectionIndex` — which is
    * the number the renderer already sends beside every Block, so nothing here
    * decodes a CFI or picks a spine index out of a Block id. ADR 0020 records why
-   * both of those were refused.
+   * both of those were refused. The ordinal is the Block's place among its own
+   * section's Blocks, which the bridge keeps together in the page's order. The
+   * Blocks are the ones the engine's Utterances were segmented from
+   * (`loadedBlocksRef`), which `UtteranceSpan.block` indexes into.
    */
-  const sectionOf = useCallback((utterance: number): number | null => {
+  const placeOf = useCallback((utterance: number): { section: number | null; block: number | null } => {
     const span = loadedRef.current[utterance]?.spans[0];
-    if (!span) return null;
-    return blocksRef.current[span.block]?.sectionIndex ?? null;
+    const at = span ? blockInSection(loadedBlocksRef.current, span.block) : null;
+    return at ? { section: at.sectionIndex, block: at.ordinal } : { section: null, block: null };
   }, []);
+  /** The spine item alone, for the engine's chapter pause. */
+  const sectionOf = useCallback((utterance: number): number | null => placeOf(utterance).section, [placeOf]);
 
   /**
    * The clock, and there is one.
@@ -601,7 +625,7 @@ export function useReading(
           ...was,
           utterance: cue.utterance,
           level: cue.words ? 'word' : 'utterance',
-          section: sectionOf(cue.utterance),
+          ...placeOf(cue.utterance),
         }));
       },
       onPosition(correction) {
@@ -614,7 +638,7 @@ export function useReading(
         lockScreenPosition(correction.contentPosition);
       },
     }),
-    [sectionOf],
+    [placeOf],
   );
 
   /**
@@ -728,8 +752,8 @@ export function useReading(
     // `isPlaying()`), and `play()` cues the front before it corrects.
     engine?.load(next, at ?? 0, { quiet: !playIntent.current });
     if (at === null) return;
-    setStatus((was) => ({ ...was, utterance: at, section: sectionOf(at) }));
-  }, [sectionOf]);
+    setStatus((was) => ({ ...was, utterance: at, ...placeOf(at) }));
+  }, [placeOf]);
 
   /**
    * One spine item on, or the end of the document.
@@ -812,12 +836,12 @@ export function useReading(
     // The Utterance, but not the Highlight Level: whether the Clip that is about to
     // be fetched carries Word Timings is not known yet, and the last Clip's answer
     // is the honest thing to keep showing until it is.
-    setStatus((was) => ({ ...was, utterance: at, section: sectionOf(at) }));
+    setStatus((was) => ({ ...was, utterance: at, ...placeOf(at) }));
     // No engine is not a failure to report: the owner has pointed at a sentence
     // without having pressed Play, `atRef` holds it, and the engine that gets
     // built will be loaded there.
     engineRef.current?.seek(at);
-  }, [sectionOf, abandonResume]);
+  }, [placeOf, abandonResume]);
 
   /**
    * A tapped word or a skip: the owner pointing the reading at a sentence.
@@ -1229,6 +1253,21 @@ export function useReading(
   }, []);
 
   /**
+   * Where a section's Contents fragments start (#212): what tells apart the
+   * Contents rows that share its file. Kept only when it differs from what is
+   * held, so a section scrolled back into view costs no render.
+   */
+  const handleAnchors = useCallback((section: number, anchors: ReadonlyMap<string, number>) => {
+    setStatus((was) => {
+      const held = was.anchors.get(section);
+      if (held && held.size === anchors.size && [...anchors].every(([fragment, at]) => held.get(fragment) === at)) return was;
+      const next = new Map(was.anchors);
+      next.set(section, anchors);
+      return { ...was, anchors: next };
+    });
+  }, []);
+
+  /**
    * M (#71, #53): the page back to the reading, and nothing else. `atRef` is the
    * sentence the reading is on — moved at once by a skip or a tap, so a return
    * straight after one goes where the highlight already is.
@@ -1272,6 +1311,7 @@ export function useReading(
     // flashing white until the first message lands.
     scheme,
     onBlocks: handleBlocks,
+    onAnchors: handleAnchors,
     onTextError: handleTextError,
     onDocument: handleDocument,
     // A tap on a word is a seek and nothing else. The bridge has already turned the

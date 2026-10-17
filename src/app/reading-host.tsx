@@ -31,7 +31,7 @@ import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Portal } from 'react-native-teleport';
 
-import type { DocumentId, ReadingPlace, ReadingPosition } from '../core/document';
+import type { DocumentId, ReadingPlace, ReadingPosition, ReadingSpineItem } from '../core/document';
 import type { ProviderId } from '../core/providers/types';
 import { cutText, debugLog, shortId } from '../debug/debug-log';
 import { setReadingPlays } from '../offline/runtime';
@@ -54,10 +54,10 @@ export interface HeldReading {
   /** Whether the player is shown in full, and the navigation bar with it (#67). */
   chrome: boolean;
   /**
-   * The section the Reading's contents list marks, or null before the view has
-   * said: where the download drawer marks and opens (#88).
+   * Where the Reading's contents list marks, or null before the view has said:
+   * where the download drawer marks and opens (#88, #212).
    */
-  section: number | null;
+  place: ReadingSpineItem | null;
 }
 
 export interface ReadingHandle {
@@ -102,8 +102,8 @@ export function ReadingHost({ children }: { children: ReactNode }) {
    * just started has said nothing yet, and the one before it was unmounted with
    * its last word still here.
    */
-  const [live, setLive] = useState<{ id: DocumentId | null; playing: boolean; buffering: boolean; chrome: boolean; section: number | null }>(
-    { id: null, playing: false, buffering: false, chrome: true, section: null },
+  const [live, setLive] = useState<{ id: DocumentId | null; playing: boolean; buffering: boolean; chrome: boolean; place: ReadingSpineItem | null }>(
+    { id: null, playing: false, buffering: false, chrome: true, place: null },
   );
   const [barHeight, setBarHeight] = useState(0);
   /** Read by `left`, which runs in a cleanup and must see the state of now, not of the render it closed over. */
@@ -247,15 +247,15 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     if (speakingRef.current) library.heard(openedId);
   }, [library, openedId]);
   const onChrome = useCallback(
-    (chrome: boolean) => setLive((was) => (was.id === openedId ? (was.chrome === chrome ? was : { ...was, chrome }) : { id: openedId, playing: false, buffering: false, chrome, section: null })),
+    (chrome: boolean) => setLive((was) => (was.id === openedId ? (was.chrome === chrome ? was : { ...was, chrome }) : { id: openedId, playing: false, buffering: false, chrome, place: null })),
     [openedId],
   );
   const onSection = useCallback(
-    (section: number | null) =>
+    (place: ReadingSpineItem | null) =>
       setLive((was) =>
         was.id === openedId
-          ? (was.section === section ? was : { ...was, section })
-          : { id: openedId, playing: false, buffering: false, chrome: true, section },
+          ? (was.place === place ? was : { ...was, place })
+          : { id: openedId, playing: false, buffering: false, chrome: true, place },
       ),
     [openedId],
   );
@@ -264,7 +264,7 @@ export function ReadingHost({ children }: { children: ReactNode }) {
       setLive((was) =>
         was.id === openedId
           ? (was.playing === playing && was.buffering === buffering ? was : { ...was, playing, buffering })
-          : { id: openedId, playing, buffering, chrome: true, section: null },
+          : { id: openedId, playing, buffering, chrome: true, place: null },
       ),
     [openedId],
   );
@@ -279,7 +279,7 @@ export function ReadingHost({ children }: { children: ReactNode }) {
             playing: mine && live.playing,
             buffering: mine && live.buffering,
             chrome: mine ? live.chrome : true,
-            section: mine ? live.section : null,
+            place: mine ? live.place : null,
           }
         : null,
       show,

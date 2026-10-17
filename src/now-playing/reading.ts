@@ -12,7 +12,7 @@
  * Neither of these imports the platform.
  */
 
-import { currentRow, type Contents } from '../core/document/contents';
+import { currentRow, type Contents, type ReadingSpineItem } from '../core/document/contents';
 
 /** What a remote button means once it is known whether the reading is running. */
 export type RemoteIntent = 'play' | 'pause';
@@ -33,17 +33,39 @@ export type RemoteIntent = 'play' | 'pause';
  * a malformed book (the owner's novel has 2,077 spine items and 2,076 entries, and
  * reading the one with no entry reports the cover). Marking the cover in an open
  * list is coarse; printing "Cover" on a lock screen while chapter 41 is being read
- * is wrong. `'shared'` is kept: several rows name that section and the first of
- * them is reported, so the row does contain the reading.
+ * is wrong.
+ *
+ * `'shared'` is kept only where the first row holds the others: a part's title
+ * and its chapters in one file, where the part does contain the reading. Where
+ * the rows sharing the file are siblings, as the chapters of the Gutenberg Pride
+ * and Prejudice are, the first is one chapter among several and naming it while a
+ * later one is read is the confident wrong answer (#212). That answer is
+ * `'shared'` only until the page has said where each chapter starts, and from
+ * then on it is `'exact'` (`currentRow`).
  *
  * An empty label is refused too. A book may write an entry with no text in it, and
  * a blank second line is indistinguishable from a bug in this function.
  */
-export function chapterOf(contents: Contents, section: number | null): string {
-  if (section === null) return '';
-  const at = currentRow(contents, { sectionIndex: section });
+export function chapterOf(contents: Contents, reading: ReadingSpineItem | null): string {
+  if (reading === null) return '';
+  const at = currentRow(contents, reading);
   if (!at || at.precision === 'before') return '';
+  if (at.precision === 'shared' && !holdsTheOthers(contents, at.row)) return '';
   return contents.rows[at.row]?.label ?? '';
+}
+
+/** Whether every other row naming `row`'s spine item sits under `row`: after it, with nothing at its own depth or above between them. */
+function holdsTheOthers(contents: Contents, row: number): boolean {
+  const { rows } = contents;
+  const own = rows[row];
+  if (!own) return false;
+  let under = true;
+  for (let index = 0; index < rows.length; index++) {
+    if (index > row && rows[index].depth <= own.depth) under = false;
+    if (index === row || rows[index].target !== own.target) continue;
+    if (index < row || !under) return false;
+  }
+  return true;
 }
 
 /**

@@ -41,7 +41,7 @@ it('shows Provider and Model on their own row, filters saved Fish Voices, and ke
   const onVoice = vi.fn();
   const render = (manage: boolean) => createElement(DownloadContent, {
     document: 'book', title: 'Book', voice: { provider: 'fish', voice: 'A', label: 'A very long narrator name that needs its own row' },
-    section: null, manage, onManage: vi.fn(), onSelectAll: vi.fn(), onVoice,
+    place: null, manage, onManage: vi.fn(), onSelectAll: vi.fn(), onVoice,
   });
   const words = (type: string) => view.root.findAll((node) => String(node.type) === type).map((node) => [node.props.children].flat().join(''));
   await act(async () => { view = create(render(false)); });

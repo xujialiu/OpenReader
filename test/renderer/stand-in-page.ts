@@ -91,7 +91,12 @@ export interface Section {
   listeners: Map<string, Listener[]>;
 }
 
-export function standInPage() {
+/**
+ * @param options.toc The navigation epub.js would hold as `book.navigation.toc`,
+ * which the program reads for the Contents' fragments (#212). Absent: no
+ * navigation, as before it had loaded.
+ */
+export function standInPage(options: { toc?: readonly unknown[] } = {}) {
   const posted: any[] = [];
   /** What the program asked epub.js to display, in order. */
   const displays: unknown[] = [];
@@ -130,7 +135,10 @@ export function standInPage() {
     // epub.js lists the sections it has on the page: a destroyed view is not among them.
     getContents: () => contents.filter((one) => one.document.defaultView),
   };
-  const book = { spine: { length: 10, get: (index: number) => ({ href: 'ch' + index + '.xhtml', index, next: () => null }) }, package: { metadata: { language: 'en' } } };
+  const book = {
+    spine: { length: 10, get: (index: number) => ({ href: 'ch' + index + '.xhtml', index, next: () => null }) }, package: { metadata: { language: 'en' } },
+    navigation: options.toc ? { toc: options.toc } : undefined,
+  };
   const setTimeout = (fn: () => void) => timers.push(fn);
   const clearTimeout = (id: number) => { if (id && timers[id - 1]) timers[id - 1] = () => {}; };
   const window: any = {
@@ -185,8 +193,8 @@ export function standInPage() {
     posted, displays, followed, manager, stage, addSection,
     send(message: object) { window.__openReaderHighlighter(message); },
     /** A Download's preparation of one section, as the hidden rendition is asked for it (`indexer.tsx`); settles once the program has posted its answer. */
-    async prepare(index: number, points: unknown[] = []): Promise<any> {
-      await window.openreaderOfflineSection(index, points, 1);
+    async prepare(index: number, points: unknown[] = [], token = 1): Promise<any> {
+      await window.openreaderOfflineSection(index, points, token);
       return posted.filter((m) => m.type === 'openreader:offline-section' || m.type === 'openreader:offline-error').pop();
     },
     /** The content hook, as epub.js runs it for every section it displays. */

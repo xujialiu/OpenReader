@@ -123,6 +123,14 @@ export interface ReaderBridgeOptions {
    */
   onBlocks?(blocks: readonly ReportedBlock[], section: RenderedSection): void;
   /**
+   * Where each of the Document's Contents fragments found in a section starts,
+   * as a Block ordinal by fragment, each time the section reports its Blocks
+   * (`BlocksMessage.anchors`, #212). Not called for a Document whose Contents
+   * names no fragment. Its own callback rather than part of `onBlocks`, which
+   * is skipped when a section comes back with the same text.
+   */
+  onAnchors?(section: number, anchors: ReadonlyMap<string, number>): void;
+  /**
    * The shape of the document, once, before any section reports its Blocks.
    *
    * A callback rather than a value to read during render, for the same reason as
@@ -956,6 +964,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
           spine: spine.current,
         });
       }
+      if (message.anchors) latest.current.onAnchors?.(message.sectionIndex, new Map(message.anchors));
       clearTimeout(preparing.current.get(message.sectionIndex));
       preparing.current.delete(message.sectionIndex);
       reportedSince.current.add(message.sectionIndex);

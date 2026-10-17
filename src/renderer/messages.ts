@@ -122,7 +122,22 @@ export interface BlocksMessage {
    * was nothing to measure for.
    */
   sizes: CharactersBySize | null;
+  /**
+   * Where each of the Document's Contents fragments found in this section
+   * starts, as `[fragment, Block ordinal]` pairs (#212): the fragment spelled
+   * as `fragmentOf` spells it, and the ordinal of the first Block whose first
+   * text lies inside the fragment's element or after it, the rule a Download's
+   * chapters are cut by. A fragment not here is not in this section. Absent
+   * when the Contents names no fragment at all.
+   *
+   * Pairs rather than an object, because a fragment is the Document's own
+   * string: `constructor` would read back from a parsed object as a function.
+   */
+  anchors?: SectionAnchors;
 }
+
+/** `BlocksMessage.anchors`. */
+export type SectionAnchors = readonly (readonly [fragment: string, block: number])[];
 
 /**
  * Characters of a Document's text, by the size in CSS pixels the Document itself
@@ -683,7 +698,8 @@ export function readWebViewMessage(event: unknown): WebViewMessage | null {
         typeof event.section === 'string' &&
         Array.isArray(event.blocks) &&
         event.blocks.every(isReportedBlock) &&
-        (event.sizes === null || isSizes(event.sizes))
+        (event.sizes === null || isSizes(event.sizes)) &&
+        (event.anchors === undefined || isAnchors(event.anchors))
         ? (event as unknown as BlocksMessage)
         : null;
     case DOCUMENT_MESSAGE:
@@ -731,6 +747,10 @@ function isReportedBlock(value: unknown): value is ReportedBlock {
     isIndex(value.sectionIndex) &&
     typeof value.cfi === 'string'
   );
+}
+
+function isAnchors(value: unknown): value is SectionAnchors {
+  return Array.isArray(value) && value.every((pair) => Array.isArray(pair) && pair.length === 2 && typeof pair[0] === 'string' && isIndex(pair[1]));
 }
 
 function isSizes(value: unknown): value is CharactersBySize {

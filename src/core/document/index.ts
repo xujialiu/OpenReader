@@ -3,8 +3,12 @@
  * it is, where the owner stopped reading, what a store keeps, and what parts the
  * Document says it has.
  *
- * Five questions, five files, and the order they appear in is the order they
- * depend on each other.
+ * Eight files below, in the order they depend on each other. Two more are not
+ * exported from here and their callers import them directly: `cover.ts` reads a
+ * Document's Cover (ADR 0026), and `navigation.ts` the spine and Contents a
+ * Download is planned from (ADR 0027). Both read only a few members of the
+ * archive, with `@xmldom/xmldom` and `fflate`, the only packages this directory
+ * imports.
  *
  * - `identity.ts` — ADR 0004. A Document Id over the archive's own manifest,
  *   `dc:identifier` beside it as a secondary match, and the format recorded
@@ -29,7 +33,9 @@
  * - `contents.ts` — ADR 0020's contents list: the Document's own navigation
  *   flattened into rows and sections, each row resolved to the spine item
  *   `goToSection` takes, and the rule that says which row the reading is in —
- *   together with what that rule cannot resolve, which is the part that matters.
+ *   inside a file several rows share once the page has said where each starts
+ *   (#212) — together with what that rule cannot resolve, which is the part that
+ *   matters.
  *
  * Nothing in here imports the platform, and nothing imports from the layers
  * above `core/`. `eslint.config.js` enforces both.
@@ -104,8 +110,11 @@ export {
 
 export {
   EMPTY_CONTENTS,
+  anchoredStart,
   contentsOf,
   currentRow,
+  fragmentOf,
+  rowOfPlace,
   rowOfSection,
   type Contents,
   type ContentsRow,

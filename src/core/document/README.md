@@ -1,7 +1,8 @@
-# src/core/document — ADR 0004, 0007, 0008, 0020
+# src/core/document — ADR 0004, 0007, 0008, 0020, 0026, 0027
 
 What a **document** is, how it is recognised again, how a place in one is written
-down, and what parts the document says it has.
+down, what parts the document says it has, and the two things read straight out
+of its archive: its **Cover** and the chapters a **Download** is planned from.
 
 ## Identity: content, not a library key (ADR 0004)
 
@@ -172,8 +173,26 @@ serializeLibrary(entries) → string
 parseLibrary(text) → LibraryParse
 
 contentsOf(navigation, spineHrefs) → Contents               // rows + sections, in document order
-currentRow(contents, { sectionIndex }) → CurrentRow | null   // and how coarse the answer is
+currentRow(contents, { sectionIndex, block?, anchors? }) → CurrentRow | null  // and how coarse the answer is
+rowOfPlace(rows, sectionOf, fragmentOf, reading) → CurrentRow | null          // the same rule, for any list of places
+fragmentOf(href) → string                                   // one spelling of a fragment for every comparison
+anchoredStart(anchors, block) → number                      // the first Block of the chapter `block` is in
+
+readDocumentCover(archive) → DocumentCover | null           // cover.ts: the Cover's bytes, or none
+readDocumentNavigation(archive) → DocumentNavigation        // navigation.ts: the spine and every Contents entry
+resolveArchivePath(base, href) → string                     // an EPUB href to an archive member name
+readArchiveMember(archive, member, limit) → Uint8Array      // one member, inflated, within a size limit
 ```
+
+`cover.ts` and `navigation.ts` are imported straight from their files by their
+callers (`src/app/document-cover.ts`, `src/offline/`), not through `index.ts`.
+They are the only files here that import a package: `@xmldom/xmldom` to parse the
+container, the package, the `nav` document and the NCX, and `fflate` to inflate
+the few members they read. A Cover (ADR 0026) is derived, device-local data;
+`navigation.ts` reads the chapters a Download is planned from (ADR 0027) without
+inflating a single chapter's body. It reads each Contents entry on its own: a
+link it cannot read names no file rather than losing every other entry with it
+(#201).
 
 `DOCUMENT_FORMATS` is the list ADR 0007 is about: adding `'pdf'` to it is what
 adding PDF looks like from here.
@@ -233,13 +252,33 @@ WebView — so a union with a CFI branch would be a stub that pretends to work.
 different and only the first is an answer:
 
 - `exact` — one row names the spine item the reading is in.
-- `shared` — several do, and the **first** is reported. Rows sharing a spine item
-  differ only by their `#fragment`; a fragment names an element, and where an
-  element falls needs the rendered document. The coarse answer that contains the
-  reading beats the precise one that might not.
+- `shared` — several do, the page has not said where their fragments start, and
+  the **first** is reported. Rows sharing a spine item differ only by their
+  `#fragment`; a fragment names an element, and where an element falls needs the
+  rendered document. That first row contains the reading when it is a part and
+  the others are its chapters, and may not when they are siblings, which is why
+  the lock screen names it only in the first case (`chapterOf`, #212).
 - `before` — no row names it, so the nearest row before it is reported. Ordinary:
   the owner's book has 2,077 spine items and 2,076 entries, and the one with no
   entry is spine item 1, `Text/copyright.xhtml`. Reading it reports the cover.
+
+**Inside a shared file, once the page has said** (#212). When the page reports a
+section's Blocks it also reports where each of the Document's Contents fragments
+in that section starts, as a Block ordinal (`BlocksMessage.anchors`), by the rule
+a Download cuts chapters by: the first Block whose first text lies inside the
+fragment's element or after it. Given that and the ordinal of the Block the
+reading is in, the current row of a shared file is the one whose fragment starts
+latest at or before the reading, `exact`. A row without a fragment starts at the
+top of the file, a later row starting at the same Block wins (a chapter under its
+part), and a row whose fragment the page did not find is passed over. Reading
+above every such row gives `before`: the last row of the latest file before. The
+Gutenberg Pride and Prejudice, whose 63 rows point into 7 of its 9 files, then
+names every row rightly where the file-level rule named the first of each file.
+`anchoredStart` moves the reading's Block back to the first Block of its chapter,
+which gives the same answer and changes only when the reading crosses into
+another chapter, so a caller that hands the place on does so per chapter rather
+than per sentence. One file named by one row is `exact` as before, wherever its
+fragment starts.
 
 It **does not read a CFI**, although a CFI's first component does encode the spine
 position: decoding it would put epub.js's CFI dialect inside `src/core/`, which is
@@ -247,25 +286,29 @@ what ADR 0008 keeps out. And it **does not parse a Block id**, although
 `highlighter.ts` mints it as `sectionIndex + '.' + ordinal` — that would be a
 second numbering to keep in step with one that already crosses the bridge.
 `ReportedBlock.sectionIndex` is the number, and `currentRow` takes the Block
-itself so that a row index or a Block ordinal cannot be passed in its place.
+itself so that a row index or a Block ordinal cannot be passed in its place. The
+Block's ordinal within its section is counted from the reported Blocks
+(`blockInSection` in `src/app/segment.ts`), never read out of its id.
 
-`#fragment` is dropped from a row's target, so `part1.xhtml#ch3` seeks to the top
-of `part1.xhtml`. Keeping it would mean handing the href to the renderer, and ADR
+`#fragment` is not followed by a row's target, so `part1.xhtml#ch3` seeks to the
+top of `part1.xhtml`; the row keeps it as `ContentsRow.fragment` only to be told
+apart from the other rows of its file. Keeping it would mean handing the href to the renderer, and ADR
 0020 says the contents list adds no third currency to `goTo(cfi)` and
 `goToSection(index)`.
 
-### What `src/renderer/` must send
+### What `src/renderer/` sends
 
-Two things, and only one of them is new:
+Three things:
 
 1. **The navigation tree** — `useReader().toc`, or `onNavigationLoaded`'s `toc`.
-   Already crossing the bridge; nothing in `src/` consumed it before this.
-2. **The spine items' hrefs, in spine order** — new. `DocumentMessage` carries
-   only `spine: number` today, and `RenderedSection.href` arrives one section at a
-   time, which is too late for a list that opens before most sections have
-   rendered. Without them every row is unreachable and `Contents.unreachable`
-   equals `rows.length`, which is a state to say out loud rather than a list of
-   rows that quietly do nothing.
+2. **The spine items' hrefs, in spine order** — `DocumentMessage.hrefs`, once per
+   document. `RenderedSection.href` arrives one section at a time, which is too
+   late for a list that opens before most sections have rendered. Without them
+   every row is unreachable and `Contents.unreachable` equals `rows.length`, which
+   is a state to say out loud rather than a list of rows that quietly do nothing.
+3. **Where each Contents fragment starts in a section**, as Block ordinals, with
+   that section's Blocks (`BlocksMessage.anchors`, #212); absent for a Document
+   whose Contents names no fragment.
 
 The hrefs must be the **spine's own spelling**, the manifest href relative to the
 package document — `book.spine`'s `href`, which `highlighter.ts` already reads one
@@ -280,10 +323,10 @@ href (#125). For example, `/Text/chapter.xhtml` matches `Text/chapter.xhtml`,
 never `Other/chapter.xhtml`. The first match wins and encoding variants remain
 supported. Unmatched rows are counted without guessing why their paths differ.
 
-## Open, and blocking
+## The CFI round trip against Zotero
 
-notes/NOTES.md item 3: the CFI round-trip against Zotero, **both directions**,
-recording not just whether it resolves but whether it resolves to the *right*
-text. If it does not survive even with verification, the retreat is that EPUB
-positions sync only between this app's own devices while settings keep syncing
-with the desktop. A retreat, not the starting design.
+Settled (ADR 0008, ADR 0031): measured in both directions on four books, 132,467
+Blocks, live in Zotero. An **element** CFI names the same paragraph on both sides
+for every `.xhtml` book tested; the seam is OpenReader's HTML parse of `.html`
+members, which the text anchor covers. The retreat ADR 0008 names, positions
+syncing only between this app's own devices, was not needed.

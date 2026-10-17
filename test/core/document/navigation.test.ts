@@ -60,3 +60,29 @@ it('offers a thousands-of-chapters catalogue without inspecting its body files',
   expect(plan.chapters).toHaveLength(count);
   expect(plan.chapters[2099]).toMatchObject({ title: 'Chapter 2100', section: 2099, prepared: false, texts: [] });
 });
+
+/**
+ * #201: one link in the Contents that cannot be read lost the whole plan, so the
+ * Download drawer listed no chapter and printed a raw URIError, or "Cover path
+ * leaves the archive.", with a Try again that failed the same way.
+ */
+const OPF = '<package xmlns="http://www.idpf.org/2007/opf" version="2.0"><manifest><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/><item id="one" href="text/one.xhtml" media-type="application/xhtml+xml"/><item id="two" href="text/two.xhtml" media-type="application/xhtml+xml"/></manifest><spine toc="ncx"><itemref idref="one"/><itemref idref="two"/></spine></package>';
+const withSecondLink = (src: string) => bytesAsArchive(zip([
+  { name: 'META-INF/container.xml', data: utf8('<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>') },
+  { name: 'OEBPS/content.opf', data: utf8(OPF) },
+  { name: 'OEBPS/toc.ncx', data: utf8(`<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/"><navMap><navPoint id="a"><navLabel><text>One</text></navLabel><content src="text/one.xhtml"/></navPoint><navPoint id="b"><navLabel><text>Two</text></navLabel><content src="${src}"/></navPoint></navMap></ncx>`) },
+]));
+it('keeps a fragment with a stray % as written, and the entry with it (#201)', () => {
+  const navigation = readDocumentNavigation(withSecondLink('text/two.xhtml#save-50%'));
+  expect(navigation.chapters.map((c) => [c.title, c.section, c.fragment])).toEqual([['One', 0, ''], ['Two', 1, 'save-50%']]);
+});
+it('gives a link that climbs out of the archive no file, and loses no other entry (#201)', () => {
+  const navigation = readDocumentNavigation(withSecondLink('../../two.xhtml'));
+  expect(navigation.chapters.map((c) => [c.title, c.section])).toEqual([['One', 0], ['Two', null]]);
+  // The plan still has every file to offer.
+  expect(navigationPlan(navigation).chapters.map((c) => c.id)).toEqual(['nav.0', 'nav.1', 'section-1']);
+});
+it('gives a path with a stray % no file either (#201)', () => {
+  const navigation = readDocumentNavigation(withSecondLink('text/tw%o.xhtml'));
+  expect(navigation.chapters.map((c) => [c.title, c.section])).toEqual([['One', 0], ['Two', null]]);
+});

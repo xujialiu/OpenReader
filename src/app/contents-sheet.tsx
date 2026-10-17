@@ -47,7 +47,7 @@
 
 import { useMemo } from 'react';
 
-import { currentRow, type Contents, type ContentsRow } from '../core/document/contents';
+import { currentRow, type Contents, type ContentsRow, type ReadingSpineItem } from '../core/document/contents';
 
 import { useAccent } from './controls';
 import { Drawer, DrawerFooter, DrawerList, DrawerRow, DrawerRowText } from './drawer';
@@ -72,8 +72,12 @@ export interface ContentsSheetProps {
    * arrived yet" and "it does not match" are two different sentences to show.
    */
   spineKnown: boolean;
-  /** The spine item the reading is in, or the one on the page when nothing is being read. Null when neither is known. */
-  section: number | null;
+  /**
+   * Where the reading is: its spine item, or the one on the page when nothing is
+   * being read, and in a file several rows share, where the page says each row
+   * starts and the Block the reading is in (#212). Null when neither is known.
+   */
+  place: ReadingSpineItem | null;
   /** Go here: a spine index. The caller does the two steps (`use-reading.ts`'s `goToSection`). */
   onGo(section: number): void;
   /**
@@ -90,10 +94,10 @@ export interface ContentsSheetProps {
  * where it stays in view however far the list is scrolled. A footer at the end
  * of 2,076 rows would never be read.
  */
-export function ContentsSheet({ visible, onClose, contents, spineKnown, section, onGo, downloaded }: ContentsSheetProps) {
+export function ContentsSheet({ visible, onClose, contents, spineKnown, place, onGo, downloaded }: ContentsSheetProps) {
   const here = useMemo(
-    () => (section === null ? null : currentRow(contents, { sectionIndex: section })),
-    [contents, section],
+    () => (place === null ? null : currentRow(contents, place)),
+    [contents, place],
   );
 
   const unfollowable = contents.rows.length > 0 && contents.unreachable === contents.rows.length;
@@ -137,9 +141,12 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
  * How exactly the marked row was pinned down, in the owner's words.
  *
  * Said out loud because ADR 0020 chose the coarse answer over the confident one:
- * where the contents cannot resolve finer than a file, the list marks the part
- * rather than guessing at the chapter, and a reader who is told nothing would read
- * the mark as exact.
+ * where the contents cannot resolve finer than a file, the list marks the first
+ * row of it rather than guessing at the chapter, and a reader who is told nothing
+ * would read the mark as exact. Since #212 that happens only until the page has
+ * said where each row of the file starts, or when it found none of them, and the
+ * first row may be a sibling chapter before the one being read rather than the
+ * part that holds it, so the sentence no longer calls it the part.
  *
  * Which is why the exact case says nothing at all: there the mark *is* exact, so
  * a sentence saying so repeats what the owner is already looking at. Only the two
@@ -148,7 +155,7 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, section,
  */
 function precisionLine(precision: 'shared' | 'before'): string {
   if (precision === 'shared') {
-    return 'Several rows share this file, so the marked one is the part being read rather than the chapter within it.';
+    return 'Several rows share this file, so the first of them is marked; the one being read may come after it.';
   }
   return 'This page is not in the contents, so the nearest row before it is marked.';
 }

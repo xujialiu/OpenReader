@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { readLocator, type DocumentId, type ReadingPosition } from '../core/document';
+import { readLocator, type DocumentId, type ReadingPosition, type ReadingSpineItem } from '../core/document';
 import { documentNameProblem } from '../core/folders';
 import { spineIndexOf } from '../renderer';
 import { AppearanceControls, FontList } from './appearance-sheet';
@@ -64,9 +64,10 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   /**
    * Where Download marks and opens (#88): where this Document's Reading has its
    * contents list mark, when there is one and it has said, so the two drawers
-   * agree; otherwise the section of the place it was left at.
+   * agree (#212); otherwise the section of the place it was left at, which names
+   * a spine item and no finer.
    */
-  const section = (held?.id === document ? held.section : null) ?? sectionOf(entry?.position ?? null);
+  const place = (held?.id === document ? held.place : null) ?? placeOf(entry?.position ?? null);
   const [page, setPage] = useState<Page>('menu');
   const [renaming, setRenaming] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -117,7 +118,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
     {page === 'fonts' ? <FontList appearance={settings.appearance} onChange={onAppearance} /> : null}
     {page === 'highlight' ? <HighlightPage appearance={settings.appearance} onChange={onAppearance} /> : null}
     {/* One element for both pages, so the selection and the list's place survive going to Manage and back. */}
-    {page === 'download' || page === 'manage' ? <DownloadContent document={document} title={entry.title} voice={voice} section={section}
+    {page === 'download' || page === 'manage' ? <DownloadContent document={document} title={entry.title} voice={voice} place={place}
       manage={page === 'manage'} onManage={(open) => setPage(open ? 'manage' : 'download')} onSelectAll={setSelectAll}
       onStart={() => { if (!entry.voice) library.voiced(document, voice); }} onVoice={(next) => {
         library.voiced(document, next); setSettings((was) => selectVoice(was, next.provider, next.voice));
@@ -133,7 +134,8 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   </Drawer>;
 }
 /** The spine item a stored Reading Position is in, read off its locator (`spineIndexOf`), or null for none. */
-function sectionOf(position: ReadingPosition | null): number | null {
+function placeOf(position: ReadingPosition | null): ReadingSpineItem | null {
   const cfi = position ? readLocator(position.locator, 'epub') : null;
-  return cfi ? spineIndexOf(cfi) : null;
+  const section = cfi ? spineIndexOf(cfi) : null;
+  return section === null ? null : { sectionIndex: section };
 }

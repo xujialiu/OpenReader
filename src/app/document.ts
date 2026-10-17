@@ -100,17 +100,18 @@ export interface AddedDocument {
  * ## The publication's own `dc:identifier` is not filled in
  *
  * Recorded here rather than left to be discovered. ADR 0004 wants it beside the
- * hash and `readPackageIdentifiers` exists to produce it — from the package
- * document, which is inside the zip, which nothing outside the WebView can open.
- * The obvious substitute does not work: epub.js reports
+ * hash and `readPackageIdentifiers` exists to produce it, from the package
+ * document inside the zip. This side of the bridge can read that member now
+ * (`core/document/cover.ts` does, for the Cover), but nothing here reads it for
+ * the identifier yet. The obvious substitute does not work: epub.js reports
  * `metadata.identifier = this.getElementText(t, "identifier")`, the **first**
  * `dc:identifier` in document order, with no reference to the package's
  * `unique-identifier` attribute. So epub.js cannot tell `'unique-identifier'`
  * from `'first-of-several'` — and those are exactly the two `identifyDocument`
  * treats differently, because the second must never be matched on. Leaving it
- * `'none'` is the honest answer until a zip reader lands on this side of the
- * bridge; a guessed source would make `matchIdentities` confident about the one
- * case ADR 0004 says it must not be.
+ * `'none'` is the honest answer until the package is read here for it; a guessed
+ * source would make `matchIdentities` confident about the one case ADR 0004 says
+ * it must not be.
  */
 export async function identifyFile(source: File): Promise<AddedDocument> {
   /**

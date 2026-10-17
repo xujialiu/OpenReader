@@ -21,14 +21,14 @@ const book = contentsOf(XIANNI_NAVIGATION, XIANNI_SPINE);
 describe('what the lock screen’s second line says', () => {
   it('names the chapter being read when exactly one row names it', () => {
     // Spine 4 is `Text/chapter2.xhtml`, which `num_4` names and nothing else does.
-    expect(chapterOf(book, chapter(2))).toBe('第1章 离乡');
-    expect(chapterOf(book, chapter(55))).toBe('第54章 四年');
+    expect(chapterOf(book, { sectionIndex: chapter(2) })).toBe('第1章 离乡');
+    expect(chapterOf(book, { sectionIndex: chapter(55) })).toBe('第54章 四年');
   });
 
   it('names the volume when the reading is on the volume’s own title page', () => {
     // A heading is also somewhere the reading can be: the book puts a title page
     // at the start of each volume, and that page is the heading's own href.
-    expect(chapterOf(book, chapter(1))).toBe('第一卷 平庸少年');
+    expect(chapterOf(book, { sectionIndex: chapter(1) })).toBe('第一卷 平庸少年');
   });
 
   it('says nothing when no row names the section — which is ordinary, not a malformed book', () => {
@@ -37,19 +37,69 @@ describe('what the lock screen’s second line says', () => {
     // marked row in a list the owner has just opened is read as "about here";
     // "封面" printed on a lock screen while chapter 41 is being read is a
     // statement, and it is false. So the line is left empty instead.
-    expect(chapterOf(book, 1)).toBe('');
+    expect(chapterOf(book, { sectionIndex: 1 })).toBe('');
   });
 
   it('says nothing before a Clip has played, and nothing for a book with no contents', () => {
     expect(chapterOf(book, null)).toBe('');
-    expect(chapterOf(EMPTY_CONTENTS, 4)).toBe('');
+    expect(chapterOf(EMPTY_CONTENTS, { sectionIndex: 4 })).toBe('');
   });
 
   it('says nothing rather than a blank line when the book wrote a row with no label', () => {
     // A blank second line on a lock screen is indistinguishable from a bug in this
     // function, so an empty label is the same answer as no row.
     const unlabelled = contentsOf([{ id: 'a', href: 'Text/cover.xhtml', label: '   ', subitems: [] }], XIANNI_SPINE);
-    expect(chapterOf(unlabelled, 0)).toBe('');
+    expect(chapterOf(unlabelled, { sectionIndex: 0 })).toBe('');
+  });
+});
+
+/**
+ * #212: the Gutenberg Pride and Prejudice puts its chapters into a few files, all
+ * at one level, and the line named the first chapter of the file for 56 of its
+ * 61 chapters. Shaped like it: three sibling chapters in one file.
+ */
+describe('the line for a file several chapters share (#212)', () => {
+  const siblings = contentsOf(
+    [
+      { id: 'a', href: '/f0.xhtml#a', label: 'Chapter I.' },
+      { id: 'b', href: '/f0.xhtml#b', label: 'Chapter II.' },
+      { id: 'c', href: '/f0.xhtml#c', label: 'Chapter III.' },
+    ],
+    ['f0.xhtml'],
+  );
+  const anchors = new Map([['a', 0], ['b', 5], ['c', 9]]);
+
+  it('names the chapter being read once the page has said where each starts', () => {
+    expect(chapterOf(siblings, { sectionIndex: 0, block: 0, anchors })).toBe('Chapter I.');
+    expect(chapterOf(siblings, { sectionIndex: 0, block: 6, anchors })).toBe('Chapter II.');
+    expect(chapterOf(siblings, { sectionIndex: 0, block: 9, anchors })).toBe('Chapter III.');
+  });
+
+  it('does not name Chapter I. while the reading may be in Chapter II. or III.', () => {
+    // The issue's own repro: the file alone is known.
+    expect(chapterOf(siblings, { sectionIndex: 0 })).toBe('');
+    expect(chapterOf(siblings, { sectionIndex: 0, block: 6, anchors: null })).toBe('');
+  });
+
+  it('still names a part whose chapters share its file, which does contain the reading', () => {
+    const part = contentsOf(
+      [{ id: 'p', href: 'f0.xhtml', label: 'Part One', subitems: [
+        { id: 'c1', href: 'f0.xhtml#c1', label: 'Chapter 1' },
+        { id: 'c2', href: 'f0.xhtml#c2', label: 'Chapter 2' },
+      ] }, { id: 'q', href: 'f1.xhtml', label: 'Part Two' }],
+      ['f0.xhtml', 'f1.xhtml'],
+    );
+    expect(chapterOf(part, { sectionIndex: 0 })).toBe('Part One');
+    expect(chapterOf(part, { sectionIndex: 0, block: 7, anchors: new Map([['c1', 1], ['c2', 6]]) })).toBe('Chapter 2');
+  });
+
+  it('says nothing when a sibling of the part shares its file', () => {
+    const mixed = contentsOf(
+      [{ id: 'p', href: 'f0.xhtml', label: 'Part One', subitems: [{ id: 'c1', href: 'f0.xhtml#c1', label: 'Chapter 1' }] },
+        { id: 'q', href: 'f0.xhtml#q', label: 'Part Two' }],
+      ['f0.xhtml'],
+    );
+    expect(chapterOf(mixed, { sectionIndex: 0 })).toBe('');
   });
 });
 
