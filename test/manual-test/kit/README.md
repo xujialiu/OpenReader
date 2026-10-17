@@ -2,7 +2,9 @@
 
 What every area uses:
 
-- `run-probe.sh`: runs any XCTest probe (below).
+- [ios-verification.md](ios-verification.md): shared admission, readiness,
+  one recovery and bounded process-tree cleanup (`ios_guard.py`, `ios_ready.py`).
+- `run-probe.sh`: runs any XCTest probe under that guard (below).
 - `project.rb`: generates the disposable XCTest project `run-probe.sh` and the
   area scripts build, finding a probe by its file name.
 - `silence.sh`: the simulator's own volume, set to zero and checked (the top
@@ -85,8 +87,10 @@ whether or not the probe plays. A new `OUTPUT_DIR` gets a new project. An
 existing one is reused only for the same probe from the same worktree, and
 refused otherwise: the project names its Swift file by absolute path. Each run
 leaves `result-STAMP.xcresult`, `test-STAMP.log` and `attachments-STAMP/`, and
-prints the `Executed … tests` line. The exit status is xcodebuild's, and 2 means
-a usage or setup error.
+prints the `Executed … tests` line. Build and test have separate deadlines;
+the runner owns the shared slot through cleanup and exports only a completed
+result bundle. Budgets, exit codes and recovery rules are in
+[ios-verification.md](ios-verification.md).
 
 - `-only-testing` takes `METHOD`, `Class/METHOD` or the full
   `LockScreenProbe/Class/METHOD`. Without it the whole class runs.

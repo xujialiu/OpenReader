@@ -32,6 +32,11 @@ measured, and stop immediately afterwards, including after failures.
 - `archive/`: superseded experiments kept because a recipe or the engineering
   log cites them ([archive/README.md](archive/README.md)).
 
+Before heavy simulator work, use the shared admission and readiness gate in
+[kit/ios-verification.md](kit/ios-verification.md). The runner below takes the
+slot automatically; other heavy phases use the guarded CLI entry. One failed
+recovery ends the attempt as BLOCKED, with evidence retained.
+
 Any XCTest probe runs the same way, and a new one is only its Swift file in its
 area's folder:
 

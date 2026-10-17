@@ -19,7 +19,10 @@ ordering without another cleanup question.
   created, the one holding the latest app included, shut down and deleted;
   and the session's build output and scratch files under `/tmp`, with any
   `ios/` its prebuild created in the worktree. Simulators that existed before
-  the session stay as they were.
+  the session stay as they were. Shared Xcode/iOS runtime packages, security
+  settings, and the shared iOS admission lock file are not session resources;
+  leave them in place. In particular, never unlink an admission lock that
+  another run may be holding or waiting on.
 - **Orphans**: also name any Metro whose `lsof -a -p PID -d cwd` is a directory
   that no longer exists or lies under `.orca-worktree-trash`; release stops
   them too. Never stop a process that another live session may be using, or

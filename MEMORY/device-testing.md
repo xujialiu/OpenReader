@@ -8,6 +8,22 @@ When `xcrun`, Metro, XCTest or a manual step goes wrong or misleads you, add it
 to that README's **Pitfalls**, with its symptom, cause and fix, before you
 finish. That includes problems you only worked around.
 
+## Admit and bound simulator work
+
+Before a heavy simulator/build/XCTest phase, read and use
+[`kit/ios-verification.md`](../test/manual-test/kit/ios-verification.md): one
+machine-wide lane across worktrees, bounded device/app readiness, one recorded
+recovery at most, and process-tree cleanup before releasing the lane. Keep the
+same attempt directory across recovery. A still-unhealthy environment returns
+BLOCKED; it is not another reason to reboot. Shared runtimes and system security
+settings are not test resources to delete or bypass.
+
+`run-probe.sh` takes the shared slot automatically. Other heavy operations use
+the guarded CLI equivalent; a direct MCP build bypasses the guard. Inspect any
+older, unguarded run before starting and leave another session's work alone.
+Use MCP for the remaining inspection and interaction operations within the
+admitted phase.
+
 For simulator work, reach first for the two MCP servers in `.mcp.json`, then
 `xcrun simctl`, `xcodebuild` and the existing XCTest/manual-test scripts. Use
 Computer Use only when none of these can perform the action. Codex does not read
