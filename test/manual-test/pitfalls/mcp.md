@@ -333,15 +333,15 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 
 ## The #203 run: AXe on a loaded machine, and a harness command eaten at launch (2026-10-17, iOS 27.0)
 
-- **Every AXe `describe-ui` snapshot can take 20–40 s when another session's
-  simulator is running a heavy XCTest build on the same Mac**, and the session
-  creation itself alternates between first-try answers and
-  `Timed out creating the simulator remote automation session`. A 20 s
-  `waitForExistence` in an XCTest probe expires against nothing (run 1 of
-  `ProviderVoiceDrawerProbe` failed that way while the app's behaviour was
-  already correct — the sheet's fixture rows were on screen); 60 s waits and
-  retry-over-minutes for the session are the working shape. `ax.py find`
-  answered 45 s after a failed attempt with no action in between.
+- **AX snapshots took 20–40 s during a run with another session's heavy
+  simulator work active**, and session creation alternated between answers and
+  `Timed out creating the simulator remote automation session`. The first
+  Voice Drawer probe failed its 20 s wait; server logs and a later screenshot
+  showed recovery, and the corrected run passed in 12 s. That is evidence for
+  this attempt, not proof that concurrent work caused every delay. Use the
+  [admission/readiness gate](../kit/ios-verification.md) before the next attempt,
+  not a standing rule to increase waits or retry for minutes. `ax.py find`
+  answered 45 s after one failed attempt with no intervening action.
 - **A harness command written in the same breath as `simctl launch` is consumed
   with no effect**: the poll fires once the bundle loads, `seq` is marked seen,
   and `navigationRef.isReady()` is still false, so `open` navigates nowhere and

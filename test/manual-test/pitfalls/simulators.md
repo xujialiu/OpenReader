@@ -329,11 +329,12 @@
   launchd_sim may have crashed or quit responding" (retry the boot after the
   shutdown settles — the first retry still answered `(Booting)` and did not
   stick); the whole UI freezing (a screenshot's status-bar clock minutes
-  behind the host's). Fix each time: `simctl shutdown` that one UDID, boot
-  again, `silence.sh set` (the boot resets the volume), relaunch with
-  `-RCT_jsLocation`. Bound every simctl call (`perl -e 'alarm N; exec @ARGV' …`)
-  while a device is in this state, and treat a screenshot whose clock lags the
-  host as a frozen frame, not app state.
+  behind the host's). Repeated shutdown/boot restored responses temporarily,
+  but did not establish a cause or complete acceptance. The current remedy is
+  [shared admission and one bounded recovery](../kit/ios-verification.md):
+  stop after a failed recovery, preserve artifacts and report BLOCKED. Re-silence
+  after any permitted boot and treat a stale screenshot as suspect evidence,
+  not proof of app state. Concurrent work is an observation, not a proven cause.
 - **After a wedge, `simctl io screenshot` can answer quickly with STALE
   FRAMES.** Three consecutive screenshots taken around a navigation each
   showed the previous screen with a frozen status-bar clock (14:17 while the

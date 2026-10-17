@@ -129,13 +129,13 @@ const server = http.createServer(async (req, res) => {
     const mode = state.speech;
     if (mode === 'ok-pcm') return complete(res, 'audio/pcm', pcmSamples, 'speech ok-pcm');
     if (mode === 'ok-wav') return complete(res, 'audio/wav', wavBytes, 'speech ok-wav');
-    if (mode === 'cut') return cut(res, { contentType: 'audio/pcm', total: 24_000, slice: 200, label: 'speech cut' });
+    if (mode === 'cut') return cut(res, { contentType: 'audio/pcm', total: 65_536, slice: 8192, label: 'speech cut', delayMs: 1000 });
     if (mode === 'stall') {
       const t0 = Date.now();
-      res.writeHead(200, { 'Content-Type': 'audio/pcm', 'Content-Length': '24000', 'Cache-Control': 'no-store' });
+      res.writeHead(200, { 'Content-Type': 'audio/pcm', 'Content-Length': '65536', 'Cache-Control': 'no-store' });
       res.flushHeaders();
-      res.write(Buffer.alloc(200, 0x61));
-      log(`SLICED speech stall 200/24000 bytes flushed at +${Date.now() - t0} ms; holding`);
+      res.write(Buffer.alloc(8192, 0x61));
+      log(`SLICED speech stall 8192/65536 bytes flushed at +${Date.now() - t0} ms; holding`);
       res.on('close', () => log(`CLOSED speech stall at +${Date.now() - t0} ms (ended=${res.writableEnded})`));
       return; // never completes; the client's deadline or abort is the only exit
     }
