@@ -147,57 +147,8 @@ GETs, the password list, header logging) and `SyncRecoveryProbe.swift`
 
 ## An unreadable Positions File is not an ordinary sync (#178)
 
-Verified 2026-10-17, beta18 at 2416a42, against an isolated local server — never
-a real Sync Folder. The transport's warning now rides `SyncOutcome.warning`
-into the one existing status Footnote (attention style) and the Debug Log.
-
-Server: `fix2-dav-stub.cjs` answers exactly what `src/core/sync/webdav.ts`
-speaks (PROPFIND 207, GET, PUT, MKCOL 405) and keeps the server-side truth in
-a plain directory the host stages between syncs:
-
-```sh
-node test/manual-test/sync/fix2-dav-stub.cjs 8843 /tmp/openreader-fix2-dav
-# davroot/xujialiu-positions.json  the file the app reads and replaces; absent = GET 404
-# davroot/PUT_FAIL                 while present, PUT answers 500 and stores nothing
-# davroot/access.log               one line per request: method, status, stored bytes
-```
-
-Setup, all handler-based (`hx.cjs`), no real credentials needed — the stub
-accepts any Basic auth and `use-sync`'s client sends an empty password when the
-Keychain has none:
-
-1. Add a fixture book (`Inbox` + harness `add`), then patch the whole sync
-   object at once: `{"do":"settings","patch":{"sync":{"url":"http://127.0.0.1:8843/fix2dav/","username":"tester","enabled":false}}}`.
-   A patch replaces `settings.sync` wholesale — patching only `{"enabled":true}`
-   wipes `url` and `username` (measured; the run then fails `Cannot read
-   property 'trim' of undefined`).
-2. **Trigger a forced run at will**: patch `enabled:false`, sleep 400 ms, patch
-   the full object with `enabled:true`. The false→true edge is the switch-on
-   sync moment, which `use-sync.ts` flushes forced — ordinary lifecycle pokes
-   would sit out the 60 s retry window after a failed run.
-3. Seed a reading position with harness `open` + `seek`; `shelf` prints it.
-
-The six states, each read from `access.log`, the Debug Log files
-(`Library/Application Support/debug-log/` in the app container — `debugLog`
-never reaches the Metro console) and the visible Footnote on the Sync screen:
-
-| Server state | Expected |
-| --- | --- |
-| file absent | ordinary `switch-on: ok … uploaded`, no warning; plain `Synced at …` Footnote |
-| `{not json`, no local positions | warning `…could not be read (not JSON). It was not replaced because this device has no reading positions.`, no PUT, bytes unchanged |
-| `{not json`, one local position | PUT 201 stores the canonical file; warning `…It was replaced with this device's reading positions.`; Footnote red |
-| `{not json` + `PUT_FAIL` | `switch-on: error (Upload failed: HTTP 500.)`; warning `…Its replacement was not confirmed.`; bytes unchanged |
-| `{"format":"xujialiu-positions","version":2,…}` | `switch-on: frozen (…version 2…left alone…)`, no PUT, bytes unchanged |
-| file removed again | ordinary `ok … uploaded`, no warning — the reset |
-
-A newer remote stamp for the same document (bump `stamp.at`, change the
-anchor) makes the next run adopt it: `1 places taken` and the `shelf` shows
-the remote anchor — the same trigger drives the #179 adoption check.
-
-What this cannot prove: a lost PUT reply cannot prove the file was not
-replaced — that distinction is `test/app/sync-unreadable-file.test.ts`'s; the
-stub's 500 is a reply-with-error, not a swallowed reply. No physical device,
-and no HTTPS.
+[unreadable-positions.md](unreadable-positions.md) — isolated local WebDAV setup,
+malformed/absent/newer-file cases, failed replacement, and the visible warning.
 
 ## A Play that waits past its Reading (#106)
 
