@@ -173,8 +173,7 @@ describe('kokoroAdapter', () => {
   });
 
   // This message is shown as it is: it names the address that was tried and
-  // asks the one question there is, since fetch rejects with the same text for
-  // a refused port, a DNS failure and a TLS error alike
+  // asks whether the server is running, with the system's reason after it
   it('reports a refused connection as local-server-down, naming the address', async () => {
     const fetchImpl = vi.fn(async () => {
       throw new TypeError('NetworkError when attempting to fetch resource.');
@@ -182,6 +181,37 @@ describe('kokoroAdapter', () => {
     await expect(provider(fetchImpl).synthesize('Hello', opts)).rejects.toMatchObject({
       kind: 'local-server-down',
       message: 'Cannot reach Kokoro at http://localhost:8880. Is the server running? (TypeError: NetworkError when attempting to fetch resource.)',
+    });
+  });
+
+  // #210. On the phone the system's reason is in the error's text (the shape
+  // notes/NOTES_2026-09-22.md recorded at 22:12). When it is about the secure
+  // connection, the server was reached or never asked, and the question would
+  // send the owner to look at a server that is running.
+  it('does not ask whether the server is running when the system refused the connection over its security', async () => {
+    const reasons = [
+      'A TLS error caused the secure connection to fail.',
+      'An SSL error has occurred and a secure connection to the server cannot be made.',
+      'The certificate for this server is invalid. You might be connecting to a server that is pretending to be “mac-mini.tailnet.ts.net” which could put your confidential information at risk.',
+      'The resource could not be loaded because the App Transport Security policy requires the use of a secure connection.',
+    ];
+    for (const reason of reasons) {
+      const fetchImpl = vi.fn(async () => {
+        throw new Error(`fetch failed: UnexpectedException: ${reason}`);
+      });
+      await expect(provider(fetchImpl).synthesize('Hello', opts)).rejects.toMatchObject({
+        kind: 'local-server-down',
+        message: `Cannot reach Kokoro at http://localhost:8880. (Error: fetch failed: UnexpectedException: ${reason})`,
+      });
+    }
+  });
+
+  it('still asks when the system says the server could not be reached', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('fetch failed: UnexpectedException: Could not connect to the server.');
+    });
+    await expect(provider(fetchImpl).listVoices()).rejects.toMatchObject({
+      message: 'Cannot reach Kokoro at http://localhost:8880. Is the server running? (Error: fetch failed: UnexpectedException: Could not connect to the server.)',
     });
   });
 

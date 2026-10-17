@@ -235,6 +235,7 @@ with the review key left where it was, never passes through the agent (notes
   - The owner creates a new Fish Audio API key with a small prepaid balance, pastes it only into App Store Connect, and deletes it after approval.
   - It is never committed, logged or shown in a screenshot.
   - Before submitting, check every step of the template below on a fresh install. A fresh install's Provider is OpenAI, so the reviewer must choose a Fish Audio voice.
+- **App Transport Security**: the build sets `NSAllowsArbitraryLoads` (ADR 0080), and Apple asks for a justification at review. The notes carry this sentence, or the answer to App Review's question does: `OpenReader connects to a speech server or WebDAV folder whose address the user enters, often a computer at home reached over plain HTTP by a local or VPN host name, so it allows HTTP connections (NSAllowsArbitraryLoads). The hosted speech services it supports are reached over HTTPS.`
 
 ### Review notes (template)
 

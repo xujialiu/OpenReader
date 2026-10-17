@@ -1,5 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ExportedConfig, ExportedConfigWithProps, InfoPlist } from 'expo/config-plugins';
 import { describe, expect, it } from 'vitest';
 
@@ -170,6 +173,47 @@ describe('#108: a fresh prebuild is one App Store Connect accepts', () => {
 
   it('names the signing team, so a fresh ios/ signs without Xcode', () => {
     expect(config.ios?.appleTeamId).toMatch(/^[A-Z0-9]{10}$/);
+  });
+});
+
+describe('ADR 0080: a server of the owner\'s is reached over http:// by any name (#210)', () => {
+  type Ats = Record<string, unknown>;
+
+  /** The App Transport Security dictionary of the prebuild template's Info.plist. */
+  function templateAts(): Ats {
+    const dir = mkdtempSync(join(tmpdir(), 'openreader-ats-'));
+    const template = new URL('../node_modules/expo/template.tgz', import.meta.url).pathname;
+    execFileSync('tar', ['-xzf', template, '-C', dir, 'package/ios/HelloWorld/Info.plist']);
+    const xml = readFileSync(join(dir, 'package/ios/HelloWorld/Info.plist'), 'utf8');
+    const block = /<key>NSAppTransportSecurity<\/key>\s*<dict>([\s\S]*?)<\/dict>/.exec(xml)![1]!;
+    const keys: Ats = {};
+    for (const [, key, value] of block.matchAll(/<key>(\w+)<\/key>\s*<(true|false)\/>/g)) keys[key!] = value === 'true';
+    return keys;
+  }
+
+  /**
+   * What the prebuild writes: a dictionary in `ios.infoPlist` replaces the
+   * template's whole, since @expo/config-plugins spreads `ios.infoPlist` over
+   * the template's Info.plist at the top level (withIosBaseMods.js).
+   */
+  const written = (): Ats =>
+    ((config.ios?.infoPlist ?? {}) as Record<string, unknown>).NSAppTransportSecurity as Ats | undefined ?? templateAts();
+
+  it('lets plain HTTP through to a dotted domain name, such as a Tailscale or home-router name', () => {
+    // Apple: NSAllowsArbitraryLoads is ignored, and NO used, while any of these
+    // three is present; NSAllowsLocalNetworking alone lets through only IP
+    // addresses, `.local` names and names without a dot (measured in #210:
+    // -1022 for a dotted name, with either dictionary that holds it).
+    const ats = written();
+    expect(ats.NSAllowsArbitraryLoads).toBe(true);
+    for (const overriding of ['NSAllowsLocalNetworking', 'NSAllowsArbitraryLoadsForMedia', 'NSAllowsArbitraryLoadsInWebContent']) {
+      expect(ats).not.toHaveProperty(overriding);
+    }
+  });
+
+  it('has the template refuse it, which is why the config says so', () => {
+    // The control: the reason the key above has to be set at all.
+    expect(templateAts()).toEqual({ NSAllowsArbitraryLoads: false, NSAllowsLocalNetworking: true });
   });
 });
 

@@ -42,6 +42,16 @@ function toTimedWords(raw: CaptionedResponse['timestamps']): TimedWord[] {
   return words;
 }
 
+/**
+ * The system's reason when it refused a request over the connection's security
+ * rather than for want of a server: a TLS failure, a certificate it would not
+ * trust, an App Transport Security refusal (#210). Read from the error's text,
+ * the only place Expo's fetch puts it (`UnexpectedException` carries the
+ * error's `localizedDescription`); a reason worded otherwise is asked about as
+ * any other failure is.
+ */
+const SECURE_CONNECTION = /secure connection|certificate/i;
+
 export type LocalEngineDeps = {
   fetch: typeof fetch;
   /**
@@ -74,10 +84,13 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
       // fetch throws outright when the local server isn't up. This must be
       // distinguished here, otherwise the owner would just see a "network
       // error" and go check their own broadband. The message is shown as it
-      // is, so it names the address that was tried and asks the one question
-      // there is: fetch rejects with the same text for a refused port, a DNS
-      // failure and a TLS error alike.
-      throw new SynthesisError('local-server-down', `Cannot reach Kokoro at ${baseURL}. Is the server running? (${e})`);
+      // is, so it names the address that was tried, asks whether the server is
+      // running, and gives the system's reason after it. When that reason is
+      // about the secure connection the question is left out (#210): the
+      // server was reached, or never asked, and the reason says what failed.
+      const reason = String(e);
+      const question = SECURE_CONNECTION.test(reason) ? '' : ' Is the server running?';
+      throw new SynthesisError('local-server-down', `Cannot reach Kokoro at ${baseURL}.${question} (${reason})`);
     }
   };
 

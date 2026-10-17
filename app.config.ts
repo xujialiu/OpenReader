@@ -144,6 +144,25 @@ const config: ExpoConfig = {
     },
 
     /**
+     * #210, ADR 0080. Kokoro FastAPI, OpenAI Compatible and the Sync Folder go
+     * to an address the owner types, and a server at home is often plain
+     * `http://` under a dotted name: Tailscale's full MagicDNS name, or one a
+     * router gives out. The template's dictionary (`NSAllowsArbitraryLoads`
+     * false, `NSAllowsLocalNetworking` true) let through only IP addresses,
+     * `.local` names and names without a dot, and refused such a name before
+     * the request went out (-1022).
+     *
+     * This key replaces the template's dictionary whole, and it has to stand
+     * alone: Apple ignores `NSAllowsArbitraryLoads`, and uses NO, while
+     * `NSAllowsLocalNetworking`, `NSAllowsArbitraryLoadsForMedia` or
+     * `NSAllowsArbitraryLoadsInWebContent` is present. App Review asks for the
+     * reason (docs/release-to-app-store.md has the sentence).
+     */
+    infoPlist: {
+      NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
+    },
+
+    /**
      * #83. An Icon Composer document rather than PNGs: one file carries the
      * default, dark, clear and tinted appearances and gives the icon Liquid
      * Glass. It has to be this string — Expo's `withIosIcons` warns when a
