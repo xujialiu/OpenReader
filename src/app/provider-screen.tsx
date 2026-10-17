@@ -53,10 +53,15 @@ export function ProviderScreen({ route, navigation }: ScreenProps<'Provider'>) {
   const locked = connection.enabled || connection.busy;
   const [discoveredModels, setDiscoveredModels] = useState<readonly FishSpeechModel[]>([]);
   const [modelError, setModelError] = useState<string | null>(null);
+  const [modelProvider, setModelProvider] = useState(id);
+  // A new visit starts without the previous visit's failure, before children commit.
+  if (modelProvider !== id) {
+    setModelProvider(id);
+    setModelError(null);
+  }
   useEffect(() => {
     if (id !== 'fish') return;
     let active = true;
-    setModelError(null);
     void sharedFishModels.load(providerDeps.fetch).then(
       (models) => { if (active) setDiscoveredModels(models); },
       () => { if (active) setModelError('Additional Models could not be loaded. Reopen this page to try again.'); },
