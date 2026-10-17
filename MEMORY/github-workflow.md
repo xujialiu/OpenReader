@@ -69,6 +69,18 @@ The agent-skill workflow labels (the triage labels in
 `docs/agents/triage-labels.md` and `wayfinder:*`) are OpenReader's own
 additions to the Zotero-OpenReader set; `gh label clone` leaves them in place.
 
+### Active work — `working`
+
+Once a session takes on an issue, add `working` before investigating,
+discussing a plan, implementing or verifying it:
+`gh issue edit <number> --add-label working`. Merely browsing issues or
+organizing the issue list does not count. Keep the label while waiting for
+the owner's decision, test results or permission to commit. Remove it when
+the issue closes or work is explicitly paused or abandoned:
+`gh issue edit <number> --remove-label working`. Add it again before resuming
+work. Adding or removing `working` leaves all other labels unchanged; it
+tracks ongoing work independently of the triage state.
+
 ## Outside contributions — the terms come first
 
 OpenReader ships on the App Store, which AGPL-3.0 alone does not allow for
