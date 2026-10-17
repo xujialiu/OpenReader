@@ -250,8 +250,10 @@ To test:
    this test key into "API key": <KEY>. Then turn "Enabled" on and confirm
    "Connection successful". Fields are locked while the provider is enabled.
 3. Open the book, open the voice list in the player, and choose a Fish Audio voice.
-4. Press Play. The first time, the app asks before sending the document's text to
-   Fish Audio: choose Allow. Each word is highlighted as it is spoken.
+4. Press Play. On the first use, choose Start Free Trial and complete Apple's
+   purchase sheet for the free 30-day Trial. Then, when the app asks before sending
+   the document's text to Fish Audio, choose Allow. Each word is highlighted as it
+   is spoken.
 
 Text goes only to the service the user chooses, and only after the user allows it.
 Word Lookup (long-press a word) asks the same way before it sends a selection to a
@@ -287,7 +289,9 @@ close to the field's 4,000-character limit.
 
   No account, no subscription, no server of its own. Your documents stay on your
   iPhone, and text goes only to the service you choose, after you allow it.
-  OpenReader is free and open source: github.com/xujialiu/OpenReader
+  Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase
+  unlocks it for good. Reading, look-up and sync stay free.
+  OpenReader is open source: github.com/xujialiu/OpenReader
   ```
 
 - **Marketing URL:** `https://github.com/xujialiu/OpenReader`.
