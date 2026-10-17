@@ -127,7 +127,7 @@ vi.mock('../../src/app/voice-sheet', () => ({ VoiceSheet: () => null }));
 vi.mock('../../src/app/player', () => ({ Player: (props: NonNullable<typeof world.player>) => { world.player = props; return null; } }));
 vi.mock('../../src/app/document-cover', () => ({ useDocumentCover: () => null }));
 vi.mock('../../src/app/reader-file-system', () => ({ useReaderFileSystem: () => ({}) }));
-vi.mock('../../src/app/use-voices', () => ({ useVoiceLists: () => ({ voicesOf: () => null, ask() {}, asking: () => false, note: null }) }));
+vi.mock('../../src/app/use-voices', () => ({ useVoiceLists: () => ({ voicesOf: () => null, ask() {}, asking: () => false, noteOf: () => null }) }));
 vi.mock('../../src/app/voice-catalog', () => ({ knownVoice: () => null }));
 vi.mock('../../src/app/walkthrough-harness', () => ({ hlog() {}, probeScript: () => '', statusLine: () => '', useHarnessCommands() {} }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });

@@ -55,7 +55,7 @@ describe('the app: the start-up listing, then the Voice list opened once the ser
       if (lists.enabled.includes('compatible') && !lists.voicesOf('compatible')) { asked = true; lists.ask('compatible'); }
       await settle();
     });
-    const result = { asked, shown: lists.voicesOf('compatible')?.map((voice) => voice.id) ?? null, note: lists.note };
+    const result = { asked, shown: lists.voicesOf('compatible')?.map((voice) => voice.id) ?? null, note: lists.noteOf('compatible') };
     await act(async () => { tree.unmount(); });
     return result;
   }

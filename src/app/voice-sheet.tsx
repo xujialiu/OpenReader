@@ -16,15 +16,16 @@
  *
  * ## Three levels, and the middle one is always there
  *
- * Provider, then locale, then Voice. Half the Providers have no locale — OpenAI,
- * any OpenAI-compatible server and Kokoro report `multilingual` for every Voice —
- * and for those the middle level is **one entry reading "multilingual"** rather
- * than being skipped, so that choosing a Voice is the same act whoever is speaking
+ * Provider, then locale, then Voice. Two Providers have no locale — OpenAI and an
+ * OpenAI Compatible server report `multilingual` for every Voice — and for those
+ * the middle level is **one entry reading "multilingual"** rather than being
+ * skipped, so that choosing a Voice is the same act whoever is speaking
  * (`voices.ts` is the grouping, and the argument).
  *
- * Nothing is fetched until a Provider is tapped. A Voice list is a request against
- * the owner's own account (philosophy rule 4), and it is cached for as long as the
- * app is open because Speechify paginates and Fish merges up to three sources.
+ * Every Enabled Provider is asked for its Voices when the app starts (#24, ADR
+ * 0033), not when it is tapped here. A Voice list is a request against the
+ * owner's own account (philosophy rule 4), and it is held for as long as the app
+ * is open because Speechify paginates and Fish merges up to three sources.
  *
  * **What is chosen here is this book's Voice** (ADR 0010). It is written into the
  * Library entry of the Document that is open, and it becomes the global default as
@@ -123,6 +124,8 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
   }, [looking]);
 
   const enabled = lists.enabled;
+  /** What went wrong with the listing of the Provider looked at, and only that one (#205). */
+  const note = lists.noteOf(looking);
 
   return (
     <>
@@ -178,7 +181,7 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
         <DrawerFooter attention>Enable a provider in Settings to choose a voice.</DrawerFooter>
       )}
 
-      {lists.note ? <DrawerFooter attention>{lists.note}</DrawerFooter> : null}
+      {note ? <DrawerFooter attention>{note}</DrawerFooter> : null}
       {error ? <DrawerFooter attention>{error}</DrawerFooter> : null}
     </>
   );

@@ -64,8 +64,12 @@ export interface VoiceLists {
   voicesOf(provider: ProviderId): readonly VoiceInfo[] | null;
   /** Whether a Provider is being asked right now — by this sheet, another, or the app's start. */
   asking(provider: ProviderId): boolean;
-  /** What the last ask said went wrong, or what a Provider said about itself. */
-  note: string | null;
+  /**
+   * What the last ask of this Provider said went wrong, or what it said about
+   * itself; null once its Voices are held (#205). Kept per Provider, so a
+   * failure is never shown under another Provider's Voices.
+   */
+  noteOf(provider: ProviderId): string | null;
   /** Ask a Provider for its Voices, joining an ask already in flight. Does nothing for a Provider that is not enabled. */
   ask(provider: ProviderId): void;
 }
@@ -77,7 +81,7 @@ function describe(problem: unknown): string {
 export function useVoiceLists(settings: AppSettings): VoiceLists {
   const lists = useSyncExternalStore(subscribeVoiceCatalog, voiceCatalogSnapshot);
   const inFlight = useSyncExternalStore(voiceLists.subscribe, voiceLists.asking);
-  const [note, setNote] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Readonly<Partial<Record<ProviderId, string>>>>({});
 
   /**
    * The settings as they are, for the ask below, which runs after an await and must
@@ -95,19 +99,30 @@ export function useVoiceLists(settings: AppSettings): VoiceLists {
 
   const voicesOf = useCallback((provider: ProviderId) => catalogVoices(lists, settings, provider), [lists, settings]);
   const asking = useCallback((provider: ProviderId) => inFlight.has(scope(settings, provider)), [inFlight, settings]);
+  // A list held since the failure (a Test connection in Settings lists it
+  // too) is the answer the sentence was about, so the sentence goes.
+  const noteOf = useCallback((provider: ProviderId) => (voicesOf(provider)?.length ? null : notes[provider] ?? null), [voicesOf, notes]);
 
   const ask = useCallback((provider: ProviderId) => {
     const settingsNow = settingsRef.current;
     if (!settingsNow.enabledProviders.includes(provider)) return;
-    setNote(null);
+    // Filed under the Provider asked, whichever is shown when the answer comes.
+    const file = (note: string | null) => setNotes((was) => {
+      if ((was[provider] ?? null) === note) return was;
+      const next = { ...was };
+      if (note === null) delete next[provider];
+      else next[provider] = note;
+      return next;
+    });
+    file(null);
     const label = PROVIDER_LABELS[provider];
     voiceLists.load(settingsNow, provider).then(
       (listed) => {
-        if (listed.length === 0) setNote(`${label} answered, and published no Voices.`);
+        if (listed.length === 0) file(`${label} answered, and published no Voices.`);
       },
-      (problem: unknown) => setNote(describe(problem)),
+      (problem: unknown) => file(describe(problem)),
     );
   }, []);
 
-  return { enabled, voicesOf, asking, note, ask };
+  return { enabled, voicesOf, asking, noteOf, ask };
 }

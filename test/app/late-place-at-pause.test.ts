@@ -93,7 +93,7 @@ vi.mock('../../src/app/voice-sheet', () => ({ VoiceSheet: () => null }));
 vi.mock('../../src/app/player', () => ({ Player: () => null }));
 vi.mock('../../src/app/document-cover', () => ({ useDocumentCover: () => null }));
 vi.mock('../../src/app/reader-file-system', () => ({ useReaderFileSystem: () => ({}) }));
-vi.mock('../../src/app/use-voices', () => ({ useVoiceLists: () => ({ voicesOf: () => null, ask() {}, asking: () => false, note: null }) }));
+vi.mock('../../src/app/use-voices', () => ({ useVoiceLists: () => ({ voicesOf: () => null, ask() {}, asking: () => false, noteOf: () => null }) }));
 vi.mock('../../src/app/voice-catalog', () => ({ knownVoice: () => null }));
 vi.mock('../../src/app/controls', () => ({ INK: { page: '#fff', quiet: '#888' } }));
 vi.mock('../../src/app/text-styles', () => ({ TEXT: { subhead: {} } }));
