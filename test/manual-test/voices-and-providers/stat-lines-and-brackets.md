@@ -56,7 +56,7 @@ bash test/manual-test/kit/run-probe.sh BracketsProbe SIMULATOR_UDID /tmp/openrea
 ```
 
 - `testDownloadStatLines`: a cold launch, the Library's `...`, Download, Select
-  all, Download selected, and `1 chapters downloaded` within 90 s. Real Fish
+  all, Download selected, and `1 chapter downloaded` within 90 s. Real Fish
   requests on the free model; no playback.
 - `testFlipBracketSwitch`: attaches to the running app, which must already be
   on General. The UI never puts General over an open reader, so push it with

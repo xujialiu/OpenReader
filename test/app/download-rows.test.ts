@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { downloadedRows, listedInManage, marker, readingChapter, type Marker } from '../../src/app/download-rows';
+import { chapterCount, downloadedRows, listedInManage, marker, readingChapter, type Marker } from '../../src/app/download-rows';
 import { fragmentOf, type ContentsRow } from '../../src/core/document/contents';
 import type { Chapter, DownloadTask } from '../../src/offline/model';
 
@@ -183,5 +183,15 @@ describe('which Contents rows carry the Downloaded check (#134)', () => {
     const rows = [row('a.xhtml', 0), row('b.xhtml', 1)];
     expect(downloadedRows(rows, [entry('nav.0', 0), entry('nav.1', 1)], new Map())).toEqual(new Set());
     expect(downloadedRows(rows, [], new Map())).toEqual(new Set());
+  });
+});
+
+describe('the counts the Download drawer writes (#144)', () => {
+  it('agree in number with the chapters they count', () => {
+    expect(chapterCount(0, 'downloaded')).toBe('0 chapters downloaded');
+    expect(chapterCount(1, 'downloaded')).toBe('1 chapter downloaded');
+    expect(chapterCount(2, 'downloaded')).toBe('2 chapters downloaded');
+    expect(chapterCount(1, 'failed')).toBe('1 chapter failed');
+    expect(chapterCount(3, 'failed')).toBe('3 chapters failed');
   });
 });

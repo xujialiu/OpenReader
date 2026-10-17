@@ -9,7 +9,7 @@ import { useShell } from './routes';
 import { PROVIDER_LABELS } from './settings';
 import { INK, useAccent, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
-import { downloadedChapters, listedInManage, marker, readingChapter, type Marker } from './download-rows';
+import { chapterCount, downloadedChapters, listedInManage, marker, readingChapter, type Marker } from './download-rows';
 import { DRAWER, DrawerList, DrawerRow, DrawerRowText, type DrawerAction } from './drawer';
 import { Icon } from './icon';
 import { useSweep } from './use-sweep';
@@ -24,7 +24,7 @@ const STATE_LINE: Partial<Record<TaskState, string>> = {
   preparing: 'Preparing selected chapter…', downloading: 'Downloading…', queued: 'Queued', waiting: 'No network connection, waiting to reconnect',
   blocked: 'Needs attention', interrupted: 'Interrupted · continues when available',
 };
-const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.length ? `${task.failed.length} chapters failed` : 'Selected chapters downloaded' : STATE_LINE[task.state];
+const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.length ? chapterCount(task.failed.length, 'failed') : 'Selected chapters downloaded' : STATE_LINE[task.state];
 
 /**
  * **Download**, and **Manage**, two pages of a Document's actions drawer
@@ -224,7 +224,7 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
       {downloads.downloadError() ? <Text style={styles.error}>{downloads.downloadError()}</Text> : null}
       {plan && !progressReady ? <Text style={styles.secondary}>Checking saved downloads…</Text> : null}
       {plan ? <View style={styles.line}>
-        <Text style={[styles.secondary, styles.grow]}>{manage ? `${downloads.formatBytes(downloads.occupied(document, choice))} saved` : `${completed} chapters downloaded`}</Text>
+        <Text style={[styles.secondary, styles.grow]}>{manage ? `${downloads.formatBytes(downloads.occupied(document, choice))} saved` : chapterCount(completed, 'downloaded')}</Text>
         {!manage && manageable ? <Pressable accessibilityRole="button" onPress={() => onManage(true)} hitSlop={8} style={styles.manage}>
           <Text style={link}>Manage downloads</Text><Icon name="next" color={accent.reading} size={16} strokeWidth={2} />
         </Pressable> : null}

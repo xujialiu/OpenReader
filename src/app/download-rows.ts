@@ -181,3 +181,11 @@ export function listedInManage(chapters: readonly Chapter[], markers: ReadonlyMa
   for (const c of chapters) if (markers.get(c.id)) for (let at: string | null = c.id; at && !listed.has(at); at = byId.get(at)?.parent ?? null) listed.add(at);
   return listed;
 }
+
+/**
+ * The Download drawer's two counts, `N chapters downloaded` under the Voice and
+ * `N chapters failed` when a download ends with failures, in the number of
+ * what they count: one chapter is `1 chapter downloaded` (#144).
+ */
+export const chapterCount = (count: number, what: 'downloaded' | 'failed'): string =>
+  `${count} ${count === 1 ? 'chapter' : 'chapters'} ${what}`;
