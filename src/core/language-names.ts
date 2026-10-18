@@ -5,7 +5,8 @@
  * `Intl.Locale` has canonicalized it — which is why `tl` is 'Filipino'.
  *
  * A table and not the call, because Hermes ships a cut-down `Intl`: it has no
- * `Intl.Segmenter` (notes/NOTES_2026-09-19.md), and a call that is missing on
+ * `Intl.Segmenter` (notes/NOTES_2026-09-19.md) and no `Intl.DisplayNames`
+ * (notes/NOTES_2026-10-18.md, 13:02), and a call that is missing on
  * the device fails the way this project cannot afford, silently, with a hint
  * that is never sent while every test passes under Node. A table answers the
  * same on both. `test/core/fish-language-hint.test.ts` checks every entry

@@ -56,12 +56,13 @@ scripts, 630 regions, 39 KB of source.
 
 ## The facts it was built on
 
-- **`Intl.DisplayNames` on Hermes is unmeasured**, and a missing call fails on
-  the phone alone, while every test passes under Node. ADR 0032 chose a table
-  for the same reason (`src/core/language-names.ts`). That table is the
-  default `dialect` display (`en-US` is `American English`) and covers only the
-  two-letter codes and Fish's English regions; the picker needs `standard` and
-  every tag a Provider can send, so it is a second table, not an extension.
+- **`Intl.DisplayNames` is absent on Hermes** (measured below), and a missing
+  call fails on the phone alone, while every test passes under Node. ADR 0032
+  chose a table when it was still unmeasured (`src/core/language-names.ts`).
+  That table is the default `dialect` display (`en-US` is `American English`)
+  and covers only the two-letter codes and Fish's English regions; the picker
+  needs `standard` and every tag a Provider can send, so it is a second table,
+  not an extension.
 - **The table is held to Node by enumeration**, not by samples
   (`test/core/locale-names.test.ts`, about 1 s): every two- and three-letter
   code alone and with `-US`, `-001` and `-Latn-CN`; every region with `en-` and
@@ -82,12 +83,21 @@ scripts, 630 regions, 39 KB of source.
   (notes/NOTES_2026-09-19.md), Azure 691 in 154 locales
   (notes/NOTES_2026-09-22.md), and Fish's official listing is read up to 20 pages
   of 100 (`fish.ts`, `MAX_PAGES`).
-- **Hermes's `Intl.Collator`**: _to be measured on the simulator (#232)._
+- **Hermes has no `Intl.DisplayNames`, and its `Intl.Collator` sorts as Node's
+  does** (notes/NOTES_2026-10-18.md, 13:02, iOS 27.0 simulator):
+  `typeof Intl.DisplayNames` is `"undefined"`, so the plugin's call would have
+  thrown on the phone. The collator's sort of Fish's 15 Chinese Voice labels in
+  Hermes is byte-identical to Node's, Han by pinyin before Latin, and the menu
+  showed that order.
+- **A menu of 45 Voices opens as fast as a menu of one** (same note, 12:54): Fish's
+  largest Language, `English`, painted within about a second of the touch and
+  scrolled without a stall. Speechify's and Azure's largest Languages were not
+  measured.
 
 ## Alternatives
 
 - **`Intl.DisplayNames` at run time**, as the plugin calls it: one line instead
-  of a table, but unmeasured on Hermes and silent where it is absent.
+  of a table, and absent on Hermes.
 - **Only the locales the Providers send today**, a table of a few hundred
   entries: smaller, but the first new locale a Provider adds would show as a
   code, and nothing would fail to say so.

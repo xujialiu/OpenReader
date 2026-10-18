@@ -6,9 +6,9 @@
  *
  * Composed from a table (`locale-name-table.ts`, written by
  * `scripts/locale-names.mjs`) rather than the call, for the reason
- * `language-names.ts` gives: Hermes ships a cut-down `Intl`, `DisplayNames` on
- * it has not been measured, and a missing call would fail on the phone alone
- * while every test passed under Node (ADR 0032, ADR 0081).
+ * `language-names.ts` gives: Hermes ships a cut-down `Intl` with no
+ * `DisplayNames` (notes/NOTES_2026-10-18.md, 13:02), and the missing call would
+ * fail on the phone alone while every test passed under Node (ADR 0081).
  * `test/core/locale-names.test.ts` holds the composition to Node's own answer.
  *
  * Where it parts from ICU, deliberately, because no Provider sends these:

@@ -5,7 +5,7 @@ import { localeName } from '../../src/core/locale-names';
 /**
  * #232. The desktop plugin names a Voice's locale with Node's — Zotero's —
  * `Intl.DisplayNames`; the phone composes the same name from a table, because
- * the call is unmeasured on Hermes (ADR 0081). Every check here is against
+ * Hermes has no such call (ADR 0081). Every check here is against
  * Node's own answer, so a newer ICU that names something differently fails here
  * rather than drifting between the phone and the desktop. The fix is
  * `node scripts/locale-names.mjs`.

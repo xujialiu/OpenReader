@@ -68,7 +68,8 @@ first, plus the fourteen English regions `fish.ts` files a voice under. A test
 checks every entry against Node's `Intl.DisplayNames` and that no nameable
 two-letter code is missing. A table rather than the call because it cannot fail
 silently on the device: `Intl.DisplayNames` on Hermes was not measured, and the
-segmenter is the precedent. Fish's library used 59 codes when listed on
+segmenter is the precedent. Measured since: Hermes has no `Intl.DisplayNames`
+(notes/NOTES_2026-10-18.md, 13:02; ADR 0081). Fish's library used 59 codes when listed on
 2026-09-22 (notes, 00:30), every one two letters; a three-letter code gets no
 hint, as a locale the plugin cannot name gets none.
 
@@ -113,6 +114,6 @@ hint.
 - **The plugin's mechanism**, the app passing the locale in `SynthesisOptions`
   and the hint joining the clip's name: offline playback must name saved audio
   without a voice list in hand, so the name cannot depend on one.
-- **`Intl.DisplayNames` at run time**, and a dictionary segmenter: the first is
-  unmeasured on Hermes and would fail silently if absent; the second is a
+- **`Intl.DisplayNames` at run time**, and a dictionary segmenter: the first was
+  unmeasured on Hermes and would fail silently if absent (it is absent, ADR 0081); the second is a
   dependency for a count the owner accepted per character.

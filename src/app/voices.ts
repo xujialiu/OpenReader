@@ -45,8 +45,8 @@ export interface VoiceLevel {
  * The desktop plugin's `compareVoiceLabels`: Chinese collation, which puts Han
  * before Latin and orders it by pinyin (晓…, 云…, then A…Z) instead of by code
  * point somewhere after Z; numbers by value; case and accents ignored. Hermes's
- * `Intl.Collator` on iOS is measured in ADR 0081; a runtime without `Intl` falls
- * back to code points, as the plugin's does.
+ * `Intl.Collator` on iOS sorts exactly as Node's (ADR 0081); a runtime without
+ * `Intl` falls back to code points, as the plugin's does.
  */
 const collator = typeof Intl !== 'undefined' && typeof Intl.Collator === 'function' ? new Intl.Collator(['zh', 'en'], { numeric: true, sensitivity: 'base' }) : null;
 

@@ -3,7 +3,7 @@
  * Writes `src/core/locale-name-table.ts`: what `localeName` (`src/core/locale-names.ts`)
  * reads to name a Voice's locale the way
  * `new Intl.DisplayNames(['en'], { type: 'language', languageDisplay: 'standard' })`
- * does, on a phone whose Hermes may not have that call (ADR 0081).
+ * does, on a phone whose Hermes has no such call (ADR 0081).
  *
  *     node scripts/locale-names.mjs
  *
