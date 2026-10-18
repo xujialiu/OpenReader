@@ -74,6 +74,11 @@ _Avoid_: voice, speaker, provider, engine
 One named speaker a provider offers. A voice belongs to exactly one provider.
 _Avoid_: model, speaker, persona
 
+**Multilingual**:
+The language listed first in the Voice drawer, holding the voices that speak
+whatever language they are given.
+_Avoid_: Multiple languages, mul
+
 **Gateway Headers**:
 The credential a provider reached at an address of the owner's own needs in
 order to get past whatever guards that address. It belongs to one provider, as

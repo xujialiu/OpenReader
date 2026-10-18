@@ -92,6 +92,7 @@ import { drawerDetentHeight } from './drawer-height';
 import { DRAWER_LIST, drawerRowText } from './drawer-list';
 import { createDrawerTurns } from './drawer-turns';
 import { Icon, type IconName } from './icon';
+import { LoadingSpinner } from './loading-spinner';
 import { useShell } from './routes';
 import { TEXT } from './text-styles';
 
@@ -562,16 +563,21 @@ export function DrawerSeparator() {
  * A row of the list that opens the system's short menu (`ChoiceMenu`, ADR
  * 0035): its name, what it is set to, and the two chevrons iOS puts on such a
  * row. The menu grows to the words, including at accessibility text sizes.
+ *
+ * `chosen` need not be among the choices: the row then shows its name alone and
+ * the menu checks nothing (the Voice row on a Language the Voice in use is not
+ * in, #232). `busy` puts the spinner where the chevrons are, while what was
+ * chosen gets ready.
  */
-export function DrawerMenuRow<T extends string | number>({ label, choices, chosen, onChoose }: {
-  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void;
+export function DrawerMenuRow<T extends string | number>({ label, choices, chosen, onChoose, busy = false }: {
+  label: string; choices: readonly Choice<T>[]; chosen: T; onChoose(next: T): void; busy?: boolean;
 }) {
   return (
     <View style={styles.menuRow}>
       <ChoiceMenu label={label} choices={choices} chosen={chosen} onChoose={onChoose}>
         <View style={styles.menuWords}>
           <RowWords label={label} value={choices.find((choice) => choice.value === chosen)?.label} />
-          <Icon name="menu" color={INK.secondary} size={18} />
+          {busy ? <LoadingSpinner /> : <Icon name="menu" color={INK.secondary} size={18} />}
         </View>
       </ChoiceMenu>
       <DrawerSeparator />

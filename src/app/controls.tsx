@@ -577,7 +577,7 @@ export function ChoiceMenu<T extends string | number>({ label, choices, chosen, 
       <Host style={[StyleSheet.absoluteFill, { height }]}>
       <Menu
         label={<RNHostView><View style={styles.menuRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{children}</View></RNHostView>}
-        modifiers={[nativeDisabled(disabled), menuOrder('fixed'), accessibilityElement('ignore'), accessibilityLabel(`${label}, ${current}`), accessibilityAddTraits(['isButton'])]}
+        modifiers={[nativeDisabled(disabled), menuOrder('fixed'), accessibilityElement('ignore'), accessibilityLabel(current ? `${label}, ${current}` : label), accessibilityAddTraits(['isButton'])]}
       >
         {choices.map((choice) => (
           <Toggle key={choice.value} label={choice.label} systemImage={choice.icon} isOn={choice.value === chosen}

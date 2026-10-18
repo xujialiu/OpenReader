@@ -12,6 +12,9 @@ React Native `Modal` with `@expo/ui`'s SwiftUI `BottomSheet`. "Inside the
 drawer's `Modal`" below was measured in the old drawer; the menus in the new one
 are still to be measured there._
 
+_[ADR 0081](0081-voice-menu-and-language-names.md) puts the Voice drawer's Voices
+in a `ChoiceMenu` too: one `Toggle` per Voice of a Language, which can be hundreds._
+
 ## What was done
 
 `@expo/ui` `~57.0.19`, the version Expo SDK 57 pins (`npx expo install @expo/ui`),

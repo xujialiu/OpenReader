@@ -14,13 +14,14 @@
  * and the design file carries the argument; it is not to be re-litigated by adding
  * the greyed-out rows back.
  *
- * ## Three levels, and the middle one is always there
+ * ## Three levels, three menus, and the middle one is always there
  *
- * Provider, then locale, then Voice. Two Providers have no locale — OpenAI and an
- * OpenAI Compatible server report `multilingual` for every Voice — and for those
- * the middle level is **one entry reading "multilingual"** rather than being
- * skipped, so that choosing a Voice is the same act whoever is speaking
- * (`voices.ts` is the grouping, and the argument).
+ * Provider, then Language, then Voice, each a row that opens the system's menu
+ * (#232). Two Providers have no locale — OpenAI and an OpenAI Compatible server
+ * report `mul` for every Voice — and for those the middle level is **one entry
+ * reading "Multilingual"** rather than being skipped, so that choosing a Voice
+ * is the same act whoever is speaking (`voices.ts` is the grouping, the names
+ * and the order, and the argument for each).
  *
  * Every Enabled Provider is asked for its Voices when the app starts (#24, ADR
  * 0033), not when it is tapped here. A Voice list is a request against the
@@ -36,17 +37,13 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
 
 import type { ProviderId } from '../core/providers/types';
 
-import { INK, useAccent } from './controls';
-import { Drawer, DrawerFooter, DrawerMenuRow, DrawerRow, DrawerRowText } from './drawer';
-import { Icon } from './icon';
+import { Drawer, DrawerFooter, DrawerMenuRow } from './drawer';
 import { PROVIDER_LABELS, type AppSettings } from './settings';
 import type { VoiceLists } from './use-voices';
 import { levelOfVoice, voiceLevels } from './voices';
-import { LoadingSpinner } from './loading-spinner';
 
 export interface VoiceSheetProps {
   visible: boolean;
@@ -75,13 +72,13 @@ export function VoiceSheet({ visible, onClose, ...props }: VoiceSheetProps) {
 }
 
 /**
- * Two menu rows, Provider and Language, each the system's short menu (ADR
- * 0035), above the Voices as the drawer's plain list; what is said about them
- * is the list's footer (#117). The rows of chips they replace were a row of
- * Providers that wrapped and a row of locales that scrolled sideways.
+ * Three menu rows, Provider, Language and Voice, each the system's menu (ADR
+ * 0035); what is said about them is the footer under them (#117). Provider and
+ * Language replaced a row of Providers that wrapped and a row of locales that
+ * scrolled sideways (#117); Voice replaced a plain list of the Language's Voices
+ * under the two, so the one choice is made one way at every level (#232).
  */
 function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSheetProps, 'visible' | 'onClose'>) {
-  const accent = useAccent();
   /** Which Provider's Voices are being looked at. The one in use, until another is chosen. */
   const [looking, setLooking] = useState<ProviderId>(lists.enabled?.includes(settings.provider) ? settings.provider : lists.enabled?.[0] ?? settings.provider);
   /** Which locale is open. Null means none has been chosen yet, and the Voice in use decides. */
@@ -94,12 +91,15 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
    * The level shown: the one chosen, or else the one the Voice in use is in.
    * The level in use can be the fortieth of them — Fish Audio publishes voices
    * in forty-odd locales — so the Language row opens on it rather than on
-   * "multilingual". Same reason the contents list opens at the chapter being
+   * "Multilingual". Same reason the contents list opens at the chapter being
    * read: a picker that opens somewhere else does not show you what you have
    * chosen.
    */
   const open = locale ?? inUse ?? levels[0]?.locale ?? null;
   const shown = useMemo(() => levels.find((level) => level.locale === open)?.voices ?? [], [levels, open]);
+  /** A Voice of this Provider and Language is being got ready (`pending`), so the row shows it with the spinner. */
+  const waiting = !!pending && pending.provider === looking && shown.some((voice) => voice.id === pending.voice);
+  const voiceChoices = useMemo(() => shown.map((voice) => ({ value: voice.id, label: voice.label })), [shown]);
 
   /**
    * Opening the sheet asks the Provider in use for its Voices, if its list is not
@@ -156,25 +156,22 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
               onChoose={(next) => setLocale(next)}
             />
           ) : null}
-          <FlatList
-            // A Provider or a Language chosen is a new list, which starts at its top.
-            key={`${looking} ${open ?? ''}`}
-            data={shown}
-            style={styles.voices}
-            keyExtractor={(voice) => voice.id}
-            renderItem={({ item: voice }) => {
-              const chosen = looking === settings.provider && voice.id === settings.voice;
-              const loading = looking === pending?.provider && voice.id === pending.voice;
-              return (
-                <DrawerRow onPress={() => onChoose(looking, voice.id)} accessibilityState={{ selected: chosen, busy: loading }}>
-                  <View style={styles.voice}>
-                    <DrawerRowText style={[styles.voiceLabel, chosen && { color: accent.reading }]}>{voice.label}</DrawerRowText>
-                    {loading ? <LoadingSpinner /> : chosen ? <Icon name="check" color={INK.text} size={20} /> : null}
-                  </View>
-                </DrawerRow>
-              );
-            }}
-          />
+          {shown.length > 0 ? (
+            /*
+             * The Voice in use, checked, when it is in this Language; the Voice
+             * being got ready, with the spinner, while it is. On another
+             * Provider or Language the row names nothing and nothing changes
+             * until a Voice is chosen: picking one for the owner would change
+             * this Document's Voice, and the default, by looking (#232).
+             */
+            <DrawerMenuRow
+              label="Voice"
+              choices={voiceChoices}
+              chosen={waiting && pending ? pending.voice : looking === settings.provider ? settings.voice : ''}
+              busy={waiting}
+              onChoose={(voice) => onChoose(looking, voice)}
+            />
+          ) : null}
           {lists.asking(looking) ? <DrawerFooter>Asking {PROVIDER_LABELS[looking]} for its Voices…</DrawerFooter> : null}
         </>
       ) : (
@@ -186,11 +183,3 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  // As tall as its rows, and no taller than the drawer leaves it, so the
-  // footer sits under the last row of a short list.
-  voices: { flexGrow: 0, flexShrink: 1 },
-  voice: { alignItems: 'center', flexDirection: 'row', gap: 12 },
-  voiceLabel: { flex: 1 },
-});

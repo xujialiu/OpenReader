@@ -106,8 +106,20 @@ final class OfflineFixProbe: XCTestCase {
     choose.tap()
     let heading = app.staticTexts.matching(NSPredicate(format: "label == 'Voice'")).firstMatch
     XCTAssertTrue(heading.waitForExistence(timeout: 5))
-    let anyVoice = app.buttons.matching(NSPredicate(format: "label CONTAINS ' - '")).firstMatch
-    XCTAssertTrue(anyVoice.waitForExistence(timeout: 15), "No Fish voice rows appeared")
+    // The Voice row's menu (#232): its items are the buttons that were not
+    // there before it opened (`DownloadRingProbe.chooseVoiceIfNeeded`).
+    let voiceRow = app.buttons.matching(NSPredicate(format: "label == 'Voice' OR label BEGINSWITH 'Voice, '")).firstMatch
+    XCTAssertTrue(voiceRow.waitForExistence(timeout: 15), "No Voice row appeared")
+    let before = Set(app.buttons.allElementsBoundByIndex.map(\.label))
+    voiceRow.tap()
+    var found: XCUIElement?
+    let deadline = Date().addingTimeInterval(5)
+    repeat {
+      found = app.buttons.allElementsBoundByIndex.first { !before.contains($0.label) && $0.isHittable }
+      if found == nil { Thread.sleep(forTimeInterval: 0.25) }
+    } while found == nil && Date() < deadline
+    XCTAssertTrue(found != nil, "The Voice menu listed no Voice")
+    let anyVoice = found!
     let label = anyVoice.label
     anyVoice.tap()
     XCTAssertTrue(heading.exists, "Choosing must leave Voice open (paused choice)")

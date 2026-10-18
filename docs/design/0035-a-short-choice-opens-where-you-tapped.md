@@ -5,6 +5,10 @@ _The engineering half of this decision is
 Alignment in the reader's appearance panel ([design 0034](0034-lines-that-meet-both-margins.md))
 and Theme in General._
 
+_Extended in [decision 0081](0081-the-voice-is-chosen-like-the-provider-and-the-language.md):
+the Voice drawer's three rows, Provider, Language and Voice, open the same menu,
+and the Voice menu can hold hundreds of choices rather than a few._
+
 ## What changed
 
 A row whose value is one of a few now opens the phone's own small menu, at the

@@ -96,13 +96,20 @@ final class DownloadRingProbe: XCTestCase {
     choose.tap()
     let heading = app.staticTexts.matching(NSPredicate(format: "label == 'Voice'")).firstMatch
     XCTAssertTrue(heading.waitForExistence(timeout: 5))
-    // A voice row is the drawer's full-width plain list row below the two menu
-    // rows (#117 batch 3); since the row stopped naming the provider and id,
-    // its label is the voice's name alone.
-    let anyVoice = app.buttons.matching(NSPredicate(format: "label != '' AND NOT label BEGINSWITH 'Provider' AND NOT label BEGINSWITH 'Language'"))
-      .allElementsBoundByIndex
-      .first { $0.frame.width > 300 && $0.frame.minY > 560 && $0.frame.maxY < 880 }
-    XCTAssertTrue(anyVoice != nil, "No Fish voice rows appeared")
+    // Voice is the drawer's third menu row since #232, under Provider and
+    // Language: `Voice` alone, or `Voice, <name>` when the Voice in use is in
+    // the Language shown. Its menu's items are buttons named by the Voice; they
+    // are the buttons that were not there before the menu opened.
+    let voiceRow = app.buttons.matching(NSPredicate(format: "label == 'Voice' OR label BEGINSWITH 'Voice, '")).firstMatch
+    XCTAssertTrue(voiceRow.waitForExistence(timeout: 15), "No Voice row appeared")
+    let before = Set(app.buttons.allElementsBoundByIndex.map(\.label))
+    voiceRow.tap()
+    var anyVoice: XCUIElement?
+    _ = until(5) {
+      anyVoice = app.buttons.allElementsBoundByIndex.first { !before.contains($0.label) && $0.isHittable }
+      return anyVoice != nil
+    }
+    XCTAssertTrue(anyVoice != nil, "The Voice menu listed no Voice")
     anyVoice!.tap()
     // The Voice drawer is the phone's sheet since #117: no close button, a
     // swipe down puts it away.

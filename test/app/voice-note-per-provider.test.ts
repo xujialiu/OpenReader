@@ -37,12 +37,8 @@ vi.mock('../../src/core/providers/factory', () => ({
 }));
 vi.mock('../../src/app/drawer', () => ({
   Drawer: ({ visible, children }: { visible: boolean; children: ReactNode }) => (visible ? children : null),
-  DrawerFooter: 'DrawerFooter', DrawerMenuRow: 'DrawerMenuRow', DrawerRow: 'DrawerRow', DrawerRowText: 'DrawerRowText',
+  DrawerFooter: 'DrawerFooter', DrawerMenuRow: 'DrawerMenuRow',
 }));
-vi.mock('react-native', () => ({ FlatList: 'FlatList', StyleSheet: { create: <T,>(s: T) => s }, View: 'View' }));
-vi.mock('../../src/app/controls', () => ({ INK: { text: '#000' }, useAccent: () => ({ reading: '#00f' }) }));
-vi.mock('../../src/app/icon', () => ({ Icon: 'Icon' }));
-vi.mock('../../src/app/loading-spinner', () => ({ LoadingSpinner: 'LoadingSpinner' }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const settings = { ...DEFAULT_SETTINGS, provider: 'fish' as const, voice: 'fish/v', enabledProviders: ['fish', 'local'] as ('fish' | 'local')[] };
@@ -54,11 +50,11 @@ function Host({ visible, at = settings }: { visible: boolean; at?: typeof settin
 
 function drawn(tree: ReactTestRenderer) {
   const row = tree.root.findAll((node) => (node.type as unknown) === 'DrawerMenuRow' && node.props.label === 'Provider')[0]!;
-  const list = tree.root.findAll((node) => (node.type as unknown) === 'FlatList')[0]!;
+  const voice = tree.root.findAll((node) => (node.type as unknown) === 'DrawerMenuRow' && node.props.label === 'Voice')[0];
   return {
     choose: row.props.onChoose as (id: string) => void,
     provider: row.props.chosen as string,
-    voices: (list.props.data as { id: string }[]).map((voice) => voice.id),
+    voices: ((voice?.props.choices ?? []) as { value: string }[]).map((choice) => choice.value),
     notes: tree.root.findAll((node) => (node.type as unknown) === 'DrawerFooter' && node.props.attention === true)
       .map((node) => [node.props.children].flat().join('')),
   };
