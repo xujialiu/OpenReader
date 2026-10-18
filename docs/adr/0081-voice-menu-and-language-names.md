@@ -102,6 +102,10 @@ The facts behind it:
   `Serbian (Cyrillic, Serbia)` and `wuu-CN` `Chinese (Wu, Simplified)`. Of the
   154, `languageNames` names 12 differently from the rule it replaced:
   the six dialects, `zh-HK`, `en-HK`, both Serbian and both Inuktitut.
+  Azure's live list in `eastasia` holds exactly these 154 and `mul`, the
+  dialects in lower case, and the drawer's Language menu read exactly what
+  `voiceLevels` computes from it in Node (notes/NOTES_2026-10-18.md, 23:37,
+  iOS 27.0 simulator).
 - **ICU's likely scripts would put a script on Chinese.** `maximize` gives
   `zh-CN` Hans and `zh-HK` and `zh-TW` Hant, so counting a script a tag does not
   write would have named Azure's Chinese `Chinese (Simplified, China)` and
