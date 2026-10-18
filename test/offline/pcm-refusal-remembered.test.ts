@@ -84,6 +84,30 @@ it('a Reading of three sentences asks a server that refuses PCM for PCM once', a
   }
 });
 
+// The playback engine fetches two Utterances at once (engine.ts), so a Reading
+// opens with two requests out before either refusal is answered: each pays it
+// once, and every request after them asks MP3 only. Measured on the simulator
+// at 1.0.0 (9)-beta6 as `pcm, pcm, mp3 × 6`; the owner accepted that bound on
+// 2026-10-18 rather than hold the second request back at every Reading's start
+// on a server that does PCM.
+it('a Reading whose first two fetches are out at once pays the refusal for each of them, and no more', async () => {
+  const settings = settingsAt('https://opening.home.example');
+  serve(settings);
+  const stop = startDownloads();
+  try {
+    await vi.waitFor(() => expect(downloadsReady()).toBe(true));
+    const provider = offlineProvider('opening', settings);
+    const signal = new AbortController().signal;
+    await Promise.all(['Title.', 'Read one.'].map((text) => provider.synthesize(text, { voice: voice.voice, signal })));
+    for (const text of ['Read two.', 'Read three.']) await provider.synthesize(text, { voice: voice.voice, signal });
+    expect(mock.asked.filter((format) => format === 'pcm')).toHaveLength(2);
+    expect(mock.asked.slice(-2)).toEqual(['mp3', 'mp3']);
+    expect(mock.asked).toHaveLength(6);
+  } finally {
+    stop();
+  }
+});
+
 it('a Download of three sentences asks a server that refuses PCM for PCM once', async () => {
   const settings = settingsAt('https://download.home.example');
   serve(settings);

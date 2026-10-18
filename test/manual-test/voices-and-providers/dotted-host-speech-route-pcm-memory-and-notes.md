@@ -108,6 +108,12 @@ change), so no second window exists without a fresh process, and a fresh process
 memory under test. The 20 ms `GET /` before the first synthesis is `warm-connections.ts`'s
 documented warm-up (ADR 0040), not a stray probe.
 
+**Owner's decision (2026-10-18):** the two refusals of a Reading's opening pair are accepted, rather
+than holding the second request back at the start of every Reading on a server that does PCM. ADR
+0013 states the bound, and `test/offline/pcm-refusal-remembered.test.ts` holds it: the opening
+pair pays the refusal once each, every later request asks MP3 only. With that, D's acceptance is
+met by the ledger above (one refusal per request already out, MP3 only from the third request).
+
 ## E. #205 — PASS
 
 Kokoro enabled on srvC while its voices were `ok` (`e-01-kokoro-enabled.png`: switch 1, `Connection
