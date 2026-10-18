@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -182,9 +182,14 @@ describe('ADR 0080: a server of the owner\'s is reached over http:// by any name
   /** The App Transport Security dictionary of the prebuild template's Info.plist. */
   function templateAts(): Ats {
     const dir = mkdtempSync(join(tmpdir(), 'openreader-ats-'));
-    const template = new URL('../node_modules/expo/template.tgz', import.meta.url).pathname;
-    execFileSync('tar', ['-xzf', template, '-C', dir, 'package/ios/HelloWorld/Info.plist']);
-    const xml = readFileSync(join(dir, 'package/ios/HelloWorld/Info.plist'), 'utf8');
+    let xml: string;
+    try {
+      const template = new URL('../node_modules/expo/template.tgz', import.meta.url).pathname;
+      execFileSync('tar', ['-xzf', template, '-C', dir, 'package/ios/HelloWorld/Info.plist']);
+      xml = readFileSync(join(dir, 'package/ios/HelloWorld/Info.plist'), 'utf8');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
     const block = /<key>NSAppTransportSecurity<\/key>\s*<dict>([\s\S]*?)<\/dict>/.exec(xml)![1]!;
     const keys: Ats = {};
     for (const [, key, value] of block.matchAll(/<key>(\w+)<\/key>\s*<(true|false)\/>/g)) keys[key!] = value === 'true';
