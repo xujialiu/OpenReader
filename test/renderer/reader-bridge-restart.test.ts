@@ -3,7 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { segmentDocument } from '../../src/app/segment';
-import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, type ReportedBlock } from '../../src/renderer/messages';
+import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, type ReportedBlock } from '../../src/renderer/messages';
 import { useReaderBridge, type ReaderBridge } from '../../src/renderer/reader-bridge';
 
 /**
@@ -151,6 +151,9 @@ describe('a new page after the web content process ended (#120)', () => {
     page.sent.length = 0;
     const later = utteranceIn(utterances, '2.0', all);
     bridge.clock.onClip({ utterance: later, words: null, duration: 2, rate: 1 } as never);
+    expect(page.sent).toEqual([]);
+    expect(page.displayed).toEqual([THIRD[0].cfi]);
+    report(THIRD);
     expect(page.sent).toEqual([expect.objectContaining({ kind: 'speak', utterance: later })]);
   });
 
@@ -179,6 +182,98 @@ describe('a new page after the web content process ended (#120)', () => {
     expect(kinds()).not.toContain('speak');
     bridge.hold();
     expect(kinds()).toContain('hold');
+  });
+
+  it.each(['show', 'clip'] as const)('after the initial repaint, %s waits for an old chapter the new page has never reported (#195)', (method) => {
+    const utterances = opened();
+    const all = [...FIRST, ...SECOND, ...THIRD];
+    const at = utteranceIn(utterances, '1.0', all);
+    bridge.show(at);
+    bridge.restart();
+    report(SECOND);
+    page.sent.length = 0;
+    const target = utteranceIn(utterances, '0.1', all);
+    if (method === 'show') bridge.show(target);
+    else bridge.clock.onClip({ utterance: target, words: null, duration: 2, rate: 1 });
+    expect(kinds()).not.toContain('speak');
+    expect(page.displayed).toEqual([FIRST[1].cfi]);
+    bridge.clock.onPosition({ utterance: target, clipPosition: 0.6, contentPosition: 0.6, inGap: false });
+    bridge.hold({ stop: true });
+    report(THIRD); // Unrelated report cannot release the cue or repeat display.
+    expect(page.displayed).toHaveLength(1);
+    expect(kinds()).not.toContain('speak');
+    report(FIRST);
+    expect(page.sent.filter((m) => ['speak', 'correct', 'hold'].includes(String(m.kind))).map((m) => m.kind)).toEqual(['speak', 'correct', 'hold']);
+    expect(page.sent.at(-1)).toEqual({ kind: 'hold', stop: true });
+    page.sent.length = 0;
+    report(FIRST);
+    expect(kinds()).not.toContain('speak');
+  });
+
+  it('replaces a waiting target, and ignores the earlier chapter arriving afterwards (#195)', () => {
+    const utterances = opened();
+    const all = [...FIRST, ...SECOND, ...THIRD];
+    bridge.show(utteranceIn(utterances, '1.0', all));
+    bridge.restart(); report(SECOND);
+    bridge.show(utteranceIn(utterances, '0.0', all));
+    const target = utteranceIn(utterances, '2.0', all);
+    bridge.show(target);
+    page.sent.length = 0;
+    report(FIRST);
+    expect(kinds()).not.toContain('speak');
+    report(THIRD);
+    expect(page.sent.filter((m) => m.kind === 'speak')).toEqual([expect.objectContaining({ utterance: target })]);
+    expect(page.displayed).toEqual([FIRST[0].cfi, THIRD[0].cfi]);
+  });
+
+  it('can replace a waiting target with one the current page already knows (#195)', () => {
+    const utterances = opened();
+    const all = [...FIRST, ...SECOND, ...THIRD];
+    const known = utteranceIn(utterances, '1.0', all);
+    bridge.show(known); bridge.restart(); report(SECOND);
+    bridge.show(0);
+    page.sent.length = 0;
+    bridge.show(known);
+    expect(page.sent.filter((m) => m.kind === 'speak')).toEqual([expect.objectContaining({ utterance: known })]);
+    page.sent.length = 0;
+    report(FIRST);
+    expect(kinds()).not.toContain('speak');
+  });
+
+  it('does not take back a browsed page for an unrevealed cue; M explicitly requests its missing section (#195)', () => {
+    const utterances = opened();
+    const all = [...FIRST, ...SECOND, ...THIRD];
+    bridge.show(utteranceIn(utterances, '1.0', all));
+    bridge.restart(); report(SECOND);
+    bridge.readerProps.onWebViewMessage({ type: FOLLOWING_STATE_MESSAGE, following: false });
+    page.sent.length = 0;
+    bridge.clock.onClip({ utterance: 0, words: null, duration: 2, rate: 1 }, { reveal: false, recover: true });
+    expect(kinds()).not.toContain('speak');
+    expect(page.displayed).toEqual([]);
+    bridge.returnToReading(0);
+    expect(page.displayed).toEqual([FIRST[0].cfi]);
+    report(FIRST);
+    expect(page.sent.filter((m) => m.kind === 'speak')).toEqual([expect.objectContaining({ utterance: 0, reveal: true })]);
+  });
+
+  it('waits for installation before displaying a new target and forgets readiness at every restart (#195)', () => {
+    opened();
+    bridge.show(0);
+    bridge.restart();
+    bridge.show(4);
+    expect(page.displayed).toEqual([]);
+    bridge.readerProps.onWebViewMessage({ type: DOCUMENT_MESSAGE, spine: 3, hrefs: ['s0.xhtml', 's1.xhtml', 's2.xhtml'] });
+    expect(page.displayed).toEqual([THIRD[0].cfi]);
+    report(THIRD);
+    bridge.restart();
+    page.sent.length = 0;
+    bridge.show(0);
+    expect(kinds()).not.toContain('speak');
+    report(THIRD);
+    expect(page.displayed.at(-1)).toBe(FIRST[0].cfi);
+    expect(kinds()).not.toContain('speak');
+    report(FIRST);
+    expect(kinds()).toContain('speak');
   });
 
   it('sends the decided body text size again, so the new page stops measuring', () => {

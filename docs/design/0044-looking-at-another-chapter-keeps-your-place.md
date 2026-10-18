@@ -42,13 +42,21 @@ book you have just added has no place to keep. If the contents only looked,
 play would read the book from its first line and take the page back there, so
 a chapter chosen in a new book is where the first play starts, and the latest
 choice wins. It is not saved as the book's place: close the book without
-playing and it opens at its beginning again. The book has a place once you
-play it, tap a sentence in it, or one arrives from another device.
+playing and it opens at its beginning again. The book has a saved place once
+speech starts, or one arrives from another device. A tap can choose where
+Play starts without saving that choice.
 
 **Tapping a sentence still moves the reading**, and so do the buttons that go
 back and forward a sentence or a paragraph. Those point at a sentence and mean
-"read from here". The sentence becomes your place straight away, even before
-anything has been read aloud.
+"read from here". While paused, the highlight moves and the next Play starts
+there, but your saved place stays where speech stopped. Leaving without
+playing comes back to that saved place, not the sentence you only pointed at.
+The new sentence becomes your place only when speech starts there. Waiting for
+a voice to answer, or a refused Play, saves no unheard sentence.
+
+Saving every tap was turned down because an accidental tap while paused could
+replace the place on every device. The cost is that choosing where to start is
+only kept while this Reading stays open; to keep the new place, read from it.
 
 ## Looking, and coming back
 

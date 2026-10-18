@@ -88,10 +88,13 @@ arrives at `reading.play()`, which builds the engine and reads from the cursor.
 A second ref holding "where to resume after a rebuild" was the smaller diff and
 the worse answer: two places would then know where the reading is, and the one
 `readingPosition()` reads — the one that writes the Library — would be the one
-that was cleared. The Reading Position written to the Library is built from
+that was cleared. At that point the Reading Position written to the Library was built from
 `atRef` (ADR 0008), so a cursor cleared at the rebuild also meant
 `readingPosition()` answering null for the whole gap between the rebuild and the
-next Clip.
+next Clip. #96 separates the cursor from persistence (ADR 0044): the last spoken
+ReadingPlace now survives independently, and a paused cursor is only Play's
+starting point. Neither is cleared by an engine rebuild; this is not a second
+cursor used only during a rebuild.
 
 ## Amendment (2026-09-23, #46)
 

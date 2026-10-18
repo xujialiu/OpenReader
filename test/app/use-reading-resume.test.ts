@@ -60,6 +60,7 @@ const engines = vi.hoisted(() => {
   /** `calls` is every load, extend, seek, play and pause in the order they came, for a test about which came first. */
   const built: { deps: Deps; loads: Load[]; seeks: number[]; pauses: number; calls: string[] }[] = [];
   function create(deps: Deps) {
+    let playing = false;
     const engine = { deps, loads: [] as Load[], seeks: [] as number[], pauses: 0, calls: [] as string[] };
     built.push(engine);
     return {
@@ -68,14 +69,14 @@ const engines = vi.hoisted(() => {
         engine.calls.push(`load:${from}`);
       },
       extend() { engine.calls.push('extend'); },
-      play() { engine.calls.push('play'); },
-      pause() { engine.pauses++; engine.calls.push('pause'); },
+      play() { playing = true; engine.calls.push('play'); },
+      pause() { playing = false; engine.pauses++; engine.calls.push('pause'); },
       silence() { engine.calls.push('silence'); },
       seek(utterance: number) { engine.seeks.push(utterance); engine.calls.push(`seek:${utterance}`); },
       setRate() {},
       switchVoice() {},
       cancelVoiceSwitch() {},
-      snapshot: () => ({ playing: false, utterance: 0, rate: 1, queued: 0, fetching: 0 }),
+      snapshot: () => ({ playing, utterance: 0, rate: 1, queued: 0, fetching: 0 }),
       dispose: async () => {},
     };
   }
@@ -690,10 +691,10 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
     const m = mount({ settings: READY, spine: SPINE_OF_FIVE });
     await m.up();
     await m.report([...ONE, ...TWO], 2);
-    // A tapped sentence: the owner has pointed the reading, so it is a place.
+    // A tapped sentence chooses Play's start, not a position to write (#96).
     await m.press((reading) => reading.seekTo(at(FERRY)));
     const place = m.reading.readingPosition();
-    expect(place).not.toBeNull();
+    expect(place).toBeNull();
     bridge.show.mockClear();
     bridge.goToSection.mockClear();
 
@@ -847,9 +848,11 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
     expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
     expect(m.reading.readingPosition()).toBeNull();
 
-    // Play reads from the latest choice, and from then on it is the book's place …
+    // Play starts at the latest choice, but only its playing cue establishes a place.
     await m.press((reading) => reading.play());
     expect(engines.built[0].loads).toEqual([{ length: 9, from: at('Chapter Two.'), quiet: false }]);
+    expect(m.reading.readingPosition()).toBeNull();
+    await m.press(() => engines.built[0].deps.clock.onClip(cue(at('Chapter Two.'))));
     expect(m.reading.readingPosition()).not.toBeNull();
     // … so a row after a pause only browses.
     await m.press((reading) => reading.pause());
@@ -865,7 +868,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
     await m.report(ALL, 3);
     await m.press((reading) => reading.skip('next-sentence'));
     expect(m.reading.status.utterance).toBe(1);
-    expect(m.reading.readingPosition()).not.toBeNull();
+    expect(m.reading.readingPosition()).toBeNull();
 
     await m.press((reading) => reading.goToSection(3));
     expect(bridge.browse).toHaveBeenCalledWith(3);
@@ -1163,8 +1166,10 @@ describe('Play with a newer place still on its way (#54)', () => {
     const m = mount({ settings: READY });
     await m.up();
     await m.report(CHAPTER_ONE, 0);
-    // A sentence the owner pointed at is a place to write …
-    await act(async () => { m.reading.seekTo(1); });
+    // A sentence actually played is a place to write …
+    await m.press((reading) => { reading.seekTo(1); reading.play(); });
+    await m.press(() => engines.built[0].deps.clock.onClip({ utterance: 1, words: null, duration: 1, rate: 1 }));
+    await m.press((reading) => reading.pause());
     expect(m.reading.readingPosition()).not.toBeNull();
     // … until a newer one is taken from another device and is on its way.
     await act(async () => { m.reading.resumeAt(desktopPlace); });
@@ -1172,9 +1177,9 @@ describe('Play with a newer place still on its way (#54)', () => {
     // Landed, the cursor is on the sentence the stored position names: still nothing to write.
     await m.report(BOTH, 2);
     expect(m.reading.readingPosition()).toBeNull();
-    // Moved by the owner, it is theirs again.
+    // Pointing again still does not replace that remote place (#96).
     await act(async () => { m.reading.seekTo(0); });
-    expect(m.reading.readingPosition()).not.toBeNull();
+    expect(m.reading.readingPosition()).toBeNull();
     await m.down();
   });
 
@@ -1304,12 +1309,23 @@ describe('a place that arrives while the reading plays (#105)', () => {
     await m.down();
   });
 
-  it('lets it go when the owner skipped while it played', async () => {
+  it('lets it go when speech starts at the skipped sentence, not merely at the press (#96)', async () => {
     const { m, engine } = await arrivingWhilePlaying();
     await m.press((reading) => reading.skip('next-sentence'));
+    await m.press(() => engine.deps.clock.onClip(cue(1)));
     await m.press((reading) => reading.pause());
     expect(m.reading.status.utterance).toBe(1);
     expect(engine.calls).toEqual(['seek:1', 'pause']);
+    await m.down();
+  });
+
+  it('keeps the newer place when a skip is paused before its Clip starts (#96)', async () => {
+    const { m, engine } = await arrivingWhilePlaying();
+    await m.press((reading) => reading.skip('next-sentence'));
+    await m.press((reading) => reading.pause());
+    expect(m.reading.status.utterance).toBe(2);
+    expect(engine.calls).toEqual(['seek:1', 'pause', 'seek:2']);
+    expect(m.reading.readingPosition()).toBeNull();
     await m.down();
   });
 
@@ -1325,7 +1341,7 @@ describe('a place that arrives while the reading plays (#105)', () => {
     await m.down();
   });
 
-  it('lets it go when a Contents row chooses where a reading with no sentence yet starts (#86)', async () => {
+  it('keeps it when Contents chooses a start but no speech starts before Pause (#96)', async () => {
     const m = mount({ settings: READY });
     await m.up();
     // Play before anything has reported: the reading plays, looking for text, with no sentence.
@@ -1336,8 +1352,8 @@ describe('a place that arrives while the reading plays (#105)', () => {
     expect(taken).toBe(false);
     await m.press((reading) => reading.goToSection(1));
     await m.press((reading) => reading.pause());
-    // Taken, the place would have asked the renderer for its section.
-    expect(bridge.goTo).not.toHaveBeenCalled();
+    // No speech superseded it: the remote place is taken and its section requested.
+    expect(bridge.goTo).toHaveBeenCalledWith('epubcfi(/6/2!/4/6)');
     await m.down();
   });
 

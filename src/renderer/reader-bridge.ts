@@ -529,6 +529,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    */
   const corrected = useRef<CorrectMessage | null>(null);
   const holding = useRef(false);
+  const stopping = useRef(false);
   /**
    * After `restart()`, the section the new page has to report before the
    * sentence is painted on it, or null when nothing is waiting; and the sections
@@ -537,6 +538,12 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    */
   const awaiting = useRef<number | null>(null);
   const reportedSince = useRef<Set<number>>(new Set());
+  const restarted = useRef(false);
+  const pageReady = useRef(true);
+  const restoring = useRef(false);
+  const following = useRef(true);
+  /** Includes the initialLocation already requested by the newly mounted Reader. */
+  const displayedFor = useRef<number | null>(null);
   /**
    * How many spine items the document has, from the message the program posts as
    * it installs. Zero until it arrives, which it does before any section reports.
@@ -608,8 +615,45 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     return () => { if (selectionCallback.current === callback) selectionCallback.current = null; };
   }, []);
   const releaseSelection = useCallback(() => send({ kind: 'lookup', selectionReleased: true }), [send]);
-  const resumeFollowing = useCallback(() => send({ kind: 'lookup', releaseBrowsing: true }), [send]);
+  const resumeFollowing = useCallback(() => {
+    following.current = true;
+    send({ kind: 'lookup', releaseBrowsing: true });
+  }, [send]);
   const closeLookup = useCallback((resumeFollow: boolean) => send({ kind: 'lookup', close: true, resumeFollow }), [send]);
+
+  /**
+   * Retained Blocks describe the Document, not what this page has loaded (#195).
+   * Every cue after a restart uses the current page's reports, not only its
+   * first repaint. One pending cue wins; corrections and a hold belong to it.
+   */
+  const paintAgain = useCallback(() => {
+    const message = cued.current;
+    const block = message ? firstBlock(blocks.current, message) : null;
+    if (!message) {
+      awaiting.current = null;
+      return;
+    }
+    if (restarted.current && block && !reportedSince.current.has(block.sectionIndex)) {
+      awaiting.current = block.sectionIndex;
+      // A repaint during Browsing must wait for the chapter to arrive naturally.
+      // An explicit reveal, or a Reading the page still follows, may request it.
+      if (pageReady.current && displayedFor.current !== block.sectionIndex &&
+          (restoring.current || message.reveal || (message.recover && following.current))) {
+        displayedFor.current = block.sectionIndex;
+        debugLog('renderer', `the app asks epub.js to display ${cutText(block.cfi)} (the new page has not reported the reading's section)`);
+        goToLocation(block.cfi);
+      }
+      return;
+    }
+    awaiting.current = null;
+    displayedFor.current = null;
+    const reveal = restoring.current || message.reveal;
+    restoring.current = false;
+    if (reveal) following.current = true;
+    send({ ...message, reveal });
+    if (corrected.current?.utterance === message.utterance) send(corrected.current);
+    if (holding.current) send(stopping.current ? { kind: 'hold', stop: true } : { kind: 'hold' });
+  }, [send, goToLocation]);
 
   const clock = useMemo<BridgeClock>(
     () => ({
@@ -625,7 +669,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         // Null means the reading and the document are out of step — an Utterance
         // the renderer does not have, or one whose Blocks are not reported. The
         // last highlight is left alone rather than replaced with a guess.
-        if (message && awaiting.current === null) send(message);
+        paintAgain();
       },
       /** One correction, about once a second. This is the only position that crosses the bridge. */
       onPosition(correction: PositionCorrection) {
@@ -635,7 +679,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         if (awaiting.current === null) send(message);
       },
     }),
-    [send],
+    [send, paintAgain],
   );
 
   const setUtterances = useCallback((list: readonly Utterance[], reported: readonly ReportedBlock[]) => {
@@ -661,11 +705,10 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       cued.current = message;
       corrected.current = null;
       holding.current = false;
-      if (awaiting.current !== null) return;
       if (options?.reveal !== false) send({ kind: 'lookup', releaseBrowsing: true });
-      send(message);
+      paintAgain();
     },
-    [send],
+    [send, paintAgain],
   );
 
   const setInset = useCallback(
@@ -745,6 +788,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
 
   const hold = useCallback((options?: { stop?: boolean }) => {
     holding.current = true;
+    stopping.current = options?.stop === true;
     if (DEBUG_MODE) debugLog('playback', `page hold.request utterance=${cued.current?.utterance ?? null} lastElapsedMs=${corrected.current?.elapsedMs ?? null} lastWord=${corrected.current?.word ?? null} deferred=${awaiting.current !== null} stop=${options?.stop === true}`);
     if (awaiting.current !== null) return;
     send(options?.stop ? { kind: 'hold', stop: true } : { kind: 'hold' });
@@ -754,20 +798,27 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     cued.current = null;
     corrected.current = null;
     holding.current = false;
+    awaiting.current = null;
+    displayedFor.current = null;
+    restoring.current = false;
     send({ kind: 'clear' });
   }, [send]);
 
   const returnToReading = useCallback(
     (utterance: number | null) => {
-      // A new page is on its way (#120), and it reveals the reading itself.
-      if (awaiting.current !== null) return;
+      // M is an explicit reveal, including a cue held back while Browsing.
+      if (awaiting.current !== null && cued.current && (utterance === null || cued.current.utterance === utterance)) {
+        cued.current = { ...cued.current, reveal: true };
+        paintAgain();
+        return;
+      }
       if (utterance === null || cued.current?.utterance === utterance) {
         send({ kind: 'return' });
         return;
       }
       show(utterance);
     },
-    [send, show],
+    [send, show, paintAgain],
   );
 
   /** Whether the page only follows, kept so it is sent again when the program installs, as the inset is. */
@@ -821,6 +872,9 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     (index: number) => {
       // First, so the sections the display renders arrive to a page that has
       // stopped following the reading: both are injected, and run in this order.
+      following.current = false;
+      restoring.current = false;
+      if (cued.current) cued.current = { ...cued.current, reveal: false };
       send({ kind: 'browse' });
       debugLog('renderer', `the app asks epub.js to display section ${index} (browse)`);
       goToLocation(String(index));
@@ -836,39 +890,16 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   const restart = useCallback((): string | null => {
+    restarted.current = true;
+    pageReady.current = false;
+    restoring.current = true;
+    following.current = true;
     reportedSince.current = new Set();
     const block = cued.current ? firstBlock(blocks.current, cued.current) : null;
     awaiting.current = block ? block.sectionIndex : null;
+    displayedFor.current = awaiting.current;
     return block ? block.cfi : null;
   }, []);
-
-  /**
-   * After `restart()`, at every section the new page reports: the sentence is
-   * painted again once the page has reported the section it starts in, and
-   * revealed, with its last correction and a pause's hold, so the page shows
-   * what the old one did. A Reading that has moved on into a section the new
-   * page has not reported has that section displayed, once, and waits for it.
-   */
-  const paintAgain = useCallback(() => {
-    const message = cued.current;
-    const block = message ? firstBlock(blocks.current, message) : null;
-    if (!message || !block) {
-      awaiting.current = null;
-      return;
-    }
-    if (!reportedSince.current.has(block.sectionIndex)) {
-      if (awaiting.current !== block.sectionIndex) {
-        awaiting.current = block.sectionIndex;
-        debugLog('renderer', `the app asks epub.js to display ${cutText(block.cfi)} (the reading moved on while the page reopened)`);
-        goToLocation(block.cfi);
-      }
-      return;
-    }
-    awaiting.current = null;
-    send({ ...message, reveal: true });
-    if (corrected.current?.utterance === message.utterance) send(corrected.current);
-    if (holding.current) send({ kind: 'hold' });
-  }, [send, goToLocation]);
 
   const onWebViewMessage = useCallback(
     (event: unknown) => {
@@ -896,6 +927,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         return;
       }
       if (message.type === DOCUMENT_MESSAGE) {
+        pageReady.current = true;
         spine.current = message.spine;
         send({ kind: 'lookup', enabled: lookupEnabled.current });
         // The program has installed, so the two things it may have missed go again.
@@ -921,9 +953,11 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         latest.current.onFollowing?.(true);
         if (followOnly.current) send({ kind: 'followOnly', on: true });
         latest.current.onDocument?.({ spine: message.spine, hrefs: message.hrefs });
+        if (awaiting.current !== null) paintAgain();
         return;
       }
       if (message.type === FOLLOWING_STATE_MESSAGE) {
+        following.current = message.following;
         latest.current.onFollowing?.(message.following);
         return;
       }
@@ -967,6 +1001,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       if (message.anchors) latest.current.onAnchors?.(message.sectionIndex, new Map(message.anchors));
       clearTimeout(preparing.current.get(message.sectionIndex));
       preparing.current.delete(message.sectionIndex);
+      pageReady.current = true;
       reportedSince.current.add(message.sectionIndex);
       if (awaiting.current !== null) paintAgain();
       // After the Blocks, which the reading cannot do without: keeping the size

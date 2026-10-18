@@ -240,9 +240,8 @@ export interface Reading {
    * navigating while paused moves the highlight and leaves the silence alone —
    * which is Zotero's behaviour, verified in its source (ADR 0020).
    *
-   * This is a tapped word: the owner pointing the reading at a sentence, which
-   * makes that sentence the Reading Position even before anything is spoken
-   * (CONTEXT.md, #52).
+   * A tapped word chooses where Play starts. Until speech starts there it is
+   * not a Reading Position, and is neither saved nor synced (#96).
    */
   seekTo(utterance: number): void;
   /** One of the four skips, computed by `playback/navigation.ts` from where the reading is. */
@@ -290,8 +289,8 @@ export interface Reading {
    * somewhere else mid-sentence is the failure design 0020 keeps out of the
    * player. The place is kept instead and settled when the reading stops
    * (#105): taken then if speech is still on the sentence it was on when the
-   * place arrived and nothing was tapped, skipped or chosen since (#154), and
-   * let go otherwise, because the place the phone writes as it reads is the
+   * place arrived (#154), and let go only once speech actually reaches another
+   * sentence (#96), because the place the phone writes as it reads is the
    * newer one. Returns whether the place was taken; a place whose section
    * has not rendered yet is held and tried on every report, like the one the
    * book opened with, and a Play pressed meanwhile waits for it (#54). The
@@ -331,6 +330,8 @@ export interface KnownCredentials {
  * @param onStopped called each time the Reading goes from playing to stopped,
  * whatever stopped it, with the place to write, or null when there is none to
  * write. A stop is a sync moment (ADR 0031); see the stop effect at the end.
+ * @param onReached a new sentence starts playing, or null when a remote place
+ * supersedes local writeback. A paused cursor change never calls it (#96).
  */
 export function useReading(
   settings: AppSettings,
@@ -338,12 +339,15 @@ export function useReading(
   resume: ReadingPlace | null,
   document: string,
   onStopped?: (place: ReadingPlace | null) => void,
+  onReached?: (place: ReadingPlace | null) => void,
 ): Reading {
   const { hasKey, writtenAt } = credentials;
   const onStoppedRef = useRef(onStopped);
+  const onReachedRef = useRef(onReached);
   useEffect(() => {
     onStoppedRef.current = onStopped;
-  }, [onStopped]);
+    onReachedRef.current = onReached;
+  }, [onStopped, onReached]);
   /**
    * The theme the page is painted in (ADR 0022), resolved the same way the shell
    * resolves the app's own — one function, so the chrome and the document cannot
@@ -439,22 +443,21 @@ export function useReading(
    */
   const resumeRef = useRef<ReadingPlace | null>(resume);
   /**
-   * The Utterance a resume landed on, while the cursor is still there.
+   * The last place speech reached, locally or on another device, independent of
+   * the cursor used by taps, skips and Play (#96). A snapshot, not an Utterance
+   * index: newly reported sections can renumber the engine's list.
    *
-   * The stored Reading Position already **is** that place, with its true Stamp —
-   * the desktop's, when the place came from there. Writing it again would put
-   * this device's name and a newer time on a sentence nobody has read here
-   * (measured 2026-09-21: +200 ms and +473 ms after the desktop's stamp), the
-   * upload would carry it, and the desktop would then take its own place back
-   * under the phone's name. ADR 0031: a position's Stamp moves only when speech
-   * stops somewhere new. So `readingPosition()` answers null while the cursor is
-   * exactly here, and this is cleared the moment it moves for any other reason.
+   * Only local speech supplies `toWrite`. Replaying the stored sentence does
+   * not give it a new Stamp (ADR 0031): the old resume write put this device
+   * +200 ms and +473 ms above the desktop's Stamp without speech moving
+   * (measured 2026-09-21). Adopting a remote place clears local writeback even
+   * before its chapter has rendered.
    */
-  const resumedAtRef = useRef<number | null>(null);
+  const reachedRef = useRef<{ place: ReadingPlace | null; toWrite: ReadingPlace | null }>({ place: resume, toWrite: null });
   /**
-   * Nothing in this Document is a Reading Position yet: it opened with no stored
-   * place, no place has arrived from another device, and nothing has been
-   * played, tapped or skipped to.
+   * No starting sentence has been chosen: it opened with no stored place, no
+   * place has arrived from another device, and nothing has been played, tapped
+   * or skipped to. This controls Contents, not persistence (#96).
    *
    * While that holds, a Contents row still chooses where the first Play starts —
    * the most recent choice winning — and the choice is not a Reading Position, so
@@ -501,21 +504,19 @@ export function useReading(
    * Declining it and keeping nothing assumed the phone would outrank it by
    * writing its own place as it read on (ADR 0031). It does not when the owner
    * pauses before speech reaches another sentence: the sentence a resume landed
-   * on is never written (`resumedAtRef`). So the Library held the newer place
+   * on is never written again. So the Library held the newer place
    * while the reading stayed on the older one. The next Play's sync had nothing
    * new to adopt, and reading on wrote the older sentence's continuation over
    * the newer place, on every device. Measured on 2026-09-30 with Play's sync
    * held past its two seconds (notes/NOTES_2026-09-30.md, 19:13).
    *
    * Settled by the effect after `readingPosition`, whichever way the reading
-   * stops. Let go at once when the owner points the reading somewhere
-   * (`seekTo`, `followRow`), and when speech reaches a sentence other than
-   * `at`, the one it was on when the place arrived (#154): from then on the
-   * phone has a newer place of its own (design 0031). `at` is null when the
-   * place arrived before the first cue, and is then the first cue's sentence,
-   * the one the reading started on.
+   * stops. Let go only when speech reaches a place other than `at`, the one
+   * it had reached when the remote place arrived (#154, #96). A paused cursor
+   * is not that place. `at` is null before any position is known and is then
+   * the first playing cue's place. Both are snapshots, immune to renumbering.
    */
-  const lateRef = useRef<{ place: ReadingPlace; at: number | null } | null>(null);
+  const lateRef = useRef<{ place: ReadingPlace; at: ReadingPlace | null } | null>(null);
   /**
    * The sentence to show if the resume is given up on, from the last attempt
    * that failed.
@@ -585,6 +586,23 @@ export function useReading(
   const sectionOf = useCallback((utterance: number): number | null => placeOf(utterance).section, [placeOf]);
 
   /**
+   * The sentence at an Utterance, written as a place (ADR 0008): the Block's
+   * CFI and the Utterance's own characters quoted out of the Block's text.
+   * Used when speech actually reaches it, not when the cursor is pointed at it.
+   */
+  const placeAt = useCallback((at: number): ReadingPlace | null => {
+    const utterance = loadedRef.current[at];
+    const span = utterance?.spans[0];
+    if (!span) return null;
+    const block = loadedBlocksRef.current[span.block];
+    if (!block) return null;
+    // Assertion-stripped: the one spelling the Positions File allows, and the
+    // one the renderer compares by (`canonicalCfi`). The Block keeps epub.js's
+    // own spelling for its own `display`.
+    return readingPlaceAt(createLocator('epub', canonicalCfi(block.cfi)), block.text, span.start, span.end);
+  }, []);
+
+  /**
    * The clock, and there is one.
    *
    * Stable for the engine's whole life, and it reads `bridgeRef` at call time
@@ -609,13 +627,23 @@ export function useReading(
         bridgeRef.current?.clock.onClip(cue, !playIntent.current ? { reveal: false } : asked ? { reveal: true } : { reveal: false, recover: true });
         if (!playIntent.current) bridgeRef.current?.hold();
         atRef.current = cue.utterance;
-        // Speech has moved on from the resumed sentence; the next place is new.
-        if (cue.utterance !== resumedAtRef.current) resumedAtRef.current = null;
-        // And from the sentence a place kept from another device arrived on:
-        // the phone has read on, so its own place is the newer one (#154).
-        const late = lateRef.current;
-        if (late?.at === null) late.at = cue.utterance;
-        else if (late && late.at !== cue.utterance) lateRef.current = null;
+        // A paused seek, speed change or refusal also cues the page. The engine
+        // pauses before cueing a refusal; only a playing cue establishes a place
+        // (#96), after the Clip is prepared and the graph resumed, never at Play
+        // while synthesis is still pending.
+        if (playIntent.current && engineRef.current?.snapshot().playing) {
+          const place = placeAt(cue.utterance);
+          const late = lateRef.current;
+          if (place && late) {
+            if (late.at === null) late.at = place;
+            else if (!samePlace(late.at, place, 'epub')) lateRef.current = null;
+          }
+          const reached = reachedRef.current;
+          if (place && (!reached.place || !samePlace(reached.place, place, 'epub'))) {
+            reachedRef.current = { place, toWrite: place };
+            onReachedRef.current?.(place);
+          }
+        }
         // Once per Clip. `cue.words === null` is the Provider reporting no Word
         // Timings, which is the whole of the Highlight Level (ADR 0005): the
         // Utterance is highlighted, nothing is estimated, and the screen says
@@ -638,7 +666,7 @@ export function useReading(
         lockScreenPosition(correction.contentPosition);
       },
     }),
-    [placeOf],
+    [placeOf, placeAt],
   );
 
   /**
@@ -668,9 +696,8 @@ export function useReading(
    * the owner their place at exactly those two moments, and the next Play read
    * the book's first line and wrote it over the stored place.
    *
-   * So every index that names a sentence of the old list — the cursor, the
-   * sentence a resume landed on — is
-   * carried to the same sentence in the new one (`carryUtterance`: its first
+   * So the cursor's index in the old list is carried to the same sentence in
+   * the new one (`carryUtterance`: its first
    * Block, where it starts there, and its text, which is an exact match and not
    * an estimate), and the engine is loaded again there. `load` is still the one
    * destructive call here, because the queue and the clock hold old numbers that
@@ -709,7 +736,6 @@ export function useReading(
     const carry = (index: number | null) => (index === null ? null : carryUtterance(index, held, incoming));
     const cursor = atRef.current;
     const at = pointed ? cursor : carry(cursor);
-    resumedAtRef.current = carry(resumedAtRef.current);
 
     // `load` cancels a voice switch the engine was preparing (`restart`), so the
     // choice is let go here as a seek lets it go, rather than left spinning.
@@ -726,7 +752,6 @@ export function useReading(
       // would move the page there, under a note saying the reading stopped here.
       engine?.load(next, 0, { quiet: true });
       atRef.current = null;
-      resumedAtRef.current = null;
       setStatus((was) => ({
         ...was,
         playing: false,
@@ -825,13 +850,8 @@ export function useReading(
     // the bookmark is done asking. The resume's own call clears the ref first, so
     // this is a no-op on that path.
     abandonResume();
-    // So is a place from another device kept while the reading plays (#105).
-    lateRef.current = null;
     const at = Math.min(list.length - 1, Math.max(0, Math.trunc(utterance)));
     atRef.current = at;
-    // Pointed somewhere, so wherever the cursor is next is a place to write —
-    // the resume's own seek sets this again right after, which is the exception.
-    resumedAtRef.current = null;
     bridgeRef.current?.show(at);
     // The Utterance, but not the Highlight Level: whether the Clip that is about to
     // be fetched carries Word Timings is not known yet, and the last Clip's answer
@@ -846,10 +866,9 @@ export function useReading(
   /**
    * A tapped word or a skip: the owner pointing the reading at a sentence.
    *
-   * `seekTo`, and the sentence is the Reading Position from now on, spoken or not
-   * (CONTEXT.md, #52): it is written, and a Contents row after it only browses. A
-   * Contents row's own seek, in a book with no place yet, and a stored place
-   * landing go through `seekTo` alone.
+   * `seekTo` chooses where Play starts, without writing a Reading Position
+   * (#96). A Contents row after it only browses. A row's own seek in a Document
+   * without a starting sentence, and a stored place landing, use `seekTo` alone.
    */
   const pointAt = useCallback(
     (utterance: number) => {
@@ -904,9 +923,6 @@ export function useReading(
    * moved it, and says why.
    */
   const followRow = useCallback((section: number, onward: boolean) => {
-    // The owner has pointed the reading, perhaps before the cursor can move: a
-    // place kept from another device while it plays is let go now (#105).
-    lateRef.current = null;
     const target = readingFromRow(
       loadedRef.current,
       blocksRef.current,
@@ -978,8 +994,8 @@ export function useReading(
        * take the page straight back from the chapter the owner chose.
        *
        * Not in a book with no place yet, where the row chooses where to start —
-       * the cursor is not a Reading Position until Play, and while playing there is
-       * no sentence until the first cue, or while Play walks past a cover. And not
+       * the cursor is not a Reading Position until speech starts. While playing,
+       * there is no sentence until the first cue, or while Play walks past a cover. And not
        * while a stored place is still waiting for its section, with no highlighted
        * sentence to keep: there the row gives the place up, as it did before (#51).
        */
@@ -1032,7 +1048,6 @@ export function useReading(
       atRef.current = found.utterance;
       before?.();
       seekTo(found.utterance);
-      resumedAtRef.current = found.utterance;
       setStatus((was) => ({ ...was, resume: sentence, resumeNeedsAttention: found.moved !== null || found.agreement === 'aligned' }));
       return true;
     },
@@ -1083,24 +1098,6 @@ export function useReading(
     abandonResume();
   }, [abandonResume]);
 
-  /**
-   * The sentence at an Utterance, written as a place (ADR 0008): the Block's
-   * CFI and the Utterance's own characters quoted out of the Block's text.
-   * `readingPosition` is this at the cursor, when the cursor is a place to
-   * write, and says why each half is what it is.
-   */
-  const placeAt = useCallback((at: number): ReadingPlace | null => {
-    const utterance = loadedRef.current[at];
-    const span = utterance?.spans[0];
-    if (!span) return null;
-    const block = blocksRef.current[span.block];
-    if (!block) return null;
-    // Assertion-stripped: the one spelling the Positions File allows, and the
-    // one the renderer compares by (`canonicalCfi`). The Block keeps epub.js's
-    // own spelling for its own `display`.
-    return readingPlaceAt(createLocator('epub', canonicalCfi(block.cfi)), block.text, span.start, span.end);
-  }, []);
-
   const resumeAt = useCallback(
     (place: ReadingPlace): boolean => {
       // An ended Reading has no page to take a place on, and keeps none (#106,
@@ -1113,14 +1110,18 @@ export function useReading(
       const at = atRef.current;
       const here = resumeRef.current === null && at !== null ? placeAt(at) : null;
       if (here && samePlace(here, place, 'epub')) {
+        reachedRef.current = { place, toWrite: null };
+        onReachedRef.current?.(null);
         lateRef.current = null;
         return true;
       }
       if (playIntent.current) {
-        lateRef.current = { place, at };
+        lateRef.current = { place, at: reachedRef.current.place };
         return false;
       }
       lateRef.current = null;
+      reachedRef.current = { place, toWrite: null };
+      onReachedRef.current?.(null);
       // Already held: one arrival is passed twice — Play passes on what its own
       // sync adopted, and the adopted-place effect passes the same arrival on the
       // next render (#54). Its section has been asked for already, or is being
@@ -1482,8 +1483,8 @@ export function useReading(
     // Play is the owner saying "read from here", and here is wherever the reading
     // is now. A bookmark whose own section has reported without it has lost its claim.
     abandonResume();
-    // And here is the Reading Position from now on, a Contents row's choice in a
-    // book with no place yet included (#52).
+    // The start has been chosen, a Contents row's choice included (#52). Only
+    // the playing Clip will make it a Reading Position (#96).
     unreadRef.current = false;
     playIntent.current = true;
     revealCue.current = true;
@@ -1868,23 +1869,7 @@ export function useReading(
    * this reads the format from whatever produced the Block rather than from a
    * screen that would have to be told.
    */
-  const readingPosition = useCallback((): ReadingPlace | null => {
-    // A place still pending (#54): the stored position already is that place,
-    // with its true Stamp, and the cursor is what it is on its way to replace —
-    // this device's older sentence, under a place from another device. Written
-    // now, that would be stamped above the newer place and carried to every
-    // device, by a pause, a Clip boundary after a renumbering, or leaving.
-    if (resumeRef.current) return null;
-    const at = atRef.current;
-    if (at === null) return null;
-    // Still on the sentence a resume landed on: the stored position is already
-    // this place, with its true Stamp, and nothing is written (`resumedAtRef`).
-    if (at === resumedAtRef.current) return null;
-    // A Contents row's choice in a book with no place yet is where the first Play
-    // starts, not a place to keep (#52).
-    if (unreadRef.current) return null;
-    return placeAt(at);
-  }, [placeAt]);
+  const readingPosition = useCallback((): ReadingPlace | null => reachedRef.current.toWrite, []);
 
   /**
    * The reading has stopped: the one exit every stop passes through. It stops
@@ -1894,10 +1879,10 @@ export function useReading(
    *
    * First a place from another device kept while it played (#105) is settled.
    * Still kept, it is taken: speech is still on the sentence it was on when
-   * the place arrived and the owner has not moved the reading, so the phone
+   * the place arrived and no new sentence has started, so the phone
    * has nothing newer, the Library already holds the kept place, and while
    * paused the newest place wins (ADR 0031). Had speech reached another
-   * sentence or the owner moved the reading, it was let go then (`lateRef`).
+   * sentence, it was let go then (`lateRef`); an unheard seek cannot do that.
    *
    * Then the place to write goes to `onStopped`, which writes it and starts a
    * sync (`reading-view.tsx`). After the settling, so a place just taken is not

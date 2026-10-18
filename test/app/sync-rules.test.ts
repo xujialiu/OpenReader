@@ -71,38 +71,9 @@ describe('the switch runs its first sync from the hook, once the settings are in
   });
 });
 
-describe('a place a resume landed on is never written again (observation b, ADR 0031)', () => {
-  const reading = code('use-reading.ts');
-
-  it('answers no place while the cursor is on the resumed sentence', () => {
-    const fn = within(reading, 'const readingPosition = useCallback(', '}, [placeAt]);');
-    pin(fn, 'if (at === resumedAtRef.current) return null;', 'use-reading.ts, readingPosition');
-  });
-
-  it('answers no place while a place is still pending, whose Stamp the stored position already carries (#54)', () => {
-    // Without it a pause, a renumbering or leaving the screen wrote this device's
-    // older sentence above a place just taken from the desktop, and carried it back.
-    const fn = within(reading, 'const readingPosition = useCallback(', '}, [placeAt]);');
-    pin(fn, 'if (resumeRef.current) return null;', 'use-reading.ts, readingPosition');
-  });
-
-  it('remembers the landing after the seek that made it, and forgets it when the cursor moves for any other reason', () => {
-    const attempt = within(reading, 'const tryResume = useCallback(', '[seekTo],');
-    expect(attempt.indexOf('seekTo(found.utterance);')).toBeLessThan(attempt.indexOf('resumedAtRef.current = found.utterance;'));
-    const seek = within(reading, 'const seekTo = useCallback(', '[placeOf, abandonResume]);');
-    pin(seek, 'resumedAtRef.current = null;', 'use-reading.ts, seekTo');
-    const clip = within(reading, 'onClip(cue) {', 'atRef.current = cue.utterance;');
-    expect(within(reading, 'onClip(cue) {', 'resumedAtRef.current = null;')).toContain('if (cue.utterance !== resumedAtRef.current) resumedAtRef.current = null;');
-    expect(clip).toContain('atRef.current = cue.utterance;');
-  });
-
-  it('drops the place held for the way out when the cursor yields none, and after an adoption is taken', () => {
-    const view = code('reading-view.tsx');
-    pin(view, 'if (status.utterance !== null) positionRef.current = null;', 'reading-view.tsx, the position effect');
-    pin(view, 'if (adopted && takePlace(adopted.position)) positionRef.current = null;', 'reading-view.tsx, the adoption effect');
-    pin(view, 'if (place && reading.resumeAt(place)) positionRef.current = null;', 'reading-view.tsx, play');
-  });
-});
+// Reading-position writeback is exercised behaviorally by use-reading-resume,
+// reading-stop-writes-and-syncs and late-place-at-pause (#96). The old source
+// guards tied persistence to the cursor; a paused cursor must no longer write.
 
 describe('leaving or pausing on an unmoved place writes nothing (defect 4, ADR 0031)', () => {
   it('asks samePlace before every write, at the one place every write goes through', () => {

@@ -2337,8 +2337,21 @@ ${constants}
     drifting.owed += drifting.speed * dt;
     var whole = drifting.owed > 0 ? Math.floor(drifting.owed) : Math.ceil(drifting.owed);
     if (whole) {
+      var stage = scroller();
+      var before = stage ? stage.scrollTop : null;
       nudge(whole);
       drifting.owed -= whole;
+      /* An unreachable line at the Document's start/end cannot converge (#196).
+         Rest only after a whole-pixel request actually failed to move an edge:
+         subpixel accumulation is not a stall, and the manager still receives
+         the scroll that can append a section. Read the bounds AFTER that call,
+         since an appended section may have made the target reachable. */
+      if (stage && stage.scrollTop === before &&
+          ((whole < 0 && stage.scrollTop <= 0) ||
+           (whole > 0 && stage.scrollTop >= stage.scrollHeight - stage.clientHeight))) {
+        rest();
+        return;
+      }
     }
     if (Math.abs(error) < 0.5 && Math.abs(drifting.speed) < DRIFT_RESTS) {
       rest();

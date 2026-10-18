@@ -37,6 +37,15 @@ that names the script or probe you are about to run.
   — with a fixture (`../fixtures/continuity-fixture.ts`) and the page probes
   `continuity-page-state.js`, `continuity-arm-stalled-view.js`,
   `continuity-disarm-stalled-view.js`.
+- [beta7-reader-fixes.md](beta7-reader-fixes.md) (#96, #195, #196, 1.0.0 (9)-beta7):
+  only speech writes the Reading Position (paused taps, all four skips, a
+  paused Contents row, a stalled Play, a never-played tap, remote adoption's
+  retained Stamp and unchanged Positions-File format, all read straight from
+  the container's `library.json` with `entry-place.cjs`); every cue after a
+  WebContent kill waits for the new page's reported sections, latest target
+  wins, Browsing is not stolen; and a paused Continuous boundary page that
+  requests zero scroll work, measured on the drift's own
+  `rendition.manager.scrollBy` with `scrollby-probe.js`.
 
 `PausedTransportProbe.swift` has no recipe: Play after an idle pause and a
 paused word tap by real touches (#26, #45, #46, #49). Its header says what it

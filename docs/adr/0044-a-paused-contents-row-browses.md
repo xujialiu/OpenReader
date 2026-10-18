@@ -41,15 +41,12 @@ if (!playIntent.current && atRef.current !== null && !unreadRef.current) {
   before: it seeks, and it abandons the place with the "had not rendered yet"
   sentence. The window is the time it takes the opening place's section to
   render: 17–585 ms on the owner's books (#50, #51).
-- **The cursor is a Reading Position.** `unreadRef` starts as
+- **The cursor has a chosen starting sentence.** `unreadRef` starts as
   `resume === null`. It is cleared by `play()`, by `pointAt`, which is the tap
   (`onTap`, and the exported `seekTo`) and all four skips, and by `resumeAt`. A
   Contents row's own seek does not clear it. So in a new Document the most
-  recent row wins, and `readingPosition()` answers null while it holds, so the
-  choice is written nowhere: not to `library.json`, not to the Positions File.
-  CONTEXT.md's Reading Position now says what the code already did for a tap:
-  "the sentence speech stopped on, or the one the owner has since pointed it
-  at".
+  recent row wins. This controls Browsing, not persistence: pointing at a
+  sentence no longer makes it a Reading Position (#96, below).
 
 A browse issues no seek. The measured cost that removes: `engine.seek` is
 `restart(); pump()`, and `pump()` starts `fetchWindow` at once, so a paused
@@ -149,10 +146,41 @@ owner is listening.
   engine at `atRef ?? 0` and read the top of whatever had reported, which is
   #46's failure.
 
+## Only speech writes a Reading Position (#96)
+
+`atRef` remains the playback cursor: a paused tap or Skip changes the highlight
+and where Play starts. `reachedRef` independently holds the last ReadingPlace
+speech reached and the local place eligible for writeback. Both are immutable
+place snapshots rather than Utterance indices, so section renumbering cannot
+turn a saved place into a different sentence.
+
+Only a Clip cue while both the Reading intends to play and the engine's
+snapshot says it is playing advances that place. The engine also cues paused
+prefetches, rate changes and refused sentences; those cannot establish progress.
+A stored or remote place supplies the baseline without local writeback, and
+replaying that same place retains its Stamp. Accepting a new remote place
+retires local writeback immediately, even while its chapter is pending.
+
+`ReadingView` saves through the speech callback, at most once per ten seconds,
+and keeps the last snapshot for stop and unmount. An effect on the displayed
+Utterance was wrong twice: it saved paused taps and missed the first playing
+cue after a tap whose cursor already named that sentence. All stop and leave
+sync moments remain. No Positions File format changes.
+
+The regressions in `reading-stop-writes-and-syncs.test.ts` keep the real Reading,
+engine, Library and sync transport: paused taps and all four Skips preserve the
+last spoken sentence and Stamp through background sync, leave and reopen; a
+never-played Document keeps no position; a late Clip after Pause and a refusal
+save no unheard sentence; Play after a tap still writes once speech starts.
+`use-reading-resume.test.ts` and `late-place-at-pause.test.ts` cover remote
+adoption and retention of a newer place until speech actually moves on. Native
+audio, page layout and transport are doubles, not device evidence.
+
 ## Limits
 
-- A stored place still waiting for its section is given up by a row, as
-  before, rather than kept.
+- A stored place still waiting for its section can lose its claim to Play's
+  start when a row chooses somewhere else. Its persisted position is kept
+  until speech starts at the new choice.
 - The opening place and a place from another device still reveal when they
   land. A browse made before either lands is overridden by it.
 - The finger-drag detection has not been exercised by real touches on a

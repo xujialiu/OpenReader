@@ -178,3 +178,19 @@
   use `|| true` to tolerate no match; do not append `|| echo 0` to `grep -c`,
   which already prints zero. Decide a build's result from its own exit status
   and marker (`BUILD SUCCEEDED` or `BUILD FAILED`), not the watch command.
+
+## The beta7 reader-verification run (2026-10-18)
+
+- **`cacheable-dav.cjs` takes its state directory only from
+  `OPENREADER_FIX2_DAV_STATE`, never from `argv[3]`.** Started as
+  `node cacheable-dav.cjs 8790 /tmp/fix3-ioscheck-01/davstate` (a state path
+  copied from the positional-argument shape of `fix2-dav-stub.cjs`, which does
+  take `argv[3]`), the stub answered `state=/tmp/openreader-fix2-dav` — the
+  shared default, potentially another session's live state — while the passed
+  path was silently ignored. Caught by reading the stub's own startup line
+  before any request was made. Fix: set the environment variable
+  (`OPENREADER_FIX2_DAV_STATE=… node cacheable-dav.cjs PORT`), restart the
+  process, and confirm the startup line names your directory before staging
+  anything; the header's usage comment now says so. General rule: when a kit
+  script documents a state directory, confirm where it actually opened it from
+  the process's own first log line, not from the arguments you passed.

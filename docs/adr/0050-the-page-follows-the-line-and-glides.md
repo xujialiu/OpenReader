@@ -385,6 +385,21 @@ review fixes after that changed the rest gate and the paragraph glide again.
   the first `touchmove`, `clear`, `browse` and every instant move. `drift()` rests
   when `!state.follow`, when browsing, or in By line. A pause stops the words, so
   the drift finishes its last approach, within about a second, and rests.
+  A target beyond the Document's scroll range also rests (#196): after a
+  whole-pixel `nudge`, if the container did not move and is at the boundary in
+  the requested direction, no next frame is scheduled. `rest` clears velocity,
+  fractional debt and the previous frame time, but retains the target. A new
+  word or placing after a layout change can wake it normally. The boundary is
+  read after `nudge`, because the manager may append a section during that call;
+  the manager still receives the scroll, without its `ignore` flag. A frame
+  with no whole pixel owed is not a stall.
+  `continuous-boundary-rest.test.ts` runs the real approach, glide, drift and
+  nudge against a clamped whole-pixel container and a controlled frame queue.
+  Before this gate, all seven unreachable-target scenarios were still looping
+  at the 600-frame bound; afterwards they rest within 120 frames and request
+  none during another 36,000-frame allowance. Reachable/subpixel movement,
+  subsequent targets, an enlarged layout and a section appended during a
+  scroll are controls. This measures scheduling logic, not native battery use.
 - **The rest gate and the program's own scroll (#58, ADR 0045).** The gate exists
   because iOS drops epub.js's correction scroll while *iOS* is moving the page:
   under a finger, in momentum, in a bounce.
