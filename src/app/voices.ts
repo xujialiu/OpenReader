@@ -1,6 +1,6 @@
 /**
- * The Voice list, as two levels (ADR 0020), named and ordered as the desktop
- * plugin's are (#232, ADR 0081).
+ * The Voice list, as two levels (ADR 0020), ordered as the desktop plugin's are
+ * (#232) and named as the owner chose (#300, ADR 0081).
  *
  * The picker is provider → Language → Voice, and the middle level is the reason
  * this file exists. Two of the six Providers do not have one: Fish Audio,
@@ -21,7 +21,7 @@
  * (`test/README.md`).
  */
 
-import { localeName } from '../core/locale-names';
+import { languageNames } from '../core/locale-names';
 import { MULTILINGUAL, type VoiceInfo } from '../core/providers/types';
 
 /** What the level of Voices that speak any language is called (CONTEXT.md). The one place the word is written. */
@@ -55,16 +55,11 @@ export function compareLabels(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** The tag up to its first hyphen: `en` for `en-US`, `zh` for `zh-Hans-CN`. */
-function baseLanguage(locale: string): string {
-  return locale.replace(/-.*$/, '');
-}
-
 /**
- * Each locale's name, as the plugin's `dropdownLabels` writes it: with its
- * region (and script) only where the list holds its language under more than
- * one locale. Kokoro's `en-US` and `en-GB` read `English (United States)` and
- * `English (United Kingdom)`; its lone `ja-JP` reads `Japanese`.
+ * Each locale's name (`languageNames`): only what tells it apart from the
+ * Provider's other Languages of its language. Kokoro's `en-US` and `en-GB` read
+ * `English (United States)` and `English (United Kingdom)`; its lone `ja-JP`
+ * reads `Japanese`; Azure's `zh-CN-liaoning` reads `Chinese (Liaoning)`.
  *
  * **Unlike the plugin, no two locales are merged.** It files Azure's `zh-CN`,
  * `zh-HK` and `zh-TW` under one `Chinese` because Zotero's own dropdown does
@@ -72,12 +67,9 @@ function baseLanguage(locale: string): string {
  * is not hidden among Mandarin ones by a name that cannot tell them apart.
  */
 function levelLabels(locales: readonly string[]): Map<string, string> {
-  const count = new Map<string, number>();
-  for (const locale of locales) count.set(baseLanguage(locale), (count.get(baseLanguage(locale)) ?? 0) + 1);
-  return new Map(locales.map((locale) => {
-    if (locale === MULTILINGUAL) return [locale, MULTILINGUAL_LABEL];
-    return [locale, localeName((count.get(baseLanguage(locale)) ?? 0) > 1 ? locale : baseLanguage(locale))];
-  }));
+  const names = languageNames(locales.filter((locale) => locale !== MULTILINGUAL));
+  if (locales.includes(MULTILINGUAL)) names.set(MULTILINGUAL, MULTILINGUAL_LABEL);
+  return names;
 }
 
 /**

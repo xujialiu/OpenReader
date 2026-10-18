@@ -4,8 +4,8 @@ import { levelOfVoice, MULTILINGUAL_LABEL, voiceInList, voiceLevels } from '../.
 import { MULTILINGUAL, type VoiceInfo } from '../../src/core/providers/types';
 
 /**
- * The middle level of the Voice picker (ADR 0020), named and ordered as the
- * desktop plugin's (#232, ADR 0081).
+ * The middle level of the Voice picker (ADR 0020), ordered as the desktop
+ * plugin's (#232) and named as the owner chose (#300, ADR 0081).
  *
  * Half the Providers report a real locale per Voice and half report none, and the
  * decision is that the level exists either way — one entry reading "Multilingual"
@@ -49,14 +49,24 @@ describe('voiceLevels', () => {
   it('keeps every Chinese region a level of its own, unlike the desktop plugin (#232)', () => {
     // Azure's Cantonese (zh-HK) Voices would otherwise sit among the Mandarin ones
     // under one "Chinese", with local names (曉曼, 晓晓) that do not say which is which.
-    const levels = voiceLevels([voice('a', 'zh-CN'), voice('b', 'zh-HK'), voice('c', 'zh-TW'), voice('d', 'zh-CN-sichuan')]);
-    // Compared by locale: where `, SICHUAN)` falls against `)` is the collator's
-    // business, and Hermes's need not agree with Node's.
-    expect(levels.map((level) => [level.locale, level.label]).sort(([a], [b]) => (a < b ? -1 : 1))).toEqual([
+    // A dialect is named by its place alone, and Hong Kong is Hong Kong (#300); they
+    // sort by name among the regions, as every Language does.
+    const levels = voiceLevels([voice('a', 'zh-CN'), voice('b', 'zh-HK'), voice('c', 'zh-TW'), voice('d', 'zh-CN-sichuan'), voice('e', 'zh-CN-liaoning')]);
+    expect(levels.map((level) => [level.locale, level.label])).toEqual([
       ['zh-CN', 'Chinese (China)'],
-      ['zh-CN-sichuan', 'Chinese (China, SICHUAN)'],
-      ['zh-HK', 'Chinese (Hong Kong SAR China)'],
+      ['zh-HK', 'Chinese (Hong Kong)'],
+      ['zh-CN-liaoning', 'Chinese (Liaoning)'],
+      ['zh-CN-sichuan', 'Chinese (Sichuan)'],
       ['zh-TW', 'Chinese (Taiwan)'],
+    ]);
+  });
+
+  it('names Serbian’s two scripts by the script alone (#300)', () => {
+    // Azure has the same two Voices in each; the country is the same, so it is not said.
+    const levels = voiceLevels([voice('a', 'sr-RS'), voice('b', 'sr-Latn-RS')]);
+    expect(levels.map((level) => [level.locale, level.label])).toEqual([
+      ['sr-RS', 'Serbian (Cyrillic)'],
+      ['sr-Latn-RS', 'Serbian (Latin)'],
     ]);
   });
 

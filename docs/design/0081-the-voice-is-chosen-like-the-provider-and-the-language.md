@@ -1,8 +1,9 @@
 # The voice is chosen like the provider and the language
 
 _The engineering half of this decision is
-[ADR 0081](../adr/0081-voice-menu-and-language-names.md). Issue
-[232](https://github.com/xujialiu/OpenReader/issues/232)._
+[ADR 0081](../adr/0081-voice-menu-and-language-names.md). Issues
+[232](https://github.com/xujialiu/OpenReader/issues/232) and
+[300](https://github.com/xujialiu/OpenReader/issues/300)._
 
 ## What the owner saw
 
@@ -21,18 +22,29 @@ voices, that is no order anyone can search by eye.
 - **Voice is a third row, opened the same way.** It names the voice in use, and
   its menu lists every voice of the language shown, with a check on the one in
   use. Choosing one reads with it, as tapping a row did before.
-- **Languages have their full English names**, as the desktop plugin writes
-  them: `English (United States)`, never `en-US` or `American English`. The
-  country is named only when the provider has the same language in more than
-  one country. Kokoro has English twice, so it shows `English (United Kingdom)`
-  and `English (United States)`, but `Japanese` alone.
+- **Languages have their full English names**: `English (United States)`,
+  never `en-US` or `American English`. The brackets say only what tells a
+  language apart from the provider's others of the same language:
+  - **The country**, only when the provider has the language in more than one.
+    Kokoro has English twice, so it shows `English (United Kingdom)` and
+    `English (United States)`, but `Japanese` alone.
+  - **A regional dialect by its place alone**: Azure's Liaoning voices are
+    `Chinese (Liaoning)`, as are its Guangxi, Henan, Shaanxi, Shandong and
+    Sichuan ones, even for a provider whose only Chinese is a dialect.
+  - **The alphabet, where that is the difference**: Azure has the same two
+    Serbian voices in each alphabet, `Serbian (Cyrillic)` and
+    `Serbian (Latin)`. An unusual alphabet is named even when it is the only
+    one; where the country differs too, both are named.
+  - **Short place names**: `Hong Kong` and `Macao`, not `Hong Kong SAR China`.
+
+  `Wu Chinese` (Shanghainese) and `Cantonese` keep those names.
 - **`Multilingual`** comes first, with a capital letter, and the other
   languages follow in alphabetical order.
 - **Voices are in alphabetical order**, as the desktop plugin sorts them.
   Chinese names come first, in pinyin order, then the Latin ones from A to Z.
 - **Chinese stays split by country and region.** Azure's voices for mainland
   China, Hong Kong and Taiwan are three languages: `Chinese (China)`,
-  `Chinese (Hong Kong SAR China)` and `Chinese (Taiwan)`. The desktop plugin
+  `Chinese (Hong Kong)` and `Chinese (Taiwan)`. The desktop plugin
   puts all three under one `Chinese`, and has been asked to stop
   ([Zotero-OpenReader issue 223](https://github.com/xujialiu/Zotero-OpenReader/issues/223)).
 - **Looking at another provider or language chooses nothing.** If the voice in
@@ -45,9 +57,12 @@ voices, that is no order anyone can search by eye.
 
 - **One way to choose.** All three levels open the same kind of menu from a row,
   so choosing a voice works the same way as the two choices above it.
-- **Names a person reads.** `zh-HK` is a code. `Chinese (Hong Kong SAR China)`
-  says what the voices speak. The phone and the desktop now use the same words
-  for the same thing.
+- **Names a person reads.** `zh-HK` is a code, and so, nearly, was the first
+  name the phone gave it, `Chinese (Hong Kong SAR China)`, with the dialects in
+  capitals after a country the plain Chinese already named:
+  `Chinese (China, LIAONING)`. `Chinese (Hong Kong)` and `Chinese (Liaoning)`
+  say what the voices speak and nothing else. `Serbian (Serbia)` did not say
+  that its voices read Cyrillic; `Serbian (Cyrillic)` does.
 - **Alphabetical order makes a long list searchable.** In a menu with hundreds
   of entries, the only way to find a voice you know by name is to know where
   its name falls.
@@ -65,11 +80,13 @@ voices, that is no order anyone can search by eye.
   found by its name.
 - **The names are English only**, whatever language the phone is set to, as
   the rest of the app is.
-- **A few names are awkward.** A regional dialect that has no English name is
-  written as the provider spells it, in capitals: `Chinese (China, SICHUAN)`.
-  That is how the desktop plugin writes it too.
-- **The phone and the desktop disagree about Chinese** until the plugin follows
-  issue 223.
+- **The phone and the desktop disagree** about Chinese, Hong Kong, the
+  dialects and Serbian until the desktop plugin follows
+  [Zotero-OpenReader issue 223](https://github.com/xujialiu/Zotero-OpenReader/issues/223),
+  where it has been asked to use the same names.
+- **Hong Kong sits among the provinces.** Languages are in alphabetical order,
+  so `Chinese (Hong Kong)` falls between `Chinese (Henan)` and
+  `Chinese (Liaoning)`, and `Wu Chinese` is far below the other Chinese.
 - **The menu covers part of the drawer while it is open**, and the row turns
   into the menu as it opens, as the other two rows already do (decision 0035).
 
@@ -87,3 +104,15 @@ voices, that is no order anyone can search by eye.
   voices are Cantonese.
 - **The provider's own order.** It looks deliberate for one provider and
   arbitrary for another, and none of them sort by name.
+- **Keeping the country beside a dialect**, `Chinese (China, Liaoning)`: it
+  says China twice over for a province.
+- **The provider's own names for the dialects**, such as
+  `Chinese (Northeastern Mandarin)`: few readers know which province that is.
+- **`Chinese (Wu)` and `Chinese (Cantonese)`**, to keep them with the other
+  Chinese: Cantonese would then sit beside `Chinese (Hong Kong)`, whose voices
+  speak Cantonese too, and the two could not be told apart by name.
+- **The dialects listed together after `Chinese (China)`**: one language would
+  then be in an order of its own, and a dialect could not be found where its
+  name falls.
+- **Naming Simplified and Traditional** for every Chinese: the place already
+  says it, and every Chinese name would grow longer.

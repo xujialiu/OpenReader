@@ -74,8 +74,14 @@ _Avoid_: voice, speaker, provider, engine
 One named speaker a provider offers. A voice belongs to exactly one provider.
 _Avoid_: model, speaker, persona
 
+**Language**:
+One way of speaking that a Provider offers Voices in: a language and, where
+the Provider has it in more than one place or script, which one. The Voice
+drawer lists Languages between Provider and Voice.
+_Avoid_: locale, dialect, accent, region
+
 **Multilingual**:
-The language listed first in the Voice drawer, holding the voices that speak
+The Language listed first in the Voice drawer, holding the voices that speak
 whatever language they are given.
 _Avoid_: Multiple languages, mul
 

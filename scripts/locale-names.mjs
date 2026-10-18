@@ -17,6 +17,11 @@
  * - **Scripts and regions** as they read inside a language's name, which is not
  *   always how they read alone: `Hans` is `Simplified` in `Chinese (Simplified)`
  *   but `Simplified Han` on its own. So each is read out of `English (…)`.
+ * - **Likely scripts**: the script ICU's likely subtags give each language
+ *   (`Intl.Locale#maximize`: `sr` is Cyrillic), and each language and region
+ *   whose script is not the language's own (`sr-ME` is Latin, `zh-TW` is
+ *   Traditional). `languageNames` reads it to tell a written script from the one
+ *   a tag means without writing it (#300).
  */
 
 import { writeFileSync } from 'node:fs';
@@ -44,6 +49,15 @@ const DIGITS = '0123456789';
 function nameOf(tag) {
   try {
     return names.of(tag);
+  } catch {
+    return undefined;
+  }
+}
+
+/** The script ICU's likely subtags give a tag, or nothing. */
+function likelyScript(tag) {
+  try {
+    return new Intl.Locale(tag).maximize().script;
   } catch {
     return undefined;
   }
@@ -91,7 +105,19 @@ export function localeNameTables() {
     const name = qualifier(code);
     if (name !== undefined) regions[code] = name;
   }
-  return { languages, aliases, scripts, regions };
+
+  // A numeric region falls back to the language's own script: no Provider sends one.
+  const likelyScripts = {};
+  for (const language of Object.keys(languages)) {
+    const script = likelyScript(language);
+    if (!script) continue;
+    likelyScripts[language] = script;
+    for (const region of Object.keys(regions).filter((code) => /^[A-Z]{2}$/.test(code))) {
+      const here = likelyScript(`${language}-${region}`);
+      if (here && here !== script) likelyScripts[`${language}-${region}`] = here;
+    }
+  }
+  return { languages, aliases, scripts, regions, likelyScripts };
 }
 
 function table(name, doc, entries) {
@@ -102,14 +128,15 @@ function table(name, doc, entries) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { languages, aliases, scripts, regions } = localeNameTables();
+  const { languages, aliases, scripts, regions, likelyScripts } = localeNameTables();
   const text = [
     `// Written by scripts/locale-names.mjs from the ICU ${process.versions.icu} in Node ${process.version}. Do not edit it; run the script.\n`,
     table('LANGUAGES', 'A language code, as ICU canonicalizes it, and its English name.', languages),
     table('LANGUAGE_ALIASES', 'A language code ICU replaces, and the tag it replaces it with.', aliases),
     table('SCRIPTS', 'A script code, and how it reads inside the parentheses of a language’s name.', scripts),
     table('REGIONS', 'A region code, and how it reads inside the parentheses of a language’s name.', regions),
+    table('LIKELY_SCRIPTS', 'A language code, or a language and region whose script is not the language’s own, and the script ICU’s likely subtags give it.', likelyScripts),
   ].join('\n');
   writeFileSync(OUT, text);
-  console.log(`${OUT}: ${Object.keys(languages).length} languages, ${Object.keys(aliases).length} aliases, ${Object.keys(scripts).length} scripts, ${Object.keys(regions).length} regions`);
+  console.log(`${OUT}: ${Object.keys(languages).length} languages, ${Object.keys(aliases).length} aliases, ${Object.keys(scripts).length} scripts, ${Object.keys(regions).length} regions, ${Object.keys(likelyScripts).length} likely scripts`);
 }
