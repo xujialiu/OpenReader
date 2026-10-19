@@ -32,6 +32,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PortalHost } from 'react-native-teleport';
 
+import { DEBUG_MODE } from '../debug/mode';
+
 // WALKTHROUGH-HARNESS
 import { useHarnessCommands, type HarnessCommand } from './walkthrough-harness';
 
@@ -154,7 +156,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
         appearance={settings.appearance}
         onChange={(next) => setSettings({ ...settings, appearance: next })}
       />
-      {actions ? <ReaderActions document={id} appearance onClose={() => setActions(false)} /> : null}
+      {actions ? <ReaderActions document={id} appearance debugNote={DEBUG_MODE} onClose={() => setActions(false)} /> : null}
     </View>
   );
 }

@@ -1,9 +1,13 @@
+import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { readLocator, type DocumentId, type ReadingPosition, type ReadingSpineItem } from '../core/document';
 import { documentNameProblem } from '../core/folders';
+import { localStamp } from '../debug/debug-log';
+import { debugNoteCopy, writeDebugNote } from '../debug/debug-note';
 import { spineIndexOf } from '../renderer';
 import { AppearanceControls, FontList } from './appearance-sheet';
 import { INK } from './controls';
+import { DebugNoteAlert } from './debug-note-alert';
 import { Drawer, DrawerChevron, DrawerFooter, DrawerRow, DrawerRowText, DrawerScroll, type DrawerAction } from './drawer';
 import { DownloadContent } from './download-sheet';
 import { HighlightPage } from './highlight-section';
@@ -56,8 +60,16 @@ const TITLES: Record<Exclude<Page, 'menu' | 'move'>, string> = { appearance: 'Ap
  * **Another Document** (#151). The Library stays live behind the drawer, so a
  * touch on another row's `…` hands this drawer a new `document`. It starts at
  * that Document's menu rather than keeping the page it was on.
+ *
+ * **Debug** (#305, ADR 0082) is granted like `appearance`: the reader passes
+ * `debugNote` in Debug Mode, and nothing else does. It is the menu's last row.
+ * The tap fixes the Debug Note's time; the phone's alert over the drawer
+ * (`DebugNoteAlert`) takes the comment. Save and Copy writes the note, copies
+ * the time and the comment, and closes the drawer; a copy that fails leaves the
+ * note written and the drawer open, with the failure under the rows, as a
+ * failed Share is. Cancel writes nothing and leaves the menu as it was.
  */
-export function ReaderActions({ document, onClose, onDelete, onSelect, appearance = false, movable = false }: { document: DocumentId; onClose(): void; onDelete?(): void; onSelect?(): void; appearance?: boolean; movable?: boolean }) {
+export function ReaderActions({ document, onClose, onDelete, onSelect, appearance = false, movable = false, debugNote = false }: { document: DocumentId; onClose(): void; onDelete?(): void; onSelect?(): void; appearance?: boolean; movable?: boolean; debugNote?: boolean }) {
   const { library, settings, setSettings } = useShell();
   const entry = library.entries.find((e) => e.id === document);
   const held = useHeldReading().current;
@@ -71,6 +83,8 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   const [page, setPage] = useState<Page>('menu');
   const [renaming, setRenaming] = useState(false);
   const [sharing, setSharing] = useState(false);
+  /** The Debug Note's time while its alert is up (#305), or null. */
+  const [noting, setNoting] = useState<string | null>(null);
   /** The menu page's one failure line: a Share that failed, or a name that could not be written (#215). */
   const [failure, setFailure] = useState<string | null>(null);
   // Download's Select all, which only Download knows the rows for.
@@ -88,6 +102,12 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
     setSharing(true);
     setFailure(null);
     shareDocument(entry).catch((problem: unknown) => setFailure(problem instanceof Error ? problem.message : String(problem))).finally(() => setSharing(false));
+  };
+  const saveNote = (time: string, comment: string) => {
+    setNoting(null);
+    writeDebugNote({ time, document: { id: document, title: entry.title }, comment });
+    Clipboard.setStringAsync(debugNoteCopy(time, comment))
+      .then(onClose, (problem: unknown) => setFailure(`The Debug Note is saved, but it could not be copied: ${problem instanceof Error ? problem.message : String(problem)}`));
   };
   const back = BACK[page];
   const onAppearance = (next: typeof settings.appearance) => setSettings((was) => ({ ...was, appearance: next }));
@@ -110,6 +130,9 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
       {onDelete ? <DrawerRow icon="trash" iconColour={INK.attention} onPress={onDelete}>
         <DrawerRowText style={{ color: INK.attention }}>Delete</DrawerRowText>
       </DrawerRow> : null}
+      {debugNote ? <DrawerRow icon="bug" onPress={() => { setFailure(null); setNoting(localStamp(Date.now())); }}>
+        <DrawerRowText>Debug</DrawerRowText>
+      </DrawerRow> : null}
       {failure ? <DrawerFooter attention>{failure}</DrawerFooter> : null}
     </DrawerScroll> : null}
     {page === 'move' ? move.body : null}
@@ -131,6 +154,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
         try { library.rename(document, name); onClose(); }
         catch (problem) { setFailure(problem instanceof Error ? problem.message : String(problem)); }
       }} /> : null}
+    {noting ? <DebugNoteAlert time={noting} onCancel={() => setNoting(null)} onSave={(comment) => saveNote(noting, comment)} /> : null}
   </Drawer>;
 }
 /** The spine item a stored Reading Position is in, read off its locator (`spineIndexOf`), or null for none. */

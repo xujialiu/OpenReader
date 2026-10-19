@@ -20,15 +20,19 @@ lines that mattered were gone.
 The copies of the app the owner installs on their own phone now keep a record
 of what the app did: the **Debug Log**. After the owner reports a fault, roughly
 when it happened is enough: the Mac copies the record off the phone, and the
-lines around that time are read. There is no button to mark the moment, and
-nothing on the screen changes except one thing, the version at the foot of
-Settings, which ends in `-debug` so the owner can see which kind of copy is
-installed.
+lines around that time are read. Nothing on the screen changed except one
+thing, the version at the foot of Settings, which ends in `-debug` so the owner
+can see which kind of copy is installed. There was no button to mark the moment
+either, until [design 0082](0082-a-fault-can-be-noted-the-moment-it-is-seen.md)
+showed that roughly when was not enough: the reader's `…` menu now has a `Debug`
+row for a **Debug Note**.
 
 Whether a copy of the app has this is decided when that copy is made, not in
 Settings. The owner's own copies are always made with it. A copy made without
 thinking about it, which is what a released app would be, has none of it: it
-records nothing, keeps no file, and its version has no `-debug`.
+records nothing, keeps no file, and its version has no `-debug`. Since design
+0082 it does one thing with the record: it deletes one that a copy with Debug
+Mode left on the phone.
 
 ## What goes in it
 
@@ -103,12 +107,13 @@ only when the owner connects it to the Mac and copies it off.
 
 ## What it costs
 
-At most 20 MB of the phone's storage. The record is kept in four parts of at
-most 5 MB each; when the fourth is full, the oldest part is deleted, so the
-record always holds the most recent 15 to 20 MB. Reckoned from the length of
-its lines rather than measured on the phone, an hour of listening writes about
-two thirds of a megabyte, so the record holds more than a day of listening,
-and an idle reader left open writes about a tenth of that.
+At most 100 MB of the phone's storage, since design 0082; it was 20 MB. The
+record is kept in twenty parts of at most 5 MB each; when the twentieth is full,
+the oldest part is deleted, so the record always holds the most recent 95 to
+100 MB. Reckoned from the length of its lines rather than measured on the phone,
+an hour of listening writes about two thirds of a megabyte, so the record holds
+several days of listening, and an idle reader left open writes about a tenth of
+that. A new version of the app starts it afresh (design 0082).
 
 It is not in the phone's backup, and it is not in the Files app. The phone does
 not delete it to make room, as it deletes the app's temporary files, so a fault
@@ -134,7 +139,7 @@ release cannot be switched into it.
 **Relying on the phone's own log.** The phone does keep a log, but it throws
 the app's lines away unless a Mac is listening at the moment they are written,
 and a day of ordinary use pushes out the lines of the phone's own that explain
-a fault. The record the app keeps is kept for as long as its 20 MB allows.
+a fault. The record the app keeps is kept for as long as its 100 MB allows.
 
 **A crash and usage reporting service.** That would send what the owner reads,
 and when, to someone else's server. Everything the app runs on belongs to the

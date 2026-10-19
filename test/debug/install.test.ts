@@ -4,9 +4,11 @@ import { APP_VERSION } from '../../app-version';
 
 /**
  * `installDebugLog` against a file system, an AppState and a native module in
- * memory (ADR 0054). In a build without Debug Mode it must not touch any of
- * them: no folder, no file, no handler wrapped. With it: the folder under
- * Library, excluded from backup; the launch line; the app's comings and goings;
+ * memory (ADR 0054). In a build without Debug Mode it must touch none of
+ * them but one: a Debug Log folder an earlier build left is deleted (#305), and
+ * then no folder is made, no file constructed and no handler wrapped. With it:
+ * the folder under Library, excluded from backup, emptied when another version
+ * wrote it (#305); the launch line; the app's comings and goings;
  * `console.warn`/`error`; uncaught errors, chained to the handler before; and
  * unhandled rejections in an embedded bundle.
  */
@@ -14,7 +16,8 @@ const world = vi.hoisted(() => ({
   made: [] as string[],
   files: new Map<string, string>(),
   excluded: [] as string[],
-  touched: 0,
+  deleted: [] as string[],
+  filesTouched: 0,
   appState: [] as ((state: string) => void)[],
   system: [] as string[],
   captureStarts: 0,
@@ -27,7 +30,6 @@ vi.mock('expo-file-system', () => {
   class Directory {
     uri: string;
     constructor(...parts: unknown[]) {
-      world.touched += 1;
       this.uri = uri(parts);
     }
     get parentDirectory() {
@@ -36,6 +38,14 @@ vi.mock('expo-file-system', () => {
     create() {
       world.made.push(this.uri);
     }
+    get exists() {
+      return world.made.includes(this.uri) || [...world.files.keys()].some((path) => path.startsWith(`${this.uri}/`));
+    }
+    delete() {
+      world.deleted.push(this.uri);
+      world.made = world.made.filter((made) => made !== this.uri);
+      for (const path of [...world.files.keys()]) if (path.startsWith(`${this.uri}/`)) world.files.delete(path);
+    }
     list() {
       return [...world.files.keys()].filter((path) => path.startsWith(`${this.uri}/`)).map((path) => new File(path));
     }
@@ -43,7 +53,7 @@ vi.mock('expo-file-system', () => {
   class File {
     uri: string;
     constructor(...parts: unknown[]) {
-      world.touched += 1;
+      world.filesTouched += 1;
       this.uri = uri(parts);
     }
     get name() {
@@ -51,6 +61,12 @@ vi.mock('expo-file-system', () => {
     }
     get size() {
       return (world.files.get(this.uri) ?? '').length;
+    }
+    get exists() {
+      return world.files.has(this.uri);
+    }
+    textSync() {
+      return world.files.get(this.uri) ?? '';
     }
     write(text: string, options?: { append?: boolean }) {
       world.files.set(this.uri, (options?.append ? (world.files.get(this.uri) ?? '') : '') + text);
@@ -103,7 +119,8 @@ beforeEach(() => {
   world.made = [];
   world.files.clear();
   world.excluded = [];
-  world.touched = 0;
+  world.deleted = [];
+  world.filesTouched = 0;
   world.appState = [];
   world.system = [];
   world.captureStarts = 0;
@@ -127,7 +144,8 @@ describe('a build without Debug Mode', () => {
     log.debugLog('reading', 'play');
     log.flushDebugLog();
     vi.advanceTimersByTime(60_000);
-    expect(world.touched).toBe(0);
+    expect(world.filesTouched).toBe(0);
+    expect(world.deleted).toEqual([]);
     expect(world.captureStarts).toBe(0);
     expect(world.captureDrains).toBe(0);
     expect(world.made).toEqual([]);
@@ -138,6 +156,22 @@ describe('a build without Debug Mode', () => {
     expect(console.error).toBe(original.error);
     expect(installedHandler).toBeNull();
     expect(tracker).toBeNull();
+  });
+
+  it('deletes the Debug Log a build with Debug Mode left, and does nothing else (#305)', async () => {
+    world.files.set(`${FOLDER}/debug-log-000001.txt`, 'an earlier build\'s lines\n');
+    world.files.set(`${FOLDER}/version.txt`, '1.0.0 (9)-beta11');
+    world.files.set('file:///container/Documents/harness.json', '{}');
+    const log = await install(false);
+    log.debugLog('reading', 'play');
+    log.flushDebugLog();
+    expect(world.deleted).toEqual([FOLDER]);
+    expect([...world.files.keys()]).toEqual(['file:///container/Documents/harness.json']);
+    expect(world.filesTouched).toBe(0);
+    expect(world.made).toEqual([]);
+    expect(world.system).toEqual([]);
+    expect(world.appState).toEqual([]);
+    expect(installedHandler).toBeNull();
   });
 });
 
@@ -167,6 +201,26 @@ describe('a build with Debug Mode', () => {
       `\\[launch\\] OpenReader ${APP_VERSION.replace(/[.()]/g, '\\$&')}, native 0\\.0\\.1 \\(1\\), Debug Mode on, embedded bundle, system log on, kept in file:///container/Library/Application Support/debug-log\n$`,
     ));
     expect(world.system[0]).toMatch(/^\[launch\] OpenReader /);
+  });
+
+  it('empties a folder another version wrote, remembers this one, and ends the launch line with what went (#305)', async () => {
+    world.files.set(`${FOLDER}/debug-log-000003.txt`, 'x'.repeat(3_145_728));
+    world.files.set(`${FOLDER}/debug-log-000004.txt`, 'y'.repeat(1_048_576));
+    world.files.set(`${FOLDER}/version.txt`, '1.0.0 (9)-beta11');
+    const log = await install(true);
+    log.flushDebugLog();
+    expect([...world.files.keys()].sort()).toEqual([`${FOLDER}/debug-log-000001.txt`, `${FOLDER}/version.txt`]);
+    expect(world.files.get(`${FOLDER}/version.txt`)).toBe(APP_VERSION);
+    expect(written()).toMatch(/, kept in file:\/\/\/container\/Library\/Application Support\/debug-log; cleared the Debug Log of 1\.0\.0 \(9\)-beta11: 2 files, 4\.0 MB\n$/);
+  });
+
+  it('goes on with the log the same version wrote', async () => {
+    world.files.set(`${FOLDER}/debug-log-000001.txt`, 'before the reinstall\n');
+    world.files.set(`${FOLDER}/version.txt`, APP_VERSION);
+    const log = await install(true);
+    log.flushDebugLog();
+    expect(written()).toMatch(/^before the reinstall\n.*\[launch\] OpenReader .*debug-log\n$/s);
+    expect(written()).not.toContain('cleared');
   });
 
   it('writes the app coming and going, and flushes as it leaves the foreground', async () => {

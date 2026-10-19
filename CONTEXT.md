@@ -458,9 +458,15 @@ Version ends in `-debug`, as in 1.0.0 (5)-beta1-debug.
 _Avoid_: debug build, diagnostic build, dev build, debug configuration, logging mode
 
 **Debug Log**:
-The record a build with Debug Mode keeps on the device of what the app did, read
-back from the Mac after the author reports a fault. It never holds a credential.
+The record a build with Debug Mode keeps on the device of what the app did and
+of the Debug Notes the author wrote, read back from the Mac after the author
+reports a fault. It never holds a credential.
 _Avoid_: log file, trace, diagnostics, crash log
+
+**Debug Note**:
+A few words the author writes, in a build with Debug Mode, about a fault at the
+moment he meets it, kept in the Debug Log with that moment's time.
+_Avoid_: bug report, comment, marker, bookmark, annotation, timestamp
 
 **Demo App**:
 A second OpenReader on the author's iPhone, installed beside his own under another
