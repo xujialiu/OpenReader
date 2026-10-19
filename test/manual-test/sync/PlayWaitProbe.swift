@@ -58,7 +58,15 @@ final class PlayWaitProbe: XCTestCase {
   func attachReader() -> XCUIApplication {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     app.activate()
-    let transport = app.buttons.matching(NSPredicate(format: "label == 'Play' OR label == 'Pause'")).firstMatch
+    var transport = app.buttons.matching(NSPredicate(format: "label == 'Play' OR label == 'Pause'")).firstMatch
+    if !transport.waitForExistence(timeout: 6) {
+      // The app was dead when the session started (a previous run's cleanup
+      // terminated it): the activate relaunched it onto the Library. Open the
+      // book natively — but this runs an `open` sync poke, so a measurement
+      // that needs no earlier failure must be staged by the host instead.
+      openBook(app, "A Short Test of Reading Aloud")
+      transport = app.buttons.matching(NSPredicate(format: "label == 'Play' OR label == 'Pause'")).firstMatch
+    }
     XCTAssertTrue(transport.waitForExistence(timeout: 10),
                   "Stage first: the reader open, paused, player expanded (harness open/collapse, no relaunch)")
     // A tap fired inside the activation's transition is not delivered (the
@@ -78,11 +86,29 @@ final class PlayWaitProbe: XCTestCase {
   /// took (Pause with the spinner early, or Pause with no spinner at +0.4 s).
   func testPlaySpinThenStart() {
     let app = attachReader()
+    let mode = param("MODE", "a")
     let play = app.buttons["Play"]
-    tree("before", app)
+    XCTAssertTrue(play.waitForExistence(timeout: 10), "No Play button")
+    if mode == "c" {
+      // The host turns the Sync switch off and on while this sleeps: the
+      // switch-on run hangs and fails 15 s later, which is the fresh
+      // `unreachableAt` the no-wait path answers to. The 60 s window is then
+      // measured from a moment the host chose, not from the build's end.
+      print("PW awaiting host failure")
+      Thread.sleep(forTimeInterval: 28)
+      print("PW failure window assumed at \(Date())")
+    }
 
     let tapped = Date()
-    print("PW tap Play at \(tapped)")
+    // A tap during the reader's entrance lands on a button that exists but is
+    // not yet hittable (r2, 06:35): wait for hittability before pressing.
+    var hittable = play.isHittable
+    for _ in 0..<30 where !hittable {
+      Thread.sleep(forTimeInterval: 0.5)
+      hittable = play.isHittable
+    }
+    print("PW tap Play at \(tapped) hittable=\(hittable) after \(ms(tapped))")
+    XCTAssertTrue(hittable, "Play never became hittable")
     play.tap()
     shot("spin-0", app)
     print("PW spin-0 shot \(ms(tapped)) label=\(label(app))")
@@ -100,7 +126,6 @@ final class PlayWaitProbe: XCTestCase {
     Thread.sleep(forTimeInterval: 1.1)
     let labels3000 = label(app)
     print("PW +3000 ms label=\(labels3000)")
-    tree("after-start", app)
 
     // The press shows as Pause from the first moments (a)/(d); with no wait
     // (c) it is already the playing Pause at +400 ms. Either way the
@@ -117,8 +142,8 @@ final class PlayWaitProbe: XCTestCase {
       predicate: NSPredicate(format: "label == 'Play'"), object: transport(app))], timeout: 10)
     print("PW transport back on Play \(ms(paused))")
     Thread.sleep(forTimeInterval: 0.8)
+    if !transport(app).exists { print("PW end: transport gone (the app crashed or restarted)"); return }
     XCTAssertEqual(label(app), "Play", "Playback must be stopped when this probe returns")
-    tree("paused", app)
   }
 
   /// Presses Play and presses Pause inside the 2 s wait: the press is taken
@@ -128,10 +153,12 @@ final class PlayWaitProbe: XCTestCase {
     let app = attachReader()
     let play = app.buttons["Play"]
     XCTAssertTrue(play.waitForExistence(timeout: 10), "Stage the reader paused first")
-    tree("before", app)
 
     let tapped = Date()
-    print("PW tap Play at \(tapped)")
+    var hittable = play.isHittable
+    for _ in 0..<30 where !hittable { Thread.sleep(forTimeInterval: 0.5); hittable = play.isHittable }
+    print("PW tap Play at \(tapped) hittable=\(hittable)")
+    XCTAssertTrue(hittable, "Play never became hittable")
     play.tap()
     shot("wait-0", app)
     print("PW wait-0 shot \(ms(tapped)) label=\(label(app))")
@@ -154,7 +181,6 @@ final class PlayWaitProbe: XCTestCase {
       print("PW taken-back sample \(at) label=\(now)")
       XCTAssertEqual(now, "Play", "The reading started \(at) after a press Pause had taken back")
     }
-    tree("taken-back", app)
   }
 
   /// Phase 2 of the #303 verification, self-staging: the probe session can
@@ -224,7 +250,6 @@ final class PlayWaitProbe: XCTestCase {
   /// each press answered, and the probe returns with playback stopped.
   func testPlayPausePlay() {
     let app = attachReader()
-    tree("before", app)
     for round in 1...2 {
       let play = app.buttons["Play"]
       XCTAssertTrue(play.waitForExistence(timeout: 10), "Round \(round): no Play button")
@@ -245,7 +270,6 @@ final class PlayWaitProbe: XCTestCase {
       Thread.sleep(forTimeInterval: 0.8)
     }
     XCTAssertEqual(label(app), "Play", "Playback must be stopped when this probe returns")
-    tree("paused", app)
   }
 }
 

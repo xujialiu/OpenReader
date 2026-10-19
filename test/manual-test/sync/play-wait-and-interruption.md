@@ -54,6 +54,68 @@ The abort therefore **reproduces without #303/#304** and is recorded as a
 separate, pre-existing finding against the simulator environment, not
 against these changes. One recovery remained: shutdown and boot of the
 device's audio stack (below).
+
+## The recovery, and where each measurement finally stands
+
+The recorded recovery (shutdown + boot of `ios-check-b11-r2`, no erase,
+`verify-recovery.sh`, log `recovery.log`, record `recovery.json`) did **not**
+clear it: the healthy-folder control Play still aborted
+(`OpenReader-2026-10-20-070226.ips`, same stack, launched 07:01:13, abort at
+07:02:26). With the one recovery spent, the remaining checks are **BLOCKED**
+by this environment failure, per the parent's instruction.
+
+Verdicts, with what each fact was measured on:
+
+- **Phase 0 — PASS.** r1: build, install, Metro, readiness, Settings showing
+  `1.0.0 (9)-beta11-debug` (kept above). r2: the same app installed on the
+  session-owned device, `ios_ready --metro` passed, the version confirmed
+  again (`recovery-version.png` after the boot).
+
+Artifacts for the r2 verdicts are under `/tmp/ios-check-b11-r2/` (probe
+projects, `phase1ac.log`, `recovery.log`, `baseline-diff.log`, screenshots);
+r1's are under `/tmp/ios-check-b11/` (`probe-playwait/`, `a1-spin-*.png`,
+webdav and fake-tts logs).
+- **Phase 1 (a) — PASS** (r1 evidence window, 00:39:06–00:39:53 +08 on
+  19A488E2, before the parallel session's first interference at ~01:04):
+  press-shot at **+555 ms** showing the spinner and Pause
+  (`attachments-.../0F298FFF-...png`), `[sync] run against` at 00:39:49.718,
+  `[reading] play at utterance 12` at 00:39:51.736 (**2.7 s** after the tap —
+  the 2 s wait plus press delivery), engine start 00:39:52.077, clip position
+  1.841 by the pause (sound played); playback ~2.1 s, stopped by the probe.
+  The r2 redo is BLOCKED by the abort (and one not-hittable tap during the
+  reader's entrance, since fixed in the probe with a hittability wait).
+- **Phase 1 (b) — PASS** twice. r2: press shot +633 ms (Pause), Pause at
+  **+1773 ms** inside the wait, transport back on Play at +1421 ms, ten
+  samples +3.6 s to +7.7 s all Play, no `play at`, 0 failures
+  (`test-20261020-055504-78162.log`; the app log: `pause at utterance 3`
+  06:12:09.801, the press's run failing at 06:12:23.216 — the run still goes
+  on in the background). Playback: none — that is the fact being measured.
+  r1: the same shape at 00:46:11–00:46:14 (`test-20261020-004603`).
+- **Phase 1 (c) — PASS** twice. r2: `[sync] play: not waited for, the last
+  run could not reach the server 34 s ago` at 06:41:33.046 and
+  `[reading] play at utterance 8` at 06:41:33.073 — **27 ms** later, ~0.8 s
+  after the tap, against **2.7 s** in (a); the +474 ms shot shows the playing
+  Pause **without** the spinner
+  (`attachments-20261020-004342-6561/DBAA7740-...png`). r1: the same shape at
+  00:43:51–00:43:52 (`test-20261020-004342-6561`, `not waited for … 6 s ago`,
+  play at +0.8 s).
+- **Phase 1 (d) — PASS** (r1 evidence window, 00:48 and 00:56, both before
+  01:04): the fast server's run succeeded (`play: ok … uploaded` at
+  00:48:09.689, GET+PUT on the stub, play at **0.7 s** after the tap) and the
+  next press with the GET hanging waited again — no `not waited for` line,
+  `[sync] run against` 00:56:05.830, `[reading] play at utterance 15`
+  00:56:07.850 (**2.0 s** after the run start). The r2 redo is BLOCKED by the
+  abort.
+- **Phase 2 — BLOCKED.** The Safari interruption needs a Reading playing;
+  every first engine start aborts (above). Nothing was measured.
+- **Phase 3 — BLOCKED.** The plain Play/Pause/Play is the control that
+  aborts; the Lock Screen Play was not attempted.
+
+Playback durations, each the shortest that establishes its fact: (a) ~2 s of
+sound (start shown, then stopped); (b) none (a taken-back press starts
+nothing — the absence is the fact); (c) ~5 s (start at once, one sentence
+advance, stopped); (d1) ~3.8 s, (d2) ~2.3 s (wait vs no-wait is decided
+before the sound matters).
 - `ios_ready.py --metro` passed. The first run inside the phase script answered
   `BLOCKED: CDP failed` because it ran the instant `simctl launch` returned,
   before the app had bundled from Metro (`iOS Bundled 936ms index.ts (1614
