@@ -193,7 +193,7 @@ final class GeneralFontsProbe: XCTestCase {
     XCTAssertTrue(savedLine.waitForExistence(timeout: 5), "Manage downloads did not show a saved-size line")
     let deleteAll = app.buttons["Delete all audio"]
     XCTAssertTrue(deleteAll.waitForExistence(timeout: 3), "Delete all audio must appear when the document has saved audio")
-    XCTAssertTrue(app.buttons["Back to downloads"].exists, "Delete all audio must sit next to Back to downloads")
+    XCTAssertTrue(app.buttons["Back from Manage"].exists, "Delete all audio must sit next to Back from Manage (#117 batch 2: the sheet has no Close button, and Manage's back button reads Back from Manage)")
     print("MANAGE-DOWNLOADS saved line: \(savedLine.label)")
     capture("manage-downloads-1-delete-all-button", app)
 
@@ -207,8 +207,13 @@ final class GeneralFontsProbe: XCTestCase {
     XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "exists == false"), object: alert)], timeout: 3), .completed)
 
-    app.buttons["Back to downloads"].tap()
-    app.buttons["Close Download"].tap()
+    // The drawer is the phone's sheet (#117): back out of Manage by its button,
+    // then put the sheet away with a swipe down from its header, as
+    // DownloadRingProbe.closeSheet does — `Close Download` no longer exists.
+    app.buttons["Back from Manage"].tap()
+    let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.52))
+    let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.97))
+    top.press(forDuration: 0.15, thenDragTo: bottom)
   }
 
   /// #12: the Fonts page inside the actions drawer — the full list, a check

@@ -366,3 +366,20 @@
   the same `&&` chain as its play, and one chain's Play was skipped by a
   caught reset and simply re-run after `set`. A zero is only a zero in the
   breath it was set; on this device that breath was short.
+
+## The #306 verification run (2026-10-20)
+
+- **On a machine with several sessions' simulators booted, `simctl install`
+  onto a freshly created device can hang past three minutes, and the kit's
+  own `silence.sh` after it with it.** The #306 narrow-screen check created
+  an iPhone SE (iOS 26.5) while four devices were booted (two of them other
+  sessions'); `simctl install` answered nothing for 180 s twice — the first
+  attempt was killed, a shutdown + boot of that one device brought the boot
+  back in seconds but the install still hung, and `silence.sh set` hung the
+  same way. Nothing was wrong with the app or the .app: the same copy
+  installed on the session's already-running iPhone 17 Pro in seconds. The
+  device was dropped and the check reported uncovered rather than fighting a
+  contended CoreSimulator. If a fresh device must be used while other
+  sessions hold booted simulators, budget for this and prefer the device
+  that is already up; `ps` itself taking seconds is the tell that the host
+  is the problem.
