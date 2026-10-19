@@ -101,12 +101,25 @@ export interface PositionsTransport {
   flush(trigger: string): Promise<SyncOutcome | null>;
   last(): SyncOutcome | null;
   running(): boolean;
+  /**
+   * When the last run that went to the server failed because it could not reach
+   * it (a `network` WebDAVError: no reply in time, or no connection), or null
+   * once a later run has reached it or the network has come back. Play does
+   * not wait for a sync while this is recent (#304).
+   */
+  unreachableAt(): number | null;
+  /** When the run in flight went to the server, or null when none is out there (#304). */
+  runningSince(): number | null;
+  /** The phone's network has come back: a failure to reach the server no longer says anything about the next run. */
+  reconnected(): void;
 }
 
 export function createPositionsTransport(deps: PositionsTransportDeps): PositionsTransport {
   let last: SyncOutcome | null = null;
   let lastFailureAt = Number.NEGATIVE_INFINITY;
   let lastReportAt = Number.NEGATIVE_INFINITY;
+  let unreachableAt: number | null = null;
+  let runningSince: number | null = null;
 
   function reportGated(problem: string): void {
     const at = deps.now();
@@ -135,6 +148,7 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
     if (!force && deps.now() - lastFailureAt < SYNC_RETRY_MS) return null;
     const at = deps.now();
     let warning: SyncOutcome['warning'] = null;
+    runningSince = at;
     try {
       const client = await deps.client();
       let remoteText: string | null = null;
@@ -152,6 +166,7 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
         } else if (parsed.reason === 'newer') {
           const error = `The positions file on the server is version ${parsed.version}, which this version of the app does not read. It was left alone; update the app to sync again.`;
           reportGated(error);
+          unreachableAt = null;
           return finish({ at, trigger, result: 'frozen', error, remote: 0, adopted: [], uploaded: false, warning });
         } else {
           // Repair as before, but report only what the completed run confirms.
@@ -168,6 +183,7 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
         uploaded = true;
       }
       lastFailureAt = Number.NEGATIVE_INFINITY;
+      unreachableAt = null;
       const outcome: SyncOutcome = { at, trigger, result: 'ok', error: null, remote: remote.length, adopted, uploaded, warning };
       const said = syncWarning(outcome);
       if (said) reportGated(said);
@@ -175,10 +191,14 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
     } catch (problem) {
       const error = problem instanceof Error ? problem.message : String(problem);
       lastFailureAt = deps.now();
+      // Any other failure is a server that answered, or settings that never reached one.
+      unreachableAt = problem instanceof WebDAVError && problem.kind === 'network' ? lastFailureAt : null;
       const outcome: SyncOutcome = { at, trigger, result: 'error', error, remote: 0, adopted: [], uploaded: false, warning };
       const said = syncWarning(outcome);
       reportGated(said ? `${said} ${error}` : error);
       return finish(outcome);
+    } finally {
+      runningSince = null;
     }
   }
 
@@ -189,5 +209,10 @@ export function createPositionsTransport(deps: PositionsTransportDeps): Position
     flush: flight.flush,
     last: () => last,
     running: flight.running,
+    unreachableAt: () => unreachableAt,
+    runningSince: () => runningSince,
+    reconnected: () => {
+      unreachableAt = null;
+    },
   };
 }

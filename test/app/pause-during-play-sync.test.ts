@@ -40,10 +40,17 @@ const world = vi.hoisted(() => ({
     /** The state Now Playing was last told. */
     playing: null as null | boolean,
   },
-  player: null as null | { playing: boolean; onPlay(): void },
+  player: null as null | { playing: boolean; buffering: boolean; onPlay(): void; onPause(): void },
   disk: { entries: [] as unknown[] },
-  /** The Sync Folder: while `slow`, a download waits in `waiting` until the test lets it answer. */
-  folder: { slow: false, waiting: [] as (() => void)[] },
+  /**
+   * The Sync Folder: while `slow`, a download waits in `waiting` until the test
+   * lets it answer; while `unreachable`, it fails as a server that cannot be reached.
+   */
+  folder: { slow: false, unreachable: false, waiting: [] as (() => void)[] },
+  /** The shell's sync handle, for a sync moment the test starts itself, such as the app coming to the foreground. */
+  sync: null as null | { poke(trigger: string): void },
+  /** What the network path monitor would tell the sync (#304). */
+  connectivity: null as null | ((connected: boolean) => void),
 }));
 
 vi.mock('react-native', () => ({
@@ -162,17 +169,22 @@ const SENTENCE: ReportedBlock = {
   id: '0.0', text: 'Sentence one.', role: 'paragraph', section: 's0.xhtml', sectionIndex: 0, cfi: 'epubcfi(/6/2[s0]!/4/2)',
 };
 
-/** The Sync Folder: it holds no Positions File, and answers at once unless it is slow. */
+/** The Sync Folder: it holds no Positions File, and answers at once unless it is slow or cannot be reached. */
 const WEBDAV: SyncDeps = {
   client: () => ({
     check: async () => {},
     download: async () => {
       if (world.folder.slow) await new Promise<void>((answer) => { world.folder.waiting.push(answer); });
+      if (world.folder.unreachable) throw new WebDAVError('network', 'No reply from https://dav.example/openreader/ within 15 s.');
       throw new WebDAVError('not-found', 'no file', 404);
     },
     upload: async () => {},
   }),
   now: () => Date.now(),
+  onConnectivity: (listener) => {
+    world.connectivity = listener;
+    return () => { world.connectivity = null; };
+  },
 };
 
 function Open() {
@@ -184,6 +196,7 @@ function Open() {
 function ShellProbe() {
   const library = useLibrary();
   const { sync, last } = useSync(SETTINGS, library, WEBDAV);
+  useEffect(() => { world.sync = sync; }, [sync]);
   const value = useMemo<Shell>(
     () => ({ settings: SETTINGS, setSettings() {}, library, secretsWritten: 0, secretRevisions: {}, noteSecretWritten() {}, sync, syncLast: last }),
     [library, sync, last],
@@ -204,6 +217,8 @@ async function press(command: 'play' | 'pause') {
 const reading = () => ({ sounding: world.sounding, player: world.player!.playing, nowPlaying: world.nowPlaying.playing });
 const PAUSED = { sounding: false, player: false, nowPlaying: false };
 const PLAYING = { sounding: true, player: true, nowPlaying: true };
+/** A press taken and waiting for its sync: nothing sounds yet, and the Player shows it starting (#304). */
+const STARTING = { sounding: false, player: true, nowPlaying: false };
 
 /** A Reading that has spoken and was paused from Now Playing, with a Sync Folder that has turned slow. */
 let tree: ReactTestRenderer | null = null;
@@ -232,7 +247,8 @@ beforeEach(() => {
     id: DOCUMENT, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A novel', position: null,
     voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: 1, device: 'iPhone-test0001' },
   } satisfies LibraryEntry];
-  world.folder.slow = false; world.folder.waiting.length = 0;
+  world.folder.slow = false; world.folder.unreachable = false; world.folder.waiting.length = 0;
+  world.sync = null; world.connectivity = null;
 });
 afterEach(async () => {
   await act(async () => { tree?.unmount(); });
@@ -241,13 +257,27 @@ afterEach(async () => {
 });
 
 describe('Play in Now Playing, with a Sync Folder that takes a moment to answer', () => {
-  it('control: nothing plays while Play waits for its sync, and the Reading starts when the folder answers', async () => {
+  it('nothing sounds while Play waits for its sync, the Player shows the press as starting at once (#304), and the Reading starts when the folder answers', async () => {
     await pausedWithSlowFolder();
     await press('play');
     expect(world.folder.waiting).toHaveLength(1);
-    expect(reading()).toEqual(PAUSED);
+    expect(reading()).toEqual(STARTING);
+    expect(world.player!.buffering).toBe(true);
     await folderAnswers();
     expect(reading()).toEqual(PLAYING);
+  });
+
+  it("the Player's own Play shows the press at once too, and its Pause takes the press back (#304)", async () => {
+    await pausedWithSlowFolder();
+    await act(async () => { world.player!.onPlay(); });
+    await settle();
+    expect(reading()).toEqual(STARTING);
+    await act(async () => { world.player!.onPause(); });
+    await settle();
+    expect(reading()).toEqual(PAUSED);
+    expect(world.player!.buffering).toBe(false);
+    await folderAnswers();
+    expect(reading()).toEqual(PAUSED);
   });
 
   it('a Pause pressed before the folder answers leaves the Reading paused once it does', async () => {
@@ -270,5 +300,75 @@ describe('Play in Now Playing, with a Sync Folder that takes a moment to answer'
     await act(async () => { vi.advanceTimersByTime(1); });
     await settle();
     expect(reading()).toEqual(PAUSED);
+  });
+});
+
+describe('Play when the Sync Folder has just shown it cannot be reached (#304)', () => {
+  /** A sync moment the app takes by itself, such as coming to the foreground, against a server that does not answer. */
+  async function aRunFindsTheServerUnreachable() {
+    world.folder.slow = false;
+    world.folder.unreachable = true;
+    await act(async () => { world.sync!.poke('foreground'); });
+    await settle();
+    // From here on its requests hang, as they did on the owner's phone.
+    world.folder.unreachable = false;
+    world.folder.slow = true;
+  }
+
+  it('after a run that could not reach the server, Play starts the Reading at once, and still asks the folder behind it', async () => {
+    await pausedWithSlowFolder();
+    await aRunFindsTheServerUnreachable();
+    await press('play');
+    expect(reading()).toEqual(PLAYING);
+    expect(world.folder.waiting).toHaveLength(1);
+  });
+
+  it('with a run already out at the server for as long as Play would wait, Play starts the Reading at once', async () => {
+    await pausedWithSlowFolder();
+    await act(async () => { world.sync!.poke('foreground'); });
+    await settle();
+    expect(world.folder.waiting).toHaveLength(1);
+    await act(async () => { vi.advanceTimersByTime(WAIT_MS); });
+    await press('play');
+    expect(reading()).toEqual(PLAYING);
+  });
+
+  it('control: with a run out at the server for less than that, Play waits for its sync', async () => {
+    await pausedWithSlowFolder();
+    await act(async () => { world.sync!.poke('foreground'); });
+    await settle();
+    await act(async () => { vi.advanceTimersByTime(WAIT_MS - 500); });
+    await press('play');
+    expect(reading()).toEqual(STARTING);
+  });
+
+  it('once a run has reached the server again, Play waits for its sync again', async () => {
+    await pausedWithSlowFolder();
+    await aRunFindsTheServerUnreachable();
+    // The network is back: the run behind the next Play gets through.
+    world.folder.slow = false;
+    await press('play');
+    expect(reading()).toEqual(PLAYING);
+    await press('pause');
+    world.folder.slow = true;
+    await press('play');
+    expect(reading()).toEqual(STARTING);
+  });
+
+  it('a minute after the failure, Play waits for its sync again', async () => {
+    await pausedWithSlowFolder();
+    await aRunFindsTheServerUnreachable();
+    await act(async () => { vi.advanceTimersByTime(60_000); });
+    await press('play');
+    expect(reading()).toEqual(STARTING);
+  });
+
+  it('when the phone reports its network back, Play waits for its sync again', async () => {
+    await pausedWithSlowFolder();
+    await aRunFindsTheServerUnreachable();
+    await act(async () => { world.connectivity!(false); });
+    await act(async () => { world.connectivity!(true); });
+    await press('play');
+    expect(reading()).toEqual(STARTING);
   });
 });

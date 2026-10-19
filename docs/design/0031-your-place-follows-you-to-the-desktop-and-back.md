@@ -75,7 +75,8 @@ resumes.
 paused book and, if the desktop has read further since, the highlight and the
 page have moved to the desktop's sentence — quietly, because the moved highlight
 is the message. Press play and the phone checks once more first, for at most two
-seconds, then reads from the newest place. When the desktop's place is in a part
+seconds, then reads from the newest place. It skips that check when it has just
+failed to reach the server. When the desktop's place is in a part
 of the book the phone has not laid out yet, play waits for that part rather than
 starting anywhere else. While the book is playing nothing moves it. A place that
 arrives late is outranked by the one the phone writes once it reads on. When the
@@ -158,6 +159,13 @@ that a person reading the file can tell which device wrote a line.
 - A paused book can move under the owner's eye. Deliberate, and quiet.
 - Pressing play on a paused book can wait up to two seconds for the check, and
   then for the phone to lay out the part of the book the other device reached.
+  The player shows the press at once, as a spinner, and Pause takes it back.
+  When the phone has just failed to reach the server, in the last minute and
+  with no sign of the network coming back, play does not wait at all. Waiting
+  there only cost two seconds and then read from the phone's own place
+  anyway. The price is small: a place the desktop reached will not be read at
+  once if the network returns before the phone notices. The phone takes that
+  place when the reading next stops.
   In the owner's longest novel, with the desktop's place four hundred to five
   hundred chapters from the phone's, the reading started two to four seconds
   after the press.
