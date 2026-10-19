@@ -16,7 +16,11 @@
  *   foreground or meets a fatal error. Never one file write per line.
  * - **Rolling**: `debug-log-000001.txt`, `…000002.txt`, … of at most
  *   `FILE_BYTES` each; a batch that would take a file past it starts the next,
- *   and the oldest is deleted so that no more than `FILES` remain: 20 MB in all.
+ *   and the oldest is deleted so that no more than `FILES` remain: 100 MB in
+ *   all (#305; 20 MB before it).
+ * - **One build's**: a launch of another `APP_VERSION` than the one that wrote
+ *   the folder empties it first (`clearForVersion`, #305), so the log a new
+ *   build keeps is its own.
  * - **Never a credential**: every line passes `withoutCredentials` first
  *   (`credentials.ts`).
  * - **Also the system log**, at once, one line each, so that it lines up with
@@ -26,7 +30,8 @@ import { withoutCredentials } from './credentials';
 
 /**
  * What a line is about. `hx` is the walkthrough harness's own lines, `probe` its
- * `js` answers, and `renderer` epub.js as the reader's page sees it (#113).
+ * `js` answers, `renderer` epub.js as the reader's page sees it (#113), and
+ * `debug-note` what the author wrote about a fault (#305).
  */
 export type DebugCategory =
   | 'launch'
@@ -43,10 +48,11 @@ export type DebugCategory =
   | 'lookup'
   | 'purchase'
   | 'renderer'
-  | 'probe';
+  | 'probe'
+  | 'debug-note';
 
 export const FILE_BYTES = 5 * 1024 * 1024;
-export const FILES = 4;
+export const FILES = 20;
 export const FLUSH_MS = 2_000;
 /** A stack trace is the longest thing written; this keeps its first dozen frames. */
 export const LINE_CHARS = 2_000;
@@ -152,6 +158,46 @@ export function describeValue(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+/** The small file beside the log that remembers which `APP_VERSION` wrote it (#305). */
+export interface DebugLogVersion {
+  /** What it holds, or null when there is none. */
+  read(): string | null;
+  write(version: string): void;
+}
+
+/** What a new build's launch deleted: the version that wrote it, null for a log from before #305, and its size. */
+export interface ClearedLog {
+  version: string | null;
+  files: number;
+  bytes: number;
+}
+
+/**
+ * Empty the folder when another version wrote it, and remember `version` as its
+ * writer (#305). A reinstall of the same build keeps its log; a new Beta, a
+ * new Build Number or a Metro reload that brings either starts empty. Answers
+ * what was deleted, or null when nothing was.
+ */
+export function clearForVersion(files: DebugLogFiles, mark: DebugLogVersion, version: string): ClearedLog | null {
+  const was = mark.read()?.trim() || null;
+  if (was === version) return null;
+  const logs = files.list().filter((name) => NAME.test(name));
+  let bytes = 0;
+  for (const name of logs) {
+    bytes += files.size(name);
+    files.remove(name);
+  }
+  mark.write(version);
+  return logs.length ? { version: was, files: logs.length, bytes } : null;
+}
+
+/** `cleared the Debug Log of 1.0.0 (9)-beta11: 7 files, 31.2 MB`: the end of the launch line after `clearForVersion`. */
+export function clearedLine(cleared: ClearedLog): string {
+  const of = cleared.version ?? 'a build that did not record its version';
+  const files = `${cleared.files} ${cleared.files === 1 ? 'file' : 'files'}`;
+  return `cleared the Debug Log of ${of}: ${files}, ${(cleared.bytes / 1_048_576).toFixed(1)} MB`;
 }
 
 export function createDebugLog(deps: DebugLogDeps): DebugLogWriter {

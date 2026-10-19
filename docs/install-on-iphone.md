@@ -172,6 +172,28 @@ Where the switch's value could go stale:
 
 ### 4. Check and install
 
+First keep the Debug Log the phone holds. A build with Debug Mode empties it at
+its first launch when another version wrote it, and a build without Debug Mode
+deletes it (ADR 0082), so the author's Debug Notes would go with it:
+
+```bash
+python3 test/manual-test/kit/debug-log.py IPHONE_UDID /tmp/or-debug-before-install
+OLD="$(cat /tmp/or-debug-before-install/debug-log/version.txt 2>/dev/null || echo unrecorded)"
+mv /tmp/or-debug-before-install "/tmp/or-debug-before-$OLD"
+python3 test/manual-test/kit/debug-notes.py "/tmp/or-debug-before-$OLD/debug-log"
+```
+
+- Say in the reply where the copy is and how many Debug Notes it holds
+  (`debug-notes.py` prints them and their count). It lasts until the Mac
+  restarts (notes 2026-10-20).
+- Exit 1 from `debug-log.py` means the phone holds no Debug Log, as after a
+  build without Debug Mode: there is nothing to keep, so go on.
+- `OLD` is the version that wrote the log, as in `1.0.0 (9)-beta11`; a log from
+  before #305 has no `version.txt` and is kept as `unrecorded`. When the folder
+  already exists, `mv` puts the new copy inside it, and both are kept.
+
+Then check the build and install it:
+
 ```bash
 APP="/tmp/openreader-iphone-$CHECKOUT/Build/Products/Release-iphoneos/OpenReader.app"
 grep -o 'var DEBUG_MODE = [a-z]*;' "${APP%/*}/main.jsbundle"

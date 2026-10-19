@@ -7,7 +7,10 @@ status: accepted
 _The product half is [design 0054](../design/0054-the-owners-phone-keeps-a-record-of-what-the-app-did.md).
 Issue #82; the owner's eight decisions are its plan comment. The terms are
 CONTEXT.md's **Debug Mode** and **Debug Log**. The measurements are in
-`notes/NOTES_2026-09-29.md`, 10:42 to 10:45._
+`notes/NOTES_2026-09-29.md`, 10:42 to 10:45. [ADR 0082](0082-a-debug-note-is-a-line-in-the-debug-log.md)
+(#305) replaces decision 8 with the **Debug Note**, raises the bound to 100 MB,
+starts the log afresh for each new `APP_VERSION`, and has a build without Debug
+Mode delete a leftover log._
 
 A fault on the owner's phone left no record there. The app's `HX` lines are
 React Native's `console.log`, which the phone keeps at INFO, in memory, only
@@ -118,7 +121,8 @@ can delay delivery.
 
 `PlaybackTraceBuffer` keeps the most recent 128 events under a lock and counts
 dropped older events. JS drains once per second and on app-state changes into
-the existing four-file 20 MB rolling Debug Log, adding JS receipt wall time.
+the existing rolling Debug Log (20 MB then, 100 MB since ADR 0082), adding JS
+receipt wall time.
 Empty drains write nothing. `recordNativePlayback` accepts only the event
 allowlist and named finite numeric fields, at most 128 per drain. A build without
 Debug Mode starts neither observers nor drain timer and retains no events.
@@ -169,9 +173,11 @@ in `src/debug/` outside `install.ts` and `launch.ts`
   one tries again.
 - **Rolling.** `debug-log-000001.txt`, `…000002.txt`, …; a batch that would
   take the newest past 5 MB (5,242,880 bytes, counted in UTF-8) starts the next
-  file, and the oldest are deleted so that no more than four remain: 20 MB in
-  all. At launch it goes on appending to the newest file the folder holds.
-  test/debug/debug-log.test.ts writes about 22 MB through a folder in memory
+  file, and the oldest are deleted so that no more than `FILES` remain. That
+  was four, 20 MB in all; since ADR 0082 (#305) it is twenty, 100 MB. At launch
+  it goes on appending to the newest file the folder holds, unless another
+  `APP_VERSION` wrote the folder, which ADR 0082 empties first.
+  test/debug/debug-log.test.ts writes past the bound through a folder in memory
   and checks both bounds after every batch.
 - **Where.** `Library/Application Support/debug-log/` in the app's container:
   `new Directory(Paths.document.parentDirectory, 'Library', 'Application
@@ -186,16 +192,19 @@ in `src/debug/` outside `install.ts` and `launch.ts`
   "Library/Application Support/debug-log"`, and falls back to a listing and a
   copy per file. The launch line names the folder's full URI, so the first pull
   from a phone proves where it is.
-- **Off, nothing.** Without Debug Mode `installDebugLog` returns before any
-  `Directory` or `File` is constructed; no handler is wrapped, no listener is
-  added, no credential is held (test/debug/install.test.ts,
+- **Off, nothing but a leftover folder.** Without Debug Mode `installDebugLog`
+  constructs no `File`; no handler is wrapped, no listener is added, no
+  credential is held (test/debug/install.test.ts,
   test/debug/credential-rule.test.ts). `loggedFetch`, `providerDepsFor` and the
-  continued task's wrapper hand back what they were given.
+  continued task's wrapper hand back what they were given. It returned before
+  constructing anything until ADR 0082, which has it delete a Debug Log folder a
+  Debug Mode build left, and nothing else.
 
 Estimated from the lines' real formats, not measured on a phone: a sentence
 read aloud writes about 590 bytes (the synthesis start, the request, the
 synthesis finish and the harness's status line), so about 0.64 MB an hour at a
-sentence every 4 s, and 20 MB holds some thirty hours of listening. An idle
+sentence every 4 s: 20 MB held some thirty hours of listening, and the 100 MB
+of ADR 0082 some 150. An idle
 open reader writes the status line every 5 s, about a tenth of that.
 
 ## What is logged (decision 3)
@@ -403,8 +412,9 @@ and `--mode release` the beta alone. Since #127 (ADR 0070), `APP_VERSION` also
 carries the Build Number, as in `1.0.0 (5)-beta1-debug`; `shownVersion` did not
 change.
 
-There is no control to mark a fault: the owner says roughly when, and the
-lines' stamps are searched around that time.
+There was no control to mark a fault (#82's decision 8): the owner said roughly
+when, and the lines' stamps were searched around that time. ADR 0082 (#305)
+superseded it with the reader's `Debug` row and the `[debug-note]` line.
 
 ## Not verified here
 

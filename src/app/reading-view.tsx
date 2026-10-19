@@ -48,6 +48,7 @@ import { AppState, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-
 import { readLocator, type ReadingPlace, type ReadingPosition } from '../core/document';
 import { anchoredStart, contentsOf, currentRow, type NavigationEntry, type ReadingSpineItem } from '../core/document/contents';
 import { cutText, debugLog } from '../debug/debug-log';
+import { onDebugNote } from '../debug/debug-note';
 import { DEBUG_MODE } from '../debug/mode';
 import { chapterOf, useNowPlaying } from '../now-playing';
 import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
@@ -763,6 +764,20 @@ export function ReadingView({
     }, 500);
     return () => clearInterval(timer);
   }, [status]);
+  /**
+   * A Debug Note just written (#305): the Reading's state at Save, beside it
+   * in the Debug Log, the status line now rather than up to 5 s later and the
+   * page's epub.js snapshot named by the note's time, so a search for the time
+   * the author copied finds all three.
+   */
+  const snapshot = reading.bridge.snapshot;
+  useEffect(() => {
+    if (!DEBUG_MODE) return undefined;
+    return onDebugNote((time) => {
+      hlog(statusLine(status, AppState.currentState));
+      snapshot(`Debug Note ${time}`);
+    });
+  }, [status, snapshot]);
 
 
   return (
