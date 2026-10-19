@@ -39,7 +39,7 @@ that names the script or probe you are about to run.
   wells opened, moved to 0 % and dragged live through XCTest, with the drawer
   back in place after the picker. `HighlightWellProbe.swift`.
 - [general-and-fonts.md](general-and-fonts.md): General's Theme menu and bracket
-  switch, Manage downloads' Delete all saved audio (always cancelled), the
+  switch, Manage downloads' Delete all audio (always cancelled), the
   Fonts page, which fonts this system has, a font change on the reading page,
   and the `serif`/`sans` migration. `GeneralFontsProbe.swift`.
 - [version-line.md](version-line.md) (#30): the Settings version line, the rows

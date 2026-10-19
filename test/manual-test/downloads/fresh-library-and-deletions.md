@@ -2,7 +2,7 @@
 
 `OfflineFixProbe.swift` covers what none of the other probes do: a device that has
 never had a provider configured or a document downloaded, and actually
-confirming (not cancelling) "Delete all saved audio" and "Delete this book".
+confirming (not cancelling) "Delete all audio" and "Delete this book".
 It expects two fixtures already in the Library: `A Short Test of Reading
 Aloud` and a second, single-utterance document titled `OpenReader Deletion
 Fixture` (one paragraph, one chapter named `Only Chapter`), used so the

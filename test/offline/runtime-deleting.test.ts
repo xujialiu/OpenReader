@@ -282,3 +282,56 @@ it('deletes a shared line only once every chapter that uses it has been deleted'
   expect(saved(SHARED)).toEqual({ file: false, rows: 0 });
   expect(await shown()).toEqual({ counts: { one: 0, two: 0, three: 0 }, downloaded: [], manage: [], files: 0 });
 });
+
+/** #306: Delete all current voice audio, which takes one Voice's audio and leaves the rest. */
+const other = { provider: 'speechify' as const, voice: 'en-US/kristy', label: 'Kristy' };
+/** Rows and files of every clip one Voice has in the book. */
+const clipsOf = (v: typeof voice) => {
+  const key = audioAddress('book', v, 'any').voice;
+  const rows = (db.prepare('SELECT COUNT(*) AS n FROM clips WHERE voice=?').get(key) as { n: number }).n;
+  return { rows, files: [...disk.values()].filter((a) => a.voice === key).length };
+};
+
+it('deletes all of one Voice\'s audio, stranded Clips included, and leaves another Voice\'s audio and Download running (#306)', async () => {
+  await open([{ id: 'one', texts: lines('One', 4) }, { id: 'two', texts: lines('Two', 4) }]);
+  // Audio saved under an old bracket setting: no chapter names it, yet it is the Voice's.
+  const repository = mock.repository as OfflineRepository;
+  await repository.saveClip('book', voice, 'An old <bracketed> line.', { audio: 'encoded', bytes: new Uint8Array([1, 2, 3]), mediaType: 'audio/mp4' }, () => true);
+  runtime.enqueue('book', voice, ['one', 'two']);
+  await vi.waitFor(() => expect(runtime.downloadTasks('book')[0].state).toBe('done'));
+  runtime.enqueue('book', other, ['one']);
+  await vi.waitFor(() => expect(runtime.downloadTasks('book').find((t) => runtime.sameVoice(t.voice, other))?.state).toBe('done'));
+  // The other Voice's next chapter is still out at the Provider.
+  mock.hold = true;
+  runtime.enqueue('book', other, ['two']);
+  await vi.waitFor(() => expect(mock.held.size).toBeGreaterThan(0));
+  expect(clipsOf(voice)).toEqual({ rows: 9, files: 9 });
+  expect(runtime.occupied('book', voice)).toBe(27);
+
+  await runtime.removeVoiceDownloads('book', voice);
+  expect(clipsOf(voice)).toEqual({ rows: 0, files: 0 });
+  expect(runtime.occupied('book', voice)).toBe(0);
+  expect(await shown()).toEqual({ counts: { one: 0, two: 0 }, downloaded: [], manage: [], files: 4 });
+  expect(runtime.savedVoices('book')).toEqual([other]);
+  // The other Voice keeps its audio, and its Download goes on.
+  expect(clipsOf(other)).toEqual({ rows: 4, files: 4 });
+  expect(runtime.downloadTasks('book').map((t) => t.voice)).toEqual([other]);
+  answerAll();
+  mock.hold = false;
+  await vi.waitFor(() => expect(runtime.downloadTasks('book')[0].state).toBe('done'));
+  expect(clipsOf(other)).toEqual({ rows: 8, files: 8 });
+  expect(runtime.planOf('book')).not.toBeNull();
+});
+
+it('keeps no answer still out at the Provider for a Voice whose audio was all deleted (#306)', async () => {
+  await open([{ id: 'one', texts: lines('One', 12) }]);
+  mock.hold = true;
+  runtime.enqueue('book', voice, ['one']);
+  await answerUntil(async () => (await savedOf('one')) >= 6);
+  await runtime.removeVoiceDownloads('book', voice);
+  answerAll();
+  expect(await shown()).toEqual({ counts: { one: 0 }, downloaded: [], manage: [], files: 0 });
+  expect(db.prepare('SELECT COUNT(*) AS n FROM clips').get()).toEqual({ n: 0 });
+  expect(db.prepare('SELECT COUNT(*) AS n FROM writes').get()).toEqual({ n: 0 });
+  expect(runtime.downloadTasks('book')).toEqual([]);
+});
