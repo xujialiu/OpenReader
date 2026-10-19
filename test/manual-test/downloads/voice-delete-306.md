@@ -91,10 +91,14 @@ the document's whole `27fa5ef2…` directory deleted from disk.
   `-2-confirm` screenshots exported beside it). It found `Delete all audio`
   on a cold launch, raised `Delete all audio?` naming a size, cancelled, and
   the catalogue afterwards still held B's 10 ready clips, 125,770 bytes.
-  Runs 3–4 before it failed for reasons outside the change: a violated
-  precondition (the probe expects saved audio; my Delete all had removed it —
-  `Manage downloads` is correctly absent then, #37) and the plan's count line
-  taking over 10 s to mount on a machine with four simulators booted.
+  Runs 3 and 4 before it (`result-20261020-014057-92189` and
+  `-014436-98005`) failed the same way, for a reason outside the change: a
+  violated precondition. Both passed the count-line wait and failed at the
+  `Manage downloads` wait (lines 189–190): the probe expects saved audio, and
+  the Delete all audio above had removed it, so `Manage downloads` was
+  correctly absent (#37). Their failure-time hierarchy shows the Download page
+  with `Download selected (0)` and no `Manage downloads`. The chapter was
+  downloaded again only after run 4; runs 5 and 6 then passed.
 - `OfflineFixProbe` (its `testDeleteAllSavedAudioReal`), `DownloadRingProbe`
   and `PauseOrderProbe` configure Fish Audio and download with the owner's
   key: not run, so no paid synthesis. Their #306 changes are the renamed
@@ -103,8 +107,8 @@ the document's whole `27fa5ef2…` directory deleted from disk.
 - **A 375 pt screen: not covered.** A session-created iPhone SE (3rd
   generation, iOS 26.5) was created for the narrow-screen check, but its
   install hung twice past three minutes while four simulators were booted
-  (two other sessions' among them); the device was deleted on the owner's
-  instruction. The row's fit at 375 pt rests on the arithmetic (326 pt
+  (two other sessions' among them); the device was deleted on the parent agent's
+  instruction once the owner noticed it. The row's fit at 375 pt rests on the arithmetic (326 pt
   between insets vs measured 101 + 47 + 191) and the 402 pt measurement.
 
 ## Observations outside the change
