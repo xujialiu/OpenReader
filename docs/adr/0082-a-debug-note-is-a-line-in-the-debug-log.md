@@ -144,9 +144,15 @@ touched; with one, only it is deleted.
   Copy, a failed copy and Cancel. It also pins the grant and the reader's
   answer, which only the phone runs.
 
-## Not verified here
+## Verified on the simulator, and what is not
 
-Written before the simulator run: that the alert presents over the drawer's
-sheet with its message and field as `RenameAlert`'s does; that the clipboard
-holds the copied text; that the snapshot reaches the log; that a new Beta
-clears the simulator's log at its first launch.
+On the iOS 26.5 simulator with `1.0.0 (9)-beta12` (notes 2026-10-20, 01:19), the
+alert presented over the drawer's sheet as `RenameAlert`'s does, with its
+message. Save and Copy wrote the note, the status line 3 ms after it and the
+snapshot 211 ms after it, and the clipboard held the copied text. The time was
+byte-identical in all three. A blank comment and Cancel behaved as above. A
+seeded `1.0.0 (9)-beta11` log was cleared at the first launch, and not again.
+
+Not run: anything on the owner's iPhone. That includes `devicectl` copying
+`version.txt` with the folder, a build without Debug Mode deleting a leftover
+log, and the real size of an hour's lines.

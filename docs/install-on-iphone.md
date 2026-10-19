@@ -185,7 +185,8 @@ python3 test/manual-test/kit/debug-notes.py "/tmp/or-debug-before-$OLD/debug-log
 
 - Say in the reply where the copy is and how many Debug Notes it holds
   (`debug-notes.py` prints them and their count). It lasts until the Mac
-  restarts (notes 2026-10-20).
+  restarts: `/tmp` keeps files unread for weeks, but nothing from before the
+  last restart.
 - Exit 1 from `debug-log.py` means the phone holds no Debug Log, as after a
   build without Debug Mode: there is nothing to keep, so go on.
 - `OLD` is the version that wrote the log, as in `1.0.0 (9)-beta11`; a log from
