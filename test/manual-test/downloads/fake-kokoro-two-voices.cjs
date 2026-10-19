@@ -15,10 +15,8 @@
 // OPENREADER_FAKE_TTS_REFUSE      a JSON control file, read per request: {"refuseFrom": N}
 
 const { Buffer } = require('node:buffer');
-const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
-const os = require('node:os');
 const path = require('node:path');
 
 const PORT = Number(process.argv[2] ?? 8811);
