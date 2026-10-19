@@ -128,6 +128,10 @@ export interface ReaderBridgeOptions {
    * (`BlocksMessage.anchors`, #212). Not called for a Document whose Contents
    * names no fragment. Its own callback rather than part of `onBlocks`, which
    * is skipped when a section comes back with the same text.
+   *
+   * Called before `onBlocks` for the same message, so a Contents row waiting
+   * for its section (#307) knows where its fragment starts when the section's
+   * Blocks arrive.
    */
   onAnchors?(section: number, anchors: ReadonlyMap<string, number>): void;
   /**
@@ -395,8 +399,15 @@ export interface ReaderBridge {
    *
    * It is a move of the page, so only something the owner asked for should call
    * it.
+   *
+   * With a `fragment`, a Contents row's own (`ContentsRow.fragment`), the page
+   * goes to the element it names inside the spine item rather than to the top of
+   * it (#307): epub.js is asked for the spine item's href and the fragment, and
+   * its manager lays the section out and then moves to `locationOf` that element,
+   * as it does for a link inside the Document. Without one, or before the program
+   * has said what the spine's hrefs are, the index goes alone.
    */
-  goToSection(index: number): void;
+  goToSection(index: number, fragment?: string): void;
   /** Obtain a missing section without moving the visible page. */
   prepareSection(index: number): void;
   /**
@@ -407,9 +418,10 @@ export interface ReaderBridge {
    * `goToSection`'s display, preceded by a message that stops the page following
    * the reading until a highlight is next revealed. Without it the reading's own
    * section, rendered again as the neighbour of the one displayed, is centred as
-   * it arrives and takes the page back (`BrowseMessage`).
+   * it arrives and takes the page back (`BrowseMessage`). A `fragment` is
+   * `goToSection`'s (#307).
    */
-  browse(index: number): void;
+  browse(index: number, fragment?: string): void;
   /**
    * Debug Mode (#113): have the page write a `[renderer]` snapshot of epub.js —
    * views, queues, scroll, sections asked for and reported, location, the
@@ -549,6 +561,11 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
    * it installs. Zero until it arrives, which it does before any section reports.
    */
   const spine = useRef(0);
+  /**
+   * The spine's hrefs, from the same message: what a Contents row's fragment is
+   * put after for epub.js (`placeIn`, #307). Empty until it arrives.
+   */
+  const hrefs = useRef<readonly string[]>([]);
   /**
    * The last inset sent, kept so it can be sent **again** when the program says it
    * has installed.
@@ -842,16 +859,34 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [goToLocation],
   );
 
+  /**
+   * What `rendition.display` is given for a spine item, and a place in it.
+   *
+   * `goToLocation` hands its argument to `rendition.display` as a string
+   * (patched to a JSON string literal, ADR 0077), and epub.js's `Spine.get`
+   * reads a target that is not a CFI and is not NaN as a spine index. So the
+   * index travels as its own decimal spelling.
+   *
+   * A fragment goes after the spine item's own href (#307). The spine's spelling
+   * and not the Contents entry's: epub.js's EPUB 3 `navItem` puts a leading `/`
+   * on the entry (#125), which `Spine.get` would not find, while it splits this
+   * target at its first `#` and looks the href up as the spine has it. The
+   * fragment is `fragmentOf`'s, decoded, which is the spelling an element's id
+   * has: the manager's `locationOf` gives everything after that `#` to
+   * `getElementById`.
+   */
+  const placeIn = useCallback((index: number, fragment: string) => {
+    const href = fragment ? hrefs.current[index] : undefined;
+    return href ? `${href}#${fragment}` : String(index);
+  }, []);
+
   const goToSection = useCallback(
-    (index: number) => {
-      // `goToLocation` hands its argument to `rendition.display` as a string
-      // (patched to a JSON string literal, ADR 0077), and epub.js's `Spine.get`
-      // reads a target that is not a CFI and is not NaN as a spine index. So the
-      // index travels as its own decimal spelling.
-      debugLog('renderer', `the app asks epub.js to display section ${index} (goToSection)`);
-      goToLocation(String(index));
+    (index: number, fragment = '') => {
+      const place = placeIn(index, fragment);
+      debugLog('renderer', `the app asks epub.js to display section ${index}${place === String(index) ? '' : ` at ${cutText(place)}`} (goToSection)`);
+      goToLocation(place);
     },
-    [goToLocation],
+    [goToLocation, placeIn],
   );
 
   const preparing = useRef(new Map<number, ReturnType<typeof setTimeout>>());
@@ -869,17 +904,18 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   }, [send]);
 
   const browse = useCallback(
-    (index: number) => {
+    (index: number, fragment = '') => {
       // First, so the sections the display renders arrive to a page that has
       // stopped following the reading: both are injected, and run in this order.
       following.current = false;
       restoring.current = false;
       if (cued.current) cued.current = { ...cued.current, reveal: false };
       send({ kind: 'browse' });
-      debugLog('renderer', `the app asks epub.js to display section ${index} (browse)`);
-      goToLocation(String(index));
+      const place = placeIn(index, fragment);
+      debugLog('renderer', `the app asks epub.js to display section ${index}${place === String(index) ? '' : ` at ${cutText(place)}`} (browse)`);
+      goToLocation(place);
     },
-    [send, goToLocation],
+    [send, goToLocation, placeIn],
   );
 
   const snapshot = useCallback(
@@ -929,6 +965,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
       if (message.type === DOCUMENT_MESSAGE) {
         pageReady.current = true;
         spine.current = message.spine;
+        hrefs.current = message.hrefs;
         send({ kind: 'lookup', enabled: lookupEnabled.current });
         // The program has installed, so the two things it may have missed go again.
         if (inset.current > 0 || openPlayer.current > 0) send({ kind: 'inset', bottomPx: inset.current, openPx: openPlayer.current });
@@ -986,6 +1023,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
           if (decided !== PLAIN_BODY_TEXT_SIZE) send({ kind: 'appearance', css: appearanceCss(appearance.current, decided) });
         }
       }
+      // First, so a Contents row waiting on this section finds its fragment (#307).
+      if (message.anchors) latest.current.onAnchors?.(message.sectionIndex, new Map(message.anchors));
       const next = withSection(blocks.current, message);
       // Unchanged means epub.js rendered a section whose text is the same, which
       // happens whenever the reader crosses back into one. Re-segmenting the book
@@ -998,7 +1037,6 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
           spine: spine.current,
         });
       }
-      if (message.anchors) latest.current.onAnchors?.(message.sectionIndex, new Map(message.anchors));
       clearTimeout(preparing.current.get(message.sectionIndex));
       preparing.current.delete(message.sectionIndex);
       pageReady.current = true;

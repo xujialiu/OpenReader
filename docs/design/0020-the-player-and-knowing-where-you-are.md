@@ -164,10 +164,14 @@ chapter of the book the app's reviewers are asked to try.
 Reading such a page marks the nearest thing before it that the contents does list.
 Nothing is highlighted as if it were exact.
 
-The related cost, in the same vein: when a book's contents points at a chapter
-partway down a longer piece, tapping that row takes you to the start of the piece
-rather than to the exact line. On the owner's novel this never happens. Where it
-does, you land slightly early rather than somewhere unpredictable.
+**A chapter partway down a longer piece opens at that chapter.** Tapping its row
+shows its heading, and reading from there starts with it. At first the row opened
+at the start of the piece instead. That was accepted while the owner's novel,
+where it never happens, was the only book that mattered: landing early seemed
+better than landing somewhere unpredictable. In Pride and Prejudice, the book the
+reviewers are asked to try, it happens on nearly every row. Any of the first ten
+chapters opened on the title page, so the list could not be used to go to a
+chapter at all.
 
 **And a book with no contents at all is normal.** Some have none; the list is then
 empty and says so. It is not an error and nothing else stops working — tapping a

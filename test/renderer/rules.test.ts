@@ -1897,7 +1897,7 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
     const bridge = code('reader-bridge.ts');
     const browse = bridge.slice(bridge.indexOf('const browse = useCallback('), bridge.indexOf('const onWebViewMessage = useCallback('));
     pin(browse, "send({ kind: 'browse' });", 'reader-bridge.ts, browse');
-    expect(browse.indexOf("send({ kind: 'browse' });")).toBeLessThan(browse.indexOf('goToLocation(String(index));'));
+    expect(browse.indexOf("send({ kind: 'browse' });")).toBeLessThan(browse.indexOf('goToLocation(place);'));
   });
 
   it('reveals a cue or a shown sentence unless the caller says not to', () => {

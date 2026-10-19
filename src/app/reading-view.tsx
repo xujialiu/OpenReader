@@ -705,7 +705,7 @@ export function ReadingView({
       return;
     }
     if (what === 'skip') return reading.skip(command.target as never);
-    if (what === 'section') return reading.goToSection(Number(command.section));
+    if (what === 'section') return reading.goToSection(Number(command.section), typeof command.fragment === 'string' ? command.fragment : '');
     if (what === 'rate') return onRate(Number(command.rate));
     if (what === 'collapse') return setCollapsed(Boolean(command.on));
     if (what === 'contents') return setContentsOpen(Boolean(command.on));

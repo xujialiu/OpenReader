@@ -13,8 +13,9 @@ row is Browsing and names no Utterance. What collapsing leaves is revised by
 navigation bar goes with the player, and the one button left, the Reading
 Button, shows the player and never plays or pauses. The skip debounce is
 removed by #86: every seek stops the sound and reaches the engine at the press
-(below, "The sound stops at the press, and nothing waits"). Historical
-measurements below are retained unchanged.
+(below, "The sound stops at the press, and nothing waits"). Where a row opens
+inside a file that several rows share is revised by #307 (below, "A row opens
+at its fragment"). Historical measurements below are retained unchanged.
 
 _The product argument is
 `docs/design/0020-the-player-and-knowing-where-you-are.md`._
@@ -466,7 +467,8 @@ array. (The `toc` array on its own measures 241,468 bytes read out of `toc.ncx`.
 
 Nothing can mint a **CFI** for a row: a CFI is a path into a rendered document's
 DOM. So there is no third currency, and `#fragment` is dropped — `part1.xhtml#ch3`
-seeks to the top of `part1.xhtml`.
+seeks to the top of `part1.xhtml`. (Until #307, below: a row now opens at its
+fragment.)
 
 **The two hrefs are matched as strings, and that is safe for a stated reason.**
 epub.js resolves neither the navigation's hrefs (`Navigation.ncxItem` returns the
@@ -594,7 +596,7 @@ names, and leaves the other lines empty.
 
 Not changed: a row is still opened at the top of its file. Following the fragment
 would need the page to scroll to an element it may not have laid out yet, and is
-a change of its own.
+a change of its own. #307 made it ("A row opens at its fragment", below).
 
 The `shared` sentence under the Contents list said the marked row was "the part
 being read". With sibling chapters that was false, and it now says only that the
@@ -611,6 +613,51 @@ file has two, so the depth comes from walking the tree.
 Flatten and locate on all 2,076 entries: **0.772 ms** and **0.003 ms** median under
 Node on the desk — and two thirds of the flatten is building the spine table, not
 walking the tree.
+
+### A row opens at its fragment (#307)
+
+In the Gutenberg Pride and Prejudice, 61 chapters sit in 7 files and every row
+names a fragment. 56 of its 63 rows are not the first row of their file, and each
+of them opened at the top of its file. The bridge asked for
+`goToLocation(String(index))`, so the fragment never left the app. On the owner's
+iPhone every Contents tap logged `the app asks epub.js to display section 1
+(browse)`, while a link inside the Document logged its own
+`…1342-h-5.htm.xhtml#CHAPTER_LX` (`notes/NOTES_2026-10-20.md`).
+
+- **The fragment goes with the row.** `contents-sheet.tsx` calls
+  `onGo(section, fragment)` with `ContentsRow.fragment`. `Reading.goToSection`
+  and the bridge's `goToSection` and `browse` take it beside the spine index.
+- **The page is asked for `<spine href>#<fragment>`.** The href is the spine's
+  own spelling, which the Document message already carries. The Contents
+  entry's spelling would not do: epub.js's EPUB 3 `navItem` puts a leading `/`
+  on it (#125), and `Spine.get` would not find that. `Spine.get` splits the
+  target at its first `#` and looks up the part before it.
+  `DefaultViewManager.display(section, target)` keeps a target that is not the
+  section's own href. It lays the section out, or scrolls to it when it is
+  already on the page (where `landBelowBar` keeps the bar's space), then calls
+  `moveTo(view.locationOf(target))`. `Contents.locationOf` hands everything
+  after the `#` to `getElementById`. So the fragment goes decoded, as
+  `fragmentOf` spells it, which is the element's id. A link inside the Document
+  makes the same display (#191). A row with no fragment, or a press before the
+  Document message, still sends the index. The target is the spine index or the
+  spine's own href, never something the list mints, so there is still no third
+  currency.
+- **A reading that follows the row starts at the fragment.** That is a book
+  with no Reading Position yet, or one playing with no sentence yet; Browsing
+  is unchanged (ADR 0044, ADR 0063). The reading starts at the first Utterance
+  whose first Block is the fragment's anchor (`BlocksMessage.anchors`, #212) or
+  a later Block of that section (`firstUtteranceOfSection`'s `from`). A section
+  read on to past a page with no text (#86) starts at its top. A fragment the
+  page did not find in the section is the top of the section, as before. A
+  heading is never welded to the Block before it (`rejoin.ts`), so a chapter's
+  first Utterance is its heading's own.
+- **The bridge hands a Blocks message's anchors on before its Blocks.** A row
+  that waited for its section takes its second step inside `onBlocks`. Before
+  the change, the anchors in that same message had not yet arrived there. With
+  the old order put back, the "once the file reports" case of
+  `test/app/contents-row-fragment.test.ts` lands on Utterance 0, the title page.
+  `use-reading.ts` keeps them in `anchorsRef`, because `status.anchors` is a
+  render behind.
 
 ## Voices: the locale dimension is missing from half the providers
 

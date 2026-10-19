@@ -239,7 +239,8 @@ top-level entries with nothing under them is one **unheaded** section: the owner
 book opens with two, and a book with no nesting at all must not become two
 thousand sections of one row.
 
-**The one currency out is a spine index**, for `goToSection`. Nothing here can
+**The one currency out is a spine index**, for `goToSection`, with the row's
+fragment beside it (#307). Nothing here can
 mint a CFI — a CFI is a path into a rendered document's DOM, and the DOM is in the
 WebView — so a union with a CFI branch would be a stub that pretends to work.
 
@@ -290,11 +291,13 @@ itself so that a row index or a Block ordinal cannot be passed in its place. The
 Block's ordinal within its section is counted from the reported Blocks
 (`blockInSection` in `src/app/segment.ts`), never read out of its id.
 
-`#fragment` is not followed by a row's target, so `part1.xhtml#ch3` seeks to the
-top of `part1.xhtml`; the row keeps it as `ContentsRow.fragment` only to be told
-apart from the other rows of its file. Keeping it would mean handing the href to the renderer, and ADR
-0020 says the contents list adds no third currency to `goTo(cfi)` and
-`goToSection(index)`.
+A row's `target` is its spine index and `ContentsRow.fragment` is where in that
+file it starts. Both go to the renderer when the row is pressed (#307). The page is
+asked for the spine item's own href with the fragment after it, and a reading that
+follows starts where the page says the fragment starts (`BlocksMessage.anchors`).
+The fragment also tells a row apart from the other rows of its file. Nothing here
+mints a CFI, so ADR 0020's currencies stay the spine index and the spine's own
+href.
 
 ### What `src/renderer/` sends
 

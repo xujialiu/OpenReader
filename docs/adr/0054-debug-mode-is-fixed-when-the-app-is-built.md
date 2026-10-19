@@ -473,7 +473,8 @@ manager's offset. They are now written as they happen, in Debug Mode only.
 - **Scripts that need changing.** The kit's scripts that read answers out of
   `note="…PROBE …"` need `HX PROBE` or `[probe]` instead.
 - **The app asks for displays too.** `goTo`, `goToSection` and `browse` write
-  `[renderer] the app asks epub.js to display … (goTo|goToSection|browse)`.
+  `[renderer] the app asks epub.js to display … (goTo|goToSection|browse)`;
+  a Contents row's fragment adds ` at <href>#<fragment>` after the section (#307).
   They reach the page through the library's `goToLocation`, whose injected
   `rendition.display('…')` the page can name only as `injected code`.
   (Since ADR 0077 it injects `rendition.display("…")`, the place as a JSON literal.)

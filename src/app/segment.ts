@@ -81,15 +81,28 @@ export function blockInSection(blocks: readonly SectionedBlock[], index: number)
  * with no text on it — the owner's book puts one at the start of each of its
  * thirteen volumes — and a cover page is a `<svg><image/></svg>`. The page has
  * still moved there, which is what the tap asked for.
+ *
+ * `from` is where a Contents row's fragment starts, as the ordinal among the
+ * spine item's Blocks that the page reports (`BlocksMessage.anchors`, #212): the
+ * Utterance is then the first whose first Block is that one or a later one of
+ * the same spine item (#307). A file that holds several chapters, as each of the
+ * Gutenberg Pride and Prejudice's seven does, is otherwise read from its top
+ * whichever of its chapters was chosen. The bridge keeps a section's Blocks
+ * together (`withSection`), so its Block at `from` is its first Block's index
+ * plus `from`.
  */
 export function firstUtteranceOfSection(
   utterances: readonly Utterance[],
   blocks: readonly SectionedBlock[],
   section: number,
+  from = 0,
 ): number | null {
+  const first = blocks.findIndex((block) => block.sectionIndex === section);
+  if (first < 0) return null;
+  const floor = first + from;
   for (let at = 0; at < utterances.length; at++) {
     const span = utterances[at].spans[0];
-    if (span && blocks[span.block]?.sectionIndex === section) return at;
+    if (span && span.block >= floor && blocks[span.block]?.sectionIndex === section) return at;
   }
   return null;
 }
@@ -117,6 +130,9 @@ export type RowReading =
  * held a Block (`rendered.reported`), or when a Block of it is in hand. Only the
  * first section not yet reported is waited for; the walk goes no further than the
  * sections that have, so it never guesses at text that has not arrived.
+ *
+ * `from` is the Block ordinal the row's fragment starts at in its own section
+ * (`firstUtteranceOfSection`, #307); a section read on to starts at its top.
  */
 export function readingFromRow(
   utterances: readonly Utterance[],
@@ -124,9 +140,10 @@ export function readingFromRow(
   rendered: { spine: number; reported: ReadonlySet<number> },
   section: number,
   onward: boolean,
+  from = 0,
 ): RowReading {
   for (let at = section; ; at++) {
-    const first = firstUtteranceOfSection(utterances, blocks, at);
+    const first = firstUtteranceOfSection(utterances, blocks, at, at === section ? from : 0);
     if (first !== null) return { kind: 'utterance', utterance: first };
     const reported = rendered.reported.has(at) || blocks.some((block) => block.sectionIndex === at);
     if (!reported) return { kind: 'wait', section: at };

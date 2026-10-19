@@ -264,8 +264,15 @@ export interface Reading {
    * from does not exist until that section has rendered and reported its Blocks,
    * so the second step waits for them — unless the section has already rendered,
    * in which case it happens now.
+   *
+   * `fragment` is the row's own (`ContentsRow.fragment`), empty for a row that
+   * names a whole spine item. With one, the page goes to the element it names,
+   * and a reading that follows starts at the first Utterance from the Block the
+   * page says that fragment starts at (#307): a file that holds several
+   * chapters, as each of the Gutenberg Pride and Prejudice's seven does, is
+   * otherwise opened and read from its top whichever chapter was chosen.
    */
-  goToSection(section: number): void;
+  goToSection(section: number, fragment?: string): void;
   /**
    * Where speech has got to, as a **Reading Position** (ADR 0008), or null
    * before a Clip has played — and while a stored place is still pending, which
@@ -303,6 +310,15 @@ export interface Reading {
 /** Whatever refused, in its own words. A `SynthesisError`'s message already names the address it tried and asks the one question there is. */
 function describe(problem: unknown): string {
   return problem instanceof Error ? problem.message : String(problem);
+}
+
+/**
+ * Where a Contents row's fragment starts in its section, as the Block ordinal the
+ * page reported (`BlocksMessage.anchors`, #212, #307); the top of the section for
+ * a row with no fragment, or one the page did not find there.
+ */
+function startOf(anchors: ReadonlyMap<number, ReadonlyMap<string, number>>, section: number, fragment: string): number {
+  return fragment ? anchors.get(section)?.get(fragment) ?? 0 : 0;
 }
 
 /**
@@ -427,9 +443,16 @@ export function useReading(
    * follow until the section reports its Blocks, because until then it has no
    * Utterance to seek to (`readingFromRow`). `onward` is a row pressed while
    * playing: the engine is silenced for the wait, and a section that reports with
-   * no text is read past (#86).
+   * no text is read past (#86). `fragment` is the row's, kept for its own section
+   * only (#307).
    */
-  const pendingSectionRef = useRef<{ section: number; onward: boolean } | null>(null);
+  const pendingSectionRef = useRef<{ section: number; onward: boolean; fragment: string } | null>(null);
+  /**
+   * `status.anchors`, as it arrives rather than as the last render had it: a row
+   * waiting on its section reads its fragment's start here in the same message
+   * that brings the section's Blocks (`onAnchors` comes first, #307).
+   */
+  const anchorsRef = useRef(new Map<number, ReadonlyMap<string, number>>());
   /**
    * The stored Reading Position, until an Utterance has been found for it.
    *
@@ -920,24 +943,26 @@ export function useReading(
    * that has some, as the owner chose; the section waited for is then asked for,
    * because nothing else displays a section no sentence has reached. When nothing
    * after the row has text, the reading stops where it was, since nothing has
-   * moved it, and says why.
+   * moved it, and says why. A row's `fragment` moves where its own section is
+   * read from (#307).
    */
-  const followRow = useCallback((section: number, onward: boolean) => {
+  const followRow = useCallback((section: number, onward: boolean, fragment = '') => {
     const target = readingFromRow(
       loadedRef.current,
       blocksRef.current,
       { spine: renderedRef.current?.spine ?? 0, reported: reportedSectionsRef.current },
       section,
       onward,
+      startOf(anchorsRef.current, section, fragment),
     );
-    debugLog('reading', `contents row ${section}${onward ? ' while playing' : ''}: ${target.kind === 'utterance' ? `utterance ${target.utterance}` : target.kind === 'wait' ? `wait for section ${target.section}` : target.kind}`);
+    debugLog('reading', `contents row ${section}${fragment ? `#${fragment}` : ''}${onward ? ' while playing' : ''}: ${target.kind === 'utterance' ? `utterance ${target.utterance}` : target.kind === 'wait' ? `wait for section ${target.section}` : target.kind}`);
     if (target.kind === 'utterance') {
       pendingSectionRef.current = null;
       seekTo(target.utterance);
       return;
     }
     if (target.kind === 'wait') {
-      pendingSectionRef.current = { section: target.section, onward };
+      pendingSectionRef.current = { section: target.section, onward, fragment: target.section === section ? fragment : '' };
       if (target.section !== section) bridgeRef.current?.goToSection(target.section);
       if (onward) engineRef.current?.silence();
       return;
@@ -975,7 +1000,7 @@ export function useReading(
    * text reads on past it (`followRow`, #86).
    */
   const goToSection = useCallback(
-    (section: number) => {
+    (section: number, fragment = '') => {
       /**
        * Browsing (#52, #107): with the reading on a sentence that is its Reading
        * Position, the row moves the page and nothing else, playing or paused. No
@@ -1007,11 +1032,11 @@ export function useReading(
         pendingSectionRef.current = null;
         if (waited?.onward) engineRef.current?.seek(atRef.current);
         revealCue.current = false;
-        bridgeRef.current?.browse(section);
+        bridgeRef.current?.browse(section, fragment);
         return;
       }
-      bridgeRef.current?.goToSection(section);
-      followRow(section, playIntent.current);
+      bridgeRef.current?.goToSection(section, fragment);
+      followRow(section, playIntent.current, fragment);
     },
     [followRow],
   );
@@ -1170,7 +1195,7 @@ export function useReading(
         if (seekingRef.current) walkForward(section);
         const waited = pendingSectionRef.current;
         if (waited?.section === section.index) {
-          if (waited.onward) followRow(section.index, true);
+          if (waited.onward) followRow(section.index, true, waited.fragment);
           else pendingSectionRef.current = null;
         }
         // Play is waiting for a place, and this may be its section, holding nothing
@@ -1213,7 +1238,7 @@ export function useReading(
        */
       const wanted = pendingSectionRef.current;
       if (wanted?.section === section.index) {
-        const first = firstUtteranceOfSection(next, reported, wanted.section);
+        const first = firstUtteranceOfSection(next, reported, wanted.section, startOf(anchorsRef.current, wanted.section, wanted.fragment));
         if (first !== null) {
           pendingSectionRef.current = null;
           atRef.current = first;
@@ -1224,7 +1249,7 @@ export function useReading(
         // Reported with no text. Pressed while playing, the reading goes on past it
         // (#86); otherwise the row is finished with, as the page has moved there.
         adopt(next, reported);
-        if (wanted.onward) followRow(wanted.section, true);
+        if (wanted.onward) followRow(wanted.section, true, wanted.fragment);
         else pendingSectionRef.current = null;
         return;
       }
@@ -1259,6 +1284,7 @@ export function useReading(
    * held, so a section scrolled back into view costs no render.
    */
   const handleAnchors = useCallback((section: number, anchors: ReadonlyMap<string, number>) => {
+    anchorsRef.current.set(section, anchors);
     setStatus((was) => {
       const held = was.anchors.get(section);
       if (held && held.size === anchors.size && [...anchors].every(([fragment, at]) => held.get(fragment) === at)) return was;

@@ -79,7 +79,7 @@ describe('a tap, a skip or a Contents row stops the sound at the press (#86)', (
   it('stops the sound while a Contents row waits for its chapter, and only a seek ends the wait', () => {
     const reading = code('use-reading.ts');
     const goToSection = within(reading, 'const goToSection = useCallback(', '[followRow]');
-    pin(goToSection, 'followRow(section, playIntent.current);', 'use-reading.ts goToSection');
+    pin(goToSection, 'followRow(section, playIntent.current, fragment);', 'use-reading.ts goToSection');
     pin(goToSection, 'if (waited?.onward) engineRef.current?.seek(atRef.current);', 'use-reading.ts goToSection');
     const followRow = within(reading, 'const followRow = useCallback(', '}, [seekTo]);');
     pin(followRow, 'if (onward) engineRef.current?.silence();', 'use-reading.ts followRow');

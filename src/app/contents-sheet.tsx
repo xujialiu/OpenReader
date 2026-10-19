@@ -78,8 +78,12 @@ export interface ContentsSheetProps {
    * starts and the Block the reading is in (#212). Null when neither is known.
    */
   place: ReadingSpineItem | null;
-  /** Go here: a spine index. The caller does the two steps (`use-reading.ts`'s `goToSection`). */
-  onGo(section: number): void;
+  /**
+   * Go here: a spine index, and the row's fragment inside it, empty for a row
+   * that names the whole spine item (#307). The caller does the two steps
+   * (`use-reading.ts`'s `goToSection`).
+   */
+  onGo(section: number, fragment: string): void;
   /**
    * The rows that carry the Downloaded check, as indexes into `contents.rows`
    * (#134, `download-rows.ts`'s `downloadedRows`). Worked out by the screen,
@@ -120,7 +124,7 @@ export function ContentsSheet({ visible, onClose, contents, spineKnown, place, o
             keyExtractor={(_, index) => String(index)}
             renderItem={({ item, index }) => (
               <Row row={item} current={index === here?.row} downloaded={downloaded.has(index)}
-                onPress={() => { if (item.target !== null) { onGo(item.target); onClose(); } }} />
+                onPress={() => { if (item.target !== null) { onGo(item.target, item.fragment); onClose(); } }} />
             )} />
         )}
 

@@ -31,8 +31,8 @@ import { highlighterSource } from '../../src/renderer/highlighter';
 
 const bridge = vi.hoisted(() => ({
   goTo: vi.fn<(cfi: string) => void>(),
-  goToSection: vi.fn<(index: number) => void>(),
-  browse: vi.fn<(index: number) => void>(),
+  goToSection: vi.fn<(index: number, fragment?: string) => void>(),
+  browse: vi.fn<(index: number, fragment?: string) => void>(),
   show: vi.fn<(utterance: number, options?: { reveal?: boolean }) => void>(),
   onClip: vi.fn<(cue: { utterance: number }, options?: { reveal?: boolean; recover?: boolean }) => void>(),
   clear: vi.fn<() => void>(),
@@ -699,7 +699,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
     bridge.goToSection.mockClear();
 
     await m.press((reading) => reading.goToSection(3));
-    expect(bridge.browse).toHaveBeenCalledWith(3);
+    expect(bridge.browse).toHaveBeenCalledWith(3, '');
     expect(bridge.goToSection).not.toHaveBeenCalled();
     expect(bridge.show).not.toHaveBeenCalled();
     expect(m.reading.status.utterance).toBe(at(FERRY));
@@ -730,7 +730,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
 
       await m.press((reading) => reading.goToSection(3));
       await act(async () => { vi.advanceTimersByTime(600); });
-      expect(bridge.browse).toHaveBeenCalledWith(3);
+      expect(bridge.browse).toHaveBeenCalledWith(3, '');
       expect(engine.seeks).toEqual([]);
       expect(m.reading.status.utterance).toBe(at(FERRY));
       await m.down();
@@ -752,7 +752,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
 
     await m.press((reading) => reading.goToSection(3));
     await m.report(ALL, 3);
-    expect(bridge.browse).toHaveBeenCalledWith(3);
+    expect(bridge.browse).toHaveBeenCalledWith(3, '');
     expect(bridge.show).not.toHaveBeenCalled();
     expect(m.reading.status.utterance).toBe(at(FERRY));
     expect(m.reading.status.resume).toBe('Resumed at the sentence the reading stopped on.');
@@ -773,7 +773,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
     const calls = engine.calls.length;
 
     await m.press((reading) => reading.goToSection(3));
-    expect(bridge.browse).toHaveBeenCalledWith(3);
+    expect(bridge.browse).toHaveBeenCalledWith(3, '');
     expect(bridge.goToSection).not.toHaveBeenCalled();
     expect(bridge.show).not.toHaveBeenCalled();
     // Nothing reaches the engine: no seek, no silence, no pause.
@@ -805,7 +805,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
 
     // Pressed while the first Clip is still being fetched.
     await m.press((reading) => reading.goToSection(3));
-    expect(bridge.browse).toHaveBeenCalledWith(3);
+    expect(bridge.browse).toHaveBeenCalledWith(3, '');
     await m.press(() => engine.deps.clock.onClip(cue(at(FERRY))));
     expect(bridge.onClip).toHaveBeenLastCalledWith(expect.objectContaining({ utterance: at(FERRY) }), { reveal: false, recover: true });
 
@@ -828,7 +828,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
 
     await m.press((reading) => reading.goToSection(2));
     expect(bridge.browse).not.toHaveBeenCalled();
-    expect(bridge.goToSection).toHaveBeenCalledWith(2);
+    expect(bridge.goToSection).toHaveBeenCalledWith(2, '');
     expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
     await m.down();
   });
@@ -857,7 +857,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
     // … so a row after a pause only browses.
     await m.press((reading) => reading.pause());
     await m.press((reading) => reading.goToSection(1));
-    expect(bridge.browse).toHaveBeenCalledWith(1);
+    expect(bridge.browse).toHaveBeenCalledWith(1, '');
     expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
     await m.down();
   });
@@ -871,7 +871,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
     expect(m.reading.readingPosition()).toBeNull();
 
     await m.press((reading) => reading.goToSection(3));
-    expect(bridge.browse).toHaveBeenCalledWith(3);
+    expect(bridge.browse).toHaveBeenCalledWith(3, '');
     expect(m.reading.status.utterance).toBe(1);
     await m.down();
   });
@@ -887,7 +887,7 @@ describe('a Contents row only moves the page, paused (#52) or playing (#107)', (
 
     await m.press((reading) => reading.goToSection(2));
     expect(bridge.browse).not.toHaveBeenCalled();
-    expect(bridge.goToSection).toHaveBeenCalledWith(2);
+    expect(bridge.goToSection).toHaveBeenCalledWith(2, '');
     expect(m.reading.status.utterance).toBe(at('Chapter Two.'));
     expect(m.reading.status.resume).toBe(
       'The place this book was left at had not rendered yet when the reading was moved, so it starts there instead.',
@@ -1334,7 +1334,7 @@ describe('a place that arrives while the reading plays (#105)', () => {
     await m.press((reading) => reading.goToSection(1));
     // Browsing: the page moves and the voice goes on with its sentence, so the
     // reading still has no place of its own.
-    expect(bridge.browse).toHaveBeenCalledWith(1);
+    expect(bridge.browse).toHaveBeenCalledWith(1, '');
     expect(engine.calls).toEqual([]);
     await m.press((reading) => reading.pause());
     expect(m.reading.status.utterance).toBe(2);

@@ -213,6 +213,31 @@ describe('readingFromRow', () => {
   it('names only the row itself when it is not to read on', () => {
     expect(readingFromRow(utterances, sectioned, rendered([1, 2, 3]), 2, false)).toEqual({ kind: 'nothing' });
   });
+
+  /**
+   * A row whose fragment starts partway into its file (#307): its own section
+   * is read from there, and a section read on to from its top.
+   */
+  describe('from where the row\'s fragment starts', () => {
+    const shared = [
+      { text: 'Chapter I.', sectionIndex: 1, role: 'heading' as const },
+      { text: 'It is a truth.', sectionIndex: 1, role: 'paragraph' as const },
+      { text: 'Chapter II.', sectionIndex: 1, role: 'heading' as const },
+      { text: 'Mr. Bennet was among the earliest.', sectionIndex: 1, role: 'paragraph' as const },
+      { text: 'Chapter III.', sectionIndex: 2, role: 'heading' as const },
+    ];
+    const read = segmentDocument(shared, 'en');
+
+    it('reads the row\'s own section from its fragment', () => {
+      expect(readingFromRow(read, shared, rendered([1, 2]), 1, false, 2)).toEqual({ kind: 'utterance', utterance: 2 });
+      expect(readingFromRow(read, shared, rendered([1, 2]), 1, true, 2)).toEqual({ kind: 'utterance', utterance: 2 });
+    });
+
+    it('with nothing to read after the fragment, reads on from the top of the next section, or names nothing', () => {
+      expect(readingFromRow(read, shared, rendered([1, 2]), 1, true, 4)).toEqual({ kind: 'utterance', utterance: 4 });
+      expect(readingFromRow(read, shared, rendered([1, 2]), 1, false, 4)).toEqual({ kind: 'nothing' });
+    });
+  });
 });
 
 describe('blockInSection', () => {
@@ -250,6 +275,17 @@ describe('firstUtteranceOfSection', () => {
     expect(firstUtteranceOfSection(utterances, sectioned, 0)).toBe(0);
     expect(firstUtteranceOfSection(utterances, sectioned, 3)).toBe(1);
     expect(firstUtteranceOfSection(utterances, sectioned, 4)).toBe(3);
+  });
+
+  it('from a Block ordinal, finds the first Utterance of the section from that Block on (#307)', () => {
+    // Section 3's second Block, and its first, where a row's fragment starts.
+    const shared = [...sectioned.slice(0, 2), { text: 'Chapter two begins.', sectionIndex: 3 }, { text: 'Chapter three.', sectionIndex: 4 }];
+    const read = segmentDocument(shared, 'en');
+    expect(read.map((one) => one.text)).toEqual(['Cover art.', 'Chapter one begins.', 'It runs on.', 'Chapter two begins.', 'Chapter three.']);
+    expect(firstUtteranceOfSection(read, shared, 3, 1)).toBe(3);
+    expect(firstUtteranceOfSection(read, shared, 3, 0)).toBe(1);
+    // Past the section's last Block: nothing in this section, not the next one's first.
+    expect(firstUtteranceOfSection(read, shared, 3, 2)).toBeNull();
   });
 
   it('answers null for a section that has no text, which is an ordinary destination', () => {
