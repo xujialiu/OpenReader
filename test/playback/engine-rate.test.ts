@@ -54,6 +54,7 @@ const audio = vi.hoisted(() => {
   const AudioManager = {
     setAudioSessionOptions() {},
     setAudioSessionActivity: async () => {},
+    observeAudioInterruptions() {},
     addSystemEventListener: () => ({ remove() {} }),
   };
   /** The once-a-second position report. */

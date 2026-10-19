@@ -158,7 +158,8 @@ The patch calls the engine's locked `pauseIfNecessary` before dispatching that
 route event or scheduling a rebuild. Rebuilding now preserves Paused; a late
 interruption-end or new-device notification does not undo it. JS still pauses
 the queue, suspends the context and publishes the stopped Reading. Explicit Play
-uses the existing resume path. Ordinary interruption behavior remains unchanged.
+uses the existing resume path. Interruptions are handled in JavaScript since
+#303 (next section).
 A fixed rewind was rejected: it hides content consumed on the wrong output and
 cannot establish what the headphones actually delivered.
 
@@ -175,3 +176,52 @@ It reproduces 1.397 seconds of unheard advancement at 1.55x before the fix and
 zero afterwards under the same 338-quantum delivery delay. That establishes the
 race, not exact Bluetooth output latency or physical auto-switch causality.
 Physical AirPods acceptance remains necessary.
+
+## Interruptions are observed, and stop the Reading (#303)
+
+Until #303 interruptions were deliberately not observed. Unobserved,
+react-native-audio-api's `SystemNotificationManager.handleInterruption` sends
+JavaScript nothing. At the end it calls `AudioEngine.onInterruptionEnd`, which
+restarts the native engine only when iOS sends
+`AVAudioSessionInterruptionOptionShouldResume`. iOS does not always send it. On
+the owner's iPhone (`1.0.0 (9)-beta9`, `notes/NOTES_2026-10-19.md`), one
+interruption ended with options 0 (`interruption.end.hold`, state 3, running 0),
+and another never ended while the other app kept the audio. Both times the
+native engine stayed stopped while the playback engine went on publishing
+`playing: true`, for five and six minutes. The Player kept its Pause button, so
+the owner's first press paused and only the second played.
+
+`createAudioGraph` now calls `AudioManager.observeAudioInterruptions(true)` and
+listens for `interruption`. Observed, the library still runs
+`onInterruptionBegin` and marks the session inactive at `began`. At `ended` it
+only tells JavaScript and never calls `onInterruptionEnd`, so resuming is
+decided in one place:
+
+- `began` while playing: the engine pauses as for output loss
+  (`pauseNow('interrupted')`), and `useReading`'s stop exit holds the page,
+  writes the place and syncs.
+- `ended` with `shouldResume`: the engine plays again, but only if nothing has
+  happened since `began` (no Play, no Pause, no output loss). This keeps
+  resume-after-a-call.
+- `ended` without it, or no end at all: the Reading stays paused. An explicit
+  Play goes through `startEngine`, which rebuilds from
+  `AudioEngineStateInterrupted` or an invalidated graph. That path is the one
+  both second presses in the evidence took, and the voice was heard again.
+
+Another route was rejected: a native patch that tells JavaScript while the
+library keeps resuming natively. The JavaScript pause at `began` moves the
+native state off `Interrupted`, so `onInterruptionEnd` would return early
+anyway. Resuming has to be owned by one side.
+
+The flag is global, and a Pronunciation plays through the same library. It now
+stops at `began` and drops the Reading's automatic resume, as at output loss,
+rather than waiting out its 15 s deadline unresumed.
+
+`test/playback/engine-interruption.test.ts` runs the real engine and graph over
+a doubled library, which delivers interruption events only once they are
+observed, as the native code does. Before the fix it failed on `began` and on
+`ended` without `shouldResume` (`playing` stayed true). A test beside #155's
+checks that the place is written and synced. The simulator cannot raise a real
+interruption, so the physical checks are left to the owner's iPhone: another
+app's audio taking over, and a call or Siri that resumes.
+

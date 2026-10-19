@@ -123,6 +123,7 @@ const audio = vi.hoisted(() => {
   const AudioManager = {
     setAudioSessionOptions() {},
     setAudioSessionActivity: async () => {},
+    observeAudioInterruptions() {},
     addSystemEventListener: () => ({ remove() {} }),
   };
   return { world, quantum, module: { AudioContext, AudioManager } };

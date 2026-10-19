@@ -240,6 +240,12 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   let rate = clampRate(deps.rate ?? NATURAL_PACE);
   let playing = false;
   let disposed = false;
+  /**
+   * iOS's interruption paused a playing Reading, and no Play, Pause or output
+   * loss has decided anything since: the one case in which the end of the
+   * interruption may start it again (#303).
+   */
+  let interrupted = false;
 
   /** The Utterance being read. The read-ahead window slides with it. */
   let cursor = 0;
@@ -513,6 +519,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       onPosition,
       onBufferEnded,
       onOutputLost,
+      onInterrupted,
+      onInterruptionEnded,
       onError: deps.onError,
     });
     built.setRate(rate);
@@ -567,6 +575,34 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
    */
   function onOutputLost(): void {
     pauseNow('output-lost');
+    // Lost output outlasts an interruption: its end must not start the Reading on another output (#303).
+    interrupted = false;
+  }
+
+  /**
+   * iOS has taken the audio away (#303). The native engine has already stopped,
+   * so this pauses the source and publishes the stop, as output loss does: the
+   * Reading holds the page, writes its place and syncs, and the Player offers
+   * Play. Before #303 nothing listened, and the Reading stayed "playing" over
+   * silence until the owner's first press, which was therefore a Pause.
+   */
+  function onInterrupted(): void {
+    if (!playing) return;
+    interrupted = true;
+    pauseNow('interrupted');
+  }
+
+  /**
+   * iOS has given the audio back. With `shouldResume`, as after a call, the
+   * Reading carries on, which the library did natively before interruptions
+   * were observed. Without it, or after the owner has pressed anything since,
+   * the Reading stays as it is, and one Play plays.
+   */
+  function onInterruptionEnded(shouldResume: boolean): void {
+    const resume = interrupted && shouldResume && !disposed;
+    interrupted = false;
+    trace(`interruption.ended.${resume ? 'resume' : 'hold'}`);
+    if (resume) engine.play();
   }
 
   function trace(event: string): void {
@@ -741,7 +777,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     }
   }
 
-  return {
+  const engine: PlaybackEngine = {
     load(list, from = 0, options = {}) {
       generation++;
       utterances = list;
@@ -767,6 +803,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
 
     play() {
       if (disposed) return;
+      // A Play, the owner's or the end of an interruption's, settles the interruption (#303).
+      interrupted = false;
       trace('play.request');
       // Play is a new request, including at the end of the Document (#156).
       // Re-report exhaustion so the caller can stop or explain the wait.
@@ -798,7 +836,11 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       pump();
     },
 
-    pause: () => pauseNow('request'),
+    pause: () => {
+      // The owner's Pause outlasts the interruption: its end must not undo it (#303).
+      interrupted = false;
+      pauseNow('request');
+    },
 
     seek(utterance) {
       if (disposed) return;
@@ -877,4 +919,5 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       await built?.dispose();
     },
   };
+  return engine;
 }
