@@ -38,6 +38,13 @@ npx tsx test/manual-test/fixtures/NAME.ts OUTPUT_DIRECTORY
   unreachable (`contents.unreachable`) and the sheet says no row can be
   followed — while an NCX's `src` is kept as written and matches. The owner's
   books are NCX; make NCX contents in any fixture whose rows must open.
+- `positions-copies-fixture.ts`: two books for the position verification of
+  #249/#250/#282/#283 (`../sync/positions-late-adoption-and-copies.md`).
+  `Positions and Copies` holds `Go. Go. Stop now.`, 100 ×
+  `Is this number N? Yes.` (the 65th-and-later copy) and 100 bare `Yes.`
+  (indistinguishable); `Named Places` holds the confusion pairs
+  `Chapter 1`/`Chapter 10`, `7`/`1907` and `第1章`/`第10章`, each pair in a
+  chapter of its own so the fallback search cannot tie across look-alikes.
 
 Each file's own header says what it holds and why. When a generated book is
 too tidy to show the behaviour, use a real one instead (**Real books**).
