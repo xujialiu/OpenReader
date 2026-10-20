@@ -302,7 +302,7 @@ final class PauseOrderProbe: XCTestCase {
       print("MIXED STATE LABEL CHECK SKIPPED: chapter four already finished before it could be read")
     }
 
-    // #56-8: in Manage downloads, the ring on the chapter being written pauses that chapter alone, and Delete all saved audio stays opposite it.
+    // #56-8: in Manage downloads, the ring on the chapter being written pauses that chapter alone, and Delete all audio stays opposite it.
     app.buttons["Manage downloads"].tap()
     // Tolerant like `DownloadRingProbe`'s own race allowance ("a fast
     // connection can finish the second chapter before Pause all is
@@ -313,7 +313,7 @@ final class PauseOrderProbe: XCTestCase {
       let paused = until(5) { self.ring(beside: "Order Chapter Four", app)?.label == "Resume download" }
       let stillThere = ring(beside: "Order Chapter Four", app) != nil
       if paused {
-        XCTAssertFalse(app.buttons["Resume all"].exists, "Manage downloads keeps Delete all saved audio in that place, not Resume all")
+        XCTAssertFalse(app.buttons["Resume all"].exists, "Manage downloads keeps Delete all audio in that place, not Resume all")
         capture("04-manage-ring-paused-chapter-four", app)
         if let resumeRing = ring(beside: "Order Chapter Four", app) {
           resumeRing.tap()

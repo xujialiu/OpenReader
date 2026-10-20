@@ -50,8 +50,18 @@ The Download drawer filters saved Fish Voices by the selected Model and passes
 that Model to progress and chapter deletion. Contents and saved-audio readiness
 use the same identity. Model and Voice are separate informational rows; the
 Model row also names Fish Audio. Document-wide occupied space and Delete all
-saved audio remain unfiltered, so hidden audio is still removable. Their
+audio remain unfiltered, so hidden audio is still removable. Their
 confirmation names every Provider, Model and Voice.
+
+Delete all current voice audio (#306) is scoped by the voice key, which carries
+the Model: `removeVoiceDownloads` drops the Document's task for that
+`narrationIdentity`, then `beginVoiceRemoval` marks every clip row of the voice
+key `deleting`, cancels its `writes` and drops its `voices` row in one
+transaction, and `cleanDeletions` removes the files and rows. It selects by
+voice rather than through `memberships`, so it reaches clips a bracket setting
+change re-keyed away from every chapter, which `beginDelete` cannot, and frees
+exactly `occupied(document, voice)`. A reply still out at the Provider is not
+saved, because `fetch` keeps a result only while its task is in `tasks`.
 
 ## Known choices are useful even when discovery cannot answer
 

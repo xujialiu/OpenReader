@@ -23,6 +23,8 @@ const hosts = vi.hoisted(() => async (...names: string[]) => {
 });
 
 vi.mock('expo-file-system', () => ({ File: class {} }));
+// The Debug row's copy (#305); this drawer is the Library's, which never grants it.
+vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn() }));
 vi.mock('react-native', () => ({ StyleSheet: { create: (styles: unknown) => styles }, Alert: { alert: disk.alert } }));
 vi.mock('@expo/ui/swift-ui/modifiers', () => ({ disabled: (value: boolean) => ({ disabled: value }) }));
 vi.mock('@expo/ui/swift-ui', async () => {

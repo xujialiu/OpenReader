@@ -2,9 +2,10 @@
  * The Debug Log's platform half (ADR 0054): its folder, the system log, and the
  * lines nothing in the app writes itself — the launch, the app coming and
  * going, `console.warn`/`console.error`, uncaught errors and unhandled
- * rejections. Run once, first thing (`launch.ts`), and in Debug Mode only: in a
- * build without it `installDebugLog` returns before touching anything, so no
- * folder is made, no file written and no handler wrapped.
+ * rejections. Run once, first thing (`launch.ts`). In a build without Debug
+ * Mode it does one thing only: it deletes a Debug Log folder that a build with
+ * Debug Mode left on the device (#305). No folder is made, no file constructed,
+ * no line written and no handler wrapped.
  */
 import { Directory, File, Paths } from 'expo-file-system';
 import { AppState } from 'react-native';
@@ -12,7 +13,18 @@ import { AppState } from 'react-native';
 import { APP_VERSION } from '../../app-version';
 import { debugLogNative } from '../../modules/open-reader-debug-log';
 import { offlineNative } from '../../modules/open-reader-offline';
-import { createDebugLog, debugLog, describeValue, flushDebugLog, setDebugLogWriter, type DebugLogFiles } from './debug-log';
+import {
+  clearForVersion,
+  clearedLine,
+  createDebugLog,
+  debugLog,
+  describeValue,
+  flushDebugLog,
+  setDebugLogWriter,
+  type ClearedLog,
+  type DebugLogFiles,
+  type DebugLogVersion,
+} from './debug-log';
 import { DEBUG_MODE } from './mode';
 import { recordNativePlayback } from './playback';
 
@@ -24,6 +36,8 @@ import { recordNativePlayback } from './playback';
  * from --domain-type appDataContainer`.
  */
 export const DEBUG_LOG_FOLDER = ['Library', 'Application Support', 'debug-log'] as const;
+/** Beside the log, the `APP_VERSION` that wrote it (#305). Not `debug-log-….txt`, which the kit's scripts read as the log. */
+export const DEBUG_LOG_VERSION_FILE = 'version.txt';
 
 type Handler = (error: unknown, isFatal?: boolean) => void;
 interface ErrorUtilsShape {
@@ -42,8 +56,12 @@ interface HermesShape {
 let installed = false;
 
 export function installDebugLog(): void {
-  if (!DEBUG_MODE || installed) return;
+  if (installed) return;
   installed = true;
+  if (!DEBUG_MODE) {
+    removeLeftoverDebugLog();
+    return;
+  }
   const native = debugLogNative;
   const systemLog = native ? (line: string) => native.systemLog(line) : undefined;
   const folder = new Directory(Paths.document.parentDirectory, ...DEBUG_LOG_FOLDER);
@@ -53,13 +71,20 @@ export function installDebugLog(): void {
   } catch (problem) {
     systemLog?.(`[app] the Debug Log's folder could not be made: ${describeValue(problem)}`);
   }
-  setDebugLogWriter(createDebugLog({ files: folderFiles(folder), now: () => Date.now(), systemLog }));
+  const files = folderFiles(folder);
+  let cleared: ClearedLog | null = null;
+  try {
+    cleared = clearForVersion(files, versionFile(folder), APP_VERSION);
+  } catch (problem) {
+    systemLog?.(`[app] the Debug Log of another version could not be cleared: ${describeValue(problem)}`);
+  }
+  setDebugLogWriter(createDebugLog({ files, now: () => Date.now(), systemLog }));
 
   debugLog(
     'launch',
     `OpenReader ${APP_VERSION}, native ${native?.nativeVersion ?? '?'} (${native?.nativeBuild ?? '?'}), ` +
       `Debug Mode on, ${__DEV__ ? 'Metro' : 'embedded'} bundle, system log ${systemLog ? 'on' : 'missing (no native module)'}, ` +
-      `kept in ${folder.uri}`,
+      `kept in ${folder.uri}${cleared ? `; ${clearedLine(cleared)}` : ''}`,
   );
 
   // Capture at native event time, not at the later JS delivery time. No native
@@ -104,6 +129,26 @@ export function installDebugLog(): void {
       onHandled: (id) => debugLog('error', `rejection ${id} was handled after all`),
     });
   }
+}
+
+/**
+ * A build without Debug Mode installed over one with it (TestFlight, the App
+ * Store) would otherwise keep up to 100 MB nobody can see or read (#305). Only
+ * the folder is looked at; nothing is said, since such a build writes no line.
+ */
+function removeLeftoverDebugLog(): void {
+  try {
+    const folder = new Directory(Paths.document.parentDirectory, ...DEBUG_LOG_FOLDER);
+    if (folder.exists) folder.delete();
+  } catch {
+    // Left for the next launch to try again.
+  }
+}
+
+/** `version.txt` in the folder, read and written once at launch. */
+function versionFile(folder: Directory): DebugLogVersion {
+  const file = new File(folder, DEBUG_LOG_VERSION_FILE);
+  return { read: () => (file.exists ? file.textSync() : null), write: (version) => file.write(version) };
 }
 
 /** The folder as the writer sees it; each call is one synchronous file operation, made only at a flush. */

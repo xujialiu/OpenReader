@@ -58,16 +58,29 @@ This does not add a Model menu, a Model browser or a second Downloads page. In
 particular, Model then Voice describes which audio belongs together, not a new
 hierarchy to navigate inside the drawer.
 
-## Deleting audio keeps its existing two scopes
+## Deleting audio has three scopes
 
 Delete selected removes the chosen chapters of the Model and Voice being
 managed. It does not remove another Model's audio.
 
-The existing Delete all saved audio action remains broader: it deletes all
-Offline Narration for this Document, across every Provider, Model and Voice,
-including Models hidden by the current choice. Its confirmation explicitly
-names that scope and the space the deletion frees. The Document and its Reading
-Position remain.
+Delete all current voice audio removes everything saved for this Document in
+the Voice being managed and, for Fish Audio, its Model, and ends that Voice's
+Download of it (#306). It reaches audio no chapter can be selected for, such as
+audio saved before a bracket setting changed, so it frees exactly the space the
+page says that Voice holds. The same Voice in another Model, and every other
+Voice, keep their audio and their Downloads. Its confirmation names the Voice,
+its Provider and, for Fish Audio, its Model, with the space the deletion frees.
+
+Delete all audio is the broadest: it deletes all Offline Narration for this
+Document, across every Provider, Model and Voice, including Models hidden by
+the current choice. Its confirmation explicitly names that scope and the space
+the deletion frees.
+
+The two whole deletions share one row of Manage downloads: Delete all audio at
+its left, Delete all current voice audio at its right end, shown only while that
+Voice has audio. Both keep the Document and its Reading Position. Neither pauses
+a Reading playing in the Voice it deletes; its next sentences are asked of the
+Provider again.
 
 There is no new Folder audio-cleanup action and no new place to manage Downloads
 across Documents.
@@ -94,9 +107,13 @@ across Documents.
 - **Showing every Model's downloads together.** It adds another place to choose
   between Models. The owner instead chose one setting and a drawer that answers
   to it, accepting the trip back to Settings to manage another Model.
-- **Making Delete all saved audio mean only the selected Model.** It would leave
-  hidden audio behind after an action that promises to delete it all. Chapter
-  deletion already provides the narrower operation.
+- **Making Delete all audio mean only the selected Model.** It would leave
+  hidden audio behind after an action that promises to delete it all. Delete
+  selected and Delete all current voice audio provide the narrower operations.
+- **Clearing one Voice by selecting all its chapters.** Audio saved before a
+  bracket setting changed belongs to no chapter the page lists, so it would
+  still count as that Voice's space with nothing left to select, and the only
+  way to free it would be deleting every other Voice's audio too.
 
 ## What it costs
 

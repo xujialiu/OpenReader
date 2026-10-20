@@ -1250,6 +1250,29 @@ export async function deleteDownloaded(
     refresh(document),
   );
 }
+/**
+ * Everything saved for `document` in one Voice and, for Fish Audio, one Model,
+ * and its Download of it ended: Manage downloads' Delete all current voice
+ * audio (#306). Other Voices and Models, their Downloads and the plan stay.
+ *
+ * Dropping the task is what keeps an answer still out at the Provider from
+ * being saved after the deletion: `fetch` keeps a result only while its task
+ * is still in `tasks`.
+ */
+export async function removeVoiceDownloads(
+  document: string,
+  voice: OfflineVoice,
+): Promise<void> {
+  tasks = tasks.filter(
+    (task) => task.document !== document || !sameVoice(task.voice, voice),
+  );
+  await persist();
+  emit();
+  await (
+    await offlineRepository()
+  ).removeVoice(document, voice, () => refresh(document));
+  kick();
+}
 export async function removeDownloads(document: string): Promise<void> {
   tasks = tasks.filter((task) => task.document !== document);
   await persist();

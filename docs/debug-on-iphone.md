@@ -1,8 +1,9 @@
 # Debug a fault on the iPhone
 
-Use this guide when the owner reports a fault seen on the phone, usually a
-screenshot and a time. It gets from that report to the state the app was in,
-in one pass. It was written from #112, where the pass took four
+Use this guide when the owner reports a fault seen on the phone: a screenshot
+and a time, or a Debug Note, as the line he copied (`2026-10-20 14:03:12.345
++08:00 the highlight fell behind`) or only what he remembers writing. It gets
+from that report to the state the app was in, in one pass. It was written from #112, where the pass took four
 rounds; each step below is one of those rounds, done in order.
 
 The phone is the owner's own. Everything here only reads it; on a build before
@@ -51,6 +52,27 @@ and the log's stamps are both the phone's local time (`+08:00`). Start the
 window well before the reported moment: the fault is usually where something
 stopped changing, minutes earlier.
 
+A report that is a Debug Note (#305, ADR 0082) gives the moment exactly:
+
+```sh
+python3 test/manual-test/kit/debug-notes.py /tmp/or-debug-NAME/debug-log
+python3 test/manual-test/kit/debug-log-timeline.py /tmp/or-debug-NAME/debug-log --around '2026-10-20 14:03:12.345 +08:00'
+```
+
+`debug-notes.py` lists every Debug Note under its own time, the tap on
+`Debug`, with the title and the comment. It also names the version that wrote
+the log, from `version.txt`. Find the owner's note by the time he copied, or
+by what his description means. `--around` takes the copied line whole and
+shows from 10 minutes before to 2 after (`--before`, `--after`). Straight after
+the note come the reader's `[hx]` status line and a `[renderer] snapshot, Debug
+Note <time>`, both written at Save. The note's time is the tap, and Save may be
+half a minute later.
+
+A Debug Log holds one build's lines only. The first launch of a new version
+empties it, and the launch line ends with what was cleared. If the note is not
+there, look for the copy `install-on-iphone.md` keeps in
+`/tmp/or-debug-before-<version>` before each install.
+
 `debug-log-timeline.py` prints each line that changes something, with the app's
 state beside it: `active`, `inactive`, `background`, or `launch`. The reading's
 status line appears only when `playing`, `known`, `section`, `rendered` or
@@ -58,7 +80,7 @@ status line appears only when `playing`, `known`, `section`, `rendered` or
 
 | Line | Meaning |
 | --- | --- |
-| `[launch]` | the app started: after a crash, a kill from the app switcher, or iOS reclaiming it |
+| `[launch]` | the app started: after a crash, a kill from the app switcher, or iOS reclaiming it. From #305 it ends `; cleared the Debug Log of <version>: N files, X MB` when it was the first launch of a new version |
 | `[app] app active/inactive/background` | the app's state; the lock screen and Control Center pass through `inactive` |
 | `[document] opening … / opened …` | a Document opened in the Reader |
 | `[reading] play at / pause at utterance N` | Play and Pause, from the player or the lock screen |
@@ -66,6 +88,7 @@ status line appears only when `playing`, `known`, `section`, `rendered` or
 | `[hx] playing=… app=… utterance=… known=… section=… rendered=I/S …` | the Reading's status, every 0.5 s when it changes and every 5 s when it does not, while a Document is open or its Reading is held. `app=` (from `1.0.0-beta3`) is the app's state then. `known` is the number of Utterances the app holds, `section` the spine index being read, `rendered` the last section the page reported out of `S` spine items. |
 | `[renderer] …` | (from `1.0.0-beta3`, #113) epub.js on the reader's page, event by event: `renderAhead:` asking for the next section, and `done` or why nothing was asked; `view N appended / displayed in X ms / unloaded / removed before its display finished / has not finished displaying`; `display "…" asked by X ← Y`; `views cleared`; `stage resized`; `page hidden / visible`; `manager queue stalled` with what is in flight and waiting, then `moving again`; and `snapshot, the reading ran out of text` beside the out-of-text note |
 | `[probe]` | a harness `js` probe's answer (step 4) |
+| `[debug-note]` | (from #305) a Debug Note: the time `Debug` was tapped, the cut title and short id, and the author's comment, or `(no comment)` |
 | `[playback]` | from #152: native route/interruption and engine lifecycle, remote commands, source pause/resume, and page hold requests. Native records retain `nativeMs` (Unix milliseconds), `uptimeMs`, `sequence` and `receivedMs`; the line's stamp is JS receipt/write time, not necessarily event time. `lastReportedPosition` and `reportAgeMs` name the latest callback, not the last word heard. `native dropped=N` means the 128-event native buffer overflowed. |
 | `[renderer] playback received=hold` | from #152: the page actually handled the hold; `pageMs`, utterance and word indices, `held` and elapsed milliseconds. A sent hold alone is not proof the page received it. |
 | `[sync]`, `[download]`, `[provider]` | skipped by the timeline by default; `--skip ''` shows them |

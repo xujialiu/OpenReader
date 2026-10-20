@@ -182,7 +182,7 @@ centre button (`run-probe.sh LockScreenProbe UDID OUT --expect-player`).
 ## Measured on beta12 (2026-10-09, iPhone 17, iOS 27.0, Metro 8082, the fake Kokoro at one sentence a second)
 
 Every press is a real touch; `store` and `open` are harness commands. To repeat
-a download run: Manage downloads → Delete all saved audio (it drops the task,
+a download run: Manage downloads → Delete all audio (it drops the task,
 so `Download selected` counts the chapters again), relaunch (the memory cache
 would answer sentences already fetched, `pitfalls/verification-runs.md`), then
 `Select all`. Before a relaunch put `{"do":"noop"}` in `harness.json`, or the

@@ -32,6 +32,10 @@ const paths = {
   // Two chevrons, one up one down: what iOS puts on a row that opens a menu.
   menu: 'm8 10 4-4 4 4 M8 14l4 4 4-4',
   check: 'm5 12 4 4L19 6',
+  // A beetle seen from above, for the reader's Debug row (#305): head, a
+  // body split down its back, three legs a side and two feelers. The app's
+  // own drawing, in this set's stroke.
+  bug: 'M9.5 9V7.5a2.5 2.5 0 0 1 5 0V9 M8 9h8a1 1 0 0 1 1 1v4a5 5 0 0 1-10 0v-4a1 1 0 0 1 1-1Z M12 12v7 M7 12H3.5 M17 12h3.5 M7.5 16.5 4.5 19 M16.5 16.5l3 2.5 M7.4 9.6 4.5 7 M16.6 9.6 19.5 7 M10.5 5.3 9 3.5 M13.5 5.3 15 3.5',
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
   eyeOff: 'm3 3 18 18 M10.6 5.1 12 5c6.5 0 10 7 10 7a20 20 0 0 1-3 3.8 M6.2 6.2A22 22 0 0 0 2 12s3.5 7 10 7c1.7 0 3.3-.5 4.6-1.2 M9.9 9.9a3 3 0 0 0 4.2 4.2',
 } as const;

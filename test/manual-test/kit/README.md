@@ -26,6 +26,9 @@ What every area uses:
 - `frame-gaps.py`: hitches in a `simctl io recordVideo` recording.
 - `debug-log.py`: copies the Debug Log off a phone, says what time it covers,
   and collects the phone's system log for that span (below).
+- `debug-notes.py`: every Debug Note in a copied Debug Log under its own time,
+  with the title and the author's comment (#305); `debug-log-timeline.py
+  --around '<its time>'` shows the lines around one.
 - `debug-log-timeline.py`: the Debug Log as a timeline, each change with the
   app's state beside it; `phone-hx.cjs`: one harness command to the phone and
   the Debug Log lines that answered it; `probes/`: the `js` probes it sends.
@@ -200,10 +203,12 @@ mode (`lock-screen/README.md`) for that. Run `state` afterwards to verify the fi
 A build with Debug Mode (#82, ADR 0054; every Metro build, and a Release build
 made with `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` as `docs/install-on-iphone.md`
 makes it) keeps the Debug Log in its container at `Library/Application
-Support/debug-log/`: `debug-log-000001.txt`, `…000002.txt`, …, four files of at
-most 5 MB, oldest deleted first, one line per event,
-`2026-09-29 14:03:12.345 +08:00 [category] message`. After the owner reports a
-fault, roughly when, copy it off and read the lines around that time:
+Support/debug-log/`: `debug-log-000001.txt`, `…000002.txt`, …, twenty files of
+at most 5 MB (#305), oldest deleted first, one line per event,
+`2026-09-29 14:03:12.345 +08:00 [category] message`, and `version.txt`, the
+`APP_VERSION` that wrote them. The first launch of a new version empties the
+folder (ADR 0082). After the owner reports a fault, roughly when or as a Debug
+Note, copy it off and read the lines around that time:
 
 ```sh
 python3 test/manual-test/kit/debug-log.py IPHONE_UDID OUT_DIR
@@ -254,6 +259,8 @@ here.
 
 ```sh
 python3 test/manual-test/kit/debug-log-timeline.py OUT_DIR/debug-log --from 'YYYY-MM-DD HH:MM' --to 'YYYY-MM-DD HH:MM'
+python3 test/manual-test/kit/debug-notes.py OUT_DIR/debug-log
+python3 test/manual-test/kit/debug-log-timeline.py OUT_DIR/debug-log --around '2026-10-20 14:03:12.345 +08:00'
 node test/manual-test/kit/phone-hx.cjs IPHONE_UDID '{"do":"navstate"}'
 node test/manual-test/kit/phone-hx.cjs IPHONE_UDID '{}' --code-file test/manual-test/kit/probes/renderer-state.js
 ```

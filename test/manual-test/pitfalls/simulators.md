@@ -360,9 +360,27 @@
   pick the WebContent child whose start time agrees with the reader page's
   `born`, and verify the kill by the page being replaced (a new `born`), not
   by the absence of a kill error.
+- **Two DeviceHub processes and a headless first one: the AX tree stays empty until a window actually opens** (verifying #305, 2026-10-20, iOS 26.5). A DeviceHub process from an earlier session was running with its window closed; `ax.py tree` returned empty for minutes. Starting the executable a second time (`/Applications/Xcode-27.0.0.app/Contents/Applications/DeviceHub.app/Contents/MacOS/DeviceHub`, the install guide's no-window recipe) opened the window and the tree answered at once. The two processes coexist; the confound is that the sibling session's probe run also ended in the same minute, so treat this as a recovery that worked once, not a proven cause.
 - **The volume came back at 60 four times in one hour** on a session-created
   iOS 27.0 device, with no boot and no app relaunch between the later ones —
   the #390 pattern, faster. Every reset was caught by `silence.sh check` in
   the same `&&` chain as its play, and one chain's Play was skipped by a
   caught reset and simply re-run after `set`. A zero is only a zero in the
   breath it was set; on this device that breath was short.
+
+## The #306 verification run (2026-10-20)
+
+- **On a machine with several sessions' simulators booted, `simctl install`
+  onto a freshly created device can hang past three minutes, and the kit's
+  own `silence.sh` after it with it.** The #306 narrow-screen check created
+  an iPhone SE (iOS 26.5) while four devices were booted (two of them other
+  sessions'); `simctl install` answered nothing for 180 s twice — the first
+  attempt was killed, a shutdown + boot of that one device brought the boot
+  back in seconds but the install still hung, and `silence.sh set` hung the
+  same way. Nothing was wrong with the app or the .app: the same copy
+  installed on the session's already-running iPhone 17 Pro in seconds. The
+  device was dropped and the check reported uncovered rather than fighting a
+  contended CoreSimulator. If a fresh device must be used while other
+  sessions hold booted simulators, budget for this and prefer the device
+  that is already up; `ps` itself taking seconds is the tell that the host
+  is the problem.

@@ -11,6 +11,8 @@ const {
   FLUSH_MS,
   LINE_CHARS,
   TEXT_CHARS,
+  clearForVersion,
+  clearedLine,
   createDebugLog,
   cutAddress,
   cutText,
@@ -22,8 +24,8 @@ const {
 
 /**
  * The Debug Log's writer against a folder in memory and a clock that is told
- * the time (ADR 0054): one line per event, batched, rolling over four files of
- * 5 MB, and never a credential.
+ * the time (ADR 0054): one line per event, batched, rolling over twenty files
+ * of 5 MB (#305), and never a credential.
  */
 function folder(sizes: Record<string, number> = {}) {
   const text = new Map<string, string>();
@@ -45,6 +47,29 @@ function folder(sizes: Record<string, number> = {}) {
       remove(name: string) {
         removed.push(name);
         text.delete(name);
+        size.delete(name);
+      },
+    },
+  };
+}
+
+/** A file's name by its serial: `debug-log-000007.txt`. */
+const serialName = (serial: number) => `debug-log-${String(serial).padStart(6, '0')}.txt`;
+
+/** A folder that keeps sizes and not text, for runs past 100 MB. */
+function sizesOnly() {
+  const size = new Map<string, number>();
+  const removed: string[] = [];
+  return {
+    removed,
+    files: {
+      list: () => [...size.keys()],
+      size: (name: string) => size.get(name) ?? 0,
+      append(name: string, more: string) {
+        size.set(name, (size.get(name) ?? 0) + Buffer.byteLength(more));
+      },
+      remove(name: string) {
+        removed.push(name);
         size.delete(name);
       },
     },
@@ -165,7 +190,12 @@ describe('batching: never one file write per line', () => {
   });
 });
 
-describe('rolling: four files of 5 MB, the oldest dropped first', () => {
+describe('rolling: twenty files of 5 MB, the oldest dropped first (#305)', () => {
+  it('holds at most 100 MB: twenty files of 5 MB', () => {
+    expect(FILE_BYTES).toBe(5_242_880);
+    expect(FILES).toBe(20);
+  });
+
   it('goes on appending to the newest file the folder holds', () => {
     const disk = folder({ 'debug-log-000003.txt': 100, 'debug-log-000004.txt': 200, 'notes.txt': 5 });
     const log = createDebugLog({ files: disk.files, now: () => AT });
@@ -175,53 +205,91 @@ describe('rolling: four files of 5 MB, the oldest dropped first', () => {
     expect(disk.removed).toEqual([]);
   });
 
-  it('starts the next file when a batch would take the newest past 5 MB, and drops the oldest so four remain', () => {
-    const disk = folder({
-      'debug-log-000001.txt': FILE_BYTES,
-      'debug-log-000002.txt': FILE_BYTES,
-      'debug-log-000003.txt': FILE_BYTES,
-      'debug-log-000004.txt': FILE_BYTES - 20,
-    });
+  it('starts the next file when a batch would take the newest past 5 MB, and drops the oldest so twenty remain', () => {
+    const full = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [serialName(i + 1), i === 19 ? FILE_BYTES - 20 : FILE_BYTES]));
+    const disk = folder(full);
     const log = createDebugLog({ files: disk.files, now: () => AT });
     log.write('hx', 'this batch does not fit in the twenty bytes left');
     log.flush();
-    expect(disk.appends).toEqual(['debug-log-000005.txt']);
+    expect(disk.appends).toEqual(['debug-log-000021.txt']);
     expect(disk.removed).toEqual(['debug-log-000001.txt']);
-    expect(disk.files.list().filter((name) => name.startsWith('debug-log-')).sort()).toEqual([
-      'debug-log-000002.txt',
-      'debug-log-000003.txt',
-      'debug-log-000004.txt',
-      'debug-log-000005.txt',
-    ]);
+    expect(disk.files.list().filter((name) => name.startsWith('debug-log-')).sort()).toEqual(
+      Array.from({ length: 20 }, (_, i) => serialName(i + 2)),
+    );
   });
 
-  it('never lets a file pass 5 MB, and never holds more than four, however long it runs', () => {
-    const disk = folder();
+  it('never lets a file pass 5 MB, and never holds more than twenty, however long it runs', () => {
+    const disk = sizesOnly();
     const log = createDebugLog({ files: disk.files, now: () => AT });
-    const line = 'x'.repeat(1_000);
-    // About 22 MB of lines in batches of 500: past four files' worth.
-    for (let batch = 0; batch < 44; batch++) {
+    const line = 'x'.repeat(1_950);
+    // About 110 MB of lines in batches of 500: past twenty files' worth.
+    for (let batch = 0; batch < 110; batch++) {
       for (let i = 0; i < 500; i++) log.write('hx', line);
       log.flush();
       const names = disk.files.list();
-      expect(names.length).toBeLessThanOrEqual(FILES);
-      for (const name of names) expect(disk.files.size(name)).toBeLessThanOrEqual(FILE_BYTES);
+      expect(names.length).toBeLessThanOrEqual(20);
+      for (const name of names) expect(disk.files.size(name)).toBeLessThanOrEqual(5_242_880);
     }
     const names = disk.files.list().sort();
-    expect(names).toHaveLength(FILES);
-    // The survivors are the newest four, in order.
+    expect(names).toHaveLength(20);
+    // The survivors are the newest twenty, in order.
     const serials = names.map((name) => Number(/(\d{6})/.exec(name)![1]));
-    expect(serials).toEqual([serials[0], serials[0] + 1, serials[0] + 2, serials[0] + 3]);
+    expect(serials).toEqual(Array.from({ length: 20 }, (_, i) => serials[0] + i));
     expect(disk.removed[0]).toBe('debug-log-000001.txt');
   });
 
-  it('trims a folder holding more than four to the newest four', () => {
-    const disk = folder(Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [`debug-log-00000${n}.txt`, 10])));
+  it('trims a folder holding more than twenty to the newest twenty', () => {
+    const disk = folder(Object.fromEntries(Array.from({ length: 22 }, (_, i) => [serialName(i + 1), 10])));
     const log = createDebugLog({ files: disk.files, now: () => AT });
     log.write('launch', 'again');
     log.flush();
     expect(disk.removed).toEqual(['debug-log-000001.txt', 'debug-log-000002.txt']);
-    expect(disk.appends).toEqual(['debug-log-000006.txt']);
+    expect(disk.appends).toEqual(['debug-log-000022.txt']);
+  });
+});
+
+describe('a new build starts with an empty Debug Log (#305)', () => {
+  /** The small file that remembers which `APP_VERSION` wrote the folder. */
+  function mark(held: string | null) {
+    const state = { held, writes: [] as string[] };
+    return { state, mark: { read: () => state.held, write(version: string) { state.writes.push(version); state.held = version; } } };
+  }
+
+  it('keeps the log a launch of the same version finds', () => {
+    const disk = folder({ 'debug-log-000001.txt': 300, 'debug-log-000002.txt': 400 });
+    const version = mark('1.0.0 (9)-beta12');
+    expect(clearForVersion(disk.files, version.mark, '1.0.0 (9)-beta12')).toBeNull();
+    expect(disk.removed).toEqual([]);
+    expect(version.state.writes).toEqual([]);
+  });
+
+  it('deletes every file of a log another version wrote, remembers the new version, and says what went', () => {
+    const disk = folder({ 'debug-log-000006.txt': FILE_BYTES, 'debug-log-000007.txt': 1_000_000 });
+    const version = mark('1.0.0 (9)-beta11');
+    const cleared = clearForVersion(disk.files, version.mark, '1.0.0 (9)-beta12');
+    expect(cleared).toEqual({ version: '1.0.0 (9)-beta11', files: 2, bytes: 6_242_880 });
+    expect(disk.removed.sort()).toEqual(['debug-log-000006.txt', 'debug-log-000007.txt']);
+    expect(version.state.held).toBe('1.0.0 (9)-beta12');
+    expect(clearedLine(cleared!)).toBe('cleared the Debug Log of 1.0.0 (9)-beta11: 2 files, 6.0 MB');
+  });
+
+  it('clears a log from before versions were remembered, and names it so', () => {
+    const disk = folder({ 'debug-log-000001.txt': 2_097_152 });
+    const version = mark(null);
+    const cleared = clearForVersion(disk.files, version.mark, '1.0.0 (9)-beta12');
+    expect(cleared).toEqual({ version: null, files: 1, bytes: 2_097_152 });
+    expect(disk.removed).toEqual(['debug-log-000001.txt']);
+    expect(clearedLine(cleared!)).toBe('cleared the Debug Log of a build that did not record its version: 1 file, 2.0 MB');
+  });
+
+  it('has nothing to clear in an empty folder, and remembers the version there too', () => {
+    const disk = folder();
+    const version = mark(null);
+    expect(clearForVersion(disk.files, version.mark, '1.0.0 (9)-beta12')).toBeNull();
+    expect(version.state.held).toBe('1.0.0 (9)-beta12');
+    const again = mark('1.0.0 (9)-beta11');
+    expect(clearForVersion(disk.files, again.mark, '1.0.0 (9)-beta12')).toBeNull();
+    expect(again.state.held).toBe('1.0.0 (9)-beta12');
   });
 });
 
