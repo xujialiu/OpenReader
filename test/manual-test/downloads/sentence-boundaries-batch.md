@@ -106,7 +106,7 @@ fact; durations from the 2.5 s fake clip at rate 1.5):
 - The catalogue was read while the app was terminated; while it runs, the drawer and the runtime reads stand in.
 - The fake's word timings are its own reported ones, not audio-waveform measurements; its clips are silence, so "plays" is established by the app's own `level=word` state, the request log and the painted bands, not by sound.
 - The revision's transaction-ordering guarantees (pauses saved before the revision row; rollback on failure) are covered by `test/offline/runtime-segmentation.test.ts` on the host; on the simulator I exercised the happy migration, pause retention (ja paused→paused) and the queued→paused conversion (below) — **no migration write-fault injection ran on the device; the failure paths are host-only**.
-- `seg-ellipsis` and `seg-zh` keep their legacy Downloads (done, old clips) and were deliberately **not** re-downloaded; their completeness is still lost until an explicit download — that is the ADR's stated cost, observed on en-negs, not a separate defect.
+- `seg-ellipsis` and `seg-zh` were deliberately **not** re-downloaded; their old Clips remain, and completeness is lost until an explicit download. The supplement leaves zh paused rather than done. This is the ADR's stated cost, not a separate defect.
 
 ## Rerun mechanics (the parts that bit)
 
@@ -123,12 +123,29 @@ fact; durations from the 2.5 s fake clip at rate 1.5):
 
 The migration run above proved pause **retention** (ja was already paused). This supplement proves the **conversion**: a queued task at migration time becomes a saved paused task, with zero synthesis. All evidence in `/tmp/or-seg18-01/` (`records/queued-before-tasks.json`, `supplement.json`, `supplement-queued.sh`, `debug-log-after-queued-conversion.txt`).
 
-Method — **native SQLite upgrade-state seeding, not a UI-generated queue and not an app-code edit**: with the app terminated, the catalogue was staged by `sqlite3` to the exact original-upgrade shape — the `state` row `segmentation` **deleted** (missing = older rules) while `walk|2` stayed, and the existing seg-zh task (old joined Clips, chapter prepared=0, `records/queued-before-tasks.json`) set `"state":"queued"` in the persisted `tasks` JSON. seg-zh was one of the books deliberately left un-reprepared, so its three Clips are the old joined texts.
+Method — **native SQLite upgrade-state seeding, not a UI-generated queue and not an app-code edit**: with the app terminated, the catalogue's revision and task state were staged by `sqlite3` to the pre-revision upgrade shape (the chapter was already marked unprepared by the earlier migration) — the `state` row `segmentation` **deleted** (missing = older rules) while `walk|2` stayed, and the existing seg-zh task (old joined Clips, chapter prepared=0, `records/queued-before-tasks.json`) set `"state":"queued"` in the persisted `tasks` JSON. seg-zh was one of the books deliberately left un-reprepared, so its three Clips are the old joined texts.
 
 Then, under `ios_guard.py run` (`supplement.json`: `outcome: passed`, exitCode 0, 57 s):
 
-- **Launch 1** (18:48:08, `[launch] OpenReader 1.0.0 (9)-beta18, native 1.0.0 (9)…`): the runtime read of the zh task answered `state:"paused", paused:["nav.0"], failed:[], error:null` — the queued task was converted before the gate opened (`downloadsReady() true` beside it). The fake's log gained **no `text=` line** (line count unchanged across the launch; the only new lines are `GET /v1/audio/voices` inventory checks).
+- **Launch 1** (18:48:08, `[launch] OpenReader 1.0.0 (9)-beta18, native 1.0.0 (9)…`): the runtime read of the zh task answered `state:"paused", paused:["nav.0"], failed:[], error:null` — the queued task was paused once initialization was ready (`downloadsReady() true` beside it). The read observes the completed state, not the internal ordering; the host tests establish the gate's ordering. The fake's log gained **no `text=` line** (line count unchanged across the launch; the only new lines are `GET /v1/audio/voices` inventory checks).
 - **Saved paused**: terminated read — `state` holds `segmentation|1` (re-recorded) beside `walk|2`, and the persisted `tasks` JSON holds the zh task `"state":"paused"` with `"paused":["nav.0"]`.
 - **Launch 2** (18:48:36, restart/reconnect): the runtime still reads `paused`; again no synthesis request. Final terminated read: unchanged.
 
-This closes the conversion assertion the batch record needed: queued-at-migration → paused-and-saved, before any preparation or synthesis, across restart.
+This closes the conversion assertion the batch record needed: queued-at-migration → paused-and-saved, with no synthesis, across restart.
+
+## Parent acceptance and publication gate
+
+The parent checked the raw fake request log (40 synthesis lines across restarted server counters), both supplement runtime reads, the terminated SQLite reads, launch provenance, the successful native build line, and the painted Chinese boundary screenshots. The supplement's process exit is not itself an assertion: its printed state is the evidence. The first guarded readiness attempt remains failed/69; its later independent readiness check passed. No XCTest ran, so no XCTest pass is claimed. The three playback-probe cleanup failures remain recorded; explicit Pause and stopped-state checks establish cleanup, not the probes' failed automatic-pause assertions.
+
+Retained signal from the supplement, before scratch cleanup:
+
+```text
+staged: walk=2, segmentation absent; zh state=queued, paused=[]
+launch 1: {state:paused, paused:[nav.0], failed:[], error:null, ready:true}
+terminated store: segmentation=1, walk=2; zh state=paused, paused=[nav.0]
+launch 2: {state:paused, paused:[nav.0], failed:[], error:null, ready:true}
+last synthesis: 10:03:58Z; supplement launches: 10:48:08Z, 10:48:36Z
+supplement traffic: GET /v1/audio/voices only; zero new text= lines
+```
+
+After merging tester commits `fad002a` and `ac04c88`, `npm run typecheck`, `npm run lint` and `npm test` all passed: **3,431 tests in 226 files**, 14.86 s for that full run. A final read-only CDP check returned `{version:"1.0.0 (9)-beta18", readings:[null], players:0, downloadsReady:true}`: the app was open on the Library with no held Reading. The `reading.cjs state` helper first refused because it requires a mounted Player; this was a probe precondition, not an app failure. No app code changed during verification. The owner authorized `finish worktree`, so this verified delivery is released after the normal main push and issue closure; the simulator, local fake, Metro and scratch artifacts are not retained as permanent evidence.

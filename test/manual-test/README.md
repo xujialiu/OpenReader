@@ -151,6 +151,8 @@ Record: [`downloads/sentence-boundaries-batch.md`](downloads/sentence-boundaries
 - **`debug-log.py`'s CoreDevice listing answered `no Debug Log … is the installed build one with Debug Mode?` while the log existed** at the container's `Library/Application Support/debug-log/debug-log-000001.txt` — copy that path directly (the file also names its own location in its `[launch]` line). The same launch line is the cleanest JS-switch provenance: the beta18 launch logs `cleared the Debug Log of 1.0.0 (9)-beta17`.
 - **A readiness check run seconds after `simctl launch` fails on its own timing, not the environment.** The first `ios_ready.py --metro` ran 2 s after launch and found no CDP target while Metro was still bundling (14.9 s cold); the immediate recheck passed with no recovery spent. Wait for the bundle (Metro log's `iOS Bundled …`) before the first readiness check.
 
+- **`reading.cjs state` reports `Reading handler evaluation failed` on the Library with no held Reading.** The helper requires a mounted `Player` and otherwise throws `Open a Document first`; its outer error hides that message. During the sentence-boundary batch's final parent check, the app correctly had no Reading after returning to the Library. A read-only CDP fiber check found the Reading context's `current=null`, zero Players and the expected beta18 version, proving the precondition rather than a playback failure. Use the held Reading context for this delivery check; do not start speech just to make the Player helper work.
+
 ## Areas
 
 How each feature was tested, with its scripts and probes, one folder per area.
