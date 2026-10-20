@@ -39,9 +39,9 @@ const CONTAINER = `<?xml version="1.0" encoding="UTF-8"?>
 </container>
 `;
 
-const book = (title: string, identifier: string, files: readonly [string, string][], navRows: readonly [string, string][]) => {
-  const manifest = files.map(([id]) => `    <item id="${id}" href="${id}.xhtml" media-type="application/xhtml+xml"/>`).join('\n');
-  const spine = files.map(([id]) => `    <itemref idref="${id}"/>`).join('\n');
+const book = (title: string, identifier: string, ids: readonly string[], navRows: readonly [string, string][]) => {
+  const manifest = ids.map((id) => `    <item id="${id}" href="${id}.xhtml" media-type="application/xhtml+xml"/>`).join('\n');
+  const spine = ids.map((id) => `    <itemref idref="${id}"/>`).join('\n');
   const rows = navRows.map(([href, label]) => `  <li><a href="${href}">${label}</a></li>`).join('\n');
   const opf = `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
@@ -98,7 +98,7 @@ const copiesChapter = () => {
 const copies = book(
   'Positions and Copies',
   'positions-copies-fixture',
-  [['one', 'two'] as [string, string]],
+  ['one', 'two'],
   [['one.xhtml', 'Positions and Copies'], ['two.xhtml', 'Second Chapter']],
 );
 
@@ -110,7 +110,7 @@ const copiesTwo = copies.chapter('two', 'Second Chapter', ['A short second chapt
 const named = book(
   'Named Places',
   'named-places-fixture',
-  [['one', 'two', 'three'] as [string, string, string]],
+  ['one', 'two', 'three'],
   [['one.xhtml', 'Longer Numbers'], ['two.xhtml', 'Digit Inside'], ['three.xhtml', 'Han Chapters']],
 );
 
@@ -129,8 +129,11 @@ for (const [name, files] of [
   ['Positions and Copies', { opf: copies.opf, nav: copies.nav, one: copiesOne, two: copiesTwo }],
   ['Named Places', { opf: named.opf, nav: named.nav, one: namedOne, two: namedTwo, three: namedThree }],
 ] as const) {
-  const entries = Object.entries(files).map(([id, text]) =>
-    ({ name: id === 'opf' ? 'OEBPS/content.opf' : id === 'nav' ? 'OEBPS/nav.xhtml' : `OEBPS/${id}.xhtml`, data: utf8(text) }));
+  const entries = [
+    { name: 'META-INF/container.xml', data: utf8(CONTAINER) },
+    ...Object.entries(files).map(([id, text]) =>
+      ({ name: id === 'opf' ? 'OEBPS/content.opf' : id === 'nav' ? 'OEBPS/nav.xhtml' : `OEBPS/${id}.xhtml`, data: utf8(text) })),
+  ];
   writeFileSync(join(output, `${name}.epub`), zip(entries), { mode: utf8.mode });
   console.log(`${join(output, `${name}.epub`)}`);
 }
