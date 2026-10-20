@@ -78,9 +78,9 @@ here is this run's measurement, not a general recipe.
 - **#249, a late desktop adoption while the phone replays a sentence it had
   already reached** — the regression check requires prior genuinely new
   progress **inside the same mounted Reading**, because a fresh mount starts
-  with `reachedRef.toWrite = null` and no writeback for the unmount to
-  mistaken (a reopen-only replay passes on the old code too). All three real
-  presses below were real touches on the Player's Play button; the delaying
+  with `reachedRef.toWrite = null` and no old writeback to overwrite the
+  adoption (a reopen-only replay passes on the old code too). The presses
+  below were real touches on the Player's Play and Pause controls; the delaying
   server held the pre-Play sync's GET so the adoption landed mid-clip.
   Exact times are the Debug Log's (`+08:00`), all inside **one** mounted
   Reading of the `Issue 105 Fixture`, mounted 19:50:40.008 and closed
@@ -108,7 +108,7 @@ here is this run's measurement, not a general recipe.
      not a cue).
   4. **Assertion**: the unmount wrote **nothing**
      (`leave: ok … nothing uploaded` 19:51:42.755). Library and Positions
-     File both kept the desktop item field-for field — locator, anchor
+     File both kept the desktop item field-for-field — locator, anchor
      `{exact: 'Phone old continuation.', prefix: '', suffix: ' Desktop new
      sentence. …'}`, Stamp 1792497123296, device `pos19-desktop`
      (`c1c2-after-library.json`, `c1c2-after-server.json`,
@@ -138,11 +138,11 @@ here is this run's measurement, not a general recipe.
 
 - A physical device, backgrounding/suspension, the desktop plugin's own
   writer, and drift over long runs are untouched by this run.
-- Real touches on the Player's Play button were used for the three #249
-  runs; harvest and resume plays went through `reading.cjs play-for`, which
+- Real touches on the Player's Play button were used for the #249
+  scenarios; harvest and resume plays went through `reading.cjs play-for`, which
   presses the Player's own Play and therefore **does** pass the 2 s pre-Play
   sync wait (only the harness's `{"do":"play"}`, used for setup, skips it).
-  Handler-level setup plays are evidence about writes and resumes, not about
+  Handler-level plays are evidence about writes and resumes, not about
   button gestures.
 - The first `Positions and Copies` import shipped one spine item (a fixture
   bug, below); every #250/#283 measurement ran inside its chapter one, whose
@@ -164,3 +164,14 @@ the replay makes the replay's cue a *new* place whose fresh Stamp
 legitimately beats the crafted desktop item (`0 places taken`), so the
 desktop item must be crafted after the replayed sentence is already the
 stored one, and newer than the place this Reading wrote since.
+
+## Parent acceptance
+
+The parent checked the corrected run's raw Debug Log and compared the mid-run,
+after-switch and crafted desktop JSON snapshots. The first progress, pause,
+replay, adoption and switch occur inside one mounted Reading; both after-switch
+positions equal the crafted desktop position, including its unchanged Stamp.
+The earlier reopen-only run is not counted as regression evidence. No XCTest
+suite ran: the gesture evidence is AXe input, with handler probes identified
+above. After merging the test-only records, all 3,124 host tests in 225 files,
+TypeScript and ESLint passed. The application code is unchanged from 18b37fb.
