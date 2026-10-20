@@ -56,3 +56,10 @@ After restoration, launch the app again before testing.
   chapter download on the simulator; OpenAI Compatible's fallback to MP3 and
   Speechify's queue on the short fixture. `download-concurrency.ts`,
   `DownloadConcurrencyProbe.swift`, the kit's `download-chapter.cjs`.
+- [voice-delete-306.md](voice-delete-306.md) (#306): the two deletes on one
+  row — `Delete all audio` and the Voice-scoped `Delete all current voice
+  audio` — their confirmations, what each leaves in the catalogue and on
+  disk, and Manage staying open or returning to Download.
+  `fake-kokoro-two-voices.cjs` (the kit's fake Kokoro serving two voices,
+  `OPENREADER_FAKE_TTS_VOICES` names them) with the kit's
+  `download-chapter.cjs` staged both Voices without spending quota.

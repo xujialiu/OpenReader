@@ -3,7 +3,7 @@ import XCTest
 /// Real-touch coverage for issues #13 and #14 that the existing probes do not
 /// reach: configuring Fish Audio from empty settings, downloading the two
 /// fixtures used by that verification, and the two "actually confirm the
-/// destructive alert" variants of Manage downloads' "Delete all saved audio"
+/// destructive alert" variants of Manage downloads' "Delete all audio"
 /// and the Library's "Delete this book" (the existing `GeneralFontsProbe` and
 /// `LibraryActionsProbe` methods always cancel those alerts by design and are
 /// left unchanged). Each method is run as its own `-only-testing` invocation
@@ -206,7 +206,7 @@ final class OfflineFixProbe: XCTestCase {
     capture("mini-fixture-downloaded", app)
   }
 
-  // MARK: - Check C, part 1: Delete all saved audio, actually confirmed
+  // MARK: - Check C, part 1: Delete all audio, actually confirmed
 
   func testDeleteAllSavedAudioReal() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
@@ -224,11 +224,11 @@ final class OfflineFixProbe: XCTestCase {
     let savedLine = app.staticTexts.matching(NSPredicate(format: "label LIKE '* saved'")).firstMatch
     XCTAssertTrue(savedLine.waitForExistence(timeout: 5))
     print("MINI saved line before delete: \(savedLine.label)")
-    let deleteAll = app.buttons["Delete all saved audio"]
+    let deleteAll = app.buttons["Delete all audio"]
     XCTAssertTrue(deleteAll.waitForExistence(timeout: 3))
     deleteAll.tap()
 
-    let alert = app.alerts["Delete all saved audio?"]
+    let alert = app.alerts["Delete all audio?"]
     XCTAssertTrue(alert.waitForExistence(timeout: 3))
     let confirmText = alert.staticTexts.matching(NSPredicate(format: "label CONTAINS 'freeing'")).firstMatch
     XCTAssertTrue(confirmText.exists, "Confirmation must name a size")

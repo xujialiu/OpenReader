@@ -175,3 +175,25 @@ it('pauses all Fish Downloads, files late replies under the old Model, keeps oth
   await vi.waitFor(() => expect(restored.state).toBe('done'));
   expect(mock.synthesize.mock.calls.filter(([model]) => model === FREE).map(([, text]) => text)).toEqual(['One.', 'Two.']);
 });
+
+it('deletes one Model of a Fish Voice with Delete all current voice audio, and leaves the same Voice in another Model (#306)', async () => {
+  const { runtime, repository, catalog } = await fixture();
+  await catalog.saveTasks([
+    { id: 'free', document: 'book', voice, chapters: ['a'], state: 'paused', error: null, failed: [] },
+    { id: 'paid', document: 'book', voice: paid, chapters: ['a'], state: 'paused', error: null, failed: [] },
+  ]);
+  await start(runtime);
+  await repository.saveClip('book', voice, 'One.', clip(FREE), () => true);
+  await repository.saveClip('book', paid, 'One.', clip('drama-3'), () => true);
+  await repository.saveClip('book', paid, 'Two.', clip('drama-3'), () => true);
+  await runtime.requestInventory('book');
+  expect(runtime.occupied('book', paid)).toBe(6);
+  await runtime.removeVoiceDownloads('book', paid);
+  expect((await repository.readClip('book', paid, 'One.')).clip).toBeNull();
+  expect((await repository.readClip('book', voice, 'One.')).clip?.note).toBe(FREE);
+  expect(runtime.occupied('book', paid)).toBe(0);
+  expect(runtime.occupied('book', voice)).toBe(3);
+  expect(await repository.savedVoices('book')).toEqual([voice]);
+  expect(runtime.downloadTasks('book').map((t) => t.id)).toEqual(['free']);
+  expect((await catalog.readTasks())?.map((t) => t.id)).toEqual(['free']);
+});

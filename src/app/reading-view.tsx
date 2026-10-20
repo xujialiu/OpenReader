@@ -531,6 +531,15 @@ export function ReadingView({
   /** The latest press of Play, numbered: `play` waits for its sync with it, and `pause` moves it on (#160). */
   const playRequestRef = useRef(0);
   /**
+   * A press of Play is waiting for its sync: the Player shows it as starting,
+   * spinner and Pause, from the moment of the press (#304). Before, nothing
+   * changed for up to `WAIT_MS`, and with a server that did not answer the press
+   * looked ignored. The Reading's own status is not touched, so nothing else
+   * takes the wait for a playing Reading; `reading.play()` takes over the
+   * Player's state where the wait ends.
+   */
+  const [awaitingSync, setAwaitingSync] = useState(false);
+  /**
    * Pause, and the one path there is.
    *
    * **Pausing re-opens the player**, and the navigation bar with it (#67) — the assumption is that the owner is about to
@@ -553,6 +562,7 @@ export function ReadingView({
     reading.pause();
     setCollapsed(false);
     playRequestRef.current += 1;
+    setAwaitingSync(false);
     lookup.stopPronunciation(false);
     // `reading` is a fresh object every render; its `pause` is the stable callback.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -568,9 +578,11 @@ export function ReadingView({
    * newest. The outcome is that run's own, so a sync queued meanwhile cannot
    * hide what it adopted; and a place whose section has not rendered yet is
    * waited for by `reading.play()` rather than given up (#54). Past the bound,
-   * or with the server down, it starts from here. A place the run takes after
-   * that does not move the reading while it plays; the Reading keeps it and
-   * takes it when it stops, unless the reading has moved on since (#105).
+   * or with the server down, it starts from here; with a server just found
+   * unreachable it starts at once, without waiting (#304, `use-sync.ts`). A place
+   * the run takes after that does not move the reading while it plays; the
+   * Reading keeps it and takes it when it stops, unless the reading has moved on
+   * since (#105). The Player shows the press as starting throughout the wait (#304).
    *
    * Each press is numbered, and a Pause or a later Play moves the number on, so
    * a press taken back during the wait starts nothing when the wait ends (#160).
@@ -578,8 +590,10 @@ export function ReadingView({
   const play = useCallback(() => {
     lookup.stopPronunciation(false);
     const request = ++playRequestRef.current;
+    setAwaitingSync(true);
     void sync.wait('play').then((outcome) => {
       if (request !== playRequestRef.current) return;
+      setAwaitingSync(false);
       if (outcome && outcome !== 'late' && outcome.adopted.includes(document.identity.id)) {
         const place = library.current(document.identity.id)?.position;
         if (place && reading.resumeAt(place)) positionRef.current = null;
@@ -814,11 +828,11 @@ export function ReadingView({
 
       {!lookup.selection ? <Player
         settings={settings}
-        playing={status.playing}
-        buffering={status.buffering}
+        playing={status.playing || awaitingSync}
+        buffering={status.buffering || awaitingSync}
         collapsed={collapsed}
         onCollapsed={setCollapsed}
-        enabled={savedVoice || ready.ready || status.playing || !settings.enabledProviders.includes(settings.provider) || !settings.voice.trim()}
+        enabled={savedVoice || ready.ready || status.playing || awaitingSync || !settings.enabledProviders.includes(settings.provider) || !settings.voice.trim()}
         voiceInUse={voiceInUse}
         notes={notes}
         onPlay={() => { if ((!settings.enabledProviders.includes(settings.provider) && inventoryReady(document.identity.id) && !savedVoice) || !settings.voice.trim()) setVoicesOpen(true); else play(); }}

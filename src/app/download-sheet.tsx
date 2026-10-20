@@ -24,6 +24,8 @@ const STATE_LINE: Partial<Record<TaskState, string>> = {
   preparing: 'Preparing selected chapter…', downloading: 'Downloading…', queued: 'Queued', waiting: 'No network connection, waiting to reconnect',
   blocked: 'Needs attention', interrupted: 'Interrupted · continues when available',
 };
+/** The two deletes share a row: each takes the row's height, and a little either side, to be pressed. */
+const DELETE_SLOP = { top: DRAWER.row.padding, bottom: DRAWER.row.padding, left: 8, right: 8 };
 const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.length ? chapterCount(task.failed.length, 'failed') : 'Selected chapters downloaded' : STATE_LINE[task.state];
 
 /**
@@ -40,7 +42,8 @@ const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.le
  * Over the list: the voice, the count, and the download's state with Pause all
  * or Resume all at its end. Under it, fixed whatever the list is scrolled to:
  * the other voices with saved audio, and Download selected, or on Manage,
- * Delete all saved audio and Delete selected. Select all is the drawer's header
+ * Delete all audio and Delete all current voice audio on one row, and Delete
+ * selected. Select all is the drawer's header
  * action, handed up through `onSelectAll`, because only this knows the rows.
  *
  * `manage` is which page this is. Manage lists only what has audio to delete
@@ -164,12 +167,32 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
    * along with the audio, and the effect that first requested it is keyed on the
    * document rather than on this.
    */
-  const deleteEverything = () => Alert.alert('Delete all saved audio?',
+  const deleteEverything = () => Alert.alert('Delete all audio?',
     `All saved audio for this document, across all providers, models and voices, will be deleted, freeing ${downloads.formatBytes(downloads.occupied(document))}. The document and reading position will be kept.`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => {
         void downloads.removeDownloads(document).then(() => {
           setSelected(new Set()); onManage(false); downloads.requestPlan(document, title);
+        }, (e) => Alert.alert('Could not delete audio', String(e)));
+      } },
+    ]);
+  /**
+   * Everything saved for this Document in the Voice being managed, and for Fish
+   * Audio its Model (#306): what the line over the list counts as saved,
+   * stranded audio included, which Delete selected cannot reach. The Voice's
+   * Download goes with it. Manage stays open on the player's Voice while there
+   * is anything left to manage.
+   */
+  const voiceName = `${choice.label || choice.voice} (${PROVIDER_LABELS[choice.provider]}${choice.provider === 'fish' ? ` · ${choice.model}` : ''})`;
+  const deleteVoice = () => Alert.alert('Delete all current voice audio?',
+    `All saved audio for this document in ${voiceName} will be deleted, freeing ${downloads.formatBytes(downloads.occupied(document, choice))}. Other voices' audio, the document and reading position will be kept.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => {
+        void downloads.removeVoiceDownloads(document, choice).then(() => {
+          setSelected(new Set());
+          setManagedVoice(null);
+          const left = downloads.occupied(document) > 0 || downloads.downloadTasks(document).some((t) => inFishModel(t.voice, settings.fish.model) && t.state !== 'done');
+          if (!left) onManage(false);
         }, (e) => Alert.alert('Could not delete audio', String(e)));
       } },
     ]);
@@ -251,8 +274,15 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
       onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.({ provider: v.provider, voice: v.voice, label: v.label }); }}>
       <DrawerRowText style={{ color: accent.reading }}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</DrawerRowText>
     </DrawerRow>)}
-    {manage && downloads.occupied(document) > 0 ? <DrawerRow onPress={deleteEverything}>
-      <DrawerRowText style={styles.destructive}>Delete all saved audio</DrawerRowText>
+    {manage && downloads.occupied(document) > 0 ? <DrawerRow>
+      <View style={styles.deletes}>
+        <Pressable accessibilityRole="button" onPress={deleteEverything} hitSlop={DELETE_SLOP} style={({ pressed }) => pressed && styles.pressed}>
+          <DrawerRowText style={styles.destructive}>Delete all audio</DrawerRowText>
+        </Pressable>
+        {downloads.occupied(document, choice) > 0 ? <Pressable accessibilityRole="button" onPress={deleteVoice} hitSlop={DELETE_SLOP} style={({ pressed }) => pressed && styles.pressed}>
+          <DrawerRowText style={[styles.destructive, styles.trailing]}>Delete all current voice audio</DrawerRowText>
+        </Pressable> : null}
+      </View>
     </DrawerRow> : null}
     <Pressable accessibilityRole="button" accessibilityLabel={manage ? `Delete selected (${chosen.length})` : `Download selected (${chosen.length})`}
       disabled={!progressReady || !downloads.downloadsReady() || !chosen.length || !choice.voice || !!downloads.downloadError()} onPress={act}
@@ -282,6 +312,10 @@ const styles = StyleSheet.create({
   circle: { alignItems: 'center', borderRadius: 12, borderWidth: 1.5, height: 24, justifyContent: 'center', width: 24 },
   column: { width: 24 },
   destructive: { color: INK.attention },
+  // Delete all audio at the row's left, Delete all current voice audio at its right end (#306).
+  deletes: { flexDirection: 'row', gap: 16, justifyContent: 'space-between' },
+  trailing: { textAlign: 'right' },
+  pressed: { opacity: 0.65 },
   button: {
     alignItems: 'center', backgroundColor: INK.text, borderRadius: 24, marginHorizontal: DRAWER.row.inset, marginTop: 12,
     paddingVertical: 15,

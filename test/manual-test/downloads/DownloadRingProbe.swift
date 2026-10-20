@@ -189,7 +189,7 @@ final class DownloadRingProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Manage downloads"].waitForExistence(timeout: 3))
     app.buttons["Manage downloads"].tap()
     XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'saved'")).firstMatch.waitForExistence(timeout: 3))
-    XCTAssertFalse(app.buttons["Resume all"].exists, "Manage downloads keeps Delete all saved audio in that place")
+    XCTAssertFalse(app.buttons["Resume all"].exists, "Manage downloads keeps Delete all audio in that place")
     capture("05-manage-paused", app)
     // #117: Manage is a page of the drawer now; its back button reads Back from Manage.
     XCTAssertTrue(app.buttons["Back from Manage"].waitForExistence(timeout: 3), "Manage has no back button")

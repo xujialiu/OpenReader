@@ -28,7 +28,7 @@ import { useSync, type SyncDeps } from '../../src/app/use-sync';
 const world = vi.hoisted(() => ({
   page: null as null | { onTap?(utterance: number): void; onBlocks?(blocks: readonly unknown[], section: { index: number; href: string; spine: number }): void },
   audio: {
-    handlers: null as null | { onBufferEnded(id: string): void; onOutputLost(): void },
+    handlers: null as null | { onBufferEnded(id: string): void; onOutputLost(): void; onInterrupted(): void; onInterruptionEnded(shouldResume: boolean): void },
     queue: [] as string[],
   },
   provider: { refuse: null as string | null, hold: null as string | null, answer: null as (() => void) | null },
@@ -249,6 +249,20 @@ describe('a Reading that stops on its second sentence: the place is written to t
     await settle();
     expect(world.player!.playing).toBe(false);
     expect(held()).toEqual(STOPPED);
+    await reading.down();
+  });
+
+  it('iOS takes the audio away: another app starts playing sound, Siri, a call (#303)', async () => {
+    const reading = await playing();
+    await reading.hear();
+    await act(async () => { world.audio.handlers!.onInterrupted(); });
+    await settle();
+    expect(world.player!.playing).toBe(false);
+    expect(held()).toEqual(STOPPED);
+    // iOS gives the audio back saying the Reading may resume, as after a call: the Player shows it playing again.
+    await act(async () => { world.audio.handlers!.onInterruptionEnded(true); });
+    await settle();
+    expect(world.player!.playing).toBe(true);
     await reading.down();
   });
 

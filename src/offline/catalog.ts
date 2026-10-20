@@ -258,6 +258,32 @@ export class OfflineCatalog {
       await tx.runAsync(`UPDATE writes SET cancelled=1 ${filter}`, ...params);
     });
   }
+  /**
+   * Every Clip of `voice` in `document` stops being offered, with any write of
+   * it still under way, in one transaction (#306). It reaches the Clips no
+   * chapter's membership names any more, those a bracket setting change left
+   * behind, which `beginDelete` cannot. The voice's own row goes too: nothing
+   * of it is left to name, and a later save records it again.
+   */
+  async beginVoiceRemoval(document: string, voice: string) {
+    await this.write(async (tx) => {
+      await tx.runAsync(
+        "UPDATE clips SET state='deleting' WHERE document=? AND voice=?",
+        document,
+        voice,
+      );
+      await tx.runAsync(
+        "UPDATE writes SET cancelled=1 WHERE document=? AND voice=?",
+        document,
+        voice,
+      );
+      await tx.runAsync(
+        "DELETE FROM voices WHERE document=? AND key=?",
+        document,
+        voice,
+      );
+    });
+  }
   async pendingDeletes(): Promise<StoredAudio[]> {
     const rows = await this.db.getAllAsync<{ metadata: string }>(
       "SELECT metadata FROM clips WHERE state='deleting'",

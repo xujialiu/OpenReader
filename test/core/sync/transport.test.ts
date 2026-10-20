@@ -163,6 +163,75 @@ describe('a server that is down', () => {
   });
 });
 
+describe('whether the server could be reached, for Play to decide whether to wait (#304)', () => {
+  /** A client whose download fails with `problem`, or answers with no file while `problem` is null. */
+  function switchable() {
+    const state = { problem: null as Error | null, hold: null as Promise<void> | null };
+    const client: SyncClient = {
+      async download() {
+        if (state.hold) await state.hold;
+        if (state.problem) throw state.problem;
+        throw new WebDAVError('not-found', 'no file', 404);
+      },
+      async upload() {},
+    };
+    return { state, client };
+  }
+  const NO_REPLY = new WebDAVError('network', 'No reply from https://dav.example/or/ within 15 s.');
+
+  it('remembers when a run could not reach the server, and forgets it at the next run that does', async () => {
+    const remote = switchable();
+    const h = harness(null, [], { client: remote.client });
+    expect(h.transport.unreachableAt()).toBeNull();
+    remote.state.problem = NO_REPLY;
+    await h.transport.flush('foreground');
+    expect(h.transport.unreachableAt()).toBe(1_000_000);
+    h.advance(5_000);
+    remote.state.problem = null;
+    await h.transport.flush('play');
+    expect(h.transport.unreachableAt()).toBeNull();
+  });
+
+  it('counts only a server that could not be reached: a refused password or an error status is a server that answered', async () => {
+    const remote = switchable();
+    const h = harness(null, [], { client: remote.client });
+    remote.state.problem = NO_REPLY;
+    await h.transport.flush('foreground');
+    remote.state.problem = new WebDAVError('auth', 'The server rejected the username or password (HTTP 401).', 401);
+    await h.transport.flush('play');
+    expect(h.transport.unreachableAt()).toBeNull();
+    remote.state.problem = new WebDAVError('network', 'Cannot reach https://dav.example/or/: offline');
+    await h.transport.flush('play');
+    expect(h.transport.unreachableAt()).toBe(1_000_000);
+    remote.state.problem = new WebDAVError('http', 'Download failed: HTTP 502.', 502);
+    await h.transport.flush('play');
+    expect(h.transport.unreachableAt()).toBeNull();
+  });
+
+  it('forgets it when the network comes back', async () => {
+    const remote = switchable();
+    const h = harness(null, [], { client: remote.client });
+    remote.state.problem = NO_REPLY;
+    await h.transport.flush('foreground');
+    h.transport.reconnected();
+    expect(h.transport.unreachableAt()).toBeNull();
+  });
+
+  it('says since when the run in flight has been out at the server', async () => {
+    const remote = switchable();
+    let release!: () => void;
+    remote.state.hold = new Promise<void>((resolve) => { release = resolve; });
+    const h = harness(null, [], { client: remote.client });
+    expect(h.transport.runningSince()).toBeNull();
+    const run = h.transport.flush('foreground');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(h.transport.runningSince()).toBe(1_000_000);
+    release();
+    await run;
+    expect(h.transport.runningSince()).toBeNull();
+  });
+});
+
 describe('single flight', () => {
   it('folds a burst of pokes into one run and one trailing run', async () => {
     const downloads: (() => void)[] = [];

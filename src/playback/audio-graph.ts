@@ -54,6 +54,14 @@ export interface AudioGraphHandlers {
    * delayed JS would consume unheard words and could reclaim the output.
    */
   onOutputLost(): void;
+  /**
+   * iOS has taken the audio away: another app's sound, Siri, a call, an alarm
+   * (#303). The native engine has already stopped (`onInterruptionBegin`); the
+   * caller pauses the source and publishes paused state, as for output loss.
+   */
+  onInterrupted(): void;
+  /** iOS has ended the interruption. `shouldResume` is its permission to carry on, which it does not always give (#303). */
+  onInterruptionEnded(shouldResume: boolean): void;
   onError(error: unknown): void;
 }
 
@@ -132,14 +140,22 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
   await AudioManager.setAudioSessionActivity(true);
 
   /**
-   * Interruptions are deliberately **not** observed. When nothing is listening,
-   * `SystemNotificationManager.handleInterruption` calls the engine's own
-   * `onInterruptionEnd(shouldResume)`, so a phone call pauses the engine and the
-   * book resumes by itself afterwards — which is what a reader wants. Observing
-   * them from JavaScript moves that responsibility here and the library then
-   * does nothing, and footgun 3 is explicit that a defensive `pause()` around a
-   * silent stretch is what breaks resumption.
+   * Interruptions are observed here, and the Reading decides what follows them
+   * (#303). Unobserved, `SystemNotificationManager.handleInterruption` tells
+   * JavaScript nothing and calls the engine's own `onInterruptionEnd`, which
+   * restarts the native engine only when iOS sends `shouldResume`. iOS often
+   * does not: on the owner's iPhone one interruption ended with options 0
+   * (`interruption.end.hold`) and another never ended while the other app kept
+   * the audio. Both times the native engine stayed stopped, the Reading went on
+   * publishing `playing: true`, and the Player's first press was a Pause.
+   *
+   * Observed, the library still stops the native engine at `began`, and at
+   * `ended` it only tells JavaScript: the engine pauses at `began` and plays
+   * again at `ended` only with `shouldResume` (`engine.ts`). Footgun 3's
+   * prohibition is on pausing because a queue drained; this pause is the
+   * system's stop made visible, like output loss.
    */
+  AudioManager.observeAudioInterruptions(true);
 
   const sampleRate = first.audio === 'samples' ? first.sampleRate : AudioManager.getDevicePreferredSampleRate();
   const context = new AudioContext({ sampleRate });
@@ -244,6 +260,17 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
     if (event.reason !== 'OldDeviceUnavailable') return;
     try {
       handlers.onOutputLost();
+    } catch (error) {
+      handlers.onError(error);
+    }
+  });
+
+  /** iOS taking the audio away and giving it back (#303); see `observeAudioInterruptions` above. */
+  const interruption: AudioEventSubscription | undefined = AudioManager.addSystemEventListener('interruption', (event) => {
+    trace(`interruption.${event.type}${event.type === 'ended' ? ` shouldResume=${event.shouldResume}` : ''}`);
+    try {
+      if (event.type === 'began') handlers.onInterrupted();
+      else handlers.onInterruptionEnded(event.shouldResume);
     } catch (error) {
       handlers.onError(error);
     }
@@ -386,6 +413,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
       closed = true;
       trace('dispose');
       routeChange?.remove();
+      interruption?.remove();
       node.onPositionChanged = null;
       node.onBufferEnded = null;
       try {

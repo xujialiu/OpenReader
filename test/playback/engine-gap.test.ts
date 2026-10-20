@@ -56,6 +56,7 @@ const audio = vi.hoisted(() => {
   const AudioManager = {
     setAudioSessionOptions() {},
     setAudioSessionActivity: async () => {},
+    observeAudioInterruptions() {},
     addSystemEventListener: () => ({ remove() {} }),
   };
   /** The buffer at the front of the queue is played to its end. */

@@ -318,6 +318,20 @@ export class OfflineRepository {
     await hidden?.();
     await this.cleanDeletions(key);
   }
+  /**
+   * All of one voice's audio in a document, stranded Clips included (#306),
+   * hidden first and removed after, as `deleteChapters` does.
+   */
+  async removeVoice(
+    document: string,
+    voice: OfflineVoice,
+    hidden?: () => Promise<void> | void,
+  ) {
+    const key = documentKey(document);
+    await this.catalog.beginVoiceRemoval(key, voiceKey(voice));
+    await hidden?.();
+    await this.cleanDeletions(key);
+  }
   async removeDocument(document: string) {
     const key = documentKey(document);
     await this.catalog.removeDocument(key);

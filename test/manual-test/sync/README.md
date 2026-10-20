@@ -198,3 +198,16 @@ the sentence it arrived on (#154). The tools it added: `SyncSetupProbe.swift`
 (types only the sync password and turns the switch on), `webdav-poller.py`
 (the Positions File from the host, browser User-Agent), and
 `fake-kokoro.cjs`'s `OPENREADER_FAKE_TTS_REFUSE`.
+
+## A press of Play made visible, and an interruption honoured (#304, #303)
+
+[play-wait-and-interruption.md](play-wait-and-interruption.md) — 2026-10-20,
+beta11 at b8325b9: the spinner-with-Pause at press while Play waits its 2 s,
+the Pause that takes a press back inside the wait, the no-wait after a run
+that could not reach the server, and the control that re-arms the wait;
+`PlayWaitProbe.swift` (XCUITest press-shot at ≤500 ms, pause-inside-the-wait,
+the Safari interruption source, the plain regression) and
+`delaying-webdav.cjs` + the kit's `fake-kokoro.cjs` as the controlled
+services. Phase 3 passed; phase 2, the interruption, is a simulator coverage
+limit (Safari's audio does not interrupt the app on the iOS 26.5 simulator),
+so #303's interruption is checked on a physical iPhone.

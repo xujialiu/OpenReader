@@ -77,6 +77,7 @@ vi.mock('react-native-audio-api', () => {
     setAudioSessionOptions() {},
     setAudioSessionActivity: () => Promise.resolve(),
     getDevicePreferredSampleRate: () => 48000,
+    observeAudioInterruptions() {},
     addSystemEventListener: () => ({ remove() {} }),
   };
   return { AudioContext, AudioManager };

@@ -1,7 +1,14 @@
 import { AudioContext, AudioManager, type AudioBufferSourceNode } from 'react-native-audio-api';
 
-/** A short-lived graph for dictionary-supplied audio; no lock-screen ownership. */
-export async function playPronunciation(url: string, signal: AbortSignal, onOutputLost: () => void): Promise<void> {
+/**
+ * A short-lived graph for dictionary-supplied audio; no lock-screen ownership.
+ *
+ * `onAudioLost` is called when the sound cannot go on: the headphones came out,
+ * or iOS took the audio away (#303). Interruptions are observed in JavaScript
+ * since #303 (`audio-graph.ts`), so the library no longer resumes this graph by
+ * itself; an interrupted Pronunciation ends here instead of running to its deadline.
+ */
+export async function playPronunciation(url: string, signal: AbortSignal, onAudioLost: () => void): Promise<void> {
   let context: AudioContext | null = null;
   let source: AudioBufferSourceNode | null = null;
   const abort = new AbortController();
@@ -13,7 +20,11 @@ export async function playPronunciation(url: string, signal: AbortSignal, onOutp
   };
   signal.addEventListener('abort', stop);
   const route = AudioManager.addSystemEventListener('routeChange', (event) => {
-    if (event.reason === 'OldDeviceUnavailable') { onOutputLost(); stop(); }
+    if (event.reason === 'OldDeviceUnavailable') { onAudioLost(); stop(); }
+  });
+  AudioManager.observeAudioInterruptions(true);
+  const interruption = AudioManager.addSystemEventListener('interruption', (event) => {
+    if (event.type === 'began') { onAudioLost(); stop(); }
   });
   let timedOut = false;
   const timeout = setTimeout(() => { timedOut = true; stop(); }, 15000);
@@ -41,6 +52,7 @@ export async function playPronunciation(url: string, signal: AbortSignal, onOutp
     clearTimeout(timeout);
     signal.removeEventListener('abort', stop);
     route?.remove();
+    interruption?.remove();
     if (source) source.onEnded = null;
     await context?.close();
   }

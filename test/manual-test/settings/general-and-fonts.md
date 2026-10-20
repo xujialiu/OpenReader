@@ -45,8 +45,8 @@ modal — and a valid non-default list is accepted silently. It ends by
 restoring the default list. It never touches Providers or downloads.
 
 `testManageDownloadsDeleteAll` opens the English fixture's Download drawer,
-enters Manage downloads, and requires `Delete all saved audio` next to `Back
-to downloads` and a confirmation titled `Delete all saved audio?` naming a
+enters Manage downloads, and requires `Delete all audio` next to `Back
+to downloads` and a confirmation titled `Delete all audio?` naming a
 size. It always cancels — this mode never deletes saved audio — and a saved
 SQLite byte count taken before and after confirms nothing was removed.
 

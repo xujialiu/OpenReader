@@ -287,6 +287,22 @@ both devices. The same could happen without Play, so while a place is pending
 `readingPosition()` answers null: no pause, renumbering or exit writes the older
 sentence over it.
 
+Play does not wait for a server just found unreachable (#304). The transport
+keeps when the last run failed with a `network` WebDAVError (no reply within
+15 s, or no connection) and when the run in flight went out. `wait('play')`
+answers `'late'` at once, still starting its forced run, if that failure is
+under `SYNC_RETRY_MS` (60 s) old or the run in flight has been out for
+`WAIT_MS`. The record ends at the next run that reaches the server, and when
+`NWPathMonitor`'s `connectivity` event reports connected. On the owner's phone,
+with requests hanging, three presses in a row each started exactly two seconds
+after their run began. None of those runs answered within the two
+seconds (`notes/NOTES_2026-10-19.md`), so the wait bought nothing.
+`NWPathMonitor` alone was rejected: it reports connected when the phone is
+connected but nothing gets through, which is that case. With no path at all,
+Expo's fetch already fails in about 20 ms. While Play does wait, the reader
+shows the press as starting, spinner and Pause, without touching the Reading's
+status. Pause takes the press back as before (#160).
+
 ## The switch, and where the password lives
 
 There is a switch, and the reason it is not a switch that does nothing is what

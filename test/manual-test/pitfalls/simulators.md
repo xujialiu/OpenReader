@@ -371,5 +371,22 @@
   the same `&&` chain as its play, and one chain's Play was skipped by a
   caught reset and simply re-run after `set`. A zero is only a zero in the
   breath it was set; on this device that breath was short.
-- **A 15-minute hole in the Debug Log is the Mac asleep, not the app frozen** (verifying #307, 2026-10-20, session-created `307-contents`, iOS 26.5). After a Contents row at 03:00:56, the app's 5-second `[hx]` status lines stopped at 03:01:07 and came back at 03:16:25. The tester's own `xcrun simctl` call hung for the same 934 s, and it reported "the app JS froze after the row press". `pmset -g log` explains both: `03:01:06 Sleep … 'Maintenance Sleep' … 917 secs` and `03:16:23 DarkWake`, then a cycle of short dark wakes and sleeps every 15 to 18 minutes. `pmset -g` read `sleep 0 (sleep prevented by xcodebuild, …)` throughout, so this was the lid or an explicit sleep, not idle sleep, and `caffeinate` cannot prevent it. Fix: before calling a gap in the app's log a freeze, read `pmset -g log | grep -E 'Sleep|DarkWake'` for the same minutes. A simulator check needs the Mac awake for its whole length.
+- **A 15-minute hole in the Debug Log is the Mac asleep, not the app frozen** (verifying #307, 2026-10-20, session-created `307-contents`, iOS 27.0). After a Contents row at 03:00:56, the app's 5-second `[hx]` status lines stopped at 03:01:07 and came back at 03:16:25. The tester's own `xcrun simctl` call hung for the same 934 s, and it reported "the app JS froze after the row press". `pmset -g log` explains both: `03:01:06 Sleep … 'Maintenance Sleep' … 917 secs` and `03:16:23 DarkWake`, then a cycle of short dark wakes and sleeps every 15 to 18 minutes. `pmset -g` read `sleep 0 (sleep prevented by xcodebuild, …)` throughout, so this was the lid or an explicit sleep, not idle sleep, and `caffeinate` cannot prevent it. Fix: before calling a gap in the app's log a freeze, read `pmset -g log | grep -E 'Sleep|DarkWake'` for the same minutes. A simulator check needs the Mac awake for its whole length.
 - **A second copy of a Document's file is the same Document, read or not** (verifying #307). Two byte-identical copies of the Gutenberg Pride and Prejudice added through the harness both answered `added sha256:173688ad…`: the Document Id comes from the bytes (CONTEXT.md, Document Id), so a copy under another name shares the first copy's Reading Position and is no "unread" book. Fix: for a Document with no Reading Position, start from fresh app data (uninstall, or erase a session-created device), not from a renamed copy.
+
+## The #306 verification run (2026-10-20)
+
+- **On a machine with several sessions' simulators booted, `simctl install`
+  onto a freshly created device can hang past three minutes, and the kit's
+  own `silence.sh` after it with it.** The #306 narrow-screen check created
+  an iPhone SE (iOS 26.5) while four devices were booted (two of them other
+  sessions'); `simctl install` answered nothing for 180 s twice — the first
+  attempt was killed, a shutdown + boot of that one device brought the boot
+  back in seconds but the install still hung, and `silence.sh set` hung the
+  same way. Nothing was wrong with the app or the .app: the same copy
+  installed on the session's already-running iPhone 17 Pro in seconds. The
+  device was dropped and the check reported uncovered rather than fighting a
+  contended CoreSimulator. If a fresh device must be used while other
+  sessions hold booted simulators, budget for this and prefer the device
+  that is already up; `ps` itself taking seconds is the tell that the host
+  is the problem.
