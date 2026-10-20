@@ -195,11 +195,13 @@ export function parseLibrary(text: string): LibraryParse {
   } catch {
     return { ok: false, reason: 'not-json' };
   }
-  if (!isRecord(file) || !Array.isArray(file.entries)) return { ok: false, reason: 'not-a-library' };
+  if (!isRecord(file)) return { ok: false, reason: 'not-a-library' };
 
   const version = file.version;
   if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) return { ok: false, reason: 'not-a-library' };
+  // A newer writer need not use this version's entries layout (#233).
   if (version > LIBRARY_VERSION) return { ok: false, reason: 'newer', version };
+  if (!Array.isArray(file.entries)) return { ok: false, reason: 'not-a-library' };
 
   const problems: LibraryProblem[] = [];
   const ignored: string[] = [];

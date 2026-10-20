@@ -44,6 +44,7 @@ import type { PositionsItem } from '../core/sync/positions-file';
 import { identifyFile, keepFile } from './document';
 import { displayNames, forgetDisplayName, saveDisplayName } from './display-names';
 import { migrateDocumentIds, readLibrary, thisDevice, writeLibrary, type LoadedLibrary } from './library';
+import { assertLibraryWritable } from './library-protection';
 import { itemsOf, planAdoption, samePlace } from './sync-items';
 
 type LibraryOperation = 'import' | 'delete' | 'visit';
@@ -162,7 +163,9 @@ export interface AddOptions {
 
 const byNewestFirst = (a: LibraryEntry, b: LibraryEntry): number => b.stamp.at - a.stamp.at;
 
-const NOTHING_READ: LoadedLibrary = { entries: [], problems: [], ignored: [], frozen: false, note: null };
+const NOTHING_READ: LoadedLibrary = {
+  entries: [], problems: [], ignored: [], frozen: true, note: 'The Library has not been read. Nothing was written.',
+};
 
 export function useLibrary(): Library {
   const [folders] = useState(openFolderStore);
@@ -224,6 +227,13 @@ export function useLibrary(): Library {
 
   /** Change the entries and write the file, in that order and never one without the other. */
   const commit = useCallback((change: (was: readonly LibraryEntry[]) => readonly LibraryEntry[], durable = false) => {
+    try {
+      assertLibraryWritable(loadedRef.current);
+    } catch (problem) {
+      if (durable) throw problem;
+      setWriteNote(describe(problem));
+      return;
+    }
     const next = [...change(entriesRef.current)].sort(byNewestFirst);
     // Import/deletion may drive another durable store. Never tell it an entry
     // changed if the Library could not be written.
@@ -243,6 +253,8 @@ export function useLibrary(): Library {
   const add = useCallback(
     async (source: File, options: AddOptions): Promise<{ entry: LibraryEntry; duplicate: boolean } | null> => {
       if (!readyRef.current) throw new Error('The Library is still loading. Try again.');
+      // Before identification, file replacement, names or Folder membership (#233).
+      assertLibraryWritable(loadedRef.current);
       folders.writable();
       const destination = options.folder === undefined ? folders.getSnapshot().tree.current : options.folder;
       const added = await identifyFile(source);
@@ -376,6 +388,7 @@ export function useLibrary(): Library {
   /** Refused, as a Folder's rename is, when the Document's Folder holds another of the name (#227). */
   const rename = useCallback((id: DocumentId, title: string) => {
     if (title.trim()) {
+      assertLibraryWritable(loadedRef.current);
       const tree = folders.getSnapshot().tree;
       const problem = documentNameProblem(tree, entriesRef.current, title, tree.documents[id] ?? null, id);
       if (problem) throw new Error(problem);

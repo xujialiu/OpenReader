@@ -76,6 +76,7 @@ import {
 } from '../core/document';
 
 import { migrationSentence, planIdMigration } from './document-ids';
+import { assertLibraryWritable } from './library-protection';
 
 /** The Library itself. One file, rewritten whole (ADR 0019). */
 const LIBRARY_FILE = 'library.json';
@@ -148,11 +149,10 @@ export function keepDocument(id: DocumentId, format: DocumentFormat, source: Fil
 /**
  * What reading the Library file produced, in the terms the screen needs.
  *
- * `frozen` is ADR 0003's rule, kept: a file written by a **newer** build is left
- * alone — not merged, not rewritten, not deleted. The Library is shown empty and
- * says why, and nothing this build does may write over it. That is the designed
- * behaviour and not a bug to route around, so it is a flag a caller has to
- * carry rather than an exception it can swallow.
+ * `frozen` protects a file this build could not read, including a **newer**
+ * version (ADR 0003, #233): not merged, rewritten or deleted. The Library is
+ * shown empty and says why. The flag outlives a dismissed note, so no later
+ * operation can turn a failed load into permission to replace the original.
  */
 export interface LoadedLibrary {
   entries: LibraryEntry[];
@@ -160,7 +160,7 @@ export interface LoadedLibrary {
   problems: LibraryProblem[];
   /** Keys in the file this build does not know. Non-empty means another writer knows more about it than this one. */
   ignored: string[];
-  /** The file is from a newer build. Nothing may be written until it is gone. */
+  /** The file could not be read. Nothing may write over it during this session. */
   frozen: boolean;
   /** What went wrong reading it at all, in the words whatever refused used. Never swallowed (philosophy rule 1). */
   note: string | null;
@@ -176,13 +176,12 @@ const EMPTY: LoadedLibrary = { entries: [], problems: [], ignored: [], frozen: f
  */
 export function readLibrary(): LoadedLibrary {
   const file = new File(Paths.document, LIBRARY_FILE);
-  if (!file.exists) return EMPTY;
-
   let text: string;
   try {
+    if (!file.exists) return EMPTY;
     text = file.textSync();
   } catch (problem) {
-    return { ...EMPTY, note: `The Library file could not be read: ${describe(problem)}` };
+    return { ...EMPTY, frozen: true, note: `The Library file could not be read: ${describe(problem)} Nothing was written.` };
   }
 
   const parsed = parseLibrary(text);
@@ -198,6 +197,7 @@ export function readLibrary(): LoadedLibrary {
     }
     return {
       ...EMPTY,
+      frozen: true,
       note:
         parsed.reason === 'not-json'
           ? 'The Library file is not JSON. Nothing has been changed; it is still there to look at.'
@@ -211,7 +211,7 @@ export function readLibrary(): LoadedLibrary {
 /**
  * Write the Library. After every change (ADR 0019).
  *
- * **Throws** when the file that is there knows more than this build does.
+ * **Throws** when loading the file failed or it knows more than this build does.
  * `ignored` non-empty means another writer put keys in it that this parser did
  * not recognise, and rewriting strips exactly those keys, for every device, with
  * nothing reported — the defect ADR 0003 found in the desktop plugin's positions
@@ -219,15 +219,7 @@ export function readLibrary(): LoadedLibrary {
  * failure can still be prevented.
  */
 export function writeLibrary(entries: readonly LibraryEntry[], loaded: LoadedLibrary): void {
-  if (loaded.frozen) {
-    throw new Error(`The Library file is from a newer build of ${APP_NAME} and must be left alone (ADR 0003). Nothing was written.`);
-  }
-  if (loaded.ignored.length > 0) {
-    throw new Error(
-      `The Library file carries ${loaded.ignored.length} key(s) this build does not know (${loaded.ignored.join(', ')}). ` +
-        'Rewriting it would strip them in silence, which is the defect ADR 0003 exists to prevent. Nothing was written.',
-    );
-  }
+  assertLibraryWritable(loaded);
   // Expo writes in place; a refused write can truncate the last saved Library (#260).
   // Its overwrite-move also removes the destination first, so it is no fallback.
   if (!offlineNative) throw new Error('Atomic Library storage is unavailable. Nothing was written.');

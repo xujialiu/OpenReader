@@ -68,6 +68,17 @@ first. Neither is a fallback: without the atomic writer, a save is refused.
 reload with empty/partial write failures, first-save failure and recovery at the
 filesystem boundary. It does not claim to fill an iPhone's storage.
 
+A missing file permits a first save; a file that cannot be read does not (#233).
+`LoadedLibrary.frozen` covers failed reads and malformed files as well as newer
+versions. The parser checks the version before requiring this version's `entries`
+layout. One shared write guard protects both `writeLibrary` and the running
+Library: import and rename refuse before changing document files, display names
+or Folder membership, and background entry changes leave memory alone. A
+migration does not mark an unreadable Library as migrated. Dismissing the load
+note cannot lift that session's protection. This is preservation, not automatic
+recovery or a reset: the original stays where it was. The storage and real-hook
+regressions are in `test/app/library-protection.test.ts`.
+
 Not SQLite, and not `AsyncStorage`. A shelf of a few hundred entries is a few
 tens of kilobytes; the whole of it is rewritten faster than a query would be
 prepared, and the format is one a person can read when something is wrong —

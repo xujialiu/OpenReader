@@ -141,6 +141,12 @@ describe('parseLibrary, a file this build must not touch', () => {
     expect('entries' in parsed).toBe(false);
   });
 
+  it.each([undefined, null, {}, 'not an array'])('recognizes a newer version before checking its entries layout: %s (#233)', (entries) => {
+    expect(parseLibrary(JSON.stringify({ version: LIBRARY_VERSION + 1, entries, documents: [] }))).toEqual({
+      ok: false, reason: 'newer', version: LIBRARY_VERSION + 1,
+    });
+  });
+
   it('reads a lower version, because an older file is still a file this build understands', () => {
     // There is no version 0, so this is the shape of the assertion rather than a
     // case that exists yet: what matters is that "lower" is not refused.
