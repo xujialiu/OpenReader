@@ -658,6 +658,22 @@ iPhone every Contents tap logged `the app asks epub.js to display section 1
   `test/app/contents-row-fragment.test.ts` lands on Utterance 0, the title page.
   `use-reading.ts` keeps them in `anchorsRef`, because `status.anchors` is a
   render behind.
+- **The view is fitted to its document before epub.js locates the fragment.**
+  On the simulator, a row to a file laid out for the first time could land far
+  above its heading, and stay there. For CHAPTER XXX. at the move,
+  `locationOf` gave the heading's true top, 97,383 px. But the new view's frame
+  was 74,711 px tall against a document of 119,833, so `scrollBy` stopped at the
+  container's end, 73,953, with the heading 23,430 px further down. epub.js's
+  own `expand()` fitted the frame 16 ms later and left the scroll where it was.
+  All 24 images above the heading were already `complete`, and the document's
+  height did not change afterwards. A row to a file already on the page always
+  landed, because its frame already fitted. `locateInWholeView` in the page
+  program makes `View.prototype.locationOf` call `expand()` first.
+  `locationOf` is read only in `DefaultViewManager.display`'s two paths, so
+  nothing else moves. The fit can still lag on its own if a document grows
+  after the move: an image whose size is known only once it loads. This book
+  did not need that, and the page does not re-place a fragment after it lands
+  (`notes/NOTES_2026-10-20.md`, `test/renderer/fragment-landing.test.ts`).
 
 ## Voices: the locale dimension is missing from half the providers
 
