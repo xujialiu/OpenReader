@@ -30,6 +30,13 @@ npx tsx test/manual-test/fixtures/NAME.ts OUTPUT_DIRECTORY
 - `declared-language-fixture.ts`: two one-chapter books declared `de-DE` and
   `nan`, for splitting by a declared language however it is written (#182,
   #185).
+- `segmentation-fixture.ts`: seven one-chapter books holding the accepted
+  sentence-boundary batch's own examples (#240/#245/#241/#242) — CJK stops
+  before digits and lowercase Latin (`zh`, `ja`), `no`/`me` sentence-final
+  words beside `Dr. Smith` and `No. 5` (`en`), ASCII/spaced ellipses with their
+  capitalized and Unicode controls (`en`), and the same German paragraph
+  declared `deu`, `ger` and `de`. Books 2 and 4 are the ones the preparation-
+  migration record downloads under pre-batch rules.
 - `issue86-fixture.ts`: five short chapters and a text-less volume page, for
   the #86 skip/Contents measurements (`../player-and-reading-held/skips-while-playing.md`). Its contents
   are an **NCX on purpose**: epub.js spells an xhtml nav's hrefs with the nav

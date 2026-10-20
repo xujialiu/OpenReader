@@ -7,6 +7,7 @@ import type { SynthesisResult } from '../../src/core/providers/types';
 import type { NarrationPlan } from '../../src/offline/model';
 import { speechKeying } from '../../src/offline/speech';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import { SEGMENTATION } from '../../src/core/segmenter/revision';
 
 /**
  * #109, ADR 0064: the runtime is where a Reading and a download send a
@@ -71,7 +72,7 @@ const voice = { provider: 'speechify' as const, voice: 'en-US/george', label: 'G
 
 mock.open.mockResolvedValue({
   tasks: async () => [],
-  catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, speechKeying: async () => speechKeying(settings) },
+  catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => speechKeying(settings) },
   plan: async (): Promise<NarrationPlan> => ({ version: 2, chapters: [] }),
   chapter: async () => null,
   progress: async () => [],

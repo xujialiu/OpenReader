@@ -8,6 +8,7 @@ import { audioAddress } from '../../src/offline/catalog-keys';
 import { OfflineRepository, type AudioFiles } from '../../src/offline/repository';
 import { downloadSpeech, speechKeying } from '../../src/offline/speech';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import { SEGMENTATION } from '../../src/core/segmenter/revision';
 
 /**
  * #184: a chapter prepared by another walk of the page is prepared again.
@@ -126,6 +127,7 @@ async function open(walk: number | null) {
   await catalog.saveTasks([{ id: 'done', document: 'book', voice, chapters: BOOK.map(({ id }) => id), state: 'done', error: null, failed: [] }]);
   await catalog.recordSpeechKeying(speechKeying(settings));
   if (walk !== null) await catalog.recordWalk(walk);
+  await catalog.recordSegmentation(SEGMENTATION);
   mock.repository = repository;
 
   vi.resetModules();

@@ -63,3 +63,12 @@ After restoration, launch the app again before testing.
   `fake-kokoro-two-voices.cjs` (the kit's fake Kokoro serving two voices,
   `OPENREADER_FAKE_TTS_VOICES` names them) with the kit's
   `download-chapter.cjs` staged both Voices without spending quota.
+- [sentence-boundaries-batch.md](sentence-boundaries-batch.md) (#240, #245,
+  #241, #242): the accepted sentence-boundary batch through the app — the
+  pre-batch Reading baseline from a detached worktree's unpatched `sentencex`,
+  legacy Downloads staged on it (one paused unfinished), the `segmentation`
+  revision's migration (zero automatic synthesis, lost completeness, kept
+  clips, persistent pause, explicit Resume/re-download fetching only changed
+  text), and the repaired cuts played with painted highlights.
+  `fixtures/segmentation-fixture.ts`'s seven books, two Metros, the fake
+  Kokoro's request log as the boundary evidence.

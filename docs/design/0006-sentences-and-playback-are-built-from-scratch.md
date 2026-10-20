@@ -58,15 +58,34 @@ slower, not needing work: the app would not start.
 
 The older release handles thirty languages rather than every language, and it
 disagrees with the newer one about a handful of abbreviations, in both directions.
-So an owner reading in one of those thirty languages gets sentence splitting as
-good as the desktop's, however the document spells its language: a book that
-says it is in the German of Germany is split as German, just as one that says
-only German is, and does not pause after the "3." of "3. Oktober". An owner
+An owner reading in one of those thirty languages gets that language's rules,
+not a promise that every sentence is split as well as on the desktop. A document
+that says it is in the German of Germany, or names German with an alternative
+language code, is split as German, just as one that says only German is, and
+does not pause after the "3." of "3. Oktober". An owner
 reading outside that set will hear the voice break where the text does not — a
 pause mid-thought, or two sentences run together — and will see the mark cover
 the wrong stretch while it happens. That is a real limit
 on who the app reads well for, and it is a smaller limit than the alternative,
 which is an app that does not run.
+
+## Ordinary sentence boundaries must still work
+
+A Chinese sentence does not stop being a sentence because the next one begins
+with a year or an English word. An English "She said no. He left." is two
+sentences, not one abbreviation. And "I was thinking... maybe we should go."
+is one continuing thought, not two sentences simply because its ellipsis is
+written as three dots. These cases are corrected while keeping real
+abbreviations and the document's original text.
+
+A correction can make previously saved audio no longer match the new sentence
+boundaries. That audio is kept, but its chapter is no longer shown as fully
+Downloaded until it is checked by downloading it again. Unfinished Downloads
+pause too. Nothing is downloaded again merely because the app was updated:
+the owner chooses Download or Resume. Sentences that have not changed reuse
+their audio; changed sentences may need to be paid for again. Keeping an old
+complete check was rejected because it would promise an offline reading that
+could stop at the first changed sentence.
 
 ## One consequence the owner may meet
 

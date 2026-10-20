@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
 import { speechKeying } from '../../src/offline/speech';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import { SEGMENTATION } from '../../src/core/segmenter/revision';
 
 /** Real runtime, scheduler, factory, Providers and Reading Clip fetcher. Only
  * native I/O, credentials and the catalogue boundary are doubled. No network. */
@@ -34,7 +35,7 @@ async function fixture(fish = false) {
   const saved = new Set<string>();
   const saveClip = vi.fn(async (_document: string, _voice: unknown, text: string) => { saved.add(text); return true; });
   h.open.mockResolvedValue({
-    tasks: async () => [], catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, speechKeying: async () => speechKeying(settings) },
+    tasks: async () => [], catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => speechKeying(settings) },
     plan: async () => ({ version: 2, chapters: [chapter] }), chapter: async () => chapter, progress: async () => [],
     hasClip: async (_document: string, _voice: unknown, text: string) => saved.has(text),
     readClip: async () => ({ clip: null, dropped: false }), saveClip, inventory: async () => [], savedVoices: async () => [],

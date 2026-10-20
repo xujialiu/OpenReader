@@ -1,5 +1,6 @@
 import segment from 'sentencex';
 
+import { LANGUAGE_ALIASES } from '../locale-name-table';
 import type { SplitSentences } from './sentences';
 
 /**
@@ -37,6 +38,12 @@ import type { SplitSentences } from './sentences';
  * Chinese or Romanian book is split by the English rules over a terminator list
  * that does include `。` and its relatives. That is a real reduction in quality
  * and it is the open half of notes/NOTES.md item 7.
+ *
+ * The owner-written patch-package repairs for #240/#245/#241 narrow that
+ * cost: CJK stops before digits/Latin, ambiguous English sentence-final words
+ * and continuing ASCII ellipses. Both exports and the readable source are
+ * patched; ADR 0006 records the limits. Raise SEGMENTATION in revision.ts when
+ * changed rules alter saved texts.
  *
  * ## What it gives
  *
@@ -96,7 +103,8 @@ const resolved = new Map<string, string>();
  *
  * Trimmed, lowercased and with `_` read as `-`. Then: the whole tag when it has
  * rules; else its primary subtag when that has (`de-DE` is `de`, `el-GR` is
- * `el`, `pt-BR` is `pt`); else English for the two keys whose fallbacks cycle;
+ * `el`, `pt-BR` is `pt`); else a three-letter primary's alias when that names
+ * rules of its own (`deu`/`ger` are `de`, #242); else English for cycling keys;
  * else the tag itself, which the package walks through `fallbacks.json` as
  * before (`gsw` reaches `de`, `zh` ends at English).
  *
@@ -116,9 +124,14 @@ export function sentencexLanguage(declared: string): string {
   if (known !== undefined) return known;
   const tag = declared.trim().toLowerCase().replace(/_/g, '-');
   const primary = tag.split('-')[0];
+  // #242: ISO 639-2/3 names such as deu/ger are not package fallback keys.
+  // Resolve only aliases of rules it actually has, not unrelated ICU rewrites
+  // of regions/scripts or the package's own low-resource-language fallbacks.
+  const alias = primary.length === 3 && Object.hasOwn(LANGUAGE_ALIASES, primary) ? LANGUAGE_ALIASES[primary] : undefined;
   let language: string;
   if (RULES.has(tag)) language = tag;
   else if (RULES.has(primary)) language = primary;
+  else if (alias && RULES.has(alias)) language = alias;
   else if (CYCLING.has(tag)) language = 'en';
   else {
     try {

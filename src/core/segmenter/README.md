@@ -19,6 +19,14 @@ third-party and freely usable, and what SDT adds on top is a document tree, page
 mappings, source anchors and text ranges, which for EPUB are largely
 unnecessary because epub.js already supplies a DOM.
 
+The JavaScript release stays pinned to 0.4.2, with the bounded boundary repairs
+in `patches/sentencex+0.4.2.patch` (#240, #245, #241). `sentencex.ts` also maps
+three-letter language aliases to the package's own rules (#242). Both shipped
+exports and the readable source are tested. Changes to boundaries, language
+resolution or rejoining must raise `SEGMENTATION` in `revision.ts`, so saved
+chapter text is not falsely presented as complete under different rules
+(ADR 0027). The original text is never normalized or rewritten to make it split.
+
 **No language detector.** An EPUB declares its own `dc:language`, which removes
 any need for `eld` and the two megabytes it carries. This is also why a document
 with more than one language in it is not handled specially (ADR 0010): it is
