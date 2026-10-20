@@ -1858,6 +1858,21 @@ export function useReading(
     disposeEngine();
   }, [identity, settings, disposeEngine]);
   /**
+   * Take a late adoption before either stop or unmount writes back (#249).
+   * It is already in the Library. Retire the old phone writeback synchronously;
+   * only a mounted, paused Reading then needs to move its cursor to this place.
+   * A genuinely new spoken sentence has already released it in onClip.
+   */
+  const takeLatePlace = useCallback((): ReadingPlace | null => {
+    const late = lateRef.current;
+    lateRef.current = null;
+    if (!late) return null;
+    reachedRef.current = { place: late.place, toWrite: null };
+    onReachedRef.current?.(null);
+    return late.place;
+  }, []);
+
+  /**
    * The Reading ends here, when the view unmounts (ADR 0049), and nothing
    * starts it again (#106). A callback can outlive the view: `reading-view.tsx`'s
    * `play` waits for its sync before it calls `play`, and the owner can leave
@@ -1873,9 +1888,10 @@ export function useReading(
     endedRef.current = false;
     return () => {
       endedRef.current = true;
+      takeLatePlace();
       disposeEngine();
     };
-  }, [disposeEngine]);
+  }, [disposeEngine, takeLatePlace]);
 
   /**
    * The Utterance being spoken, written down as a place in the document.
@@ -1928,13 +1944,12 @@ export function useReading(
       wasPlayingRef.current = true;
       return;
     }
-    const late = lateRef.current;
-    lateRef.current = null;
-    if (late) resumeAt(late.place);
+    const late = takeLatePlace();
+    if (late) resumeAt(late);
     if (!wasPlayingRef.current) return;
     wasPlayingRef.current = false;
     onStoppedRef.current?.(readingPosition());
-  }, [stopped, readingPosition, resumeAt]);
+  }, [stopped, readingPosition, resumeAt, takeLatePlace]);
 
   return { bridge, status, opened, play, carryOn: start, pause, chooseVoice, seekTo: pointAt, skip, returnToReading, goToSection, readingPosition, resumeAt };
 }

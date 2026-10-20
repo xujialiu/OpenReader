@@ -73,6 +73,14 @@ describe('samePlace', () => {
     expect(samePlace(place('epubcfi(/6/8!/4/2/4/4)', 'Copyright by the author.'), place('epubcfi(/6/8!/4/2/4/4)', 'Then more.'), 'epub')).toBe(false);
   });
 
+  it('distinguishes copies by both sides of the quotation, but not by Stamp or Unicode composition', () => {
+    const first = place('epubcfi(/6/8!/4/2/4/4)', 'Café.');
+    expect(samePlace(first, { ...first, anchor: { ...first.anchor, prefix: 'Earlier. ' } }, 'epub')).toBe(false);
+    expect(samePlace(first, { ...first, anchor: { ...first.anchor, suffix: ' Later.' } }, 'epub')).toBe(false);
+    const other = { ...first, anchor: { ...first.anchor, exact: 'Cafe\u0301.' }, stamp: { at: 2, device: 'other' } };
+    expect(samePlace(first, other, 'epub')).toBe(true);
+  });
+
   it('never calls two places the same across formats', () => {
     expect(samePlace(place('epubcfi(/6/8!/4/2/4/4)', 'x'), place('epubcfi(/6/8!/4/2/4/4)', 'x'), 'pdf' as never)).toBe(false);
   });

@@ -120,6 +120,7 @@ vi.mock('../../src/keys/store', () => ({ readSyncPassword: async () => ({ outcom
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const DOCUMENT = ('sha256:' + 'c'.repeat(64)) as DocumentId;
+const OTHER = ('sha256:' + 'e'.repeat(64)) as DocumentId;
 const PHONE = 'iPhone-test0001';
 const DESKTOP = 'desktop-zotero';
 const SETTINGS: AppSettings = {
@@ -179,7 +180,7 @@ function folder() {
 }
 
 /** The app with one Document in its Library, opened in the Reader. */
-async function open(stored: boolean, deps: SyncDeps) {
+async function open(stored: boolean, deps: SyncDeps, page: readonly ReportedBlock[] = PAGE) {
   world.engines.length = 0;
   world.intent = null;
   world.options = null;
@@ -188,7 +189,7 @@ async function open(stored: boolean, deps: SyncDeps) {
     position: stored ? readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/2)'), SENTENCES[0], 0, SENTENCES[0].length, { at: START - 60_000, device: PHONE }) : null,
     voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: START - 60_000, device: PHONE },
   };
-  world.disk.entries = [entry];
+  world.disk.entries = [entry, { ...entry, id: OTHER, title: 'Another document', position: null }];
   const seen: { library: Library | null; handle: ReadingHandle | null } = { library: null, handle: null };
   function Opener() {
     seen.handle = useHeldReading();
@@ -208,7 +209,7 @@ async function open(stored: boolean, deps: SyncDeps) {
   await settle();
   await act(async () => { seen.handle!.show(DOCUMENT); });
   await settle();
-  await act(async () => { world.options!.onBlocks!(PAGE, { index: 0, href: 's0.xhtml', spine: 1 }); });
+  await act(async () => { world.options!.onBlocks!(page, { index: 0, href: 's0.xhtml', spine: 1 }); });
   await settle();
   return {
     settle,
@@ -222,6 +223,7 @@ async function open(stored: boolean, deps: SyncDeps) {
     async hears(utterance: number) { await act(async () => { world.engines[0].deps.clock.onClip(cue(utterance)); }); await settle(); },
     async pass(ms: number) { await act(async () => { vi.advanceTimersByTime(ms); }); await settle(); },
     async down() { await act(async () => { tree.unmount(); }); },
+    async openOther() { await act(async () => { seen.handle!.show(OTHER); }); await settle(); },
   };
 }
 
@@ -265,6 +267,72 @@ async function afternoon(options: { stored: boolean; heard: readonly number[] })
   await m.down();
   return result;
 }
+
+describe('ending a Reading while a newer desktop place is kept (#249)', () => {
+  it.each(['pause', 'switch', 'unmount'] as const)('settles the place before %s writes back', async (ending) => {
+    const sync = folder();
+    const m = await open(true, sync.deps);
+    try {
+      await m.press('play');
+      await m.hears(1);
+      await m.press('pause');
+      await m.pass(600_000);
+      sync.desktopReads(2);
+      sync.state.slow = true;
+      await m.press('play');
+      await m.pass(WAIT_MS);
+      sync.answer();
+      await m.settle();
+      const adopted = world.disk.entries;
+      const uploaded = sync.state.text;
+      // A real engine can cue the resumed sentence again: that is not new speech.
+      await m.hears(1);
+      if (ending === 'pause') await m.press('pause');
+      else if (ending === 'switch') await m.openOther();
+      else { await m.down(); await m.settle(); }
+      expect(world.disk.entries).toEqual(adopted); // Including the desktop's original Stamp.
+      expect(sync.state.text).toBe(uploaded);
+    } finally { if (ending !== 'unmount') await m.down(); }
+  });
+
+  it('releases a kept desktop place when the next identical sentence actually starts (#250)', async () => {
+    const sync = folder();
+    const m = await open(false, sync.deps, [{ ...PAGE[0], text: 'Go. Go. Stop now.' }]);
+    try {
+      await m.press('play'); await m.hears(0); await m.press('pause');
+      await m.pass(600_000);
+      sync.desktopReads(2);
+      sync.state.slow = true;
+      await m.press('play'); await m.pass(WAIT_MS);
+      sync.answer(); await m.settle();
+      await m.hears(1);
+      await m.openOther();
+      const entry = (world.disk.entries as LibraryEntry[]).find((one) => one.id === DOCUMENT)!;
+      expect(entry.position?.anchor).toEqual({ exact: 'Go.', prefix: 'Go. ', suffix: ' Stop now.' });
+      expect(sync.says()).toBe(`Go. @${PHONE}`);
+    } finally { await m.down(); }
+  });
+
+  it('writes genuinely new phone speech when another Document is opened', async () => {
+    const sync = folder();
+    const m = await open(true, sync.deps);
+    try {
+      await m.press('play');
+      await m.hears(1);
+      await m.press('pause');
+      await m.pass(600_000);
+      sync.desktopReads(2);
+      sync.state.slow = true;
+      await m.press('play');
+      await m.pass(WAIT_MS);
+      sync.answer();
+      await m.settle();
+      await m.hears(3);
+      await m.openOther();
+      expect([m.holds(), sync.says()]).toEqual(Array(2).fill(`Desktop new continuation. @${PHONE}`));
+    } finally { await m.down(); }
+  });
+});
 
 beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], now: START }); });
 afterEach(() => { vi.useRealTimers(); });

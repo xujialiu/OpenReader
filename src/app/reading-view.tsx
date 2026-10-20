@@ -443,6 +443,8 @@ export function ReadingView({
       // first, so the run that follows carries it. It ends when the Reader goes
       // while it is paused, when another document is opened, and when this one
       // is deleted (#68); going back while it plays does not unmount this view.
+      // useReading's earlier cleanup has already retired this writeback if a
+      // newer adopted place was still kept (#249), without seeking the dying page.
       if (positionRef.current) onReachedRef.current(positionRef.current);
       syncRef.current.poke('leave');
     },

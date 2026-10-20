@@ -2,6 +2,7 @@ import { createElement, useEffect, useMemo } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { parsePositionsFile, serializePositionsFile, usableItems } from '../../src/core/sync/positions-file';
 import type { DocumentId, LibraryEntry } from '../../src/core/document';
 import { createFolderStore } from '../../src/core/folders';
 import { WebDAVError } from '../../src/core/sync/webdav';
@@ -283,6 +284,66 @@ describe('a Reading that stops on its second sentence: the place is written to t
     // The refused sentence was cued to explain the stop, but never spoken (#96).
     expect(held()).toEqual({ library: 'Sentence one.', folder: 'Sentence one.' });
     await reading.down();
+  });
+});
+
+describe('repeated sentences are different Reading Positions (#250)', () => {
+  const position = () => (world.disk.entries as LibraryEntry[]).find((entry) => entry.id === DOCUMENT)!.position!;
+
+  it.each(['Go. Go. Stop now.', 'Go. Go. Go. Stop now.', 'One here. Two here. Three here. Four here.'])(
+    'saves, uploads and resumes the last heard copy in %s', async (text) => {
+      const reading = await playing([text]);
+      const heard = text === 'Go. Go. Stop now.' ? 1 : 2;
+      try {
+        for (let i = 0; i < heard; i++) await reading.hear();
+        await act(async () => { world.remote!('pause'); });
+        await settle();
+        const saved = position();
+        expect(saved.anchor.prefix).toBe(text.slice(0, text.lastIndexOf(saved.anchor.exact)));
+        const uploaded = parsePositionsFile(world.folder.file!);
+        expect(uploaded.ok && usableItems(uploaded.items).find((item) => item.id === DOCUMENT)?.anchor).toEqual(saved.anchor);
+        // A second Pause and leaving do not restamp this same occurrence.
+        vi.setSystemTime(Date.now() + 20_000);
+        await act(async () => { world.remote!('pause'); });
+        await settle();
+        expect(position()).toEqual(saved);
+      } finally { await reading.down(); }
+      const reopened = await playing([text], false);
+      try { expect(world.shown.at(-1)).toBe(heard); } finally { await reopened.down(); }
+    },
+  );
+
+  it('takes a remote place on the next identical sentence instead of calling it already being read', async () => {
+    const reading = await playing(['Go. Go. Stop now.']);
+    try {
+      await act(async () => { world.remote!('pause'); });
+      await settle();
+      const file = parsePositionsFile(world.folder.file!);
+      if (!file.ok) throw new Error(file.reason);
+      const items = usableItems(file.items);
+      items[0] = { ...items[0], anchor: { exact: 'Go.', prefix: 'Go. ', suffix: ' Stop now.' }, stamp: { at: Date.now() + 1, device: 'desktop' } };
+      world.folder.file = serializePositionsFile(items);
+      await act(async () => { world.sync!.poke('foreground'); });
+      await settle();
+      expect(world.shown.at(-1)).toBe(1);
+      expect(position().anchor.prefix).toBe('Go. ');
+    } finally { await reading.down(); }
+  });
+
+  it('saves a later nonadjacent copy even inside the periodic-write throttle', async () => {
+    const reading = await playing(['Go. Wait here. Go. Stop now.']);
+    try {
+      await act(async () => { world.remote!('pause'); });
+      await settle();
+      const first = position();
+      await act(async () => { world.player!.onPlay(); });
+      await settle();
+      await reading.hear(); await reading.hear();
+      await act(async () => { world.remote!('pause'); });
+      await settle();
+      expect(position().anchor.prefix).toBe('Go. Wait here. ');
+      expect(position().stamp.at).toBeGreaterThan(first.stamp.at);
+    } finally { await reading.down(); }
   });
 });
 

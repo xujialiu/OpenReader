@@ -22,13 +22,15 @@
  * keep; they stay in the file, which the transport carries through.
  */
 
-import { createLocator, newerThan, readLocator, type DocumentFormat, type DocumentId, type LibraryEntry, type ReadingPlace, type ReadingPosition } from '../core/document';
+import { createLocator, newerThan, normalizeAnchorText, readLocator, type DocumentFormat, type DocumentId, type LibraryEntry, type ReadingPlace, type ReadingPosition } from '../core/document';
 import type { PositionsItem } from '../core/sync/positions-file';
 import { canonicalCfi } from '../renderer/cursor';
 
 /**
  * Whether two places are the same sentence in the same Block: the same
- * canonical locator and the same quotation. What `reached` asks before it
+ * canonical locator and the same quotation with its surrounding context. Two
+ * copies of one sentence inside a Block are not the same place (#250).
+ * What `reached` asks before it
  * writes, so that leaving a book or pausing on the sentence the reading was
  * already at re-stamps nothing (ADR 0031: a position's Stamp moves only when
  * speech stops somewhere new). Measured 2026-09-21: a pause wrote
@@ -40,7 +42,10 @@ export function samePlace(a: ReadingPlace, b: ReadingPlace, format: DocumentForm
   const x = readLocator(a.locator, format);
   const y = readLocator(b.locator, format);
   if (x === null || y === null) return false;
-  return canonicalCfi(x) === canonicalCfi(y) && a.anchor.exact === b.anchor.exact;
+  return canonicalCfi(x) === canonicalCfi(y)
+    && normalizeAnchorText(a.anchor.exact) === normalizeAnchorText(b.anchor.exact)
+    && normalizeAnchorText(a.anchor.prefix) === normalizeAnchorText(b.anchor.prefix)
+    && normalizeAnchorText(a.anchor.suffix) === normalizeAnchorText(b.anchor.suffix);
 }
 
 /** The Library's positions as items of the file. `device` is this device's Device Name, for a position that carries none. */

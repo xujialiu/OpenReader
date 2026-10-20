@@ -251,6 +251,25 @@ remote place still wins. Both places are snapshots, not renumberable indices.
 The stop exit takes a place still kept, and only then hands the screen the
 place to write, which `readingPosition()` answers null on the place just taken.
 
+Ending the Reading also settles this writeback decision before disposing the
+engine (#249). A switch to another Document unmounts the view while it still
+shows playing; no paused render will run the stop effect. `takeLatePlace` is
+shared by the stop effect and the unmount cleanup: it takes a still-kept
+adoption and synchronously clears the old phone writeback. Only the mounted
+stop then calls `resumeAt`; unmount seeks nothing and updates no page state.
+The Library already holds the remote place with its original Stamp. An actual
+new spoken sentence still releases the adoption and is written normally.
+The real host/Library/transport tests in `late-place-at-pause.test.ts` compare
+both stores and the original Stamp across Pause, replacement and unmount.
+
+The equality used to detect new speech and suppress duplicate writes includes
+the NFC quotation's prefix and suffix as well as its canonical Locator (#250).
+Locator plus `exact` alone made adjacent copies of `Go.` the same place, so the
+later copy was neither saved nor accepted when it arrived from another device.
+The context already exists in version 1; no new coordinates or fields are
+added. Identical quotations with indistinguishable context cannot be located
+uniquely, and their resume is refused rather than guessed (ADR 0008).
+
 The first version took the kept place only if `readingPosition()` was null,
 and let the screen's pause write first. That held for #105's case, a Reading
 still on the sentence it resumed at, and failed for a Reading that had spoken a
