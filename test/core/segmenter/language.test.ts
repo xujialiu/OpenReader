@@ -74,6 +74,37 @@ describe('a declared tag with a region, in capitals or with an underscore (#182)
   });
 });
 
+describe('three-letter names for a language with its own rules (#242)', () => {
+  const de = 'Er wurde am 3. Oktober 1990 in Berlin geboren. Dann zog er um.';
+  it.each(['deu', 'ger', 'DEU', ' GER ', 'deu-DE', 'ger_AT'])('%s uses German in Reading and Download', (tag) => {
+    const expected = ['Er wurde am 3. Oktober 1990 in Berlin geboren.', 'Dann zog er um.'];
+    expect(reading(de, tag)).toEqual(expected);
+    expect(download(de, tag)).toEqual(expected);
+    expect(sentencexLanguage(tag)).toBe('de');
+  });
+
+  it.each([
+    ['fra', 'fr', 'Il habite av. Foch à Paris. Elle aussi.'],
+    ['fre', 'fr', 'Il habite av. Foch à Paris. Elle aussi.'],
+    ['spa', 'es', 'La Sra. García llegó tarde. Nadie lo notó.'],
+    ['rus', 'ru', 'Он родился в 1990 г. в Москве. Потом уехал.'],
+    ['ell', 'el', 'Τι κάνεις; Είμαι καλά.'],
+    ['gre', 'el', 'Τι κάνεις; Είμαι καλά.'],
+    ['nld', 'nl', 'Dat is bv. zo. En dan?'],
+    ['dut', 'nl', 'Dat is bv. zo. En dan?'],
+    ['por', 'pt', 'A Sra. Silva chegou tarde. Ninguém notou.'],
+  ])('%s uses %s, not English: %s', (tag, bare, text) => {
+    expect(reading(text, bare)).not.toEqual(reading(text, 'en'));
+    expect(reading(text, tag)).toEqual(reading(text, bare));
+    expect(download(text, tag)).toEqual(reading(text, bare));
+    expect(sentencexLanguage(tag)).toBe(bare);
+  });
+
+  it.each([['jpn', 'ja'], ['pol', 'pl'], ['eng', 'en'], ['deu', 'de']])('resolves %s before its region', (tag, bare) => {
+    expect(sentencexLanguage(`${tag.toUpperCase()}_ZZ`)).toBe(bare);
+  });
+});
+
 describe('a tag whose fallbacks cycle (#185)', () => {
   it.each(['nan', 'cdo', ' nan ', 'NAN', 'nan-TW', 'cdo-Hant'])('%s is split, by the English rules', (tag) => {
     expect(splitWithSentencex(tag, 'One. Two.')).toEqual(['One.', 'Two.']);
