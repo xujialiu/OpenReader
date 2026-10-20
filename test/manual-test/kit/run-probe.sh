@@ -80,7 +80,10 @@ output=$(cd "$output" && pwd)
 finish() {
   status=$?
   trap - EXIT INT TERM
-  if [[ $status -ne 0 ]]; then
+  # Terminate only when a test actually ran: a refusal before testing
+  # (readiness 69, silence 2, setup 2) killed the staged app and cost the next
+  # run its reader (2026-10-20, r2 of #303/#304). 65 and up are test outcomes.
+  if [[ $status -ne 0 && $status -ge 65 ]]; then
     python3 "$kit/ios_guard.py" run --timeout 10 -- \
       xcrun simctl terminate "$simulator" "$bundle" > "$output/stop-target.log" 2>&1 || true
   fi
