@@ -128,6 +128,26 @@ resolve that fails is still surfaced on the entry rather than deleting it, per
 the design file; it is now a `stat` rather than a bookmark resolution, and the
 Library screen can therefore say so before the entry is tapped as well as after.
 
+Re-adding a Document stages its file in a private `.import-…` directory under
+`library/`, then commits it with `OpenReaderOffline.replaceFile` (#261). Expo
+still performs the scoped copy from Files; the native primitive only renames the
+completed, app-owned staging file. Darwin's `rename(2)` replaces the target
+atomically on the same filesystem and leaves it alone on failure. There is no
+remove-then-move fallback. A failed copy or replacement cleans up staging and
+keeps both the prior EPUB and the incoming source; a move removes its app-owned
+source only after commit. Handing the kept file itself back in is a no-op.
+
+An existing file is not skipped: the Document Id hashes the ZIP manifest, not
+the integrity of the stored archive, and re-adding must still repair or restore
+it. The cost is room for a complete staged copy before replacing anything. A
+process killed before commit can leave an unreferenced staging directory, but
+cannot remove the old kept file; automatic orphan recovery is not added here.
+`test/app/document-storage-failure.test.ts` covers the real duplicate-import
+path with injected filesystem failures. `bash test/native-storage/run.sh`
+compiles the actual iOS replacement function against disposable host files,
+including refused replacement and Unicode paths; that is not an iPhone I/O
+failure measurement.
+
 `document.ts` used to say a Document is "read and never copied". That sentence
 was true when there was nowhere to keep one and is not true now. What philosophy
 rule 8 actually asks for is unchanged and is still kept: nothing is uploaded, the

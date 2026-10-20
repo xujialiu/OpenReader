@@ -135,14 +135,35 @@ export function documentFile(id: DocumentId, format: DocumentFormat): File {
 /**
  * Keep these bytes as the Document's own file, and say where they went.
  *
- * `overwrite` is on because the destination is named by the hash of what is
- * being written: a file already there has these very bytes, and refusing would
- * be refusing to add a book the owner has added twice from two places.
+ * Re-adding can repair a kept file, so an existing destination is replaced, not
+ * skipped. The Document Id is a ZIP-manifest digest, not a file-integrity check.
+ * Expo's overwrite copy/move deletes the destination before copying (#261):
+ * stage a complete copy on this filesystem, then commit it with native rename.
  */
 export function keepDocument(id: DocumentId, format: DocumentFormat, source: File, options: { move: boolean }): File {
   const destination = documentFile(id, format);
-  if (options.move) source.moveSync(destination, { overwrite: true });
-  else source.copySync(destination, { overwrite: true });
+  if (source.uri === destination.uri) return destination;
+  if (!offlineNative?.replaceFile) throw new Error('Atomic document storage is unavailable. The document was not added.');
+
+  // A private directory reserves the name without ever overwriting another import.
+  const staging = new Directory(booksDirectory(), `.import-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  staging.create();
+  const pending = new File(staging, destination.name);
+  try {
+    // Keep Expo's scoped access to a file handed over by Files. Even a move keeps
+    // its source until the new file has been committed successfully.
+    source.copySync(pending);
+    offlineNative.replaceFile(pending.uri, destination.uri);
+  } catch (problem) {
+    try {
+      staging.delete();
+    } catch (cleanup) {
+      throw new Error(`${describe(problem)} The temporary copy could not be removed: ${describe(cleanup)}`);
+    }
+    throw problem;
+  }
+  staging.delete();
+  if (options.move) source.delete();
   return destination;
 }
 

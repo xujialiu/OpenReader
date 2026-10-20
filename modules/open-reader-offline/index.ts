@@ -12,6 +12,8 @@ export interface ContinuedEnded {
 
 interface OfflineNative {
   writeJson(uri: string, contents: string): void;
+  /** Atomically rename a completed staging file over its destination, on the same filesystem. */
+  replaceFile(source: string, destination: string): void;
   excludeFromBackup(uri: string): void;
   compress(input: string, output: string, rate: number): Promise<void>;
   beginBackground(): Promise<boolean>;

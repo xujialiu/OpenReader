@@ -31,6 +31,9 @@ public final class OpenReaderOfflineModule: Module {
     Function("writeJson") { (uri: String, contents: String) in
       try contents.write(to: URL(string: uri)!, atomically: true, encoding: .utf8)
     }
+    Function("replaceFile") { (source: String, destination: String) in
+      try replaceFileAtomically(source: source, destination: destination)
+    }
     OnStartObserving {
       let monitor = NWPathMonitor()
       monitor.pathUpdateHandler = { [weak self] path in
