@@ -175,3 +175,49 @@ The earlier reopen-only run is not counted as regression evidence. No XCTest
 suite ran: the gesture evidence is AXe input, with handler probes identified
 above. After merging the test-only records, all 3,124 host tests in 225 files,
 TypeScript and ESLint passed. The application code is unchanged from 18b37fb.
+
+## Integrated re-verification on `1.0.0 (9)-beta20` (e501d38, 2026-10-20)
+
+After main's sentence-boundary batch (#240/#245/#241/#242, `sentencex`
+0.4.2) was merged and the tree re-cut at e501d38, the same session device
+and build 9's native app were reused (no native or dependency version
+change; JavaScript from a fresh parent-worktree Metro on 8088; the empty
+Positions File was re-created by the app's own first upload). Bounded
+integration checks, not a rerun:
+
+- **Splitter and bundle**: the served bundle names `1.0.0 (9)-beta20` and
+  still carries `takeLatePlace`/`quotationEdgesAgree`; `sentencex` in the
+  parent's `node_modules` is 0.4.2; Settings shows
+  `Version 1.0.0 (9)-beta20-debug`. The `Positions and Copies` utterance map
+  is unchanged under the new splitter (304 utterances, `Go.`/`Yes.`
+  boundaries where they were), and `Named Places` still splits its CJK-digit
+  headings whole (第1章/第10章 as utterances 7/8).
+- **#250**: the later `Go.` copy saved and uploaded
+  (`{exact:'Go.', prefix:'Go. ', suffix:' Stop now.'}`) and a reopen resumed
+  at utterance 2 (`play at utterance 2` 20:32:29.054).
+- **#283**: the 100th `Yes.` (prefix `…Is this number 99?`) saved and a
+  reopen resumed at utterance 203 (`play at utterance 203` 20:33:12.768).
+- **#282 (CJK control, interaction with the new splitter)**: a crafted
+  desktop item with 第1章's anchor and 第10章's Block locator was adopted and
+  the reading recovered to utterance 7 (第1章) — `play at utterance 7`
+  20:35:34.590.
+- **#249, same-mount regression (real touches throughout)** — mount opened
+  20:59:47.964, closed 21:00:54.701, no reopen or Provider/Voice change in
+  between: real Play 21:00:00.926 → `play at utterance 1` 21:00:02.841 →
+  roll into utterance 2 (21:00:23.181) → real Pause landed on **utterance 2**
+  (`pause at utterance 2` 21:00:24.983, a genuinely different sentence;
+  `pause: ok … uploaded` 21:00:33.079) → desktop item at utterance 3 crafted
+  while the reader sat paused (Stamp 1792501283108 = mid + 60 s, device
+  `pos19-desktop`, PUT 201) → real Play, no seek, 21:00:47.275 →
+  `play at utterance 2` 21:00:49.164 (the replay; its cue matched the stored
+  place) → **`play: ok … 1 places taken` 21:00:51.196** (adopted mid-clip,
+  kept) → switch Documents 21:00:54.701, before utterance 3's cue → the
+  unmount wrote nothing (`leave: ok … nothing uploaded` 21:00:58.720) and
+  Library and Positions File both kept the desktop item field for field
+  (`b20f-after-*.json` vs `b20f-crafted.json`).
+
+Two environment findings from this pass are in `../README.md`'s Pitfalls:
+`ax.py` point touches stopped landing while tree reads kept working (two
+silent failures with correct coordinates; an XCUITest-simulated tap reported
+success equally fruitlessly), and a shutdown+boot of the session device —
+the run's one recorded recovery — restored them.
