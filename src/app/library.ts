@@ -62,6 +62,7 @@ import { Directory, File, FileMode, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
 import { APP_NAME } from '../../app-name';
+import { offlineNative } from '../../modules/open-reader-offline';
 
 import {
   DOCUMENT_ID_RULE,
@@ -227,7 +228,10 @@ export function writeLibrary(entries: readonly LibraryEntry[], loaded: LoadedLib
         'Rewriting it would strip them in silence, which is the defect ADR 0003 exists to prevent. Nothing was written.',
     );
   }
-  new File(Paths.document, LIBRARY_FILE).write(serializeLibrary(entries));
+  // Expo writes in place; a refused write can truncate the last saved Library (#260).
+  // Its overwrite-move also removes the destination first, so it is no fallback.
+  if (!offlineNative) throw new Error('Atomic Library storage is unavailable. Nothing was written.');
+  offlineNative.writeJson(new File(Paths.document, LIBRARY_FILE).uri, serializeLibrary(entries));
 }
 
 /**

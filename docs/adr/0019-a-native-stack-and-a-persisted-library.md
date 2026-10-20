@@ -58,6 +58,16 @@ Document: its Document Id, the name to show, the bookmarked file's location, and
 the Reading Position (ADR 0008). It is written after every change, read once at
 launch.
 
+A save uses the synchronous native `OpenReaderOffline.writeJson`, as settings
+already do (ADR 0026, #186). Foundation writes atomically, so a refused save
+leaves the last saved entries, Reading Positions, Voices and Stamps readable
+(#260). Expo's `File.write` writes in place and may truncate that file before
+failing; staging followed by Expo's overwrite-move also removes the old target
+first. Neither is a fallback: without the atomic writer, a save is refused.
+`test/app/library-storage-failure.test.ts` exercises the real serializer and
+reload with empty/partial write failures, first-save failure and recovery at the
+filesystem boundary. It does not claim to fill an iPhone's storage.
+
 Not SQLite, and not `AsyncStorage`. A shelf of a few hundred entries is a few
 tens of kilobytes; the whole of it is rewritten faster than a query would be
 prepared, and the format is one a person can read when something is wrong —
