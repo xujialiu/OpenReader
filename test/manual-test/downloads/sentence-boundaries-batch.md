@@ -94,10 +94,10 @@ fact; durations from the 2.5 s fake clip at rate 1.5):
 
 ## Raw artifacts (`/tmp/or-seg18-01/`)
 
-- `fake-tts.log` — every synthesis request of the run in order (1–19), with the on-purpose refusals; the segmenter's request evidence throughout.
+- `fake-tts.log` — every synthesis request of the run, with the on-purpose refusals; the segmenter's request evidence throughout. **The numbered counter restarts with each server process**: requests 1–19 below are the final server instance's count (the German plays end it), not a whole-run total — the legacy-download requests sit under earlier instances' counters, and the file holds 40 `text=` lines across all instances. Quote `text=` lines, not the counter, when dating requests.
 - `records/prebatch-utterances.txt`, `records/debug-log-pre-final.txt` (491 lines, opens with the beta18 launch and the beta17 clearing), `records/dl-legacy-*.log`.
 - `shots/00…10-*.png` — 00 is the legacy phase's Settings showing `1.0.0 (9)-beta16-debug` (the first baseline attempt, Metro 8096 at 9451d12; the worktree was then re-pinned to f12eefc and 8096 restarted — the pre-batch relaunch itself is proven by 8096's cwd/checkout and by the deu/ger English split only that tree produces); post-migration drawer 01, Manage 02/03, ja paused 04 and resumed 05, en-negs re-downloaded 06, the root-level-sheet state 07/08, the clean reader 09, beta18 Settings 10; `zh-play-*.png`, `ennegs-play-*.png`, `ell-play-*.png`, `deu-play-5s.png`, `ger-play-5s.png`, `de-play-5s.png`, `ja-play-5s.png`.
-- `phase1.json` (guard record: the first readiness attempt exited 69 — CDP checked 2 s after launch, before the 15 s bundle finished; the immediate recheck passed, no recovery spent), `readiness/`, `metro-8095.log`, `metro-8096.log`, `xcodebuild.log`, `prebuild.log`, `pod-install.log`.
+- `phase1.json` (the guarded build phase's record: `outcome: failed`, `exitCode 69` — its last step, the first readiness check, ran 2 s after launch, before the 14.9 s bundle finished; readiness then passed in a separate check outside that record, rc=0, with no recovery spent — do not read phase1.json as a pass), `readiness/`, `metro-8095.log`, `metro-8096.log`, `xcodebuild.log`, `prebuild.log`, `pod-install.log`.
 - No XCTest probe ran in this verification; there are no `test.log` `Executed` lines to quote — the evidence is the app's own lists, its request log, SQLite and screenshots.
 
 ## What this cannot prove
@@ -105,7 +105,7 @@ fact; durations from the 2.5 s fake clip at rate 1.5):
 - `walk-utts.cjs` reads the Reading's Utterance list, not the painted highlight; the painted evidence is the play screenshots and the seek lines.
 - The catalogue was read while the app was terminated; while it runs, the drawer and the runtime reads stand in.
 - The fake's word timings are its own reported ones, not audio-waveform measurements; its clips are silence, so "plays" is established by the app's own `level=word` state, the request log and the painted bands, not by sound.
-- The revision's transaction-ordering guarantees (pauses saved before the revision row; rollback on failure) are covered by `test/offline/runtime-segmentation.test.ts` on the host; on the simulator I exercised the happy migration, the persisted pause and the failed-pause-then-retry path only as far as staging them deterministically allows — I did not kill the app mid-migration.
+- The revision's transaction-ordering guarantees (pauses saved before the revision row; rollback on failure) are covered by `test/offline/runtime-segmentation.test.ts` on the host; on the simulator I exercised the happy migration, pause retention (ja paused→paused) and the queued→paused conversion (below) — **no migration write-fault injection ran on the device; the failure paths are host-only**.
 - `seg-ellipsis` and `seg-zh` keep their legacy Downloads (done, old clips) and were deliberately **not** re-downloaded; their completeness is still lost until an explicit download — that is the ADR's stated cost, observed on en-negs, not a separate defect.
 
 ## Rerun mechanics (the parts that bit)
@@ -118,3 +118,17 @@ fact; durations from the 2.5 s fake clip at rate 1.5):
   slow the fake with `OPENREADER_FAKE_TTS_DELAY_MS` and pause it mid-flight
   (`toggleTask` over CDP), as the ja staging did.
 - `cdp.cjs --eval` takes a file, not an inline expression.
+
+## Supplement: an unfinished **queued** legacy Download converts to paused (2026-10-20 18:48, same device, same beta18)
+
+The migration run above proved pause **retention** (ja was already paused). This supplement proves the **conversion**: a queued task at migration time becomes a saved paused task, with zero synthesis. All evidence in `/tmp/or-seg18-01/` (`records/queued-before-tasks.json`, `supplement.json`, `supplement-queued.sh`, `debug-log-after-queued-conversion.txt`).
+
+Method — **native SQLite upgrade-state seeding, not a UI-generated queue and not an app-code edit**: with the app terminated, the catalogue was staged by `sqlite3` to the exact original-upgrade shape — the `state` row `segmentation` **deleted** (missing = older rules) while `walk|2` stayed, and the existing seg-zh task (old joined Clips, chapter prepared=0, `records/queued-before-tasks.json`) set `"state":"queued"` in the persisted `tasks` JSON. seg-zh was one of the books deliberately left un-reprepared, so its three Clips are the old joined texts.
+
+Then, under `ios_guard.py run` (`supplement.json`: `outcome: passed`, exitCode 0, 57 s):
+
+- **Launch 1** (18:48:08, `[launch] OpenReader 1.0.0 (9)-beta18, native 1.0.0 (9)…`): the runtime read of the zh task answered `state:"paused", paused:["nav.0"], failed:[], error:null` — the queued task was converted before the gate opened (`downloadsReady() true` beside it). The fake's log gained **no `text=` line** (line count unchanged across the launch; the only new lines are `GET /v1/audio/voices` inventory checks).
+- **Saved paused**: terminated read — `state` holds `segmentation|1` (re-recorded) beside `walk|2`, and the persisted `tasks` JSON holds the zh task `"state":"paused"` with `"paused":["nav.0"]`.
+- **Launch 2** (18:48:36, restart/reconnect): the runtime still reads `paused`; again no synthesis request. Final terminated read: unchanged.
+
+This closes the conversion assertion the batch record needed: queued-at-migration → paused-and-saved, before any preparation or synthesis, across restart.
