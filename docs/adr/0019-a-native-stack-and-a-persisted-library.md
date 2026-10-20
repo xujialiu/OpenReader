@@ -58,6 +58,27 @@ Document: its Document Id, the name to show, the bookmarked file's location, and
 the Reading Position (ADR 0008). It is written after every change, read once at
 launch.
 
+A save uses the synchronous native `OpenReaderOffline.writeJson`, as settings
+already do (ADR 0026, #186). Foundation writes atomically, so a refused save
+leaves the last saved entries, Reading Positions, Voices and Stamps readable
+(#260). Expo's `File.write` writes in place and may truncate that file before
+failing; staging followed by Expo's overwrite-move also removes the old target
+first. Neither is a fallback: without the atomic writer, a save is refused.
+`test/app/library-storage-failure.test.ts` exercises the real serializer and
+reload with empty/partial write failures, first-save failure and recovery at the
+filesystem boundary. It does not claim to fill an iPhone's storage.
+
+A missing file permits a first save; a file that cannot be read does not (#233).
+`LoadedLibrary.frozen` covers failed reads and malformed files as well as newer
+versions. The parser checks the version before requiring this version's `entries`
+layout. One shared write guard protects both `writeLibrary` and the running
+Library: import and rename refuse before changing document files, display names
+or Folder membership, and background entry changes leave memory alone. A
+migration does not mark an unreadable Library as migrated. Dismissing the load
+note cannot lift that session's protection. This is preservation, not automatic
+recovery or a reset: the original stays where it was. The storage and real-hook
+regressions are in `test/app/library-protection.test.ts`.
+
 Not SQLite, and not `AsyncStorage`. A shelf of a few hundred entries is a few
 tens of kilobytes; the whole of it is rewritten faster than a query would be
 prepared, and the format is one a person can read when something is wrong —
@@ -106,6 +127,26 @@ which is what `src/core/document/README.md` says growth has to look like. A
 resolve that fails is still surfaced on the entry rather than deleting it, per
 the design file; it is now a `stat` rather than a bookmark resolution, and the
 Library screen can therefore say so before the entry is tapped as well as after.
+
+Re-adding a Document stages its file in a private `.import-…` directory under
+`library/`, then commits it with `OpenReaderOffline.replaceFile` (#261). Expo
+still performs the scoped copy from Files; the native primitive only renames the
+completed, app-owned staging file. Darwin's `rename(2)` replaces the target
+atomically on the same filesystem and leaves it alone on failure. There is no
+remove-then-move fallback. A failed copy or replacement cleans up staging and
+keeps both the prior EPUB and the incoming source; a move removes its app-owned
+source only after commit. Handing the kept file itself back in is a no-op.
+
+An existing file is not skipped: the Document Id hashes the ZIP manifest, not
+the integrity of the stored archive, and re-adding must still repair or restore
+it. The cost is room for a complete staged copy before replacing anything. A
+process killed before commit can leave an unreferenced staging directory, but
+cannot remove the old kept file; automatic orphan recovery is not added here.
+`test/app/document-storage-failure.test.ts` covers the real duplicate-import
+path with injected filesystem failures. `bash test/native-storage/run.sh`
+compiles the actual iOS replacement function against disposable host files,
+including refused replacement and Unicode paths; that is not an iPhone I/O
+failure measurement.
 
 `document.ts` used to say a Document is "read and never copied". That sentence
 was true when there was nowhere to keep one and is not true now. What philosophy

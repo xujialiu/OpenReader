@@ -384,3 +384,18 @@ behind the half-screen drawer switched the open drawer's subject while it
 kept its Move page and browsed folder — was fixed and re-verified: the drawer
 now shows the new entry's actions menu, and its `Move to…` opens at the new
 entry's own folder.
+
+## Library data preservation under storage failure (#260, #233, #261, `library-preservation.md`)
+
+Record: [`library-preservation.md`](library-preservation.md). No script of its
+own: the checks are seeded `library.json` states and `chmod 555` injections
+over the container's `Documents`/`Documents/library`, harness `add` attempts,
+and before/after hash diffs of every Library store, all written out step by
+step in the record. What it established on 1.0.0 (9)-beta17: a healthy
+import/rename/re-add/restore round-trip on real books; a frozen Library (truncated
+and newer-version-without-entries) refusing imports before any store moves; a
+real native refusal at the #261 staging step leaving the kept EPUB intact; a
+refused rename leaving `library.json` and `display-names.json` consistent. It
+also met two pitfalls (harness replay committing an orphan kept file after a
+permission restore; kept files carrying cloned timestamps), recorded in the
+root README's Pitfalls.
