@@ -1,24 +1,26 @@
 // #307 read: dump the scrollTo record `scroll-watch-arm.js` collected, with
 // the current scroll position and where the fragment now sits. Generate per
 // fragment (`sed -e 's/__FRAGMENT__/<id>/'`) and send the same way.
+/* global rendition */
+// eslint-disable-next-line no-unused-vars
 function probe() {
-  var FRAG = '__FRAGMENT__';
-  var m = rendition.manager;
+  let FRAG = '__FRAGMENT__';
+  let m = rendition.manager;
   if (!m) return JSON.stringify({ error: 'no manager' });
-  var out = { frag: FRAG, scrolls: m.__owScrolls || null, now: Date.now() % 10000000 };
+  let out = { frag: FRAG, scrolls: m.__owScrolls || null, now: Date.now() % 10000000 };
   try {
-    var stage = m.container;
-    var stageRect = stage.getBoundingClientRect();
+    let stage = m.container;
+    let stageRect = stage.getBoundingClientRect();
     out.scrollTop = Math.round(stage.scrollTop);
     m.views._views.forEach(function (v) {
-      var win = null;
-      try { win = v.contents && v.contents.window; } catch (e) { }
+      let win = null;
+      try { win = v.contents && v.contents.window; } catch (_e) { }
       if (!win || !win.document) return;
-      var el = win.document.getElementById(FRAG);
+      let el = win.document.getElementById(FRAG);
       if (!el) return;
-      var frame = win.frameElement;
-      var frameTop = frame ? frame.getBoundingClientRect().top : NaN;
-      var r = el.getBoundingClientRect();
+      let frame = win.frameElement;
+      let frameTop = frame ? frame.getBoundingClientRect().top : NaN;
+      let r = el.getBoundingClientRect();
       out.h2TopInStage = Math.round(frameTop - stageRect.top + r.top);
       out.h2TopInDoc = Math.round(r.top);
       out.scrollHeight = el.ownerDocument.documentElement.scrollHeight;

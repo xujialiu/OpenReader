@@ -7,12 +7,14 @@
 // program and any direct `container.scrollTop =` assignment bypass it, so an
 // empty record with the page moved means something else did the moving. Read
 // the record with `scroll-watch-read.js`.
+/* global rendition */
+// eslint-disable-next-line no-unused-vars
 function probe() {
-  var m = rendition.manager;
+  let m = rendition.manager;
   if (!m) return JSON.stringify({ error: 'no manager' });
   if (!m.__owScrolls) {
     m.__owScrolls = [];
-    var orig = m.scrollTo;
+    let orig = m.scrollTo;
     m.scrollTo = function (x, y, silent) {
       m.__owScrolls.push([Date.now() % 10000000, Math.round(x), Math.round(y)]);
       return orig.apply(this, arguments);

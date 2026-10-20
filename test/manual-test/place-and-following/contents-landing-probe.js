@@ -10,29 +10,31 @@
 // `h2TopInDoc`/`scrollTop` pair tells a drift of the content above the heading
 // (scrollTop == the heading's pre-growth position) from a scroll that never
 // happened (scrollTop at the view top).
+/* global rendition */
+// eslint-disable-next-line no-unused-vars
 function probe() {
-  var FRAG = '__FRAGMENT__';
-  var out = { frag: FRAG };
+  let FRAG = '__FRAGMENT__';
+  let out = { frag: FRAG };
   try {
-    var m = rendition.manager;
-    var stage = m && m.container;
+    let m = rendition.manager;
+    let stage = m && m.container;
     if (!stage) return JSON.stringify({ frag: FRAG, error: 'no manager.container' });
-    var stageRect = stage.getBoundingClientRect();
+    let stageRect = stage.getBoundingClientRect();
     out.scrollTop = Math.round(stage.scrollTop);
     out.scrollH = stage.scrollHeight;
-    var bar = document.getElementById('openreader-bar');
+    let bar = document.getElementById('openreader-bar');
     out.barCss = bar ? bar.textContent.trim() : null;
     out.views = [];
     m.views._views.forEach(function (v) {
-      var entry = { section: v.section && v.section.index };
-      var win = null;
-      try { win = v.contents && v.contents.window; } catch (e) { /* view without a live document */ }
+      let entry = { section: v.section && v.section.index };
+      let win = null;
+      try { win = v.contents && v.contents.window; } catch (_e) { /* view without a live document */ }
       if (!win || !win.document) { out.views.push([entry.section, 'no-doc']); return; }
-      var el = win.document.getElementById(FRAG);
+      let el = win.document.getElementById(FRAG);
       if (!el) { out.views.push(entry); return; }
-      var frame = win.frameElement;
-      var frameTop = frame ? frame.getBoundingClientRect().top : NaN;
-      var r = el.getBoundingClientRect();
+      let frame = win.frameElement;
+      let frameTop = frame ? frame.getBoundingClientRect().top : NaN;
+      let r = el.getBoundingClientRect();
       entry.h2TopInStage = Math.round(frameTop - stageRect.top + r.top);
       entry.h2TopInDoc = Math.round(r.top);
       entry.frameTopInStage = Math.round(frameTop - stageRect.top);
