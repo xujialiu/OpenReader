@@ -52,6 +52,10 @@
   the same way — `silence.sh check UDID && hx.cjs … '{"do":"play"}'` — and on
   a failed check `set` again and relaunch the app (the volume is read when the
   audio session activates) before playing.
+  Again 2026-10-20 verifying #307: a `set` before the fresh install's launch read 0, and the
+  `check` five minutes later read 60 with nothing booted or played in between; the `&&`-chained
+  play refused. Fix as documented: `set`, terminate + relaunch with `-RCT_jsLocation`, redo the
+  state the relaunch dropped (here: the Contents row press), and run the `check &&` play again.
 - **The simulator volume can reset immediately before a chapter run even when
   the preceding check was zero.** Measured 2026-09-25 at 10:42 on `iPhone 17
   issue63`: the first check before `play` read 60, although the device had
