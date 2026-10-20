@@ -60,11 +60,15 @@ import { DEFAULT_FISH_MODEL } from "../core/providers/fish-models";
 import { downloadSpeech, speechKeying } from "./speech";
 import type { ChapterProgress, VoiceInventory } from "./catalog";
 import { BLOCK_WALK } from "../renderer/highlighter";
+import { SEGMENTATION } from "../core/segmenter/revision";
 
 let revision = 0;
 let tasks: DownloadTask[] = [];
 let settings: AppSettings;
 let loaded = false;
+// Lifecycle callbacks may kick the scheduler while launch awaits the store.
+// Neither they nor an unrelated successful persist can bypass this check.
+let preparationCurrent = false;
 let fishModelChangedBeforeLoad = false;
 let online = true;
 let foreground = AppState.currentState === "active";
@@ -197,7 +201,7 @@ export function useDownloads(): number {
   );
 }
 export const downloadError = () => storeError;
-export const downloadsReady = () => loaded;
+export const downloadsReady = () => loaded && preparationCurrent;
 export const downloadTasks = (document: string) =>
   tasks.filter((t) => t.document === document);
 export const planOf = (document: string): NarrationPlan | null =>
@@ -607,6 +611,7 @@ const scheduler = createScheduler({
   // scheduler never raises an alert.
   allowed: () =>
     loaded &&
+    preparationCurrent &&
     !storeError &&
     purchases.allowsSpeech() &&
     (foreground || !expired || readingPlays || continued.running()),
@@ -821,7 +826,7 @@ function beginBounded() {
 function continueAway() {
   // Nothing goes on away from the screen while read-aloud is locked, so no
   // continued task and no Live Activity is submitted for it (#148).
-  if (!foreground || !purchases.allowsSpeech()) return;
+  if (!preparationCurrent || !foreground || !purchases.allowsSpeech()) return;
   void continued.start().then((running) => {
     if (running && !foreground) void offlineNative?.endBackground();
   });
@@ -934,19 +939,26 @@ function ensureSpeechKeys(force = false): Promise<void> {
   return keying;
 }
 /**
- * Chapters another walk of the page prepared are asked for again (#184, ADR
- * 0027): the Reading cuts its sentences with this walk, and a chapter that
- * kept another walk's would read Downloaded while a sentence of it went to the
- * Provider. Run once at launch, before the speech keys and the first run, on
- * the same chain as the keys so the two never walk the catalogue at once. The
- * plans held in memory are read again, since they carry `prepared`.
+ * Chapters another walk or sentence splitter prepared are asked for again
+ * (#184, #240, ADR 0027). A changed sentence misses its old saved Clip, so stale
+ * completeness cannot stand. A sentence-rule update also pauses unfinished
+ * Downloads: only a new Download/Resume may ask for the changed audio. Persist
+ * those pauses BEFORE recording the revision, so a failed migration or a kill
+ * cannot let the next launch resume a newly segmented Download by itself.
+ * Run on the speech-key chain, before enabling the scheduler; reload held plans.
  */
-function ensureWalk(): Promise<void> {
+function ensurePreparedText(): Promise<void> {
   keying = keying
     .then(async () => {
       const repository = await offlineRepository();
-      if ((await repository.catalog.preparedWalk()) === BLOCK_WALK) return;
-      await repository.catalog.prepareAgain(BLOCK_WALK);
+      const walk = await repository.catalog.preparedWalk();
+      const segmentation = await repository.catalog.preparedSegmentation();
+      if (walk === BLOCK_WALK && segmentation === SEGMENTATION) return;
+      if (segmentation !== SEGMENTATION) {
+        for (const task of tasks) if (task.state !== 'done') pausing.pauseAll(task);
+        await persist();
+      }
+      await repository.catalog.prepareAgain(BLOCK_WALK, SEGMENTATION);
       for (const document of [...plans.keys()]) {
         const plan = await repository.plan(document);
         if (plan) plans.set(document, plan);
@@ -955,8 +967,9 @@ function ensureWalk(): Promise<void> {
       for (const item of progressVoices.values())
         requestProgress(item.document, item.voice);
       emit();
-    })
-    .catch(reportStore);
+    });
+  // Let launch report the failure without opening the scheduler gate. A later
+  // successful task save must not turn an unverified preparation into a current one.
   return keying;
 }
 export function startDownloads(): () => void {
@@ -984,12 +997,13 @@ export function startDownloads(): () => void {
       // continued task is submitted for it (#148).
       await purchases.ready();
       if (pauseForLock()) await persist();
-      // Opened with a download that goes on by itself (#77).
-      continueAway();
-      // Before the first run, so the scheduler never trusts text another walk
-      // prepared, or keys computed under a setting the owner has since changed.
-      await ensureWalk();
+      // Before any run, including a lifecycle kick while launch is awaiting.
+      await ensurePreparedText();
       await ensureSpeechKeys();
+      preparationCurrent = true;
+      emit();
+      // Only a Download still permitted to go on may start away (#77).
+      continueAway();
       kick();
     })();
     void starting.catch(reportStore).finally(() => {
@@ -1111,7 +1125,7 @@ export async function startDownload(
   voice: OfflineVoice,
   chapters: string[],
 ): Promise<boolean> {
-  if (!chapters.length || !settings) return false;
+  if (!preparationCurrent || !chapters.length || !settings) return false;
   voice = withFishModel(voice, voice.model ?? settings.fish.model);
   if (!usesCurrentModel(voice)) return false;
   const found = keyIsOffered(voice.provider)
@@ -1136,7 +1150,7 @@ export function enqueue(
   voice: OfflineVoice,
   chapters: string[],
 ): void {
-  if (!chapters.length) return;
+  if (!preparationCurrent || !chapters.length) return;
   voice = withFishModel(voice, voice.model ?? settings?.fish.model ?? DEFAULT_FISH_MODEL);
   if (!usesCurrentModel(voice)) return;
   const task = tasks.find(
@@ -1179,7 +1193,9 @@ export const goesOn = (task: DownloadTask) =>
   pausing.goesOn(task, completeIn(task));
 /** Pause all while any chapter goes on by itself; otherwise Resume all, which is also Retry failed. */
 export function toggleTask(task: DownloadTask): void {
-  if (!usesCurrentModel(task.voice)) return;
+  // A failed preparation check stays a failure, not a queued task whose save
+  // clears the error while the scheduler still cannot run. Relaunch retries it.
+  if (!preparationCurrent || !usesCurrentModel(task.voice)) return;
   if (goesOn(task)) pausing.pauseAll(task);
   else {
     // Resuming is asking for speech: while read-aloud is locked, the person is
@@ -1198,7 +1214,7 @@ export function toggleTask(task: DownloadTask): void {
 }
 /** A tap on one chapter's ring (#56); one that resumes may go on away from the screen. */
 export function toggleChapter(task: DownloadTask, chapter: string): void {
-  if (!usesCurrentModel(task.voice)) return;
+  if (!preparationCurrent || !usesCurrentModel(task.voice)) return;
   const resumes =
     !pausing.GOES_ON.includes(task.state) || pausing.isPaused(task, chapter);
   // A ring that resumes is asking for speech, as Resume all is (#148).

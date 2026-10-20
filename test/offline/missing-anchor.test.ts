@@ -5,6 +5,7 @@ import { readDocumentNavigation } from '../../src/core/document/navigation';
 import { bytesAsArchive } from '../../src/core/document/zip';
 import { navigationPlan, sectionChapters, withPreparedSection, type Chapter, type DownloadTask } from '../../src/offline/model';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import { SEGMENTATION } from '../../src/core/segmenter/revision';
 import { utf8, zip } from '../core/document/zip-fixture';
 import { standInPage } from '../renderer/stand-in-page';
 
@@ -65,7 +66,7 @@ it('writes the chapters after a file whose Contents has an entry with a missing 
   const task: DownloadTask = { id: 't', document: 'book', voice, chapters: plan.chapters.map((c) => c.id), state: 'queued', error: null, failed: [] };
   mock.open.mockResolvedValue({
     tasks: async () => [task],
-    catalog: { saveTasks: async () => {}, speechKeying: async () => null, preparedWalk: async () => BLOCK_WALK, prepareAgain: async () => {} },
+    catalog: { saveTasks: async () => {}, speechKeying: async () => null, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, prepareAgain: async () => {} },
     rekey: async () => {},
     plan: async () => plan,
     progress: async () => plan.chapters.map((c) => ({ id: c.id, count: c.texts.filter((t) => saved.has(t)).length,

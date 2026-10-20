@@ -2,6 +2,8 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
 import type { Chapter, NarrationPlan } from '../../src/offline/model';
 import { speechKeying } from '../../src/offline/speech';
+import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import { SEGMENTATION } from '../../src/core/segmenter/revision';
 
 /**
  * #202. A server that refuses PCM (the owner's Chatterbox answered 422, #65) is
@@ -44,7 +46,7 @@ function serve(settings: AppSettings) {
   const saved = new Set<string>();
   mock.open.mockResolvedValue({
     tasks: async () => [],
-    catalog: { saveTasks: async () => {}, speechKeying: async () => speechKeying(settings) },
+    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => speechKeying(settings) },
     plan: async (): Promise<NarrationPlan> => ({ version: 2, chapters: [chapter] }),
     chapter: async () => ({ ...chapter, texts, textCount: texts.length, textsLoaded: true }),
     progress: async () => [],

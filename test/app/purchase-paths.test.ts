@@ -129,7 +129,7 @@ describe('a download speaks only through the gate', () => {
 
   it('submits no continued task while locked', () => {
     pin(between(runtime, 'function continueAway() {', 'function interruptAway() {', 'continueAway()'),
-      'if (!foreground || !purchases.allowsSpeech()) return;', 'continueAway()');
+      'if (!preparationCurrent || !foreground || !purchases.allowsSpeech()) return;', 'continueAway()');
   });
 });
 

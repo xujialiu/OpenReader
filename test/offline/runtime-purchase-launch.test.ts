@@ -4,6 +4,7 @@ import type { SynthesisResult } from '../../src/core/providers/types';
 import type { Chapter, DownloadTask, NarrationPlan } from '../../src/offline/model';
 import { speechKeying } from '../../src/offline/speech';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import { SEGMENTATION } from '../../src/core/segmenter/revision';
 import type { PurchaseCache } from '../../src/purchase/cache';
 
 /**
@@ -68,7 +69,7 @@ async function launch(owned: { unlocked: boolean; trialStartedAt: number | null 
   const saved = new Set<string>();
   mock.open.mockResolvedValue({
     tasks: async () => [left],
-    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, speechKeying: async () => speechKeying(settings) },
+    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => speechKeying(settings) },
     plan: async (): Promise<NarrationPlan> => ({ version: 2, chapters: [chapter] }),
     chapter: async () => ({ ...chapter, texts: ['Left going on.'], textCount: 1, textsLoaded: true }),
     progress: async () => [],

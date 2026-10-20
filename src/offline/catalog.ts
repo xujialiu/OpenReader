@@ -61,6 +61,13 @@ function recordWalk(tx: SqlSession, walk: number) {
   );
 }
 
+function recordSegmentation(tx: SqlSession, segmentation: number) {
+  return tx.runAsync(
+    "INSERT INTO state VALUES('segmentation',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+    String(segmentation),
+  );
+}
+
 export class OfflineCatalog {
   private writes: Promise<unknown> = Promise.resolve();
   constructor(private readonly db: SqlDatabase) {}
@@ -418,9 +425,19 @@ export class OfflineCatalog {
   async recordWalk(walk: number) {
     await this.write((tx) => recordWalk(tx, walk));
   }
+  /** The sentence rules that prepared the texts, independent of the DOM walk. */
+  async preparedSegmentation(): Promise<number | null> {
+    const [row] = await this.db.getAllAsync<{ value: string }>(
+      "SELECT value FROM state WHERE name='segmentation'",
+    );
+    return row ? Number(row.value) : null;
+  }
+  async recordSegmentation(segmentation: number) {
+    await this.write((tx) => recordSegmentation(tx, segmentation));
+  }
   /**
-   * Every chapter whose text another walk prepared is asked for again, and
-   * `walk` is recorded, in one transaction (#184, ADR 0027).
+   * Every chapter whose text another walk or sentence splitter prepared is
+   * asked for again; both revisions commit with the invalidation (#184, #240).
    *
    * A Reading cuts its sentences with the walk it has, and asks for a saved Clip
    * by the sentence's Speech Text; a chapter prepared by another walk may hold
@@ -432,7 +449,7 @@ export class OfflineCatalog {
    * whose text changed. A chapter with nothing to speak stays as it is, because
    * no walk finds text where the last found none.
    */
-  async prepareAgain(walk: number) {
+  async prepareAgain(walk: number, segmentation: number) {
     await this.write(async (tx) => {
       await tx.runAsync(
         "UPDATE chapters SET prepared=0 WHERE prepared=1 AND section IS NOT NULL AND text_count>0",
@@ -443,6 +460,7 @@ export class OfflineCatalog {
           WHERE value NOT IN(SELECT section FROM chapters WHERE chapters.document=plans.document AND prepared=0 AND section IS NOT NULL))`,
       );
       await recordWalk(tx, walk);
+      await recordSegmentation(tx, segmentation);
     });
   }
   /** Every chapter whose text has been prepared, across documents: what re-keying walks. */

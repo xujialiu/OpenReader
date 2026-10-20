@@ -8,6 +8,7 @@ import type { OfflineVoice } from '../../src/offline/model';
 import { narrationIdentity } from '../../src/offline/narration-voice';
 import { speechKeying } from '../../src/offline/speech';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import { SEGMENTATION } from '../../src/core/segmenter/revision';
 import { testCatalog } from './sqlite';
 
 const mock = vi.hoisted(() => ({
@@ -49,6 +50,7 @@ async function fixture() {
   await catalog.initialize();
   await catalog.recordSpeechKeying(speechKeying(settings()));
   await catalog.recordWalk(BLOCK_WALK);
+  await catalog.recordSegmentation(SEGMENTATION);
   const audio = new Map<string, { row: StoredAudio; clip: SynthesisResult }>();
   const addressKey = (address: { document: string; voice: string; key: string }) => JSON.stringify([address.document, address.voice, address.key]);
   const files: AudioFiles = {

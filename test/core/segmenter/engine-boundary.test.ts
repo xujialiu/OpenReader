@@ -69,6 +69,7 @@ describe('the engine boundary', () => {
       'graphemes.ts',
       'index.ts',
       'rejoin.ts',
+      'revision.ts',
       'sentences.ts',
       // Hand-written because 0.4.2 ships no types. Not `sentencex.d.ts`:
       // TypeScript takes a `.d.ts` beside a `.ts` of the same basename for that

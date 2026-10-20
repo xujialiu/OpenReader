@@ -4,6 +4,7 @@ import type { SynthesisResult } from '../../src/core/providers/types';
 import type { Chapter, NarrationPlan } from '../../src/offline/model';
 import { speechKeying } from '../../src/offline/speech';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import { SEGMENTATION } from '../../src/core/segmenter/revision';
 
 /**
  * #75: a Download goes on while a Reading plays, in the foreground and with the
@@ -101,7 +102,7 @@ function catalogue() {
   const saveClip = vi.fn(async (_document: string, _voice: unknown, text: string) => { saved.add(text); return true; });
   mock.open.mockResolvedValue({
     tasks: async () => [],
-    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, speechKeying: async () => speechKeying(settings) },
+    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => speechKeying(settings) },
     plan: async (): Promise<NarrationPlan> => ({ version: 2, chapters: [chapter] }),
     chapter: async (document: string) => ({ ...chapter, texts: books.get(document) ?? [], textCount: books.get(document)?.length ?? 0, textsLoaded: true }),
     progress: async () => [],

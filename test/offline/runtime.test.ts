@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../src/app/settings';
 import type { SynthesisResult } from '../../src/core/providers/types';
 import { BLOCK_WALK } from '../../src/renderer/highlighter';
+import { SEGMENTATION } from '../../src/core/segmenter/revision';
 
 /**
  * The runtime is React Native code and this suite renders no native view
@@ -155,7 +156,7 @@ it('keeps nothing warm while the device is offline', async () => {
   mock.open.mockResolvedValue({
     readClip: async () => ({ clip: spoken(), dropped: false }),
     tasks: async () => [],
-    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, speechKeying: async () => null },
+    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => null },
   });
   const stop = startDownloads();
   try {
