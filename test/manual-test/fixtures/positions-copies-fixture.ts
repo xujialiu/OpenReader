@@ -134,6 +134,6 @@ for (const [name, files] of [
     ...Object.entries(files).map(([id, text]) =>
       ({ name: id === 'opf' ? 'OEBPS/content.opf' : id === 'nav' ? 'OEBPS/nav.xhtml' : `OEBPS/${id}.xhtml`, data: utf8(text) })),
   ];
-  writeFileSync(join(output, `${name}.epub`), zip(entries), { mode: utf8.mode });
+  writeFileSync(join(output, `${name}.epub`), zip(entries));
   console.log(`${join(output, `${name}.epub`)}`);
 }
