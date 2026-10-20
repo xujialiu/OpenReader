@@ -208,5 +208,6 @@ that could not reach the server, and the control that re-arms the wait;
 `PlayWaitProbe.swift` (XCUITest press-shot at ≤500 ms, pause-inside-the-wait,
 the Safari interruption source, the plain regression) and
 `delaying-webdav.cjs` + the kit's `fake-kokoro.cjs` as the controlled
-services. Phases 2–3 stand BLOCKED on a pre-existing device abort the record
-differentialises against beta10.
+services. Phase 3 passed; phase 2, the interruption, is a simulator coverage
+limit (Safari's audio does not interrupt the app on the iOS 26.5 simulator),
+so #303's interruption is checked on a physical iPhone.
