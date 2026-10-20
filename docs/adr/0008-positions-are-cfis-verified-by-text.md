@@ -44,6 +44,34 @@ machinery for matching text that does not match exactly already exists —
 class of problem, when a provider reports words that differ from the ones it was
 given.
 
+## Matching a quotation, not a substring or an arbitrary early copy
+
+A character hit must respect the quotation's edges (#282). `7` inside `1907`,
+`Chapter 1` inside `Chapter 10`, and a Han heading inside a longer Han word are
+not the same quotation. Adjacent letters, marks or numbers require the stored
+context to attest that adjacency; ASCII word boundaries alone cannot serve
+scripts without spaces. Token-exact matching can still find a reflowed valid
+quotation elsewhere, but approximate alignment cannot rescue a rejected
+substring. An unpunctuated whole-Block heading must match all its words, not
+lose its number to the aligner's partial-match allowance. Original-text offsets
+and NFC/NFD matching are preserved.
+
+Every occurrence within a Block is eligible for context ranking (#283), not
+only the first 64. In the real splitter/cursor regression, the 65th `Yes.`
+previously resumed at the first while the 64th resumed correctly. Raising the
+cap would only move the failure; the matcher now retains a best candidate and
+tie flag without sorting. Context scoring binary-searches the token edges and
+compares only the stored context instead of scanning all tokens for each hit.
+The tests include 10,000 occurrences without changing the sentence splitter.
+
+A Locator names a Block, not a particular copy of a sentence within it. Tied
+copies are therefore unresolved even when the Locator succeeds; fallback
+search likewise carries ambiguity within its winning Block, not only ties
+between Blocks. The existing ambiguous-resume notice is used. The cost is an
+explicit refusal when the stored 32-code-unit context cannot distinguish
+copies, rather than a silent jump presented as a verified sentence. No shared
+Reading Position field, locator dialect or context length changes.
+
 ## Consequences
 
 Text anchors must be Unicode-normalised on both the storing and the matching

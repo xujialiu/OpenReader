@@ -237,7 +237,11 @@ export function resolveReadingPosition(position: ReadingPlace, document: PlaceRe
   const text = document.textAt(position.locator);
   if (text !== null) {
     const match = matchAnchor(position.anchor, text);
-    if (match) return { outcome: 'verified', locator: position.locator, ...found(match) };
+    if (match) {
+      // The locator verifies a Block, not which copy of a sentence inside it.
+      if (match.ambiguous) return { outcome: 'unresolved', because: 'text-disagreed', search: 'ambiguous' };
+      return { outcome: 'verified', locator: position.locator, ...found(match) };
+    }
   }
 
   const because: LocatorProblem = text === null ? 'locator-did-not-resolve' : 'text-disagreed';
@@ -283,5 +287,5 @@ export function findAnchor(anchor: TextAnchor, places: Iterable<Place>): AnchorS
       tied = true;
     }
   }
-  return best ? { ...best, ambiguous: tied } : null;
+  return best ? { ...best, ambiguous: tied || best.match.ambiguous } : null;
 }
