@@ -2998,6 +2998,33 @@ ${EPUB_GUARDS_SOURCE}
     View.prototype.openreaderBelowBar = true;
   }
 
+  /* Where epub.js puts a place inside a section, a Contents row's fragment
+     (#307): display() asks the view for locationOf() that element and scrolls by
+     it. The scroll can go no further than the view's frame is tall, and the frame
+     can still be shorter than its document then. Measured on the Gutenberg
+     Pride and Prejudice, a row to CHAPTER XXX. in a file laid out for the first
+     time: at the move the frame was 74,711 px and its document 119,833, so the
+     scroll stopped at its end, 73,953, with the heading 23,430 px further down
+     (notes/NOTES_2026-10-20.md). epub.js grew the frame 16 ms later and left the
+     scroll where it was. So the view is fitted to its document first, which is
+     the expand() epub.js would have run next. locationOf() is read in exactly
+     those two places in the bundled epub.js, both in that display, so this
+     changes nothing else. */
+  function locateInWholeView(manager) {
+    var View = manager && manager.View;
+    if (!View || !View.prototype || View.prototype.openreaderLocatesWhole) return;
+    var locationOf = View.prototype.locationOf;
+    View.prototype.locationOf = function () {
+      try {
+        if (typeof this.expand === 'function') this.expand();
+      } catch (error) {
+        report('could not fit a view to its document before placing a fragment: ' + error);
+      }
+      return locationOf.apply(this, arguments);
+    };
+    View.prototype.openreaderLocatesWhole = true;
+  }
+
   /* ---- the blank open (notes/NOTES_2026-09-20.md, 01:51) ---- */
 
   /* A resize destroys every view, and epub.js only puts them back if it has
@@ -3077,6 +3104,7 @@ ${EPUB_GUARDS_SOURCE}
   holdStill(rendition.manager);
   keepFingerOnText(rendition.manager);
   landBelowBar(rendition.manager);
+  locateInWholeView(rendition.manager);
   settleRemovedViews(rendition.manager);
   tickWithoutFrames(rendition.manager && rendition.manager.q);
   tickWithoutFrames(rendition.q);
