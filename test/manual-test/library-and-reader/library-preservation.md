@@ -23,6 +23,11 @@ the contract.
   `/tmp/openreader-libfix-01/phase1.json`); readiness by `kit/ios_ready.py`
   with `--metro` (first attempt 69: CDP answered 0 targets because the check
   ran before the app's first bundle finished; same-attempt recheck passed).
+  `phase1.json` therefore records **failed / 69**, not a passing phase. The
+  raw tool output preserved as `phase1-console.txt` records prebuild,
+  xcodebuild, install and launch each at rc=0, followed by ready rc=69;
+  `readiness-recheck-console.txt` records ready rc=0, and
+  `readiness/readiness.json` records `outcome: ready`. No XCTest ran.
 - Real books: disposable **copies** of `Cultivation Online 2001-2044.epub`
   (360 KB) and `The Innkeeper 2001-2153.epub` (560 KB) from
   `~/Works/epub_books`; originals' sha256 recorded before and after —
@@ -66,7 +71,7 @@ vs `post-*`).
    newer version of OpenReader (version 3)… leaving it alone…" — the version
    is judged before the entries layout, no crash. `add` refused with the same
    sentence; no mutation.
-3. **Kept-files directory unwritable (#261 commit path).** Control library
+3. **Kept-files directory unwritable (#261 import staging).** Control library
    restored; `chmod 555 Documents/library`; harness `add` INK: refused at the
    real staging step — native log: `UnableToCreateException … ".import-…"
    in the folder "library"`. The existing CO kept file and every store
@@ -94,11 +99,11 @@ Folder store (`library-folders.pending.json`, Documents read-only), leaving a
 committed orphan kept file with **no** Library entry. Root cause: `add` runs
 `keepFile` before `folders.place`, identical at base 77a0b91 — a refusal
 after the file is kept but before the entry commit leaves an orphan. This is
-not one of the batch's three guarantees (the frozen-Library preflight of
-#233 held in checks 1–2, and the saved Library was never damaged), but ADR
-0019's "import … refuse before changing document files" is narrower than the
-code's behaviour when the **Folder** store fails late. Reported to the
-parent; not fixed here.
+not one of the batch's three guarantees: the frozen-Library preflight of
+#233 held in checks 1–2, and the saved Library was never damaged. ADR 0019's
+preflight protects an unreadable Library; it does not make a later **Folder**
+write failure transactional. Tracked separately as
+[#309](https://github.com/xujialiu/OpenReader/issues/309); not fixed here.
 
 ## What this cannot prove
 
