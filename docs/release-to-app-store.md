@@ -55,7 +55,8 @@ happened in that day's `notes/` file.
   - iOS only, primary language English (U.S.), Full Access.
   - "OpenReader" was already taken as an App Store name. The Home Screen name stays OpenReader, from `CFBundleDisplayName`.
 - **Builds**
-  - The last upload is **1.0.0 (8)**, from `4227e51`, uploaded 2026-10-17 23:07 and processed. It is on TestFlight only, not submitted. The next upload is build 9.
+  - The last upload is the first pair, **1.0.0 (9)** and **1.0.0 (10)-debug** (ADR 0083), from `80b5bcf`, uploaded 2026-10-21 11:13 and 11:19 and processed. Both are on TestFlight only, not submitted; build 10 has Debug Mode and is for the owner's phone only. The next pair is builds 11 and 12.
+  - 1.0.0 (8), from `4227e51`, uploaded 2026-10-17 23:07, is on TestFlight only, not submitted.
   - 1.0.0 (7), from `08ec380`, uploaded 2026-10-10 12:49, is the first build that sells the Unlock (ADR 0075). On 2026-10-10 13:03 it was submitted together with both In-App Purchases, three items in one submission, and it is **Waiting for Review**, with manual release selected.
   - 1.0.0 (6) was removed from review on 2026-10-10 (author's decision), before Apple had reviewed it, and never released. Version 1.0.0 then read Developer Rejected until build 7 replaced build 6.
   - 1.0.0 (5) was removed from review when build 6 replaced it.
@@ -70,7 +71,7 @@ happened in that day's `notes/` file.
   - On the Mac, `~/.secrets/openreader/app-store-connect-api.env` names the Key ID, the Issuer ID and the `.p8` beside it. Apple lets the `.p8` be downloaded once.
   - On GitHub, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_PRIVATE_KEY` are secrets of the `github-pages` environment, which only `main` may use.
   - If the key leaks, revoke it under Users and Access → Integrations → App Store Connect API, generate another, and set the three secrets again.
-- **Tags**: `1.0.0(2)` to `1.0.0(8)`, all pushed. On 2026-10-10 they replaced `build-2` to `build-6` and `v1.0.0`, which were deleted locally and from GitHub.
+- **Tags**: `1.0.0(2)` to `1.0.0(8)`, one per build, and `1.0.0(10)` for the pair 1.0.0 (9) and 1.0.0 (10)-debug, all pushed. On 2026-10-10 they replaced `build-2` to `build-6` and `v1.0.0`, which were deleted locally and from GitHub.
 - **App Review Information**: the notes are the Guideline 2.1 answer, revised for build 7 on 2026-10-10 (3,990 characters). The revision adds a paragraph on the In-App Purchases and removes the claims that the app sells nothing. The recording `OpenReader-Review-Demo.mp4` is still attached, and predates the purchases. The review key is saved only in App Store Connect.
 - **Description**: since 2026-10-10 it says "Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase unlocks it for good. Reading, look-up and sync stay free." It ends "OpenReader is open source", without "free and".
 - **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), not on Apple silicon Macs or Apple Vision Pro. Books, 4+, non-trader. The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
@@ -170,6 +171,8 @@ and uploads the build with Debug Mode, `N + 1`, from the same commit.
    ```text
    Debug Mode build for the owner's phone only. Never add it to an external group, and never submit it for review.
    ```
+
+   The Team key can set it too: `PATCH /v1/betaBuildLocalizations/{id}` with `whatsNew`, the id from `GET /v1/builds/{build}/betaBuildLocalizations`. Sign that one token without a `scope`: with `scope` set to the `PATCH`, App Store Connect answers 405.
 
 8. **Tag**, on the pair's commit:
    - `git tag -a "X.Y.Z(N+1)" -m "OpenReader X.Y.Z (N) and X.Y.Z (N+1)-debug, uploaded YYYY-MM-DD"`, such as `1.0.0(10)`.
