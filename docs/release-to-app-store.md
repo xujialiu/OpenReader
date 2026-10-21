@@ -74,7 +74,7 @@ happened in that day's `notes/` file.
 - **Tags**: `1.0.0(2)` to `1.0.0(8)`, one per build, and `1.0.0(10)` for the pair 1.0.0 (9) and 1.0.0 (10)-debug, all pushed. On 2026-10-10 they replaced `build-2` to `build-6` and `v1.0.0`, which were deleted locally and from GitHub.
 - **App Review Information**: the notes are the Guideline 2.1 answer, revised for build 7 on 2026-10-10 (3,990 characters). The revision adds a paragraph on the In-App Purchases and removes the claims that the app sells nothing. The recording `OpenReader-Review-Demo.mp4` is still attached, and predates the purchases. The review key is saved only in App Store Connect.
 - **Description**: since 2026-10-10 it says "Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase unlocks it for good. Reading, look-up and sync stay free." It ends "OpenReader is open source", without "free and".
-- **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), not on Apple silicon Macs or Apple Vision Pro. Books, 4+, non-trader. The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
+- **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), not on Apple silicon Macs or Apple Vision Pro. Books, 4+, trader under the EU Digital Services Act (below). The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
 - **In-App Purchases** (ADR 0075, #148), both Non-Consumable, submitted with 1.0.0 (7) on 2026-10-10 and Waiting for Review. Each has its review screenshot (2026-10-09): the phone's alert from 1.0.0 (7)-beta11 on the simulator, the Trial's for the trial and the ended one, with Unlock for $4.99, for the Unlock. Neither has review notes.
   - "30-day Trial": `top.xujialiu.openreader.trial`, Apple ID 6820864102, US$0.00. English (U.S.) display name "30-day Trial", description "Read aloud free for 30 days."
   - "Unlock": `top.xujialiu.openreader.unlock`, Apple ID 6820865303, US$4.99 with the United States as base. Apple's generated prices hold elsewhere (Australia A$7.99, for example). English (U.S.) display name "Unlock Read Aloud", description "Read aloud and offline narration, for good."
@@ -244,7 +244,7 @@ with the review key left where it was, never passes through the agent (notes
   - Free.
   - Every country or region except China mainland, which requires an ICP filing and falls under the deep-synthesis rules.
   - Turn off availability on Mac with Apple silicon and on Apple Vision Pro; neither has been tested.
-- **EU Digital Services Act:** trader, since the app sells the Unlock. The owner submitted it on 2026-10-09 from Business → Compliance; it was In Review on 2026-10-10. Until it is verified, the EU storefronts may hold back the version (ADR 0075).
+- **EU Digital Services Act:** trader, since the app sells the Unlock (ADR 0075). Business → Compliance shows it Active for 27 countries or regions: verified, so it no longer holds back the EU storefronts. Opening its row opens the trader or non-trader form; close it with Cancel.
 - **Export compliance:** nothing to answer, because `ITSAppUsesNonExemptEncryption = NO` is in the build.
 - **Content rights:** the owner answers. The app shows documents the person adds themselves, and ships none.
 - **Category:** Books (saved).
