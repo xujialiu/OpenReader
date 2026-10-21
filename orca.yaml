@@ -1,0 +1,35 @@
+# Orca worktree hooks for OpenReader.
+# Orca reads this file from the new worktree, so a change takes effect for
+# worktrees cut after it reaches the base branch. Orca asks once to trust it.
+# Hooks get $ORCA_ROOT_PATH (main checkout), $ORCA_WORKTREE_PATH and
+# $ORCA_WORKSPACE_NAME.
+
+scripts:
+  # Every worktree has its own node_modules (AGENTS.md, "Sub-worktrees").
+  # npm ci also runs postinstall, which applies patches/ with patch-package.
+  setup: |
+    npm ci
+
+  # Metros outlive the worktree they serve (MEMORY/cleanup.md). Stop those
+  # whose working directory is in this worktree: the npm exec parent, the Expo
+  # CLI and its esbuild child. The openreader-metro-* launchd services, and
+  # processes of any other worktree, are left alone.
+  archive: |
+    root=$(cd "$ORCA_WORKTREE_PATH" && pwd -P) || exit 0
+    services=$(launchctl list | awk 'tolower($3) ~ /metro/ && $1 ~ /^[0-9]+$/ { print $1 }')
+    for pid in $(pgrep -f '[e]xpo (start|run)|[e]sbuild'); do
+      [ "$pid" = "$$" ] && continue
+      printf '%s\n' "$services" | grep -qx "$pid" && continue
+      cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+      case "$cwd" in
+        "$root" | "$root"/*)
+          echo "Stopping $pid: $(ps -o command= -p "$pid")"
+          kill "$pid" 2>/dev/null || true
+          ;;
+      esac
+    done
+    exit 0
+
+# An agent started with the worktree waits for npm ci, so its first test or
+# typecheck does not run against a half-installed node_modules.
+setupAgentStartupPolicy: wait-for-setup
