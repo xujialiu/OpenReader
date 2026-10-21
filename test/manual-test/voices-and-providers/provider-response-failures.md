@@ -201,13 +201,22 @@ seek, not from Play.
    switch was measured within ~0.4 s of the choice) and was not hit on device;
    it stays host-tested (`test/playback/engine-missing-audio.test.ts`).
 
-Two observations from this run, neither one of the batch's claims: a Voice
-choice made while the queue is dry and the current Voice's fetches are still
-out starts no fetches for the new Voice until those settle (~1.3–1.6 s later,
-journal and `[provider]` lines); and a final Utterance whose Clip fails while
-the queue plays into it leaves the Reading `playing` on a dry queue until the
-next external stop, which reports end-of-book rather than the error (the
-stop-at-the-Utterance pass in `drain` needs `timeline.pending() === 0` and a
-pump that did not come in the ~240 ms observed). Both are corners of unchanged
-code paths; report them with the Debug Log windows if they are chased.
+One observation from this run, not one of the batch's claims: a Voice choice
+made while the queue is dry and the current Voice's fetches are still out
+starts no fetches for the new Voice until those settle (~1.3–1.6 s later,
+journal and `[provider]` lines). It is a corner of unchanged code; report it
+with the Debug Log window if it is chased.
+
+A second one was taken at first for a failing final Utterance that ended the
+Reading at the end of the book without its error, and is not one. That run
+(23:57:25–31) read from Utterance 10 in `fixture-breeze`, whose Clip for the
+last Utterance held the cached `bad-mp3` bytes, and switched to `fixture-alto`
+2 s after Play. The switch landed; alto had all of 10–18 cached as good PCM
+(no alto request in the journal), so 18 was heard in alto and the engine
+reported the end of the book itself (`pause.request playing=true utterance=18`
+at 31.030 is `ranOutOfText`'s own pause, 1.6 s before the tester's at 32.687).
+Breeze's bad Clip was never asked for. The run without the switch (19
+Utterances in two sections, rates 1, 1.5 and 2, a seek to 10 while paused, then
+Play) stops at 18 with the decode error in
+`test/playback/engine-missing-audio.test.ts`.
 

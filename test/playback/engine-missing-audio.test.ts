@@ -313,6 +313,31 @@ describe('a Clip that cannot be played stops the Reading at it, whatever else is
     expect(r.states.length, r.told()).toBe(states);
   });
 
+  // The device shape of 2026-10-21 23:57, without the Voice switch that run also made:
+  // two sections, a seek while paused, Play, and the last sentence's Clip cached undecodable.
+  it.each([[1], [1.5], [2]])('at %sx, a Reading sought to while paused stops at its last sentence, which does not decode', async (rate) => {
+    Object.assign(audio.world, { hz: 0, source: null, suspended: false, frames: 0, ids: 0 });
+    const lines = Array.from({ length: 19 }, (_, i) => `Sentence number ${i} is here.`);
+    const { provider } = scripted(lines, 'compatible', { 18: 'broken' });
+    const notes: string[] = [];
+    const engine = createPlaybackEngine({
+      provider, voice: 'breeze', rate, clock: { onClip() {}, onPosition() {} },
+      onError: (error) => notes.push(String(error)), onOutOfText: (report) => notes.push(`out of text, ${report.unspoken} unspoken`),
+      sectionOf: (utterance) => (utterance < 10 ? 0 : 1), availableThrough: () => lines.length,
+    });
+    engines.push(engine);
+    engine.load(segmentDocument(lines.map((text) => ({ text, role: 'paragraph' as const })), 'en'), 18, { quiet: true });
+    await settle();
+    engine.seek(10);
+    await settle();
+    engine.play();
+    await settle();
+    const until = audio.world.frames + 12 * 24_000;
+    while (audio.world.frames < until) if (audio.quantum()) await settle();
+    expect(notes.every((note) => note === 'Error: decode failed'), JSON.stringify(notes)).toBe(true);
+    expect(engine.snapshot()).toMatchObject({ playing: false, utterance: 18, queued: 0 });
+  });
+
   it('control: the same sentence refused by the server stops the Reading (ADR 0027)', async () => {
     const r = reading(ONE, { replies: { 0: 'refuse' } });
     await r.run(5);
