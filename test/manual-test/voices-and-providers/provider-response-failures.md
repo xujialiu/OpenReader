@@ -158,3 +158,56 @@ makes its tries.
 4. Stop the server (or point the Address at a closed port) and Play uncached
    text: the note begins `Cannot reach http://127.0.0.1:PORT` (#280).
 
+## No audio, an undecodable reply, and a cancelled Voice choice (#235, #276, #252, ADR 0027)
+
+Verified 2026-10-22 on `1.0.0 (12)-beta6-debug`, session device `iPhone 17
+b6test` (iOS 26.5, `A558280D-78F5-427A-8F4B-A74B2828B765`), Metro 8091 from the
+`ios-tester` worktree, the fault server on 127.0.0.1:8791, provider configured
+through the harness settings patch, Consent answered after the alert was
+checked (`Send text to the server at 127.0.0.1:8791?`). Fixtures:
+`short-test-fixture.ts`, `boundary-fixture.ts`, `pause-order-fixture.ts`.
+
+The server's new modes, added with this batch: `speech=empty-200` (a complete
+200, no body, no Content-Type), `speech=empty-204` (a 204) — the #235 shapes a
+speakable sentence must refuse — and `speech=bad-mp3` (a complete 200
+`audio/mpeg` whose 4096 bytes are not MP3, the #276 Clip that will not decode).
+`__mode?delayVoice=fixture-willow&delayMs=2500` holds every speech answer for
+that one voice before its mode answers it, so one Voice is slow while another
+is fast (#252); `delayVoice=` clears it. The hold clocks from when each request
+arrives — a paused seek's prefetch is held too, so derive the window from the
+seek, not from Play.
+
+1. #235, `speech=empty-200`, at the Document's last speakable Utterance so
+   nothing else is out: the Reading stops at that Utterance, the Player shows
+   Paused (button `Play`), and the note is `OpenAI Compatible speech: the reply
+   carried no audio`. `speech=ok-pcm` and Play again: one new request for the
+   same text hash (the empty reply was not cached) and the sentence plays.
+   Repeat the stop with `empty-204` on a fresh Voice (uncached text).
+2. #276, `speech=bad-mp3` at the last sentence: the journal shows the request
+   naming `response_format: pcm`; the `audio/mpeg` answer is kept as encoded and
+   handed to the native decoder, which refuses it — note `Failed to open memory
+   block with miniaudio decoder: MiniAudioDecoder::openMemory failed: Invalid
+   file (-10)` — and the Reading is Paused at that Utterance. Play again on the
+   same bytes: no new request (the encoded bytes were cached before the decode),
+   the same refusal, Paused again, never a spinner.
+3. #252 (a): a normal mid-reading Voice switch lands in the new Voice — the
+   `say` harness line shows `playing=true` with the new `voice=` and the
+   Utterance advancing. (b) choose another Voice, then the current Voice again
+   straight away: with the other Voice's replies held at the server
+   (`delayVoice`), the cancel of the pending choice leaves the Reading in the
+   current Voice, requests for the current Voice keep reaching the server, and
+   no spinner lasts. The exact race — a cancel while the replacement's first
+   Clip is queued on an empty queue — is one native clock tick wide (a landed
+   switch was measured within ~0.4 s of the choice) and was not hit on device;
+   it stays host-tested (`test/playback/engine-missing-audio.test.ts`).
+
+Two observations from this run, neither one of the batch's claims: a Voice
+choice made while the queue is dry and the current Voice's fetches are still
+out starts no fetches for the new Voice until those settle (~1.3–1.6 s later,
+journal and `[provider]` lines); and a final Utterance whose Clip fails while
+the queue plays into it leaves the Reading `playing` on a dry queue until the
+next external stop, which reports end-of-book rather than the error (the
+stop-at-the-Utterance pass in `drain` needs `timeline.pending() === 0` and a
+pump that did not come in the ~240 ms observed). Both are corners of unchanged
+code paths; report them with the Debug Log windows if they are chased.
+
