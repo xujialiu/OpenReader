@@ -188,6 +188,24 @@ describe('createClipFetcher', () => {
     expect((await fetcher.fetch(0, 'Hello.', true)).audio).toBe('samples');
   });
 
+  // ADR 0027 and 0037: speakable text that comes back with no audio is an error,
+  // not silence, for every Provider (#235). Kept, it would be the silence every
+  // later fetch of the sentence answered with, without asking again.
+  it.each([
+    ['no samples', pcm(0)],
+    ['half a sample', { audio: 'pcm', samples: new Uint8Array(1), sampleRate: 24_000 } as SynthesisResult],
+    ['no encoded bytes', { audio: 'encoded', bytes: new Uint8Array(0), mediaType: 'audio/mpeg' } as SynthesisResult],
+  ])('refuses a reply to speakable text with %s, and keeps nothing, so a later fetch asks again', async (_name, empty) => {
+    let calls = 0;
+    const { provider, asked } = fakeProvider(async () => (++calls === 1 ? empty : pcm(24)));
+    const shared = cache();
+    const fetcher = createClipFetcher({ provider, voice: 'ava', cache: shared });
+    await expect(fetcher.fetch(0, 'Hello.', true)).rejects.toMatchObject({ name: 'SynthesisError', kind: 'unknown', retriable: false, message: 'speechify: the reply carried no audio' });
+    expect(await shared.match(clipCacheKey('speechify', 'ava', 'Hello.'))).toBeFalsy();
+    expect((await fetcher.fetch(0, 'Hello.', true)).audio).toBe('samples');
+    expect(asked).toEqual(['Hello.', 'Hello.']);
+  });
+
   it('asks for no speed, because SynthesisOptions has none (ADR 0009)', async () => {
     let options: Record<string, unknown> | undefined;
     const { provider } = fakeProvider(async () => pcm(24));

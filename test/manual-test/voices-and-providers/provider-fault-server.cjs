@@ -25,7 +25,13 @@
 // journaled on /__speech), 502 / 503 / 429 / 404, and flaky-503 (each
 // distinct text is answered 503 for its first `fails` requests, then complete
 // raw PCM — #237's retry; `__mode?speech=flaky-503&fails=2`, 1 by default,
-// counts restarting at every mode change).  Modes (voices): ok
+// counts restarting at every mode change), empty-200 (a complete 200 with no
+// body and no Content-Type) / empty-204 (a 204) — a speakable sentence answered
+// with no audio (#235) — and bad-mp3 (a complete 200 `audio/mpeg` whose bytes
+// are not MP3 — a Clip that does not decode, #276). `delayVoice=ID&delayMs=MS`
+// holds every speech answer for that one voice MS before its mode answers it,
+// so one Voice can be slow while another is fast (#252); `delayVoice=` clears
+// it.  Modes (voices): ok
 // (fixture voices), junk (a complete 200 with no usable list — the
 // documented-fallback control), 502 / 503 / 429 / 404.  Modes (models): ok
 // (the fixture model, the default), 404 (publishes no model list — #209).
@@ -52,11 +58,11 @@ if (!Number.isInteger(port) || port <= 0) {
   process.exit(2);
 }
 
-const SPEECH_MODES = ['ok-pcm', 'ok-wav', 'cut', 'stall', 'json-error', 'html-error', 'text-error', 'refuse-pcm', '502', '503', '429', '404', 'flaky-503'];
+const SPEECH_MODES = ['ok-pcm', 'ok-wav', 'cut', 'stall', 'json-error', 'html-error', 'text-error', 'refuse-pcm', '502', '503', '429', '404', 'flaky-503', 'empty-200', 'empty-204', 'bad-mp3'];
 const VOICES_MODES = ['ok', 'junk', '502', '503', '429', '404'];
 const MODELS_MODES = ['ok', '404'];
 const STATUS_MODES = ['502', '503', '429', '404'];
-const state = { speech: 'ok-pcm', voices: 'ok', models: 'ok', fails: 1 };
+const state = { speech: 'ok-pcm', voices: 'ok', models: 'ok', fails: 1, delayVoice: '', delayMs: 0 };
 // flaky-503: how many 503s each text (by hash) has been answered since the mode was set.
 const flakySeen = new Map();
 const journal = [];
@@ -162,6 +168,11 @@ const server = http.createServer(async (req, res) => {
     }
     const text = createHash('sha256').update(String(request.input ?? '')).digest('hex');
     speechRequests.push({ at: Date.now(), mode, voice: request.voice, response_format: request.response_format ?? null, text });
+    if (state.delayVoice && request.voice === state.delayVoice && state.delayMs > 0) {
+      log(`HOLD speech for ${request.voice} ${state.delayMs} ms`);
+      await new Promise((resolve) => setTimeout(resolve, state.delayMs));
+      if (res.destroyed) return log(`CLOSED speech for ${request.voice} before its delayed answer`);
+    }
     if (mode === 'flaky-503') {
       const seen = flakySeen.get(text) ?? 0;
       if (seen < state.fails) { flakySeen.set(text, seen + 1); return status(res, 503, `speech flaky-503 ${seen + 1}/${state.fails}`); }
@@ -190,6 +201,17 @@ const server = http.createServer(async (req, res) => {
     if (mode === 'json-error') return complete(res, 'application/json', JSON.stringify({ error: { message: 'Insufficient balance', code: 'insufficient_balance' } }), 'speech json-error');
     if (mode === 'html-error') return complete(res, 'text/html', '<html><body><h1>502 upstream</h1><p>gateway lost the worker</p></body></html>', 'speech html-error');
     if (mode === 'text-error') return complete(res, 'text/plain', 'Insufficient balance', 'speech text-error');
+    if (mode === 'empty-200') {
+      res.writeHead(200, { 'Content-Length': '0', 'Date': new Date().toUTCString(), 'Cache-Control': 'no-store' });
+      res.end();
+      return log('HTTP 200 OK speech empty-200 0 bytes, no Content-Type');
+    }
+    if (mode === 'empty-204') {
+      res.writeHead(204, { 'Date': new Date().toUTCString(), 'Cache-Control': 'no-store' });
+      res.end();
+      return log('HTTP 204 speech empty-204');
+    }
+    if (mode === 'bad-mp3') return complete(res, 'audio/mpeg', Buffer.alloc(4096, 0x61), 'speech bad-mp3');
     if (['502', '503', '429', '404'].includes(mode)) return status(res, Number(mode), 'speech');
     return status(res, 500, 'speech unknown-mode');
   }
@@ -269,6 +291,11 @@ const server = http.createServer(async (req, res) => {
     if (models !== null && !MODELS_MODES.includes(models)) { res.writeHead(400); res.end('unknown models mode'); return; }
     const fails = url.searchParams.get('fails');
     if (fails !== null && !/^[0-9]+$/.test(fails)) { res.writeHead(400); res.end('fails is a whole number'); return; }
+    const delayVoice = url.searchParams.get('delayVoice');
+    const delayMs = url.searchParams.get('delayMs');
+    if (delayMs !== null && !/^[0-9]+$/.test(delayMs)) { res.writeHead(400); res.end('delayMs is a whole number'); return; }
+    if (delayVoice !== null) { state.delayVoice = delayVoice; log(`MODE delayVoice=${delayVoice}`); }
+    if (delayMs !== null) { state.delayMs = Math.min(Number(delayMs), 60_000); log(`MODE delayMs=${state.delayMs}`); }
     if (speech) { state.speech = speech; flakySeen.clear(); log(`MODE speech=${speech}`); }
     if (fails !== null) { state.fails = Number(fails); flakySeen.clear(); log(`MODE fails=${fails}`); }
     if (voices) { state.voices = voices; log(`MODE voices=${voices}`); }

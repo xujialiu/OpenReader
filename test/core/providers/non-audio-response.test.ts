@@ -28,6 +28,14 @@ for (const fixture of providers) describe(fixture.name, () => {
     const result = await speak(() => new Response(new Uint8Array([0, 1, 0, 2]), { headers: type ? { 'Content-Type': type } : {} }));
     expect(result).toMatchObject({ audio: 'pcm', sampleRate: 24000, samples: new Uint8Array([0, 1, 0, 2]) });
   });
+  // ADR 0027 and 0037: speakable text that comes back with no audio is an error, not silence (#235)
+  it.each([
+    ['a 200 with no body and no type', () => new Response(new Uint8Array(0), { status: 200 })],
+    ['a 200 with no body under audio/pcm', () => new Response(new Uint8Array(0), { headers: { 'Content-Type': 'audio/pcm' } })],
+    ['a 204', () => new Response(null, { status: 204 })],
+  ])('refuses %s, which carried no audio', async (_name, response) => {
+    await expect(speak(response)).rejects.toMatchObject({ name: 'SynthesisError', kind: 'unknown', retriable: false, message: expect.stringMatching(/no audio/) });
+  });
   it('keeps the container signature authoritative when a PCM request receives encoded audio', async () => {
     const result = await speak(() => new Response(new Uint8Array([0x49, 0x44, 0x33, 4]), { headers: { 'Content-Type': 'audio/pcm' } }));
     expect(result).toMatchObject({ audio: 'encoded', mediaType: 'audio/mpeg' });

@@ -139,7 +139,8 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
         if (e instanceof SynthesisError) throw e;
         throw new SynthesisError('decode-failed', `Kokoro captioned response is not valid JSON: ${e}`);
       }
-      if (typeof body.audio === 'string') {
+      // An empty string is no audio either: the plain route is asked, and refuses a reply with none (#235).
+      if (typeof body.audio === 'string' && body.audio) {
         // The audio arrives inside JSON, so there is no Content-Type to read:
         // readClip has only the bytes to go on, and reports `encoded` if a
         // server ignored `response_format` and sent a container anyway.

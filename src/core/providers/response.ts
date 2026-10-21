@@ -47,7 +47,12 @@ export const responseBytes = async (response: Response, what: string, signal?: A
   new Uint8Array(await consume(() => response.arrayBuffer(), what, signal));
 
 /** Only raw-audio routes use this. Fish's event stream and JSON envelopes
- * deliberately carry non-audio types and must be parsed by their Provider. */
+ * deliberately carry non-audio types and must be parsed by their Provider.
+ *
+ * A reply with no bytes is refused whatever it declares: a 204, or a 200 whose
+ * body a gateway swallowed. Read as zero samples of PCM it played as a silence
+ * and the sentence was passed over unheard, where every other Provider stops
+ * on "no audio" (ADR 0027, ADR 0037, #235). Only speakable text is sent. */
 export async function responseAudio(response: Response, what: string, signal?: AbortSignal): Promise<SynthesisResult> {
   const type = response.headers.get('Content-Type');
   const essence = type?.split(';')[0]?.trim().toLowerCase() ?? '';
@@ -55,7 +60,9 @@ export async function responseAudio(response: Response, what: string, signal?: A
     const reason = serverReason(await responseText(response, what, signal));
     throw new SynthesisError('decode-failed', `${what}: the server returned ${essence}, not audio${reason ? ` — ${reason}` : ''}`);
   }
-  return readClip(await responseBytes(response, what, signal), type);
+  const bytes = await responseBytes(response, what, signal);
+  if (bytes.byteLength === 0) throw new SynthesisError('unknown', `${what}: the reply carried no audio`);
+  return readClip(bytes, type);
 }
 
 /** JSON parsing is outside consume: only an incomplete transfer is network. */

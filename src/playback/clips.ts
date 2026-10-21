@@ -28,9 +28,11 @@ import { pcm16ToFloat32 } from './pcm';
  *   `audio-graph.ts` decodes it, because that is where the decoder is, and it is
  *   why `disableFFmpeg: false` is in `app.config.ts`.
  * - `silence` — an Utterance that was never sent to a Provider because it is not
- *   Speakable, or one whose reply carried no samples at all. Silence is a Clip
- *   like any other: it takes time, the reading passes over it, and it is
- *   highlighted at Utterance level while it does (CONTEXT.md, ADR 0005).
+ *   Speakable. A reply with no samples is refused before it gets here
+ *   (`createClipFetcher`, #235), though `prepareClip` still makes silence of
+ *   one. Silence is a Clip like any other: it takes time, the reading passes
+ *   over it, and it is highlighted at Utterance level while it does
+ *   (CONTEXT.md, ADR 0005).
  */
 export type PreparedClip =
   | { utterance: number; audio: 'samples'; samples: Float32Array<ArrayBuffer>; sampleRate: number; words: Timestamp[] | null }
@@ -171,6 +173,14 @@ export function createClipFetcher(deps: ClipFetcherDeps): ClipFetcher {
       () => new SynthesisError('network', `${deps.provider.id}: no audio within ${Math.round(timeoutMs / 1000)}s`),
       () => controller.abort(),
     );
+    // Only speakable text gets here, and speakable text that comes back with no
+    // audio is an error, not silence (ADR 0027, ADR 0037). Refused before the
+    // cache, or the silence `prepareClip` makes of it would answer every later
+    // fetch of the sentence without asking again, and the Reading would pass it
+    // over unheard where a Download refuses it (#235). One byte of PCM is half a
+    // sample: none.
+    const empty = result.audio === 'pcm' ? result.samples.byteLength < 2 : result.bytes.byteLength === 0;
+    if (empty) throw new SynthesisError('unknown', `${deps.provider.id}: the reply carried no audio`);
     await cache.put(key, toStored(result));
     return result;
   }

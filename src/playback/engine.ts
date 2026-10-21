@@ -217,6 +217,7 @@ export interface PlaybackEngine {
    */
   setGap(gap: GapSettings): void;
   switchVoice(provider: ClipProvider, voice: string, selected: () => void, failed: (error: unknown) => void): void;
+  /** Drop a pending Voice choice. The Reading goes on in the old Voice, from wherever the choice held it (#252). */
   cancelVoiceSwitch(): void;
   snapshot(): PlaybackSnapshot;
   /** Give back the audio session and close the context. After this the engine is done. */
@@ -259,13 +260,12 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   /** Replaced whole by a press of Play (`retryOnPlay`), cleared by anything that restarts. */
   let failed = new Set<number>();
   /**
-   * The last problem that left an Utterance unspoken, for `OutOfTextReport`.
-   *
-   * Not every problem: a session that would not activate is reported through
-   * `onError` and is not a sentence that was skipped. This is set beside
-   * `failed.add` and cleared wherever `failed` is emptied — `restart`, a voice
-   * landing, and a press of Play — so the two cannot disagree about whether
-   * anything was lost.
+   * The last problem that left an Utterance unspoken, for `OutOfTextReport`:
+   * a refusal, a Clip that would not decode, or an audio session that would not
+   * start for it. The Reading stops at that Utterance and Play asks again,
+   * session included (#276). This is set beside `failed.add` and cleared
+   * wherever `failed` is emptied — `restart`, a voice landing, and a press of
+   * Play — so the two cannot disagree about whether anything was lost.
    */
   let lastRefusal: unknown = null;
 
@@ -443,13 +443,18 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
         try {
           await enqueue(clip, mine);
         } catch (error) {
-          // A decode failure blocks here too; never claim unheard text was read.
+          // A Clip that would not decode, or an audio session that would not
+          // start for it, blocks here too; never claim unheard text was read.
+          // Round again rather than out: the pass that finds it missing is the
+          // one that stops the Reading on it. Out, nothing but another fetch
+          // settling would make that pass, and with nothing else out at the
+          // Provider the Reading played on a spinner with no sound (#276).
           if (mine === generation && !disposed) {
             deps.onError(error);
             failed.add(nextToEnqueue);
             lastRefusal = error;
             prepared.delete(index);
-            break;
+            continue;
           }
         }
         if (mine !== generation || pending?.armed) break;
@@ -662,17 +667,38 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     audioByBuffer.clear();
   }
 
-  function cancelVoiceSwitch() {
+  /**
+   * Drop the pending Voice choice, and take its queued replacement off the
+   * queue, putting back the old tail it took. True when there was a replacement
+   * to take off.
+   *
+   * While a replacement is queued nothing is fetched or queued in the old Voice
+   * (`pump`, `drain`), so its Clips wait in `prepared`. A `restart` pumps once
+   * it has reset everything; any other cancel must pump itself (`abandonSwitch`).
+   */
+  function cancelVoiceSwitch(): boolean {
     const previous = pending;
     pending = null;
     if (previous?.deadline) clearTimeout(previous.deadline);
-    if (!previous?.armed || !graph) return;
+    if (!previous?.armed || !graph) return false;
     const { cut, removed } = previous.armed;
     const discarded = timeline.truncateAfter(cut);
     graph.remove(discarded.map((clip) => clip.bufferId));
     for (const clip of discarded) audioByBuffer.delete(clip.bufferId);
     for (const item of removed) queueAudio(item.audio, item.clip.gap, item.clip.offset ?? 0,
       (item.clip.offset ?? 0) + item.clip.speech, item.clip.voiceGeneration);
+    return true;
+  }
+
+  /**
+   * A cancel that no `restart` follows: the owner choosing the current Voice
+   * again, or the choice failing after its first Clip was queued. The Reading
+   * goes on in the old Voice from the Clips the replacement held back. With an
+   * empty queue there was no old tail to put back and no audio to send an event,
+   * so without this pump it stayed playing with a spinner and no sound (#252).
+   */
+  function abandonSwitch(): void {
+    if (cancelVoiceSwitch()) pump();
   }
 
   function landed(front: QueuedClip) {
@@ -771,7 +797,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
         prepareSwitch();
       }).catch((error: unknown) => {
         if (pending !== target || disposed) return;
-        cancelVoiceSwitch();
+        abandonSwitch();
         target.failed(error);
       }).finally(() => target.fetching.delete(at));
     }
@@ -889,17 +915,20 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     },
 
     switchVoice(provider, voice, selected, failed) {
-      cancelVoiceSwitch();
+      const restored = cancelVoiceSwitch();
       const target: PendingSwitch = { id: ++switchSerial, fetcher: createClipFetcher({ provider, voice, cache, timeoutMs: deps.synthesisTimeoutMs, brackets: deps.brackets }),
         ready: new Map(), fetching: new Set(), selected, failed, armed: null, deadline: null, uncleared: new Set() };
       pending = target;
       // A slow target must not chase a fast reading forever. Pausing still keeps
       // downloads alive; the deadline bounds preparation, not how long a pause
       // may last, nor how long the owner takes to answer (`startDeadline`).
-      prepareSwitch();
+      // A replacement taken off for this choice held the old Voice back, which
+      // goes on until this one is queued (`abandonSwitch`, #252).
+      if (restored) pump();
+      else prepareSwitch();
     },
 
-    cancelVoiceSwitch,
+    cancelVoiceSwitch: abandonSwitch,
 
     snapshot() {
       return { playing, utterance: cursor, rate, queued: timeline.pending(), fetching: inFlight.size };

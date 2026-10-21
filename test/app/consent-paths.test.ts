@@ -127,7 +127,7 @@ describe('the owner\'s answer is taken before any clock starts (#109)', () => {
 
   it('starts a Voice switch\'s deadline once nothing it asked for waits on the owner, never at the choice', () => {
     const engine = read('src/playback/engine.ts');
-    const choosing = between(engine, 'switchVoice(provider, voice, selected, failed) {', '    cancelVoiceSwitch,\n', 'src/playback/engine.ts');
+    const choosing = between(engine, 'switchVoice(provider, voice, selected, failed) {', '    cancelVoiceSwitch: abandonSwitch,\n', 'src/playback/engine.ts');
     expect(choosing).not.toMatch(/setTimeout\s*\(/);
     const starting = between(engine, 'function startDeadline(target: PendingSwitch)', 'function prepareSwitch()', 'src/playback/engine.ts');
     pin(starting, '}, 120_000);', 'startDeadline() in src/playback/engine.ts');

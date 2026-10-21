@@ -90,6 +90,15 @@ replies. A speed change cannot re-cue an ended Clip after starvation, at a secti
 boundary or while stopped on a refusal (#169). A current position still supplies
 the correction. The section pause uses a fake timer, not a wall-clock race.
 
+`playback/engine-missing-audio.test.ts` runs the real engine, Clip fetcher,
+segmenter and graph wrapper over the same clocked queue, which here also holds or
+refuses a decode, refuses the audio session and dequeues without an end event.
+A Clip that will not decode, a session that will not start and a speakable
+sentence answered with no audio each stop the Reading at it, with nothing else
+out at the Provider (#276, #235). A Voice choice cancelled after its first Clip
+was queued on an empty queue goes on in the old Voice (#252). Refusals, a
+choice left to land, a seek and disposal during a held decode are controls.
+
 `app/reading-seek-during-decode.test.ts` keeps `useReading`, the offline runtime,
 engine and graph wrapper real, while holding native decode/session promises.
 A Skip with memory-cached Clips must resume without another action (#158).

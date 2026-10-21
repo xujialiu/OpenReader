@@ -285,6 +285,31 @@ describe('kokoroAdapter', () => {
     expect(result).toMatchObject({ audio: 'pcm', samples: Uint8Array.from([7, 0]) });
     expect('timestamps' in result).toBe(false);
   });
+
+  // An empty string is no audio either, and is not a silence to play (#235)
+  it('falls back to the plain endpoint when the captioned audio is the empty string', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ audio: '', timestamps: [] }))
+      .mockResolvedValueOnce(pcmResponse(7, 0));
+
+    const result = await provider(fetchImpl).synthesize('Hello', opts);
+
+    expect((fetchImpl as any).mock.calls[1][0]).toBe('http://localhost:8880/v1/audio/speech');
+    expect(result).toMatchObject({ audio: 'pcm', samples: Uint8Array.from([7, 0]), note: 'the captioned reply had no audio; fell back to /v1/audio/speech' });
+  });
+
+  it('refuses a sentence neither route gave audio for, without asking again', async () => {
+    waits = [];
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ audio: '', timestamps: [] }))
+      .mockResolvedValueOnce(new Response(new Uint8Array(0), { status: 200 }));
+
+    await expect(provider(fetchImpl).synthesize('Hello', opts)).rejects.toMatchObject({ kind: 'unknown', retriable: false, message: expect.stringMatching(/no audio/) });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(waits).toEqual([]);
+  });
 });
 
 describe('extra headers and gateways', () => {
