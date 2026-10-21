@@ -71,3 +71,31 @@ note. Play was back at rest once the finger lifted.
 A drag that starts on the page above the Player still moves the page and turns
 A to M: `--from 200 450 --by -150 --panel-top 130` reports RED, all of it page
 rows plus the A-to-M mark, with Play at +0.0 pt.
+
+Verified 2026-10-21 on `1.0.0 (12)-beta2-debug`, iPhone 17 (iOS 26.5), by
+`ios-tester` against ca9628f. Default size, long note: GREEN, 0.0 pt and 0
+panel rows in every mid-drag shot, from the head row (300,765), the transport
+row's plain gap (73,818) and the note (200,716). Without the note: the same
+from (300,765) and (73,818) with `--panel-top 740`, and the Player is the two
+rows it was before #312. `accessibility-extra-extra-extra-large`, long note:
+the Player's top meets the navigation bar (the notes' viewport 120–438 pt,
+"2 pages"), every control readable and at the same frames as without the note;
+GREEN from (250,497) and (156,715) with `--panel-top 440`; the note drag
+(`--from 200 250 --by -150`) scrolled 914 pixel rows, every one of them in
+120–438 pt, 0 below 440 — only the note moved. Without the note at that size
+the Player is 441 pt tall (top ≈433 pt against 736 at the default size),
+nothing cut off, no scroll, GREEN from the same starts with `--panel-top 425`.
+At both sizes: collapse arrow → Reading Button → Player back; Contents opens
+and closes; the speed bubble opens above its button fully on screen and a tap
+outside over the Contents button closed it without opening Contents; the page
+drag above the Player reported RED (page rows only, Play +0.0) and turned A to
+M; M brought the page back to A; a tap on a sentence above the Player seeked
+the reading (`utterance` null→2) with `playing=false`. No audio played.
+
+The transport row's plain spots are gaps between its buttons, and they move
+with the layout: at the default size with the note, `--from 300 818` lands
+inside Next paragraph (282–326 × 796–844) — the run still read GREEN 0 rows
+here because the finger's pressed fade fell between the shots, but a plain
+gap (73,818, between Contents and Previous paragraph; 156,715 at the largest
+size, between Previous sentence and Play) is the start the measurement should
+come from. Read the frames from `ax.py tree` before choosing one.
