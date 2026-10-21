@@ -112,6 +112,14 @@ describe('what the Keychain hands over is never written', () => {
     // A title is not a credential.
     expect(withoutCredentials('Basic English Grammar')).toBe('Basic English Grammar');
   });
+
+  it('an address\'s whole name:password@ when the password has "@" in it, and no "@" past the host (#314)', () => {
+    // The URL standard and Foundation end the user name and password at the last "@" before the host.
+    expect(withoutCredentials('PROPFIND https://alice:p@ssw0rd@dav.example.com/dav failed')).toBe(`PROPFIND https://${REDACTED}@dav.example.com/dav failed`);
+    expect(withoutCredentials('run against https://alice:p@ss@w0rd@dav.example.com/dav')).toBe(`run against https://${REDACTED}@dav.example.com/dav`);
+    const plain = 'GET https://dav.example.com/dav/?to=a@b.c#a@b failed, ask a@b.c';
+    expect(withoutCredentials(plain)).toBe(plain);
+  });
 });
 
 describe('one value held per Keychain entry, and none too short to be a secret', () => {

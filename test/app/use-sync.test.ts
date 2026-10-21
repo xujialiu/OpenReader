@@ -3,7 +3,8 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { PositionsItem } from '../../src/core/sync/positions-file';
-import { WebDAVError } from '../../src/core/sync/webdav';
+import { createWebDAVClient, WebDAVError } from '../../src/core/sync/webdav';
+import { createDebugLog, setDebugLogWriter } from '../../src/debug/debug-log';
 import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
 import type { Library } from '../../src/app/use-library';
 import { useSync, type SyncDeps, type SyncHandle } from '../../src/app/use-sync';
@@ -173,5 +174,37 @@ describe('check', () => {
     await act(async () => { tree.update(createElement(Probe, { deps: refused })); });
     expect(await handle!.check('https://dav.example/or', 'ann', 'pw')).toEqual({ ok: false, reason: 'The server rejected the username or password (HTTP 401).' });
     await act(async () => { tree.unmount(); });
+  });
+
+  it('of an address typed with a password that has "@" in it writes no part of the password to the Debug Log, though the WebDAV error quotes the address whole (#314)', async () => {
+    // The real WebDAV client, failing as a phone with no route to the server does.
+    const unreachable: SyncDeps = {
+      client: ({ url, username }, password) =>
+        createWebDAVClient({ url, username, password }, { fetch: async () => { throw new TypeError('Network request failed'); } }),
+      now: () => 0,
+    };
+    const written: string[] = [];
+    const log = createDebugLog({ files: { list: () => [], size: () => 0, append: (_name, text) => void written.push(text), remove: () => {} }, now: () => 0 });
+    let handle: SyncHandle | undefined;
+    function Probe() { handle = useSync(settingsWith(false), library, unreachable).sync; return null; }
+    let tree: ReactTestRenderer;
+    await act(async () => { tree = create(createElement(Probe)); });
+    setDebugLogWriter(log);
+    try {
+      for (const [password, tail] of [['p@ssw0rd', 'ssw0rd'], ['p@ss@w0rd', 'w0rd']]) {
+        const url = `https://alice:${password}@dav.example.com/dav`;
+        const result = await handle!.check(url, '', '');
+        // The Sync screen shows the owner the address he typed, password and all.
+        expect(result).toEqual({ ok: false, reason: `Cannot reach ${url}/: Network request failed` });
+        log.flush();
+        const line = written.join('');
+        expect(line).toContain('check of https://dav.example.com/dav failed: Cannot reach https://[credential]@dav.example.com/dav/: Network request failed');
+        expect(line).not.toContain(tail);
+        written.length = 0;
+      }
+    } finally {
+      setDebugLogWriter(null);
+      await act(async () => { tree!.unmount(); });
+    }
   });
 });

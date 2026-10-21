@@ -119,10 +119,12 @@ export function cutText(text: string): string {
 /**
  * A URL as a line may quote it: scheme, host and path, and nothing that can carry
  * a credential — no `user:password@`, no query, no fragment — cut to about 80
- * characters.
+ * characters. The `user:password@` ends at the last `@` before the host, as the
+ * URL standard and Foundation read it, so a password with an `@` in it goes whole
+ * (#314).
  */
 export function cutAddress(url: string): string {
-  const found = /^([a-z][a-z0-9+.-]*:\/\/)(?:[^@/?#]*@)?([^/?#]*)([^?#]*)/i.exec(url.trim());
+  const found = /^([a-z][a-z0-9+.-]*:\/\/)(?:[^/?#]*@)?([^/?#]*)([^?#]*)/i.exec(url.trim());
   return shorten(found ? `${found[1]}${found[2]}${found[3]}` : '(not a URL)', TEXT_CHARS);
 }
 

@@ -103,8 +103,12 @@ export function forgetCredential(entry: string): void {
 /** Case-sensitive and eight characters long, as the header writes them, so that `Basic English` in a title survives. */
 const TOKEN_AFTER_SCHEME = /\b(Bearer|Basic) +[A-Za-z0-9._~+/=-]{8,}/g;
 const KEY_HEADER = /\b(authorization|x-api-key|api-key|xi-api-key|ocp-apim-subscription-key)(["']?\s*[:=]\s*["']?)[^\s"',;}]+/gi;
-/** `https://name:password@host`, as an address the owner typed may carry it. */
-const USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi;
+/**
+ * `https://name:password@host`, as an address the owner typed may carry it: up to
+ * the last `@` before the host, as the URL standard and Foundation read it, so a
+ * password with an `@` in it goes whole (#314).
+ */
+const USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi;
 
 /** `text` with every held credential, and whatever the three patterns find, replaced by `[credential]`. */
 export function withoutCredentials(text: string): string {

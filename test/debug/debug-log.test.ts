@@ -126,6 +126,14 @@ describe('a Debug Log line', () => {
     expect(shortId('sha256:0123456789abcdef')).toBe('01234567');
   });
 
+  it('quotes an address whose password has "@" in it with no part of the password (#314)', () => {
+    // The URL standard and Foundation end the user name and password at the last "@" before the host.
+    expect(cutAddress('https://alice:p@ssw0rd@dav.example.com/remote.php/dav')).toBe('https://dav.example.com/remote.php/dav');
+    expect(cutAddress('https://alice:p@ss@w0rd@dav.example.com/dav?to=a@b')).toBe('https://dav.example.com/dav');
+    // An "@" in the query is not a user name's.
+    expect(cutAddress('https://dav.example.com?to=a@b')).toBe('https://dav.example.com');
+  });
+
   it('goes to the system log at once, without the stamp, one call per line', () => {
     const disk = folder();
     const systemLog = vi.fn();
