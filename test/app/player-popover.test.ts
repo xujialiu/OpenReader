@@ -30,7 +30,7 @@ beforeEach(() => Object.assign(dimensions, { width: 390, height: 844, fontScale:
 async function player() {
   const props: PlayerProps = {
     settings: DEFAULT_SETTINGS, playing: false, collapsed: false, enabled: true,
-    voiceInUse: null, notes: [], following: true,
+    voiceInUse: null, notes: [], following: true, barHeight: 0,
     onCollapsed: vi.fn(), onPlay: vi.fn(), onPause: vi.fn(), onSkip: vi.fn(), onRate: vi.fn(),
     onContents: vi.fn(), onVoices: vi.fn(), onReturn: vi.fn(), onHeight: vi.fn(), onOpenHeight: vi.fn(),
   };

@@ -143,10 +143,10 @@ full-width label's size.
 `playerLayout` grows the speed target with fontScale and keeps the compact
 transport's two ends equal. When those ends and the five transport controls
 cannot fit, Contents and speed take another row and the Voice gets the full
-width. A/M sizes to its letters. Player content scrolls if it exceeds 75% of
-the window, keeping long notes reachable rather than extending off-screen.
-Only the player's content boundary remounts on a text-size change; the Reading
-and document remain mounted. The player remains an absolute overlay.
+width. A/M sizes to its letters. The Player grows with its content and never
+scrolls as a whole; past the navigation bar only its notes scroll (#312,
+below). Only the player's content boundary remounts on a text-size change; the
+Reading and document remain mounted. The player remains an absolute overlay.
 
 On 2026-10-02, iPhone 17 / iOS 27.0 simulator: the pre-change General screenshot
 failed the visible-text check for `Pause between paragraphs` at XXL. After the
@@ -162,6 +162,38 @@ background/re-entry check. The current shared LibraryRow already uses
 `useWindowDimensions().fontScale` to update its height (introduced by #121).
 No speculative Library layout change is made; live transitions and progress
 visibility remain required regression and owner-acceptance checks.
+
+### The Player grows rather than scrolls (#312)
+
+Until #312 the whole open Player sat in one `ScrollView` with `maxHeight` 75 %
+of the window, meant to scroll only once its content passed that. It set no
+`alwaysBounceVertical`, and React Native 0.86.3 defaults it to `!horizontal`
+(`ScrollView.js`), i.e. `true` for a vertical one, which on iOS bounces even
+when the content is smaller than the frame. So at every size a drag on the
+Player slid its controls up inside the panel and they sprang back. Measured on
+an iPhone 17 (iOS 26.5) with `test/manual-test/player-and-reading-held/player-drag.py`:
+a 200-point drag moved Play -44.7 to -53.7 pt mid-drag, with or without a note;
+`alwaysBounceVertical={false}` alone took it to 0.0 pt.
+
+The owner then chose no scrolling at all, rather than bouncing only past 75 %:
+
+- The open Player is laid out at the bottom of a `box-none` room that runs from
+  the navigation bar's bottom (`barHeight`, the bar is always shown while the
+  Player is open, #67) to the bottom of the reader's box. It has `flexShrink: 1`
+  and grows with its content up to that room; the part of the room it does not
+  cover is still the page.
+- Notes are the only scroll view, `alwaysBounceVertical={false}`, `flexGrow: 0`,
+  `flexShrink: 1`: they give way first and scroll only when the room is full.
+  The controls (`flexShrink: 0`) are never inside a scroll view.
+- At `accessibility-extra-extra-extra-large` a 210-character note fills the
+  room: the Player's top meets the bar, the note is cut off and scrolls, and a
+  drag on the head row or the transport moves nothing (0 changed pixel rows).
+- `test/app/player-drag.test.ts` pins that shape; it cannot see the native
+  bounce, which only the device script measures.
+
+A Player that may reach the bar can cover the whole page while a note is shown,
+and a Player with a note does not collapse (#67). The 75 % cap had the same
+kind of cost, smaller.
 
 ### Six gaps of at least 3 points (#218)
 

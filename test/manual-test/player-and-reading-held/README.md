@@ -21,6 +21,10 @@ that names the script or probe you are about to run.
   playback, and whether the page moves. `player-touch.sh` with
   `PlayerTouchProbe.swift`, around `place-and-following/line-follow.cjs`.
 
+- [player-drag.md](player-drag.md) (#312): a drag on the open Player moves
+  nothing, at the default and the largest text size, with and without a long
+  note; past the navigation bar only the notes scroll. `player-drag.py`.
+
 - [skips-while-playing.md](skips-while-playing.md) (#86): a tap, the four
   Skips and a Contents row while playing, with no wait between the press and
   the fetch; a fake Kokoro provider that logs every request

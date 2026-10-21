@@ -9,6 +9,12 @@
  *   expands. The price is that it covers the last few lines, and the price of
  *   *that* is `onHeight` below: the centring has to know how much is covered, and
  *   the number changes when the player collapses (ADR 0011, ADR 0020).
+ * - **It never scrolls, and a drag on it moves nothing** (#312). When it needs
+ *   more room, at the largest text sizes or with notes, it grows, up to the
+ *   bottom of the navigation bar. Only when even that is not enough do the
+ *   notes, and only the notes, scroll; the controls never move under a finger.
+ *   It was one scroll view capped at 75 % of the window until #312, and React
+ *   Native's `alwaysBounceVertical`, on by default, bounced it at every size.
  * - **There is no progress bar**, and the design file is the argument. On the
  *   owner's novel — one file, two thousand chapters — a bar would answer "how far
  *   through am I" with a number too small to read and destroy the reading position
@@ -155,6 +161,12 @@ export interface PlayerProps {
    * when they are not drawn and the last height stands.
    */
   onOpenHeight(height: number): void;
+  /**
+   * How tall the navigation bar over the top of the page is, in points: the open
+   * player grows no higher than its bottom (#312). The bar is always shown while
+   * the player is open (#67), so this is never a bar that is not there.
+   */
+  barHeight: number;
 }
 
 /**
@@ -187,8 +199,9 @@ export function Player({
   onReturn,
   onHeight,
   onOpenHeight,
+  barHeight,
 }: PlayerProps) {
-  const { width, height, fontScale } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
   const layout = playerLayout(width, fontScale);
   const [speedOpen, setSpeedOpen] = useState(false);
   const [speedGeometry, setSpeedGeometry] = useState({ fontScale, width });
@@ -252,11 +265,22 @@ export function Player({
   }
 
   return (
+    // The room the open player may take, from the bottom of the navigation bar
+    // to the bottom of the screen (#312); it sits at the bottom of it and grows
+    // upwards. `box-none`, so the part it does not cover is still the page.
+    <View style={[styles.room, { top: barHeight }]} pointerEvents="box-none">
     <View style={[styles.player, { borderColor: borders.line }]} onLayout={measure}>
-      <ScrollView key={fontScale} style={{ maxHeight: height * 0.75 }} contentContainerStyle={{ gap: 6 }}>
-      {notes.map((note) => (
-        <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>{note.said}</Text>
-      ))}
+      {/* Remounted on a text-size change (ADR 0061), and nothing else is. */}
+      <View key={fontScale} style={styles.rows}>
+      {/* The one part that may scroll, and only once the room above runs out:
+          it gives way first, and does not bounce while the notes fit (#312). */}
+      {notes.length > 0 ? (
+        <ScrollView style={styles.notes} alwaysBounceVertical={false} contentContainerStyle={styles.notesBody}>
+          {notes.map((note) => (
+            <Text key={note.said} style={[styles.note, note.attention && styles.noteAttention]}>{note.said}</Text>
+          ))}
+        </ScrollView>
+      ) : null}
       {/* The controls in a box of their own, so they can be measured without the
           notes above them (onOpenHeight, #71). The box carries the gap the
           player puts between its rows. */}
@@ -298,7 +322,7 @@ export function Player({
             width={layout.endWidth} height={layout.rateHeight} />
         </View> : null}
       </View>
-      </ScrollView>
+      </View>
       {/* A tap outside the phone's bubble closes it, and without this it also
           pressed whatever React Native button it landed on: measured, a tap on
           Contents closed the bubble and opened the contents too (notes,
@@ -307,6 +331,7 @@ export function Player({
           own bubbles and the drawer this replaced both behave. */}
       {speedOpen ? <Pressable style={StyleSheet.absoluteFill} onPress={closeSpeed}
         accessible={false} importantForAccessibility="no-hide-descendants" /> : null}
+    </View>
     </View>
   );
 }
@@ -517,9 +542,10 @@ function Speed({ rate, onRate }: { rate: number; onRate(next: number): void }) {
 }
 
 /**
- * Both states are `position: absolute` against the reader's own box, which is the
- * whole of "it floats over the page": the document's layout does not mention it, so
- * nothing about the document changes when it appears or goes.
+ * Both states are `position: absolute` against the reader's own box, the open one
+ * through the room it grows in, which is the whole of "it floats over the page":
+ * the document's layout does not mention it, so nothing about the document
+ * changes when it appears or goes.
  */
 const styles = StyleSheet.create({
   button: {
@@ -538,8 +564,8 @@ const styles = StyleSheet.create({
   chevronTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   collapsed: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   // The player's own gap between its rows, carried by the box the rows are
-  // measured in (onOpenHeight).
-  controls: { gap: 6 },
+  // measured in (onOpenHeight). Never shrunk: the notes give way instead.
+  controls: { flexShrink: 0, gap: 6 },
   disabled: { opacity: 0.35 },
   footTap: { width: TRANSPORT_END, height: 44, alignItems: 'center', justifyContent: 'center' },
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
@@ -552,22 +578,23 @@ const styles = StyleSheet.create({
   markLetter: { ...TEXT_EMPHASIZED.footnote, color: INK.text },
   note: { ...TEXT.caption1, color: INK.quiet },
   noteAttention: { color: INK.attention },
+  // A scroll view grows by default; this one only ever gives way.
+  notes: { flexGrow: 0, flexShrink: 1 },
+  notesBody: { gap: 6 },
   player: {
     backgroundColor: INK.panel,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    bottom: 0,
-    gap: 6,
-    left: 0,
+    flexShrink: 1,
     paddingBottom: PLAYER_PADDING_BOTTOM,
     paddingHorizontal: 12,
     paddingTop: PLAYER_PADDING_TOP,
-    position: 'absolute',
-    right: 0,
   },
   pressed: { opacity: 0.65 },
   rateTap: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  room: { bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0 },
+  rows: { flexShrink: 1, gap: 6 },
   // A step above the voice's 14 beside it; at 13 it was the smallest thing on
   // the row of 24-point icons it ends.
   rateLabel: { ...TEXT_EMPHASIZED.subhead, color: INK.text, fontVariant: ['tabular-nums'] },

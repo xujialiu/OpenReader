@@ -101,6 +101,15 @@ can only be read enlarged on a long press was rejected: reading a control
 should not require an extra action. The lookup result's use of Appearance
 remains a separate issue.
 
+The player never scrolls, and a finger dragged on it moves nothing (#312).
+When its buttons and its notes need more room, it grows, up to the bottom of
+the bar at the top of the screen; at the largest sizes, with a long note, that
+is nearly the whole page. Only when even that is not enough does the note
+scroll, inside the player, while the buttons below it stay where they are.
+Until #312 the player scrolled as a whole once it passed three quarters of the
+screen, and at every size its buttons slid up and down under a finger and
+sprang back, though everything fitted.
+
 The narrowest iPhones, the SE and the minis, are the exception at every size:
 the playback buttons, Contents and the speed do not fit across them in one
 row, so Contents and the speed always have a row of their own there, and the
@@ -118,6 +127,10 @@ for two (#218).
   already says the phone's look wins.
 - **The table's line spacing.** Tried first. It set lines further apart than
   the phone's own apps do.
+- **A player that grows past the bar at the top.** The start of a long note
+  would end up under the bar and off the screen, with no way to read it.
+- **Cutting a note short to make it fit.** A note says something the owner has
+  not been told yet; its second half would be lost.
 - **Changing only the drawers and the Library.** That was the first trial. It
   left the settings pages, the player and the titles above the pages with sizes
   of their own, which is what the owner asked to be rid of.
