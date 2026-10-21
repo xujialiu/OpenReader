@@ -51,6 +51,14 @@ describe('who receives a Document\'s text', () => {
       .toBe('To read aloud, OpenReader sends your document\'s text to the server at tts.example.net with your API key.');
   });
 
+  it('names a server whose Address has "@" in its password by its host, and keys its yes with no part of the password (#315)', () => {
+    const server = providerRecipient(serverAt('http://user:p@ss@nas.local:8880/v1'), 'compatible', true);
+    expect(server).toMatchObject({ key: 'provider:compatible@http://nas.local:8880', name: 'the server at nas.local:8880' });
+    expect(consentQuestion(server).title).toBe('Send text to the server at nas.local:8880?');
+    // The same server as the Address without a password: one yes covers both.
+    expect(providerRecipient(serverAt('http://nas.local:8880/v1'), 'compatible', true).key).toBe(server.key);
+  });
+
   it('asks again about another server, and not about another path on the same one', () => {
     const first = providerRecipient(serverAt('http://192.168.1.20:8880/v1'), 'compatible', false);
     expect(providerRecipient(serverAt('http://192.168.1.20:8880/other'), 'compatible', false).key).toBe(first.key);

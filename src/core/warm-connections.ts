@@ -68,8 +68,13 @@ export interface WarmConnections {
   keepWarm(origin: string): void;
 }
 
-/** Scheme, then an optional user name and password, then the host and port. */
-const ADDRESS = /^([a-z][a-z0-9+.-]*):\/\/(?:[^@/?#]*@)?([^/?#]+)/i;
+/**
+ * Scheme, then an optional user name and password, then the host and port. The
+ * user name and password end at the last `@` before the host, as the URL standard
+ * and Foundation read them, so a password with an `@` in it is not taken for part
+ * of the host (#315).
+ */
+const ADDRESS = /^([a-z][a-z0-9+.-]*):\/\/(?:[^/?#]*@)?([^/?#]+)/i;
 const DEFAULT_PORT: Readonly<Record<string, string>> = { http: '80', https: '443' };
 
 /**

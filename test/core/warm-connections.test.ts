@@ -112,6 +112,17 @@ describe('a request that is not a GET, after a quiet spell', () => {
     expect(net.sent[2].init).toBe(SYNTHESIS);
   });
 
+  it('goes to the host of an address typed with a password that has "@" in it, carrying no part of the password (#315)', async () => {
+    const net = network();
+    const time = clock();
+    const warm = createWarmConnections({ fetch: net.fetch, now: time.now });
+    const speech = 'http://user:p@ss@w0rd@nas.local:8880/v1/audio/speech';
+    await warm.fetch(speech, SYNTHESIS);
+    time.pass(QUIET_MS);
+    await warm.fetch(speech, SYNTHESIS);
+    expect(net.lines()).toEqual([`POST ${speech}`, 'GET http://nas.local:8880/', `POST ${speech}`]);
+  });
+
   it('waits for the warm-up before it goes out', async () => {
     const net = network();
     const time = clock();
@@ -389,6 +400,14 @@ describe('originOf', () => {
   it('never keeps a user name or password written into the address', () => {
     // The warm-up is sent to the origin, and credentials must not travel with it.
     expect(originOf('https://owner:secret@gateway.example/v1')).toBe('https://gateway.example');
+  });
+
+  it('ends the user name and password at the last "@" before the host, as the URL standard and Foundation read it (#315)', () => {
+    expect(originOf('http://user:p@ss@nas.local:8880/v1')).toBe('http://nas.local:8880');
+    expect(originOf('https://user:p@ss@w0rd@nas.local/v1?to=a@b')).toBe('https://nas.local');
+    // An "@" in the query or the fragment is not a user name's.
+    expect(originOf('https://nas.local?to=a@b')).toBe('https://nas.local');
+    expect(originOf('https://nas.local#a@b')).toBe('https://nas.local');
   });
 
   it('reads a URL and a Request without asking either for an origin', () => {
