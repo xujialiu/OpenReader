@@ -56,6 +56,15 @@ After restoration, launch the app again before testing.
   chapter download on the simulator; OpenAI Compatible's fallback to MP3 and
   Speechify's queue on the short fixture. `download-concurrency.ts`,
   `DownloadConcurrencyProbe.swift`, the kit's `download-chapter.cjs`.
+- [notes/NOTES_2026-10-21.md](../../../notes/NOTES_2026-10-21.md) (#311, the
+  window across a Download's chapters): the four timed ABAB runs on Fish and
+  the changed interactions on a controlled fake (`fake-kokoro-two-voices.cjs`,
+  the Pause Order Fixture at 12–20 s per request). The run's new tools:
+  `download-window-sampler.cjs` (samples the runtime's `task.state`,
+  `task.writing`/`task.current` and `occupied` through one CDP connection,
+  JSONL), `download-run-metrics.cjs` (enqueue→first/last clip, save-gap
+  median/p90/max, and the chapter boundary gap attributed through the
+  sampler's JSONL).
 - [voice-delete-306.md](voice-delete-306.md) (#306): the two deletes on one
   row — `Delete all audio` and the Voice-scoped `Delete all current voice
   audio` — their confirmations, what each leaves in the catalogue and on
