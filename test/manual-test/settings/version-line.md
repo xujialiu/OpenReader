@@ -8,11 +8,13 @@ bash test/manual-test/kit/run-probe.sh SettingsVersionProbe SIMULATOR_UDID /tmp/
 
 This relaunches the app (so a JavaScript-only change, such as `app-version.ts`,
 is proven current rather than assumed), opens Settings, and requires an
-element labelled exactly `Version <APP_VERSION>-debug` under the Sync row, reading
-`APP_VERSION` from the working tree's `app-version.ts` at run time. Every Metro
-build has Debug Mode, which the line shows as `-debug` (#82, ADR 0054); for a
-Release build made without it, add `--mode release` and the probe requires
-`Version <APP_VERSION>` instead. The label is the
+element labelled exactly `Version <APP_VERSION with its Build Number plus one>-debug`
+under the Sync row, such as `Version 1.0.0 (10)-beta21-debug` for
+`1.0.0 (9)-beta21`, reading `APP_VERSION` from the working tree's
+`app-version.ts` at run time. Every Metro build has Debug Mode, which the line
+shows with its own, even, Build Number (#310, ADR 0083) and `-debug` (#82, ADR
+0054); for a Release build made without it, add `--mode release` and the probe
+requires `Version <APP_VERSION>` instead. The label is the
 accessibility label a screen reader announces, which is not the same thing as
 the line's visible text, since `accessibilityLabel` replaces what iOS exposes
 rather than adding to it (a screenshot is what proves the visible text has no

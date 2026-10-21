@@ -6,7 +6,11 @@ status: accepted
 
 _Issue #127. The owner's decisions are in its body; the terms are CONTEXT.md's
 **Version**, **Build Number** and **Beta**. The rule an agent follows is in
-`MEMORY/app-change.md`, and the upload steps are in `docs/release-to-app-store.md`._
+`MEMORY/app-change.md`, and the upload steps are in `docs/release-to-app-store.md`.
+[ADR 0083](0083-uploads-go-in-pairs-the-even-one-with-debug-mode.md) (#310)
+replaces the rule that each upload takes the next number: uploads go in pairs
+from one commit, `APP_VERSION` holds the odd number, and a build with Debug Mode
+shows the even one after it. The rest stands._
 
 `APP_VERSION` in `app-version.ts` is one string, `x.y.z (n)-betaN`, and
 Settings shows it, with `-debug` added in Debug Mode (`shownVersion`, ADR 0054).

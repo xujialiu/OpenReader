@@ -4,10 +4,11 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ExportedConfig, ExportedConfigWithProps, InfoPlist } from 'expo/config-plugins';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import config from '../app.config';
 import { APP_VERSION } from '../app-version';
+import { shownVersion } from '../src/debug/mode';
 import manifest from '../package.json';
 import withContinuedProcessing from '../plugins/with-continued-processing';
 import { pin } from './structural';
@@ -156,6 +157,44 @@ describe('MEMORY/app-change.md: every app change carries a beta version (#127)',
   });
 });
 
+describe('ADR 0083: an upload is a pair, the odd number without Debug Mode and the even one with it (#310)', () => {
+  const shown = /^\d+\.\d+\.\d+ \(([1-9]\d*)\)/.exec(APP_VERSION);
+
+  /** app.config.ts as a prebuild made with this value of Debug Mode's switch reads it. */
+  async function prebuiltWith(debugSwitch: string | undefined) {
+    vi.resetModules();
+    vi.stubEnv('EXPO_PUBLIC_OPENREADER_DEBUG_MODE', debugSwitch as string);
+    return (await import('../app.config')).default;
+  }
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('names the build without Debug Mode in APP_VERSION, on an odd Build Number', () => {
+    expect(Number(shown![1]) % 2, `${APP_VERSION} has an even Build Number`).toBe(1);
+  });
+
+  it('stops a prebuild whose APP_VERSION has an even Build Number', async () => {
+    vi.resetModules();
+    vi.doMock('../app-version', () => ({ APP_VERSION: '1.0.0 (10)-beta1' }));
+    await expect(import('../app.config')).rejects.toThrow(/even Build Number/);
+    vi.doUnmock('../app-version');
+  });
+
+  it('writes the odd number in a prebuild made without the switch, or with anything but 1', async () => {
+    for (const value of [undefined, '0', 'true', '', ' 1']) {
+      expect((await prebuiltWith(value)).ios?.buildNumber, String(value)).toBe(shown![1]);
+    }
+  });
+
+  it('writes the even number after it in a prebuild made with EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1, the number Settings shows there', async () => {
+    const debug = await prebuiltWith('1');
+    expect(debug.ios?.buildNumber).toBe(String(Number(shown![1]) + 1));
+    expect(shownVersion(APP_VERSION, true)).toContain(`(${debug.ios?.buildNumber})`);
+    // The Version is the pair's, the same for both.
+    expect(debug.version).toBe(config.version);
+  });
+});
+
 describe('#108: a fresh prebuild is one App Store Connect accepts', () => {
   it('ships for iPhone only', () => {
     // An iPad runs it in compatibility mode, in portrait, the tested layout.
@@ -167,7 +206,7 @@ describe('#108: a fresh prebuild is one App Store Connect accepts', () => {
     expect(config.ios?.config?.usesNonExemptEncryption).toBe(false);
   });
 
-  it('gives CFBundleVersion as a whole number, raised by one for each upload', () => {
+  it('gives CFBundleVersion as a whole number, raised for each upload', () => {
     expect(config.ios?.buildNumber).toMatch(/^[1-9]\d*$/);
   });
 

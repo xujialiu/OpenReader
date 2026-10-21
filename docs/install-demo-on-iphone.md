@@ -96,7 +96,7 @@ install-on-iphone.md):
 2. **Two edits, never committed**:
    - `app.config.ts`: `bundleIdentifier: 'top.xujialiu.openreader.demo',`
    - `src/debug/mode.ts`, `shownVersion`:
-     ``return `${debugMode ? `${version}-debug` : version}-demo`;``
+     ``return `${debugMode ? `${buildVersion(version, true)}-debug` : version}-demo`;``
 
    `APP_VERSION` stays as it is: `app.config.ts` stops the prebuild on any line
    that is not `x.y.z (n)` or `x.y.z (n)-betaN`.

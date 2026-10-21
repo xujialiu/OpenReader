@@ -5,10 +5,14 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { APP_VERSION } from '../../app-version';
 import { DEFAULT_SETTINGS } from '../../src/app/settings';
 
+/** `APP_VERSION` as a build with Debug Mode names itself: its Build Number one higher (#310, ADR 0083). */
+const DEBUG_BUILD = APP_VERSION.replace(/\((\d+)\)/, (_, build: string) => `(${Number(build) + 1})`);
+
 /**
  * Settings' version line (#30) says when a build has Debug Mode (#82, design
- * 0054): `1.0.0 (5)-beta1-debug` (#127), read aloud as
- * `Version 1.0.0 (5)-beta1-debug`, and the version alone in a build without it.
+ * 0054), and gives it its own Build Number, one above `APP_VERSION`'s (#310):
+ * `1.0.0 (9)-beta1` shows `1.0.0 (10)-beta1-debug` (#127), read aloud as
+ * `Version 1.0.0 (10)-beta1-debug`, and the version alone in a build without it.
  * Nothing else on the screen changes. Above it, the Author's card (#129, design
  * 0072) names the Author, his email and the repository, and asks for a star.
  * The real screen, with the settings controls replaced by probes that keep
@@ -77,10 +81,11 @@ async function shown(debugMode: boolean) {
 
 afterEach(() => vi.doUnmock('../../src/debug/mode'));
 
-it('shows the version and reads it aloud with -debug in Debug Mode', async () => {
+it('shows the Debug Mode build\'s version and reads it aloud with -debug in Debug Mode', async () => {
   const { footnote } = await shown(true);
-  expect(footnote.text).toBe(`${APP_VERSION}-debug`);
-  expect(footnote.label).toBe(`Version ${APP_VERSION}-debug`);
+  expect(DEBUG_BUILD).not.toBe(APP_VERSION);
+  expect(footnote.text).toBe(`${DEBUG_BUILD}-debug`);
+  expect(footnote.label).toBe(`Version ${DEBUG_BUILD}-debug`);
 });
 
 it('shows the beta alone in a build without Debug Mode, and the rows above it are the same either way', async () => {

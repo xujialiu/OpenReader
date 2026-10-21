@@ -5,8 +5,9 @@ collect the phone's own system log for the same span (#82, ADR 0054).
 The Debug Log is kept by a build with Debug Mode in the app's container, at
 `Library/Application Support/debug-log/debug-log-NNNNNN.txt` (twenty files of at most 5 MB,
 oldest dropped first; #305), one line per event: `2026-09-29 14:03:12.345 +08:00 [category] message`.
-Beside them, `version.txt` names the `APP_VERSION` that wrote them: a new version empties the
-folder at its first launch (ADR 0082).
+Beside them, `version.txt` names the version of the build that wrote them, `APP_VERSION` with the
+Debug Mode build's own Build Number (#310): a new version empties the folder at its first launch
+(ADR 0082).
 
     python3 debug-log.py IPHONE_UDID OUT_DIR [--syslog] [--pmd3 PATH]
 

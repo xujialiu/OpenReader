@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { APP_VERSION } from '../../app-version';
 
+/** `APP_VERSION` as a build with Debug Mode names itself: its Build Number one higher (#310, ADR 0083). */
+const DEBUG_BUILD = APP_VERSION.replace(/\((\d+)\)/, (_, build: string) => `(${Number(build) + 1})`);
+
 /**
  * `installDebugLog` against a file system, an AppState and a native module in
  * memory (ADR 0054). In a build without Debug Mode it must touch none of
@@ -99,7 +102,7 @@ let tracker: { onUnhandled(id: number, rejection: unknown): void } | null;
 
 async function install(debugMode: boolean, dev = false) {
   vi.resetModules();
-  vi.doMock('../../src/debug/mode', () => ({ DEBUG_MODE: debugMode }));
+  vi.doMock('../../src/debug/mode', async (real) => ({ ...(await real<typeof import('../../src/debug/mode')>()), DEBUG_MODE: debugMode }));
   vi.stubGlobal('__DEV__', dev);
   vi.stubGlobal('ErrorUtils', {
     getGlobalHandler: () => previousHandler,
@@ -195,10 +198,12 @@ describe('a build with Debug Mode', () => {
     expect(world.made).toEqual([FOLDER]);
     expect(world.excluded).toEqual([FOLDER]);
     log.flushDebugLog();
-    // The version is app-version.ts's, so a new beta or release changes nothing
-    // here. It holds a bracket and dots since #127, so all of it is escaped.
+    // The version is app-version.ts's with the Debug Mode build's own number
+    // (#310), so a new beta or release changes nothing here. It holds a bracket
+    // and dots since #127, so all of it is escaped.
+    expect(DEBUG_BUILD).not.toBe(APP_VERSION);
     expect(written()).toMatch(new RegExp(
-      `\\[launch\\] OpenReader ${APP_VERSION.replace(/[.()]/g, '\\$&')}, native 0\\.0\\.1 \\(1\\), Debug Mode on, embedded bundle, system log on, kept in file:///container/Library/Application Support/debug-log\n$`,
+      `\\[launch\\] OpenReader ${DEBUG_BUILD.replace(/[.()]/g, '\\$&')}, native 0\\.0\\.1 \\(1\\), Debug Mode on, embedded bundle, system log on, kept in file:///container/Library/Application Support/debug-log\n$`,
     ));
     expect(world.system[0]).toMatch(/^\[launch\] OpenReader /);
   });
@@ -210,13 +215,13 @@ describe('a build with Debug Mode', () => {
     const log = await install(true);
     log.flushDebugLog();
     expect([...world.files.keys()].sort()).toEqual([`${FOLDER}/debug-log-000001.txt`, `${FOLDER}/version.txt`]);
-    expect(world.files.get(`${FOLDER}/version.txt`)).toBe(APP_VERSION);
+    expect(world.files.get(`${FOLDER}/version.txt`)).toBe(DEBUG_BUILD);
     expect(written()).toMatch(/, kept in file:\/\/\/container\/Library\/Application Support\/debug-log; cleared the Debug Log of 1\.0\.0 \(9\)-beta11: 2 files, 4\.0 MB\n$/);
   });
 
   it('goes on with the log the same version wrote', async () => {
     world.files.set(`${FOLDER}/debug-log-000001.txt`, 'before the reinstall\n');
-    world.files.set(`${FOLDER}/version.txt`, APP_VERSION);
+    world.files.set(`${FOLDER}/version.txt`, DEBUG_BUILD);
     const log = await install(true);
     log.flushDebugLog();
     expect(written()).toMatch(/^before the reinstall\n.*\[launch\] OpenReader .*debug-log\n$/s);

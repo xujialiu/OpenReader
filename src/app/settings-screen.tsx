@@ -18,8 +18,9 @@ export const STAR_LINE = 'If you like OpenReader, give it a ⭐ on GitHub — it
 /**
  * The front page of Settings: the card of settings, then the Author's card
  * (#129), then a card holding the privacy policy (#110) and the
- * acknowledgements (#111), with the version under it (design 0041). The version
- * ends in `-debug` in a build with Debug Mode (design 0054).
+ * acknowledgements (#111), with the version under it (design 0041). In a build
+ * with Debug Mode the version names that build's own Build Number, one above
+ * `APP_VERSION`'s (#310), and ends in `-debug` (design 0054).
  *
  * Each row says on its right only what is true behind it now, a count or a
  * state. General says nothing: the `Theme` it used to carry described what was

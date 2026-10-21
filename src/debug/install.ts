@@ -25,7 +25,7 @@ import {
   type DebugLogFiles,
   type DebugLogVersion,
 } from './debug-log';
-import { DEBUG_MODE } from './mode';
+import { buildVersion, DEBUG_MODE } from './mode';
 import { recordNativePlayback } from './playback';
 
 /**
@@ -36,7 +36,11 @@ import { recordNativePlayback } from './playback';
  * from --domain-type appDataContainer`.
  */
 export const DEBUG_LOG_FOLDER = ['Library', 'Application Support', 'debug-log'] as const;
-/** Beside the log, the `APP_VERSION` that wrote it (#305). Not `debug-log-….txt`, which the kit's scripts read as the log. */
+/**
+ * Beside the log, the version of the build that wrote it (#305): `APP_VERSION`
+ * with the Debug Mode build's own number (`buildVersion`, #310). Not
+ * `debug-log-….txt`, which the kit's scripts read as the log.
+ */
 export const DEBUG_LOG_VERSION_FILE = 'version.txt';
 
 type Handler = (error: unknown, isFatal?: boolean) => void;
@@ -72,9 +76,11 @@ export function installDebugLog(): void {
     systemLog?.(`[app] the Debug Log's folder could not be made: ${describeValue(problem)}`);
   }
   const files = folderFiles(folder);
+  // Only a build with Debug Mode gets here, so it names its own, even, number (#310).
+  const version = buildVersion(APP_VERSION, true);
   let cleared: ClearedLog | null = null;
   try {
-    cleared = clearForVersion(files, versionFile(folder), APP_VERSION);
+    cleared = clearForVersion(files, versionFile(folder), version);
   } catch (problem) {
     systemLog?.(`[app] the Debug Log of another version could not be cleared: ${describeValue(problem)}`);
   }
@@ -82,7 +88,7 @@ export function installDebugLog(): void {
 
   debugLog(
     'launch',
-    `OpenReader ${APP_VERSION}, native ${native?.nativeVersion ?? '?'} (${native?.nativeBuild ?? '?'}), ` +
+    `OpenReader ${version}, native ${native?.nativeVersion ?? '?'} (${native?.nativeBuild ?? '?'}), ` +
       `Debug Mode on, ${__DEV__ ? 'Metro' : 'embedded'} bundle, system log ${systemLog ? 'on' : 'missing (no native module)'}, ` +
       `kept in ${folder.uri}${cleared ? `; ${clearedLine(cleared)}` : ''}`,
   );

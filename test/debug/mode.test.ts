@@ -36,14 +36,29 @@ describe('DEBUG_MODE', () => {
   });
 });
 
-describe('the version Settings shows', () => {
-  it('ends in -debug in Debug Mode and is the version alone otherwise', async () => {
-    const { shownVersion } = await modeWith(undefined, false);
-    expect(shownVersion('1.0.0 (5)-beta1', true)).toBe('1.0.0 (5)-beta1-debug');
-    expect(shownVersion('1.0.0 (5)-beta1', false)).toBe('1.0.0 (5)-beta1');
-    // An upload has no beta, and the owner's Debug Mode install of it says so (#127).
-    expect(shownVersion('1.0.0 (5)', true)).toBe('1.0.0 (5)-debug');
+describe('the version of the build (#310, ADR 0083)', () => {
+  it('is APP_VERSION without Debug Mode, and the even Build Number after it with Debug Mode', async () => {
+    const { buildVersion } = await modeWith(undefined, false);
+    expect(buildVersion('1.0.0 (9)-beta3', false)).toBe('1.0.0 (9)-beta3');
+    expect(buildVersion('1.0.0 (9)-beta3', true)).toBe('1.0.0 (10)-beta3');
+    // An upload pair: 1.0.0 (9), and 1.0.0 (10) with Debug Mode.
+    expect(buildVersion('1.0.0 (9)', true)).toBe('1.0.0 (10)');
+    // Only the Build Number moves, not the Version's digits or the Beta's.
+    expect(buildVersion('1.9.9 (99)-beta9', true)).toBe('1.9.9 (100)-beta9');
     // Its default is the build's own answer.
-    expect(shownVersion('1.0.0 (5)-beta1')).toBe('1.0.0 (5)-beta1');
+    expect(buildVersion('1.0.0 (9)-beta3')).toBe('1.0.0 (9)-beta3');
+  });
+});
+
+describe('the version Settings shows', () => {
+  it('names the Debug Mode build and ends in -debug in Debug Mode, and is the version alone otherwise', async () => {
+    const { shownVersion } = await modeWith(undefined, false);
+    expect(shownVersion('1.0.0 (11)-beta1', true)).toBe('1.0.0 (12)-beta1-debug');
+    expect(shownVersion('1.0.0 (11)-beta1', false)).toBe('1.0.0 (11)-beta1');
+    // An upload has no beta, and the Debug Mode build of the pair says so (#127, #310).
+    expect(shownVersion('1.0.0 (9)', true)).toBe('1.0.0 (10)-debug');
+    expect(shownVersion('1.0.0 (9)', false)).toBe('1.0.0 (9)');
+    // Its default is the build's own answer.
+    expect(shownVersion('1.0.0 (11)-beta1')).toBe('1.0.0 (11)-beta1');
   });
 });

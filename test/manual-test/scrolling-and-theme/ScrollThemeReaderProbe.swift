@@ -33,6 +33,14 @@ final class ScrollThemeReaderProbe: XCTestCase {
     return line.split(separator: "'").dropFirst().first.map(String.init)
   }
 
+  /// `APP_VERSION` as a build with Debug Mode names itself: its Build Number
+  /// one higher, the even build of the pair (#310, ADR 0083).
+  func debugBuild(_ version: String) -> String {
+    guard let open = version.firstIndex(of: "("), let close = version[open...].firstIndex(of: ")"),
+          let build = Int(version[version.index(after: open)..<close]) else { return version }
+    return version.replacingCharacters(in: open...close, with: "(\(build + 1))")
+  }
+
   /// The player footer can mount before epub.js has laid the section out.
   /// Wait for the "Laying the document out…" placeholder (the WebView's own
   /// scroll-view accessibility label, an `Other`) to be gone.
@@ -74,7 +82,9 @@ final class ScrollThemeReaderProbe: XCTestCase {
     XCTAssertTrue(settings.waitForExistence(timeout: 15), "Library header did not appear")
     settings.tap()
 
-    guard let expected = workingTreeVersion() else { XCTFail("Could not read APP_VERSION from app-version.ts"); return }
+    guard let tree = workingTreeVersion() else { XCTFail("Could not read APP_VERSION from app-version.ts"); return }
+    // A Metro build has Debug Mode: its own Build Number and `-debug` (#82, #310).
+    let expected = "\(debugBuild(tree))-debug"
     let version = app.staticTexts["Version \(expected)"]
     XCTAssertTrue(version.waitForExistence(timeout: 5), "No element labelled 'Version \(expected)'")
     capture("01-settings-version", app)
@@ -401,7 +411,9 @@ final class ScrollThemeReaderProbe: XCTestCase {
     XCTAssertTrue(settings.waitForExistence(timeout: 15), "Library header did not appear")
     settings.tap()
 
-    guard let expected = workingTreeVersion() else { XCTFail("Could not read APP_VERSION from app-version.ts"); return }
+    guard let tree = workingTreeVersion() else { XCTFail("Could not read APP_VERSION from app-version.ts"); return }
+    // A Metro build has Debug Mode: its own Build Number and `-debug` (#82, #310).
+    let expected = "\(debugBuild(tree))-debug"
     let version = app.staticTexts["Version \(expected)"]
     XCTAssertTrue(version.waitForExistence(timeout: 5), "No element labelled 'Version \(expected)'")
     capture("realdocs-01-settings-version", app)

@@ -410,7 +410,9 @@ without, and the rows above it the same either way
 (test/app/settings-version.test.ts). `SettingsVersionProbe` expects `-debug`,
 and `--mode release` the beta alone. Since #127 (ADR 0070), `APP_VERSION` also
 carries the Build Number, as in `1.0.0 (5)-beta1-debug`; `shownVersion` did not
-change.
+change. Since #310 (ADR 0083), a build with Debug Mode shows its own Build
+Number, one above `APP_VERSION`'s: `1.0.0 (9)-beta1` shows
+`1.0.0 (10)-beta1-debug`.
 
 There was no control to mark a fault (#82's decision 8): the owner said roughly
 when, and the lines' stamps were searched around that time. ADR 0082 (#305)

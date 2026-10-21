@@ -6,22 +6,25 @@ In order: set the beta version, hand the tree to the tester, then leave the late
 
 Settings shows `APP_VERSION` from `app-version.ts`, so the owner can read off
 the device which build is running. It is `x.y.z (n)-betaN`: the Version, Build
-Number and Beta of CONTEXT.md (#127, ADR 0070). Debug Mode adds `-debug`.
+Number and Beta of CONTEXT.md (#127, ADR 0070). Its Build Number is odd: the
+build without Debug Mode. A build with Debug Mode shows the even number after
+it, the other build of the upload pair, and adds `-debug` (#310, ADR 0083).
 Every app change sets it before the tree goes to the tester, meaning each change
 that ends with the latest app in the simulator:
 
-- **The first change after an upload** raises the Build Number by one and starts
-  the Beta at 1. Build 4 was `1.0.0 (4)`, so the next change is
-  `1.0.0 (5)-beta1`.
-- **Each later change** takes the next Beta: `1.0.0 (5)-beta2`, `-beta3`, ….
-- **The upload** drops the Beta: `1.0.0 (5)`. The procedure is in
-  `docs/release-to-app-store.md`.
+- **The first change after an upload pair** raises the Build Number by two and
+  starts the Beta at 1. Builds 9 and 10 were `1.0.0 (9)`, so the next change is
+  `1.0.0 (11)-beta1`, which the simulator and the owner's phone show as
+  `1.0.0 (12)-beta1-debug`.
+- **Each later change** takes the next Beta: `1.0.0 (11)-beta2`, `-beta3`, ….
+- **The upload pair** drops the Beta: `1.0.0 (11)`, uploaded as 1.0.0 (11) and
+  1.0.0 (12). The procedure is in `docs/release-to-app-store.md`.
 - **The Version** (`x.y.z`) changes only when the owner says so. Uploads,
   submissions and new features leave it as it is. When the owner names a new
   Version, `npm version <x.y.z> --no-git-tag-version` moves `package.json` with
   it.
 
-Write it exactly like that: no `v`, and a space before the bracket. A git tag is the one exception: it cannot hold a space, so the tag of an uploaded build is `1.0.0(7)` (docs/release-to-app-store.md). Every
+Write it exactly like that: no `v`, and a space before the bracket. A git tag is the one exception: it cannot hold a space, so the tag of an upload pair is `1.0.0(10)` (docs/release-to-app-store.md). Every
 record that names a build uses the same form, including notes, test records,
 commit subjects and issue comments. Records written before #127 stay as they
 were written. `app.config.ts` reads both native numbers from `APP_VERSION`, and

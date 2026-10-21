@@ -17,7 +17,17 @@
 export const DEBUG_MODE: boolean =
   (typeof __DEV__ !== 'undefined' && __DEV__) || process.env.EXPO_PUBLIC_OPENREADER_DEBUG_MODE === '1';
 
-/** The version line Settings shows: `APP_VERSION` (`1.0.0 (5)-beta1`, #127), and `-debug` after it in Debug Mode (#82). */
+/**
+ * The version of this build (#310, ADR 0083). `APP_VERSION` names the build
+ * without Debug Mode, on an odd Build Number; the same code with Debug Mode is
+ * the even number after it. So `1.0.0 (9)-beta3` is `1.0.0 (10)-beta3` in
+ * Debug Mode, and the upload `1.0.0 (9)` is paired with `1.0.0 (10)`.
+ */
+export function buildVersion(version: string, debugMode: boolean = DEBUG_MODE): string {
+  return debugMode ? version.replace(/\((\d+)\)/, (_, build: string) => `(${Number(build) + 1})`) : version;
+}
+
+/** The version line Settings shows: `buildVersion` (#127, #310), and `-debug` after it in Debug Mode (#82). */
 export function shownVersion(version: string, debugMode: boolean = DEBUG_MODE): string {
-  return debugMode ? `${version}-debug` : version;
+  return debugMode ? `${buildVersion(version, true)}-debug` : version;
 }

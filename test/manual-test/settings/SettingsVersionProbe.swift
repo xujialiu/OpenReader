@@ -1,8 +1,8 @@
 import XCTest
 
 /// Issue #30: Settings shows `APP_VERSION` under the Sync row, so the owner
-/// can read off the device which build is running, with `-debug` after it in
-/// a build with Debug Mode (#82). Checks the line's exact
+/// can read off the device which build is running; a build with Debug Mode
+/// shows its own Build Number, one higher (#310), with `-debug` after it (#82). Checks the line's exact
 /// accessibility label, that the three rows above it still open their screens
 /// and return here, and how the line reads in both the light and dark theme.
 /// Never presses Play.
@@ -36,6 +36,14 @@ final class SettingsVersionProbe: XCTestCase {
     return line.split(separator: "'").dropFirst().first.map(String.init)
   }
 
+  /// `APP_VERSION` as a build with Debug Mode names itself: its Build Number
+  /// one higher, the even build of the pair (#310, ADR 0083).
+  func debugBuild(_ version: String) -> String {
+    guard let open = version.firstIndex(of: "("), let close = version[open...].firstIndex(of: ")"),
+          let build = Int(version[version.index(after: open)..<close]) else { return version }
+    return version.replacingCharacters(in: open...close, with: "(\(build + 1))")
+  }
+
   /// Every back button reads `Back` since #48 (README Pitfalls); the first
   /// nav-bar button is always that one, whatever it is labelled.
   func backToSettings(_ app: XCUIApplication) {
@@ -57,11 +65,12 @@ final class SettingsVersionProbe: XCTestCase {
     // The version line's accessibility label, exactly. `accessibilityLabel`
     // replaces what iOS exposes, so the raw version text is not a separately
     // queryable label; the screenshot is what proves that.
-    // A build with Debug Mode says so after the beta (#82), and every Metro
-    // build has it; `--mode release` expects a build made without it.
+    // A build with Debug Mode names its own, even, Build Number (#310) and says
+    // so after the beta (#82), and every Metro build has it; `--mode release`
+    // expects a build made without it.
     guard let beta = workingTreeVersion() else { return XCTFail("Could not read APP_VERSION from app-version.ts") }
     let release = Bundle(for: Self.self).object(forInfoDictionaryKey: "ManualMode") as? String == "release"
-    let expected = release ? beta : "\(beta)-debug"
+    let expected = release ? beta : "\(debugBuild(beta))-debug"
     let version = app.staticTexts["Version \(expected)"]
     XCTAssertTrue(version.waitForExistence(timeout: 5), "No element labelled 'Version \(expected)'")
     capture("settings-version-1-initial", app)

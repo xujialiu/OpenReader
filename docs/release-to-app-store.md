@@ -11,25 +11,32 @@ The owner set these.
 - **Build only from a commit on `main`.**
   - The working tree must be clean, and HEAD must equal `origin/main`.
   - Start every build from `npx expo prebuild --platform ios --clean`, never from an `ios/` left over from earlier work.
-  - A Debug Mode build (ADR 0054) is for the owner's phone only. Do not upload one.
+- **Every upload is a pair** from one commit (ADR 0083, #310).
+  - The odd Build Number is the build without Debug Mode, for testers and App Review. The even number after it is the same code with Debug Mode (ADR 0054), for the owner's phone: 1.0.0 (9) and 1.0.0 (10)-debug.
+  - Upload the odd one first. The even one is then both the higher number and the newer upload, so TestFlight keeps the owner's phone on the build with Debug Mode.
+  - The build with Debug Mode goes to the internal group `owner` only. Never add it to `public` and never submit it for review; its "What to Test" says so. Only the owner adds a build to `public` or submits one.
 - **The version line.** `APP_VERSION` in `app-version.ts` is
   `x.y.z (n)-betaN`: the Version, Build Number and Beta of CONTEXT.md (#127,
   ADR 0070). `app.config.ts` reads `CFBundleShortVersionString` (`x.y.z`) and
-  `CFBundleVersion` (`n`) from it. The beta changes before an upload
-  already carry the number that upload will take: `1.0.0 (5)-beta3` uploads as
-  1.0.0 (5). Every uploaded build, TestFlight-only or submitted, has
-  `APP_VERSION` with no Beta, `1.0.0 (5)`.
+  `CFBundleVersion` (`n`) from it. `n` is odd: the build without Debug Mode.
+  A prebuild made with `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` writes `n + 1`,
+  and a build with Debug Mode shows `n + 1` in Settings (ADR 0083). The beta
+  changes before an upload already carry the number that upload will take:
+  `1.0.0 (9)-beta21` uploads as 1.0.0 (9) and 1.0.0 (10). Every upload pair,
+  TestFlight-only or submitted, is made from `APP_VERSION` with no Beta,
+  `1.0.0 (9)`.
 - **Version.** Only the owner changes `x.y.z`; an upload or a submission does
   not. App Store Connect refuses uploads to a version that is already released
   (ITMS-90186). If the version is live on the App Store, stop before archiving
   and ask the owner for the next one, recommending the next patch.
-- **Build number.** It goes up by one for every upload, across all versions, and
-  a number is never reused. The first app change after an upload raises it
-  (MEMORY/app-change.md). An upload with no change since the last one raises it
-  itself. The commit that sets the upload's `APP_VERSION` is the commit that
-  build is made from.
+- **Build number.** Each upload pair takes the next two numbers, across all
+  versions, and a number is never reused. The first app change after a pair
+  raises `APP_VERSION`'s by two (MEMORY/app-change.md). A pair with no change
+  since the last one raises it itself. The commit that sets the pair's
+  `APP_VERSION` is the commit both builds are made from. Up to build 8 each
+  upload was a single build.
 - **Tags.**
-  - Every uploaded build gets an annotated tag `X.Y.Z(N)` on the commit it was built from, such as `1.0.0(7)`. It is the form every record names a build in, `X.Y.Z (N)` (MEMORY/app-change.md), without the space, which git refuses in a tag name (owner's decision, 2026-10-10). Quote it in a shell.
+  - Every upload pair gets one annotated tag `X.Y.Z(N)`, named by its higher number, the build with Debug Mode, on the commit both were built from, such as `1.0.0(10)` for 1.0.0 (9) and 1.0.0 (10) (ADR 0083). Up to build 8 each upload had its own tag, such as `1.0.0(7)`. It is the form every record names a build in, `X.Y.Z (N)` (MEMORY/app-change.md), without the space, which git refuses in a tag name (owner's decision, 2026-10-10). Quote it in a shell.
   - There is no `v` tag: the submitted build is named by its own `X.Y.Z(N)`.
   - Push `main` and tags only after the owner agrees. The repository is public.
 
@@ -56,6 +63,7 @@ happened in that day's `notes/` file.
 - **TestFlight**
   - The TestFlight Beta's public link is https://testflight.apple.com/join/vjC8QejW ("Join the OpenReader: Read Aloud beta"). Anyone with it can join while it accepts testers.
   - Two groups. The internal group `owner` gets every upload. The external group `public` owns the public link, and gets a build only when the owner adds the group to it.
+  - The owner's Apple account is a tester in both groups, and TestFlight offers him the newest build of either. That is why the build with Debug Mode takes the higher number of a pair (ADR 0083).
   - Which build the link installs is not written here, because it changes without a commit. Read it from App Store Connect ("The README follows Apple's answers", below), never from memory: the 1.0.0 (5) this line named until 2026-10-10 was never in `public` (notes 2026-10-10 13:53).
 - **App Store Connect API** (#150): access was approved on 2026-10-10.
   - One Team key, "OpenReader README badge", with the Developer role. Apple's role table gives that role read-only access to TestFlight builds and external groups; no role is read-only throughout. A key does not expire and its role cannot be changed: revoke it and generate another.
@@ -87,9 +95,13 @@ store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
    - Run the unit tests, `npx tsc --noEmit` and `npx eslint .`.
    - Check for other heavy Xcode builds (`pgrep -fl xcodebuild`). A build in the same workspace at the same time needs its own `-derivedDataPath`, because two builds cannot share one DerivedData.
 2. **Version and build number**, as a commit that reaches `main` through the usual merge:
-   - Set `APP_VERSION` in `app-version.ts` to `X.Y.Z (N)`: drop the `-betaN`. `N` must be one more than the last uploaded build (the highest `X.Y.Z(N)` tag). It is already, unless nothing has changed since that upload; then raise it.
+   - Set `APP_VERSION` in `app-version.ts` to `X.Y.Z (N)`: drop the `-betaN`. `N` must be one more than the last uploaded build (the highest `X.Y.Z(N)` tag), and odd. It is already, unless nothing has changed since that pair; then raise it by two.
    - Only if the owner named a new Version: `npm version <X.Y.Z> --no-git-tag-version`, so that `package.json` and the lockfile match.
-   - `npx vitest run test/app-config.test.ts` checks that `APP_VERSION`, `app.config.ts` and `package.json` agree.
+   - `npx vitest run test/app-config.test.ts` checks that `APP_VERSION`, `app.config.ts` and `package.json` agree, and that `N` is odd.
+
+Steps 3 to 5 make and upload the build without Debug Mode, `N`. Step 6 makes
+and uploads the build with Debug Mode, `N + 1`, from the same commit.
+
 3. **Prebuild:** `npx expo prebuild --platform ios --clean`, then check that `node_modules/expo-sqlite/ios/sqlite3.h` exists.
 4. **Archive**, without `EXPO_PUBLIC_OPENREADER_DEBUG_MODE` or `EXPO_PUBLIC_OPENREADER_UNLOCKED` anywhere: not on the command line, not in the shell, not in `.env*`, and not in `ios/.xcode.env.local`. The first would ship Debug Mode; the second would ship the app with no Trial and no Unlock (ADR 0075).
 
@@ -148,9 +160,19 @@ store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
    - It ends with `Upload succeeded` and `** EXPORT SUCCEEDED **`. Expect a few minutes, the upload included.
    - Warnings about missing dSYMs are expected, and they fail nothing. They name React, ReactNativeDependencies, hermesvm, libavcodec, libavformat, libavutil and libswresample: prebuilt frameworks that ship no dSYMs.
    - `App record with bundle identifier … not found` means no App Store Connect record uses this bundle ID.
-6. **Processing.** App Store Connect → the app → TestFlight → Build Uploads shows Processing, then Complete, within about 10 to 25 minutes. Apple emails any ITMS problem.
-7. **Tags**, on the build's commit:
-   - `git tag -a "X.Y.Z(N)" -m "OpenReader X.Y.Z (N), uploaded YYYY-MM-DD"`
+6. **The build with Debug Mode**, `N + 1`, from the same commit, after build `N`'s export has succeeded. Steps 3 to 5 again, with these differences:
+   - Prebuild with the switch on the command line: `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1 npx expo prebuild --platform ios --clean`. Expo writes `CFBundleVersion` into `Info.plist` at prebuild, so this is what gives the archive `N + 1`; nothing passed to `xcodebuild` can.
+   - Archive with `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` on the `xcodebuild` command line, beside `ENABLE_USER_SCRIPT_SANDBOXING=NO`, and with the archive named `OpenReader X.Y.Z (N+1)-debug.xcarchive`. Still not in the shell, `.env*` or `ios/.xcode.env.local`, and still no `EXPO_PUBLIC_OPENREADER_UNLOCKED`.
+   - Check `Info.plist` as before, but with the build `N + 1`. In the bundle, `var DEBUG_MODE = true;` and `var PURCHASE_LOCK = true;`. Check the bundle straight after this archive: it replaces the first archive's in the same DerivedData folder.
+   - Export with the same `ExportOptions.plist`.
+7. **Processing.** App Store Connect → the app → TestFlight → Build Uploads shows Processing, then Complete, within about 10 to 25 minutes. Apple emails any ITMS problem. Then, on build `N + 1` (TestFlight → the build → Test Details), set "What to Test" to:
+
+   ```text
+   Debug Mode build for the owner's phone only. Never add it to an external group, and never submit it for review.
+   ```
+
+8. **Tag**, on the pair's commit:
+   - `git tag -a "X.Y.Z(N+1)" -m "OpenReader X.Y.Z (N) and X.Y.Z (N+1)-debug, uploaded YYYY-MM-DD"`, such as `1.0.0(10)`.
    - Ask the owner before `git push origin main --tags`.
 
 ## The README follows Apple's answers

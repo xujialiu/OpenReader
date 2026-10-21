@@ -41,6 +41,14 @@ final class PauseSuspendProbe: XCTestCase {
     return line.split(separator: "'").dropFirst().first.map(String.init)
   }
 
+  /// `APP_VERSION` as a build with Debug Mode names itself: its Build Number
+  /// one higher, the even build of the pair (#310, ADR 0083).
+  func debugBuild(_ version: String) -> String {
+    guard let open = version.firstIndex(of: "("), let close = version[open...].firstIndex(of: ")"),
+          let build = Int(version[version.index(after: open)..<close]) else { return version }
+    return version.replacingCharacters(in: open...close, with: "(\(build + 1))")
+  }
+
   /// No rejected suspend/resume promise has surfaced as the player's own
   /// attention-coloured note (`src/app/reading-view.tsx`'s `notes`,
   /// `src/playback/audio-graph.ts`'s `drive()` catches into `handlers.onError`),
@@ -63,7 +71,9 @@ final class PauseSuspendProbe: XCTestCase {
     if app.buttons["Back"].exists { app.buttons["Back"].tap() }
     XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 15), "Library header did not appear")
     app.buttons["Settings"].tap()
-    guard let expected = workingTreeVersion() else { XCTFail("Could not read APP_VERSION from app-version.ts"); return }
+    guard let tree = workingTreeVersion() else { XCTFail("Could not read APP_VERSION from app-version.ts"); return }
+    // A Metro build has Debug Mode: its own Build Number and `-debug` (#82, #310).
+    let expected = "\(debugBuild(tree))-debug"
     let version = app.staticTexts["Version \(expected)"]
     XCTAssertTrue(version.waitForExistence(timeout: 10), "No element labelled 'Version \(expected)' — running app is not \(expected), or Metro did not reconnect")
     capture("00-settings-version", app)
