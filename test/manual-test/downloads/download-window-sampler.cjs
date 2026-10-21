@@ -12,7 +12,7 @@
 // Stops by itself when the task reads done/blocked/paused/interrupted on three
 // consecutive samples. SIGINT stops cleanly. Nothing is evaluated during a
 // bundle reload: a failed eval is recorded as { t, error } and retried.
-const { readFileSync, writeFileSync, openSync, appendFileSync, closeSync } = require('node:fs');
+const { openSync, appendFileSync, closeSync } = require('node:fs');
 // ws ships with Metro in this repository's node_modules.
 const WebSocket = require('ws');
 

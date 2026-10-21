@@ -847,6 +847,7 @@ export function ReadingView({
         onReturn={reading.returnToReading}
         onHeight={reading.bridge.setInset}
         onOpenHeight={reading.bridge.setOpenPlayer}
+        barHeight={barHeight}
       /> : null}
 
       <LookupDrawer lookup={lookup} service={settings.lookup.service}
