@@ -85,10 +85,12 @@ export function continuedShown(batch: readonly ContinuedDownload[]): ContinuedSh
     if (!documents.includes(task.document)) documents.push(task.document);
     total += counted.length;
     done += counted.filter(complete).length;
-    const current = task.current && counted.includes(task.current) ? plan?.chapters.find((chapter) => chapter.id === task.current) : undefined;
-    if (current && current.prepared !== false && !complete(current.id)) {
-      const texts = chapterTextCount(current);
-      if (texts > 0) part += Math.min((saved.get(current.id)?.count ?? 0) / texts, 0.999);
+    // Every chapter being written counts its part (#311); a download writes several at a chapter's end.
+    const writing = new Set((task.writing ?? []).filter((id) => counted.includes(id) && !complete(id)));
+    if (writing.size) for (const chapter of plan?.chapters ?? []) {
+      if (!writing.has(chapter.id) || chapter.prepared === false) continue;
+      const texts = chapterTextCount(chapter);
+      if (texts > 0) part += Math.min((saved.get(chapter.id)?.count ?? 0) / texts, 0.999);
     }
   }
   return {

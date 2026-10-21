@@ -32,8 +32,12 @@ export interface DownloadTask {
    * every chapter it has left is here. Absent reads as none.
    */
   paused?: string[];
-  /** The chapter the scheduler is preparing or fetching right now; null between passes. Read only while the task runs (ADR 0027). */
-  current?: string | null;
+  /**
+   * The chapters being written: each one with a text out or its text being
+   * prepared by the writer, in the order they were begun (#311). Empty between
+   * passes. Read only while the task runs (ADR 0027).
+   */
+  writing?: string[];
 }
 /**
  * A Contents entry of one section, placed by the page: the Block its anchor

@@ -143,13 +143,14 @@ it('resumes without loading or re-checking chapters already complete for the voi
   expect(f.tasks[0].state).toBe('done');
 });
 
-it('names the chapter it is on and forgets it when the pass ends', async () => {
+it('names the chapters it is on and forgets them when the pass ends', async () => {
   const f = fixture();
-  const seen: (string | null | undefined)[] = [];
-  f.fetch.mockImplementation(async (task, text) => { seen.push(task.current); f.stored.add(text); });
+  const seen: string[][] = [];
+  f.fetch.mockImplementation(async (task, text) => { seen.push([...task.writing ?? []]); f.stored.add(text); });
   await f.scheduler.run();
-  expect(seen).toEqual(['a', 'a', 'b']);
-  expect(f.tasks[0].current).toBeNull();
+  // One at a time, a chapter's last text fills the window, so the next is begun only once it is back.
+  expect(seen).toEqual([['a'], ['a'], ['b']]);
+  expect(f.tasks[0].writing).toEqual([]);
 });
 
 it('names the chapter while its text is being counted', async () => {
@@ -157,24 +158,24 @@ it('names the chapter while its text is being counted', async () => {
   const plan: NarrationPlan = { version: 2, chapters: [{ id: 'x', title: 'X', depth: 0, parent: null, texts: [], prepared: false }] };
   const during: string[] = [];
   const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
-    prepare: async (t, chapter) => { during.push(`${t.state} ${t.current}`); return { ...chapter, prepared: true, texts: ['Hi.'] }; },
+    prepare: async (t, chapter) => { during.push(`${t.state} ${t.writing}`); return { ...chapter, prepared: true, texts: ['Hi.'] }; },
     exists: () => false, fetch: async () => {}, wait: async () => {} });
   await scheduler.run();
   expect(during).toEqual(['preparing x']);
-  expect(task.current).toBeNull();
+  expect(task.writing).toEqual([]);
 });
 
 it('forgets a chapter left over from before a restart as soon as the pass starts', async () => {
-  const task: DownloadTask = { id: 't', document: 'book', voice: { provider: 'fish', voice: 'A', label: 'A' }, chapters: ['a', 'b'], state: 'queued', error: null, failed: [], current: 'b' };
+  const task: DownloadTask = { id: 't', document: 'book', voice: { provider: 'fish', voice: 'A', label: 'A' }, chapters: ['a', 'b'], state: 'queued', error: null, failed: [], writing: ['b'] };
   const plan: NarrationPlan = { version: 2, chapters: [
     { id: 'a', title: 'A', depth: 0, parent: null, texts: ['One.'] },
     { id: 'b', title: 'B', depth: 0, parent: null, texts: ['Two.'] },
   ] };
   const events: string[] = [];
-  const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => { events.push(`${task.state} ${task.current}`); },
+  const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => { events.push(`${task.state} [${task.writing}]`); },
     connected: () => true, allowed: () => true, exists: () => false, fetch: async () => {}, wait: async () => {} });
   await scheduler.run();
-  expect(events).toEqual(['downloading null', 'downloading a', 'downloading b', 'done null']);
+  expect(events).toEqual(['downloading []', 'downloading [a]', 'downloading [b]', 'done []']);
 });
 
 describe('the order chapters are written in, and chapters paused one by one (#56)', () => {
@@ -203,7 +204,7 @@ describe('the order chapters are written in, and chapters paused one by one (#56
     await f.scheduler.run();
     expect(f.fetched).toEqual(['A1', 'C1']);
     expect(f.task.state).toBe('paused');
-    expect(f.task.current).toBeNull();
+    expect(f.task.writing).toEqual([]);
   });
   it('leaves the chapter being written when it is paused, keeps what it saved, and starts the next', async () => {
     const f = book(['a', 'b', 'c']);
@@ -247,7 +248,7 @@ describe('the order chapters are written in, and chapters paused one by one (#56
   });
 });
 
-describe('several of a chapter\'s sentences at once (#64)', () => {
+describe('several sentences at once (#64), carried past the end of a chapter (#311)', () => {
   const voice = { provider: 'fish' as const, voice: 'A', label: 'A' };
   const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
   /** A request that takes `delay` ticks, then does `effect`, which may throw; every start and end is logged in order. */
@@ -285,11 +286,13 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     expect([...f.saved].sort()).toEqual(['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'B1']);
     expect(f.task.state).toBe('done');
   });
-  it('sends the next chapter\'s first request only once the last of this chapter\'s has settled', async () => {
+  it('sends the next chapter\'s first request as soon as this chapter has none left to send, with its own still out (#311)', async () => {
     const r = requests((text) => (text === 'A1' ? 5 : 1));
     const f = book(4, 3, r.request);
     await f.scheduler.run();
-    expect(r.events.indexOf('start B1')).toBeGreaterThan(r.events.indexOf('end A1'));
+    expect(r.starts()).toEqual(['start A1', 'start A2', 'start A3', 'start A4', 'start B1']);
+    expect(r.events.indexOf('start B1')).toBeLessThan(r.events.indexOf('end A1'));
+    expect(r.most()).toBe(3);
     expect(f.task.state).toBe('done');
   });
   it('starts none of a paused chapter\'s texts, keeps what its requests out bring, and goes on to the next', async () => {
@@ -312,14 +315,16 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     expect(f.task.state).toBe('blocked');
     expect(f.task.error).toBe('Refused.');
   });
-  it('fails the chapter once its retries are spent, and starts the next after its other requests settle', async () => {
+  it('fails the chapter once its retries are spent and starts no more of it, while the next chapter goes on (#311)', async () => {
     const r = requests((text) => (text === 'A3' ? 4 : 1), (_, text) => { if (text === 'A1') throw new SynthesisError('network'); });
     const f = book(4, 3, r.request);
     await f.scheduler.run();
     expect(r.starts().filter((e) => e === 'start A1')).toHaveLength(3);
     expect(f.task.failed).toEqual(['a']);
-    expect(r.events.indexOf('start B1')).toBeGreaterThan(r.events.indexOf('end A3'));
+    // The chapter after it does not wait for the failed chapter's other request.
+    expect(r.events.indexOf('start B1')).toBeLessThan(r.events.indexOf('end A3'));
     expect(f.saved.has('B1')).toBe(true);
+    expect(f.task.state).toBe('done');
   });
   it('waits for the network when it goes with several requests out, and records no failure', async () => {
     const env = { online: true, allowed: true };
@@ -356,14 +361,31 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     await f.scheduler.run();
     expect(r.starts()).toEqual(['start A1', 'start B1']);
   });
-  it('asks how many at once as each chapter starts, so a change made during one applies from the next (#64)', async () => {
+  it('asks how many at once each time a place is to be filled, so a higher number made during a chapter is used at its next sentence (#311)', async () => {
     let width = 1;
-    const asked: number[] = [];
     const r = requests(() => 1, (_, text) => { if (text === 'A2') width = 3; });
-    const f = book(6, () => { asked.push(width); return width; }, r.request);
+    const f = book(9, () => width, r.request);
     await f.scheduler.run();
-    expect(r.most()).toBe(1);
-    expect(asked).toEqual([1, 3]);
+    expect(r.starts().slice(0, 5)).toEqual(['start A1', 'start A2', 'start A3', 'start A4', 'start A5']);
+    // A3 to A5 went out together, once A2 had come back with the number raised.
+    expect(r.events.indexOf('start A5')).toBeLessThan(r.events.indexOf('end A3'));
+    expect(r.most()).toBe(3);
+    expect(f.task.state).toBe('done');
+  });
+  it('lets the requests out finish when the number is lowered, and sends no more until fewer are out (#311)', async () => {
+    let width = 3;
+    let out = 0;
+    const afterLowered: number[] = [];
+    const r = requests(() => 1, (_, text) => { if (text === 'A1') width = 1; });
+    const f = book(6, () => width, async (task, text) => {
+      if (width === 1) afterLowered.push(out + 1);
+      out++;
+      try { await r.request(task, text); } finally { out--; }
+    });
+    await f.scheduler.run();
+    expect(r.starts().slice(0, 3)).toEqual(['start A1', 'start A2', 'start A3']);
+    expect(afterLowered.length).toBeGreaterThan(0);
+    expect(Math.max(...afterLowered)).toBe(1);
     expect(f.task.state).toBe('done');
   });
   it('asks for a text the chapter holds twice once', async () => {
@@ -371,6 +393,276 @@ describe('several of a chapter\'s sentences at once (#64)', () => {
     const f = book(0, 3, r.request, { texts: ['Same.', 'Other.', 'Same.'] });
     await f.scheduler.run();
     expect(r.starts().sort()).toEqual(['start B1', 'start Other.', 'start Same.']);
+  });
+});
+
+describe('one window across the chapters of a download (#311)', () => {
+  const voice = { provider: 'fish' as const, voice: 'A', label: 'A' };
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  const flush = async () => { for (let i = 0; i < 5; i++) await tick(); };
+  const texts = (prefix: string, count: number) => Array.from({ length: count }, (_, i) => `${prefix}${i + 1}`);
+  const chapter = (id: string, content: string[], extra: Partial<Chapter> = {}): Chapter =>
+    ({ id, title: id, depth: 0, parent: null, texts: content, ...extra });
+  const download = (chapters: string[], extra: Partial<DownloadTask> = {}): DownloadTask =>
+    ({ id: 't', document: 'book', voice, chapters, state: 'queued', error: null, failed: [], ...extra });
+  /** Requests that settle only when released, by text; `started` lists them in the order they went out. */
+  function held() {
+    const started: string[] = [];
+    const gates = new Map<string, { resolve: () => void; reject: (error: unknown) => void }>();
+    const fetch = vi.fn((_task: DownloadTask, text: string) => new Promise<void>((resolve, reject) => {
+      started.push(text); gates.set(text, { resolve, reject });
+    }));
+    const release = async (...which: string[]) => { for (const text of which) gates.get(text)!.resolve(); await flush(); };
+    const refuse = async (text: string, error: unknown) => { gates.get(text)!.reject(error); await flush(); };
+    return { started, fetch, release, refuse };
+  }
+
+  it('with ten at once, starts the next chapter\'s first sentence when nine of this one\'s are left, and its second when eight are', async () => {
+    const plan: NarrationPlan = { version: 2, chapters: [chapter('a', texts('A', 12)), chapter('b', texts('B', 5))] };
+    const task = download(['a', 'b']);
+    const h = held();
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+      exists: () => false, fetch: h.fetch, concurrency: () => 10, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(texts('A', 10));
+    await h.release('A1');                       // eleven left: A11 goes out
+    expect(h.started.slice(10)).toEqual(['A11']);
+    await h.release('A2');                       // ten left, all out or going
+    expect(h.started.slice(10)).toEqual(['A11', 'A12']);
+    await h.release('A3');                       // nine left: the next chapter's first
+    expect(h.started.slice(12)).toEqual(['B1']);
+    expect(task.writing).toEqual(['a', 'b']);
+    await h.release('A4');                       // eight left: its second
+    expect(h.started.slice(12)).toEqual(['B1', 'B2']);
+    await h.release(...texts('A', 12).slice(4), 'B1', 'B2');
+    await h.release('B3', 'B4', 'B5');
+    await pass;
+    expect(h.started).toEqual([...texts('A', 12), ...texts('B', 5)]);
+    expect(task).toMatchObject({ state: 'done', writing: [], failed: [] });
+  });
+
+  it('carries the window across as many short chapters as it takes, in the list\'s order, past paused, failed, complete and empty ones', async () => {
+    const plan: NarrationPlan = { version: 2, chapters: [
+      chapter('a', ['A1', 'A2']), chapter('cover', []), chapter('b', ['B1']), chapter('p', ['P1']), chapter('f', ['F1']),
+      chapter('done', ['D1']), chapter('c', ['C1']), chapter('d', ['E1', 'E2', 'E3']),
+    ] };
+    const task = download(['d', 'c', 'done', 'f', 'p', 'b', 'cover', 'a'], { paused: ['p'], failed: ['f'] });
+    const h = held();
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+      completed: async () => new Set(['done']), exists: () => false, fetch: h.fetch, concurrency: () => 5, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['A1', 'A2', 'B1', 'C1', 'E1']);
+    expect(task.writing).toEqual(['a', 'b', 'c', 'd']);
+    await h.release('A1', 'A2', 'B1', 'C1', 'E1');
+    await h.release('E2', 'E3');
+    await pass;
+    expect(h.started).toEqual(['A1', 'A2', 'B1', 'C1', 'E1', 'E2', 'E3']);
+    expect(task.state).toBe('paused');
+  });
+
+  it('never takes a sentence from the next download: another document waits until everything of this one is back', async () => {
+    const plans: Record<string, NarrationPlan> = {
+      book: { version: 2, chapters: [chapter('a', ['A1', 'A2'])] },
+      other: { version: 2, chapters: [chapter('x', ['X1', 'X2'])] },
+    };
+    const tasks = [download(['a']), { ...download(['x']), id: 'u', document: 'other' }];
+    const h = held();
+    const scheduler = createScheduler({ tasks: () => tasks, plan: (document) => plans[document], changed: () => {}, connected: () => true,
+      allowed: () => true, exists: () => false, fetch: h.fetch, concurrency: () => 5, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['A1', 'A2']);
+    await h.release('A1');
+    expect(h.started).toEqual(['A1', 'A2']);
+    await h.release('A2');
+    expect(h.started).toEqual(['A1', 'A2', 'X1', 'X2']);
+    await h.release('X1', 'X2');
+    await pass;
+    expect(tasks.map((t) => t.state)).toEqual(['done', 'done']);
+  });
+
+  it('finishes the chapters begun before a chapter resumed above them, which then comes next', async () => {
+    const plan: NarrationPlan = { version: 2, chapters: [chapter('a', ['A1']), chapter('b', ['B1', 'B2', 'B3']), chapter('c', ['C1', 'C2'])] };
+    const task = download(['a', 'b', 'c'], { paused: ['a'] });
+    const h = held();
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+      exists: () => false, fetch: h.fetch, concurrency: () => 2, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['B1', 'B2']);
+    // The ring's resume, which the runtime follows with a run.
+    task.paused = [];
+    await scheduler.run();
+    await h.release('B1');
+    expect(h.started).toEqual(['B1', 'B2', 'B3']);
+    await h.release('B2');
+    expect(h.started).toEqual(['B1', 'B2', 'B3', 'A1']);
+    await h.release('B3', 'A1');
+    await h.release('C1', 'C2');
+    await pass;
+    expect(h.started).toEqual(['B1', 'B2', 'B3', 'A1', 'C1', 'C2']);
+    expect(task.state).toBe('done');
+  });
+
+  it('gives the places of a chapter paused at its end to the chapters after it, and keeps what its requests out bring', async () => {
+    const plan: NarrationPlan = { version: 2, chapters: [chapter('a', texts('A', 4)), chapter('b', texts('B', 4))] };
+    const task = download(['a', 'b']);
+    const h = held();
+    const saved: string[] = [];
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+      exists: () => false, fetch: async (t, text) => { await h.fetch(t, text); saved.push(text); }, concurrency: () => 5, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['A1', 'A2', 'A3', 'A4', 'B1']);
+    // Paused with all of a's out: what they bring is kept, and the next chapter takes the places.
+    task.paused = ['a'];
+    await scheduler.run();
+    await h.release('A1', 'A2');
+    expect(h.started).toEqual(['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3']);
+    // Still being written while anything of it is out: the drawer keeps its ring, and Manage cannot choose it.
+    expect(task.writing).toEqual(['a', 'b']);
+    await h.release('A3', 'A4');
+    expect(task.writing).toEqual(['b']);
+    await h.release('B1', 'B2', 'B3');
+    await h.release('B4');
+    await pass;
+    expect(saved).toEqual(expect.arrayContaining([...texts('A', 4), ...texts('B', 4)]));
+    expect(task.failed).toEqual([]);
+    // Every text of a went through before the pause took effect, so it is finished, not left paused.
+    expect(task.state).toBe('done');
+  });
+
+  it('fails only the chapter whose sentence failed, once its other requests are back, while the chapters around it go on', async () => {
+    const plan: NarrationPlan = { version: 2, chapters: [chapter('a', ['A1', 'A2']), chapter('b', ['B1', 'B2']), chapter('c', ['C1'])] };
+    const task = download(['a', 'b', 'c']);
+    const h = held();
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {},
+      connected: () => true, allowed: () => true, exists: () => false, fetch: h.fetch, concurrency: () => 4, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['A1', 'A2', 'B1', 'B2']);
+    await h.refuse('B1', new SynthesisError('decode-failed', 'The audio could not be read.'));
+    // b takes no more, and its place goes to c; a goes on.
+    expect(h.started).toEqual(['A1', 'A2', 'B1', 'B2', 'C1']);
+    expect(task.failed).toEqual([]);
+    await h.release('B2');
+    expect(task).toMatchObject({ failed: ['b'], error: 'The audio could not be read.', state: 'downloading' });
+    await h.release('A1', 'A2', 'C1');
+    await pass;
+    expect(task).toMatchObject({ state: 'done', failed: ['b'] });
+  });
+
+  it.each([
+    ['a missing key', new SynthesisError('auth', 'The key was refused.'), 'blocked', 'The key was refused.'],
+    ['the store', new Error('The catalogue is gone.'), 'blocked', 'The catalogue is gone.'],
+  ] as const)('stops the whole download at %s with two chapters out, sends nothing more, and records it once everything is back', async (_, error, state, message) => {
+    const plan: NarrationPlan = { version: 2, chapters: [chapter('a', ['A1', 'A2']), chapter('b', ['B1', 'B2', 'B3']), chapter('c', ['C1'])] };
+    const task = download(['a', 'b', 'c']);
+    const h = held();
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+      exists: () => false, fetch: h.fetch, concurrency: () => 3, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['A1', 'A2', 'B1']);
+    await h.refuse('B1', error);
+    await h.release('A1');
+    expect(h.started).toEqual(['A1', 'A2', 'B1']);
+    expect(task.state).toBe('downloading');
+    await h.release('A2');
+    await pass;
+    expect(h.started).toEqual(['A1', 'A2', 'B1']);
+    expect(task).toMatchObject({ state, error: message, failed: [] });
+  });
+
+  it('waits for the network when it goes with two chapters out, and fails neither', async () => {
+    const plan: NarrationPlan = { version: 2, chapters: [chapter('a', ['A1']), chapter('b', ['B1', 'B2', 'B3'])] };
+    const task = download(['a', 'b']);
+    const h = held();
+    const env = { online: true };
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => env.online, allowed: () => true,
+      exists: () => false, fetch: h.fetch, concurrency: () => 3, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['A1', 'B1', 'B2']);
+    env.online = false;
+    await h.refuse('B1', new SynthesisError('network'));
+    await h.release('A1', 'B2');
+    await pass;
+    expect(h.started).toEqual(['A1', 'B1', 'B2']);
+    expect(task).toMatchObject({ state: 'waiting', failed: [] });
+  });
+
+  it('waits for the text of the next chapter in the foreground, spinning it while the chapter before it is still out', async () => {
+    let plan: NarrationPlan = { version: 2, chapters: [chapter('a', ['A1']), chapter('b', [], { section: 1, prepared: false })] };
+    const task = download(['a', 'b']);
+    const h = held();
+    let finish!: () => void;
+    const changes: string[] = [];
+    const prepare = vi.fn(async (_: DownloadTask, c: Chapter) => {
+      await new Promise<void>((resolve) => { finish = resolve; });
+      const ready = { ...c, prepared: true, texts: ['B1'] };
+      plan = { ...plan, chapters: [plan.chapters[0], ready] };
+      return ready;
+    });
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => { changes.push(`${task.state} [${task.writing}]`); },
+      connected: () => true, allowed: () => true, foreground: () => true, exists: () => false, fetch: h.fetch, prepare, concurrency: () => 3, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['A1']);
+    // b is being written, its text being counted, while A1 is out: the status line still says downloading.
+    expect(task).toMatchObject({ state: 'downloading', writing: ['a', 'b'] });
+    expect(prepare).toHaveBeenCalledTimes(1);
+    await h.release('A1');
+    // Nothing out, and the download waits for b's text: preparing.
+    expect(task).toMatchObject({ state: 'preparing', writing: ['b'] });
+    finish();
+    await flush();
+    expect(h.started).toEqual(['A1', 'B1']);
+    expect(task.state).toBe('downloading');
+    await h.release('B1');
+    await pass;
+    expect(changes).toEqual(['downloading []', 'downloading [a,b]', 'downloading [a,b]', 'preparing [b]', 'downloading [b]', 'downloading [b]', 'done []']);
+  });
+
+  it('away from the screen, finishes the chapters begun and reaches into none whose text is not prepared', async () => {
+    const plan: NarrationPlan = { version: 2, chapters: [
+      chapter('a', ['A1', 'A2']), chapter('b', ['B1']), chapter('c', [], { section: 2, prepared: false }), chapter('d', ['D1']),
+    ] };
+    const task = download(['a', 'b', 'c', 'd']);
+    const h = held();
+    const prepare = vi.fn(async (_: DownloadTask, c: Chapter) => ({ ...c, prepared: true, texts: ['C1'] }));
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+      foreground: () => false, exists: () => false, fetch: h.fetch, prepare, concurrency: () => 5, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['A1', 'A2', 'B1']);
+    await h.release('A1', 'A2', 'B1');
+    await pass;
+    expect(prepare).not.toHaveBeenCalled();
+    expect(task).toMatchObject({ state: 'interrupted', error: null, failed: [], writing: [] });
+  });
+
+  it('uses a higher number at once when the scheduler is asked again during a chapter, as a change in Settings does', async () => {
+    const plan: NarrationPlan = { version: 2, chapters: [chapter('a', texts('A', 5))] };
+    const task = download(['a']);
+    const h = held();
+    let width = 1;
+    const scheduler = createScheduler({ tasks: () => [task], plan: () => plan, changed: () => {}, connected: () => true, allowed: () => true,
+      exists: () => false, fetch: h.fetch, concurrency: () => width, wait: async () => {} });
+    const pass = scheduler.run();
+    await flush();
+    expect(h.started).toEqual(['A1']);
+    width = 3;
+    await scheduler.run();
+    await flush();
+    // A1 is still out: A2 and A3 did not wait for it.
+    expect(h.started).toEqual(['A1', 'A2', 'A3']);
+    await h.release('A1', 'A2', 'A3');
+    await h.release('A4', 'A5');
+    await pass;
+    expect(task.state).toBe('done');
   });
 });
 
@@ -529,7 +821,7 @@ describe('chapter text prepared ahead in the foreground, and never away from it 
     await f.scheduler.run();
     expect(f.prepares()).toEqual(['prepare c0 preparing', 'prepare c1 downloading']);
     expect([...f.saved]).toEqual(['c0.', 'c1.']);
-    expect(f.task).toMatchObject({ state: 'interrupted', error: null, failed: [], current: null });
+    expect(f.task).toMatchObject({ state: 'interrupted', error: null, failed: [], writing: [] });
 
     // Back in the foreground, the runtime queues an interrupted download again.
     f.env.foreground = true; f.task.state = 'queued';

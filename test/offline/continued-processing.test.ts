@@ -26,7 +26,7 @@ const entry = (task: DownloadTask, progress: ContinuedDownload['progress'] = [],
   ({ task, progress, plan: of });
 
 it('counts the chapters of the download that are saved, and moves within the chapter being written', () => {
-  const shown = continuedShown([entry(download({ current: 'b' }), [
+  const shown = continuedShown([entry(download({ writing: ['b'] }), [
     { id: 'a', count: 10, complete: true },
     { id: 'b', count: 10, complete: false },
     { id: 'c', count: 0, complete: false },
@@ -34,8 +34,22 @@ it('counts the chapters of the download that are saved, and moves within the cha
   expect(shown).toEqual({ title: 'Downloading 1 book', subtitle: '1 of 3 chapters', completed: 1250, total: 3000, documents: ['book'] });
 });
 
+it('moves within every chapter being written, as at a chapter\'s end where the next one has begun (#311)', () => {
+  const shown = continuedShown([entry(download({ writing: ['a', 'b'] }), [
+    { id: 'a', count: 5, complete: false },
+    { id: 'b', count: 10, complete: false },
+  ])]);
+  // Half of a and a quarter of b, of three chapters.
+  expect(shown).toMatchObject({ subtitle: '0 of 3 chapters', completed: 750, total: 3000 });
+  // A chapter being written that has just completed is counted once, as done.
+  expect(continuedShown([entry(download({ writing: ['a', 'b'] }), [
+    { id: 'a', count: 10, complete: true },
+    { id: 'b', count: 10, complete: false },
+  ])])).toMatchObject({ subtitle: '1 of 3 chapters', completed: 1250 });
+});
+
 it('counts a chapter whose text is not yet prepared as nothing written', () => {
-  expect(continuedShown([entry(download({ current: 'c' }), [{ id: 'a', count: 10, complete: true }])]))
+  expect(continuedShown([entry(download({ writing: ['c'] }), [{ id: 'a', count: 10, complete: true }])]))
     .toMatchObject({ subtitle: '1 of 3 chapters', completed: 1000 });
 });
 
@@ -56,7 +70,7 @@ const six: NarrationPlan = {
 
 it('leaves out the chapters the owner paused while the download goes on, unless they are complete, and keeps failed ones', () => {
   // It read `49 of 188 chapters` with 140 paused (#77).
-  const task = download({ chapters: ['a', 'b', 'c', 'd', 'e', 'f'], paused: ['b', 'c'], failed: ['e'], current: 'd' });
+  const task = download({ chapters: ['a', 'b', 'c', 'd', 'e', 'f'], paused: ['b', 'c'], failed: ['e'], writing: ['d'] });
   const shown = continuedShown([entry(task, [
     { id: 'a', count: 10, complete: true },
     { id: 'b', count: 10, complete: true },
@@ -69,7 +83,7 @@ it('leaves out the chapters the owner paused while the download goes on, unless 
 });
 
 it('moves the bar for no paused chapter, even the one the writer is leaving', () => {
-  const task = download({ chapters: ['a', 'b', 'c'], paused: ['b'], current: 'b' });
+  const task = download({ chapters: ['a', 'b', 'c'], paused: ['b'], writing: ['b'] });
   expect(continuedShown([entry(task, [{ id: 'b', count: 5, complete: false }], six)]))
     .toMatchObject({ subtitle: '0 of 2 chapters', completed: 0, total: 2000 });
 });
@@ -95,7 +109,7 @@ const saved = (n: number) => ids(n).map((id) => ({ id, count: 10, complete: true
 
 it('counts the downloads of the batch together, and names how many books they are', () => {
   const shown = continuedShown([
-    entry(download({ current: 'b' }), [{ id: 'a', count: 10, complete: true }, { id: 'b', count: 10, complete: false }]),
+    entry(download({ writing: ['b'] }), [{ id: 'a', count: 10, complete: true }, { id: 'b', count: 10, complete: false }]),
     entry(download({ id: 'u', document: 'second', chapters: ['a', 'b'], state: 'queued' })),
   ]);
   expect(shown).toEqual({ title: 'Downloading 2 books', subtitle: '1 of 5 chapters', completed: 1250, total: 5000, documents: ['book', 'second'] });
@@ -104,14 +118,14 @@ it('counts the downloads of the batch together, and names how many books they ar
 it('keeps a finished download in the count, so the count never goes back', () => {
   // The plan on #92: two books of 100 chapters, the first finished and the second at 20; a third of 50 added.
   const first = entry(download({ id: 'x', document: 'first', chapters: ids(100), state: 'done' }), saved(100), chaptersPlan(100));
-  const second = entry(download({ id: 'y', document: 'second', chapters: ids(100), current: 'c20' }), saved(20), chaptersPlan(100));
+  const second = entry(download({ id: 'y', document: 'second', chapters: ids(100), writing: ['c20'] }), saved(20), chaptersPlan(100));
   expect(continuedShown([first, second])).toMatchObject({ title: 'Downloading 2 books', subtitle: '120 of 200 chapters', completed: 120000, total: 200000 });
   const third = entry(download({ id: 'z', document: 'third', chapters: ids(50), state: 'queued' }), [], chaptersPlan(50));
   expect(continuedShown([first, second, third])).toMatchObject({ title: 'Downloading 3 books', subtitle: '120 of 250 chapters' });
 });
 
 it('counts a paused chapter only once saved in every download of the batch while one goes on, a whole download paused included', () => {
-  const going = download({ id: 'w', chapters: ['a', 'b', 'c', 'd'], paused: ['b'], current: 'a' });
+  const going = download({ id: 'w', chapters: ['a', 'b', 'c', 'd'], paused: ['b'], writing: ['a'] });
   // Paused as a whole by Pause all, with a saved and c failed.
   const held = download({ id: 'h', document: 'held', chapters: ['a', 'b', 'c', 'd'], state: 'paused', paused: ['a', 'b', 'd'], failed: ['c'] });
   // Paused as a whole before anything was saved: no chapter of it counts, and it is no book.
@@ -143,8 +157,8 @@ it('counts two voices of one Document as one book', () => {
 
 it('adds the saved share of each download\'s chapter being written, 1,000 units a chapter', () => {
   const shown = continuedShown([
-    entry(download({ chapters: ['a', 'b'], current: 'a' }), [{ id: 'a', count: 5, complete: false }], six),
-    entry(download({ id: 'u', document: 'second', chapters: ['a', 'b', 'c'], current: 'b' }), [
+    entry(download({ chapters: ['a', 'b'], writing: ['a'] }), [{ id: 'a', count: 5, complete: false }], six),
+    entry(download({ id: 'u', document: 'second', chapters: ['a', 'b', 'c'], writing: ['b'] }), [
       { id: 'a', count: 10, complete: true },
       { id: 'b', count: 3, complete: false },
     ], six),

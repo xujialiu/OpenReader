@@ -298,13 +298,14 @@ export interface AppSettings {
    */
   drawerHeight: number;
   /**
-   * How many of a chapter's sentences a download asks each Provider for at
-   * once (#64): the provider's own page, **Sentences at once**. Per Provider
-   * because the limit is the service's — Fish Audio states five for an account
-   * that has spent under $100, Azure's free tier counts requests per minute —
-   * and one number for all would raise the ones that refuse along with the one
-   * that does not. Read by a download as each chapter starts, never by
-   * playback, so not in `engineIdentity`.
+   * How many sentences a download asks each Provider for at once (#64),
+   * carried past the end of a chapter into the next (#311): the provider's own
+   * page, **Sentences at once**. Per Provider because the limit is the
+   * service's — Fish Audio states five for an account that has spent under
+   * $100, Azure's free tier counts requests per minute — and one number for all
+   * would raise the ones that refuse along with the one that does not. Read by a
+   * download each time a place is to be filled, never by playback, so not in
+   * `engineIdentity`.
    */
   sentencesAtOnce: Readonly<Record<ProviderId, number>>;
   /**

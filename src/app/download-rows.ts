@@ -14,9 +14,9 @@ import { isPaused } from '../offline/pausing';
  * anything else carries the selection circle, which behaves as a checkbox.
  *
  * With `manage` set the same rule lists what Manage downloads shows (#37): the
- * ring on the chapter being written, a checkbox on anything with a saved clip,
- * and nothing — `null` — for a chapter that occupies no space, because there is
- * nothing there to delete.
+ * ring on every chapter being written (#311), a checkbox on anything with a
+ * saved clip, and nothing — `null` — for a chapter that occupies no space,
+ * because there is nothing there to delete.
  */
 export type Marker =
   | { kind: 'check' }
@@ -30,11 +30,11 @@ export type Marker =
  */
 export const HALTED: readonly TaskState[] = ['paused', 'blocked', 'interrupted'];
 /**
- * States in which the scheduler is writing a chapter and `task.current` names
- * it. Only these read `current`: a task restored after a restart comes back
- * `queued` still naming the chapter it was on, and stays so until a pass on it
- * begins, behind another document's download or while the scheduler is held
- * back (ADR 0027).
+ * States in which the scheduler is writing and `task.writing` names the
+ * chapters being written. Only these read `writing`: a task restored after a
+ * restart comes back `queued` still naming the chapters it was on, and stays so
+ * until a pass on it begins, behind another document's download or while the
+ * scheduler is held back (ADR 0027).
  */
 export const WRITING: readonly TaskState[] = ['preparing', 'downloading'];
 
@@ -50,16 +50,19 @@ export function marker(
 ): Marker | null {
   const count = progress?.count ?? 0;
   const total = chapterTextCount(chapter);
+  const writing = !!task && WRITING.includes(task.state) && !!task.writing?.includes(chapter.id);
   const ring = (halted: boolean): Marker => ({
     kind: 'ring',
     fraction: total > 0 ? Math.min(1, count / total) : 0,
-    // Only while the text is being counted is there no fraction to show; the
-    // scheduler names that chapter (ADR 0027), so it is never guessed from order.
-    spinning: !!task && task.state === 'preparing' && task.current === chapter.id,
+    // Only while the text is being counted is there no fraction to show: a
+    // chapter being written whose text is not prepared yet. The scheduler names
+    // the chapters being written (ADR 0027), so it is never guessed from order,
+    // and a chapter prepared ahead of its turn does not spin (#76).
+    spinning: writing && chapter.prepared === false,
     halted,
   });
   if (manage) {
-    if (inTask(chapter, task) && WRITING.includes(task.state) && task.current === chapter.id) return ring(false);
+    if (inTask(chapter, task) && writing) return ring(false);
     return count > 0 ? { kind: 'checkbox' } : null;
   }
   if (progress?.complete) return { kind: 'check' };

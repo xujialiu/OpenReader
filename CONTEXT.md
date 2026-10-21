@@ -117,9 +117,9 @@ _Avoid_: downloaded book, audiobook export, document download
 
 **Download**:
 The preparation of one document's offline narration in one voice and, for Fish
-Audio, one Model, for the chapters the owner chose, worked through one chapter
-at a time. Each chapter in it is waiting its turn, being written, paused, failed
-or saved.
+Audio, one Model, for the chapters the owner chose, worked through in the
+document's order. Each chapter in it is waiting its turn, being written, paused,
+failed or saved.
 _Avoid_: task, job, queue
 
 **Downloaded**:
@@ -133,8 +133,9 @@ says nothing about another.
 _Avoid_: offline, saved, cached, available offline
 
 **Sentences at once**:
-How many of a chapter's sentences a Download asks one Provider for at the
-same time. Chosen per Provider.
+How many sentences a Download asks one Provider for at the same time, taken in
+the order of its chapters and carried past the end of one chapter into the
+next. Chosen per Provider.
 _Avoid_: concurrency, parallelism, threads, batch size
 
 **Word Timing**:

@@ -258,7 +258,8 @@ native module and the catalogue passed in. It is tested in
   counting every download in the Library, paused ones included (a total the
   batch will never reach). Progress is 1,000 units per counted chapter:
   `completed` is the complete counted chapters plus the saved share of each
-  download's `task.current` when it is counted, read from `repository.progress`
+  chapter in each download's `task.writing` that is counted (one chapter,
+  `task.current`, before #311), read from `repository.progress`
   and the plan's text count, so the bar moves with every saved clip; `total`
   is `max(total, 1)` × 1,000. The report is taken after every
   `persist()`, which the scheduler calls after each saved clip and each change

@@ -82,6 +82,8 @@ The drawer's `FlatList` is wrapped in a `GestureDetector` whose two-finger pan c
 
 ## Amendment (2026-09-25, #64): several sentences of a chapter at once
 
+_Revised by the amendment for #311 below: chapters are no longer written one at a time. The window of requests runs across them, and the number is read each time a place is filled._
+
 The scheduler asked for one text, waited for its clip to be saved, and only then asked for the next. Measured with the owner's key on 2026-09-25 (`notes/NOTES_2026-09-25.md`, 13:27): Fish Audio's `s2.1-pro-free` answered a sentence in a median 2.76 s alone and 2.29 s with five out at once, so 40 sentences took 113.4 s one at a time and 21.2 s five at a time. Every reply carried `ratelimit-limit-concurrency: 5`, and none of the 360 was refused, up to ten at once.
 
 Chapters are still written one at a time, in the order of the list. Inside the chapter being written, `write` in `scheduler.ts` keeps up to `concurrency(task)` of its texts requested at once. Each worker takes the next text and first makes the checks the single loop made before every text (`here()`, `allowed()`, `connected()`), then `exists`, `fetch` with the same bounded retry, and `changed`. A text a chapter holds twice is asked for once. The first worker that stops or fails stops the others taking more. A worker never rejects: whatever it throws, from `exists` or `changed` as much as from `fetch`, is recorded, so `write` settles only once every request out has settled. That keeps what the drawer and #56 rely on. `task.current` names one chapter, the next chapter's first request goes out after this chapter's last has settled, and the chapter's failure is recorded once, from the first failure, by the same `catch` as before. The first version awaited the workers with a `Promise.all` that rejected on the first throw while the others were still out. The failure would then have been handled, and the next chapter could have started, with requests of this chapter still in flight. A test in which `exists` throws for the fourth text while three requests are out is what showed it.
@@ -192,3 +194,42 @@ What is given up: the revision is catalogue-wide, so all nonempty prepared chapt
 
 **One link that cannot be read no longer loses the plan** (#201). `readDocumentNavigation` resolves each entry on its own: a `%` that is not an escape keeps the fragment as written, as `fragmentOf` spells it for the Contents and the page alike, and a path that leaves the archive or does not decode names no spine item, as Contents' own lookup gives that row no target. `resolveArchivePath` and `readArchiveMember`, which the package, the `nav` document and the NCX go through as well as the Cover, no longer word their errors as a Cover's.
 
+## Amendment (2026-10-21, #311): one window across the chapters of a download
+
+The owner decided on 2026-10-21 that a download keeps Sentences at once requests out across its chapters. Three statements in #64's amendment no longer hold: "Chapters are still written one at a time", "the next chapter's first request goes out after this chapter's last has settled" and "The scheduler asks for it once as each chapter starts". The same amendment gave the reason the overlap was not built: "Writing the next chapter's first texts during that wait would remove it. It was not done, because it would change what the drawer and Manage downloads call the chapter being written (#38, #56)." That is the trade-off the owner then accepted.
+
+**The window.** `write` in `scheduler.ts` now writes the whole task in one window per pass. It keeps up to `concurrency(task)` texts out across the chapters it has begun. Each `Begun` holds the chapter's texts, deduplicated as before, how many are taken and how many are out, `stopped`, `preparing`, and its own first failure. A free place goes to the next text of the begun chapters, in the order they were begun. When none of them has a text left to send, `begin` takes the next chapter by the #56 rule: plan order, in the task, and not finished, failed, paused or begun. It prepares the chapter through the one preparation path if `prepared === false` (#76), loads it, and starts `prepareAhead()`. Only one chapter is begun at a time. Begun chapters are drained first, so a chapter resumed above the window comes after them, which is #56's "comes straight after it" with more than one chapter being written. The window ends at the task's last chapter. The outer loop of `run` still takes one queued task at a time, so the window never takes a text from another task (another Document, or another Voice of the same Document).
+
+**The number.** `concurrency` is read each time a place is to be filled, in the `while (out < width())` condition. A lower number therefore lets the requests out settle and sends nothing until fewer are out. `run()` during a pass calls `nudge`, which makes the window look again, and `configureDownloads` calls `kick` when `sentencesAtOnce` changes, so a raise is used at once. `test/offline/runtime-at-once.test.ts` fails without that call: the second and third requests waited for the first to settle.
+
+**Per chapter, as before.** What the single chapter's `write` guaranteed now holds for each chapter:
+
+- Before each text, `here(chapter)` (the task runs, and the chapter is in it and not paused), `allowed()` and `connected()` are checked. A failed `connected()` sets `waiting` at once, as before.
+- A paused or removed chapter is `stopped` and takes no more. Its requests out settle and are kept by `wanted()`, as before, and its places go to the chapters after it. `take()` does not stop a chapter whose every text is already out when it is paused, and that chapter is finished when they are back. The first version did stop it, and the pass ended `paused` over a chapter with nothing left to write, the shape of #277. A scheduler test found it.
+- A provider failure met with the device online that is not one of `STOPS_ALL` (`auth`, `no-key`, `quota`, `declined`) stops its own chapter only, once its retries are spent. It is recorded (`failed`, `task.error`) once that chapter has nothing out, by `record`, which is the old `catch` turned into a function.
+- Every other failure sets `halt`: one of `STOPS_ALL`, anything that is not a `SynthesisError` (the store, `exists`, `changed`, a preparation, `load`), or any failure met while offline. `halt` stops every chapter from taking more, and is recorded once nothing is out and nothing is being begun.
+- A failure met after its chapter was paused or removed records nothing, as before.
+- The window settles only once nothing is out and nothing is being begun, so a pass never overlaps the next one. A plan that cannot be read is thrown once nothing is out, as the old loop let it through `run`.
+
+**`task.current` is `task.writing`.** `DownloadTask.current` is now `writing: string[]`: every begun chapter, in begin order, replaced rather than changed in place, `[]` between passes, and copied by `persist`. A chapter is in it from `begin` (before its preparation, when it needs one) until it has nothing out. It has three readers:
+
+- `marker` in `download-rows.ts` gives Manage's ring to every chapter in it while `WRITING`. The ring spins on a chapter in it whose plan entry is `prepared === false`, which is the writer's preparation; a chapter prepared ahead keeps its empty ring. The old rule was `state === 'preparing' && current === id`, but with requests of the chapter before still out, the task is `downloading`.
+- `continuedShown` sums the saved share of every chapter in it that is counted, incomplete and prepared.
+- `nextAhead` passes over every chapter in it.
+
+A task stored with `current` keeps the stray key in its JSON, and nothing reads it. `task.state` is `preparing` only while nothing is out and a begun chapter is being prepared, and `downloading` otherwise. The window sets it each time it looks. `begin` sets `preparing` itself before it asks for the first chapter's text, so `prepare` still sees it; the #76 tests read the state at that call.
+
+**Away from the screen.** When `begin` meets an unprepared chapter with `foreground()` false, it sets `away` without beginning the chapter. The chapters already begun are finished, and the pass ends `interrupted` with no error, as the old `PreparationInterrupted` path did. A preparation abandoned as the app leaves ends the same way. One abandoned with the app already back is asked for again at the next look.
+
+**Tests.** `test/offline/scheduler.test.ts` replaces three #64 tests that asserted the old behaviour with their #311 forms: "sends the next chapter's first request only once the last of this chapter's has settled", "fails the chapter once its retries are spent, and starts the next after its other requests settle" and "asks how many at once as each chapter starts". A new describe block, "one window across the chapters of a download (#311)", holds each request until the test releases it. It covers:
+
+- At ten at once, nine sentences left sends the next chapter's first text, and eight left its second.
+- Short, paused, failed, complete and empty chapters.
+- No reach into another task.
+- Begun chapters before a resumed one.
+- A pause with every text already out.
+- A chapter's failure while the others go on.
+- A key failure and a store failure with two chapters out.
+- The network going.
+- The next chapter's text, in the foreground and away from it.
+- A raise picked up through `run()`.

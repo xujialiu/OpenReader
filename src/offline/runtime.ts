@@ -172,6 +172,7 @@ async function persist() {
     chapters: [...task.chapters],
     failed: [...task.failed],
     paused: [...(task.paused ?? [])],
+    writing: [...(task.writing ?? [])],
   }));
   try {
     await (await offlineRepository()).catalog.saveTasks(snapshot);
@@ -905,7 +906,10 @@ const usesCurrentModel = (voice: OfflineVoice) => inFishModel(voice, settings?.f
 export function configureDownloads(next: AppSettings): void {
   const rekey = !!settings && speechKeying(settings) !== speechKeying(next);
   const changedModel = !!settings && settings.fish.model !== next.fish.model;
+  // Read each time a place is to be filled (#311): a running download looks again at once, so a higher number is used now.
+  const changedAtOnce = !!settings && JSON.stringify(settings.sentencesAtOnce) !== JSON.stringify(next.sentencesAtOnce);
   settings = next;
+  if (changedAtOnce && !changedModel) kick();
   if (changedModel) {
     if (!loaded) fishModelChangedBeforeLoad = true;
     for (const task of tasks) if (task.voice.provider === 'fish' && task.state !== 'done') pausing.pauseAll(task);

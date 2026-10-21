@@ -14,15 +14,24 @@ describe('what a chapter row shows in Downloads', () => {
     expect(marker(chapter('a'), saved(17, true), undefined, false)).toEqual({ kind: 'check' });
   });
   it('a chapter of a running download is a ring with its saved fraction, empty while it waits its turn', () => {
-    const t = task('downloading', ['a', 'b'], { current: 'a' });
+    const t = task('downloading', ['a', 'b'], { writing: ['a'] });
     expect(marker(chapter('a'), saved(3), t, false)).toEqual({ kind: 'ring', fraction: 3 / 17, spinning: false, halted: false });
     expect(marker(chapter('b'), undefined, t, false)).toEqual({ kind: 'ring', fraction: 0, spinning: false, halted: false });
     expect(marker(chapter('b', 0, false), undefined, t, false)).toMatchObject({ kind: 'ring', fraction: 0, spinning: false });
   });
   it('spins only on the chapter whose text is being counted', () => {
-    const t = task('preparing', ['a', 'b'], { current: 'a' });
+    const t = task('preparing', ['a', 'b'], { writing: ['a'] });
     expect(marker(chapter('a', 0, false), undefined, t, false)).toMatchObject({ kind: 'ring', spinning: true });
     expect(marker(chapter('b', 0, false), undefined, t, false)).toMatchObject({ kind: 'ring', spinning: false });
+  });
+  it('spins on the chapter being counted while the arc of the one before it still fills (#311)', () => {
+    const t = task('downloading', ['a', 'b', 'c'], { writing: ['a', 'b'] });
+    expect(marker(chapter('a'), saved(15), t, false)).toEqual({ kind: 'ring', fraction: 15 / 17, spinning: false, halted: false });
+    expect(marker(chapter('b', 0, false), undefined, t, false)).toMatchObject({ kind: 'ring', spinning: true });
+    // Prepared ahead and not begun: an empty ring, still.
+    expect(marker(chapter('c', 0, false), undefined, t, false)).toMatchObject({ kind: 'ring', fraction: 0, spinning: false });
+    // A restored download still naming them spins nothing.
+    expect(marker(chapter('b', 0, false), undefined, task('queued', ['a', 'b'], { writing: ['a', 'b'] }), false)).toMatchObject({ spinning: false });
   });
   it('holds the triangle while the download waits for the owner and the square while it goes on by itself', () => {
     for (const state of ['paused', 'blocked', 'interrupted'] as const)
@@ -31,16 +40,16 @@ describe('what a chapter row shows in Downloads', () => {
       expect(marker(chapter('a'), saved(3), task(state, ['a']), false)).toMatchObject({ kind: 'ring', halted: false });
   });
   it('holds the triangle on a chapter the owner paused while the rest of the download goes on (#56)', () => {
-    const t = task('downloading', ['a', 'b'], { current: 'b', paused: ['a'] });
+    const t = task('downloading', ['a', 'b'], { writing: ['b'], paused: ['a'] });
     expect(marker(chapter('a'), saved(3), t, false)).toEqual({ kind: 'ring', fraction: 3 / 17, spinning: false, halted: true });
     expect(marker(chapter('b'), saved(5), t, false)).toMatchObject({ kind: 'ring', halted: false });
   });
   it('a failed chapter and a finished download go back to the checkbox', () => {
-    expect(marker(chapter('a'), saved(3), task('downloading', ['a', 'b'], { failed: ['a'], current: 'b' }), false)).toEqual({ kind: 'checkbox' });
+    expect(marker(chapter('a'), saved(3), task('downloading', ['a', 'b'], { failed: ['a'], writing: ['b'] }), false)).toEqual({ kind: 'checkbox' });
     expect(marker(chapter('a'), saved(3), task('done', ['a']), false)).toEqual({ kind: 'checkbox' });
   });
   it('a complete chapter is a check even inside a running download', () => {
-    expect(marker(chapter('a'), saved(17, true), task('downloading', ['a', 'b'], { current: 'b' }), false)).toEqual({ kind: 'check' });
+    expect(marker(chapter('a'), saved(17, true), task('downloading', ['a', 'b'], { writing: ['b'] }), false)).toEqual({ kind: 'check' });
   });
 });
 
@@ -52,23 +61,29 @@ describe('what Manage downloads lists', () => {
     expect(marker(chapter('a'), undefined, undefined, true)).toBeNull();
   });
   it('shows the ring only on the chapter being written; the rest of the download is a checkbox with audio and absent without', () => {
-    const t = task('downloading', ['a', 'b', 'c'], { current: 'a' });
+    const t = task('downloading', ['a', 'b', 'c'], { writing: ['a'] });
     expect(marker(chapter('a'), saved(3), t, true)).toMatchObject({ kind: 'ring', fraction: 3 / 17, halted: false });
     expect(marker(chapter('b'), saved(5), t, true)).toEqual({ kind: 'checkbox' });
     expect(marker(chapter('c'), undefined, t, true)).toBeNull();
   });
+  it('shows a ring on every chapter being written, which cannot be chosen, as at a chapter\'s end (#311)', () => {
+    const t = task('downloading', ['a', 'b', 'c'], { writing: ['a', 'b'] });
+    expect(marker(chapter('a'), saved(15), t, true)).toMatchObject({ kind: 'ring', fraction: 15 / 17, halted: false });
+    expect(marker(chapter('b'), saved(2), t, true)).toMatchObject({ kind: 'ring', fraction: 2 / 17, halted: false });
+    expect(marker(chapter('c'), undefined, t, true)).toBeNull();
+  });
   it('shows no ring while nothing is being written, even on the chapter a restored download still names', () => {
     for (const state of ['queued', 'waiting'] as const)
-      expect(marker(chapter('a'), saved(3), task(state, ['a', 'b'], { current: 'a' }), true)).toEqual({ kind: 'checkbox' });
-    expect(marker(chapter('b'), undefined, task('queued', ['a', 'b'], { current: 'b' }), true)).toBeNull();
+      expect(marker(chapter('a'), saved(3), task(state, ['a', 'b'], { writing: ['a'] }), true)).toEqual({ kind: 'checkbox' });
+    expect(marker(chapter('b'), undefined, task('queued', ['a', 'b'], { writing: ['b'] }), true)).toBeNull();
   });
   it('a paused download leaves its partial chapters deletable and its untouched ones unlisted', () => {
-    const t = task('paused', ['a', 'b'], { current: null });
+    const t = task('paused', ['a', 'b'], { writing: [] });
     expect(marker(chapter('a'), saved(3), t, true)).toEqual({ kind: 'checkbox' });
     expect(marker(chapter('b'), undefined, t, true)).toBeNull();
   });
   it('the chapter being counted is listed by its spinning ring although nothing is saved yet', () => {
-    expect(marker(chapter('a', 0, false), undefined, task('preparing', ['a'], { current: 'a' }), true)).toMatchObject({ kind: 'ring', spinning: true });
+    expect(marker(chapter('a', 0, false), undefined, task('preparing', ['a'], { writing: ['a'] }), true)).toMatchObject({ kind: 'ring', spinning: true });
   });
 });
 
