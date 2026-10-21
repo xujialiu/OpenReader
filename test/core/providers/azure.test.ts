@@ -4,7 +4,6 @@ import {
   AZURE_OUTPUT_FORMAT,
   CLOSE_GRACE_MS,
   RATE_LIMIT_WAITS_MS,
-  RETRY_DELAY_MS,
   azureRegion,
   createAzureProvider,
   refusedStatus,
@@ -12,6 +11,7 @@ import {
   type HeaderWebSocket,
 } from '../../../src/core/providers/azure';
 import { buildTextFrame, parseTextFrame } from '../../../src/core/providers/azure-ws';
+import { SERVER_ERROR_DELAY_MS } from '../../../src/core/providers/server-error';
 import type { SynthesisResult } from '../../../src/core/providers/types';
 
 /** A reply recorded from Azure on 2026-09-22 (notes/NOTES_2026-09-22.md): its text frames verbatim, its audio frames as lengths. */
@@ -387,11 +387,11 @@ describe('when Azure refuses', () => {
     expect(wait.mock.calls.map(([ms]) => ms)).toEqual([1_000, 2_000]);
   });
 
-  it('asks a 5xx once more after a pause, then reports it', async () => {
-    FakeSocket.script = [{ refuse: 503 }, { refuse: 503 }];
-    await expect(provider().synthesize('Hello', opts)).rejects.toMatchObject({ kind: 'unknown', message: 'Azure answered HTTP 503.' });
-    expect(wait.mock.calls.map(([ms]) => ms)).toEqual([RETRY_DELAY_MS]);
-    expect(FakeSocket.sockets).toHaveLength(2);
+  it('asks a 5xx again after a pause, up to three tries in all, then reports it (#237)', async () => {
+    FakeSocket.script = [{ refuse: 503 }, { refuse: 502 }, { refuse: 503 }];
+    await expect(provider().synthesize('Hello', opts)).rejects.toMatchObject({ kind: 'unknown', retriable: false, message: 'Azure answered HTTP 503.' });
+    expect(wait.mock.calls.map(([ms]) => ms)).toEqual([SERVER_ERROR_DELAY_MS, 2 * SERVER_ERROR_DELAY_MS]);
+    expect(FakeSocket.sockets).toHaveLength(3);
   });
 
   it('names the voice when Azure closes with 1007', async () => {

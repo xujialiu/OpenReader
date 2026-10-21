@@ -22,7 +22,10 @@
 // refuse-pcm (a request naming response_format pcm is refused 422 with
 // FastAPI's literal_error body, any other format gets complete WAV — the
 // #202 PCM-memory scenario; each speech request's response_format is
-// journaled on /__speech), 502 / 503 / 429 / 404.  Modes (voices): ok
+// journaled on /__speech), 502 / 503 / 429 / 404, and flaky-503 (each
+// distinct text is answered 503 for its first `fails` requests, then complete
+// raw PCM — #237's retry; `__mode?speech=flaky-503&fails=2`, 1 by default,
+// counts restarting at every mode change).  Modes (voices): ok
 // (fixture voices), junk (a complete 200 with no usable list — the
 // documented-fallback control), 502 / 503 / 429 / 404.  Modes (models): ok
 // (the fixture model, the default), 404 (publishes no model list — #209).
@@ -49,11 +52,13 @@ if (!Number.isInteger(port) || port <= 0) {
   process.exit(2);
 }
 
-const SPEECH_MODES = ['ok-pcm', 'ok-wav', 'cut', 'stall', 'json-error', 'html-error', 'text-error', 'refuse-pcm', '502', '503', '429', '404'];
+const SPEECH_MODES = ['ok-pcm', 'ok-wav', 'cut', 'stall', 'json-error', 'html-error', 'text-error', 'refuse-pcm', '502', '503', '429', '404', 'flaky-503'];
 const VOICES_MODES = ['ok', 'junk', '502', '503', '429', '404'];
 const MODELS_MODES = ['ok', '404'];
 const STATUS_MODES = ['502', '503', '429', '404'];
-const state = { speech: 'ok-pcm', voices: 'ok', models: 'ok' };
+const state = { speech: 'ok-pcm', voices: 'ok', models: 'ok', fails: 1 };
+// flaky-503: how many 503s each text (by hash) has been answered since the mode was set.
+const flakySeen = new Map();
 const journal = [];
 // Machine-readable assertions without keeping the Document text in this ledger.
 const speechRequests = [];
@@ -155,8 +160,13 @@ const server = http.createServer(async (req, res) => {
         { type: 'missing', loc: ['body', 'voice'], msg: 'Field required', input: {} },
       ] }), 'speech probe', 422);
     }
-    speechRequests.push({ at: Date.now(), mode, voice: request.voice, response_format: request.response_format ?? null,
-      text: createHash('sha256').update(String(request.input ?? '')).digest('hex') });
+    const text = createHash('sha256').update(String(request.input ?? '')).digest('hex');
+    speechRequests.push({ at: Date.now(), mode, voice: request.voice, response_format: request.response_format ?? null, text });
+    if (mode === 'flaky-503') {
+      const seen = flakySeen.get(text) ?? 0;
+      if (seen < state.fails) { flakySeen.set(text, seen + 1); return status(res, 503, `speech flaky-503 ${seen + 1}/${state.fails}`); }
+      return complete(res, 'audio/pcm', pcmSamples, 'speech flaky-503 ok-pcm');
+    }
     if (mode === 'refuse-pcm') {
       if (request.response_format === 'pcm') {
         return complete(res, 'application/json', JSON.stringify({ detail: [
@@ -257,7 +267,10 @@ const server = http.createServer(async (req, res) => {
     if (speech !== null && !SPEECH_MODES.includes(speech)) { res.writeHead(400); res.end('unknown speech mode'); return; }
     if (voices !== null && !VOICES_MODES.includes(voices)) { res.writeHead(400); res.end('unknown voices mode'); return; }
     if (models !== null && !MODELS_MODES.includes(models)) { res.writeHead(400); res.end('unknown models mode'); return; }
-    if (speech) { state.speech = speech; log(`MODE speech=${speech}`); }
+    const fails = url.searchParams.get('fails');
+    if (fails !== null && !/^[0-9]+$/.test(fails)) { res.writeHead(400); res.end('fails is a whole number'); return; }
+    if (speech) { state.speech = speech; flakySeen.clear(); log(`MODE speech=${speech}`); }
+    if (fails !== null) { state.fails = Number(fails); flakySeen.clear(); log(`MODE fails=${fails}`); }
     if (voices) { state.voices = voices; log(`MODE voices=${voices}`); }
     if (models) { state.models = models; log(`MODE models=${models}`); }
     res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -2,6 +2,7 @@ import { alignWordsToText, type TimedWord } from '../align';
 import { PCM_SAMPLE_RATE, base64ToBytes, concatBytes, pcmSeconds } from './audio';
 import { SynthesisError } from './errors';
 import { responseErrorText, responseJSON, throwIfAborted } from './response';
+import { mayRetryServerError, serverErrorNote, serverErrorPause } from './server-error';
 import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type SynthesisResult, type TTSProvider, type VoiceInfo } from './types';
 
 /**
@@ -72,8 +73,6 @@ export const MAX_INPUT_CHARS = 2000;
 /** The most the list route gives per page; 992 voices are five pages. */
 export const PAGE_SIZE = 200;
 const MAX_PAGES = 25;
-/** The pause before a 5xx is asked again. */
-export const RETRY_DELAY_MS = 500;
 /** How many times a 429 is waited out before it surfaces; the free plan's cap is one request at a time, one per second. */
 export const RATE_LIMIT_RETRIES = 3;
 const RETRY_AFTER_DEFAULT_MS = 1000;
@@ -289,19 +288,20 @@ export function createSpeechifyProvider(cfg: SpeechifyConfig, deps: SpeechifyDep
   /**
    * One request through the queue, with the two retries: a 429 waits what
    * Retry-After says and asks again, up to RATE_LIMIT_RETRIES times,
-   * unless its body names the allowance; a 5xx is asked once more after
-   * RETRY_DELAY_MS. The note says what happened, for the debug line — the
-   * only place a live run can see a retry.
+   * unless its body names the allowance; a 5xx is asked again, three tries
+   * in all, 500 ms and then 1 s apart, as by every Provider (#237, ADR 0084).
+   * The note says what happened; the Debug Log shows each try as its own
+   * request line.
    */
   function exchange(path: string, init: RequestInit, what: string, signal?: AbortSignal): Promise<{ response: Response; note: string }> {
     return queue.run(async () => {
       let waits = 0;
-      let retried = '';
+      const retried: number[] = [];
       for (;;) {
         const response = await request(path, init, what);
         if (response.ok) {
           const waited = waits ? ` after ${waits} rate-limit wait${waits === 1 ? '' : 's'}` : '';
-          return { response, note: `${retried}${waited}` };
+          return { response, note: `${serverErrorNote(retried)}${waited}` };
         }
         const body = await responseErrorText(response, what, signal);
         if (response.status === 429 && waits < RATE_LIMIT_RETRIES && !isQuota(429, speechifyReason(body))) {
@@ -309,9 +309,9 @@ export function createSpeechifyProvider(cfg: SpeechifyConfig, deps: SpeechifyDep
           await pause(retryAfterMs(response));
           continue;
         }
-        if (response.status >= 500 && !retried) {
-          retried = ` after a retry of HTTP ${response.status}`;
-          await pause(RETRY_DELAY_MS);
+        if (mayRetryServerError(response.status, retried.length)) {
+          retried.push(response.status);
+          await pause(serverErrorPause(retried.length));
           continue;
         }
         throw refusal(response.status, body, what);

@@ -106,3 +106,53 @@ it('keeps the full timeout for a genuinely stalled transfer that reports no fail
   await vi.advanceTimersByTimeAsync(1);
   expect(result).toMatchObject({ kind: 'network', message: 'fish: no audio within 60s' });
 });
+
+/** A 5xx is the server's passing failure (#237, ADR 0084): asked again, three tries at most, in a Reading and in a Download alike. */
+const gatewayPage = (status: number) => new Response('<!DOCTYPE html><title>Bad Gateway</title>', { status, headers: { 'Content-Type': 'text/html' } });
+
+it('a Reading speaks on past one 5xx from an OpenAI Compatible server (#237)', async () => {
+  const { runtime, voice, settings } = await fixture();
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementationOnce(async () => gatewayPage(503)).mockImplementation(async () => pcm());
+  vi.stubGlobal('fetch', fetch);
+  const { createClipFetcher } = await import('../../src/playback/clips');
+  let result: unknown = 'pending';
+  void createClipFetcher({ provider: runtime.offlineProvider('book', settings), voice: voice.voice }).fetch(0, sentence, true)
+    .then(clip => { result = clip; }, error => { result = error; });
+  await vi.advanceTimersByTimeAsync(499);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(20);
+  expect(result).not.toBeInstanceOf(Error);
+  expect(result).not.toBe('pending');
+});
+
+it('a Download finishes a chapter past one 5xx, with nothing failed (#237)', async () => {
+  const { runtime, voice, saveClip } = await fixture();
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementationOnce(async () => gatewayPage(502)).mockImplementation(async () => pcm());
+  vi.stubGlobal('fetch', fetch);
+  runtime.enqueue('book', voice, ['a']);
+  await vi.advanceTimersByTimeAsync(600);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(saveClip).toHaveBeenCalledTimes(1);
+  expect(runtime.downloadTasks('book')[0]).toMatchObject({ state: 'done', failed: [], error: null });
+});
+
+it('a 5xx that does not pass is asked three times in all, by a Reading and by a Download, never more (#237)', async () => {
+  const { runtime, voice, settings, saveClip } = await fixture();
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => gatewayPage(503));
+  vi.stubGlobal('fetch', fetch);
+  const { createClipFetcher } = await import('../../src/playback/clips');
+  let result: unknown = 'pending';
+  void createClipFetcher({ provider: runtime.offlineProvider('book', settings), voice: voice.voice }).fetch(0, sentence, true)
+    .catch(error => { result = error; });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(result).toMatchObject({ kind: 'unknown', message: 'OpenAI Compatible speech: HTTP 503' });
+  fetch.mockClear();
+  runtime.enqueue('book', voice, ['a']);
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  expect(saveClip).not.toHaveBeenCalled();
+  expect(runtime.downloadTasks('book')[0]).toMatchObject({ failed: ['a'], error: 'OpenAI Compatible speech: HTTP 503' });
+});

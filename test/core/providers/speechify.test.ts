@@ -403,7 +403,7 @@ describe('createSpeechifyProvider', () => {
       expect(waits).toEqual([1000, 5000, 1000]);
     });
 
-    it('retries a 5xx once, after the pause, and says so in the note', async () => {
+    it('retries a 5xx after the pause, and says so in the note', async () => {
       waits = [];
       const fetchImpl = vi
         .fn()
@@ -415,11 +415,18 @@ describe('createSpeechifyProvider', () => {
       expect(result.note).toBe(`${MODEL_ENGLISH} after a retry of HTTP 502`);
     });
 
-    it('gives up after the one retry, quoting the second refusal, and never retries a refusal below 500', async () => {
+    it('gives up after three tries in all, quoting the last refusal, and never retries a refusal below 500 (#237)', async () => {
       waits = [];
-      const twice = vi.fn().mockResolvedValueOnce(refusal(502, 'upstream_failure', 'first')).mockResolvedValueOnce(refusal(500, 'internal', 'second'));
-      await expect(provider(twice).synthesize('Hi', GEORGE)).rejects.toMatchObject({ kind: 'unknown', message: /500.*second/ });
-      expect(twice).toHaveBeenCalledTimes(2);
+      const thrice = vi.fn()
+        .mockResolvedValueOnce(refusal(502, 'upstream_failure', 'first'))
+        .mockResolvedValueOnce(refusal(503, 'unavailable', 'second'))
+        .mockResolvedValueOnce(refusal(500, 'internal', 'third'));
+      await expect(provider(thrice).synthesize('Hi', GEORGE)).rejects.toMatchObject({ kind: 'unknown', retriable: false, message: /500.*third/ });
+      expect(thrice).toHaveBeenCalledTimes(3);
+      expect(waits).toEqual([500, 1000]);
+      waits = [];
+      const twice = vi.fn().mockResolvedValueOnce(refusal(502, 'upstream_failure', 'first')).mockResolvedValueOnce(refusal(503, 'unavailable', 'second')).mockResolvedValueOnce(reply([['Hi', 0, 2, 0, 300]]));
+      expect((await provider(twice).synthesize('Hi', GEORGE)).note).toBe(`${MODEL_ENGLISH} after 2 retries of HTTP 502, 503`);
       const once = vi.fn(async () => refusal(400, 'validation_failed', 'bad'));
       await expect(provider(once).synthesize('Hi', GEORGE)).rejects.toMatchObject({ kind: 'unknown' });
       expect(once).toHaveBeenCalledTimes(1);

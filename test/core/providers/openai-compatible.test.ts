@@ -27,9 +27,12 @@ const cfg: OpenAICompatibleConfig = {
   defaultVoices: OPENAI_DEFAULT_VOICES,
 };
 
+/** Every pause before a 5xx is asked again is skipped in the tests; `waits` keeps what was asked for. */
+let waits: number[] = [];
+
 /** A memory of PCM refusals of its own for each Provider, so no test inherits another's (#202). */
-function provider(fetchImpl: unknown, over: Partial<OpenAICompatibleConfig> = {}) {
-  return createOpenAICompatibleProvider({ ...cfg, ...over }, { fetch: fetchImpl as typeof fetch, pcmRefusals: new Set() });
+function provider(fetchImpl: unknown, over: Partial<OpenAICompatibleConfig> = {}, wait = async (ms: number) => void waits.push(ms)) {
+  return createOpenAICompatibleProvider({ ...cfg, ...over }, { fetch: fetchImpl as typeof fetch, pcmRefusals: new Set(), wait });
 }
 
 const signalController = new AbortController();
@@ -154,9 +157,10 @@ describe('createOpenAICompatibleProvider', () => {
   });
 
   // A refusal that is not a 400 is not a format problem: retrying it would
-  // double the cost of every failure and hide the status that explains it
-  it('never asks twice after a status other than 400 or 422', async () => {
-    for (const status of [401, 429, 500]) {
+  // double the cost of every failure and hide the status that explains it.
+  // A 5xx is the server's passing failure and is asked again (#237, below).
+  it('never asks twice after a status other than 400, 422 or a 5xx', async () => {
+    for (const status of [401, 403, 404, 429]) {
       const fetchImpl = vi.fn(async () => new Response('', { status }));
       await expect(provider(fetchImpl).synthesize('Hi', opts)).rejects.toBeInstanceOf(SynthesisError);
       expect(fetchImpl).toHaveBeenCalledOnce();
@@ -656,5 +660,94 @@ describe("the server's reason for a refusal", () => {
   it('keeps auth and rate-limit refusals as they are', async () => {
     await expect(provider(refused(401, { error: { message: 'Invalid API Key' } }), chat).synthesize('x', opts)).rejects.toMatchObject({ kind: 'auth' });
     await expect(provider(refused(429, { error: { message: 'slow down' } }), chat).synthesize('x', opts)).rejects.toMatchObject({ kind: 'rate-limit' });
+  });
+});
+
+describe("a 5xx, the server's passing failure (#237, ADR 0084)", () => {
+  const chat: Partial<OpenAICompatibleConfig> = { route: 'chat', model: 'mimo-v2.5-tts', baseURL: 'https://api.xiaomimimo.com/v1' };
+  const page = (status: number) => new Response('<!DOCTYPE html><title>Bad Gateway</title>', { status, headers: { 'Content-Type': 'text/html' } });
+  /** Answers each status in turn, then what `then` gives. */
+  const answering = (statuses: number[], then: () => Response) => {
+    let n = 0;
+    return vi.fn(async () => (n < statuses.length ? page(statuses[n++]) : then()));
+  };
+  const chatAudio = () => Response.json({ choices: [{ message: { audio: { data: btoa('mp3') } } }] });
+
+  it('asks the speech route again, 500 ms and then 1 s later, and says so in the note', async () => {
+    waits = [];
+    const fetchImpl = answering([502, 503], () => samples(1, 2));
+    expect(await provider(fetchImpl).synthesize('Hi', opts)).toMatchObject({ audio: 'pcm', note: 'after 2 retries of HTTP 502, 503' });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([500, 1000]);
+  });
+
+  it('asks once more after one 5xx, for OpenAI as for a server of the owner\'s', async () => {
+    for (const status of [500, 502, 503, 504]) {
+      waits = [];
+      const fetchImpl = answering([status], () => samples(1, 2));
+      expect(await provider(fetchImpl, { id: 'compatible', label: 'OpenAI Compatible' }).synthesize('Hi', opts)).toMatchObject({ note: `after a retry of HTTP ${status}` });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(waits).toEqual([500]);
+    }
+  });
+
+  it('gives up after three tries in all, with the last status alone and nothing for a Download to ask a fourth time', async () => {
+    waits = [];
+    const fetchImpl = vi.fn(async () => page(503));
+    await expect(provider(fetchImpl).synthesize('Hi', opts)).rejects.toMatchObject({ kind: 'unknown', retriable: false, message: 'OpenAI speech: HTTP 503' });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([500, 1000]);
+  });
+
+  it('asks the chat route again too', async () => {
+    waits = [];
+    const fetchImpl = answering([502], chatAudio);
+    expect(await provider(fetchImpl, chat).synthesize('Hi', opts)).toMatchObject({ audio: 'encoded', note: 'audio through /v1/chat/completions after a retry of HTTP 502' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const down = vi.fn(async () => page(500));
+    await expect(provider(down, chat).synthesize('Hi', opts)).rejects.toMatchObject({ kind: 'unknown', message: 'chat/completions audio: HTTP 500' });
+    expect(down).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps the MP3 a server asked for after its refusal of PCM, when a 5xx comes between', async () => {
+    waits = [];
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: 'Unsupported response_format' } }), { status: 400 }))
+      .mockResolvedValueOnce(mp3())
+      .mockResolvedValueOnce(page(503))
+      .mockResolvedValueOnce(mp3());
+    const p = provider(fetchImpl);
+    await p.synthesize('One', opts);
+    expect(await p.synthesize('Two', opts)).toMatchObject({ audio: 'encoded', note: 'the server does not do PCM; asked for MP3 after a retry of HTTP 503' });
+    expect([2, 3].map((i) => formatOf(fetchImpl, i))).toEqual([FALLBACK_FORMAT, FALLBACK_FORMAT]);
+  });
+
+  it('stops at once when the request is aborted during the pause, without asking again', async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(async () => page(503));
+    const p = provider(fetchImpl, {}, async () => { controller.abort(); });
+    await expect(p.synthesize('Hi', { voice: 'alloy', signal: controller.signal })).rejects.toMatchObject({ kind: 'unknown', message: expect.stringMatching(/aborted/) });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+});
+
+describe('a server that cannot be reached is named (#280)', () => {
+  const offline = () => vi.fn(async () => { throw new TypeError('fetch failed: The Internet connection appears to be offline.'); });
+
+  it('names the Address a sentence was asked of, on the speech route and on the chat route', async () => {
+    await expect(provider(offline(), { id: 'compatible', label: 'OpenAI Compatible', baseURL: 'http://studio.local:8000/v1/' }).synthesize('Hi', opts)).rejects.toMatchObject({
+      kind: 'network',
+      message: 'Cannot reach http://studio.local:8000: TypeError: fetch failed: The Internet connection appears to be offline.',
+    });
+    await expect(provider(offline(), { route: 'chat', baseURL: 'https://api.xiaomimimo.com/v1' }).synthesize('Hi', opts)).rejects.toMatchObject({
+      kind: 'network',
+      message: expect.stringMatching(/^Cannot reach https:\/\/api\.xiaomimimo\.com: /),
+    });
+  });
+
+  it('is not asked again: a connection that was never made is a Download\'s to retry, as before', async () => {
+    const fetchImpl = offline();
+    await expect(provider(fetchImpl).synthesize('Hi', opts)).rejects.toMatchObject({ kind: 'network', retriable: true });
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });

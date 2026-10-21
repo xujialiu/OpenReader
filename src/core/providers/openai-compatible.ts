@@ -2,6 +2,7 @@ import { base64ToBytes } from './audio';
 import { normalizeBaseURL } from './base-url';
 import { SynthesisError } from './errors';
 import { responseAudio, responseErrorText, responseJSON, throwIfAborted } from './response';
+import { askThroughServerErrors, ServerError } from './server-error';
 import { serverReason } from './server-reason';
 import { MULTILINGUAL, type ListVoicesOptions, type ProviderId, type SynthesisOptions, type SynthesisResult, type TTSProvider, type VoiceInfo } from './types';
 
@@ -129,6 +130,8 @@ export function parseModelList(body: unknown): string[] {
 function statusError(status: number, what: string): SynthesisError {
   if (status === 401 || status === 403) return new SynthesisError('auth', `${what}: the server rejected the API key (${status})`);
   if (status === 429) return new SynthesisError('rate-limit', `${what}: rate limited (429)`);
+  // The server's passing failure: a synthesis asks it again (#237, ADR 0084)
+  if (status >= 500) return new ServerError(status, `${what}: HTTP ${status}`);
   return new SynthesisError('unknown', `${what}: HTTP ${status}`);
 }
 
@@ -145,7 +148,9 @@ function refusalFrom(status: number, body: string, what: string): SynthesisError
   }
   const error = statusError(status, what);
   const reason = error.kind === 'unknown' ? serverReason(body) : '';
-  return reason ? new SynthesisError('unknown', `${error.message} — ${reason}`) : error;
+  if (!reason) return error;
+  const message = `${error.message} — ${reason}`;
+  return error instanceof ServerError ? new ServerError(status, message) : new SynthesisError('unknown', message);
 }
 
 /** The base64 audio of a chat completion reply, `choices[0].message.audio.data`; null when the reply carries none. */
@@ -160,6 +165,8 @@ export type OpenAICompatibleDeps = {
   fetch: typeof fetch;
   /** The servers known to refuse PCM; the module's shared one when absent. */
   pcmRefusals?: Set<string>;
+  /** The pause before a 5xx is asked again; `setTimeout` when absent, nothing in the tests. */
+  wait?: (ms: number) => Promise<void>;
 };
 
 export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps: OpenAICompatibleDeps): TTSProvider {
@@ -180,6 +187,7 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
    * closed; another Address or Model is asked for PCM again.
    */
   const pcmRefusals = deps.pcmRefusals ?? sharedPcmRefusals;
+  const pause = deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const server = () => `${cfg.id} ${base()} ${cfg.model}`;
 
   async function get(path: string, signal?: AbortSignal): Promise<Response> {
@@ -201,7 +209,8 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
       });
     } catch (e) {
       throwIfAborted(signal, cfg.label);
-      throw new SynthesisError('network', String(e));
+      // Named as the Voice list names it, so the owner of a server of their own knows which to look at (#280)
+      throw new SynthesisError('network', `Cannot reach ${base()}: ${e}`);
     }
   }
 
@@ -275,8 +284,16 @@ export function createOpenAICompatibleProvider(cfg: OpenAICompatibleConfig, deps
     }
   }
 
+  /**
+   * One synthesis on the configured route, asked again after a 5xx, three
+   * tries in all (#237, ADR 0084). A try on the speech route is its PCM
+   * request and, after a refusal of the format, its MP3 one.
+   */
   const speak = (text: string, voice: string, signal?: AbortSignal): Promise<SynthesisResult> =>
-    cfg.route === 'chat' ? speakOnChatRoute(text, voice, signal) : speakOnSpeechRoute(text, voice, signal);
+    askThroughServerErrors(
+      () => (cfg.route === 'chat' ? speakOnChatRoute(text, voice, signal) : speakOnSpeechRoute(text, voice, signal)),
+      { pause, signal, what: cfg.label },
+    );
 
   /**
    * The voices the server publishes on /v1/audio/voices (a common extension

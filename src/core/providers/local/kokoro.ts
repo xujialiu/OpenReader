@@ -4,6 +4,7 @@ import { base64ToBytes, readClip } from '../audio';
 import { normalizeBaseURL } from '../base-url';
 import { SynthesisError } from '../errors';
 import { responseAudio, responseJSON, throwIfAborted } from '../response';
+import { askThroughServerErrors, ServerError } from '../server-error';
 import type { ListVoicesOptions, SynthesisOptions, SynthesisResult, TTSProvider, VoiceInfo } from '../types';
 
 /** Kokoro voice ids encode language and gender via a prefix, e.g. af_bella = American Female. */
@@ -62,6 +63,8 @@ export type LocalEngineDeps = {
    * another machine.
    */
   headers?: Record<string, string>;
+  /** The pause before a 5xx is asked again; `setTimeout` when absent, nothing in the tests. */
+  wait?: (ms: number) => Promise<void>;
 };
 
 function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSProvider {
@@ -71,10 +74,14 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
   // A gateway answers 401/403 when the credentials are missing or wrong;
   // that is a different problem from the server being down, and the owner is
   // told so ("rejected the credentials") instead of being sent to Docker.
+  // A 5xx is the server's passing failure, which a synthesis asks again (#237, ADR 0084).
   const statusError = (what: string, status: number): SynthesisError =>
     status === 401 || status === 403
       ? new SynthesisError('auth', `${what}: the server rejected the credentials (${status})`)
-      : new SynthesisError('unknown', `${what} returned ${status}`);
+      : status >= 500
+        ? new ServerError(status, `${what} returned ${status}`)
+        : new SynthesisError('unknown', `${what} returned ${status}`);
+  const pause = deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const call = async (path: string, init: RequestInit): Promise<Response> => {
     const headers = { ...(deps.headers ?? {}), ...((init.headers as Record<string, string> | undefined) ?? {}) };
     try {
@@ -109,6 +116,66 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
     stream: false,
   });
 
+  /** One try of a synthesis: the captioned route, and the plain one when that gives no audio. */
+  async function synthesizeOnce(text: string, o: SynthesisOptions): Promise<SynthesisResult> {
+    const init: RequestInit = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payloadFor(text, o.voice)),
+      signal: o.signal,
+    };
+
+    const captioned = await call('/dev/captioned_speech', init);
+    if (captioned.status === 401 || captioned.status === 403) {
+      // The plain endpoint sits behind the same gateway; no point trying it
+      throw statusError('Kokoro speech', captioned.status);
+    }
+
+    if (captioned.ok) {
+      let body: CaptionedResponse;
+      try {
+        body = await responseJSON(captioned, 'Kokoro speech', o.signal);
+      } catch (e) {
+        if (e instanceof SynthesisError) throw e;
+        throw new SynthesisError('decode-failed', `Kokoro captioned response is not valid JSON: ${e}`);
+      }
+      if (typeof body.audio === 'string') {
+        // The audio arrives inside JSON, so there is no Content-Type to read:
+        // readClip has only the bytes to go on, and reports `encoded` if a
+        // server ignored `response_format` and sent a container anyway.
+        let clip: SynthesisResult;
+        try {
+          clip = readClip(base64ToBytes(body.audio));
+        } catch (e) {
+          throw new SynthesisError('decode-failed', `Kokoro audio is not valid base64: ${e}`);
+        }
+        const words = toTimedWords(body.timestamps);
+        if (!words.length) return { ...clip, note: 'the captioned reply came without word timestamps' };
+        // The server speaks a rewritten text and returns its words; the
+        // aligner pairs what it can and bridges the rest, and the debug line
+        // says how much of each
+        const aligned = alignWords(words, text);
+        if (!aligned.timestamps.length) return { ...clip, note: `none of the ${words.length} words the server returned is in the text` };
+        const note = describeAlignment(aligned);
+        return { ...clip, timestamps: aligned.timestamps, ...(note ? { note } : {}) };
+      }
+    }
+
+    // Older versions or minimal deployments may not have
+    // /dev/captioned_speech. Fall back to the plain endpoint, at the cost
+    // of losing word timings — ADR 0005: fall back to utterance level rather
+    // than estimating. The note says why, so the debug output can tell a
+    // wrong server from a wordless voice.
+    const note = captioned.ok
+      ? 'the captioned reply had no audio; fell back to /v1/audio/speech'
+      : `/dev/captioned_speech returned ${captioned.status}; fell back to /v1/audio/speech`;
+    const plain = await call('/v1/audio/speech', init);
+    if (!plain.ok) {
+      throw statusError('Kokoro speech', plain.status);
+    }
+    return { ...await responseAudio(plain, 'Kokoro speech', o.signal), note };
+  }
+
   return {
     id: 'local',
     capabilities: { wordTimestamps: true },
@@ -138,63 +205,13 @@ function createKokoroProvider(rawBaseURL: string, deps: LocalEngineDeps): TTSPro
       return voices;
     },
 
-    async synthesize(text: string, o: SynthesisOptions): Promise<SynthesisResult> {
-      const init: RequestInit = {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payloadFor(text, o.voice)),
-        signal: o.signal,
-      };
-
-      const captioned = await call('/dev/captioned_speech', init);
-      if (captioned.status === 401 || captioned.status === 403) {
-        // The plain endpoint sits behind the same gateway; no point trying it
-        throw statusError('Kokoro speech', captioned.status);
-      }
-
-      if (captioned.ok) {
-        let body: CaptionedResponse;
-        try {
-          body = await responseJSON(captioned, 'Kokoro speech', o.signal);
-        } catch (e) {
-          if (e instanceof SynthesisError) throw e;
-          throw new SynthesisError('decode-failed', `Kokoro captioned response is not valid JSON: ${e}`);
-        }
-        if (typeof body.audio === 'string') {
-          // The audio arrives inside JSON, so there is no Content-Type to read:
-          // readClip has only the bytes to go on, and reports `encoded` if a
-          // server ignored `response_format` and sent a container anyway.
-          let clip: SynthesisResult;
-          try {
-            clip = readClip(base64ToBytes(body.audio));
-          } catch (e) {
-            throw new SynthesisError('decode-failed', `Kokoro audio is not valid base64: ${e}`);
-          }
-          const words = toTimedWords(body.timestamps);
-          if (!words.length) return { ...clip, note: 'the captioned reply came without word timestamps' };
-          // The server speaks a rewritten text and returns its words; the
-          // aligner pairs what it can and bridges the rest, and the debug line
-          // says how much of each
-          const aligned = alignWords(words, text);
-          if (!aligned.timestamps.length) return { ...clip, note: `none of the ${words.length} words the server returned is in the text` };
-          const note = describeAlignment(aligned);
-          return { ...clip, timestamps: aligned.timestamps, ...(note ? { note } : {}) };
-        }
-      }
-
-      // Older versions or minimal deployments may not have
-      // /dev/captioned_speech. Fall back to the plain endpoint, at the cost
-      // of losing word timings — ADR 0005: fall back to utterance level rather
-      // than estimating. The note says why, so the debug output can tell a
-      // wrong server from a wordless voice.
-      const note = captioned.ok
-        ? 'the captioned reply had no audio; fell back to /v1/audio/speech'
-        : `/dev/captioned_speech returned ${captioned.status}; fell back to /v1/audio/speech`;
-      const plain = await call('/v1/audio/speech', init);
-      if (!plain.ok) {
-        throw statusError('Kokoro speech', plain.status);
-      }
-      return { ...await responseAudio(plain, 'Kokoro speech', o.signal), note };
+    /**
+     * One synthesis, asked again after a 5xx, three tries in all (#237, ADR
+     * 0084). A try is the captioned request and its fallback to the plain
+     * route, so a 5xx counts only when the plain route answered it too.
+     */
+    synthesize(text: string, o: SynthesisOptions): Promise<SynthesisResult> {
+      return askThroughServerErrors(() => synthesizeOnce(text, o), { pause, signal: o.signal, what: 'Kokoro' });
     },
 
     /**

@@ -7,7 +7,8 @@ import { OPENAI_DEFAULT_VOICES } from '../../../src/core/providers/openai';
 // typed, with a key only if the server wants one and gateway headers if one
 // sits in front of it.
 const cfg = { baseURL: 'http://localhost:8004', apiKey: '', model: 'tts-1', voices: '', headers: {} as Record<string, string> };
-const provider = (fetchImpl: unknown, over: Partial<typeof cfg> = {}) => createCompatibleProvider({ ...cfg, ...over }, { fetch: fetchImpl as typeof fetch });
+/** A 5xx is asked again after a pause (#237), skipped in the tests. */
+const provider = (fetchImpl: unknown, over: Partial<typeof cfg> = {}) => createCompatibleProvider({ ...cfg, ...over }, { fetch: fetchImpl as typeof fetch, wait: async () => {} });
 const opts = { voice: 'Emily.wav', signal: new AbortController().signal };
 const audio = () => new Response(new Uint8Array(4), { status: 200, headers: { 'Content-Type': 'audio/pcm' } });
 

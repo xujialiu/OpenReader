@@ -4,6 +4,7 @@ import { withTimeout } from '../timeout';
 import { PCM_SAMPLE_RATE, base64ToBytes, concatBytes, readClip } from './audio';
 import { SynthesisError } from './errors';
 import { responseErrorText, responseJSON, responseText, throwIfAborted } from './response';
+import { mayRetryServerError, serverErrorNote, serverErrorPause } from './server-error';
 import { isSpeakable } from './speechify';
 import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type SynthesisResult, type TTSProvider, type VoiceInfo } from './types';
 
@@ -129,8 +130,6 @@ export const FISH_VOICE_LIST_TIMEOUT_MS = 11_000;
 /** The id of the built-in entry that sends no reference: the model's own voice. */
 export const DEFAULT_VOICE = 'default';
 export const DEFAULT_VOICE_LABEL = 'Default';
-/** The pause before a 5xx is asked again, as Speechify's. */
-export const RETRY_DELAY_MS = 500;
 /** How many times a 429 is waited out before it surfaces. */
 export const RATE_LIMIT_RETRIES = 3;
 const RETRY_AFTER_DEFAULT_MS = 1000;
@@ -424,8 +423,10 @@ function isQuota(status: number, headers: Headers): boolean {
 
 function refusal(response: Response, body: string, what: string): SynthesisError {
   const status = response.status;
-  // The list's 401 is plain text ("No permission -- see authorization schemes"), the rest is JSON
-  const message = fishReason(body) || body.trim().replace(/\s+/g, ' ').slice(0, 200);
+  // The list's 401 is plain text ("No permission -- see authorization schemes"), the rest is JSON.
+  // A web page a gateway answered (Cloudflare's, in front of api.fish.audio) is not a reason: the status says it (#279).
+  const plain = body.trim();
+  const message = fishReason(body) || (plain.startsWith('<') ? '' : plain.replace(/\s+/g, ' ').slice(0, 200));
   const quoted = message ? ` — ${message}` : '';
   if (isQuota(status, response.headers)) return new SynthesisError('quota', `${what}: Fish Audio refused the request (${status})${quoted}`);
   if (status === 401 || status === 403) return new SynthesisError('auth', `${what}: Fish Audio rejected the API key (${status})${quoted}`);
@@ -467,19 +468,19 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
   /**
    * One request with the two retries: a 429 waits what Retry-After says
    * and asks again, up to RATE_LIMIT_RETRIES times, unless it is the
-   * credit; a 5xx is asked once more after RETRY_DELAY_MS. The note says
-   * what happened, for the debug line — the only place a live run can see a
-   * retry.
+   * credit; a 5xx is asked again, three tries in all, 500 ms and then 1 s
+   * apart, as by every Provider (#237, ADR 0084). The note says what
+   * happened; the Debug Log shows each try as its own request line.
    */
   async function exchange(path: string, init: RequestInit, what: string, deadline = Number.POSITIVE_INFINITY): Promise<{ response: Response; note: string }> {
     let waits = 0;
-    let retried = '';
+    const retried: number[] = [];
     for (;;) {
       if (Date.now() >= deadline) throw new SynthesisError('network', `${what}: no reply within the listing time limit`);
       const response = await request(path, init, what);
       if (response.ok) {
         const waited = waits ? ` after ${waits} rate-limit wait${waits === 1 ? '' : 's'}` : '';
-        return { response, note: `${retried}${waited}` };
+        return { response, note: `${serverErrorNote(retried)}${waited}` };
       }
       const body = await responseErrorText(response, what, init.signal ?? undefined);
       if (response.status === 429 && waits < RATE_LIMIT_RETRIES && !isQuota(429, response.headers)) {
@@ -491,12 +492,13 @@ export function createFishProvider(cfg: FishConfig, deps: FishDeps): TTSProvider
         else await pause(waitMs);
         continue;
       }
-      if (response.status >= 500 && !retried) {
-        retried = ` after a retry of HTTP ${response.status}`;
+      if (mayRetryServerError(response.status, retried.length)) {
+        retried.push(response.status);
+        const waitMs = serverErrorPause(retried.length);
         const remaining = deadline - Date.now();
         if (remaining <= 0) throw new SynthesisError('network', `${what}: no reply within the listing time limit`);
-        if (Number.isFinite(deadline)) await withTimeout(pause(RETRY_DELAY_MS), remaining, () => new SynthesisError('network', `${what}: no reply within the listing time limit`));
-        else await pause(RETRY_DELAY_MS);
+        if (Number.isFinite(deadline)) await withTimeout(pause(waitMs), remaining, () => new SynthesisError('network', `${what}: no reply within the listing time limit`));
+        else await pause(waitMs);
         continue;
       }
       throw refusal(response, body, what);

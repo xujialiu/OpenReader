@@ -23,7 +23,9 @@ OpenAI Compatible requests; `/v1/models` answers a fixture Model.
   `text-error`, `refuse-pcm` (a request naming `response_format: pcm` is
   refused 422 with FastAPI's literal_error body; any other format gets
   complete WAV — the #202 PCM-memory scenario, its per-request
-  `response_format` readable on `/__speech`), and `502`/`503`/`429`/`404`.
+  `response_format` readable on `/__speech`), `502`/`503`/`429`/`404`, and
+  `flaky-503` (each distinct text answered 503 for its first `fails`
+  requests, then complete PCM: `__mode?speech=flaky-503&fails=2`).
 - Voice modes: `ok` (Fixture Willow/Alto/Breeze), `junk` (complete unusable
   200), and `502`/`503`/`429`/`404`.
 - Models modes: `ok` (the fixture model, the default) and `404` (publishes no
@@ -133,3 +135,26 @@ Stop playback as soon as its fact is established, including on failure. Return
 separate verdicts for native readers, Voice UI and Reading/Download persistence;
 if readiness fails after the permitted recovery, preserve evidence and return
 BLOCKED rather than rebooting again or relaxing the app assertion.
+
+## A passing 5xx (#237, #280, ADR 0084)
+
+Every Provider asks a synthesis answered 5xx again, three tries in all, 500 ms
+and then 1 s apart, in a Reading as in a Download, and never a fourth time.
+`/__speech` groups the requests by the hash of their text, so count them per
+text, diffing from a snapshot taken just before the scenario. The Debug Log
+shows each try as its own `[provider]` line (`-> 503 -> 503 -> 200`); the
+Clip's note (` after 2 retries of HTTP 503, 503`) is not printed there. A
+pause or a skip aborts no request (ADR 0026): a sentence already out still
+makes its tries.
+
+1. `__mode?speech=flaky-503&fails=2`, then Play on an uncached sentence: the
+   Reading speaks on with no note, and `/__speech` shows three requests for
+   that text, about 0.5 s and then 1 s apart.
+2. The same mode, then a Download of one short chapter: it ends Downloaded,
+   nothing failed, three requests per text.
+3. `__mode?speech=503` on uncached text: the Reading stops on `OpenAI
+   Compatible speech: HTTP 503` after exactly three requests for the text; a
+   Download marks the chapter failed after three, not nine.
+4. Stop the server (or point the Address at a closed port) and Play uncached
+   text: the note begins `Cannot reach http://127.0.0.1:PORT` (#280).
+

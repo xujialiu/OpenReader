@@ -2,6 +2,7 @@ import { alignWords, describeAlignment, type TimedWord } from '../align';
 import { concatBytes } from './audio';
 import { buildSSML, buildTextFrame, parseBinaryFrame, parseTextFrame, parseWordBoundaries, pinnedTail } from './azure-ws';
 import { SynthesisError } from './errors';
+import { mayRetryServerError, serverErrorNote, serverErrorPause } from './server-error';
 import { isSpeakable } from './speechify';
 import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type SynthesisResult, type TTSProvider, type VoiceInfo } from './types';
 
@@ -33,7 +34,8 @@ import { MULTILINGUAL, type ListVoicesOptions, type SynthesisOptions, type Synth
  * - **A refusal says what it was.** 401 is the key or the region, since a key
  *   used in another region is also a 401; 403 on a synthesis is the month's
  *   characters; 429, or a close with code 4429, waits and asks again (#40);
- *   a 5xx is asked once more; a close 1007 names the voice.
+ *   a 5xx is asked again, three tries in all (#237, ADR 0084); a close 1007
+ *   names the voice.
  * - **A pinned tail drops the clip's timings.** See `pinnedTail`.
  * - **Text with nothing to say is not sent**, as in Fish: Azure answers
  *   asterisks with a clean `turn.end` and no audio, and bills the turn anyway.
@@ -79,8 +81,6 @@ export const AZURE_SAMPLE_RATE = 24_000;
  * counted ahead of a refusal.
  */
 export const RATE_LIMIT_WAITS_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 16_000];
-/** The pause before a refused upgrade with a 5xx is asked again, as Speechify's and Fish's. */
-export const RETRY_DELAY_MS = 500;
 /**
  * How long a socket's `error` waits for the `close` that carries its reason.
  * React Native dispatches the two together; Node's `WebSocket` was measured
@@ -334,14 +334,14 @@ export function createAzureProvider(cfg: AzureConfig, deps: AzureDeps): TTSProvi
 
       let waits = 0;
       let waited = 0;
-      let retried = '';
+      const retried: number[] = [];
       for (;;) {
         // An aborted signal fires no further `abort` event, so it is checked
         // before a socket is opened for it, and again after every pause.
         if (o.signal.aborted) throw new SynthesisError('unknown', 'aborted');
         const outcome = await turn(text, o.voice, key, host, o.signal);
         if (outcome.ok) {
-          const after = `${retried}${waits ? ` after ${waits} rate-limit wait${waits === 1 ? '' : 's'}` : ''}`;
+          const after = `${serverErrorNote(retried)}${waits ? ` after ${waits} rate-limit wait${waits === 1 ? '' : 's'}` : ''}`;
           return clip(outcome, text, o.voice, after);
         }
         if ((outcome.status === 429 || outcome.code === 4429) && waits < RATE_LIMIT_WAITS_MS.length) {
@@ -350,9 +350,10 @@ export function createAzureProvider(cfg: AzureConfig, deps: AzureDeps): TTSProvi
           await pause(ms);
           continue;
         }
-        if (outcome.status !== null && outcome.status >= 500 && !retried) {
-          retried = ` after a retry of HTTP ${outcome.status}`;
-          await pause(RETRY_DELAY_MS);
+        // A refused upgrade with a 5xx: three tries in all, as by every Provider (#237, ADR 0084)
+        if (outcome.status !== null && mayRetryServerError(outcome.status, retried.length)) {
+          retried.push(outcome.status);
+          await pause(serverErrorPause(retried.length));
           continue;
         }
         throw ended(outcome, region, o.voice, waited);

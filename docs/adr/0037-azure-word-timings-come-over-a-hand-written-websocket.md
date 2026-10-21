@@ -95,7 +95,7 @@ wrong key (notes, 22:27).
   wrong region is refused with 401 too;
 - 403 → `quota`;
 - 429, or a close with code 4429 after opening → `rate-limit`;
-- 5xx → asked once more after 500 ms, as Speechify and Fish do;
+- 5xx → asked again, three tries in all, 500 ms and then 1 s apart, as by every Provider since #237 ([ADR 0084](0084-a-server-error-is-asked-again-three-tries-in-all.md)); it was asked once more after 500 ms;
 - close 1007 → the voice is not one Azure offers.
 
 **What a rate-limit refusal does.** It waits 1, 2, 4, 8 and 16 s between

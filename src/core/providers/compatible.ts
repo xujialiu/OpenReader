@@ -1,6 +1,6 @@
 import { SynthesisError } from './errors';
 import { OPENAI_DEFAULT_VOICES } from './openai';
-import { createOpenAICompatibleProvider } from './openai-compatible';
+import { createOpenAICompatibleProvider, type OpenAICompatibleDeps } from './openai-compatible';
 import type { TTSProvider } from './types';
 
 /**
@@ -29,7 +29,7 @@ export type CompatibleConfig = {
   headers?: Record<string, string>;
 };
 
-export function createCompatibleProvider(cfg: CompatibleConfig, deps: { fetch: typeof fetch }): TTSProvider {
+export function createCompatibleProvider(cfg: CompatibleConfig, deps: Pick<OpenAICompatibleDeps, 'fetch' | 'wait'>): TTSProvider {
   const provider = createOpenAICompatibleProvider(
     {
       id: 'compatible',

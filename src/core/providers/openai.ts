@@ -1,4 +1,4 @@
-import { createOpenAICompatibleProvider } from './openai-compatible';
+import { createOpenAICompatibleProvider, type OpenAICompatibleDeps } from './openai-compatible';
 import type { TTSProvider } from './types';
 
 /**
@@ -36,7 +36,7 @@ export type OpenAIConfig = {
   voices?: string;
 };
 
-export function createOpenAIProvider(cfg: OpenAIConfig, deps: { fetch: typeof fetch }): TTSProvider {
+export function createOpenAIProvider(cfg: OpenAIConfig, deps: Pick<OpenAICompatibleDeps, 'fetch' | 'wait'>): TTSProvider {
   return createOpenAICompatibleProvider(
     {
       id: 'openai-official',

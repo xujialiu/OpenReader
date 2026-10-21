@@ -3,8 +3,11 @@ import { kokoroAdapter, localeForKokoroVoice } from '../../../../src/core/provid
 
 const opts = { voice: 'af_bella', signal: new AbortController().signal };
 
-function provider(fetchImpl: unknown) {
-  return kokoroAdapter.create('http://localhost:8880', { fetch: fetchImpl as typeof fetch });
+/** Every pause before a 5xx is asked again is skipped in the tests; `waits` keeps what was asked for. */
+let waits: number[] = [];
+
+function provider(fetchImpl: unknown, wait = async (ms: number) => void waits.push(ms)) {
+  return kokoroAdapter.create('http://localhost:8880', { fetch: fetchImpl as typeof fetch, wait });
 }
 
 /**
@@ -170,6 +173,47 @@ describe('kokoroAdapter', () => {
     expect((fetchImpl as any).mock.calls[1][0]).toBe('http://localhost:8880/v1/audio/speech');
     expect(result).toMatchObject({ audio: 'pcm', samples: Uint8Array.from([9, 0]) });
     expect('timestamps' in result).toBe(false);
+  });
+
+  // A try is the captioned request and its fallback, as one synthesis always was (#237, ADR 0084)
+  it('asks again when both routes answer a 5xx, 500 ms and then 1 s later, and says so in the note', async () => {
+    waits = [];
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockResolvedValueOnce(new Response('', { status: 502 }))
+      .mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ audio: AUDIO_B64, timestamps: [{ word: 'Hello', start_time: 0, end_time: 0.4 }] }));
+    const result = await provider(fetchImpl).synthesize('Hello', opts);
+    expect(result).toMatchObject({ audio: 'pcm', note: 'after 2 retries of HTTP 502, 503' });
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    expect(waits).toEqual([500, 1000]);
+  });
+
+  it('gives up after three tries in all, with the last status, and nothing for a Download to ask a fourth time', async () => {
+    waits = [];
+    const fetchImpl = vi.fn(async () => new Response('', { status: 503 }));
+    await expect(provider(fetchImpl).synthesize('Hello', opts)).rejects.toMatchObject({ kind: 'unknown', retriable: false, message: 'Kokoro speech returned 503' });
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    expect(waits).toEqual([500, 1000]);
+  });
+
+  it('does not ask again after a refusal that is not a 5xx, nor after a 5xx the plain route answered', async () => {
+    waits = [];
+    const missing = vi.fn(async () => new Response('', { status: 404 }));
+    await expect(provider(missing).synthesize('Hello', opts)).rejects.toMatchObject({ kind: 'unknown', message: 'Kokoro speech returned 404' });
+    expect(missing).toHaveBeenCalledTimes(2);
+    const fellBack = vi.fn().mockResolvedValueOnce(new Response('', { status: 503 })).mockResolvedValueOnce(pcmResponse(9, 0));
+    expect(await provider(fellBack).synthesize('Hello', opts)).toMatchObject({ note: '/dev/captioned_speech returned 503; fell back to /v1/audio/speech' });
+    expect(waits).toEqual([]);
+  });
+
+  it('stops at once when the request is aborted during the pause', async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(async () => new Response('', { status: 503 }));
+    const p = provider(fetchImpl, async () => { controller.abort(); });
+    await expect(p.synthesize('Hello', { voice: 'af_bella', signal: controller.signal })).rejects.toMatchObject({ message: expect.stringMatching(/aborted/) });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   // This message is shown as it is: it names the address that was tried and

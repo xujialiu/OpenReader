@@ -11,7 +11,6 @@ import {
   OFFICIAL_AUTHOR_ID,
   PAGE_SIZE,
   RATE_LIMIT_RETRIES,
-  RETRY_DELAY_MS,
   createFishProvider,
   decodeFishVoice,
   fishReason,
@@ -23,6 +22,7 @@ import {
   type FishConfig,
   type FishDeps,
 } from '../../../src/core/providers/fish';
+import { SERVER_ERROR_DELAY_MS } from '../../../src/core/providers/server-error';
 
 /**
  * The plugin's `test/core/providers/fish.test.ts`, adapted to the contract of
@@ -901,17 +901,34 @@ describe('synthesize', () => {
     expect(waits).toEqual([]);
   });
 
-  it('asks once more after a 5xx, and says so in the note', async () => {
+  it('asks again after a 5xx, up to three tries in all, and says so in the note (#237)', async () => {
     waits = [];
     const fetchImpl = vi.fn().mockResolvedValueOnce(new Response('Bad Gateway', { status: 502 })).mockResolvedValueOnce(stream(event(MP3_A, [['Hi', 0, 0.3]])));
     const result = await speaker(fetchImpl).synthesize('Hi', NARRATOR);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(waits).toEqual([RETRY_DELAY_MS]);
+    expect(waits).toEqual([SERVER_ERROR_DELAY_MS]);
     expect(result.note).toBe(`${MODEL_FREE} after a retry of HTTP 502`);
-    await expect(speaker(vi.fn(async () => new Response('down', { status: 503 }))).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
+    waits = [];
+    const twice = vi.fn().mockResolvedValueOnce(new Response('', { status: 502 })).mockResolvedValueOnce(new Response('', { status: 503 })).mockResolvedValueOnce(stream(event(MP3_A, [['Hi', 0, 0.3]])));
+    expect((await speaker(twice).synthesize('Hi', NARRATOR)).note).toBe(`${MODEL_FREE} after 2 retries of HTTP 502, 503`);
+    expect(waits).toEqual([500, 1000]);
+    waits = [];
+    const down = vi.fn(async () => new Response('down', { status: 503 }));
+    await expect(speaker(down).synthesize('Hi', NARRATOR)).rejects.toMatchObject({
       kind: 'unknown',
+      retriable: false,
       message: expect.stringContaining('503'),
     });
+    expect(down).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([500, 1000]);
+  });
+
+  it('reports a web page a gateway answered by its status alone, without the markup (#279)', async () => {
+    const page = '<!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US"> <![endif]--> <head> <title>api.fish.audio | 502: Bad gateway</title> </head><body>Bad gateway</body></html>';
+    const fetchImpl = vi.fn(async () => new Response(page, { status: 502, headers: { 'Content-Type': 'text/html' } }));
+    await expect(speaker(fetchImpl).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'unknown', message: `Fish Audio ${MODEL_FREE}: HTTP 502` });
+    const limited = vi.fn(async () => new Response(page, { status: 429, headers: { 'Content-Type': 'text/html' } }));
+    await expect(speaker(limited).synthesize('Hi', NARRATOR)).rejects.toMatchObject({ kind: 'rate-limit', message: expect.not.stringMatching(/[<>]/) });
   });
 
   it('reports a server that cannot be reached as a network error', async () => {
