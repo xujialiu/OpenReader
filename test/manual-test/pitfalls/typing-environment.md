@@ -243,3 +243,25 @@
 - **A relaunch replays `Documents/harness.json`'s last command, a `store` state included.** Symptom: to test a fresh `purchase-debug.json` the file was deleted and the app relaunched; `{"do":"store"}` read `not-started` (the state of the last command) and the file was back. Cause: the harness polls from `seen = -1`, so the file's last command runs once at every launch (the #95 bullet in `verification-runs.md`, here with a `store` command). Fix: send `{"do":"noop"}`, let it run, terminate, delete the file, relaunch: `owned: unlocked true, trial began never`, and the file is not written until a command asks.
 - **The first `HX store` line after a state command is printed before the products load.** Symptom: `price=null unavailable=false` even after `"state":"unavailable"`, with `[purchase] products did not load` in the same millisecond. Cause: the answer waits for the first read of what is owned, not for the products. Fix: send `{"do":"store"}` again for the settled line (`price=$4.99`).
 - **Switching Word Lookup off by a `settings` patch that also removes its consent raises a consent alert.** Symptom: `Send selected text to Youdao?` came up on the next reader about 30 s after a patch `{"consent":[…without lookup:youdao],"lookup":{"enabled":false,…}}` with a lookup drawer open on the previous one, and the Debug Log had `[lookup] dictionary by dictionary, en-zh: "chapter"` in the patch's own millisecond. Cause: the lookup effect runs once more with the stale selection before the drawer is closed, and the consent is now missing. Fix: patch `lookup.enabled:false` alone first, then change `consent`; answer a stray alert with Don't Allow (`ax.py alert-touch`).
+
+## The alert field commits the keyboard's autocandidate at Save (2026-10-23, #317 run, iOS 26.5)
+
+- **A `RenameAlert`/Create-folder save can store the QuickType candidate, not
+  the typed name.** Symptom: `alert-input.py` verified the native field held
+  the exact intended name on two fresh reads, one `Save` tap later
+  `library-folders.json` held something else — `Qwrtz` → **`Quartz`**,
+  `Innerq` → `Inner`, `Innerx` → `Inns`, while the dictionary word `Deeper`
+  saved exactly. Cause: the alert's SwiftUI `TextField`
+  (`src/app/rename-alert.tsx`) has autocorrection on; at the Save tap iOS
+  commits the marked word as its autocandidate, the native binding the app
+  deliberately reads at submit (`text.get()`, the #123 repair) then holds the
+  candidate, and the app stores it. Not #123's lost-final-keystroke shape: no
+  lag can turn `Qwrtz` into `Quartz` — the candidate did. Not separable from
+  the app by the helper alone, because the field reads exact until the tap.
+  Fix when asserting a name: use a dictionary word (candidate == typed, saves
+  exact), or read `library-folders.json` after every Save and rename again
+  toward the intended name until the store reads it exactly (each attempt
+  keeps its artifacts). App-side fix, for the implementing agent: disable
+  autocorrection on that TextField. Same helper passed exact on iOS 27.0
+  (input-integrity.md, 2026-10-02), so treat the behaviour as device/OS-bound
+  until re-measured.
