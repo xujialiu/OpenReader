@@ -385,6 +385,30 @@ kept its Move page and browsed folder — was fixed and re-verified: the drawer
 now shows the new entry's actions menu, and its `Move to…` opens at the new
 entry's own folder.
 
+## A swipe in from the left edge inside a Folder (#317, `folder-edge-swipe.sh`)
+
+```sh
+bash test/manual-test/library-and-reader/folder-edge-swipe.sh SIMULATOR_UDID           # folder: Inner → Outer → Library
+bash test/manual-test/library-and-reader/folder-edge-swipe.sh SIMULATOR_UDID settings  # the control: Settings → Library
+```
+
+Needs the Debug app installed and its Metro running; it relaunches the app.
+`folder` overwrites `Documents/library-folders.json` with Outer → Inner, Inner
+being browsed (every Document goes back to the Library root, none is touched),
+swipes in from the left edge twice and reads the bar's title after each.
+`settings` opens Settings from the root and swipes once; it is what shows the
+swipe reaches UIKit as the phone's own back gesture, so run it first: a
+`folder` FAIL with a `settings` PASS is the app. About 7 s a run; prints
+`PASS`/`FAIL` with the titles seen, exit 0 on PASS, 2 when the app never
+reached its starting title. It plays nothing. It reads only where a swipe
+ends, not how the screen moves under the finger.
+
+On 1.0.1 (11) (2026-10-23, iPhone 17, iOS 26.5): `settings` PASS 3 of 3,
+`folder` FAIL 3 of 3 (`Inner → Inner → Inner`). One level entered by a tap
+fails the same way. The harness's `navstate` inside the Folder reads one route,
+`Library`, at index 0: a Folder is the Library route's own state, so UIKit has
+nothing to pop.
+
 ## Library data preservation under storage failure (#260, #233, #261, `library-preservation.md`)
 
 Record: [`library-preservation.md`](library-preservation.md). No script of its
