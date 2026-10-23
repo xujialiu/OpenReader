@@ -416,6 +416,66 @@ read `Library`, `Folder` Outer, `Folder` Inner, and `library-folders.json`'s
 `current` was `null` after the two swipes. Check the bundle Metro serves holds
 the change first (pitfalls/metro.md, `CI=1`): a stale bundle reads FAIL here.
 
+### The rest of the #317 behaviour (ios-tester, 2026-10-23, 1.0.1 (14)-beta1-debug)
+
+Session-owned `iPhone 17 edgeswipe` (iOS 26.5, `8937CF48-74A1-4948-B803-744DEEAB4329`),
+the parent worktree's Metro 8081, bundle checked for `reconcileFolderStack`, version
+line read `1.0.1 (14)-beta1-debug`. No audio was played. Artifacts under `/tmp/or317-tester/`.
+
+- **Push and back by real taps.** Root → Outer → Inner by row taps; each push
+  slides in and the top-left button's label is the previous page's title
+  (`Library` inside Outer, `Outer` inside Inner). Tapping it pops one level.
+  `navstate` inside Inner reads three routes (`Library`, `Folder` f-outer,
+  `Folder` f-inner, index 2).
+- **The back button's menu** (hold the arrow: `axe touch --down`, 1.8 s,
+  screenshot while down, then `--up`): Outer's page lists `Library`; Inner's
+  page lists `Outer` and `Library` — the Folders above, back to the Library.
+  Releasing on an entry navigates to it. A released screenshot shows nothing:
+  photograph while the finger is down (pitfalls/mcp.md, #111).
+- **A swipe released about a third of the way stays put.** The script's `axe
+  drag` shortened to `--end-x 100` on Inner's page left the title `Inner` and
+  a byte-identical `navstate`.
+- **Relaunch inside Inner** opens on Inner (three routes); two swipes reach
+  the Library root and `current` reads `null`.
+- **An import lands in the Folder on screen.** A harness `add` of the short
+  fixture while Inner's page was up answered `added sha256:ca8c…` and put the
+  Document at `"documents": {"sha256:ca8c…": "f-inner"}`; the row listed on
+  Inner. Opening it pushed the Reader (back label `Inner`, paused — no Play);
+  the back button returned to Inner's page. The Reader's own left-edge swipe
+  did not pop in three `axe drag` attempts while the back button pops — the
+  Reader screen sets no `gestureEnabled` (unchanged code, a WebView page), so
+  this is an automation/WebView question for an XCTest press-drag, not a #317
+  regression; the contract's `back` path passes.
+- **Selection.** `…` → Select on Inner's page: the title reads `1 selected`,
+  Select/Deselect all stands where the back arrow was, and the same edge swipe
+  changes nothing (title and `navstate` unchanged) until Cancel; after Cancel
+  the arrow is back and the swipe pops.
+- **Create folder lands in the Folder on screen.** Via Library actions →
+  Create folder and the checked `alert-input.py` input (`Deeper`), the folder
+  was created with `"parent": "f-inner"` and listed on Inner's page. One
+  earlier attempt created `Nest6` in Outer instead: a Library actions drawer
+  had been opened on Outer's page earlier in the session (these sheets float
+  at the app's root and survive route changes, #240), and its create answered
+  a later tap from Inner's page. Relaunch before a create when any drawer was
+  opened on another page earlier; verify the drawer's own subject before
+  touching inside it (pitfalls/mcp.md, #317 batch).
+- **A drawer left open over the page it acts on.** With Inner's actions drawer
+  open on Outer's page, tapping Inner's row pushes Inner's page and the drawer
+  stays at the Drawer Height. `Move to…` → up to the root → into `Other` →
+  `Move` set Inner's parent to `f-other` and reconciled the stack to `Library
+  → Folder` f-other `→ Folder` f-inner (index 2); the edge swipe then pops to
+  Other. `Delete` (its confirm alert names the drawer's subject) removed Inner
+  and left exactly one `Library` route at index 0 with the root on screen — no
+  red screen, no LogBox, no CDP warnings. The move page's rows use plain
+  labels (`Other`), not the Library row labels (`Folder, Other, Empty`).
+  After the move the reconciled back button can read the generic `Back`
+  rather than the new parent's title, whose page was never focused; the swipe
+  still goes to it.
+- **Not run:** the two-finger range sweep inside a Folder page
+  (`LibraryTwoFingerProbe` seeds and measures the root, and would need adapted
+  geometry and a probe build for this device); the sweep selection itself is
+  unchanged code.
+
 ## Library data preservation under storage failure (#260, #233, #261, `library-preservation.md`)
 
 Record: [`library-preservation.md`](library-preservation.md). No script of its
