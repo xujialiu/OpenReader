@@ -390,3 +390,4 @@
   sessions hold booted simulators, budget for this and prefer the device
   that is already up; `ps` itself taking seconds is the tell that the host
   is the problem.
+- **`simctl io recordVideo` without an explicit output file writes nothing and fails silently under redirection** (verifying #321, iOS 26.5). Symptom: `xcrun simctl io UDID recordVideo --codec=h264 --force >/dev/null 2>&1 &` produced no `.mp4` anywhere; the analysis step found no video after two "successful" plays. Cause: `--force` is an output-file flag (overwrite permission), not a destination; with no path the recorder errors at once, and the redirection ate the message. Fix: always pass the path (`recordVideo --codec=h264 --force /tmp/dir/name.mp4`), `ls` the file before relying on a run, and stop the recorder with SIGINT (`kill -INT`), which it finalises cleanly.

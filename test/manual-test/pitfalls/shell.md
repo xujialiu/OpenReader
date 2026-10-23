@@ -194,3 +194,4 @@
   anything; the header's usage comment now says so. General rule: when a kit
   script documents a state directory, confirm where it actually opened it from
   the process's own first log line, not from the arguments you passed.
+- **A bash heredoc writing JSON into SQLite keeps `\"` literally and corrupts the value** (verifying #321, iOS 26.5). Symptom: staged `clips.metadata` rows read `{\"document\":…}`; the app answered `downloadError: JSON Parse error: Unexpected character` and refused the Document's progress reads (chapterProgress null) while everything else looked healthy. Cause: inside an unquoted heredoc and a single-quoted SQL string, `\"` is not an escape — the backslash is stored. Fix: build the SQL from a script (`node`/`python`) or double the single quotes properly; verify a staged JSON column with `python3 -c json.loads` before relaunching. The app's behaviour is correct: a corrupt store surfaces as an error, not silence.
