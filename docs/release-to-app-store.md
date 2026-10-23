@@ -260,7 +260,8 @@ with the review key left where it was, never passes through the agent (notes
   - Show no API key and no Provider's prices (ADR 0017).
   - Suggested set: the Library, a page with the spoken word highlighted, the player, Word Lookup, Settings.
 - **Review notes and demo key**
-  - The owner creates a new Fish Audio API key with a small prepaid balance, pastes it only into App Store Connect, and deletes it after approval.
+  - The owner keeps one review-only Fish Audio API key with a small prepaid balance, pasted only into App Store Connect.
+  - It stays from one version to the next (owner's decision, 2026-10-23): every submission is reviewed, and a reviewer without a working key cannot test reading aloud (Guideline 2.1). Before each submission the owner checks that the key still works and that its balance covers a review.
   - It is never committed, logged or shown in a screenshot.
   - Before submitting, check every step of the template below on a fresh install. A fresh install's Provider is OpenAI, so the reviewer must choose a Fish Audio voice.
 - **App Transport Security**: the build sets `NSAllowsArbitraryLoads` (ADR 0080), and Apple asks for a justification at review. The notes carry this sentence, or the answer to App Review's question does: `OpenReader connects to a speech server or WebDAV folder whose address the user enters, often a computer at home reached over plain HTTP by a local or VPN host name, so it allows HTTP connections (NSAllowsArbitraryLoads). The hosted speech services it supports are reached over HTTPS.`
