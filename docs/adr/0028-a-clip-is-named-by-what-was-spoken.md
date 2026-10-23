@@ -81,6 +81,8 @@ promise mechanically: after a change, a downloaded chapter reports what is
 missing under the new names, and switching back makes the old audio count again
 without a byte moving.
 
+**A chapter can disappear during that pass (#175).** The chapter read and its key commit are separate operations so hashing does not hold an exclusive SQLite transaction. At commit, `rekeyChapter` now compares the exact text snapshot inside the transaction. An absent chapter is skipped; changed text asks the repository to read and hash it again, even if it has the same number of sentences. A genuine text/key count mismatch or a database error still rejects the pass. Only a completed pass records the new setting. The deterministic host regression holds one chapter read, deletes its Document, then releases the read: before the repair the pass rejected with `Every prepared text must have one membership key.` and never reached the other Document. A same-length text replacement instead silently committed obsolete keys. Both now leave the surviving chapters keyed from their current text, while the no-change control and real-error cases retain their behavior.
+
 **The rule.** `prepareSpeechText` removes every configured pair wherever it
 encloses text, every nesting layer, each closing bracket pairing with the
 nearest unpaired opening one of its own pair, so crossing groups lose both. The

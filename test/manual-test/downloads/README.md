@@ -72,6 +72,13 @@ After restoration, launch the app again before testing.
   `fake-kokoro-two-voices.cjs` (the kit's fake Kokoro serving two voices,
   `OPENREADER_FAKE_TTS_VOICES` names them) with the kit's
   `download-chapter.cjs` staged both Voices without spending quota.
+- [offline-cleanup-313.md](offline-cleanup-313.md) (#313, #176, #175): the
+  cleanup/audit/rekey verification on the device — `offline-audit.cjs`
+  (catalog-vs-disk agreement, `--strict`), `offline-delete-sampler.cjs`
+  (heartbeat + unrelated-Clip reads through CDP during a sweep), the staged
+  interrupted deletion raced with a re-download, the 4,193-clip UI voice
+  deletion measured, the legacy missing-payload repair, and the bracket rekey
+  with a Document deleted mid-pass.
 - [sentence-boundaries-batch.md](sentence-boundaries-batch.md) (#240, #245,
   #241, #242): the accepted sentence-boundary batch through the app — the
   pre-batch Reading baseline from a detached worktree's unpatched `sentencex`,

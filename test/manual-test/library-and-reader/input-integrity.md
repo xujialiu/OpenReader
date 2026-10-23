@@ -1,4 +1,4 @@
-# Exact native name input (#123)
+# Exact native name input (#123, #318)
 
 Use non-secret ASCII fixture names in a disposable Library. This recipe covers
 OpenReader's native Rename / Create folder alerts, not masked fields, credentials,
@@ -38,6 +38,90 @@ The helper's clear may fail on scrolled text whose end is not at the field's
 right edge. That fails closed before new text is typed; it is not permission to
 repeat a backspace burst. The placeholder defaults to `Name`; text equal to the
 placeholder is ambiguous in AX, so use another fixture name.
+
+## Exact name after Save (#318)
+
+From a disposable Library page with no drawer open:
+
+```sh
+python3 test/manual-test/kit/ios_guard.py run --wait 900 --timeout 180 \
+  --record /tmp/name-save-phase.json -- \
+  python3 test/manual-test/library-and-reader/name-save.py \
+  SIMULATOR_UDID NEW_OUTPUT_DIR --value Qwrtz
+```
+
+The default creates a Folder. Add `--folder CURRENT_NAME` to rename that
+Folder on the browsed page; `--open-alert` starts with the matching editor
+already open to remove navigation from the reproduction. Use non-secret ASCII
+names, and a name free in that Folder. It reuses `alert-input.py`, then touches
+the editor's own Create/Save, waits for the native dismissal and the store
+write, and checks the exact name, parent, identity (for Rename) and Library row.
+It never retries typing or restores a wrong name. Successful and failed saves
+stay in place. Exit 0 is PASS, 1 is a saved-name/row mismatch, 2 is a setup or
+input failure. Each run retains command/AX artifacts, `input/result.json`, and
+before/after Folder snapshots. About 10–20 seconds with the device ready.
+
+**Pin the keyboard's learned state when comparing old and fixed code.** A word
+that was corrected once may save exactly on every later attempt even in the
+old app. A green run on a learned word is not a negative control. For this
+issue's before/after comparison, on a session-owned disposable simulator only:
+stop the app, shut down the simulator, move its
+`data/Library/Keyboard` directory into the run's artifacts, then boot it,
+re-silence it, relaunch the app against the chosen Metro, and pass the readiness
+gate. This lets iOS recreate unlearned keyboard data. Do not alter the Mac's,
+a phone's or another session's keyboard; keep every moved directory until the
+session's evidence is recorded. Reset the disposable Folder fixture between
+Create runs as well, so a duplicate refusal is not mistaken for a save. Run
+these setup operations inside the shared guard. The reset is a controlled
+fixture operation on a healthy device, not an environment-recovery retry.
+
+Measured on iOS 26.5: with fresh keyboard data, the old code saved `Qwrtz` as
+`Quartz` twice; with only `autocorrectionDisabled(true)` on the shared field,
+both runs saved `Qwrtz` exactly. Subsequent Folder renames to `Innerq` and
+`Innerx` were exact too. `Deeper` is the ordinary-word control. This script does
+not exercise Document Rename, IME composition or paste; those require separate
+native checks. The mocked-field Vitest assertion protects the modifier's
+configuration, not the keyboard's behavior.
+
+## Document rename from the Library and the Reader (#318)
+
+The Library row's actions drawer and the Reader's menu are the same
+`ReaderActions`, so one script covers both entry points. It opens the drawer
+with real touches, types through `kit/alert-input.py`, presses the alert's own
+Save, and requires the new title in `display-names.json`, `library.json` and on
+screen (the Library row's actions button in `--mode library`, the reader's own
+title in `--mode reader`). Successful and failed renames stay in place.
+
+```sh
+python3 test/manual-test/library-and-reader/doc-name-save.py SIMULATOR_UDID NEW_OUTPUT_DIR \
+  --mode library --current 'A Short Test of Reading Aloud' --value 'Renamed In Library'
+python3 test/manual-test/library-and-reader/doc-name-save.py SIMULATOR_UDID NEW_OUTPUT_DIR \
+  --mode reader --current 'Renamed In Library' --value 'Renamed Twice'
+```
+
+`--mode reader` starts on the Library page and opens the Reader itself. Use a
+uniquely named Document fixture. Exit 0 is PASS, 1 is a store/title mismatch,
+2 is setup. This script asserts successful saves, not #227 duplicate refusal.
+For that separate check, rename to a sibling Document's name, require the
+warning to quote it exactly, return with Back to editing, require the preserved
+draft, then Cancel and compare both stores with their starting snapshots.
+ASCII names only. Verified 2026-10-23 on iOS 26.5 (`1.0.1 (14)-beta3-debug`): both modes
+renamed exactly, with the Document Id preserved in `display-names.json` across
+the two renames.
+
+## Reversible native write failure (#215)
+
+`display-names.json` is written by the native `writeJson`; making the file
+immutable (`chflags uchg`) fails that write for real, without filling the disk
+or touching other stores. With the flag set, a Document rename must say so
+under the drawer's rows and change nothing; after `chflags nouchg`, the same
+drawer's rename must succeed. The drawer is left open between the two parts on
+purpose. Restore the flag immediately after the failing part.
+
+The native readback in these helpers takes time: the independent run's Save
+occurred about 2.5–2.8 seconds after typing finished, with no deliberate input
+settle. This is not proof of a last-keystroke/immediate-submit race. The #123
+unit tests separately force a stale React draft and an older submit callback.
 
 ## Repeatable before/after loop
 

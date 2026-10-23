@@ -270,3 +270,62 @@
   autocorrection on that TextField. Same helper passed exact on iOS 27.0
   (input-integrity.md, 2026-10-02), so treat the behaviour as device/OS-bound
   until re-measured.
+
+## Keeping the name-save reproduction red-capable (#318)
+
+- **Repeated input can teach the keyboard the very spelling being tested.**
+  On the session's iOS 26.5 simulator, the unchanged app first saved `Qwrtz`
+  as `Quartz`, but a Rename and three later Create runs saved `Qwrtz` exactly.
+  Restarting the app and emptying the disposable Folder fixture did not bring
+  the failure back. Shutting down that session-owned simulator and moving its
+  `data/Library/Keyboard` into scratch artifacts before booting restored
+  `Qwrtz` → `Quartz` on two runs. With fresh keyboard data again, disabling
+  autocorrection on the field saved `Qwrtz` exactly twice. Pin learned state
+  for a before/after comparison; a successful retry in a learned dictionary
+  cannot verify the repair. The bounded recipe is in
+  [input-integrity.md](../library-and-reader/input-integrity.md).
+- **The native name editor can disappear before the saved Folder reaches disk.**
+  An immediate read after Create's dismissal reported no new Folder for
+  `Deeper` and `Innerq`; the next run's starting snapshot already held `Deeper`
+  and the corrected `Inner`. Native dismissal is not completion of the JS
+  save. `name-save.py` now waits for the store outcome with an eight-second
+  deadline before checking the name. The original early-read failures are
+  invalid persistence verdicts, not evidence of dropped creates.
+- **`Back to editing` re-presents the editor a few hundred ms later, and a
+  zero-retry input helper must not race it.** Symptom (verifying #318,
+  iOS 26.5): `input-integrity.py` invoked `alert-input.py` immediately after
+  the Back-to-editing touch and read "Expected exactly one native alert titled
+  'Rename'" — the system alert was dismissed but the SwiftUI editor had not
+  re-presented yet. The app was right (the editor did re-present with the exact
+  draft; later trees show it), the script was early, and the failure left the
+  editor open, which poisoned the next runs' preconditions (a later helper saw
+  the folder editor's draft instead of the document's). Fix in
+  `input-integrity.py`: wait for `Name unavailable` to dismiss and `Rename` to
+  re-present before the checked input, and start each scenario from a clean
+  relaunch.
+- **The simulator's software keyboard is hidden while the Mac's hardware
+  keyboard is connected, and its AX rows linger off-screen as stale ghosts.**
+  Symptom (verifying #318, iOS 26.5): with the name editor open, the tree
+  listed a full QWERTY at y=952+ — past the 874-point screen — while the
+  screenshot showed no keyboard at all. `axe type` still works (HID, no
+  composition), so nothing else seems wrong until a test needs candidates, the
+  globe or the prediction bar: they are not on screen. Guest-side switches
+  tried and bounded: HID globe (keycode 63), Ctrl+Space, Cmd+Space — none
+  switched the input source, and Cmd+Space opened **Spotlight** over the app
+  (recover with `axe button home`; the app's own field keeps its draft and its
+  stores untouched). These guest-side attempts did not establish genuine IME
+  candidate selection/composition; non-Latin coverage came from paste instead
+  (input-integrity.md). They do not prove IME testing is impossible. A parent
+  check of Device Hub found only another session's simulator window, so no
+  host-side keyboard toggle was sent to that window. Do not read off-screen
+  QWERTY rows as the live keyboard state.
+- **`xcrun simctl pbcopy` loses to the simulator's Mac pasteboard sync; write
+  the device pasteboard through LLDB instead.** Symptom (verifying #318):
+  `printf '仙逆' | xcrun simctl pbcopy UDID` followed by `simctl pbpaste` read
+  back unrelated Mac-clipboard content within a second, and the field's real
+  Paste callout delivered that Mac content. Fix: with the app running,
+  `lldb -p PID --batch -s FILE` whose FILE runs
+  `expr -- @import UIKit; (void)[[UIPasteboard generalPasteboard] setString:@"仙逆"]`
+  sets the device pasteboard (verified by `simctl pbpaste`), and the paste flow
+  then read and saved `仙逆` exactly. Never edit the Mac's own clipboard to fix
+  this; the owner's clipboard is theirs.

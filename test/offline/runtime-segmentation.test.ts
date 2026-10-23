@@ -117,6 +117,9 @@ async function shown() {
   runtime.requestPlan('book', 'Document');
   runtime.requestProgress('book', voice);
   await flush();
+  // The first availability query can now yield while verifying pre-fix audio
+  // (#313); a single setImmediate is not a completed progress read.
+  await vi.waitFor(() => expect(runtime.chapterProgress('book', voice).has('section-0')).toBe(true), { interval: 1 });
   return {
     complete: runtime.chapterProgress('book', voice).get('section-0')?.complete,
     count: runtime.chapterProgress('book', voice).get('section-0')?.count,

@@ -7,7 +7,10 @@ const warning = vi.hoisted(() => vi.fn());
 const native = vi.hoisted(() => ({ value: '', get() { return this.value; } }));
 vi.mock('react-native', () => ({ StyleSheet: { create: (styles: unknown) => styles }, Alert: { alert: warning } }));
 vi.mock('../../src/app/controls', () => ({ SchemeContext: createContext(null) }));
-vi.mock('@expo/ui/swift-ui/modifiers', () => ({ disabled: (value: boolean) => ({ disabled: value }) }));
+vi.mock('@expo/ui/swift-ui/modifiers', () => ({
+  disabled: (value: boolean) => ({ disabled: value }),
+  autocorrectionDisabled: (value: boolean) => ({ autocorrectionDisabled: value }),
+}));
 vi.mock('@expo/ui/swift-ui', () => {
   const host = (name: string) => function MockNative({ children, ...props }: Record<string, unknown> & { children?: React.ReactNode }) {
     return createElement(name, props, children);
@@ -38,6 +41,14 @@ async function editor() {
 }
 
 describe('submit-time folder name validation (#121)', () => {
+  it('disables automatic spelling replacement on the shared name field (#318)', async () => {
+    const e = await editor();
+    // Configuration guard only: the real keyboard → Save → persisted-name
+    // loop in manual-test/library-and-reader/name-save.py proves the behavior.
+    const field = e.view.root.findAll((node) => String(node.type) === 'TextField')[0];
+    expect(field.props.modifiers ?? []).toContainEqual({ autocorrectionDisabled: true });
+    await e.unmount();
+  });
   it('saves the native field when the JS draft missed its final character (#123)', async () => {
     const e = await editor();
     await e.type('Fictio');

@@ -86,6 +86,7 @@ export class OfflineCatalog {
         state TEXT NOT NULL DEFAULT 'ready', PRIMARY KEY(document, voice, key)
       );
       CREATE INDEX IF NOT EXISTS clips_inventory ON clips(document, voice, state);
+      CREATE INDEX IF NOT EXISTS clips_cleanup ON clips(document, state, voice, key);
       CREATE TABLE IF NOT EXISTS plans(document TEXT PRIMARY KEY, version INTEGER NOT NULL, sections TEXT, prepared_sections TEXT);
       CREATE TABLE IF NOT EXISTS chapters(
         document TEXT NOT NULL, id TEXT NOT NULL, ordinal INTEGER NOT NULL, title TEXT NOT NULL,
@@ -291,11 +292,50 @@ export class OfflineCatalog {
       );
     });
   }
-  async pendingDeletes(): Promise<StoredAudio[]> {
+  async deletionDocuments(): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ document: string }>(
+      "SELECT DISTINCT document FROM clips WHERE state='deleting'",
+    );
+    return rows.map((row) => row.document);
+  }
+  async pendingDeletes(document?: string, limit = -1): Promise<StoredAudio[]> {
     const rows = await this.db.getAllAsync<{ metadata: string }>(
-      "SELECT metadata FROM clips WHERE state='deleting'",
+      document === undefined
+        ? "SELECT metadata FROM clips WHERE state='deleting' ORDER BY document,voice,key LIMIT ?"
+        : "SELECT metadata FROM clips WHERE state='deleting' AND document=? ORDER BY voice,key LIMIT ?",
+      ...(document === undefined ? [limit] : [document, limit]),
     );
     return rows.map((row) => JSON.parse(row.metadata) as StoredAudio);
+  }
+  /** Keyset pagination: deleting an absent payload cannot shift the next page. */
+  async readyBatch(document: string, after: AudioAddress | null, limit: number): Promise<StoredAudio[]> {
+    const rows = await this.db.getAllAsync<{ metadata: string }>(
+      `SELECT metadata FROM clips WHERE document=? AND state='ready'
+       ${after ? "AND (voice,key) > (?,?)" : ""} ORDER BY voice,key LIMIT ?`,
+      document, ...(after ? [after.voice, after.key] : []), limit,
+    );
+    return rows.map((row) => JSON.parse(row.metadata) as StoredAudio);
+  }
+  async audioVerified(document: string): Promise<boolean> {
+    const [row] = await this.db.getAllAsync<{ value: string }>(
+      "SELECT value FROM state WHERE name=?", `audio-verified:${document}`,
+    );
+    return row?.value === "1";
+  }
+  recordAudioVerified(document: string) {
+    return this.write((tx) => tx.runAsync(
+      "INSERT INTO state VALUES(?, '1') ON CONFLICT(name) DO UPDATE SET value='1'",
+      `audio-verified:${document}`,
+    ));
+  }
+  /** Caller holds the document's file queue across presence checks and this write. */
+  forgetMissing(document: string, missing: AudioAddress[]) {
+    if (!missing.length) return Promise.resolve();
+    return this.write((tx) => tx.runAsync(
+      `DELETE FROM clips WHERE document=? AND state='ready' AND (voice,key) IN
+       (SELECT json_extract(value,'$.voice'),json_extract(value,'$.key') FROM json_each(?))`,
+      document, JSON.stringify(missing.map(({ voice, key }) => ({ voice, key }))),
+    ));
   }
   async isDeleting(
     document: string,
@@ -469,15 +509,19 @@ export class OfflineCatalog {
       "SELECT document,id FROM chapters WHERE prepared=1 ORDER BY document,ordinal",
     );
   }
-  /** One chapter's membership keys replaced, its texts and everything else untouched. */
-  async rekeyChapter(document: string, chapter: string, keys: string[]) {
-    await this.write(async (tx) => {
-      const [row] = await tx.getAllAsync<{ text_count: number }>(
-        "SELECT text_count FROM chapters WHERE document=? AND id=?",
+  /** True when updated or removed; false when the text changed and needs new keys. */
+  async rekeyChapter(document: string, chapter: string, texts: string[], keys: string[]): Promise<boolean> {
+    if (texts.length !== keys.length)
+      throw new Error("Every prepared text must have one membership key.");
+    return this.write(async (tx) => {
+      const [row] = await tx.getAllAsync<{ text_count: number; texts: string }>(
+        "SELECT text_count,texts FROM chapters WHERE document=? AND id=?",
         document,
         chapter,
       );
-      if (!row || row.text_count !== keys.length)
+      if (!row) return true;
+      if (row.texts !== JSON.stringify(texts)) return false;
+      if (row.text_count !== keys.length)
         throw new Error("Every prepared text must have one membership key.");
       await tx.runAsync(
         "DELETE FROM memberships WHERE document=? AND chapter=?",
@@ -490,6 +534,7 @@ export class OfflineCatalog {
         chapter,
         JSON.stringify(keys),
       );
+      return true;
     });
   }
   async removeDocument(document: string) {
@@ -513,6 +558,9 @@ export class OfflineCatalog {
       "SELECT document FROM removals",
     );
     return rows.map((row) => row.document);
+  }
+  async hasRemoval(document: string): Promise<boolean> {
+    return (await this.db.getAllAsync("SELECT 1 FROM removals WHERE document=?", document)).length > 0;
   }
   async finishRemoval(document: string) {
     await this.write(async (tx) => {

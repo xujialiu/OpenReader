@@ -1,10 +1,10 @@
 import type { SynthesisResult } from "../core/providers/types";
 import { audioAddress, audioKey, documentKey, voiceKey } from "./catalog-keys";
-import {
+import type {
   OfflineCatalog,
-  type AudioAddress,
-  type StoredAudio,
-  type PreparedChapter,
+  AudioAddress,
+  StoredAudio,
+  PreparedChapter,
 } from "./catalog";
 import type {
   Chapter,
@@ -30,8 +30,22 @@ export interface AudioFiles {
   removeDocumentFiles(documentKey: string): Promise<void>;
 }
 
-/** Rows one DELETE takes. A JSON array of this many keys is about 34 KB. */
-const DELETE_BATCH = 500;
+/** Files finalized together, and time before yielding within that batch (#176). */
+const FILE_BATCH = 64;
+const FILE_SLICE_MS = 8;
+const nextTurn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/** A synchronous native call cannot be preempted; yield after it spends the slice. */
+async function visitFiles<T>(items: readonly T[], visit: (item: T) => Promise<void>) {
+  let started = performance.now();
+  for (let i = 0; i < items.length; i++) {
+    await visit(items[i]);
+    if (i + 1 < items.length && performance.now() - started >= FILE_SLICE_MS) {
+      await nextTurn();
+      started = performance.now();
+    }
+  }
+}
 
 /**
  * A saved clip, or none, and whether looking for it changed the saved audio.
@@ -49,6 +63,7 @@ const MISS: SavedClipRead = { clip: null, dropped: false };
 
 export class OfflineRepository {
   private fileJobs = new Map<string, Promise<unknown>>();
+  private verifications = new Map<string, Promise<void>>();
   /**
    * Settles once the deletions found by the last `recover()` have removed their
    * files and rows. Reads already leave a `deleting` row out, so nothing waits
@@ -96,29 +111,72 @@ export class OfflineRepository {
   private async cleanDeletions(only?: string) {
     for (const document of await this.catalog.removals()) {
       if (only && document !== only) continue;
-      await this.serialize(document, async () => {
-        await this.files.removeDocumentFiles(document);
-        await this.catalog.finishRemoval(document);
-      });
+      await this.serialize(document, () => this.finishDocumentRemoval(document));
     }
-    const groups = new Map<string, StoredAudio[]>();
-    for (const audio of await this.catalog.pendingDeletes()) {
-      if (only && audio.document !== only) continue;
-      const key = JSON.stringify([audio.document, audio.voice]);
-      let group = groups.get(key);
-      if (!group) groups.set(key, (group = []));
-      group.push(audio);
+    // This list chooses queues, never files. Each queue reads its own current
+    // batch AFTER admission, so an older sweep cannot delete a new save (#313).
+    for (const document of only ? [only] : await this.catalog.deletionDocuments()) {
+      while (await this.serialize(document, async () => {
+        const batch = await this.catalog.pendingDeletes(document, FILE_BATCH);
+        const voices = new Map<string, string[]>();
+        await visitFiles(batch, async (audio) => {
+          await this.files.remove(audio);
+          let keys = voices.get(audio.voice);
+          if (!keys) {
+            keys = [];
+            voices.set(audio.voice, keys);
+          }
+          keys.push(audio.key);
+        });
+        for (const [voice, keys] of voices)
+          await this.catalog.finishDeletes(document, voice, keys);
+        return batch.length > 0;
+      })) {
+        // Release BOTH the file queue and the JS task. Awaiting a synchronous
+        // File.delete wrapped in an async function does neither on its own.
+        await nextTurn();
+      }
     }
-    for (const group of groups.values())
-      await this.serialize(group[0].document, async () => {
-        for (const audio of group) await this.files.remove(audio);
-        for (let at = 0; at < group.length; at += DELETE_BATCH)
-          await this.catalog.finishDeletes(
-            group[0].document,
-            group[0].voice,
-            group.slice(at, at + DELETE_BATCH).map((audio) => audio.key),
-          );
-      });
+  }
+  /** Called only inside the file queue, including before a save reuses a directory. */
+  private async finishDocumentRemoval(document: string) {
+    if (!await this.catalog.hasRemoval(document)) return;
+    await this.files.removeDocumentFiles(document);
+    await this.catalog.finishRemoval(document);
+  }
+  /**
+   * Repair pre-#313 ready rows on the first availability query for a Document.
+   * No render-time scans, Provider calls, or startup/playback wait for all files.
+   * The durable marker is written only after success; interrupted work retries.
+   */
+  private verifyAudio(document: string): Promise<void> {
+    const existing = this.verifications.get(document);
+    if (existing) return existing;
+    const job = (async () => {
+      if (await this.catalog.audioVerified(document)) return;
+      // A removal already hides all its rows. Reporting nothing must not wait
+      // behind that directory's slow deletion, nor mark a scan as completed.
+      if (!(await this.catalog.readyBatch(document, null, 1)).length) return;
+      let after: AudioAddress | null = null;
+      for (;;) {
+        const batch = await this.serialize(document, async () => {
+          const ready = await this.catalog.readyBatch(document, after, FILE_BATCH);
+          const missing: AudioAddress[] = [];
+          await visitFiles(ready, async (audio) => {
+            if (!await this.files.present(audio)) missing.push(audio);
+          });
+          await this.catalog.forgetMissing(document, missing);
+          return ready;
+        });
+        if (!batch.length) break;
+        after = batch[batch.length - 1];
+        await nextTurn();
+      }
+      await this.catalog.recordAudioVerified(document);
+    })();
+    this.verifications.set(document, job);
+    void job.catch(() => { this.verifications.delete(document); });
+    return job;
   }
   async tasks(): Promise<DownloadTask[]> {
     return (await this.catalog.readTasks()) ?? [];
@@ -134,7 +192,9 @@ export class OfflineRepository {
     return this.catalog.savedVoices(documentKey(document));
   }
   async inventory(document: string) {
-    return this.catalog.voices(documentKey(document));
+    const key = documentKey(document);
+    await this.verifyAudio(key);
+    return this.catalog.voices(key);
   }
   async readClip(
     document: string,
@@ -206,6 +266,8 @@ export class OfflineRepository {
   ): Promise<boolean> {
     const address = this.address(document, voice, text);
     return this.serialize(address.document, async () => {
+      if (!wanted()) return false;
+      await this.finishDocumentRemoval(address.document);
       if (!wanted()) return false;
       await this.rememberVoice(document, voice);
       await this.catalog.beginWrite(
@@ -286,20 +348,26 @@ export class OfflineRepository {
    */
   async rekey(keyOf: (text: string) => string, keying: string) {
     for (const { document, id } of await this.catalog.preparedChapters()) {
-      const chapter = await this.catalog.chapter(document, id);
-      if (!chapter) continue;
-      const keys: string[] = [];
-      for (let i = 0; i < chapter.texts.length; i++) {
-        keys.push(keyOf(chapter.texts[i]));
-        if (i % 128 === 127)
-          await new Promise((resolve) => setTimeout(resolve, 0));
+      for (;;) {
+        const chapter = await this.catalog.chapter(document, id);
+        if (!chapter) break;
+        const keys: string[] = [];
+        for (let i = 0; i < chapter.texts.length; i++) {
+          keys.push(keyOf(chapter.texts[i]));
+          if (i % 128 === 127) await nextTurn();
+        }
+        if (await this.catalog.rekeyChapter(document, id, chapter.texts, keys)) break;
+        // The chapter was replaced during the read/hash/commit gap. Use its
+        // current text, even when the replacement has the same length (#175).
+        await nextTurn();
       }
-      await this.catalog.rekeyChapter(document, id, keys);
     }
     await this.catalog.recordSpeechKeying(keying);
   }
   async progress(document: string, voice: OfflineVoice) {
-    return this.catalog.progress(documentKey(document), voiceKey(voice));
+    const key = documentKey(document);
+    await this.verifyAudio(key);
+    return this.catalog.progress(key, voiceKey(voice));
   }
   /**
    * The selected chapters' audio stops being offered in the marking transaction.
