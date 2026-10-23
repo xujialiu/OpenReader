@@ -3027,10 +3027,13 @@ ${EPUB_GUARDS_SOURCE}
 
   /* #319: record the upper visible passage BEFORE resize clears the views.
      rendition.location is only the last reported location: during a scroll it
-     can still name an earlier passage. currentLocation maps the live viewport
-     synchronously in the bundled continuous manager. Passing that CFI through
-     resize lets epub.js do its own one redisplay, not a competing display from
-     us. This is only the rendition's visual location, never a Reading Position.
+     can still name an earlier passage. scrolledLocation maps the live viewport
+     without changing layout. Do NOT call rendition.currentLocation here: its
+     manager.currentLocation calls updateLayout, which overwrites _stageSize
+     with the NEW container size before resize compares it, suppressing clear
+     and leaving old-width iframes. Our flow is always scrolled-continuous.
+     Passing the mapped CFI through resize lets epub.js do its own one redisplay.
+     This is only the rendition's visual location, never a Reading Position.
 
      An explicit target wins. During rapid resizing there can already be no
      views; keep the last captured location then instead of replacing it with
@@ -3041,7 +3044,7 @@ ${EPUB_GUARDS_SOURCE}
     manager.resize = function (width, height, target) {
       if (!target) {
         try {
-          var location = rendition.currentLocation();
+          var location = rendition.located(this.scrolledLocation());
           if (location && location.start && location.start.cfi) {
             rendition.location = location;
             target = location.start.cfi;

@@ -79,8 +79,9 @@ reported viewport: during scrolling it can refer to an earlier passage.
 Capturing a location in the `resized` listener is too late; the views are gone.
 
 `keepPlaceOnResize` wraps the manager's resize entry. Before destruction it
-maps the live viewport with `rendition.currentLocation()` and passes its start
-CFI through the existing resize/redisplay path. An explicit target wins. If a
+maps the live viewport with `manager.scrolledLocation()`, converts that mapping
+with `rendition.located()`, and passes its start CFI through the existing
+resize/redisplay path. An explicit target wins. If a
 rapid second resize finds no views yet, the previously captured location is
 kept. Capturing does not emit a Reading Position, a seek, or a Browsing change.
 The existing section-level blank-open recovery remains for a page with neither
@@ -92,10 +93,23 @@ a Browsing page. Its upper visible text remains the resize anchor, while
 Following returns to Line Position. A CFI preserves text, not an identical
 pixel coordinate through reflow.
 
-`test/renderer/resize-place.test.ts` executes the installed manager's actual
-resize and the actual rendition location/redisplay methods. Only browser
-geometry and visible-text mapping are doubled. Its unwrapped control returns
-to the stale location; the wrapper captures before clear and redisplays once,
-including repeated resize and the interval before the first location report.
-This is not a substitute for live rotation, resizing, highlight and speech
-checks, which remain required before delivery.
+Do not replace that mapping call with `rendition.currentLocation()`. It calls
+`manager.currentLocation()`, which first calls `updateLayout()` and overwrites
+`_stageSize` with the new native container size. The original resize then sees
+no size difference, skips `clear()` and leaves old-width iframes. This was
+missed by rotating a 13-inch iPad: both orientations kept the 800-point cap.
+The first real native corner drag exposed a 375-point viewport holding an
+800-point iframe. The first unit double also hid it by replacing the manager's
+whole location getter rather than only its visible-text mapping.
+
+`test/renderer/resize-place.test.ts` now executes the installed manager's actual
+resize, currentLocation and updateLayout, plus rendition location/redisplay
+methods. Only browser geometry, visible-text mapping and applying layout to
+views are doubled. Native container size changes before the resize observer
+runs, as on device. This regression fails the first wrapper because `clear`
+and redisplay never occur, and passes the side-effect-free mapping call.
+The unwrapped stale-location control and repeated-resize cases remain.
+
+Rotation, actual width-changing resize, highlighting and speech checks are
+separate runtime gates. Passing rotation at a constant capped width is not
+proof of width reflow; their results are recorded on #319.

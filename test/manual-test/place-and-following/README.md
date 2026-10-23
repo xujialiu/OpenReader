@@ -3,6 +3,9 @@
 Each recipe is its own file. Read the one for what you are testing, or the one
 that names the script or probe you are about to run.
 
+- [ipad-window.md](ipad-window.md) (#319): real system rotation and the native
+  resize handle, independent viewport/iframe geometry checks, and what each
+  proves. `IpadRotationProbe.swift`, `viewport-size.js`.
 - [chapter-boundary.md](chapter-boundary.md) (#26, #45, #46): reading from a
   downloaded chapter into one that is not, sentences that failed retried by
   Play, and a place kept when sections render out of order.

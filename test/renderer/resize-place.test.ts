@@ -8,8 +8,9 @@ import { pin } from '../structural';
 const require = createRequire(import.meta.url);
 const source = (require('@epubjs-react-native/core/lib/commonjs/epubjs.js') as { default: string }).default;
 
-/** Real bundled manager.resize and Rendition.currentLocation/located/onResized.
- * Only the browser's stage/views and their visible-text mapping are doubled.
+/** Real bundled manager.resize/currentLocation/updateLayout and Rendition's
+ * location/redisplay methods. Only browser geometry/mapping and view layout
+ * application are doubled. currentLocation MUST retain its layout side effect:
  * A stale last-reported location is exactly what a resize during scrolling sees. */
 function page(patched: boolean) {
   const module = { exports: {} as { Rendition: { prototype: { requireManager(name: string): { prototype: object } } } } };
@@ -27,6 +28,8 @@ function page(patched: boolean) {
   let visible = true;
   const trace: string[] = [];
   const display = vi.fn();
+  let viewport = { width: 800, height: 800 };
+  const layout = { width: 800, height: 800, calculate(width: number, height: number) { this.width = width; this.height = height; } };
   const rendition = Object.assign(Object.create(proto), {
     location: { start: { cfi: 'earlier-passage' } }, display,
     emit: vi.fn(),
@@ -37,10 +40,10 @@ function page(patched: boolean) {
   });
   const manager = Object.assign(Object.create(Manager.prototype), {
     _stageSize: { width: 800, height: 800 },
-    stage: { size: (width = 800, height = 800) => ({ width, height }) },
-    bounds: () => ({}), viewSettings: {}, updateLayout: vi.fn(),
+    stage: { size: (width = viewport.width, height = viewport.height) => ({ width, height }) },
+    bounds: () => ({}), viewSettings: {}, layout, isPaginated: false, setLayout: vi.fn(),
     clear() { trace.push('clear'); visible = false; },
-    currentLocation() {
+    scrolledLocation() {
       trace.push('map visible text');
       return visible ? [{ index: 3, href: 'chapter.xhtml', pages: [4], totalPages: 20, mapping: { start: fresh, end: 'end' } }] : [];
     },
@@ -59,7 +62,12 @@ function page(patched: boolean) {
     });
   }
   return {
-    resize: (width: number, height: number, target?: string) => manager.resize(width, height, target),
+    resize: (width: number, height: number, target?: string) => {
+      // A native window resize changes the container BEFORE the observer calls
+      // manager.resize. A location getter that updates _stageSize masks it.
+      viewport = { width, height };
+      return manager.resize(width, height, target);
+    },
     nextPassage: (cfi: string) => { fresh = cfi; visible = true; },
     loseReportedLocation: () => { rendition.location = undefined; },
     display, trace,
