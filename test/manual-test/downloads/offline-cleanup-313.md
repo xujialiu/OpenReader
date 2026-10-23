@@ -13,9 +13,10 @@ and what a measurement can and cannot prove.
   `OPENREADER_FAKE_TTS_LOG` set) — no paid Provider.
 - A large fixture: a real-book part with ~40 chapters downloaded through the
   app's own runtime (`kit/download-chapter.cjs`) gives ~4,000 Clips. Record the
-  Document id and the fake's `text=` request count before anything else; every
-  full re-download of those chapters is exactly one request per Clip, so the
-  count arithmetic identifies every later requester.
+  Document id and the fake's `text=` request count before each scenario. For
+  request-count checks, remove the intended saved audio and relaunch to clear
+  the in-memory cache; measure actual requests rather than assuming one per
+  sentence (shared Clips, cached audio and retries can change the count).
 - Consent: the first synthesis asks; check the recipient against the fake's
   address before answering (see `../voices-and-providers/consent-recovery.md`).
 
@@ -26,8 +27,8 @@ node test/manual-test/downloads/offline-audit.cjs UDID [--strict] [--json]
 ```
 
 Snapshots `Documents/offline-narration-v2/catalog.sqlite` with the SQLite
-online-backup API (`sqlite3 SRC ".backup DEST"` — consistent while the app
-runs; a fallback to raw main/WAL copies is printed as NOT consistent), then
+online-backup API (`sqlite3 -readonly SRC ".backup DEST"` — consistent while
+the app runs; a failed snapshot exits 2 rather than copying a racing WAL), then
 reports per Document/Voice clip counts by state and every `ready` row's
 payload presence/size, plus `audio-verified` markers. `--strict` exits 1 on
 any missing/short payload and is only meaningful for a QUIESCENT store: during
@@ -46,8 +47,10 @@ $S read METRO DEVICE [SINCE] [UNTIL]  # per-window summary; bounds are marks, ms
 $S raw  METRO DEVICE > RAW.json     # full tick/read/marks dump; save BEFORE any relaunch
 ```
 
-Arming stops any previous probe. The heartbeat records each fire's due time,
-so summaries report callback-start lateness; the unrelated read loop records
+Arming stops any previous probe. The current heartbeat records each fire's due
+time relative to the preceding tick plus 25 ms; old v2 dumps used a different,
+incorrect deadline reset, so compare their actual inter-tick gaps instead of
+their `late` field. The unrelated read loop records
 due/startedAt/resolvedAt. `read` counts only the requested window — always
 summarise the confirmed→terminal window, never the armed aggregate. A
 repository `readClip` miss returns `{clip:null}` and calls NO Provider (the
@@ -65,9 +68,9 @@ with a `raw` call answering `null` if cleanliness matters.
    interval, treats 0 deleting as terminal only AFTER positive deleting rows
    were seen (a poller started before its deletion, or against a quiescent
    store, must keep waiting, not exit), and stops at a deadline — never a
-   fixed iteration count. Both earlier mistakes (fixed iteration count;
-   pre-confirm start) happened on 2026-10-23 and cost one run's early
-   progression.
+   fixed iteration count. Keep the last positive and first empty timestamps:
+   together they bound completion. If the probe auto-stops before completion,
+   the missing tail cannot be counted as responsive.
 4. Optionally, mid-sweep, perform a real navigation touch and record the touch
    time and the first tree showing the destination — a response observation,
    not a latency measurement.
@@ -80,10 +83,14 @@ with a `raw` call answering `null` if cleanliness matters.
 
 The first availability query audits a Document only when `audio-verified` is
 absent and the process has not already memoised an empty-set answer. After a
-fresh download, terminate and relaunch (fresh process), remove the Document's
-marker while the app is stopped if one exists, then arm, `mark before-audit`,
+fresh download, terminate the app, assert that the fixture still has its ready
+rows and payloads, and remove only that Document's marker. Then relaunch for a
+fresh process, arm, `mark before-audit`,
 trigger `runtime.requestInventory(DOC)` through CDP (a handler probe), poll
-the probe's own completedAt, `mark audit-observed`, `stop`, `raw > file`.
+a bounded probe's `inventoryReady(DOC)` until true and record `completedAt`,
+then `mark audit-observed`, `stop`, `raw > file`. Use the actual request time
+and readiness observation to bound the query; do not treat a later human
+`audit-observed` marker as the completion time.
 Check: fake request count unchanged across the window, `--strict` agreement
 after, marker present after (only success records it). The same visitFiles
 path serves both audit and deletion, but on the simulator an exists-check is
@@ -94,12 +101,11 @@ storage claim.
 
 - Ticks and reads are scheduling evidence, not frame rate and not audible
   playback.
-- Compare every window to an idle baseline taken on the same boot, and record
-  machine load around the window: on 2026-10-23 a parallel session's load spike
-  (5-minute load average 76) produced one-off 249–335 ms heartbeat gaps in an
-  otherwise clean audit window, all gone in a calm-load repeat (max 44 ms).
-  Attribute outliers to the machine before attributing them to the app, and
-  never extrapolate a duration from two polls — bound it.
+- Compare every window to an idle baseline taken on the same boot, saving the
+  baseline's raw data too. Record machine load and CPU idle around the window,
+  but neither an elevated load average nor a passing repeat proves the cause
+  of an outlier. Keep unexplained spikes as a limitation; use targeted probes
+  to attribute them. Never extrapolate a duration from two polls — bound it.
 - The exact repository interleavings stay with the host tests
   (`repository-races.test.ts`, `deletion-responsiveness.test.ts`); device
   staging proves overlap and post-state contracts.

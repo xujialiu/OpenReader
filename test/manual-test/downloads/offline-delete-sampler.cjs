@@ -1,4 +1,4 @@
-// #176 device measurement, v2: a BOUNDED in-app heartbeat and unrelated-Clip
+// #176 device measurement, v3: a BOUNDED in-app heartbeat and unrelated-Clip
 // reader, armed through CDP, with explicit stop, named phase markers, and raw
 // timestamp retention. Injects no app code changes; nothing here is a gate.
 //
@@ -28,7 +28,7 @@ const { join } = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const [, , mode, metro, device, ...rest] = process.argv;
-if (!mode || !metro) {
+if (!['arm', 'mark', 'stop', 'read', 'raw'].includes(mode) || !metro || !device) {
   console.error('usage: sampler arm|mark|stop|read|raw METRO DEVICE [args]');
   process.exit(2);
 }
@@ -60,12 +60,16 @@ if (mode === 'arm') {
     process.exit(2);
   }
   const seconds = Number(boundedSeconds ?? 90);
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 600) {
+    console.error('BOUNDED_SECONDS must be greater than 0 and at most 600');
+    process.exit(2);
+  }
   const expr = `(() => {
   // Stop any previous probe: its timer, its read timer, its loop flag.
   const old = globalThis.__or176v2;
   if (old) { old.stopped = true; if (old.timer) clearInterval(old.timer); if (old.readTimer) clearTimeout(old.readTimer); old.stopReason = 'replaced by a new arm'; }
   const s = globalThis.__or176v2 = {
-    v: 2,
+    v: 3,
     armedAt: Date.now(), boundedMs: ${Math.round(seconds * 1000)},
     ticks: [], droppedTicks: 0, reads: [], droppedReads: 0,
     marks: {}, stopped: false, stoppedAt: null, stopReason: null,
@@ -79,7 +83,9 @@ if (mode === 'arm') {
     if (s.ticks.length >= s.maxTicks) { s.ticks.splice(0, 10000); s.droppedTicks += 10000; }
     s.ticks.push({ at, due: expected, late: Math.max(0, at - expected), gap: prevAt === null ? 0 : at - prevAt });
     prevAt = at;
-    expected = Math.max(expected + ${HEARTBEAT_MS}, at + 1);
+    // The prior v2 reset to at+1 after delayed ticks: its raw gap is valid,
+    // but its late field is not a 25 ms scheduling-delay measurement.
+    expected = at + ${HEARTBEAT_MS};
     if (at - s.armedAt >= s.boundedMs) { s.stopped = true; s.stoppedAt = at; s.stopReason = 'bounded duration reached'; clearInterval(s.timer); if (s.readTimer) clearTimeout(s.readTimer); }
   }, ${HEARTBEAT_MS});
   const scheduleRead = () => {
@@ -131,10 +137,6 @@ if (mode === 'arm') {
   console.log(evalCdp(`(() => JSON.stringify(globalThis.__or176v2))()`));
 } else {
   const [since, until] = rest;
-  const num = (spec, fallbackKind) => {
-    if (!spec || spec === 'now') return spec === 'now' || !spec ? { now: true } : null;
-    return { ms: Number.isFinite(Number(spec)) ? Number(spec) : { mark: spec } };
-  };
   const resolveBound = (spec) => {
     if (!spec) return { expr: 's.armedAt', label: 'arm' };
     if (spec === 'now') return { expr: 'Date.now()', label: 'now' };
@@ -157,7 +159,7 @@ if (mode === 'arm') {
   };
   const wt = win(s.ticks, 'at');
   const wr = win(s.reads, 'startedAt');
-  const done = wr.filter((r) => r.resolvedAt !== null);
+  const done = wr.filter((r) => r.resolvedAt !== null && r.resolvedAt <= end);
   const worst = (xs, key) => [...xs].sort((a, b) => b[key] - a[key]).slice(0, 8).map((e) => ({ at: e.at ?? e.startedAt, v: e[key] }));
   return JSON.stringify({
     window: { start, end, ms: end - start, since: ${JSON.stringify(A.label)}, until: ${JSON.stringify(B.label)} },

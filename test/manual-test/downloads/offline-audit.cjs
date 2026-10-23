@@ -7,9 +7,8 @@
 //
 // Snapshot: the catalogue is captured with the SQLite ONLINE BACKUP API
 // (`sqlite3 SRC ".backup DEST"`), which takes a consistent snapshot while the
-// app is running; falling back to file copies only warns and is then NOT
-// consistent (main/WAL copies race a live writer). node:sqlite on this machine
-// has no backup() (Node 22); the CLI is used instead.
+// app is running; a failed backup refuses the audit rather than copying a
+// main/WAL pair that can race a live writer. The CLI supplies this operation.
 //
 // Reports, per Document and Voice: clip counts by state, and for every `ready`
 // row whether its payload file exists and matches the sidecar's recorded size.
@@ -47,15 +46,13 @@ if (!existsSync(dbPath)) {
 }
 const work = mkdtempSync(join(tmpdir(), 'openreader-offline-audit-'));
 const dest = join(work, 'catalog.sqlite');
-let method = 'sqlite3 .backup (online, consistent)';
-let consistent = true;
+const method = 'sqlite3 .backup (online, consistent)';
 try {
-  execFileSync('sqlite3', [dbPath, `.backup '${dest}'`], { timeout: 30000 });
+  execFileSync('sqlite3', ['-readonly', dbPath, `.backup '${dest}'`], { timeout: 30000 });
 } catch (problem) {
-  method = `file copies (NOT consistent: ${String(problem.message).slice(0, 80)})`;
-  consistent = false;
-  for (const suffix of ['', '-wal', '-shm'])
-    if (existsSync(dbPath + suffix)) execFileSync('cp', [dbPath + suffix, dest + suffix]);
+  rmSync(work, { recursive: true, force: true });
+  console.error(`snapshot failed: ${String(problem.message).slice(0, 160)}`);
+  process.exit(2);
 }
 if (!existsSync(dest) || statSync(dest).size === 0) {
   rmSync(work, { recursive: true, force: true });
@@ -77,7 +74,7 @@ try {
   const problems = [];
   const perGroup = new Map();
   const group = (d, v) => {
-    const k = `${d.slice(0, 12)}…/${v.slice(0, 10)}…`;
+    const k = `${d}/${v}`;
     if (!perGroup.has(k)) perGroup.set(k, { document: d, voice: v, states: {}, ready: 0, missing: 0, short: 0 });
     return perGroup.get(k);
   };
@@ -97,21 +94,20 @@ try {
     const size = payload && existsSync(payload) ? statSync(payload).size : 0;
     checked++;
     if (!payload || !existsSync(payload)) { g.missing++; problems.push(`missing payload: ${r.document.slice(0, 12)}…/${r.voice.slice(0, 10)}…/${r.key}`); }
-    else if (sidecar && Number.isSafeInteger(sidecar.size) && size !== sidecar.size) { g.short++; problems.push(`short payload (${size} != ${sidecar.size}): ${r.document.slice(0, 12)}…/${r.voice.slice(0, 10)}…/${r.key}`); }
+    else if (!Number.isSafeInteger(sidecar?.size) || sidecar.size <= 0 || size !== sidecar.size) { g.short++; problems.push(`short payload (${size} != ${sidecar.size}): ${r.document.slice(0, 12)}…/${r.voice.slice(0, 10)}…/${r.key}`); }
   }
   const report = {
     container: data,
     catalog: dbPath,
-    snapshot: { method, consistent },
+    snapshot: { method, consistent: true },
     groups: [...perGroup.values()],
     readyChecked: checked,
     verifiedMarkers: markers.map((m) => m.name),
     problems,
-    caveat: consistent ? null : 'inconsistent snapshot: strict results valid only for quiescent stores',
+    caveat: 'Row/file agreement requires a quiescent store, even with a consistent database snapshot.',
   };
   if (asJson) console.log(JSON.stringify(report, null, 2));
   else {
-    if (!consistent) console.log(`WARNING ${report.caveat}`);
     for (const g of report.groups)
       console.log(`${g.document} voice ${g.voice.slice(0, 10)}… states=${JSON.stringify(g.states)} ready=${g.ready} missingPayload=${g.missing} shortPayload=${g.short}`);
     console.log(`ready rows checked against disk: ${checked}`);

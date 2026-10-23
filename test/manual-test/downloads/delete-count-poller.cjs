@@ -16,18 +16,22 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 
 const [data, doc, deadlineSeconds, intervalMs] = process.argv.slice(2);
-if (!data || !doc) { console.error('usage: delete-count-poller.cjs CONTAINER_DATA DOC_KEY [DEADLINE_S=200] [INTERVAL_MS=350]'); process.exit(2); }
+const seconds = Number(deadlineSeconds ?? 200);
+const interval = Number(intervalMs ?? 350);
+if (!data || !/^[a-f0-9]{64}$/i.test(doc ?? '') || !Number.isFinite(seconds) || seconds <= 0 || seconds > 3600 || !Number.isFinite(interval) || interval < 1 || interval > 5000) {
+  console.error('usage: delete-count-poller.cjs CONTAINER_DATA HEX_DOC_KEY [DEADLINE_S=200, 0<value<=3600] [INTERVAL_MS=350, 1..5000]');
+  process.exit(2);
+}
 const dbPath = join(data, 'Documents', 'offline-narration-v2', 'catalog.sqlite');
 const work = mkdtempSync(join(tmpdir(), 'or176-poller-'));
 const dest = join(work, 'catalog.sqlite');
-const deadline = Date.now() + Number(deadlineSeconds ?? 200) * 1000;
-const interval = Number(intervalMs ?? 350);
+const deadline = Date.now() + seconds * 1000;
 let zeros = 0;
 let sawPositive = false;
 const cleanup = () => rmSync(work, { recursive: true, force: true });
 const poll = () => {
   try {
-    execFileSync('sqlite3', [dbPath, `.backup '${dest}'`], { timeout: 10000 });
+    execFileSync('sqlite3', ['-readonly', dbPath, `.backup '${dest}'`], { timeout: 10000 });
     const out = execFileSync('sqlite3', [dest, `SELECT state||'='||COUNT(*) FROM clips WHERE document='${doc}' GROUP BY state;`], { timeout: 10000 }).toString().trim();
     const counts = {};
     for (const line of out.split('\n').filter(Boolean)) { const [k, v] = line.split('='); counts[k] = Number(v); }
