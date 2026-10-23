@@ -8,7 +8,7 @@ import { useShell } from './routes';
 const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 /** Selection is page-local; submitted work survives blur, but its completion cannot restore an old selection. */
-export function useLibrarySelection(navigation: Pick<ScreenProps<'Library'>['navigation'], 'addListener'>, rows: readonly LibraryTarget[], remove: (id: string) => Promise<void>) {
+export function useLibrarySelection(navigation: Pick<ScreenProps<'Library' | 'Folder'>['navigation'], 'addListener'>, rows: readonly LibraryTarget[], remove: (id: string) => Promise<void>) {
   const { library } = useShell();
   const [active, setActive] = useState(false);
   const [keys, setKeys] = useState<Set<string>>(new Set());

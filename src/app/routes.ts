@@ -19,6 +19,7 @@ import { createContext, useContext } from 'react';
 
 import { APP_NAME } from '../../app-name';
 import type { DocumentId } from '../core/document';
+import type { FolderId } from '../core/folders';
 import type { ProviderId } from '../core/providers/types';
 
 import type { SyncOutcome } from '../core/sync/transport';
@@ -41,6 +42,12 @@ import type { SyncHandle } from './use-sync';
  */
 export type RootStackParamList = {
   Library: undefined;
+  /**
+   * One Folder of the Library, pushed over the page of the Folder it is in
+   * (#317), so the phone draws its slide, its back arrow and its back swipe.
+   * Takes the Folder's id, for the reason `Reader` takes a Document Id.
+   */
+  Folder: { id: FolderId };
   Reader: { id: DocumentId };
   Settings: undefined;
   General: undefined;

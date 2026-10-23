@@ -42,6 +42,8 @@ When the remembered Folder no longer exists, browsing returns directly to the Li
 
 A Folder row shows its icon, name and actions button. Tapping it enters that Folder. The page title is the current Folder name and the top-left control returns to its parent; Settings remains accessible at the Library root. Full paths appear in the move Drawer and duplicate-import alert rather than taking up space above the main list.
 
+_Revised on 2026-10-23 (#317): each Folder opens as a page of its own, with the phone's own back arrow and back swipe. See "A Folder is a page" below._
+
 When this feature first arrives, all existing Documents remain at the Library root, with their names, Reading Positions and Offline Narration unchanged. The owner organizes them explicitly. Sibling Folder names must be unique, and so must the names of Documents in one place (below), but a Document and Folder may have the same name.
 
 After the owner confirms deletion, any Reading or Download belonging to a contained Document is stopped before that Document is removed. Unrelated Reading and Downloads are unaffected. The warning explains this impact when applicable. Failures are reported explicitly, and content that could not be deleted is not presented as successfully removed. This version has no trash or recovery feature.
@@ -100,6 +102,27 @@ Turned down:
 - **Closing a Drawer when the owner touches another entry, or shutting the Library behind a Drawer to touches.** Touching another entry's actions button asks for that entry's actions, so the Drawer shows them, and the Library behind a Drawer stays usable (decision 0066).
 
 The owner chose each of these on 2026-10-10 (#151).
+
+## A Folder is a page
+
+Issue #317. Inside a Folder, a swipe in from the left edge did nothing. Everywhere else in the app that swipe goes back, as it does in the phone's own apps, and the Folder showed a back arrow like any other page. Only the arrow worked, small and at the top of a large phone, and a nested Folder needed it once per level.
+
+Each Folder now opens as a page of its own, as a folder does in the phone's Files app. Entering one slides it in from the right; going back slides it away. The swipe from the left edge goes up one level, and the page follows the finger, so a swipe let go of halfway leaves the owner where they were. The top-left control is the phone's own back arrow. Held down, it lists the Folders above, back to the Library, to go straight to one.
+
+What stays as it was:
+
+- The app reopens in the Folder browsed last, and a swipe from there goes up through the Folders above it.
+- Returning from a book returns to the Folder it was opened from.
+- A Document arriving from another app, an import and Create folder all land in the Folder on screen.
+- While entries are being selected, Select all stands where the back arrow was, and the swipe does nothing until the selection is cancelled, as in Files. A swipe would otherwise drop the selection without a word.
+- If the Folder on screen is deleted from a Drawer left open over it, the Library root is shown, as before. If it is moved, its back swipe goes up through its new place.
+
+Turned down:
+
+- **A swipe on the one Library page that, once the finger lifts, shows the parent Folder.** Much less work, but nothing moves under the finger. The swipe would feel unlike the same swipe everywhere else, and could not be abandoned halfway. Entering a Folder would also stay an instant swap.
+- **That swipe with a copy of the phone's slide drawn by the app.** More work than letting the phone draw it, and still a copy of something the phone already does.
+
+The owner chose this on 2026-10-23 (#317).
 
 ## Design review
 

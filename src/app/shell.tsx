@@ -4,12 +4,14 @@ import { AcknowledgementScreen, AcknowledgementsScreen } from './acknowledgement
  * The screens of ADR 0019, and the one way back from each of them.
  *
  * ```
- * Library ──┬─→ Reader ──→ (Appearance, a sheet over it)
+ * Library ──┬─→ Folder ─→ Folder … (each ─→ Reader)
+ *           ├─→ Reader ──→ (Appearance, a sheet over it)
  *           └─→ Settings ──┬─→ General
  *                          └─→ Providers ──→ one Provider
  * ```
  *
- * `Library` is the initial route. The route list and the shell's own context are
+ * `Library` is the initial route, with the Folders down to the one browsed
+ * last pushed over it at launch (#317). The route list and the shell's own context are
  * in `routes.ts`, which imports no screen, so this file can import every screen
  * without a cycle.
  *
@@ -34,7 +36,7 @@ import { asDocumentId } from '../core/document';
 import { readProviderKey, saveProviderKey } from '../keys/store';
 
 import { ReaderProvider } from '@epubjs-react-native/core';
-import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
+import { CommonActions, DarkTheme, DefaultTheme, NavigationContainer, type InitialState } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -45,6 +47,7 @@ import { Alert, Appearance, AppState, useColorScheme, useWindowDimensions } from
 
 import { readingAccent } from './accent';
 import { AccentContext, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
+import { folderRoutes, reconcileFolderStack } from './folder-stack';
 import { GeneralScreen } from './general-screen';
 import { LibraryScreen } from './library-screen';
 import { importDocument } from './import-document';
@@ -279,6 +282,27 @@ export function OpenReader() {
   }, [arrival, library, navigationReady, sync]);
 
   /**
+   * A Folder is a page of the stack (#317), so a relaunch opens on the pages
+   * from the Library down to the Folder browsed last (design 0069), and a back
+   * swipe goes up through them. Read once: the navigator takes it at mount.
+   */
+  const [initialNavigation] = useState<InitialState | undefined>(() => {
+    const { tree } = library.folders.getSnapshot();
+    if (tree.current === null) return undefined;
+    const routes = folderRoutes(tree, tree.current);
+    return { index: routes.length - 1, routes };
+  });
+  /** A Folder whose page is open, deleted or moved from a drawer left over it: the stack follows the tree. */
+  const folderTree = library.folderSnapshot.tree;
+  useEffect(() => {
+    if (!navigationReady) return;
+    const state = navigationRef.getRootState();
+    if (!state) return;
+    const routes = reconcileFolderStack(state.routes, folderTree);
+    if (routes) navigationRef.dispatch(CommonActions.reset({ ...state, index: routes.length - 1, routes }));
+  }, [folderTree, navigationReady]);
+
+  /**
    * The theme, resolved once for the whole app (ADR 0022).
    *
    * `useColorScheme()` is only consulted for `'system'` — `resolveTheme` decides —
@@ -355,7 +379,7 @@ export function OpenReader() {
           <SafeAreaProvider>
           <PortalProvider>
           <ReadingHost>
-          <NavigationContainer ref={navigationRef} theme={navigationTheme} onReady={() => setNavigationReady(true)}>
+          <NavigationContainer ref={navigationRef} theme={navigationTheme} initialState={initialNavigation} onReady={() => setNavigationReady(true)}>
             <Stack.Navigator
               initialRouteName="Library"
               screenOptions={{
@@ -377,6 +401,14 @@ export function OpenReader() {
               }}
             >
               <Stack.Screen name="Library" component={LibraryScreen} options={{ title: 'Library' }} />
+              {/*
+                * One page per Folder (#317). Its id is the Folder's, so a second tap on a row
+                * before the first push has drawn brings the same page forward instead of
+                * pushing a copy. The name is here as well as set by the screen, so the bar
+                * has it from the push's first frame.
+                */}
+              <Stack.Screen name="Folder" component={LibraryScreen} getId={({ params }) => params.id}
+                options={({ route }) => ({ title: folderTree.folders.find((one) => one.id === route.params.id)?.name ?? '' })} />
               <Stack.Screen name="Reader" component={ReaderScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings', ...settingsScreen }} />
               <Stack.Screen name="General" component={GeneralScreen} options={{ title: 'General', headerBackTitle: 'Settings', ...settingsScreen }} />

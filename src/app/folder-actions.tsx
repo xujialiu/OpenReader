@@ -9,8 +9,8 @@ import { useShell } from './routes';
 
 const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
 
-/** Kept mounted until the native dismissal finishes before handing over to Files. */
-export function AddDrawer({ visible, onClose, onImport, onSelect }: { visible: boolean; onClose(): void; onImport(): void; onSelect(): void }) {
+/** Kept mounted until the native dismissal finishes before handing over to Files. `folder` is the page's, where Create folder creates (#317). */
+export function AddDrawer({ visible, folder, onClose, onImport, onSelect }: { visible: boolean; folder: FolderId | null; onClose(): void; onImport(): void; onSelect(): void }) {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
   const [naming, setNaming] = useState(false);
@@ -25,7 +25,7 @@ export function AddDrawer({ visible, onClose, onImport, onSelect }: { visible: b
       <DrawerRow icon="plus" disabled={busy || !!problem} onPress={() => { importing.current = true; onClose(); }}>
         <DrawerRowText>Import file</DrawerRowText>
       </DrawerRow>
-      <DrawerRow icon="folder" disabled={busy || !!problem} onPress={() => { parent.current = tree.current; setNaming(true); }}>
+      <DrawerRow icon="folder" disabled={busy || !!problem} onPress={() => { parent.current = folder; setNaming(true); }}>
         <DrawerRowText>Create folder</DrawerRowText>
       </DrawerRow>
       <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => { onClose(); onSelect(); }}>
@@ -67,11 +67,12 @@ export interface MovePage {
  * included. A refusal is the phone's alert, since a line under a long list is
  * out of sight of the button that was pressed.
  */
-export function useMovePage(moving: { target: MoveTarget } | { targets: readonly LibraryTarget[] }, { onMoved, onLeave }: { onMoved(): void; onLeave?(): void }): MovePage {
+export function useMovePage(moving: { target: MoveTarget } | { targets: readonly LibraryTarget[]; from: FolderId | null }, { onMoved, onLeave }: { onMoved(): void; onLeave?(): void }): MovePage {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
   const target = 'target' in moving ? moving.target : null;
-  const source = target ? (target.kind === 'folder' ? tree.folders.find((folder) => folder.id === target.id)?.parent ?? null : tree.documents[target.id] ?? null) : tree.current;
+  // A selection's entries are the rows of the page it was made on (#317).
+  const source = 'from' in moving ? moving.from : target ? (target.kind === 'folder' ? tree.folders.find((folder) => folder.id === target.id)?.parent ?? null : tree.documents[target.id] ?? null) : null;
   /** `undefined` until the owner leaves the entries' own folder. */
   const [destination, setDestination] = useState<FolderId | null | undefined>(undefined);
   const shown = destination === undefined ? source : destination;

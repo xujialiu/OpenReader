@@ -18,12 +18,14 @@ _The product argument — what the owner sees and what it costs — is
 ## The screens
 
 ```
-Library ──┬─→ Reader ──→ (Appearance, a sheet over it)
+Library ──┬─→ Folder ─→ Folder … (each ─→ Reader)
+          ├─→ Reader ──→ (Appearance, a sheet over it)
           └─→ Settings ──┬─→ General
                          └─→ Providers ──→ Provider detail
 ```
 
-`Library` is the initial route. `Reader` takes a Document Id, not a path or a
+`Library` is the initial route. Since #317 each Folder is a `Folder` route
+over it, taking the Folder's id (ADR 0069, "A Folder is a page of the stack"). `Reader` takes a Document Id, not a path or a
 `Document` object: the route params of a native stack are serialised, and a
 Document Id is already the content hash (ADR 0004), so the route survives a
 state restore while a path would go stale the moment a file moved.

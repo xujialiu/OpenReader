@@ -1,5 +1,9 @@
-/** The Library's current Folder: immediate child folders, then Documents in their existing recency order (#121). */
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+/**
+ * One page of the Library: the root, or one Folder pushed over the page of the
+ * Folder it is in (#317). Immediate child folders, then Documents in their
+ * existing recency order (#121).
+ */
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
@@ -36,9 +40,11 @@ function progressOf(entry: LibraryEntry, present: boolean): string {
 }
 type Row = { kind: 'folder'; folder: Folder } | { kind: 'document'; entry: LibraryEntry };
 
-export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
+export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Folder'>) {
   const { settings, library, sync } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
+  /** The Folder this page shows, for as long as the page is open; `null` is the Library root. */
+  const folder = route.params?.id ?? null;
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const [actionHeight, setActionHeight] = useState(52);
@@ -50,7 +56,13 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const [actions, setActions] = useState<LibraryEntry | null>(null);
   const [folderActions, setFolderActions] = useState<FolderId | null>(null);
   const importLocation = useRef<FolderId | null>(null);
-  const currentFolder = tree.current === null ? null : folderAt(tree, tree.current);
+  /**
+   * `null` at the root, and for the moment between a drawer left over this
+   * page deleting its Folder and the shell taking the page away
+   * (`reconcileFolderStack`): the page then shows nothing, under the name it
+   * had, rather than throwing.
+   */
+  const currentFolder = folder === null ? null : tree.folders.find((one) => one.id === folder) ?? null;
   const reportDeletion = (error: unknown) => library.report(error instanceof Error ? error.message : String(error), 'delete');
 
   const removeDocument = async (id: string) => {
@@ -61,11 +73,11 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     library.remove(document);
   };
   const rows: Row[] = [
-    ...childFolders(tree, tree.current).map((folder): Row => ({ kind: 'folder', folder })),
-    ...library.entries.filter((entry) => (tree.documents[entry.id] ?? null) === tree.current).map((entry): Row => ({ kind: 'document', entry })),
+    ...childFolders(tree, folder).map((child): Row => ({ kind: 'folder', folder: child })),
+    ...library.entries.filter((entry) => (tree.documents[entry.id] ?? null) === folder).map((entry): Row => ({ kind: 'document', entry })),
   ];
   const selection = useLibrarySelection(navigation, rows.map(rowTarget), removeDocument);
-  const move = useMovePage({ targets: selection.selected }, { onMoved: selection.moved });
+  const move = useMovePage({ targets: selection.selected, from: folder }, { onMoved: selection.moved });
   const selectionRef = useRef(selection);
   useLayoutEffect(() => { selectionRef.current = selection; }, [selection]);
   const selecting = selection.active;
@@ -77,7 +89,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
   const sweep = useRowSweep<Row>({
     ids: sweepIds, values: sweepIds.map((id) => [id]), selected: selectedKeys,
     enabled: focused && !selectionLocked && !adding && !actions && !folderActions && !picking && !library.loading && !problem,
-    scope: tree.current ?? 'root', bottomInset: actionBottom + actionHeight + 12,
+    scope: folder ?? 'root', bottomInset: actionBottom + actionHeight + 12,
   }, selection.sweepTo);
   const remove = (entry: LibraryEntry) => {
     void requestInventory(entry.id).then(() => Alert.alert('Delete this book?',
@@ -125,14 +137,26 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     } finally { setPicking(false); }
   }, [library, navigation, sync]);
 
-  const visit = useCallback((id: FolderId | null) => {
+  /**
+   * The Folder being browsed is the focused page's (#317), remembered for a
+   * relaunch and for a Document arriving from another app (design 0069). Not
+   * while a deletion holds the store: the page can be left during one, and the
+   * place is written once it ends.
+   */
+  const shown = folder === null || currentFolder !== null;
+  const browsed = tree.current;
+  useEffect(() => {
+    if (!focused || busy || problem || !shown || browsed === folder) return;
     const complete = library.beginOperation('visit');
-    try { library.folders.visit(id); complete(); }
+    try { library.folders.visit(folder); complete(); }
     catch (error) { library.report(error instanceof Error ? error.message : String(error), 'visit'); }
-  }, [library]);
+  }, [focused, busy, problem, shown, browsed, folder, library]);
+  const title = selecting ? `${selectedCount} selected` : folder === null ? 'Library' : currentFolder?.name;
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: selecting ? `${selectedCount} selected` : currentFolder?.name ?? 'Library',
+      ...(title === undefined ? {} : { title }),
+      // Select all stands where the back arrow was, so leaving waits for Cancel, as in Files.
+      gestureEnabled: !selecting,
       // Native bar items size their own labels at accessibility text sizes; custom RN text can outgrow UIKit's bar.
       unstable_headerLeftItems: selecting ? () => [{ type: 'button',
         label: selectedCount === rows.length && rows.length > 0 ? 'Deselect all' : 'Select all',
@@ -143,17 +167,17 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
       }] : undefined,
       headerLeft: () => selecting
         ? <HeaderButton label={selectedCount === rows.length && rows.length > 0 ? 'Deselect all' : 'Select all'} onPress={() => selectionRef.current.selectAll()} disabled={selectionLocked || !rows.length} />
-        : currentFolder
-        ? <HeaderButton icon="previous" label="Back to parent folder" onPress={() => visit(currentFolder.parent)} disabled={busy} />
+        // Inside a Folder the phone's own back arrow, which goes back as the swipe does (#317).
+        : folder !== null ? undefined
         : <HeaderButton icon="settings" label="Settings" onPress={() => navigation.navigate('Settings')} />,
       headerRight: () => selecting
         ? <HeaderButton label="Cancel" onPress={() => selectionRef.current.cancel()} disabled={selectionLocked} />
         : <HeaderButton icon="more" label={picking ? 'Adding…' : 'Library actions'} onPress={() => {
-        importLocation.current = library.folders.getSnapshot().tree.current;
+        importLocation.current = folder;
         setAdding(true);
       }} disabled={picking || busy || working || library.loading || !!problem} />,
     });
-  }, [navigation, currentFolder, visit, picking, busy, library, problem, selecting, selectedCount, working, selectionLocked, rows.length]);
+  }, [navigation, folder, title, picking, busy, library, problem, selecting, selectedCount, working, selectionLocked, rows.length]);
 
   const present = useMemo(() => {
     const found = new Set<string>();
@@ -171,13 +195,12 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
     <FlatList<Row>
       {...sweep.list}
       style={styles.list}
-      key={tree.current ?? 'root'}
       contentContainerStyle={{ paddingTop: 12, paddingBottom: (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
       data={rows}
       keyExtractor={(row) => targetKey(rowTarget(row))}
       renderItem={({ item }) => item.kind === 'folder'
         ? <FolderRow title={item.folder.name} summary={folderSummary(counts.get(item.folder.id)?.documents ?? 0, counts.get(item.folder.id)?.folders ?? 0)} disabled={selectionLocked} selected={selection.active ? selectedKeys.has(targetKey(rowTarget(item))) : undefined}
-          onPress={() => selection.active ? selection.toggle(rowTarget(item)) : visit(item.folder.id)} onActions={() => setFolderActions(item.folder.id)} />
+          onPress={() => selection.active ? selection.toggle(rowTarget(item)) : navigation.push('Folder', { id: item.folder.id })} onActions={() => setFolderActions(item.folder.id)} />
         : <LibraryDocument entry={item.entry} present={present.has(item.entry.id)} disabled={selectionLocked}
           selected={selection.active ? selectedKeys.has(targetKey(rowTarget(item))) : undefined}
           onPress={() => selection.active ? selection.toggle(rowTarget(item)) : navigation.navigate('Reader', { id: item.entry.id })} onActions={() => setActions(item.entry)} />}
@@ -190,7 +213,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
         {busy && !selection.working ? <Note>Deleting folder…</Note> : null}
       </View> : null}
       ListEmptyComponent={library.loading ? null : <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>{currentFolder ? 'No documents or folders yet' : 'Library is empty'}</Text>
+        <Text style={styles.emptyTitle}>{folder !== null ? 'No documents or folders yet' : 'Library is empty'}</Text>
         {settings.enabledProviders.length === 0 ? <Note attention>{NO_PROVIDER_SENTENCE}</Note> : null}
       </View>}
     />
@@ -206,7 +229,7 @@ export function LibraryScreen({ navigation }: ScreenProps<'Library'>) {
       <ReadingButton playing={held.playing} buffering={held.buffering} label="Return to the reading"
         onPress={() => navigation.navigate('Reader', { id: held.id })} />
     </View> : null}
-    <AddDrawer visible={adding} onClose={() => setAdding(false)} onImport={() => void add()} onSelect={selection.begin} />
+    <AddDrawer visible={adding} folder={folder} onClose={() => setAdding(false)} onImport={() => void add()} onSelect={selection.begin} />
     <Drawer visible={selection.moving} {...move.header} onClose={selection.closeMove}>
       {selection.moving ? move.body : null}
     </Drawer>

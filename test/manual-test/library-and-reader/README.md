@@ -409,6 +409,13 @@ fails the same way. The harness's `navstate` inside the Folder reads one route,
 `Library`, at index 0: a Folder is the Library route's own state, so UIKit has
 nothing to pop.
 
+On 1.0.1 (14)-beta1-debug, the fix, where each Folder is a page of the stack
+(ADR 0069), the same device and bundle read `folder` PASS 3 of 3 (`Inner →
+Outer → Library`) and `settings` PASS. `navstate` after a relaunch inside Inner
+read `Library`, `Folder` Outer, `Folder` Inner, and `library-folders.json`'s
+`current` was `null` after the two swipes. Check the bundle Metro serves holds
+the change first (pitfalls/metro.md, `CI=1`): a stale bundle reads FAIL here.
+
 ## Library data preservation under storage failure (#260, #233, #261, `library-preservation.md`)
 
 Record: [`library-preservation.md`](library-preservation.md). No script of its
