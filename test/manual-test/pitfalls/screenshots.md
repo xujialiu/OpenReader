@@ -989,3 +989,4 @@
   --export-image` PNGs; a Home Screen screenshot sampled as-is matched the
   sRGB references within a few units. Check the profile before converting
   anyway — `sips --matchTo .../sRGB.icc` on an already-sRGB file is harmless.
+- **`ink.py` measures phone screenshots only: it assumes 3×, and iPad shots are 2×** (#319, 2026-10-23, 1.0.1 (14)-beta5-debug). On an iPad Pro 13-inch shot (2064×2752 px, 2× of 1032×1376 pt) `ink.py` printed the same fixed band (`band y 130.0..688.0 pt ink x 210.7..914.3`) for screenshots of different content — the point scale and band search are built for the phone's 3× shots. On the iPad read text insets and caps from the AX tree's frames or measure the pixels directly (scan for non-background runs at 2 px = 1 pt).
