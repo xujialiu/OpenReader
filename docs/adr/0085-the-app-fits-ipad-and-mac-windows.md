@@ -110,6 +110,20 @@ runs, as on device. This regression fails the first wrapper because `clear`
 and redisplay never occur, and passes the side-effect-free mapping call.
 The unwrapped stale-location control and repeated-resize cases remain.
 
+A second runtime finding separated CFI restoration from visual placement:
+a wide-to-narrow resize redisplayed the correct `/162/1:210` target, but it
+ended near the bottom, not the top. The default manager moves to the CFI
+before the continuous manager's `fill()` appends its neighbour, so a target
+near a section's end can clamp at the available scroll limit.
+
+After the resize display/fill completes, `restoreResizeAnchor` measures the
+same CFI in the new contents and nudges it below the visible navigation bar.
+Like Following's settle, it remeasures for at most `SETTLE_FRAMES` and exits
+after three stable frames. It does not display again or send a speech/position
+message. A finger landing, a fresh Browsing choice or Return cancels it; it
+never competes with Following. `resize-anchor-settle.test.ts` exercises the
+clamped-target case, late frame movement, cancellation and the finite budget.
+
 Rotation, actual width-changing resize, highlighting and speech checks are
 separate runtime gates. Passing rotation at a constant capped width is not
 proof of width reflow; their results are recorded on #319.

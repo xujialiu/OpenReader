@@ -161,7 +161,7 @@ describe('the page follows the line being spoken (ADR 0011, ADR 0050)', () => {
     }
   });
 
-  it('scrolls in one place, and only bring() and a glide reach it', () => {
+  it('scrolls in one place, reached only by placement, gliding, drift and resize restoration', () => {
     // ADR 0005 keeps the frame path off the bridge; this keeps the scroll in one
     // function, so there is one thing to read to know how the page moves. Each
     // scroll costs the continuous manager a pass over its views, so a scroll from
@@ -170,8 +170,10 @@ describe('the page follows the line being spoken (ADR 0011, ADR 0050)', () => {
     expect(program.match(/scrollBy\(/g)).toHaveLength(1);
     pin(fn(program, 'nudge'), 'rendition.manager.scrollBy(0, by, false);', 'highlighter.ts, function nudge');
     // One call in bring(), for a move made at once, one a frame in glideStep(),
-    // and one a frame in drift() (Continuous, #71); the declaration is the fourth.
-    expect(program.match(/nudge\(/g)).toHaveLength(4);
+    // one a frame in drift() (Continuous, #71), and the bounded browsing-anchor
+    // restoration after resize (#319); plus the declaration.
+    expect(program.match(/nudge\(/g)).toHaveLength(5);
+    expect(fn(program, 'restoreResizeAnchor').match(/nudge\(/g)).toHaveLength(1);
     expect(fn(program, 'bring').match(/nudge\(/g)).toHaveLength(1);
     expect(fn(program, 'glideStep').match(/nudge\(/g)).toHaveLength(1);
     expect(fn(program, 'drift').match(/nudge\(/g)).toHaveLength(1);

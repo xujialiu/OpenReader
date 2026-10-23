@@ -1434,6 +1434,7 @@ ${constants}
      every finger down, the one landing included. Passive, like every touch
      listener here. */
   function landed(event) {
+    resizeAnchor = null;
     var count = event.touches ? event.touches.length : 0;
     pinched = count > 1;
   }
@@ -1441,6 +1442,8 @@ ${constants}
   /* Browsing starts or ends, and the player's A or M is told — once, when it
      changes, never per word (#71). The only place \`browsing\` is written. */
   function setBrowsing(value) {
+    // A new browse/Return/seek supersedes an in-flight resize restoration.
+    resizeAnchor = null;
     browsing = !!value;
     var following = !browsing;
     if (following === announced) return;
@@ -3038,6 +3041,35 @@ ${EPUB_GUARDS_SOURCE}
      An explicit target wins. During rapid resizing there can already be no
      views; keep the last captured location then instead of replacing it with
      an empty one. The existing blank-open recovery remains the final fallback. */
+  var resizeAnchor = null;
+
+  /* The native redisplay can clamp at a section's end BEFORE fill() appends
+     its neighbour. A correct CFI alone then ends at the viewport's bottom.
+     After display/fill, put that text below the visible header, remeasuring
+     while the section frames settle. No new display and no speech/position
+     message. A finger, another browse or Return cancels this short settle. */
+  function restoreResizeAnchor(anchor, left, still) {
+    if (resizeAnchor !== anchor || (!browsing && state && state.follow)) return;
+    var list = rendition.getContents();
+    var stage = scroller();
+    var move = null;
+    if (stage) {
+      for (var i = 0; i < list.length; i++) {
+        var contents = list[i];
+        if (contents.sectionIndex !== anchor.section) continue;
+        var frame = contents.document.defaultView.frameElement;
+        if (!frame) continue;
+        var at = contents.locationOf(anchor.cfi);
+        move = frame.getBoundingClientRect().top + at.top - stage.getBoundingClientRect().top - barCovered;
+        break;
+      }
+    }
+    var steady = move !== null && Math.abs(move) < 1 ? still + 1 : 0;
+    if (move !== null && Math.abs(move) >= 1) nudge(move);
+    if (steady >= 3 || left <= 0) { resizeAnchor = null; return; }
+    window.requestAnimationFrame(function () { restoreResizeAnchor(anchor, left - 1, steady); });
+  }
+
   function keepPlaceOnResize(manager) {
     if (!manager || manager.openreaderKeepsResizePlace) return;
     var resize = manager.resize;
@@ -3048,6 +3080,7 @@ ${EPUB_GUARDS_SOURCE}
           if (location && location.start && location.start.cfi) {
             rendition.location = location;
             target = location.start.cfi;
+            if (browsing || !state || !state.follow) resizeAnchor = { cfi: target, section: location.start.index };
           }
         } catch (error) {
           report('could not capture the page before a resize: ' + error);
@@ -3119,7 +3152,11 @@ ${EPUB_GUARDS_SOURCE}
   rendition.on('displayed', function () {
     if (!resizedPage) return;
     resizedPage = false;
-    window.requestAnimationFrame(function () { settle(SETTLE_FRAMES, 0); });
+    var anchor = resizeAnchor;
+    window.requestAnimationFrame(function () {
+      if (anchor) restoreResizeAnchor(anchor, SETTLE_FRAMES, 0);
+      else settle(SETTLE_FRAMES, 0);
+    });
   });
 
   /* Every section document epub.js displays, as it displays it: the first one,

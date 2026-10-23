@@ -41,6 +41,13 @@ and every displayed iframe has the same width. Wait for reflow before judging
 a screenshot taken during the native animation. A 375-point stage containing
 an 800-point iframe is a failure, even if some Body Text has rewrapped.
 
+Before resizing a Browsing page, send `resize-anchor.js` the same way. Its
+first call keeps the upper viewport's CFI; repeat after resizing to measure
+that SAME character's top, not a newly chosen post-resize anchor. It must be
+near the upper visible edge, below the navigation bar, not merely somewhere
+inside the viewport. Reset between scenarios with a harness `js` command whose
+code is `delete window.__openReaderResizeProbe; return 'reset';`.
+
 Repeat larger and smaller, with a Browsing passage and then a bounded Reading.
 Check the passage near the top, Following, saved Reading Position, Drawer close
 and preview, and the Player's narrow layout separately. Keep each playback

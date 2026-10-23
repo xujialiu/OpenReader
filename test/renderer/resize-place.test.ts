@@ -58,7 +58,8 @@ function page(patched: boolean) {
     if (begin < 0) throw new Error('resize wrapper missing');
     const end = program.indexOf('\n  }\n', begin) + '\n  }\n'.length;
     vm.runInNewContext(`${program.slice(begin, end)}\nkeepPlaceOnResize(rendition.manager);`, {
-      rendition, report: (message: string) => { throw new Error(message); },
+      rendition, browsing: true, state: null, resizeAnchor: null,
+      report: (message: string) => { throw new Error(message); },
     });
   }
   return {
