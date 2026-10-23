@@ -124,6 +124,21 @@ Turned down:
 
 The owner chose this on 2026-10-23 (#317).
 
+### The back arrow names every Folder behind it
+
+Holding down the back arrow lists the pages behind it, nearest first, back to the Library. The first version of this change left a line of that list blank when the app had not yet shown the page it stood for. That happened when the app reopened two Folders deep: the Library line was blank. It also happened right after a Drawer left open moved the Folder on screen into another one: the new parent's line was blank, and VoiceOver read the arrow as "Back" instead of the parent's name.
+
+The phone's pages come from a component the app builds on, and that component names a page only once it has been on screen. It is now changed so that every page behind the one on screen carries its name from the start, and so that the arrow is named again after a page is put behind it. Every line of the list and the arrow's spoken name are the Folder's or the Library's.
+
+Turned down:
+
+- **The app's own back button again, named after the parent Folder, with the swipe kept.** No change to that component, but no list of the Folders above either. That list is the phone's quickest way up several levels.
+- **Leaving the blank lines and recording them as a known limit.** A blank line in a list of places reads as a fault, and reopening inside a nested Folder is the usual case, not a rare one.
+
+The cost is that this change to the component has to be checked each time the component is updated. If an update drops it, the check that goes with this decision fails: the blank line comes back.
+
+The owner chose this on 2026-10-23 (#317).
+
 ## Design review
 
 The owner accepted all individual choices above and confirmed the complete original scope for implementation on 2026-10-02 (#121). After simulator review, the owner approved fixing the missing duplicate-name explanation, repairing the tester configuration and completing the remaining verification, and requested the visual refinement described above.

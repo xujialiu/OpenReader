@@ -435,6 +435,10 @@ from the installed Expo's own `bundledNativeModules.json` rather than from npm
 latest. `test/app-config.test.ts` reads that same file, so it asserts the rule
 rather than a number that would have to be edited at the next upgrade.
 
+`react-native-screens` carries an owner-written patch since #317,
+`patches/react-native-screens+4.26.2.patch`, which names pages placed below the
+top without being shown (ADR 0069). Check it at every upgrade of the package.
+
 ## Settings is three routes, and choosing a Provider is not a side effect of looking at one
 
 `Settings` is a list of two rows. `General` holds what is true of the whole app;
