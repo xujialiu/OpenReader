@@ -7,6 +7,7 @@ const phone = vi.hoisted(() => ({
   files: new Map<string, string>(),
   environment: 'sandbox', account: 'internal', sourceKnown: true,
   owned: [] as { productId: string; purchaseDate: number }[],
+  revoked: [] as string[],
   alerts: [] as string[],
 }));
 vi.mock('expo-file-system', () => {
@@ -39,7 +40,7 @@ vi.mock('../../modules/open-reader-store', () => ({ storeNative: {
   purchase: async () => ({ outcome: 'cancelled' }),
   snapshot: async () => ({
     source: phone.sourceKnown ? { environment: phone.environment, appTransactionId: phone.account } : null,
-    owned: phone.owned, revoked: [],
+    owned: phone.owned, revoked: phone.revoked,
   }),
   environment: async () => phone.sourceKnown ? phone.environment : 'unavailable',
   sync: async () => 'restored',
@@ -67,6 +68,7 @@ beforeEach(() => {
   phone.files.clear();
   phone.sourceKnown = true;
   phone.owned = [];
+  phone.revoked = [];
 });
 afterEach(() => { stop(); vi.useRealTimers(); });
 
@@ -95,15 +97,57 @@ it('does not carry a Trial to a different verified app transaction identity', as
   expect((await launch('production', 'second')).access()).toEqual({ kind: 'not-started' });
 });
 
-it('rebuilds the old unscoped cache without touching any other app data', async () => {
-  phone.files.set(RECORD, JSON.stringify({ unlocked: true, trialStartedAt: START }));
+/** What 1.0.0 (7), the first App Store copy, keeps: one record naming no source (#316). */
+const unscoped = (record: { unlocked: boolean; trialStartedAt: number | null }) => phone.files.set(RECORD, JSON.stringify(record));
+
+it('counts the Unlock of an unscoped record once in production, without its Trial date or touching other app data (#316)', async () => {
+  unscoped({ unlocked: true, trialStartedAt: START - 40 * 86400000 });
   phone.files.set('Container/Documents/library.json', 'keep this');
   const app = await launch('production');
-  expect(app.access()).toEqual({ kind: 'not-started' });
+  expect(app.access()).toEqual({ kind: 'unlocked' });
   expect(phone.files.get('Container/Documents/library.json')).toBe('keep this');
-  expect(JSON.parse(phone.files.get(RECORD)!)).toMatchObject({ version: 2, records: [
-    { source: { environment: 'production', appTransactionId: 'internal' }, record: { unlocked: false, trialStartedAt: null } },
-  ] });
+  expect(JSON.parse(phone.files.get(RECORD)!)).toEqual({ version: 2, records: [{ version: 2,
+    source: { environment: 'production', appTransactionId: 'internal' }, record: { unlocked: true, trialStartedAt: null } }] });
+  // Counted once: it is now that source's record, and nobody else's.
+  expect((await launch('production')).access()).toEqual({ kind: 'unlocked' });
+  expect((await launch('production', 'second')).access()).toEqual({ kind: 'not-started' });
+});
+
+it('does not count an unscoped Unlock under TestFlight or Xcode (#162, #316)', async () => {
+  for (const environment of ['sandbox', 'xcode']) {
+    phone.files.clear();
+    unscoped({ unlocked: true, trialStartedAt: null });
+    const app = await launch(environment);
+    expect(app.access()).toEqual({ kind: 'not-started' });
+    expect(JSON.parse(phone.files.get(RECORD)!).records).toEqual([{ version: 2,
+      source: { environment, appTransactionId: 'internal' }, record: { unlocked: false, trialStartedAt: null } }]);
+  }
+});
+
+it('does not count an unscoped Trial date in production (#316)', async () => {
+  unscoped({ unlocked: false, trialStartedAt: START - 40 * 86400000 });
+  const app = await launch('production');
+  expect(app.access()).toEqual({ kind: 'not-started' });
+  await app.askForSpeech();
+  expect(phone.alerts).toEqual(['Read Aloud Free for 30 Days']);
+});
+
+it('lets a refund StoreKit reports in production clear an unscoped Unlock (#316)', async () => {
+  unscoped({ unlocked: true, trialStartedAt: null });
+  phone.revoked = [UNLOCK];
+  expect((await launch('production')).access()).toEqual({ kind: 'not-started' });
+  phone.revoked = [];
+  expect((await launch('production')).access()).toEqual({ kind: 'not-started' });
+});
+
+it('keeps an unscoped Unlock unused and on disk until a production source is verified (#316)', async () => {
+  unscoped({ unlocked: true, trialStartedAt: null });
+  const kept = phone.files.get(RECORD);
+  phone.sourceKnown = false;
+  expect((await launch('production')).allowsSpeech()).toBe(false);
+  expect(phone.files.get(RECORD)).toBe(kept);
+  phone.sourceKnown = true;
+  expect((await launch('production')).access()).toEqual({ kind: 'unlocked' });
 });
 
 it('keeps verified production ownership through an empty read from the same source', async () => {

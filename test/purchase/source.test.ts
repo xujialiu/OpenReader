@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { purchaseCache, parseCache, type PurchaseCache } from '../../src/purchase/cache';
+import { purchaseCache, purchaseCacheStore, parseCache, type PurchaseCache } from '../../src/purchase/cache';
 import { createFakeStore, FAKE_SOURCE, FAKE_UNLOCKED, fakeStateFor } from '../../src/purchase/fake-store';
 import { PRODUCTS, TRIAL_PRODUCT, UNLOCK_PRODUCT } from '../../src/purchase/products';
 import { createPurchases, type Purchases } from '../../src/purchase/purchases';
@@ -34,6 +34,25 @@ function setup(options: { cache?: PurchaseCache; snapshot?: () => Promise<StoreS
   controller.start();
   return { controller, asked, saved: () => saved, event: (event: StoreTransaction) => listener(event) };
 }
+
+it('offers an unscoped Unlock only to a verified production source, and only until a record is saved (#316)', () => {
+  let file: unknown = { unlocked: true, trialStartedAt: NOW };
+  const store = purchaseCacheStore(() => file, (next) => { file = next; });
+  expect(store.load()).toBeNull();
+  expect(store.load({ environment: 'sandbox', appTransactionId: 'tester' })).toBeNull();
+  expect(store.load({ environment: 'xcode', appTransactionId: 'developer' })).toBeNull();
+  expect(store.load(SOURCE)).toEqual(purchaseCache(SOURCE, { unlocked: true, trialStartedAt: null }));
+  store.save(purchaseCache({ environment: 'sandbox', appTransactionId: 'tester' }, EMPTY_RECORD));
+  expect(store.load(SOURCE)).toBeNull();
+  expect(purchaseCacheStore(() => file, () => {}).load(SOURCE)).toBeNull();
+});
+
+it('offers nothing from an unscoped record without the Unlock, or from anything else that is not 1.0.0 (7)\'s record (#316)', () => {
+  for (const value of [null, 'unlocked', {}, { unlocked: false, trialStartedAt: NOW }, { unlocked: 'true', trialStartedAt: null },
+    { version: 1, unlocked: true, trialStartedAt: null }, { version: 2, unlocked: true, records: [] }]) {
+    expect(purchaseCacheStore(() => value, () => {}).load(SOURCE)).toBeNull();
+  }
+});
 
 it('rejects legacy, malformed and unknown-version caches instead of assigning them a production source', () => {
   const good = purchaseCache(SOURCE, { unlocked: true, trialStartedAt: null });

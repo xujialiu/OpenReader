@@ -444,11 +444,26 @@ case are defined below.
 
 ### Purchase records are bound to verified sources (#162)
 
-The owner confirmed that TestFlight has only internal testers and the store
-copy has not shipped. The unversioned `{ unlocked, trialStartedAt }` cache is
-therefore not migrated as evidence of a production purchase. The app rebuilds
-it from StoreKit without removing Documents, settings, credentials, Reading
-Positions or Offline Narration. Apple-side purchases are not revoked.
+The unversioned `{ unlocked, trialStartedAt }` cache names no source, so by
+itself it is no evidence of a production purchase. Every build up to 1.0.0 (7)
+wrote it, and 1.0.0 (7) was also the first App Store copy, so it is the only
+record a buyer of that copy has (#316). It counts once, and only its Unlock:
+when a verified `production` source has no version-2 record of its own,
+`purchaseCacheStore` offers it `{ unlocked: true, trialStartedAt: null }`. The
+read lays StoreKit's answer over it, a reported revocation clears it, and the
+save that follows replaces the file. Its Trial date never counts, so a Trial
+run in a test copy cannot end the store copy's. Under `sandbox`, `xcode` or no
+verified source it authorizes nothing, and the app rebuilds it from StoreKit.
+Neither way removes Documents, settings, credentials, Reading Positions or
+Offline Narration, and Apple-side purchases are not revoked.
+
+This replaced the first rule, made when TestFlight had only internal testers
+and the store copy had not shipped, that no unscoped cache counts at all. That
+rule would have left a buyer of 1.0.0 (7) with no fallback in the next version
+against an empty read (FB22556883). The owner accepted the cost: an unscoped
+Unlock bought in a TestFlight copy and carried into the App Store copy by
+installing over it unlocks that copy (#162, case 1). The TestFlight Beta had
+no purchases, so that is at most the owner's own phone.
 
 `purchase.json` now holds `version: 2` and `records`, each a versioned envelope
 with a `source` and the two purchase facts. A source is StoreKit's environment

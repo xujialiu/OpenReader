@@ -27,7 +27,11 @@ export interface PurchaseDeps {
   /** `PURCHASE_LOCK`, handed in so a test can have either. */
   lockOn: boolean;
   store: Store;
-  /** Only source-bound versioned records can supply a fallback. Legacy records load as null. */
+  /**
+   * Only source-bound versioned records can supply a fallback, and 1.0.0 (7)'s
+   * unscoped Unlock once for a production source (#316). Otherwise an unscoped
+   * record loads as null.
+   */
   record: { load(source?: PurchaseSource): PurchaseCache | null; save(record: PurchaseCache): void };
   ask: PurchaseAsker;
   now(): number;

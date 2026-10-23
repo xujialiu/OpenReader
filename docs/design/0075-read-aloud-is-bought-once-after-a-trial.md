@@ -91,16 +91,28 @@ OpenReader is open source, and two other ways of getting it never ask for money:
   by mistake.
 
 A test copy's Trial and Unlock belong to testing alone. Neither carries over
-to the App Store copy: someone who tried or unlocked a test copy can still
-start their own Trial in the store copy if they have no purchase there.
+to the App Store copy, with the one exception below: someone who tried or
+unlocked a test copy can still start their own Trial in the store copy if they
+have no purchase there.
 
-Only internal testers have used the app, and the App Store copy has not
-shipped. Its earlier remembered purchase state may therefore be rebuilt from
-what Apple reports, rather than carried forward as proof of a real purchase.
-An internal tester may need to restore or make a free test purchase again.
-This leaves their Documents, settings, credentials, Reading Positions and
-Offline Narration alone, and cancels no purchase held by Apple. Preserving the
-old test state was turned down because no paying store customer depends on it.
+The first version on the App Store remembered purchases the old way, without
+noting where they were made. Later versions note it, and an old memory counts
+for one thing only: in the App Store copy, an old memory that the Unlock was
+bought keeps that copy unlocked, and becomes the store copy's own memory from
+then on. Someone who paid in the first version therefore keeps the Unlock
+through an update, even on a day Apple briefly forgets the purchase. The old
+memory's Trial start date does not count, so a Trial tried in a test copy never
+ends the store copy's Trial. In a test copy an old memory counts for nothing
+and is rebuilt from what Apple reports. Either way Documents, settings,
+credentials, Reading Positions and Offline Narration are left alone, and no
+purchase held by Apple is cancelled.
+
+The cost: someone who unlocked a test copy for free, and then installed the
+store copy over it without deleting the app first, finds the store copy
+unlocked too. Nobody bought anything in the test copies, so in practice that
+is only the author's own phone. Ignoring the old memory everywhere was turned
+down: a customer who paid could then be asked to pay again on the day Apple
+briefly forgets their purchase.
 
 A previously verified purchase is kept when Apple temporarily omits it and the
 app can still confirm that it belongs to the same store copy. If Apple reports
