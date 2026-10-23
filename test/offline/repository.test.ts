@@ -220,8 +220,9 @@ it("hides selected chapters first, then removes their files and their rows in on
     });
     expect(seen).toEqual(["hidden after 0 removals"]);
     expect(calls).toEqual({ remove: 600, removeDocumentFiles: 0 });
-    // The mark, then 500 keys and 100 keys.
-    expect(counts.transactions).toBe(3);
+    // The mark, then ten batches of at most 64 files, each followed by a real
+    // event-loop turn (#176), not 600 synchronous deletions before the SQL.
+    expect(counts.transactions).toBe(11);
     expect(await catalog.pendingDeletes()).toEqual([]);
     expect(await repository.inventory("book")).toEqual([]);
   } finally {

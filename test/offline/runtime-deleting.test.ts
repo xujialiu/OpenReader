@@ -27,6 +27,7 @@ const mock = vi.hoisted(() => ({
   /** Requests out at the Provider, each answered when its function is called. */
   held: new Map<string, () => void>(),
   hold: false,
+  asked: [] as string[],
 }));
 vi.mock('react-native', () => ({
   AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
@@ -54,6 +55,7 @@ vi.mock('../../src/core/providers/factory', () => ({
   createProvider: () => ({
     id: 'speechify', capabilities: { wordTimestamps: true }, listVoices: async () => [],
     synthesize: async (text: string): Promise<SynthesisResult> => {
+      mock.asked.push(text);
       if (mock.hold) await new Promise<void>((resolve) => mock.held.set(text, resolve));
       return { audio: 'encoded', bytes: new Uint8Array([1, 2, 3]), mediaType: 'audio/mp4' };
     },
@@ -99,11 +101,12 @@ let runtime: typeof import('../../src/offline/runtime');
 let stop: () => void = () => {};
 
 /** A fresh catalogue holding `book`, prepared, and a fresh runtime over it. */
-async function open(book: { id: string; texts: string[] }[]) {
+async function open(book: { id: string; texts: string[] }[], beforeLaunch?: (repository: OfflineRepository, catalog: OfflineCatalog) => Promise<void>) {
   stop();
   disk.clear();
   mock.held.clear();
   mock.hold = false;
+  mock.asked = [];
   db = new DatabaseSync(':memory:');
   const session: SqlSession = {
     execAsync: async (sql) => { db.exec(sql); },
@@ -130,6 +133,7 @@ async function open(book: { id: string; texts: string[] }[]) {
   await catalog.recordWalk(BLOCK_WALK);
   await catalog.recordSegmentation(SEGMENTATION);
   mock.repository = repository;
+  await beforeLaunch?.(repository, catalog);
 
   vi.resetModules();
   runtime = await import('../../src/offline/runtime');
@@ -199,6 +203,23 @@ it('deletes every trace of a chapter half downloaded and paused, with requests s
   expect(db.prepare('SELECT COUNT(*) AS n FROM clips').get()).toEqual({ n: 0 });
   expect(db.prepare('SELECT COUNT(*) AS n FROM writes').get()).toEqual({ n: 0 });
   expect(runtime.downloadTasks('book')).toEqual([]);
+});
+
+it('removes a pre-fix false Downloaded check without spending, and an explicit download repairs its missing audio (#313)', async () => {
+  await open([{ id: 'one', texts: ['Hello.'] }], async (repository, catalog) => {
+    await repository.saveClip('book', voice, 'Hello.', { audio: 'encoded', bytes: new Uint8Array([1, 2, 3]), mediaType: 'audio/mp4' }, () => true);
+    await catalog.saveTasks([{ id: 'old', document: 'book', voice, chapters: ['one'], state: 'done', failed: [], error: null }]);
+    disk.clear(); // One ready row, no audio: precisely the pre-fix state.
+  });
+  await vi.waitFor(() => expect(runtime.chapterProgress('book', voice).get('one')?.complete).toBe(false));
+  expect((await shown()).downloaded).toEqual([]);
+  expect(mock.asked).toEqual([]);
+  expect(runtime.downloadTasks('book')[0].state).toBe('done'); // no automatic paid repair
+  runtime.enqueue('book', voice, ['one']);
+  await vi.waitFor(() => expect(runtime.downloadTasks('book')[0].state).toBe('done'));
+  expect(mock.asked).toEqual(['Hello.']);
+  expect((await shown()).downloaded).toEqual(['one']);
+  expect(saved('Hello.')).toEqual({ file: true, rows: 1 });
 });
 
 it('deletes every trace of a chapter paused by its ring, after what was out has been kept', async () => {
