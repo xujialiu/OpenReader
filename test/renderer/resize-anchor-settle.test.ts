@@ -63,7 +63,8 @@ describe('a browsed passage returns to the upper visible edge after resize (#319
     p.reflow();
     p.drain();
     expect(p.targetTop()).toBe(54);
-    expect(p.context.resizeAnchor).toBeNull();
+    expect(p.context.resizeAnchor).toMatchObject({ cfi: 'epubcfi-target', section: 15 });
+    expect(p.queued()).toBe(0);
     expect(p.locationOf).toHaveBeenCalledWith('epubcfi-target');
   });
 
@@ -92,7 +93,7 @@ describe('a browsed passage returns to the upper visible edge after resize (#319
     p.start();
     p.drain();
     expect(p.queued()).toBe(0);
-    expect(p.context.resizeAnchor).toBeNull();
+    expect(p.context.resizeAnchor).toMatchObject({ cfi: 'epubcfi-target', section: 15 });
     expect(p.nudge.mock.calls.length).toBeLessThanOrEqual(13);
   });
 });

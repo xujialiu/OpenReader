@@ -52,15 +52,16 @@ function page(patched: boolean) {
     },
   });
   rendition.manager = manager;
+  const environment = vm.createContext({
+    rendition, browsing: true, state: null, resizeAnchor: null,
+    report: (message: string) => { throw new Error(message); },
+  });
   if (patched) {
     const program = highlighterSource();
     const begin = program.indexOf('  function keepPlaceOnResize(manager) {');
     if (begin < 0) throw new Error('resize wrapper missing');
     const end = program.indexOf('\n  }\n', begin) + '\n  }\n'.length;
-    vm.runInNewContext(`${program.slice(begin, end)}\nkeepPlaceOnResize(rendition.manager);`, {
-      rendition, browsing: true, state: null, resizeAnchor: null,
-      report: (message: string) => { throw new Error(message); },
-    });
+    vm.runInContext(`${program.slice(begin, end)}\nkeepPlaceOnResize(rendition.manager);`, environment);
   }
   return {
     resize: (width: number, height: number, target?: string) => {
@@ -70,6 +71,7 @@ function page(patched: boolean) {
       return manager.resize(width, height, target);
     },
     nextPassage: (cfi: string) => { fresh = cfi; visible = true; },
+    userBrowses: () => { environment.resizeAnchor = null; },
     loseReportedLocation: () => { rendition.location = undefined; },
     display, trace,
     location: () => rendition.location,
@@ -89,11 +91,22 @@ describe('resize keeps the current upper passage, not the last reported one (#31
     p.resize(500, 800);
     expect(p.trace).toEqual(['map visible text', 'clear']);
     expect(p.display).toHaveBeenCalledExactlyOnceWith('epubcfi(/6/8!/4/2/10:7)');
-    // A subsequent scroll, then a height-only resize, captures the new passage.
+    // A subsequent user scroll, then a height-only resize, captures the new passage.
+    p.userBrowses();
     p.nextPassage('epubcfi(/6/8!/4/2/18:12)');
     p.resize(500, 500);
     expect(p.display).toHaveBeenLastCalledWith('epubcfi(/6/8!/4/2/18:12)');
     expect(p.display).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not recapture hidden text above the restored line during a multi-step native resize', () => {
+    const p = page(true);
+    p.resize(800, 790); // the first native height adjustment in the drag
+    p.nextPassage('earlier-text-under-the-header'); // redraw changes raw viewport start
+    p.resize(375, 476); // real width adjustment arrives later, even after frames settled
+    expect(p.display.mock.calls.map(([target]) => target)).toEqual([
+      'epubcfi(/6/8!/4/2/10:7)', 'epubcfi(/6/8!/4/2/10:7)',
+    ]);
   });
 
   it('retains the last captured passage when another resize lands before views return', () => {

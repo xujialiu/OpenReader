@@ -1433,8 +1433,12 @@ ${constants}
      until every finger has lifted and a new gesture begins (#79). \`touches\` is
      every finger down, the one landing included. Passive, like every touch
      listener here. */
-  function landed(event) {
+  function forgetResizeAnchor() {
     resizeAnchor = null;
+  }
+
+  function landed(event) {
+    forgetResizeAnchor();
     var count = event.touches ? event.touches.length : 0;
     pinched = count > 1;
   }
@@ -1504,6 +1508,9 @@ ${constants}
     contents.document.addEventListener('touchmove', dragged, { passive: true });
     /* And a second finger landing makes the gesture a pinch: see landed. */
     contents.document.addEventListener('touchstart', landed, { passive: true });
+    contents.document.addEventListener('wheel', forgetResizeAnchor, { passive: true });
+    contents.document.addEventListener('mousedown', forgetResizeAnchor, { passive: true });
+    contents.document.addEventListener('keydown', forgetResizeAnchor);
 
     var index = contents.sectionIndex;
     var section = null;
@@ -3066,7 +3073,10 @@ ${EPUB_GUARDS_SOURCE}
     }
     var steady = move !== null && Math.abs(move) < 1 ? still + 1 : 0;
     if (move !== null && Math.abs(move) >= 1) nudge(move);
-    if (steady >= 3 || left <= 0) { resizeAnchor = null; return; }
+    // Keep the target after settling. One native drag can resize again after
+    // several quiet frames; raw viewport start now includes text UNDER the bar.
+    // Recapturing it walks backwards. Only a new owner action releases it.
+    if (steady >= 3 || left <= 0) return;
     window.requestAnimationFrame(function () { restoreResizeAnchor(anchor, left - 1, steady); });
   }
 
@@ -3074,7 +3084,10 @@ ${EPUB_GUARDS_SOURCE}
     if (!manager || manager.openreaderKeepsResizePlace) return;
     var resize = manager.resize;
     manager.resize = function (width, height, target) {
-      if (!target) {
+      if (target) resizeAnchor = null;
+      else if (resizeAnchor && (browsing || !state || !state.follow)) {
+        target = resizeAnchor.cfi;
+      } else {
         try {
           var location = rendition.located(this.scrolledLocation());
           if (location && location.start && location.start.cfi) {
@@ -3125,6 +3138,8 @@ ${EPUB_GUARDS_SOURCE}
   var displaying = false;
   var resizedPage = false;
   rendition.on('resized', function () {
+    // Invalidate an older frame loop while retaining its text across the drag.
+    if (resizeAnchor) resizeAnchor = { cfi: resizeAnchor.cfi, section: resizeAnchor.section };
     resizedPage = true;
     if (rendition.location && rendition.location.start) return;
     if (onScreen === null || displaying) return;
@@ -3179,6 +3194,9 @@ ${EPUB_GUARDS_SOURCE}
   var stage = scroller();
   if (stage) stage.addEventListener('touchmove', dragged, { passive: true });
   if (stage) stage.addEventListener('touchstart', landed, { passive: true });
+  if (stage) stage.addEventListener('wheel', forgetResizeAnchor, { passive: true });
+  if (stage) stage.addEventListener('mousedown', forgetResizeAnchor, { passive: true });
+  if (stage) stage.addEventListener('keydown', forgetResizeAnchor);
   /* The page's own scroll, which is how the program knows it moves; and the
      manager whose trims and prepends wait for it to stop (#58). */
   if (stage) stage.addEventListener('scroll', noteScroll, { passive: true });

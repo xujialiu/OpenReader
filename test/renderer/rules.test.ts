@@ -1168,10 +1168,12 @@ describe('tapping a word reads from there, and it is a tap (ADR 0020)', () => {
     // stays the platform's; lookup observes selection and passive touch events.
     const program = code('highlighter.ts');
     expect(program).toContain("addEventListener('click', tapped, false)");
-    for (const gesture of ['contextmenu', 'selectstart', 'longpress', 'mousedown']) {
+    for (const gesture of ['contextmenu', 'selectstart', 'longpress']) {
       expect({ gesture, listened: program.includes("'" + gesture + "'") }).toEqual({ gesture, listened: false });
     }
     expect(program).not.toContain('user-select: none');
+    expect(program).toContain("addEventListener('mousedown', forgetResizeAnchor, { passive: true })");
+    expect(fn(program, 'forgetResizeAnchor')).not.toMatch(/preventDefault|stopPropagation/);
     expect(program).toContain("addEventListener('touchstart', selectionStarted, { passive: true })");
     expect(program).toContain("addEventListener('selectionchange', selectionChanged)");
     expect(fn(program, 'tapped')).toContain('lookupHeld || Date.now() < suppressTapUntil');
@@ -1831,6 +1833,8 @@ describe('browsing leaves the page where the owner put it (#52)', () => {
           'var touchId = null; var touchY = null; var touchTop = null; var pinched = false; var DRAG_PX = 10;',
           'var halted = 0; function halt() { halted += 1; }',
           'var browsing = []; function setBrowsing(value) { browsing.push(value); }',
+          'var resizeAnchor = null;',
+          fn(program, 'forgetResizeAnchor'),
           fn(program, 'landed'),
           fn(program, 'dragged'),
           '({ halts: function () { return halted; }, browsing: browsing, landed: landed, dragged: dragged });',

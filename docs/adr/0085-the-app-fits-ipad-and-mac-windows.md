@@ -120,8 +120,14 @@ After the resize display/fill completes, `restoreResizeAnchor` measures the
 same CFI in the new contents and nudges it below the visible navigation bar.
 Like Following's settle, it remeasures for at most `SETTLE_FRAMES` and exits
 after three stable frames. It does not display again or send a speech/position
-message. A finger landing, a fresh Browsing choice or Return cancels it; it
-never competes with Following. `resize-anchor-settle.test.ts` exercises the
+message. The CFI remains the resize anchor after that short loop ends: a native
+drag can deliver another resize even after several quiet frames. Recapturing
+the raw viewport start then selects text hidden above the restored line under
+the navigation bar and walks backwards on every resize. A user touch, mouse,
+wheel or keyboard action on the page, a fresh Browsing choice or Return
+releases the retained CFI; the next resize captures the newly browsed text.
+A fresh resize invalidates the old frame loop without discarding its target.
+It never competes with Following. `resize-anchor-settle.test.ts` exercises the
 clamped-target case, late frame movement, cancellation and the finite budget.
 
 Rotation, actual width-changing resize, highlighting and speech checks are
