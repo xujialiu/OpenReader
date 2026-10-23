@@ -33,6 +33,15 @@ is the drawer itself, the setting, Contents and one drawer at a time. Batch 2
 Voice and Lookup. With all three in, `src/app/sheet.tsx` was deleted
 (`0a2dcdb`).
 
+## Tablet/Mac amendment (#319)
+
+[ADR 0085](0085-the-app-fits-ipad-and-mac-windows.md) retains the measured
+custom-height correction and swipe-only header below on iPhone. Tablet/Mac
+sheets use a native fractional opening detent, explicit detent selection and
+a visible close control. The phone measurements below are not evidence of
+tablet sheet geometry. Undimmed opening-height preview is still a required
+runtime check, not inferred from the modifier's presence.
+
 ## What was there
 
 `src/app/sheet.tsx`'s `Sheet` is `<Modal visible transparent animationType="slide">`

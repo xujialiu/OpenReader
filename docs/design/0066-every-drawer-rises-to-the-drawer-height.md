@@ -26,6 +26,12 @@ to go into Appearance next, would have done exactly that.
 
 ## Every drawer is the phone's own
 
+_[Decision 0085](0085-the-app-fits-ipad-and-mac-windows.md) keeps these phone
+interactions on iPhone, but lets iPad and Mac use the system's own panel
+presentation and adds a visible close control there. On those devices the
+opening height is a share of the panel's available space rather than the
+phone geometry below. Undimmed preview at the opening height remains required._
+
 Every drawer in the app becomes the phone's own: Contents, Voice, Appearance and
 Fonts, a book's actions with Rename and Download, and the drawer a looked-up
 word opens in. The phone moves it, rounds its corners and answers

@@ -25,6 +25,12 @@ _Changed on 2026-10-02: the owner chose 28 for a new install, replacing the
 
 ## The same number of points on every screen
 
+_Revised for the large-screen adaptation in
+[decision 0085](0085-the-app-fits-ipad-and-mac-windows.md): Margins is now the
+inset within a centred reading page. A wide window may have extra space
+outside that page. The screen-edge meaning and unlimited tablet line length
+below describe the earlier choice, not the new one._
+
 The old strip was a share of the screen's width, so it grew on a bigger
 screen. The Margins are a number of points instead, and 16 is 16 on a phone and
 on a tablet.
@@ -34,8 +40,8 @@ on their phone, and a number that means the same distance everywhere is easier
 to judge than one that means a different distance on each screen. What it costs:
 on a tablet the lines are much longer than on a phone at the same setting, and
 the owner has to set a wider margin there to get a comfortable line length. It
-is one setting for every device, so a tablet and a phone cannot keep two
-different margins.
+is one setting for every Document on that device; a tablet and a phone can
+keep different margins. It does not sync, as described below.
 
 ## A stepper and a number, like Font Size
 

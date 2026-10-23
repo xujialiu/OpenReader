@@ -75,7 +75,7 @@ happened in that day's `notes/` file.
 - **Tags**: `1.0.0(2)` to `1.0.0(8)`, one per build, `1.0.0(10)` for the pair 1.0.0 (9) and 1.0.0 (10)-debug, and `1.0.1(12)` for 1.0.1 (11) and 1.0.1 (12)-debug, all pushed. On 2026-10-10 they replaced `build-2` to `build-6` and `v1.0.0`, which were deleted locally and from GitHub.
 - **App Review Information**: the notes are the Guideline 2.1 answer, revised for 1.0.1 (3,987 characters). Their first line names 1.0.1 (11); a paragraph covers the In-App Purchases. The recording `OpenReader-Review-Demo.mp4` was attached to 1.0.0 (7) and predates the purchases; a new version copies the notes but not the attachment, so 1.0.1 has none, and the notes name it as attached to 1.0.0 (7). The review key is saved only in App Store Connect.
 - **Description**: since 2026-10-10 it says "Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase unlocks it for good. Reading, look-up and sync stay free." It ends "OpenReader is open source", without "free and".
-- **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), not on Apple silicon Macs or Apple Vision Pro. Books, 4+, trader under the EU Digital Services Act (below). The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
+- **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), available on Apple silicon Macs (enabled by the owner and downloadable through the direct link), not on Apple Vision Pro. Mac availability is not a claim of verified Mac compatibility. Books, 4+, trader under the EU Digital Services Act (below). The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
 - **In-App Purchases** (ADR 0075, #148), both Non-Consumable, approved with 1.0.0 (7) and on sale. Each has its review screenshot (2026-10-09): the phone's alert from 1.0.0 (7)-beta11 on the simulator, the Trial's for the trial and the ended one, with Unlock for $4.99, for the Unlock. Neither has review notes.
   - "30-day Trial": `top.xujialiu.openreader.trial`, Apple ID 6820864102, US$0.00. English (U.S.) display name "30-day Trial", description "Read aloud free for 30 days."
   - "Unlock": `top.xujialiu.openreader.unlock`, Apple ID 6820865303, US$4.99 with the United States as base. Apple's generated prices hold elsewhere (Australia A$7.99, for example). English (U.S.) display name "Unlock Read Aloud", description "Read aloud and offline narration, for good."
@@ -121,7 +121,8 @@ and uploads the build with Debug Mode, `N + 1`, from the same commit.
    - Check the archive's `Products/Applications/OpenReader.app/Info.plist`:
      - the version and build are the intended ones;
      - `ITSAppUsesNonExemptEncryption` is false;
-     - `UIDeviceFamily` is `[1]`;
+     - `UIDeviceFamily` is `[1, 2]` (#319);
+     - `UIRequiresFullScreen` is false; the base orientations remain portrait and upside-down portrait, and `UISupportedInterfaceOrientations~ipad` includes both landscape orientations too;
      - `NSMicrophoneUsageDescription` is present;
      - `UIBackgroundModes` is `[audio]`.
    - Check the JavaScript bundle the archive used:
@@ -245,7 +246,7 @@ with the review key left where it was, never passes through the agent (notes
   - Free.
   - Every country or region except China mainland, which requires an ICP filing and falls under the deep-synthesis rules.
   - To take the app off the store, Remove App From Sale is at the bottom of the page. It leaves every storefront within 24 hours; people who downloaded it keep it and its updates, and can download it again from their purchase history.
-  - Turn off availability on Mac with Apple silicon and on Apple Vision Pro; neither has been tested.
+  - Preserve the owner's enabled availability on Macs with Apple silicon. Mark compatibility as verified only after testing the uploaded app on Mac; iPad simulator results alone do not establish it. Apple Vision Pro remains off.
 - **EU Digital Services Act:** trader, since the app sells the Unlock (ADR 0075). Business → Compliance shows it Active for 27 countries or regions: verified, so it no longer holds back the EU storefronts. Opening its row opens the trader or non-trader form; close it with Cancel.
 - **Export compliance:** nothing to answer, because `ITSAppUsesNonExemptEncryption = NO` is in the build.
 - **Content rights:** the owner answers. The app shows documents the person adds themselves, and ships none.
@@ -254,7 +255,8 @@ with the review key left where it was, never passes through the agent (notes
 - **Release after approval:** manual.
 - **A new version** (the + beside iOS App) copies the description, keywords, URLs, copyright and review notes from the last one, but not the review attachment. Its What's New starts empty. Add for Review warns "Newer Build Available" while the pair's Debug Mode build is the newer one; Submit keeps the odd build chosen, and the Draft Submission's Submit for Review sends it.
 - **Screenshots**
-  - 6.9-inch, 1320 × 2868, from an iPhone 17 Pro Max simulator, 3 to 10 of them. iPhone only, so no iPad set.
+  - Keep the iPhone set and verify the current required slots in App Store Connect against Apple's [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
+  - With iPad support (#319), also provide a 13-inch iPad set: 2064 × 2752 or 2048 × 2732 portrait, or those dimensions reversed for landscape. At least one is required; use captures of the actual iPad layout, not enlarged phone screenshots.
   - Set the status bar with `xcrun simctl status_bar <udid> override --time 9:41`.
   - Show only public-domain books, for example from Project Gutenberg.
   - Show no API key and no Provider's prices (ADR 0017).

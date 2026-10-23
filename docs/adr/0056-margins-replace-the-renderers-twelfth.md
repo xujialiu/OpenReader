@@ -9,6 +9,13 @@ Issue #84. It adds a fourth part to the stylesheet [ADR 0021](0021-appearance-is
 installs; the message, the one `<style>` element and the re-centre stand, and ADR
 0030's size rule, ADR 0029's font list and ADR 0034's alignment rule are unchanged._
 
+## Large-window amendment (#319)
+
+[ADR 0085](0085-the-app-fits-ipad-and-mac-windows.md) caps and centres the
+reader's native viewport. The body-padding rule below is unchanged, but
+Margins now measures the inset within that reading page, not all whitespace
+to the window edge. No new body `max-width` rule or settings migration is added.
+
 ## Where the side space came from
 
 Not from the Documents. epub.js's `Contents.size(width, height)`, which the

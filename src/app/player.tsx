@@ -50,6 +50,7 @@ import { LoadingSpinner } from './loading-spinner';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 import { playerLayout } from './player-layout';
+import { LAYOUT_WIDTH } from './layout-widths';
 
 /** The open player's padding above and below its rows: part of the height the Line Position is measured above (`onOpenHeight`). */
 const PLAYER_PADDING_TOP = 4;
@@ -201,15 +202,16 @@ export function Player({
   onOpenHeight,
   barHeight,
 }: PlayerProps) {
-  const { width, fontScale } = useWindowDimensions();
-  const layout = playerLayout(width, fontScale);
+  const { width, height, fontScale } = useWindowDimensions();
+  // The row must fit the Player, not the wider window around it (#319).
+  const layout = playerLayout(Math.min(width, LAYOUT_WIDTH.player), fontScale);
   const [speedOpen, setSpeedOpen] = useState(false);
-  const [speedGeometry, setSpeedGeometry] = useState({ fontScale, width });
+  const [speedGeometry, setSpeedGeometry] = useState({ fontScale, width, height });
   // Close before children commit against a moved popover anchor, not in an
   // effect after that commit. Remembering the dimensions also keeps it closed
   // when the owner returns to the previous text size or width (#124).
-  if (speedGeometry.fontScale !== fontScale || speedGeometry.width !== width) {
-    setSpeedGeometry({ fontScale, width });
+  if (speedGeometry.fontScale !== fontScale || speedGeometry.width !== width || speedGeometry.height !== height) {
+    setSpeedGeometry({ fontScale, width, height });
     setSpeedOpen(false);
   }
   const closeSpeed = useCallback(() => setSpeedOpen(false), []);
@@ -582,6 +584,7 @@ const styles = StyleSheet.create({
   notes: { flexGrow: 0, flexShrink: 1 },
   notesBody: { gap: 6 },
   player: {
+    alignSelf: 'center', width: '100%', maxWidth: LAYOUT_WIDTH.player,
     backgroundColor: INK.panel,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,

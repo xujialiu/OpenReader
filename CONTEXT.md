@@ -279,10 +279,11 @@ the document's, so body text is the same size in every document.
 _Avoid_: scale, zoom, text size, percentage
 
 **Margins**:
-The empty space between a document's text and the left and right edges of the
-screen, always the same on both sides. It is the owner's and never the
-document's; an indent a document sets inside its own text, for a quotation or a
-list, comes on top of it.
+The empty space between a document's text and the left and right edges of its
+reading page, always the same on both sides. A wide window can have additional
+space outside that page. Margins are the owner's and never the document's; an
+indent a document sets inside its own text, for a quotation or a list, comes
+on top of them.
 _Avoid_: padding, gutter, side space, inset, page margin
 
 **Text Alignment**:
@@ -360,16 +361,18 @@ _Avoid_: clip, voice, offline narration
 ### On the screen
 
 **Drawer**:
-A surface that rises from the bottom of the screen to the drawer height, over
-part of what the owner was looking at, holding the choices or the list that
-belong to it. Pushed up, it reaches almost to the top of the screen; dragged
-down, it goes away. At the drawer height, what it does not cover stays in view
+A temporary surface over what the owner was looking at, holding the choices
+or the list that belong to it. On a phone it rises from the bottom to the
+Drawer Height, can be pushed up for more room and dragged down to close.
+On iPad and Mac it follows the device's panel presentation and also has a
+close control. At its opening height, what it does not cover stays in view
 and in use.
 _Avoid_: sheet, bottom sheet, modal, popup, panel
 
 **Drawer Height**:
-How much of the screen a drawer covers when it opens, measured from the bottom
-edge of the screen. The same for every drawer, and the owner's.
+How much space a Drawer takes when it opens: a share of the phone's screen
+height, or of the space available to the system panel on iPad and Mac. The
+same choice for every Drawer, and the owner's.
 _Avoid_: sheet height, detent, drawer size
 
 **Player**:

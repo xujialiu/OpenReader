@@ -3025,6 +3025,36 @@ ${EPUB_GUARDS_SOURCE}
     View.prototype.openreaderLocatesWhole = true;
   }
 
+  /* #319: record the upper visible passage BEFORE resize clears the views.
+     rendition.location is only the last reported location: during a scroll it
+     can still name an earlier passage. currentLocation maps the live viewport
+     synchronously in the bundled continuous manager. Passing that CFI through
+     resize lets epub.js do its own one redisplay, not a competing display from
+     us. This is only the rendition's visual location, never a Reading Position.
+
+     An explicit target wins. During rapid resizing there can already be no
+     views; keep the last captured location then instead of replacing it with
+     an empty one. The existing blank-open recovery remains the final fallback. */
+  function keepPlaceOnResize(manager) {
+    if (!manager || manager.openreaderKeepsResizePlace) return;
+    var resize = manager.resize;
+    manager.resize = function (width, height, target) {
+      if (!target) {
+        try {
+          var location = rendition.currentLocation();
+          if (location && location.start && location.start.cfi) {
+            rendition.location = location;
+            target = location.start.cfi;
+          }
+        } catch (error) {
+          report('could not capture the page before a resize: ' + error);
+        }
+      }
+      return resize.call(this, width, height, target);
+    };
+    manager.openreaderKeepsResizePlace = true;
+  }
+
   /* ---- the blank open (notes/NOTES_2026-09-20.md, 01:51) ---- */
 
   /* A resize destroys every view, and epub.js only puts them back if it has
@@ -3057,7 +3087,9 @@ ${EPUB_GUARDS_SOURCE}
      way to render — it is the only way, run when the library has declined to run
      it. */
   var displaying = false;
+  var resizedPage = false;
   rendition.on('resized', function () {
+    resizedPage = true;
     if (rendition.location && rendition.location.start) return;
     if (onScreen === null || displaying) return;
     /* The section that was at the top of the page, not the start of the book: on a
@@ -3076,6 +3108,15 @@ ${EPUB_GUARDS_SOURCE}
     window.setTimeout(function () {
       displaying = false;
     }, 0);
+  });
+
+  // A resize's redisplay moves to its CFI AFTER attach has painted the new
+  // document. Restore Following after that move, not before it. settle itself
+  // refuses to move a Browsing page, including one browsed during the resize.
+  rendition.on('displayed', function () {
+    if (!resizedPage) return;
+    resizedPage = false;
+    window.requestAnimationFrame(function () { settle(SETTLE_FRAMES, 0); });
   });
 
   /* Every section document epub.js displays, as it displays it: the first one,
@@ -3105,6 +3146,7 @@ ${EPUB_GUARDS_SOURCE}
   keepFingerOnText(rendition.manager);
   landBelowBar(rendition.manager);
   locateInWholeView(rendition.manager);
+  keepPlaceOnResize(rendition.manager);
   settleRemovedViews(rendition.manager);
   tickWithoutFrames(rendition.manager && rendition.manager.q);
   tickWithoutFrames(rendition.q);

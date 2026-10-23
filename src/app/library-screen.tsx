@@ -29,6 +29,7 @@ import { ReaderActions } from './reader-actions';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { useHeldReading } from './reading-host';
 import { TEXT_EMPHASIZED } from './text-styles';
+import { LAYOUT_WIDTH } from './layout-widths';
 import { formatBytes, occupied, removeDownloads, requestInventory } from '../offline/runtime';
 
 const QUOTATION = 90;
@@ -190,7 +191,7 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
   const counts = useMemo(() => directFolderCounts(tree, library.entries.map((entry) => entry.id)), [tree, library.entries]);
   return <View style={styles.screen}>
     <GestureDetector gesture={sweep.gesture}>
-    <View style={styles.list} collapsable={false}>
+    <View style={[styles.list, styles.column]} collapsable={false}>
     <GestureDetector gesture={sweep.nativeGesture}>
     <FlatList<Row>
       {...sweep.list}
@@ -247,7 +248,8 @@ function LibraryDocument({ entry, present, onPress, onActions, disabled, selecte
 const READING_BUTTON_ROOM = READING_BUTTON_PLACE.bottom + 52 + 12;
 const styles = StyleSheet.create({
   list: { flex: 1 },
-  selectionActions: { position: 'absolute', left: 22, right: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  column: { width: '100%', maxWidth: LAYOUT_WIDTH.library, alignSelf: 'center' },
+  selectionActions: { position: 'absolute', width: '100%', maxWidth: LAYOUT_WIDTH.library, alignSelf: 'center', paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   banner: { paddingHorizontal: 16, paddingTop: 12 },
   message: { flexDirection: 'row', alignItems: 'flex-start' },

@@ -119,13 +119,13 @@ const config: ExpoConfig = {
 
   ios: {
     /**
-     * #108. iPhone only, the owner's decision for the first release. An iPad
-     * runs the iPhone app in compatibility mode, in portrait: the layout that
-     * has been tested. With `true`, the iPad app allowed all four orientations
-     * (UISupportedInterfaceOrientations~ipad), none of them tested, and App
-     * Review tests on iPad.
+     * #319, ADR 0085. iPhone stays portrait; Expo's tablet configuration adds
+     * all four iPad orientations independently. Multitasking also permits a
+     * resizable iPad-app window on Apple silicon Macs. The scene plugin still
+     * declares one scene: a resizable window is not multiple app windows.
      */
-    supportsTablet: false,
+    supportsTablet: true,
+    requireFullScreen: false,
     bundleIdentifier: 'top.xujialiu.openreader',
 
     /**

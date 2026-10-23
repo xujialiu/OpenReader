@@ -59,6 +59,7 @@ import { INK } from './controls';
 import type { OpenDocument } from './document';
 import { useDocumentCover } from './document-cover';
 import { Player } from './player';
+import { LAYOUT_WIDTH } from './layout-widths';
 import { useReaderFileSystem } from './reader-file-system';
 import { useShell } from './routes';
 import { TEXT } from './text-styles';
@@ -888,7 +889,9 @@ function Waiting({ words }: { words: string }) {
 }
 
 const styles = StyleSheet.create({
-  document: { backgroundColor: INK.page, flex: 1 },
+  // Cap the measured viewport, not an EPUB's body: publisher tables/images and
+  // our existing Margins then share the same page width (#319).
+  document: { backgroundColor: INK.page, flex: 1, width: '100%', maxWidth: LAYOUT_WIDTH.reader, alignSelf: 'center' },
   screen: { backgroundColor: INK.page, flex: 1 },
   waiting: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 32 },
   waitingWords: { ...TEXT.subhead, color: INK.quiet },

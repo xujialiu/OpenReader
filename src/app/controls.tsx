@@ -27,6 +27,7 @@ import { NameText } from './name-text';
 import { FolderArtwork } from './folder-artwork';
 import { LIBRARY_ROW, libraryRowHeight } from './library-row-layout';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
+import { LAYOUT_WIDTH } from './layout-widths';
 
 /**
  * One colour that is two, resolved by iOS rather than by React (ADR 0022).
@@ -714,7 +715,7 @@ const styles = StyleSheet.create({
   headerButton: { ...TEXT.body, color: INK.text },
   rowProgress: { ...TEXT.footnote, color: INK.quiet },
   settingsPage: { backgroundColor: INK.settingsPage, flex: 1 },
-  settingsBody: { gap: SETTINGS.groupGap, paddingBottom: 64, paddingHorizontal: SETTINGS.margin, paddingTop: 16 },
+  settingsBody: { width: '100%', maxWidth: LAYOUT_WIDTH.settings, alignSelf: 'center', gap: SETTINGS.groupGap, paddingBottom: 64, paddingHorizontal: SETTINGS.margin, paddingTop: 16 },
   groupTitle: { ...TEXT.headline, color: INK.secondary, marginBottom: 6, paddingHorizontal: SETTINGS.inset },
   groupCard: { backgroundColor: INK.card, borderCurve: 'continuous', borderRadius: SETTINGS.cardRadius, overflow: 'hidden' },
   separator: { backgroundColor: INK.separator, bottom: 0, height: 1, left: SETTINGS.inset, position: 'absolute', right: SETTINGS.inset },

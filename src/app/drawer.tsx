@@ -9,6 +9,10 @@
  * cannot end up a few points apart. Every drawer in the app is one of these;
  * the old `Modal` drawer, `sheet.tsx`, is gone (#117).
  *
+ * #319, ADR 0085: these measured phone rules remain on iPhone. Tablet/Mac
+ * sheets use a native fraction rather than the phone geometry, retain their
+ * selected height through resize, and also have an explicit close control.
+ *
  * ## Two heights
  *
  * A drawer opens at the **Drawer Height**, the owner's (`drawer-height.ts`),
@@ -75,14 +79,14 @@
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import {
   environment, ignoreSafeArea, presentationBackground, presentationBackgroundInteraction, presentationDetents,
-  presentationDragIndicator,
+  presentationDragIndicator, type PresentationDetent,
 } from '@expo/ui/swift-ui/modifiers';
 import {
   createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
   type ReactElement, type ReactNode,
 } from 'react';
 import {
-  FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
+  FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
   type AccessibilityRole, type AccessibilityState, type ColorValue, type FlatListProps, type StyleProp, type TextStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -271,7 +275,7 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
   title: string;
   /** A control drawn where the centred title goes, in its place: the lookup drawer's Dictionary | Translation. */
   heading?: ReactNode;
-  /** Called when the drawer is swiped away, and by VoiceOver's escape. Not by a tap outside: there is none. */
+  /** Swipe/VoiceOver dismissal, or the explicit tablet/Mac close control. */
   onClose(): void;
   /** Native dismissal finished: a system picker can now be presented without racing this sheet. */
   onDismiss?(): void;
@@ -281,15 +285,24 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
   const colours = useDrawerColours();
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const opening = { height: drawerDetentHeight(settings.drawerHeight, { width: window.width, height: window.height, bottomInset: insets.bottom }) };
+  const tablet = Platform.OS === 'ios' && (Platform.isPad || Platform.isMacCatalyst || Platform.constants.interfaceIdiom === 'mac');
+  // #319: the phone's measured floating-card correction is not iPad geometry.
+  // A fraction remains valid while the system resizes its tablet/Mac panel.
+  const opening: PresentationDetent = tablet
+    ? { fraction: settings.drawerHeight / 100 }
+    : { height: drawerDetentHeight(settings.drawerHeight, { width: window.width, height: window.height, bottomInset: insets.bottom }) };
   const turn = useDrawerTurn(visible, onClose);
+  const [expanded, setExpanded] = useState(false);
   const bottom = insets.bottom + DRAWER.bottom;
   return (
     <Host style={styles.host} colorScheme={colours.scheme}>
-      <BottomSheet isPresented={turn.presented} onDismiss={() => { turn.dismissed(); onDismiss?.(); }}
+      <BottomSheet isPresented={turn.presented} onDismiss={() => { setExpanded(false); turn.dismissed(); onDismiss?.(); }}
         onIsPresentedChange={(presented) => { if (!presented) onClose(); }}>
         <Group modifiers={[
-          presentationDetents([opening, DRAWER.expanded]),
+          presentationDetents([opening, DRAWER.expanded], tablet ? {
+            selection: expanded ? DRAWER.expanded : opening,
+            onSelectionChange: (detent) => setExpanded(detent === DRAWER.expanded),
+          } : undefined),
           presentationDragIndicator('visible'),
           presentationBackgroundInteraction({ type: 'enabledUpThrough', detent: opening }),
           presentationBackground(colours.page),
@@ -300,7 +313,7 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
           <RNHostView>
             <View style={[styles.body, { paddingBottom: bottom }]} onAccessibilityEscape={onClose}>
               <DrawerBottom value={bottom}>
-                <DrawerTitle title={title} heading={heading} onBack={onBack} backLabel={backLabel} action={action} titleLeft={!!titleLeft} />
+                <DrawerTitle title={title} heading={heading} onBack={onBack} backLabel={backLabel} action={action} titleLeft={!!titleLeft} onClose={tablet ? onClose : undefined} />
                 {children}
               </DrawerBottom>
             </View>
@@ -311,26 +324,32 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
   );
 }
 
-function DrawerTitle({ title, heading, onBack, backLabel, action, titleLeft }: { title: string; heading?: ReactNode; onBack?(): void; backLabel?: string; action?: DrawerAction; titleLeft: boolean }) {
+function DrawerTitle({ title, heading, onBack, backLabel, action, titleLeft, onClose }: { title: string; heading?: ReactNode; onBack?(): void; backLabel?: string; action?: DrawerAction; titleLeft: boolean; onClose?(): void }) {
   // How far in the centred title is kept on both sides: past the wider of the two ends, so it is centred on the drawer.
   const [actionWidth, setActionWidth] = useState(0);
+  const close = onClose ? <RoundButton icon="close" label={`Close ${title}`} onPress={onClose} drawn={DRAWER.button.action} /> : null;
   if (titleLeft && action) {
     return (
       <View style={styles.header}>
+        {close}
         <Text style={[styles.title, styles.titleLeading]} accessibilityRole="header" numberOfLines={2}>{title}</Text>
         <HeaderAction action={action} />
       </View>
     );
   }
-  const clear = DRAWER.button.side + Math.max(onBack ? DRAWER.button.size : 0, action ? actionWidth : 0, DRAWER.button.size);
+  const right = action || (onBack && close) ? <View style={styles.headerActions} onLayout={(event) => setActionWidth(event.nativeEvent.layout.width)}>
+    {action ? <HeaderAction action={action} /> : null}
+    {onBack ? close : null}
+  </View> : null;
+  const clear = DRAWER.button.side + Math.max(right ? actionWidth : 0, DRAWER.button.size);
   return (
     <View style={styles.header}>
       {/* Absolute, so the title, or the control drawn in its place, is centred on the drawer rather than on what the buttons leave of it. */}
       <View style={[styles.titleCentred, { left: clear, right: clear }]}>
         {heading ?? <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>}
       </View>
-      {onBack ? <RoundButton icon="previous" label={backLabel ?? `Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : <View />}
-      {action ? <View onLayout={(event) => setActionWidth(event.nativeEvent.layout.width)}><HeaderAction action={action} /></View> : null}
+      {onBack ? <RoundButton icon="previous" label={backLabel ?? `Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : close ?? <View />}
+      {right}
     </View>
   );
 }
@@ -599,6 +618,7 @@ const styles = StyleSheet.create({
     marginBottom: DRAWER.header.gap, marginTop: DRAWER.header.top, minHeight: DRAWER.header.height,
     paddingHorizontal: DRAWER.button.side,
   },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { ...TEXT.headline, color: INK.text },
   titleCentred: { bottom: 0, justifyContent: 'center', position: 'absolute', top: 0 },
   titleCentredText: { textAlign: 'center' },

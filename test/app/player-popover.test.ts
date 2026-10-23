@@ -38,6 +38,7 @@ async function player() {
   await act(async () => { view = create(createElement(Player, props)); });
   const bubble = () => view.root.findAll((node) => String(node.type) === 'Popover')[0];
   return {
+    root: () => view.root,
     open: () => bubble().props.isPresented,
     toggle: () => act(async () => view.root.findAll((node) => String(node.type) === 'Pressable' &&
       String(node.props.accessibilityLabel).startsWith('Playback speed,'))[0].props.onPress()),
@@ -49,6 +50,26 @@ async function player() {
     unmount: () => act(async () => view.unmount()),
   };
 }
+
+describe('the capped Player measures its own width (#319)', () => {
+  it('splits crowded controls inside its cap, even with space outside in a wide window', async () => {
+    const p = await player();
+    const transportLabels = () => {
+      const row = p.root().findAll((node) => String(node.type) === 'View' && node.props.style?.flexDirection === 'row')
+        .find((node) => node.findAll((child) => String(child.type) === 'Pressable' && child.props.accessibilityLabel === 'Next sentence').length > 0);
+      if (!row) throw new Error('No transport row');
+      return row.findAll((node) => String(node.type) === 'Pressable').map((node) => node.props.accessibilityLabel);
+    };
+    expect(transportLabels()).toContain('Contents'); // unchanged 390-pt phone
+    await p.update({ width: 1200, fontScale: 3.571 });
+    expect(transportLabels()).not.toContain('Contents'); // 600-pt cap, not 1200
+    expect(p.root().findAll((node) => String(node.type) === 'View').some((node) =>
+      [node.props.style].flat().some((style) => style?.maxWidth === 600 && style.width === '100%' && style.alignSelf === 'center'))).toBe(true);
+    await p.update({ width: 390, fontScale: 1 });
+    expect(transportLabels()).toContain('Contents');
+    await p.unmount();
+  });
+});
 
 describe('player speed popover geometry (#124)', () => {
   it('opens, stays open on unchanged dimensions, and closes via the native dismissal', async () => {
@@ -66,7 +87,7 @@ describe('player speed popover geometry (#124)', () => {
     expect(p.open()).toBe(false);
     await p.unmount();
   });
-  it.each([{ fontScale: 2 }, { width: 320 }])('closes on %j, stays closed on returning, and can reopen', async (next) => {
+  it.each([{ fontScale: 2 }, { width: 320 }, { height: 800 }])('closes on %j, stays closed on returning, and can reopen', async (next) => {
     const p = await player();
     await p.toggle();
     await p.update(next);
@@ -77,11 +98,12 @@ describe('player speed popover geometry (#124)', () => {
     expect(p.open()).toBe(true);
     await p.unmount();
   });
-  it('does not dismiss for a height-only change', async () => {
+  it('closes for a wide-window resize even when the capped Player width stays the same (#319)', async () => {
     const p = await player();
+    await p.update({ width: 1000 });
     await p.toggle();
-    await p.update({ height: 800 });
-    expect(p.open()).toBe(true);
+    await p.update({ width: 1200 });
+    expect(p.open()).toBe(false);
     await p.unmount();
   });
 });

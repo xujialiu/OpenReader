@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ExportedConfig, ExportedConfigWithProps, InfoPlist } from 'expo/config-plugins';
+import { IOSConfig, type ExportedConfig, type ExportedConfigWithProps, type InfoPlist } from 'expo/config-plugins';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import config from '../app.config';
@@ -196,10 +196,19 @@ describe('ADR 0083: an upload is a pair, the odd number without Debug Mode and t
 });
 
 describe('#108: a fresh prebuild is one App Store Connect accepts', () => {
-  it('ships for iPhone only', () => {
-    // An iPad runs it in compatibility mode, in portrait, the tested layout.
-    // With iPad support, the iPad app allowed all four orientations, untested.
-    expect(config.ios?.supportsTablet).toBe(false);
+  it('supports resizable iPad apps while retaining portrait iPhone orientation (#319)', () => {
+    expect(config.ios?.supportsTablet).toBe(true);
+    expect(config.ios?.requireFullScreen).toBe(false);
+    expect(config.orientation).toBe('portrait');
+    // The installed SDK's writers, not a second hand-written config mapping.
+    const plist = IOSConfig.RequiresFullScreen.setRequiresFullScreen(config, IOSConfig.Orientation.setOrientation(config, {}));
+    expect(IOSConfig.DeviceFamily.getDeviceFamilies(config)).toEqual([1, 2]);
+    expect(plist.UIRequiresFullScreen).toBe(false);
+    expect(plist.UISupportedInterfaceOrientations).toEqual(['UIInterfaceOrientationPortrait', 'UIInterfaceOrientationPortraitUpsideDown']);
+    expect(plist['UISupportedInterfaceOrientations~ipad']).toEqual([
+      'UIInterfaceOrientationPortrait', 'UIInterfaceOrientationPortraitUpsideDown',
+      'UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight',
+    ]);
   });
 
   it('declares no non-exempt encryption, so no upload waits on the export-compliance question', () => {
