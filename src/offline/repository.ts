@@ -30,9 +30,22 @@ export interface AudioFiles {
   removeDocumentFiles(documentKey: string): Promise<void>;
 }
 
-/** File operations per turn, not just rows per SQL statement (#176). */
+/** Files finalized together, and time before yielding within that batch (#176). */
 const FILE_BATCH = 64;
+const FILE_SLICE_MS = 8;
 const nextTurn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/** A synchronous native call cannot be preempted; yield after it spends the slice. */
+async function visitFiles<T>(items: readonly T[], visit: (item: T) => Promise<void>) {
+  let started = performance.now();
+  for (let i = 0; i < items.length; i++) {
+    await visit(items[i]);
+    if (i + 1 < items.length && performance.now() - started >= FILE_SLICE_MS) {
+      await nextTurn();
+      started = performance.now();
+    }
+  }
+}
 
 /**
  * A saved clip, or none, and whether looking for it changed the saved audio.
@@ -106,7 +119,7 @@ export class OfflineRepository {
       while (await this.serialize(document, async () => {
         const batch = await this.catalog.pendingDeletes(document, FILE_BATCH);
         const voices = new Map<string, string[]>();
-        for (const audio of batch) {
+        await visitFiles(batch, async (audio) => {
           await this.files.remove(audio);
           let keys = voices.get(audio.voice);
           if (!keys) {
@@ -114,7 +127,7 @@ export class OfflineRepository {
             voices.set(audio.voice, keys);
           }
           keys.push(audio.key);
-        }
+        });
         for (const [voice, keys] of voices)
           await this.catalog.finishDeletes(document, voice, keys);
         return batch.length > 0;
@@ -149,8 +162,9 @@ export class OfflineRepository {
         const batch = await this.serialize(document, async () => {
           const ready = await this.catalog.readyBatch(document, after, FILE_BATCH);
           const missing: AudioAddress[] = [];
-          for (const audio of ready)
+          await visitFiles(ready, async (audio) => {
             if (!await this.files.present(audio)) missing.push(audio);
+          });
           await this.catalog.forgetMissing(document, missing);
           return ready;
         });

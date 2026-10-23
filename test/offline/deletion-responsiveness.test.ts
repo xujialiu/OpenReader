@@ -60,7 +60,7 @@ function open() {
       try { await run(session); db.exec('COMMIT'); } catch (error) { db.exec('ROLLBACK'); throw error; }
     },
   };
-  return { db, catalog: new OfflineCatalog(connection) };
+  return { db, catalog: new OfflineCatalog(connection), connection };
 }
 async function download(repository: OfflineRepository) {
   await repository.savePlan('book', { version: 2, sections: [{ href: '0', path: '0' }], preparedSections: [],
@@ -114,3 +114,54 @@ it('after an interrupted deletion, a Clip of another Document asked for at launc
   expect(answer.clip).not.toBeNull();
   expect(atAnswer.deleted).toBeLessThan(atEnd.deleted);
 }, 120_000);
+
+for (const kind of ['cleanup', 'audit'] as const) {
+  for (const cost of [0, 10]) {
+    it(`${kind} yields within a slow batch, not per Clip transaction (operation cost ${cost} ms)`, async () => {
+      const { db, catalog, connection } = open();
+      try {
+        await catalog.initialize();
+        const repository = new OfflineRepository(catalog, audioFiles);
+        // Two Clips are enough: the regression is a long JS task INSIDE one
+        // database batch, not the total size of the deletion or audit.
+        for (const text of ['First.', 'Second.'])
+          await repository.saveClip('book', voice, text, pcm, () => true);
+        const transactions = vi.spyOn(connection, 'withExclusiveTransactionAsync');
+        let clock = 0, operations = 0;
+        vi.spyOn(performance, 'now').mockImplementation(() => clock);
+        let record!: (count: number) => void;
+        const firstTimer = new Promise<number>((resolve) => { record = resolve; });
+        const completed = () => {
+          operations++;
+          clock += cost;
+          if (operations === 1) setTimeout(() => record(operations), 0);
+        };
+        if (kind === 'cleanup') {
+          const remove = audioFiles.remove;
+          vi.spyOn(audioFiles, 'remove').mockImplementation(async (address) => {
+            await remove(address);
+            completed();
+          });
+          await repository.removeVoice('book', voice);
+        } else {
+          const present = audioFiles.present;
+          vi.spyOn(audioFiles, 'present').mockImplementation(async (audio) => {
+            const found = await present(audio);
+            completed();
+            return found;
+          });
+          expect((await repository.inventory('book'))[0].count).toBe(2);
+        }
+        const observed = await firstTimer;
+        expect(operations).toBe(2);
+        expect(observed).toBe(cost ? 1 : 2);
+        // Timer slices do not split the durable batch: mark + one row delete,
+        // or one successful audit marker when both payloads are present.
+        expect(transactions).toHaveBeenCalledTimes(kind === 'cleanup' ? 2 : 1);
+      } finally {
+        vi.restoreAllMocks();
+        db.close();
+      }
+    });
+  }
+}
