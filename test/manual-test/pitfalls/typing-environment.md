@@ -247,11 +247,16 @@
 ## The alert field commits the keyboard's autocandidate at Save (2026-10-23, #317 run, iOS 26.5)
 
 - **A `RenameAlert`/Create-folder save can store the QuickType candidate, not
-  the typed name.** Symptom: `alert-input.py` verified the native field held
-  the exact intended name on two fresh reads, one `Save` tap later
-  `library-folders.json` held something else — `Qwrtz` → **`Quartz`**,
-  `Innerq` → `Inner`, `Innerx` → `Inns`, while the dictionary word `Deeper`
-  saved exactly. Cause: the alert's SwiftUI `TextField`
+  the typed name.** Measured on the session device `iPhone 17 edgeswipe`
+  (iOS 26.5, `8937CF48-74A1-4948-B803-744DEEAB4329`), app 1.0.1 (14)-beta2-debug.
+  Symptom: `alert-input.py` typed each value through its checked HID path
+  (`axe type` after a counted clear and an exact-empty check) and verified the
+  native field held the exact intended name on two fresh `describe-ui` reads;
+  one `Save` tap later `library-folders.json` held something else — `Qwrtz` →
+  **`Quartz`**, `Innerq` → `Inner`, `Innerx` → `Inns`, while the dictionary
+  word `Deeper` saved exactly. Artifacts: `/tmp/or317-tester2/phase4/`
+  (`rename-repro`, `rename-qwrtz`, `create-deeper`, each with its
+  `result.json` `native` read). Cause: the alert's SwiftUI `TextField`
   (`src/app/rename-alert.tsx`) has autocorrection on; at the Save tap iOS
   commits the marked word as its autocandidate, the native binding the app
   deliberately reads at submit (`text.get()`, the #123 repair) then holds the
