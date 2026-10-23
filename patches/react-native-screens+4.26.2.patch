@@ -1,0 +1,55 @@
+diff --git a/node_modules/react-native-screens/ios/RNSScreenStack.mm b/node_modules/react-native-screens/ios/RNSScreenStack.mm
+index 192f5d2..547bfeb 100644
+--- a/node_modules/react-native-screens/ios/RNSScreenStack.mm
++++ b/node_modules/react-native-screens/ios/RNSScreenStack.mm
+@@ -574,6 +574,39 @@ - (void)setModalViewControllers:(NSArray<UIViewController *> *)controllers
+   finish();
+ }
+ 
++// OpenReader (#317): UIKit's back button and its long-press menu name each page
++// by its navigation item, which this library fills only when the page is shown.
++// A page placed below the top without being shown (an initial state several pages
++// deep, or a reset that puts a page under the top) was left untitled: a blank row
++// in the menu, and a back button read as "Back". Every page below the top takes
++// the title of its own header config.
++- (void)openReaderNameControllersBelowTop:(NSArray<UIViewController *> *)controllers
++{
++  for (NSUInteger i = 0; i + 1 < controllers.count; i++) {
++    UIViewController *vc = controllers[i];
++    if (![vc isKindOfClass:[RNSScreen class]]) {
++      continue;
++    }
++    RNSScreenStackHeaderConfig *config = [((RNSScreen *)vc).screenView findHeaderConfig];
++    if (config.title != nil) {
++      vc.navigationItem.title = config.title;
++    }
++  }
++}
++
++// OpenReader (#317): a change below the top leaves the top's back button
++// configured against the page that was below it before; configure it again.
++- (void)openReaderConfigureTop:(UIViewController *)top
++{
++  if (![top isKindOfClass:[RNSScreen class]]) {
++    return;
++  }
++  RNSScreenStackHeaderConfig *config = [((RNSScreen *)top).screenView findHeaderConfig];
++  if (config != nil) {
++    [RNSScreenStackHeaderConfig willShowViewController:top animated:NO withConfig:config];
++  }
++}
++
+ - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
+ {
+   // when there is no change we return immediately
+@@ -669,7 +702,10 @@ - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
+   } else {
+     // change wasn't on the top of the stack. We don't need animation.
+     [_controller setViewControllers:controllers animated:NO];
++    [self openReaderNameControllersBelowTop:controllers];
++    [self openReaderConfigureTop:top];
+   }
++  [self openReaderNameControllersBelowTop:controllers];
+ }
+ 
+ - (void)updateContainer

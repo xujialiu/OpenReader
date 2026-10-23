@@ -47,7 +47,7 @@ import { Alert, Appearance, AppState, useColorScheme, useWindowDimensions } from
 
 import { readingAccent } from './accent';
 import { AccentContext, PALETTE, SchemeContext, SETTINGS_SURFACE } from './controls';
-import { folderRoutes, reconcileFolderStack } from './folder-stack';
+import { folderPageNames, folderRoutes, reconcileFolderStack } from './folder-stack';
 import { GeneralScreen } from './general-screen';
 import { LibraryScreen } from './library-screen';
 import { importDocument } from './import-document';
@@ -405,10 +405,14 @@ export function OpenReader() {
                 * One page per Folder (#317). Its id is the Folder's, so a second tap on a row
                 * before the first push has drawn brings the same page forward instead of
                 * pushing a copy. The name is here as well as set by the screen, so the bar
-                * has it from the push's first frame.
+                * has it from the push's first frame; the back title names the page behind,
+                * the back button's label and its menu entry (`folderPageNames`).
                 */}
               <Stack.Screen name="Folder" component={LibraryScreen} getId={({ params }) => params.id}
-                options={({ route }) => ({ title: folderTree.folders.find((one) => one.id === route.params.id)?.name ?? '' })} />
+                options={({ route }) => {
+                  const { title, backTitle } = folderPageNames(folderTree, route.params.id);
+                  return { title, headerBackTitle: backTitle };
+                }} />
               <Stack.Screen name="Reader" component={ReaderScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings', ...settingsScreen }} />
               <Stack.Screen name="General" component={GeneralScreen} options={{ title: 'General', headerBackTitle: 'Settings', ...settingsScreen }} />

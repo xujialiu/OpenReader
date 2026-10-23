@@ -31,6 +31,18 @@ export function folderRoutes(tree: FolderTree, folder: FolderId | null): Library
 }
 
 /**
+ * A Folder page's title and its back button's: the Folder's name, and the name
+ * of the page behind it. Both from the tree, because the back button otherwise
+ * takes the page behind's own title, which iOS has not set on a page put under
+ * it by `reconcileFolderStack` and never shown; it then reads `Back`.
+ */
+export function folderPageNames(tree: FolderTree, folder: FolderId): { title: string; backTitle: string } {
+  const found = tree.folders.find((one) => one.id === folder);
+  const parent = found?.parent == null ? undefined : tree.folders.find((one) => one.id === found.parent);
+  return { title: found?.name ?? '', backTitle: parent?.name ?? 'Library' };
+}
+
+/**
  * `null` while the stack's Library pages are the path to the deepest of them;
  * otherwise the routes it should hold. That Folder deleted returns to the root,
  * as the Library did before (design 0069); moved, its new path is built. Pages

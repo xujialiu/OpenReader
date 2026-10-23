@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FolderTree } from '../../src/core/folders';
-import { folderRoutes, reconcileFolderStack, routeFolder } from '../../src/app/folder-stack';
+import { folderPageNames, folderRoutes, reconcileFolderStack, routeFolder } from '../../src/app/folder-stack';
 
 /** Language → English → Fiction, and Spare beside Language (#317). */
 const tree = (current: string | null = null): FolderTree => ({
@@ -73,5 +73,11 @@ describe('A Folder is a page of the stack (#317)', () => {
       { name: 'Folder', params: { id: 'spare' } },
       folder('fic'),
     ]);
+  });
+
+  it('names a Folder page and the page behind it from the tree, so a page put under it by a reset is named too', () => {
+    expect(folderPageNames(tree(), 'en')).toEqual({ title: 'English', backTitle: 'Language' });
+    expect(folderPageNames(tree(), 'lang')).toEqual({ title: 'Language', backTitle: 'Library' });
+    expect(folderPageNames(tree(), 'gone')).toEqual({ title: '', backTitle: 'Library' });
   });
 });
