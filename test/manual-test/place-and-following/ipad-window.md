@@ -53,6 +53,32 @@ Check the passage near the top, Following, saved Reading Position, Drawer close
 and preview, and the Player's narrow layout separately. Keep each playback
 only as long as its named check needs; pause before inspecting results.
 
+## Exact-character regression driver
+
+`ipad-resize-case.py` stages a chosen CFI with the app's Browsing message, then
+uses native AXe handle drags and measures that same character before, narrow
+and wide. It asserts stage/iframe widths800/375/800, an upper-edge position
+within two line heights below the 54-point header, unchanged saved Reading
+Positions and a paused Reading before/after. It never starts audio. Initial
+page placement is a handler-assisted fixture; window changes are real native
+input. Start with the Document open in a wide window.
+
+```sh
+python3 test/manual-test/kit/ios_guard.py run --wait 0 --timeout 150 \
+  --record /tmp/resize-case-phase.json -- \
+  python3 test/manual-test/place-and-following/ipad-resize-case.py \
+  "$SIMULATOR_UDID" /tmp/resize-case-new \
+  --cfi "$EXACT_CFI" --section "$SPINE_INDEX" --axe "$AXE" \
+  --metro http://127.0.0.1:PORT \
+  --narrow "$X" "$Y" "$TO_X" "$TO_Y" \
+  --wide "$SMALL_X" "$SMALL_Y" "$LARGE_X" "$LARGE_Y"
+```
+
+The output directory must be new; `records.json` and screenshots survive an
+assertion failure. Use current screenshot-derived coordinates, not copied
+ones. If a gesture misses, keep that attempt and correct the input once. The
+script fails on unchanged width rather than crediting a successful dispatch.
+
 ## Limits and evidence
 
 - A frame from AX can be relative to a floating app window. A ref-based tap
