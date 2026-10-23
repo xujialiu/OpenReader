@@ -60,11 +60,14 @@ with a `raw` call answering `null` if cleanliness matters.
 1. Navigate to Manage downloads for the large fixture BEFORE arming.
 2. Arm the sampler (bounded), `mark before-confirm`.
 3. Touch `Delete all current voice audio`, touch the alert's Delete, then
-   IMMEDIATELY `mark confirmed` and start the count poller. The poller must be
-   a single process that loops to a terminal state (two zero-deleting polls)
-   with a deadline — never a fixed iteration count, and never started before
-   the confirm (a pre-trigger poller sees a quiescent store and exits; both
-   mistakes happened on 2026-10-23 and cost one run's early progression).
+   IMMEDIATELY `mark confirmed` and start the count poller in the same shell
+   chain. Use `delete-count-poller.cjs`: a single process that polls on an
+   interval, treats 0 deleting as terminal only AFTER positive deleting rows
+   were seen (a poller started before its deletion, or against a quiescent
+   store, must keep waiting, not exit), and stops at a deadline — never a
+   fixed iteration count. Both earlier mistakes (fixed iteration count;
+   pre-confirm start) happened on 2026-10-23 and cost one run's early
+   progression.
 4. Optionally, mid-sweep, perform a real navigation touch and record the touch
    time and the first tree showing the destination — a response observation,
    not a latency measurement.
