@@ -42,7 +42,7 @@ The owner set these.
 
 ## Current state
 
-Checked 2026-10-10. When a fact here changes, change it here, and record what
+Checked 2026-10-23. When a fact here changes, change it here, and record what
 happened in that day's `notes/` file.
 
 - **Team and signing**
@@ -57,7 +57,8 @@ happened in that day's `notes/` file.
 - **Builds**
   - The last upload is the first pair, **1.0.0 (9)** and **1.0.0 (10)-debug** (ADR 0083), from `80b5bcf`, uploaded 2026-10-21 11:13 and 11:19 and processed. Both are on TestFlight only, not submitted; build 10 has Debug Mode and is for the owner's phone only. The next pair is builds 11 and 12.
   - 1.0.0 (8), from `4227e51`, uploaded 2026-10-17 23:07, is on TestFlight only, not submitted.
-  - 1.0.0 (7), from `08ec380`, uploaded 2026-10-10 12:49, is the first build that sells the Unlock (ADR 0075). On 2026-10-10 13:03 it was submitted together with both In-App Purchases, three items in one submission, and it is **Waiting for Review**, with manual release selected.
+  - 1.0.0 (7), from `08ec380`, uploaded 2026-10-10 12:49, is the first build that sells the Unlock (ADR 0075), and the build **on sale**: submitted with both In-App Purchases on 2026-10-10, approved, and released by the owner on 2026-10-23. Version 1.0.0 is released, so App Store Connect takes no more 1.0.0 uploads. It predates the source-bound purchase records (#162), so it writes only the unscoped `purchase.json` (#316).
+  - The next Version is 1.0.1 (owner's decision, 2026-10-23); its version is not yet created in App Store Connect.
   - 1.0.0 (6) was removed from review on 2026-10-10 (author's decision), before Apple had reviewed it, and never released. Version 1.0.0 then read Developer Rejected until build 7 replaced build 6.
   - 1.0.0 (5) was removed from review when build 6 replaced it.
   - 0.0.1 (1) tested the pipeline only. Never submit it.
@@ -75,7 +76,7 @@ happened in that day's `notes/` file.
 - **App Review Information**: the notes are the Guideline 2.1 answer, revised for build 7 on 2026-10-10 (3,990 characters). The revision adds a paragraph on the In-App Purchases and removes the claims that the app sells nothing. The recording `OpenReader-Review-Demo.mp4` is still attached, and predates the purchases. The review key is saved only in App Store Connect.
 - **Description**: since 2026-10-10 it says "Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase unlocks it for good. Reading, look-up and sync stay free." It ends "OpenReader is open source", without "free and".
 - **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), not on Apple silicon Macs or Apple Vision Pro. Books, 4+, trader under the EU Digital Services Act (below). The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
-- **In-App Purchases** (ADR 0075, #148), both Non-Consumable, submitted with 1.0.0 (7) on 2026-10-10 and Waiting for Review. Each has its review screenshot (2026-10-09): the phone's alert from 1.0.0 (7)-beta11 on the simulator, the Trial's for the trial and the ended one, with Unlock for $4.99, for the Unlock. Neither has review notes.
+- **In-App Purchases** (ADR 0075, #148), both Non-Consumable, approved with 1.0.0 (7) and on sale. Each has its review screenshot (2026-10-09): the phone's alert from 1.0.0 (7)-beta11 on the simulator, the Trial's for the trial and the ended one, with Unlock for $4.99, for the Unlock. Neither has review notes.
   - "30-day Trial": `top.xujialiu.openreader.trial`, Apple ID 6820864102, US$0.00. English (U.S.) display name "30-day Trial", description "Read aloud free for 30 days."
   - "Unlock": `top.xujialiu.openreader.unlock`, Apple ID 6820865303, US$4.99 with the United States as base. Apple's generated prices hold elsewhere (Australia A$7.99, for example). English (U.S.) display name "Unlock Read Aloud", description "Read aloud and offline narration, for good."
   - Both: 174 countries or regions (every one except China mainland), future territories added automatically, Family Sharing off, tax category matched to the app. An In-App Purchase's availability list starts with China mainland ticked, so untick it there. (notes 2026-10-09 14:20)
@@ -243,6 +244,7 @@ with the review key left where it was, never passes through the agent (notes
 - **Pricing and Availability**
   - Free.
   - Every country or region except China mainland, which requires an ICP filing and falls under the deep-synthesis rules.
+  - To take the app off the store, Remove App From Sale is at the bottom of the page. It leaves every storefront within 24 hours; people who downloaded it keep it and its updates, and can download it again from their purchase history.
   - Turn off availability on Mac with Apple silicon and on Apple Vision Pro; neither has been tested.
 - **EU Digital Services Act:** trader, since the app sells the Unlock (ADR 0075). Business → Compliance shows it Active for 27 countries or regions: verified, so it no longer holds back the EU storefronts. Opening its row opens the trader or non-trader form; close it with Cancel.
 - **Export compliance:** nothing to answer, because `ITSAppUsesNonExemptEncryption = NO` is in the build.
