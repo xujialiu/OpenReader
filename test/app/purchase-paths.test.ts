@@ -90,7 +90,7 @@ describe('a download speaks only through the gate', () => {
   const runtime = read('src/offline/runtime.ts');
 
   it('asks before Consent when it is started, so a refusal leaves no task', () => {
-    const starting = between(runtime, 'export async function startDownload(', 'export function enqueue(', 'startDownload()');
+    const starting = between(runtime, 'export async function startDownload(', 'export async function enqueue(', 'startDownload()');
     const gate = 'if (!(await purchases.askForSpeech())) return false;';
     pin(starting, gate, 'startDownload()');
     expect(starting.indexOf(gate)).toBeLessThan(starting.indexOf('consent.ensure(recipient)'));

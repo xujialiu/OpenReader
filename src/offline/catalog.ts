@@ -42,6 +42,10 @@ export interface ChapterProgress {
   count: number;
   complete: boolean;
 }
+export interface OfflineSummary {
+  chapters: number; downloaded: number; awaiting: number; partial: number;
+  unprepared: number; allSaved: number; clips: number; orphans: number;
+}
 export interface PreparedChapter extends Chapter {
   keys: string[];
 }
@@ -75,7 +79,7 @@ export class OfflineCatalog {
     const [version] = await this.db.getAllAsync<{ user_version: number }>(
       "PRAGMA user_version",
     );
-    if (version.user_version > 2)
+    if (version.user_version > 3)
       throw new Error("Update the app to read this offline database.");
     await this.db.execAsync(`
       PRAGMA journal_mode = WAL;
@@ -100,11 +104,23 @@ export class OfflineCatalog {
       CREATE TABLE IF NOT EXISTS writes(document TEXT NOT NULL,voice TEXT NOT NULL,key TEXT NOT NULL,cancelled INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(document,voice,key));
       CREATE TABLE IF NOT EXISTS voices(document TEXT NOT NULL,key TEXT NOT NULL,provider TEXT NOT NULL,voice_id TEXT NOT NULL,label TEXT NOT NULL,PRIMARY KEY(document,key));
       CREATE TABLE IF NOT EXISTS removals(document TEXT PRIMARY KEY);
+      CREATE TABLE IF NOT EXISTS recheck_holds(document TEXT NOT NULL,voice TEXT NOT NULL,chapter TEXT NOT NULL,
+        PRIMARY KEY(document,voice,chapter));
     `);
     // Existing voices and audio keep their keys; NULL means the formerly fixed
     // free Fish Model. Bump atomically so a restart cannot repeat ALTER (#229).
     if (version.user_version < 2) await this.write(async (tx) => {
       await tx.execAsync('ALTER TABLE voices ADD COLUMN model TEXT; PRAGMA user_version = 2;');
+    });
+    // #321: old upgrades erased preparation, not audio. Restore that evidence,
+    // then Recheck it without taking the check away before the result is known.
+    if (version.user_version < 3) await this.write(async (tx) => {
+      await tx.execAsync(`ALTER TABLE chapters ADD COLUMN recheck INTEGER NOT NULL DEFAULT 0;
+        UPDATE chapters SET prepared=1,recheck=1 WHERE prepared=0 AND text_count>0 AND section IS NOT NULL;
+        UPDATE plans SET prepared_sections=(SELECT json_group_array(section) FROM
+          (SELECT section FROM chapters WHERE chapters.document=plans.document AND section IS NOT NULL
+           GROUP BY section HAVING MIN(prepared)=1 ORDER BY section));
+        PRAGMA user_version = 3;`);
     });
   }
   private write<T>(run: (transaction: SqlSession) => Promise<T>): Promise<T> {
@@ -165,7 +181,7 @@ export class OfflineCatalog {
         json,
       );
       await tx.runAsync(
-        `INSERT INTO chapters
+        `INSERT INTO chapters(document,id,ordinal,title,parent,depth,section,fragment,prepared,texts,text_count)
         SELECT ?,json_extract(value,'$.id'),CAST(key AS INTEGER),json_extract(value,'$.title'),json_extract(value,'$.parent'),
           json_extract(value,'$.depth'),json_extract(value,'$.section'),json_extract(value,'$.fragment'),
           COALESCE(json_extract(value,'$.prepared'),1),json_extract(value,'$.texts'),json_array_length(value,'$.texts')
@@ -186,7 +202,7 @@ export class OfflineCatalog {
     );
     if (!row) return null;
     const chapters = await this.db.getAllAsync<Chapter>(
-      `SELECT id,title,parent,depth,section,fragment,prepared,text_count AS textCount FROM chapters WHERE document=? ORDER BY ordinal`,
+      `SELECT id,title,parent,depth,section,fragment,prepared,recheck,text_count AS textCount FROM chapters WHERE document=? ORDER BY ordinal`,
       document,
     );
     return {
@@ -194,6 +210,7 @@ export class OfflineCatalog {
       chapters: chapters.map((c) => ({
         ...c,
         prepared: !!c.prepared,
+        recheck: !!c.recheck,
         texts: [],
         textsLoaded: false,
       })),
@@ -207,7 +224,7 @@ export class OfflineCatalog {
     const [row] = await this.db.getAllAsync<
       Omit<Chapter, "texts"> & { texts: string }
     >(
-      "SELECT id,title,parent,depth,section,fragment,prepared,text_count AS textCount,texts FROM chapters WHERE document=? AND id=?",
+      "SELECT id,title,parent,depth,section,fragment,prepared,recheck,text_count AS textCount,texts FROM chapters WHERE document=? AND id=?",
       document,
       id,
     );
@@ -215,6 +232,7 @@ export class OfflineCatalog {
       ? {
           ...row,
           prepared: !!row.prepared,
+          recheck: !!row.recheck,
           texts: JSON.parse(row.texts),
           textsLoaded: true,
         }
@@ -241,6 +259,22 @@ export class OfflineCatalog {
       complete: !!row.complete,
     }));
   }
+  /** Diagnostic metadata, not a filesystem audit. Owned chapters follow the same #146 rule as the UI. */
+  async summary(document: string, voice: string, owned: readonly string[]): Promise<OfflineSummary> {
+    const [row] = await this.db.getAllAsync<OfflineSummary>(`
+      SELECT COUNT(*) AS chapters, COALESCE(SUM(prepared AND total>0 AND saved=total),0) AS downloaded,
+        COALESCE(SUM(recheck),0) AS awaiting, COALESCE(SUM(saved>0 AND saved<total),0) AS partial,
+        COALESCE(SUM(NOT prepared),0) AS unprepared, COALESCE(SUM(total>0 AND saved=total),0) AS allSaved,
+        (SELECT COUNT(*) FROM clips WHERE document=? AND voice=? AND state='ready') AS clips,
+        (SELECT COUNT(*) FROM clips c WHERE c.document=? AND c.voice=? AND c.state='ready' AND NOT EXISTS(
+          SELECT 1 FROM memberships m WHERE m.document=c.document AND m.clip_key=c.key)) AS orphans
+      FROM (SELECT ch.prepared,ch.recheck,ch.text_count AS total,COUNT(c.key) AS saved
+        FROM chapters ch LEFT JOIN memberships m ON m.document=ch.document AND m.chapter=ch.id
+        LEFT JOIN clips c ON c.document=m.document AND c.voice=? AND c.key=m.clip_key AND c.state='ready'
+        WHERE ch.document=? AND ch.id IN(SELECT value FROM json_each(?)) GROUP BY ch.id)`,
+      document, voice, document, voice, voice, document, JSON.stringify(owned));
+    return row;
+  }
   async beginDelete(
     document: string,
     voice: string,
@@ -264,6 +298,8 @@ export class OfflineCatalog {
         ...params,
       );
       await tx.runAsync(`UPDATE writes SET cancelled=1 ${filter}`, ...params);
+      await tx.runAsync(`DELETE FROM recheck_holds WHERE document=? AND voice=?
+        AND chapter IN(SELECT value FROM json_each(?))`, document, voice, JSON.stringify(selected));
     });
   }
   /**
@@ -285,6 +321,7 @@ export class OfflineCatalog {
         document,
         voice,
       );
+      await tx.runAsync('DELETE FROM recheck_holds WHERE document=? AND voice=?', document, voice);
       await tx.runAsync(
         "DELETE FROM voices WHERE document=? AND key=?",
         document,
@@ -388,6 +425,15 @@ export class OfflineCatalog {
     )
       throw new Error("Every prepared text must have one membership key.");
     await this.write(async (tx) => {
+      // The hold and the new text MUST commit together. A kill here cannot leave
+      // a resumed Download authorized to fetch the newly missing sentences.
+      const checked = await tx.getAllAsync<{ voice: string; chapter: string }>(`
+        SELECT v.key AS voice,ch.id AS chapter FROM chapters ch
+        JOIN voices v ON v.document=ch.document
+        LEFT JOIN memberships m ON m.document=ch.document AND m.chapter=ch.id
+        LEFT JOIN clips c ON c.document=m.document AND c.voice=v.key AND c.key=m.clip_key AND c.state='ready'
+        WHERE ch.document=? AND ch.section=? AND ch.recheck=1 AND ch.prepared=1 AND ch.text_count>0
+        GROUP BY v.key,ch.id HAVING COUNT(c.key)=ch.text_count`, document, section);
       for (const chapter of await tx.getAllAsync<{ id: string }>(
         "SELECT id FROM chapters WHERE document=? AND section=?",
         document,
@@ -395,7 +441,7 @@ export class OfflineCatalog {
       )) {
         const content = chapters.find((c) => c.id === chapter.id);
         await tx.runAsync(
-          `UPDATE chapters SET texts=?,text_count=?,prepared=1,title=CASE WHEN id LIKE 'section-%' THEN COALESCE(?,title) ELSE title END WHERE document=? AND id=?`,
+          `UPDATE chapters SET texts=?,text_count=?,prepared=1,recheck=0,title=CASE WHEN id LIKE 'section-%' THEN COALESCE(?,title) ELSE title END WHERE document=? AND id=?`,
           JSON.stringify(content?.texts ?? []),
           content?.texts.length ?? 0,
           content?.title ?? null,
@@ -414,6 +460,12 @@ export class OfflineCatalog {
           JSON.stringify(content?.keys ?? []),
         );
       }
+      await tx.runAsync(`INSERT OR IGNORE INTO recheck_holds
+        SELECT ch.document,json_extract(old.value,'$.voice'),ch.id
+        FROM json_each(?) old JOIN chapters ch ON ch.document=? AND ch.id=json_extract(old.value,'$.chapter')
+        LEFT JOIN memberships m ON m.document=ch.document AND m.chapter=ch.id
+        LEFT JOIN clips c ON c.document=m.document AND c.voice=json_extract(old.value,'$.voice') AND c.key=m.clip_key AND c.state='ready'
+        GROUP BY old.value HAVING ch.text_count>0 AND COUNT(c.key)<ch.text_count`, JSON.stringify(checked), document);
       const [row] = await tx.getAllAsync<{ prepared_sections: string | null }>(
         "SELECT prepared_sections FROM plans WHERE document=?",
         document,
@@ -475,33 +527,32 @@ export class OfflineCatalog {
   async recordSegmentation(segmentation: number) {
     await this.write((tx) => recordSegmentation(tx, segmentation));
   }
-  /**
-   * Every chapter whose text another walk or sentence splitter prepared is
-   * asked for again; both revisions commit with the invalidation (#184, #240).
-   *
-   * A Reading cuts its sentences with the walk it has, and asks for a saved Clip
-   * by the sentence's Speech Text; a chapter prepared by another walk may hold
-   * sentences the Reading no longer makes, and would read Downloaded while one
-   * of them goes to the Provider. So each chapter with text is marked not
-   * prepared and its section taken out of `prepared_sections`. Its texts,
-   * memberships and Clips stay: Manage downloads can still delete them, and the
-   * next download of it prepares the text afresh and fetches only the sentences
-   * whose text changed. A chapter with nothing to speak stays as it is, because
-   * no walk finds text where the last found none.
-   */
+  /** Mark old text for Recheck without erasing its last known completeness (#321). */
   async prepareAgain(walk: number, segmentation: number) {
     await this.write(async (tx) => {
       await tx.runAsync(
-        "UPDATE chapters SET prepared=0 WHERE prepared=1 AND section IS NOT NULL AND text_count>0",
-      );
-      await tx.runAsync(
-        `UPDATE plans SET prepared_sections=(
-          SELECT json_group_array(value) FROM json_each(COALESCE(plans.prepared_sections,'[]'))
-          WHERE value NOT IN(SELECT section FROM chapters WHERE chapters.document=plans.document AND prepared=0 AND section IS NOT NULL))`,
+        "UPDATE chapters SET recheck=1 WHERE prepared=1 AND section IS NOT NULL AND text_count>0",
       );
       await recordWalk(tx, walk);
       await recordSegmentation(tx, segmentation);
     });
+  }
+  /** Metadata only; one entry per section that has any saved audio, including partial chapters. */
+  recheckSections(): Promise<{ document: string; section: number }[]> {
+    return this.db.getAllAsync(`SELECT DISTINCT ch.document,ch.section FROM chapters ch
+      WHERE ch.recheck=1 AND ch.section IS NOT NULL AND EXISTS(
+        SELECT 1 FROM memberships m JOIN clips c ON c.document=m.document AND c.key=m.clip_key AND c.state='ready'
+        WHERE m.document=ch.document AND m.chapter=ch.id) ORDER BY ch.document,ch.section`);
+  }
+  async recheckHolds(document: string, voice: string): Promise<string[]> {
+    const rows = await this.db.getAllAsync<{ chapter: string }>(
+      'SELECT chapter FROM recheck_holds WHERE document=? AND voice=? ORDER BY chapter', document, voice);
+    return rows.map((row) => row.chapter);
+  }
+  /** Only a fresh Download selected grants permission for a Recheck's missing audio. */
+  allowRechecked(document: string, voice: string, chapters: string[]) {
+    return this.write((tx) => tx.runAsync(`DELETE FROM recheck_holds WHERE document=? AND voice=?
+      AND chapter IN(SELECT value FROM json_each(?))`, document, voice, JSON.stringify(chapters)));
   }
   /** Every chapter whose text has been prepared, across documents: what re-keying walks. */
   async preparedChapters(): Promise<{ document: string; id: string }[]> {
@@ -547,7 +598,7 @@ export class OfflineCatalog {
         "UPDATE writes SET cancelled=1 WHERE document=?",
         document,
       );
-      for (const table of ["memberships", "chapters", "plans", "voices"])
+      for (const table of ["memberships", "chapters", "plans", "voices", "recheck_holds"])
         await tx.runAsync(`DELETE FROM ${table} WHERE document=?`, document);
       // The document's directory goes as one; per-clip removal is for chapters.
       await tx.runAsync("INSERT OR IGNORE INTO removals VALUES(?)", document);

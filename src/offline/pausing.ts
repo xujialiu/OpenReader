@@ -20,7 +20,7 @@ export const isPaused = (task: DownloadTask, chapter: string) => !!task.paused?.
 /** The chapters still to be written: in the download, not failed, not already complete. */
 function left(task: DownloadTask, complete: ReadonlySet<string>): string[] {
   const failed = new Set(task.failed);
-  return task.chapters.filter((id) => !failed.has(id) && !complete.has(id));
+  return task.chapters.filter((id) => !failed.has(id) && !complete.has(id) && !task.recheckHeld?.includes(id));
 }
 
 /** Whether some chapter of the download would go on by itself, so Pause all is offered rather than Resume all. */
@@ -38,7 +38,7 @@ export function goesOn(task: DownloadTask, complete: ReadonlySet<string>): boole
  * paused one by one, and the tapped chapter goes on with it.
  */
 export function tapChapter(task: DownloadTask, chapter: string, complete: ReadonlySet<string>): void {
-  if (task.state === 'done') return;
+  if (task.state === 'done' || task.recheckHeld?.includes(chapter)) return;
   if (STOPPED.includes(task.state)) {
     task.paused = (task.paused ?? []).filter((id) => id !== chapter);
     task.state = 'queued'; task.error = null; task.failed = [];
@@ -60,7 +60,7 @@ export function tapChapter(task: DownloadTask, chapter: string, complete: Readon
 /** Pause all: every chapter of the download is paused, and the download with them. */
 export function pauseAll(task: DownloadTask): void {
   const failed = new Set(task.failed);
-  task.paused = task.chapters.filter((id) => !failed.has(id));
+  task.paused = task.chapters.filter((id) => !failed.has(id) && !task.recheckHeld?.includes(id));
   task.state = 'paused'; task.error = null;
 }
 

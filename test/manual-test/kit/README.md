@@ -24,6 +24,10 @@ What every area uses:
   offline runtime, or lists their ids.
 - `node-kit.ts`: what the Node probes against Providers and books share.
 - `frame-gaps.py`: hitches in a `simctl io recordVideo` recording.
+- `offline-catalog.py`: reads a phone catalogue or takes a local SQLite online backup,
+  writes a bounded metadata summary by Document/Voice, and distinguishes all
+  sentences saved from Downloaded and awaiting Recheck. Usage and the non-atomic
+  phone-copy limitation are in `docs/debug-on-iphone.md`.
 - `debug-log.py`: copies the Debug Log off a phone, says what time it covers,
   and collects the phone's system log for that span (below).
 - `debug-notes.py`: every Debug Note in a copied Debug Log under its own time,

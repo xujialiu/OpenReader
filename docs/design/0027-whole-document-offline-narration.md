@@ -136,11 +136,21 @@ On recent versions of iOS, a download the owner starts or resumes goes on after 
 
 ## Amendment (#184): an update that reads a book differently asks for its downloads again
 
+_The #321 amendment below replaces this trade-off. Its reason is retained here; it is no longer the behaviour._
+
 Sometimes an update changes how the app divides a book into sentences: a list read an item at a time rather than as one long sentence, or a chapter heading on two lines read with its number and its title apart. A sentence read differently is a different recording, and a chapter saved before may not hold it.
 
 So after such an update every downloaded chapter loses its check until the owner downloads it again. Downloading it again is quick and costs little: what was already saved is used again, and only the sentences that changed are asked for. Until then the saved audio stays, and Manage downloads can still delete it.
 
 Two alternatives were turned down. Keeping the checks would tell the owner a chapter can be heard without a network when one of its sentences cannot, and with no network the reading would stop there, at every chapter's heading in some web novels. Asking for the changed sentences by itself would spend the owner's speech service credit without being asked.
+
+## Amendment (#321): an update keeps the checks while saved audio is checked again
+
+An ordinary update changes neither settings nor download checks. When an update changes how sentences are read, the checks stay too, while the app quietly Rechecks the chapters with saved audio. It starts with the open book, from the reading's place onward, then works through the others. It stops when the app leaves the screen and continues on return, giving a download's preparation priority. Nothing appears on the Lock Screen for a Recheck.
+
+A chapter whose audio still covers every sentence keeps its check. One with missing sentences loses its check and shows how much remains saved, such as `251 / 253`. Its remaining audio can still be managed or played. Recheck sends no text to a speech service: only selecting that chapter and pressing Download selected asks for the missing sentences. Resume all does not silently add them to a running download. A download that was already unfinished continues its requested work after an update; it is not paused merely because the app changed. Partly saved chapters are checked too, so their counts become current. No extra banner repeats what the counts already say.
+
+The cost is a period in which a retained check describes the last check rather than the new way of reading. A sentence may be missing before its chapter is Rechecked. Keeping the checks forever would hide that permanently. Taking every check away until the work finishes, or making the owner press a check button for each book, makes the owner do work because the app was updated. Those alternatives were rejected, as was automatically paying for replacement audio. Saved audio already left without checks by the earlier behaviour is restored to its last-known state and then checked in the same way.
 
 ## Amendment (2026-10-21, #311): the end of one chapter overlaps the start of the next
 

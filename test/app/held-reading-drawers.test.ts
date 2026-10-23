@@ -73,7 +73,7 @@ vi.mock('../../src/playback/audio-graph', () => ({
 // The Provider: silence for every sentence. Nothing leaves the machine.
 vi.mock('../../src/offline/runtime', () => ({
   hasSavedVoice: () => false, inventoryReady: () => true, inventoryError: () => null, planOf: () => null, chapterProgress: () => new Map(),
-  releaseProgress: () => {}, requestProgress: () => {}, requestInventory: async () => {}, useDownloads: () => 0, setReadingPlays: () => {},
+  releaseProgress: () => {}, requestProgress: () => {}, requestInventory: async () => {}, useDownloads: () => 0, prioritizeRecheck: () => {}, setReadingPlays: () => {},
   offlineProvider: () => ({
     id: 'local', capabilities: { wordTimestamps: false }, listVoices: async () => [],
     synthesize: async () => ({ audio: 'pcm' as const, samples: new Uint8Array(4800), sampleRate: 24000 }),

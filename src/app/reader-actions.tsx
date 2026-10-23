@@ -105,7 +105,8 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   };
   const saveNote = (time: string, comment: string) => {
     setNoting(null);
-    writeDebugNote({ time, document: { id: document, title: entry.title }, comment });
+    writeDebugNote({ time, document: { id: document, title: entry.title }, comment,
+      voice: { ...voice, ...(voice.provider === 'fish' ? { model: current.fish.model } : {}) } });
     Clipboard.setStringAsync(debugNoteCopy(time, comment))
       .then(onClose, (problem: unknown) => setFailure(`The Debug Note is saved, but it could not be copied: ${problem instanceof Error ? problem.message : String(problem)}`));
   };

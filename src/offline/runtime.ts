@@ -53,8 +53,11 @@ import { consent, declinedSentence, providerRecipient, type Recipient } from "..
 import { purchases } from "../app/purchase";
 import { cutText, debugLog, describeProblem, shortId } from "../debug/debug-log";
 import { DEBUG_MODE } from "../debug/mode";
+import { onDebugNote } from '../debug/debug-note';
+import { downloadActionLine, offlineSummaryLine, voiceFacts } from './diagnostics';
 import { offlineRepository } from "./database";
-import { audioKey, voiceKey } from "./catalog-keys";
+import { audioKey, voiceKey, documentKey } from "./catalog-keys";
+import { createRechecks, RecheckInterrupted, type RecheckSection } from "./rechecks";
 import { fishModelOf, inFishModel, narrationIdentity, withFishModel } from "./narration-voice";
 import { DEFAULT_FISH_MODEL } from "../core/providers/fish-models";
 import { downloadSpeech, speechKeying } from "./speech";
@@ -112,7 +115,9 @@ export interface PreparationRequest {
 }
 let preparation:
   | (PreparationRequest & {
-      task: DownloadTask;
+      task: DownloadTask | null;
+      settled: Promise<void>;
+      saving?: boolean;
       resolve(): void;
       reject(error: Error): void;
     })
@@ -128,10 +133,10 @@ export const indexDocument = () =>
       ["preparing", "downloading"].includes(task.state),
   )
     ? rendererDocument
-    : null);
+    : foreground && rechecks.pendingDocument() === rendererDocument ? rendererDocument : null);
 function cancelInactivePreparation() {
   if (
-    preparation &&
+    preparation?.task &&
     (!tasks.includes(preparation.task) ||
       !["preparing", "downloading"].includes(preparation.task.state))
   ) {
@@ -152,7 +157,8 @@ function abandonPreparation() {
   const abandoned = preparation;
   preparation = null;
   emit();
-  abandoned.reject(new PreparationInterrupted());
+  if (!abandoned.task) debugLog('offline', `Recheck ${shortId(abandoned.document)} section ${abandoned.section} interrupted`);
+  abandoned.reject(abandoned.task ? new PreparationInterrupted() : new RecheckInterrupted());
 }
 const keyOf = (document: string, voice: OfflineVoice, text: string) =>
   JSON.stringify([document, narrationIdentity(voice), text]);
@@ -189,6 +195,7 @@ async function persist() {
   }
   emit();
   continued.follow();
+  rechecks.wake();
 }
 export function useDownloads(): number {
   return useSyncExternalStore(
@@ -649,44 +656,11 @@ const scheduler = createScheduler({
         .map((chapter) => chapter.id),
     ),
   prepare: async (task, chapter) => {
-    const section = chapter.section;
-    if (section === null || section === undefined)
-      throw new Error("This chapter does not identify a document section.");
-    const plan = planOf(task.document)!;
-    const held = plan.chapters.find((c) => c.id === chapter.id)!;
-    if (held.prepared !== false) return held;
-    const started = Date.now();
-    const which = `${shortId(task.document)} chapter ${chapter.id} (section ${section})`;
-    debugLog("download", `preparing ${which}`);
-    await new Promise<void>((resolve, reject) => {
-      rendererDocument = task.document;
-      preparation = {
-        token: ++preparationSerial,
-        document: task.document,
-        section,
-        task,
-        resolve,
-        reject,
-        points: plan.chapters
-          .filter((c) => c.section === section && !c.id.startsWith("section-"))
-          .map((c) => ({
-            id: c.id,
-            title: c.title,
-            parent: c.parent,
-            depth: c.depth,
-            section,
-            fragment: c.fragment ?? "",
-          })),
-      };
-      emit();
-    }).catch((problem: unknown) => {
-      debugLog("download", `preparing ${which} ${problem instanceof PreparationInterrupted ? "waits for the foreground" : "failed"} after ${Date.now() - started} ms: ${describeProblem(problem)}`);
-      throw problem;
-    });
-    debugLog("download", `prepared ${which} in ${Date.now() - started} ms`);
+    await prepareChapter(task.document, chapter, task);
     return planOf(task.document)!.chapters.find((c) => c.id === chapter.id)!;
   },
   fetch: async (task, text, chapter) => {
+    if (task.recheckHeld?.includes(chapter)) return;
     const key = JSON.stringify([
       task.document,
       narrationIdentity(task.voice),
@@ -699,31 +673,139 @@ const scheduler = createScheduler({
         debugLog("download", `${shortId(task.document)} chapter ${chapter}: a sentence was not synthesized, ${describeProblem(problem)}`);
         throw problem;
       });
-    // A paused task can keep its paid in-flight result; a removed chapter cannot.
-    const wanted = () =>
-      tasks.includes(task) &&
-      task.chapters.includes(chapter) &&
-      (deletionEpochs.get(key) ?? 0) === epoch;
+    const wanted = () => tasks.includes(task) && task.chapters.includes(chapter) &&
+      !task.recheckHeld?.includes(chapter) && (deletionEpochs.get(key) ?? 0) === epoch;
     if (!wanted()) return;
-    if (
-      !(await (
-        await offlineRepository()
-      ).saveClip(task.document, task.voice, speech, clip, wanted))
-    )
-      return;
+    if (!(await (await offlineRepository()).saveClip(task.document, task.voice, speech, clip, wanted))) return;
     await refresh(task.document);
   },
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+});
+
+let downloadPreparations = 0;
+async function prepareChapter(document: string, chapter: Chapter, task: DownloadTask | null): Promise<void> {
+  if (task) downloadPreparations++;
+  try {
+    if (task && preparation && !preparation.task && !preparation.saving) abandonPreparation();
+    while (preparation) await preparation.settled.catch(() => {});
+    if (!foreground) throw task ? new PreparationInterrupted() : new RecheckInterrupted();
+    if (task && (!tasks.includes(task) || !['preparing', 'downloading'].includes(task.state)))
+      throw new Error('Chapter preparation was stopped.');
+    const section = chapter.section;
+    if (section === null || section === undefined)
+      throw new Error("This chapter does not identify a document section.");
+    const plan = planOf(document);
+    const held = plan?.chapters.find((c) => c.id === chapter.id);
+    if (!plan || !held) throw new Error('Chapter metadata was removed.');
+    if (held.prepared !== false && !held.recheck) return;
+    const started = Date.now();
+    const which = `${shortId(document)} chapter ${chapter.id} (section ${section})`;
+    if (task) debugLog("download", `preparing ${which}`);
+    let resolve!: () => void;
+    let reject!: (error: Error) => void;
+    const settled = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+    rendererDocument = document;
+    preparation = {
+      token: ++preparationSerial,
+      document,
+      section,
+      task,
+      settled,
+      resolve,
+      reject,
+      points: plan.chapters
+        .filter((c) => c.section === section && !c.id.startsWith("section-"))
+        .map((c) => ({
+          id: c.id,
+          title: c.title,
+          parent: c.parent,
+          depth: c.depth,
+          section,
+          fragment: c.fragment ?? "",
+        })),
+    };
+    emit();
+    await settled.catch((problem: unknown) => {
+      if (task) debugLog("download", `preparing ${which} ${problem instanceof PreparationInterrupted ? "waits for the foreground" : "failed"} after ${Date.now() - started} ms: ${describeProblem(problem)}`);
+      throw problem;
+    });
+    if (task) debugLog("download", `prepared ${which} in ${Date.now() - started} ms`);
+  } finally { if (task) downloadPreparations--; }
+}
+
+let recheckCurrent: RecheckSection | null = null;
+export function prioritizeRecheck(document: string | null, section = 0): void {
+  recheckCurrent = document ? { document, section } : null;
+  rechecks.wake();
+}
+const recheckMeasures = new Map<string, { started: number; sections: number; lost: number }>();
+const rechecks = createRechecks({
+  allowed() { return loaded && preparationCurrent && foreground && !storeError && !preparation && !downloadPreparations; },
+  order: () => [...documentTitles.keys()],
+  current: () => recheckCurrent,
+  sections: async () => {
+    const ids = new Map([...documentTitles.keys(), ...tasks.map((t) => t.document)].map((id) => [documentKey(id), id]));
+    return (await (await offlineRepository()).catalog.recheckSections()).flatMap((s) => {
+      const document = ids.get(s.document);
+      return document ? [{ document, section: s.section }] : [];
+    });
+  },
+  prepare: async ({ document, section }) => {
+    const plan = await loadPlan(document);
+    const chapter = plan?.chapters.find((c) => c.section === section && c.recheck);
+    if (!chapter) return;
+    if (!foreground || preparation || downloadPreparations) throw new RecheckInterrupted();
+    if (DEBUG_MODE && !recheckMeasures.has(document)) {
+      recheckMeasures.set(document, { started: Date.now(), sections: 0, lost: 0 });
+      debugLog('offline', `Recheck ${shortId(document)} ${cutText(documentTitles.get(document) ?? '')} started: ${plan!.chapters.filter((c) => c.recheck).length} chapters awaiting`);
+    }
+    await prepareChapter(document, chapter, null);
+  },
+  finished: ({ document }, remaining) => {
+    const measure = recheckMeasures.get(document);
+    if (!measure) return;
+    measure.sections++;
+    if (remaining.some((s) => s.document === document)) return;
+    debugLog('offline', `Recheck ${shortId(document)} finished: ${measure.sections} sections checked, ${measure.lost} Voice/chapter checks withdrawn in ${Date.now() - measure.started} ms`);
+    recheckMeasures.delete(document);
+  },
+  failed: (s, error) => debugLog('offline', `Recheck ${shortId(s.document)} section ${s.section} failed: ${describeProblem(error)}`),
 });
 /**
  * The names the Library shows, which the Debug Log gives for the Documents a
  * continued task's Live Activity covers: its title names none (#93).
  */
 const documentTitles = new Map<string, string>();
+/** Metadata only: summaries must not audit every audio file at launch. */
+async function logOfflineState(reason: string, document?: string, selected?: OfflineVoice): Promise<void> {
+  if (!DEBUG_MODE) return;
+  const catalog = (await offlineRepository()).catalog;
+  const documents = document ? [document] : [...new Set([...documentTitles.keys(), ...tasks.map((t) => t.document)])];
+  let lines = 0;
+  for (const id of documents) {
+    const voices = new Map((await catalog.savedVoices(documentKey(id))).map((v) => [narrationIdentity(v), v]));
+    for (const task of tasks.filter((t) => t.document === id)) voices.set(narrationIdentity(task.voice), task.voice);
+    if (selected) voices.set(narrationIdentity(selected), selected);
+    for (const voice of voices.values()) {
+      const task = tasks.find((t) => t.document === id && sameVoice(t.voice, voice));
+      const summary = await catalog.summary(documentKey(id), voiceKey(voice), task?.chapters ?? []);
+      debugLog('offline', `${reason}: ${offlineSummaryLine(id, documentTitles.get(id) ?? '', voice, summary)}`);
+      if (task) debugLog('offline', `${reason}: ${downloadActionLine('task', task, documentTitles.get(id) ?? '', 'catalogue')}`);
+      lines++;
+    }
+  }
+  debugLog('offline', `${reason}: ${lines} Document/Voice summaries; catalogue records, not a file audit`);
+}
+function logDownload(action: string, task: DownloadTask, source: string) {
+  if (DEBUG_MODE) debugLog('download', downloadActionLine(action, task, documentTitles.get(task.document) ?? '', source));
+}
 export function nameDocuments(
   entries: readonly { id: string; title: string }[],
 ): void {
+  const added = entries.some(({ id }) => !documentTitles.has(id));
+  documentTitles.clear();
   for (const { id, title } of entries) documentTitles.set(id, title);
+  if (added) rechecks.retry();
 }
 /** ADR 0053: the continued processing task a download away from the screen runs under. */
 const continued = createContinuedProcessing({
@@ -859,6 +941,7 @@ function pauseForLock(): boolean {
   for (const task of tasks)
     if (pausing.GOES_ON.includes(task.state) || task.state === "interrupted") {
       pausing.pauseAll(task);
+      logDownload('paused', task, 'lock');
       paused = true;
     }
   if (paused) debugLog("download", "read-aloud is locked: every download that would go on is paused (#148)");
@@ -943,13 +1026,11 @@ function ensureSpeechKeys(force = false): Promise<void> {
   return keying;
 }
 /**
- * Chapters another walk or sentence splitter prepared are asked for again
- * (#184, #240, ADR 0027). A changed sentence misses its old saved Clip, so stale
- * completeness cannot stand. A sentence-rule update also pauses unfinished
- * Downloads: only a new Download/Resume may ask for the changed audio. Persist
- * those pauses BEFORE recording the revision, so a failed migration or a kill
- * cannot let the next launch resume a newly segmented Download by itself.
- * Run on the speech-key chain, before enabling the scheduler; reload held plans.
+ * Old text retains its last known completeness until Rechecked (#321).
+ * Revision changes mark the text, not the Downloads: unfinished Downloads
+ * continue. A Recheck's new holes have durable per-Voice holds in the same
+ * transaction as the new text, and only Download selected releases those.
+ * Run on the speech-key chain before enabling either runner; reload held plans.
  */
 function ensurePreparedText(): Promise<void> {
   keying = keying
@@ -958,11 +1039,12 @@ function ensurePreparedText(): Promise<void> {
       const walk = await repository.catalog.preparedWalk();
       const segmentation = await repository.catalog.preparedSegmentation();
       if (walk === BLOCK_WALK && segmentation === SEGMENTATION) return;
-      if (segmentation !== SEGMENTATION) {
-        for (const task of tasks) if (task.state !== 'done') pausing.pauseAll(task);
-        await persist();
-      }
       await repository.catalog.prepareAgain(BLOCK_WALK, SEGMENTATION);
+      if (DEBUG_MODE) {
+        const pending = await repository.catalog.recheckSections();
+        debugLog('offline', `revision change: ${pending.length} sections in ${new Set(pending.map((s) => s.document)).size} Documents with saved Clips await Recheck`);
+      }
+      debugLog('offline', `preparation revisions walk ${walk}→${BLOCK_WALK}, segmentation ${segmentation}→${SEGMENTATION}; pending Recheck, checks retained; ${tasks.filter((t) => pausing.GOES_ON.includes(t.state)).length} Downloads continue`);
       for (const document of [...plans.keys()]) {
         const plan = await repository.plan(document);
         if (plan) plans.set(document, plan);
@@ -976,10 +1058,14 @@ function ensurePreparedText(): Promise<void> {
   // successful task save must not turn an unverified preparation into a current one.
   return keying;
 }
+let downloadWatchers = 0;
 export function startDownloads(): () => void {
+  downloadWatchers++;
+  rechecks.start();
   if (!loaded && !starting) {
     starting = (async () => {
       tasks = await (await offlineRepository()).tasks();
+      for (const document of new Set(tasks.map((t) => t.document))) await refreshRecheckHolds(document);
       tasks.forEach((task) => {
         registerVoice(task.voice);
         // Settings may have changed before async task loading finished.
@@ -993,7 +1079,7 @@ export function startDownloads(): () => void {
             task.state,
           )
         )
-          task.state = "queued";
+          { task.state = "queued"; logDownload('resumed', task, 'launch'); }
       loaded = true;
       await persist();
       // Whether read-aloud may go on is known before anything goes on by
@@ -1004,11 +1090,14 @@ export function startDownloads(): () => void {
       // Before any run, including a lifecycle kick while launch is awaiting.
       await ensurePreparedText();
       await ensureSpeechKeys();
+      if (DEBUG_MODE) await logOfflineState('launch').catch((error) => debugLog('offline', `launch summary failed: ${describeProblem(error)}`));
       preparationCurrent = true;
+      if (downloadWatchers > 0) rechecks.start();
       emit();
       // Only a Download still permitted to go on may start away (#77).
       continueAway();
       kick();
+      rechecks.wake();
     })();
     void starting.catch(reportStore).finally(() => {
       starting = null;
@@ -1020,7 +1109,7 @@ export function startDownloads(): () => void {
       online = connected;
       if (connected)
         for (const task of tasks)
-          if (task.state === "waiting") task.state = "queued";
+          if (task.state === "waiting") { task.state = "queued"; logDownload('resumed', task, 'connectivity'); }
       emit();
       kick();
     },
@@ -1048,7 +1137,7 @@ export function startDownloads(): () => void {
               `thermal state ${ended.thermalState}, Low Power Mode ${ended.lowPower}`
           : "continued task expired",
       );
-      for (const task of continued.expired()) pausing.pauseAll(task);
+      for (const task of continued.expired()) { pausing.pauseAll(task); logDownload('paused', task, 'Live Activity'); }
       if (!foreground) expired = true;
       fire(persist());
     },
@@ -1056,15 +1145,20 @@ export function startDownloads(): () => void {
   const state = AppState.addEventListener("change", (value) => {
     foreground = value === "active";
     if (foreground) {
+      rechecks.retry();
       expired = false;
       void offlineNative?.endBackground();
       for (const task of tasks)
-        if (task.state === "interrupted") task.state = "queued";
+        if (task.state === "interrupted") { task.state = "queued"; logDownload('resumed', task, 'foreground'); }
       // Back with a download that goes on by itself: leaving again keeps it going without a tap (#77).
       continueAway();
       fire(persist().then(kick));
     } else if (!continued.running() && runsAway()) beginBounded();
   });
+  const noteWatch = DEBUG_MODE ? onDebugNote((time, note) => {
+    void logOfflineState(`snapshot, Debug Note ${time}`, note.document.id, note.voice)
+      .catch((error) => debugLog('offline', `snapshot, Debug Note ${time} failed: ${describeProblem(error)}`));
+  }) : () => {};
   const leaving = AppState.addEventListener("change", (value) => {
     if (value !== "active") abandonPreparation();
   });
@@ -1081,6 +1175,11 @@ export function startDownloads(): () => void {
   const timer = Platform.OS !== "ios" ? setInterval(kick, 5000) : null;
   kick();
   return () => {
+    noteWatch();
+    if (--downloadWatchers === 0) {
+      rechecks.stop();
+      if (preparation && !preparation.task) abandonPreparation();
+    }
     purchaseWatch();
     if (trialEnd) clearTimeout(trialEnd);
     trialEnd = null;
@@ -1146,20 +1245,26 @@ export async function startDownload(
   consent.again(recipient.key);
   if (!(await consent.ensure(recipient))) return false;
   if (!usesCurrentModel(voice)) return false;
-  enqueue(document, voice, chapters);
+  await enqueue(document, voice, chapters);
   return true;
 }
-export function enqueue(
+export async function enqueue(
   document: string,
   voice: OfflineVoice,
   chapters: string[],
-): void {
+): Promise<void> {
   if (!preparationCurrent || !chapters.length) return;
   voice = withFishModel(voice, voice.model ?? settings?.fish.model ?? DEFAULT_FISH_MODEL);
   if (!usesCurrentModel(voice)) return;
   const task = tasks.find(
     (t) => t.document === document && sameVoice(t.voice, voice),
   );
+  if (task?.recheckHeld?.some((id) => chapters.includes(id))) {
+    await (await offlineRepository()).catalog.allowRechecked(documentKey(document), voiceKey(voice), chapters);
+    // A delete while permission was being saved must not resurrect its task.
+    if ((task && !tasks.includes(task)) || !usesCurrentModel(voice)) return;
+    await refreshRecheckHolds(document);
+  }
   if (task) {
     // Chapters the owner paused stay paused: adding others is not resuming them (#56).
     task.chapters = [...new Set([...task.chapters, ...chapters])];
@@ -1178,6 +1283,8 @@ export function enqueue(
       failed: [],
     });
   registerVoice(voice);
+  const queued = tasks.find((t) => t.document === document && sameVoice(t.voice, voice))!;
+  logDownload(task ? 'added to' : 'started', queued, `Download selected (${chapters.length} chosen)`);
   continueAway();
   fire(persist().then(kick));
 }
@@ -1200,7 +1307,7 @@ export function toggleTask(task: DownloadTask): void {
   // A failed preparation check stays a failure, not a queued task whose save
   // clears the error while the scheduler still cannot run. Relaunch retries it.
   if (!preparationCurrent || !usesCurrentModel(task.voice)) return;
-  if (goesOn(task)) pausing.pauseAll(task);
+  if (goesOn(task)) { pausing.pauseAll(task); logDownload('paused', task, 'Pause all'); }
   else {
     // Resuming is asking for speech: while read-aloud is locked, the person is
     // asked first, and the resume happens only once it is allowed (#148).
@@ -1212,13 +1319,14 @@ export function toggleTask(task: DownloadTask): void {
     // refused is asked about again as the download reaches it (#109).
     consent.again();
     pausing.resumeAll(task);
+    logDownload('resumed', task, 'Resume all');
     continueAway();
   }
   fire(persist().then(kick));
 }
 /** A tap on one chapter's ring (#56); one that resumes may go on away from the screen. */
 export function toggleChapter(task: DownloadTask, chapter: string): void {
-  if (!preparationCurrent || !usesCurrentModel(task.voice)) return;
+  if (!preparationCurrent || !usesCurrentModel(task.voice) || task.recheckHeld?.includes(chapter)) return;
   const resumes =
     !pausing.GOES_ON.includes(task.state) || pausing.isPaused(task, chapter);
   // A ring that resumes is asking for speech, as Resume all is (#148).
@@ -1227,6 +1335,7 @@ export function toggleChapter(task: DownloadTask, chapter: string): void {
     return;
   }
   pausing.tapChapter(task, chapter, completeIn(task));
+  logDownload(resumes ? 'resumed' : 'paused', task, `ring ${chapter}`);
   if (resumes) {
     consent.again();
     continueAway();
@@ -1365,9 +1474,24 @@ export function requestPlan(document: string, title: string): void {
   );
 }
 export const indexingState = (document: string) => indexing.get(document);
+async function refreshRecheckHolds(document: string) {
+  const catalog = (await offlineRepository()).catalog;
+  for (const task of tasks.filter((t) => t.document === document)) {
+    const held = await catalog.recheckHolds(documentKey(document), voiceKey(task.voice));
+    if (DEBUG_MODE) for (const id of held.filter((id) => !task.recheckHeld?.includes(id))) {
+      const progress = (await catalog.progress(documentKey(document), voiceKey(task.voice))).find((c) => c.id === id);
+      const chapter = await catalog.chapter(documentKey(document), id);
+      debugLog('offline', `Recheck ${shortId(document)} ${id} ${voiceFacts(task.voice)}: ${progress?.count ?? 0} / ${chapter?.textCount ?? 0}; needs Download selected, Resume all cannot fetch it`);
+      const measure = recheckMeasures.get(document);
+      if (measure) measure.lost++;
+    }
+    task.recheckHeld = held.length ? held : undefined;
+  }
+}
 export function finishPreparation(token: number, chapters: Chapter[]): void {
   const request = preparation;
-  if (!request || request.token !== token) return;
+  if (!request || request.token !== token || request.saving) return;
+  request.saving = true;
   void (async () => {
     try {
       const repository = await offlineRepository();
@@ -1377,12 +1501,18 @@ export function finishPreparation(token: number, chapters: Chapter[]): void {
         audioKey(downloadSpeech(text, current)),
       );
       if (speechKeying(settings) !== speechKeying(current)) void ensureSpeechKeys(true);
+      // Publish holds before the scheduler can observe new text. This is also
+      // done for a late save completed after backgrounding/preemption.
+      await refreshRecheckHolds(request.document);
       const plan = await repository.plan(request.document);
-      if (preparation !== request) return;
       if (plan) plans.set(request.document, plan);
+      for (const item of progressVoices.values()) if (item.document === request.document)
+        requestProgress(item.document, item.voice);
+      if (preparation !== request) return;
       preparation = null;
       emit();
       request.resolve();
+      rechecks.wake();
     } catch (error) {
       failPreparation(token, String(error));
     }

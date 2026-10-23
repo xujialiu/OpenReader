@@ -78,7 +78,7 @@ vi.mock('../../src/playback', async () => ({
 }));
 vi.mock('../../src/offline/runtime', () => ({
   hasSavedVoice: () => false, inventoryReady: () => true, inventoryError: () => null, planOf: () => null, chapterProgress: () => new Map(),
-  releaseProgress: () => {}, requestProgress: () => {}, requestInventory: async () => {}, useDownloads: () => 0, setReadingPlays: () => {},
+  releaseProgress: () => {}, requestProgress: () => {}, requestInventory: async () => {}, useDownloads: () => 0, prioritizeRecheck: () => {}, setReadingPlays: () => {},
   offlineProvider: () => ({ capabilities: { wordTimestamps: false } }),
 }));
 vi.mock('../../src/now-playing', () => ({

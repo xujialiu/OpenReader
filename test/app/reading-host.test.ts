@@ -25,7 +25,7 @@ const shell = vi.hoisted(() => ({ current: null as unknown }));
 const downloads = vi.hoisted(() => ({ readingPlays: false }));
 
 vi.mock('react-native', () => ({ StyleSheet: { create: <T,>(styles: T) => styles }, Text: 'Text', View: 'View' }));
-vi.mock('../../src/offline/runtime', () => ({ setReadingPlays: (plays: boolean) => { downloads.readingPlays = plays; } }));
+vi.mock('../../src/offline/runtime', () => ({ prioritizeRecheck: () => {}, setReadingPlays: (plays: boolean) => { downloads.readingPlays = plays; } }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 62, bottom: 34, left: 0, right: 0 }) }));
 vi.mock('react-native-teleport', () => ({
   Portal: ({ hostName, children }: { hostName?: string; children: unknown }) => {

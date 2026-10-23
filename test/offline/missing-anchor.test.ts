@@ -66,7 +66,7 @@ it('writes the chapters after a file whose Contents has an entry with a missing 
   const task: DownloadTask = { id: 't', document: 'book', voice, chapters: plan.chapters.map((c) => c.id), state: 'queued', error: null, failed: [] };
   mock.open.mockResolvedValue({
     tasks: async () => [task],
-    catalog: { saveTasks: async () => {}, speechKeying: async () => null, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, prepareAgain: async () => {} },
+    catalog: { recheckHolds: async () => [], recheckSections: async () => [], saveTasks: async () => {}, speechKeying: async () => null, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, prepareAgain: async () => {} },
     rekey: async () => {},
     plan: async () => plan,
     progress: async () => plan.chapters.map((c) => ({ id: c.id, count: c.texts.filter((t) => saved.has(t)).length,

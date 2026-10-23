@@ -9,6 +9,8 @@ export interface Chapter {
   section?: number | null; fragment?: string;
   /** False means text has not been read. */
   prepared?: boolean;
+  /** Old prepared text still counts until the current rules have Rechecked it. */
+  recheck?: boolean;
   /** Metadata queries omit text. Only the scheduler loads a selected chapter. */
   textCount?: number;
   textsLoaded?: boolean;
@@ -38,6 +40,9 @@ export interface DownloadTask {
    * passes. Read only while the task runs (ADR 0027).
    */
   writing?: string[];
+  /** Retained audio ownership, but no request to fill holes found by Recheck.
+   * Reloaded from the catalogue's durable holds, not trusted from task JSON. */
+  recheckHeld?: string[];
 }
 /**
  * A Contents entry of one section, placed by the page: the Block its anchor

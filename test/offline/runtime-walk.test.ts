@@ -17,10 +17,8 @@ import { SEGMENTATION } from '../../src/core/segmenter/revision';
  * sentences: a list read an item at a time, a heading's two lines kept apart.
  * A Reading asks for a saved Clip by the sentence it cuts now, so a chapter that
  * kept the sentences of an earlier walk would read Downloaded while one of them
- * went to the Provider (ADR 0027). At launch the runtime asks the catalogue
- * which walk prepared it, and when it is another, every chapter with text loses
- * its check until it is downloaded again; that download prepares the text
- * afresh and asks the Provider only for the sentences whose text changed.
+ * went to the Provider (ADR 0027). #321 retains the checks until a foreground
+ * Recheck knows which sentences changed. Only a new selection may fetch them.
  *
  * The real runtime, scheduler, repository and SQLite catalogue; the Provider,
  * the disk and the hidden rendering are doubles. What the drawer would draw is
@@ -161,20 +159,22 @@ it('keeps every Downloaded check of a catalogue this walk prepared', async () =>
 
 it('asks again for every chapter with text that another walk prepared, and keeps its saved audio to delete', async () => {
   await open(null);
-  expect(await shown()).toEqual({ downloaded: [], manage: ['one', 'two'], prepared: ['cover'] });
+  expect(await shown()).toEqual({ downloaded: ['one', 'two'], manage: ['one', 'two'], prepared: ['one', 'two', 'cover'] });
   expect(await catalog.preparedWalk()).toBe(BLOCK_WALK);
-  expect(runtime.planOf('book')!.preparedSections).toEqual([2]);
+  expect(runtime.planOf('book')!.preparedSections).toEqual([0, 1, 2]);
   expect(disk.size).toBe(4);
 });
 
 it('downloads such a chapter again by asking the Provider only for the sentences whose text changed', async () => {
   await open(null);
-  runtime.enqueue('book', voice, ['one']);
   await vi.waitFor(() => expect(runtime.preparationRequest()).not.toBeNull());
   const request = runtime.preparationRequest()!;
   expect(request.section).toBe(0);
   runtime.finishPreparation(request.token, [{ id: 'one', title: 'one', depth: 0, parent: null, texts: ['Chapter 1:\nNightmare Begins', 'It was late.'] }]);
-  await vi.waitFor(async () => expect((await shown()).downloaded).toEqual(['one']));
+  await vi.waitFor(async () => expect((await shown()).downloaded).toEqual(['two']));
+  expect(mock.asked).toEqual([]);
+  await runtime.enqueue('book', voice, ['one']);
+  await vi.waitFor(async () => expect((await shown()).downloaded).toEqual(['one', 'two']));
   expect(mock.asked).toEqual(['Chapter 1:\nNightmare Begins']);
 });
 

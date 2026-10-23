@@ -69,7 +69,8 @@ async function launch(owned: { unlocked: boolean; trialStartedAt: number | null 
   const saved = new Set<string>();
   mock.open.mockResolvedValue({
     tasks: async () => [left],
-    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => speechKeying(settings) },
+    catalog: {
+      recheckHolds: async () => [], recheckSections: async () => [], saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => speechKeying(settings) },
     plan: async (): Promise<NarrationPlan> => ({ version: 2, chapters: [chapter] }),
     chapter: async () => ({ ...chapter, texts: ['Left going on.'], textCount: 1, textsLoaded: true }),
     progress: async () => [],

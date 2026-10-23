@@ -34,7 +34,7 @@ import { Portal } from 'react-native-teleport';
 import type { DocumentId, ReadingPlace, ReadingPosition, ReadingSpineItem } from '../core/document';
 import type { ProviderId } from '../core/providers/types';
 import { cutText, debugLog, shortId } from '../debug/debug-log';
-import { setReadingPlays } from '../offline/runtime';
+import { prioritizeRecheck, setReadingPlays } from '../offline/runtime';
 
 import { openDocument, type OpenDocument } from './document';
 import { ReadingView } from './reading-view';
@@ -134,6 +134,11 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     playingRef.current = mine && live.playing;
   }, [mine, live.playing]);
   const plays = mine && live.playing;
+  const recheckSection = mine ? live.place?.sectionIndex ?? 0 : 0;
+  useEffect(() => {
+    prioritizeRecheck(heldId, recheckSection);
+    return () => prioritizeRecheck(null);
+  }, [heldId, recheckSection]);
   /**
    * Speech is being heard: playing, and not still waiting for a Clip. Play that
    * is building, asking for Consent or fetching its first Clip is not yet, and a

@@ -92,7 +92,7 @@ vi.mock('../../src/offline/runtime', async () => {
   const { SynthesisError } = await vi.importActual<typeof import('../../src/core/providers/errors')>('../../src/core/providers/errors');
   return {
     hasSavedVoice: () => false, inventoryReady: () => true, inventoryError: () => null, planOf: () => null, chapterProgress: () => new Map(),
-    releaseProgress: () => {}, requestProgress: () => {}, requestInventory: async () => {}, useDownloads: () => 0, setReadingPlays: () => {},
+    releaseProgress: () => {}, requestProgress: () => {}, requestInventory: async () => {}, useDownloads: () => 0, prioritizeRecheck: () => {}, setReadingPlays: () => {},
     offlineProvider: () => ({
       id: 'local', capabilities: { wordTimestamps: false }, listVoices: async () => [],
       synthesize: async (text: string) => {

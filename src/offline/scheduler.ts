@@ -113,11 +113,11 @@ export function createScheduler(deps: SchedulerDeps) {
   function nextAhead({ task, finished, prepared, failures }: Pass, plan: NarrationPlan, from: number): number {
     const chosen = new Set(task.chapters);
     const failed = new Set(task.failed);
-    const paused = new Set(task.paused);
+    const paused = new Set([...(task.paused ?? []), ...(task.recheckHeld ?? [])]);
     const writing = new Set(task.writing);
     for (let at = from; at < plan.chapters.length; at++) {
-      const { id, prepared: ready } = plan.chapters[at];
-      if (ready === false && chosen.has(id) && !writing.has(id) && !finished.has(id) && !failed.has(id) && !paused.has(id)
+      const { id, prepared: ready, recheck } = plan.chapters[at];
+      if ((ready === false || recheck) && chosen.has(id) && !writing.has(id) && !finished.has(id) && !failed.has(id) && !paused.has(id)
         && !prepared.has(id) && (failures.get(id) ?? 0) < TRIES_AHEAD) return at;
     }
     return -1;
@@ -259,7 +259,7 @@ export function createScheduler(deps: SchedulerDeps) {
     nudge = () => { ended = false; away = false; poke(); };
 
     /** Still a chapter of this download that may be written: the task runs, and the chapter is in it and not paused. */
-    const here = (id: string) => active(task) && task.chapters.includes(id) && !task.paused?.includes(id);
+    const here = (id: string) => active(task) && task.chapters.includes(id) && !task.paused?.includes(id) && !task.recheckHeld?.includes(id);
     const going = () => active(task) && deps.allowed() && !halt && !unreadable;
     const width = () => Math.max(1, Math.floor(deps.concurrency?.(task) ?? 1) || 1);
     /** Every chapter being written, for the drawer and the Live Activity; replaced, never changed in place. */
@@ -307,14 +307,14 @@ export function createScheduler(deps: SchedulerDeps) {
       catch (error) { unreadable = { error }; return; }
       if (!going()) return;
       const failed = new Set(task.failed);
-      const paused = new Set(task.paused);
+      const paused = new Set([...(task.paused ?? []), ...(task.recheckHeld ?? [])]);
       const chosen = new Set(task.chapters);
       const writing = new Set(begun.map((b) => b.id));
       let chapter = plan?.chapters.find(({ id }) => chosen.has(id) && !finished.has(id) && !failed.has(id) && !paused.has(id) && !writing.has(id));
       if (!chapter) { ended = true; return; }
       const b: Begun = { id: chapter.id, texts: null, taken: 0, out: 0, stopped: false, preparing: false };
       try {
-        if (chapter.prepared === false) {
+        if (chapter.prepared === false || chapter.recheck) {
           if (!deps.prepare) throw new Error('Chapter text is not prepared.');
           // Away from the screen nothing is prepared (#76): the window goes no further.
           if (!foreground()) { away = true; return; }
@@ -426,7 +426,7 @@ export function createScheduler(deps: SchedulerDeps) {
         finally { task.writing = []; }
         if (active(task)) {
           // Sets, because a whole long book can be one task.
-          const chosen = new Set(task.chapters);
+          const chosen = new Set(task.chapters.filter((id) => !task.recheckHeld?.includes(id)));
           const failed = new Set(task.failed);
           const paused = new Set(task.paused);
           /** A chapter still to write that the owner paused: then the task is paused, not done. */

@@ -12,6 +12,7 @@
  * the alert and the clipboard are the app's (`debug-note-alert.tsx`).
  */
 import { cutText, debugLog, flushDebugLog, shortId } from './debug-log';
+import type { OfflineVoice } from '../offline/model';
 
 export interface DebugNote {
   /** The Debug Note's time: `localStamp` of the tap on Debug. */
@@ -20,6 +21,8 @@ export interface DebugNote {
   document: { id: string; title: string };
   /** What the author typed; may be blank. */
   comment: string;
+  /** The selected Voice at Save, even if it has no saved audio. */
+  voice?: OfflineVoice;
 }
 
 /**
@@ -32,7 +35,7 @@ export function debugNoteCopy(time: string, comment: string): string {
   return said ? `${time} ${said}` : time;
 }
 
-type Listener = (time: string) => void;
+type Listener = (time: string, note: DebugNote) => void;
 const listeners = new Set<Listener>();
 
 /**
@@ -58,5 +61,5 @@ export function writeDebugNote(note: DebugNote): void {
   const said = note.comment.trim() || '(no comment)';
   debugLog('debug-note', `${note.time} ${cutText(note.document.title)} (${shortId(note.document.id)}): ${said}`);
   flushDebugLog();
-  for (const listener of [...listeners]) listener(note.time);
+  for (const listener of [...listeners]) listener(note.time, note);
 }

@@ -66,7 +66,8 @@ it('withdraws the preparation out when the app leaves, ignores its timeout, and 
   });
   mock.open.mockResolvedValue({
     tasks: async () => [stored],
-    catalog: { saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => null },
+    catalog: {
+      recheckHolds: async () => [], recheckSections: async () => [], saveTasks: async () => {}, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => null },
     rekey: async () => {},
     plan: async () => plan,
     progress: async () => [],

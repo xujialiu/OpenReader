@@ -113,7 +113,7 @@ it('keeps old free addresses through a real SQLite upgrade, scopes chapter delet
   const { repository, catalog, connection, runtime } = await fixture();
   await repository.saveClip('book', voice, 'One.', clip(FREE), () => true);
   // Simulate the installed v1 schema, with its existing voice row and payload.
-  await connection.execAsync('ALTER TABLE voices DROP COLUMN model; PRAGMA user_version = 1;');
+  await connection.execAsync('ALTER TABLE voices DROP COLUMN model; ALTER TABLE chapters DROP COLUMN recheck; PRAGMA user_version = 1;');
   await catalog.initialize();
   await catalog.initialize(); // idempotent on another open
   expect(voiceKey(voice)).toBe(voiceKey({ ...voice, model: FREE }));

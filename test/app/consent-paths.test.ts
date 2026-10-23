@@ -74,7 +74,7 @@ describe('a Document\'s text reaches a Provider only through the gate', () => {
     pin(sheet, 'downloads.startDownload(document, choice, chosen)', 'src/app/download-sheet.tsx');
     expect(calling(/downloads\.enqueue\s*\(/)).toEqual([]);
     const runtime = read('src/offline/runtime.ts');
-    const starting = between(runtime, 'export async function startDownload(', 'export function enqueue(', 'src/offline/runtime.ts');
+    const starting = between(runtime, 'export async function startDownload(', 'export async function enqueue(', 'src/offline/runtime.ts');
     pin(starting, 'if (!(await consent.ensure(recipient))) return false;', 'startDownload() in src/offline/runtime.ts');
     expect(starting.indexOf('consent.ensure(recipient)')).toBeLessThan(starting.indexOf('enqueue(document, voice, chapters);'));
   });

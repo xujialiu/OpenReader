@@ -99,7 +99,7 @@ vi.mock('../../../src/playback/audio-graph', () => ({
 // The Provider: silence for every sentence it is asked for.
 vi.mock('../../../src/offline/runtime', () => ({
   hasSavedVoice: () => false, inventoryReady: () => true, inventoryError: () => null, planOf: () => null, chapterProgress: () => new Map(),
-  releaseProgress: () => {}, requestProgress: () => {}, requestInventory: async () => {}, useDownloads: () => 0, setReadingPlays: () => {},
+  releaseProgress: () => {}, requestProgress: () => {}, requestInventory: async () => {}, useDownloads: () => 0, prioritizeRecheck: () => {}, setReadingPlays: () => {},
   offlineProvider: () => ({
     id: 'local', capabilities: { wordTimestamps: false }, listVoices: async () => [],
     synthesize: async () => {

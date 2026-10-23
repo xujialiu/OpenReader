@@ -124,13 +124,22 @@ _Avoid_: task, job, queue
 
 **Downloaded**:
 Said of a chapter in a Download whose Offline Narration in that Voice and, for
-Fish Audio, that Model is complete: a Clip saved for every one of its
-Utterances, of the Speech Text the owner's settings now make of it. A chapter with only some of them
-saved is not downloaded, and a part with nothing to speak never is. A chapter
-deleted from the Download is not downloaded, even while other chapters keep
-the Clips it shared with them. Downloaded in one Voice or Fish Audio Model
-says nothing about another.
+Fish Audio, that Model was complete when the app last cut it into Utterances:
+a Clip saved for every one of them, of the Speech Text the owner's settings
+make of it. An update that cuts sentences differently leaves a chapter
+Downloaded until it is Rechecked, and it stays Downloaded only if every
+sentence still has its Clip. A chapter with only some of them saved is not
+downloaded, and a part with nothing to speak never is. A chapter deleted from
+the Download is not downloaded, even while other chapters keep the Clips it
+shared with them. Downloaded in one Voice or Fish Audio Model says nothing
+about another.
 _Avoid_: offline, saved, cached, available offline
+
+**Recheck**:
+The app cutting a chapter with saved Clips into Utterances again after an
+update changed how it cuts them, to see how many of them its saved Clips still
+cover. It sends nothing to a Provider and starts no Download.
+_Avoid_: revalidation, re-preparation, migration, invalidation
 
 **Sentences at once**:
 How many sentences a Download asks one Provider for at the same time, taken in

@@ -136,7 +136,7 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
   const otherVoices = downloads.savedVoices(document).filter((v) => inFishModel(v, settings.fish.model) && !downloads.sameVoice(v, choice) && downloads.occupied(document, v) > 0);
   // Nothing saved for any voice and nothing under way: there is nothing to manage, so Manage is not offered (#37).
   const manageable = downloads.occupied(document) > 0 || downloads.downloadTasks(document).some((t) => inFishModel(t.voice, settings.fish.model) && t.state !== 'done');
-  const status = task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length && whole) ? task : null;
+  const status = task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length && (whole || !!task.recheckHeld?.length)) ? task : null;
   const act = () => {
     try {
       if (manage) Alert.alert('Delete downloaded audio?', 'The document and reading position will be kept.', [

@@ -44,6 +44,7 @@ export type DebugCategory =
   | 'playback'
   | 'provider'
   | 'download'
+  | 'offline'
   | 'sync'
   | 'lookup'
   | 'purchase'

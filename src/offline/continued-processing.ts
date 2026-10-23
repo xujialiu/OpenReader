@@ -80,7 +80,7 @@ export function continuedShown(batch: readonly ContinuedDownload[]): ContinuedSh
     const saved = new Map(progress.map((chapter) => [chapter.id, chapter]));
     const complete = (id: string) => !!saved.get(id)?.complete;
     const paused = new Set(batchGoesOn ? task.paused : []);
-    const counted = task.chapters.filter((id) => complete(id) || !paused.has(id));
+    const counted = task.chapters.filter((id) => !task.recheckHeld?.includes(id) && (complete(id) || !paused.has(id)));
     if (!counted.length) continue;
     if (!documents.includes(task.document)) documents.push(task.document);
     total += counted.length;

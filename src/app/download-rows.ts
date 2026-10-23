@@ -40,7 +40,7 @@ export const WRITING: readonly TaskState[] = ['preparing', 'downloading'];
 
 /** The chapter is in a download that has not finished, and has not failed in it. */
 export const inTask = (chapter: Chapter, task: DownloadTask | undefined): task is DownloadTask =>
-  !!task && task.state !== 'done' && task.chapters.includes(chapter.id) && !task.failed.includes(chapter.id);
+  !!task && task.state !== 'done' && task.chapters.includes(chapter.id) && !task.failed.includes(chapter.id) && !task.recheckHeld?.includes(chapter.id);
 
 export function marker(
   chapter: Chapter,

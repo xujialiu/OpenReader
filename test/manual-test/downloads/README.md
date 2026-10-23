@@ -15,6 +15,11 @@ After restoration, launch the app again before testing.
 
 ## Recipes
 
+- [recheck-321.md](recheck-321.md) (#321, #322): retained checks across rule updates,
+  no-synthesis foreground Recheck, durable holds, explicit repair, and the
+  offline diagnostics. This supersedes the expected lost-check/pause outcomes
+  in the historical sentence-boundary migration recipe.
+
 - [offline-narration.md](offline-narration.md): the short fixture's actions
   drawer and rename, Manage downloads' deletion, a name kept across a restart,
   a real download, a second voice's progress without spending quota, saved

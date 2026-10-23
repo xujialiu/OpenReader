@@ -93,7 +93,8 @@ async function start(stored: DownloadTask[] = []) {
   const runtime = await import('../../src/offline/runtime');
   mock.open.mockResolvedValue({
     tasks: async () => stored,
-    catalog: { saveTasks: mock.saveTasks, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => null },
+    catalog: {
+      recheckHolds: async () => [], recheckSections: async () => [], saveTasks: mock.saveTasks, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => null },
     plan: () => new Promise(() => {}),
     progress: () => mock.progress(),
   });

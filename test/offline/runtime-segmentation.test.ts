@@ -15,11 +15,21 @@ import { testCatalog } from './sqlite';
 // Native lifecycle, files, rendering and the Provider are doubles. No real audio.
 const mock = vi.hoisted(() => ({
   repository: null as unknown,
+  lines: [] as { tag: string; message: string }[],
   asked: [] as string[],
   connectivity: (_connected: boolean) => {},
+  appState: 'active',
+  lifecycle: new Set<(state: string) => void>(),
+}));
+vi.mock('../../src/debug/mode', () => ({ DEBUG_MODE: true }));
+vi.mock('../../src/debug/debug-log', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/debug/debug-log')>(),
+  debugLog: (tag: string, message: string) => { mock.lines.push({ tag, message }); },
 }));
 vi.mock('react-native', () => ({
-  AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
+  AppState: { get currentState() { return mock.appState; }, addEventListener: (_: string, fn: (state: string) => void) => {
+    mock.lifecycle.add(fn); return { remove() { mock.lifecycle.delete(fn); } };
+  } },
   Platform: { OS: 'ios' },
 }));
 vi.mock('expo-file-system', () => ({ FileMode: { ReadOnly: 'r' } }));
@@ -80,6 +90,9 @@ let stop: (() => void) | undefined;
 
 beforeEach(async () => {
   mock.asked = [];
+  mock.lines = [];
+  mock.appState = 'active';
+  mock.lifecycle.clear();
   disk.clear();
   store = testCatalog();
   await store.catalog.initialize();
@@ -134,138 +147,159 @@ async function recordRevision(value: number) {
   await store.connection.runAsync("INSERT OR REPLACE INTO state VALUES('segmentation',?)", String(value));
 }
 
-it('removes stale completeness, not saved audio or the ability to delete it, even when the walk is current', async () => {
-  await launch();
-  expect(await shown()).toEqual({ complete: false, count: 2, prepared: [false, true] });
-  expect(await revision()).toBe(CURRENT_SEGMENTATION);
-  expect(disk.size).toBe(2);
-  expect(mock.asked).toEqual([]);
-  expect(runtime.preparationRequest()).toBeNull();
-  expect(runtime.downloadTasks('book')[0].state).toBe('done');
+
+const ready = () => vi.waitFor(() => expect(runtime.downloadsReady()).toBe(true), { interval: 1 });
+const changeState = (state: string) => { mock.appState = state; for (const fn of mock.lifecycle) fn(state); };
+async function recheck(changed = true) {
+  await vi.waitFor(() => expect(runtime.preparationRequest()).not.toBeNull(), { interval: 1 });
+  const request = runtime.preparationRequest()!;
+  const chapters = changed ? sectionChapters(0, [{ text }, { text: unchanged }], [], 'zh')
+    : [chapter('section-0', [text, unchanged])];
+  runtime.finishPreparation(request.token, chapters);
+  await vi.waitFor(() => expect(runtime.planOf('book')?.chapters[0].recheck).toBe(false), { interval: 1 });
+}
+it('records launch evidence, the chosen Voice in a Debug Note, and the Download trigger', async () => {
+  await launch(); await ready();
+  expect(mock.lines.some((l) => l.tag === 'offline' && l.message.includes('launch:') && l.message.includes('1 Downloaded, 1 awaiting Recheck'))).toBe(true);
+  const note = await import('../../src/debug/debug-note');
+  note.writeDebugNote({ time: 'test-note-time', document: { id: 'book', title: 'Book' }, comment: 'check', voice: { ...voice, voice: 'other' } });
+  await vi.waitFor(() => expect(mock.lines.some((l) => l.message.includes('snapshot, Debug Note test-note-time') && l.message.includes('other'))).toBe(true), { interval: 1 });
+  await recheck();
+  await runtime.enqueue('book', voice, ['section-0']);
+  expect(mock.lines.some((l) => l.tag === 'download' && l.message.includes('george') && l.message.includes('Download selected'))).toBe(true);
+  await vi.waitFor(() => expect(runtime.downloadTasks('book')[0].state).toBe('done'), { interval: 1 });
 });
 
-it('keeps completeness when both preparation revisions are current', async () => {
-  await recordRevision(CURRENT_SEGMENTATION);
-  await launch();
+it('keeps checks through an update, then Rechecks unchanged sentences without any Provider call', async () => {
+  await launch(); await ready();
   expect(await shown()).toEqual({ complete: true, count: 2, prepared: [true, true] });
+  await recheck(false);
+  expect((await shown()).complete).toBe(true);
   expect(mock.asked).toEqual([]);
+  expect(disk.size).toBe(2);
 });
-
-it('invalidates an explicitly older revision, and only once across fresh runtimes', async () => {
-  await recordRevision(0);
-  const invalidate = vi.spyOn(store.catalog, 'prepareAgain');
-  await launch();
-  expect(invalidate).toHaveBeenCalledTimes(1);
-  await launch();
-  expect(invalidate).toHaveBeenCalledTimes(1);
-  expect(await revision()).toBe(CURRENT_SEGMENTATION);
+it('a changed sentence loses only its check, not its partial count, and only Download selected may fill the hole', async () => {
+  await launch(); await ready();
+  await recheck();
+  await vi.waitFor(async () => expect((await shown()).complete).toBe(false), { interval: 1 });
+  expect((await shown()).count).toBe(1);
+  expect(runtime.downloadTasks('book')[0].recheckHeld).toEqual(['section-0']);
+  runtime.toggleTask(runtime.downloadTasks('book')[0]); // Resume all is NOT a fresh selection
+  await flush(); await flush();
   expect(mock.asked).toEqual([]);
-});
-
-it.each(['queued', 'downloading', 'waiting', 'interrupted'] as const)('persists a pause for an unfinished %s Download; another launch or reconnect cannot resume it', async (state) => {
-  await store.catalog.saveTasks([task(state)]);
-  await launch();
-  expect(runtime.downloadTasks('book')[0].state).toBe('paused');
-  expect((await repository.tasks())[0].state).toBe('paused');
-  await launch();
+  await launch(); await ready(); // durable even if a restart loses every in-memory object
+  runtime.toggleTask(runtime.downloadTasks('book')[0]);
   mock.connectivity(true);
-  await flush();
-  expect(runtime.downloadTasks('book')[0].state).toBe('paused');
+  await flush(); await flush();
+  expect(mock.asked).toEqual([]);
+  await runtime.enqueue('book', voice, ['section-0']);
+  await vi.waitFor(() => expect(mock.asked).toEqual(['这是第一句。', '2024年发生了很多事。']), { interval: 1 });
+  await vi.waitFor(async () => expect((await shown()).complete).toBe(true), { interval: 1 });
+});
+it.each(['queued', 'downloading', 'waiting', 'interrupted'] as const)('an unfinished %s Download keeps going, but cannot fill a completed chapter made incomplete by Recheck', async (state) => {
+  await store.catalog.saveTasks([task(state)]);
+  await launch(); await ready();
+  await recheck();
+  mock.connectivity(true);
+  await flush(); await flush();
+  expect(runtime.downloadTasks('book')[0].state).not.toBe('paused');
+  expect(mock.asked).toEqual([]);
+});
+it('a partly saved Download is cut again before sending, and may finish its authorized work', async () => {
+  await repository.saveSection('book', 0, [chapter('section-0', [text, unchanged, 'Not yet saved.'])]);
+  await store.catalog.saveTasks([task('queued')]);
+  await launch(); await ready();
+  await recheck();
+  await vi.waitFor(() => expect(mock.asked).toEqual(['这是第一句。', '2024年发生了很多事。']), { interval: 1 });
+});
+it('keeps completeness without Recheck when both revisions are current', async () => {
+  await recordRevision(CURRENT_SEGMENTATION);
+  await launch(); await ready();
+  expect(await shown()).toEqual({ complete: true, count: 2, prepared: [true, true] });
+  await new Promise((r) => setTimeout(r, 40));
   expect(runtime.preparationRequest()).toBeNull();
   expect(mock.asked).toEqual([]);
 });
-
-it('an explicit Download prepares current sentences and requests only changed text; unchanged audio still plays from disk', async () => {
-  await launch();
-  expect((await shown()).complete).toBe(false);
-  runtime.enqueue('book', voice, ['section-0']);
-  await flush();
-  const request = runtime.preparationRequest();
-  if (!request) throw new Error('An explicit Download must request fresh preparation.');
-  const prepared = sectionChapters(0, [{ text }, { text: unchanged }], [], 'zh');
-  runtime.finishPreparation(request.token, prepared);
-  await flush();
+it('marks an older revision once, and retries an interrupted Recheck after reopening', async () => {
+  await recordRevision(0);
+  const mark = vi.spyOn(store.catalog, 'prepareAgain');
+  await launch(); await ready();
+  await vi.waitFor(() => expect(runtime.preparationRequest()).not.toBeNull(), { interval: 1 });
+  await launch(); await ready();
+  expect(mark).toHaveBeenCalledTimes(1);
+  await recheck(false);
   expect((await shown()).complete).toBe(true);
-  expect(mock.asked).toEqual(['这是第一句。', '2024年发生了很多事。']);
-  expect(disk.size).toBe(4); // The old merged Clip was not deleted.
-  await runtime.offlineProvider('book', settings).synthesize(unchanged, { voice: voice.voice, signal: new AbortController().signal });
-  expect(mock.asked).toHaveLength(2);
+});
+it('abandons Recheck away from the foreground, ignores its late reply, and continues on return', async () => {
+  await launch(); await ready();
+  await vi.waitFor(() => expect(runtime.preparationRequest()).not.toBeNull(), { interval: 1 });
+  const stale = runtime.preparationRequest()!;
+  changeState('background');
+  runtime.finishPreparation(stale.token, [chapter('section-0', ['Wrong.'])]);
+  await flush();
+  expect(runtime.preparationRequest()).toBeNull();
+  expect((await shown()).complete).toBe(true);
+  changeState('active');
+  await recheck(false);
+  expect(mock.asked).toEqual([]);
+});
+it('a Download preempts an idle Recheck, ignores its old reply, then Recheck resumes without paying', async () => {
+  await launch(); await ready();
+  await vi.waitFor(() => expect(runtime.preparationRequest()).not.toBeNull(), { interval: 1 });
+  const stale = runtime.preparationRequest()!;
+  await repository.savePlan('next', { version: 2, sections: [{ path: 'next', href: 'next' }], preparedSections: [],
+    chapters: [{ ...chapter('section-0', []), section: 0, prepared: false }] });
+  runtime.requestPlan('next', 'Next');
+  await vi.waitFor(() => expect(runtime.planOf('next')).not.toBeNull(), { interval: 1 });
+  await runtime.enqueue('next', voice, ['section-0']);
+  await vi.waitFor(() => expect(runtime.preparationRequest()?.document).toBe('next'), { interval: 1 });
+  runtime.finishPreparation(stale.token, [chapter('section-0', ['STALE'])]);
+  const fresh = runtime.preparationRequest()!;
+  runtime.finishPreparation(fresh.token, [chapter('section-0', ['Explicit download.'])]);
+  await vi.waitFor(() => expect(runtime.downloadTasks('next')[0].state).toBe('done'), { interval: 1 });
+  await recheck(false);
+  expect(mock.asked).toEqual(['Explicit download.']);
+  expect((await repository.chapter('book', 'section-0'))?.texts).toEqual([text, unchanged]);
 });
 
-it('does not start the scheduler on a reconnect while preparation revisions are still being read', async () => {
-  await store.catalog.saveTasks([task('queued')]);
-  await repository.saveSection('book', 0, [chapter('section-0', [text, unchanged, 'Not yet saved.'])]);
+it('a section save failing after rendering leaves the old check and never schedules synthesis', async () => {
+  await launch(); await ready();
+  vi.spyOn(repository, 'saveSection').mockRejectedValueOnce(new Error('disk full'));
+  await vi.waitFor(() => expect(runtime.preparationRequest()).not.toBeNull(), { interval: 1 });
+  runtime.finishPreparation(runtime.preparationRequest()!.token, [chapter('section-0', ['Changed'])]);
+  await vi.waitFor(() => expect(mock.lines.some((l) => l.message.includes('Recheck') && l.message.includes('disk full'))).toBe(true), { interval: 1 });
+  expect((await shown()).complete).toBe(true);
+  expect(mock.asked).toEqual([]);
+  changeState('background'); changeState('active');
+  await recheck(false);
+});
+
+it('gates scheduler and Recheck until revisions have been read, even on reconnect', async () => {
   let release!: (value: number) => void;
   vi.spyOn(store.catalog, 'preparedWalk').mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  await launch();
   try {
-    await launch();
     mock.connectivity(true);
     await flush();
     expect(mock.asked).toEqual([]);
     expect(runtime.preparationRequest()).toBeNull();
-    expect(runtime.downloadTasks('book')[0].state).toBe('queued');
-  } finally {
-    release(BLOCK_WALK);
-    await flush();
-  }
-  expect(runtime.downloadTasks('book')[0].state).toBe('paused');
+  } finally { release(BLOCK_WALK); }
+  await ready();
+  await recheck(false);
 });
-
-it('a failure to persist the pauses leaves both the old revision and prepared texts intact', async () => {
+it('a failed revision transaction leaves the old evidence intact and both runners stopped until restart', async () => {
   await store.catalog.saveTasks([task('queued')]);
-  const save = store.catalog.saveTasks.bind(store.catalog);
-  const persist = vi.spyOn(store.catalog, 'saveTasks').mockImplementation(async (tasks) => {
-    if (tasks.some((task) => task.state === 'paused')) throw new Error('pause write failed');
-    await save(tasks);
-  });
+  vi.spyOn(store.catalog, 'prepareAgain').mockRejectedValueOnce(new Error('disk full'));
   await launch();
-  expect(runtime.downloadError()).toContain('pause write failed');
+  await vi.waitFor(() => expect(runtime.downloadError()).toContain('disk full'), { interval: 1 });
   expect(await revision()).toBeNull();
   expect((await repository.plan('book'))?.chapters[0].prepared).toBe(true);
-  expect((await repository.tasks())[0].state).toBe('queued');
-  mock.connectivity(true);
-  await flush();
-  expect(mock.asked).toEqual([]);
-  persist.mockRestore();
-  await launch();
-  expect(await revision()).toBe(CURRENT_SEGMENTATION);
-  expect((await repository.tasks())[0].state).toBe('paused');
-});
-
-it('a revision-write failure rolls back the invalidation of chapters and prepared sections', async () => {
-  await recordRevision(0);
-  const transact = store.connection.withExclusiveTransactionAsync.bind(store.connection);
-  vi.spyOn(store.connection, 'withExclusiveTransactionAsync').mockImplementationOnce((run) => transact(async (tx) => run({
-    ...tx,
-    runAsync: async (sql, ...params) => {
-      if (sql.includes("VALUES('segmentation'")) throw new Error('revision write failed');
-      return tx.runAsync(sql, ...params);
-    },
-  })));
-  await expect(store.catalog.prepareAgain(BLOCK_WALK, CURRENT_SEGMENTATION)).rejects.toThrow('revision write failed');
-  expect(await revision()).toBe(0);
-  expect((await repository.plan('book'))?.chapters.map((c) => c.prepared)).toEqual([true, true]);
-  expect((await repository.plan('book'))?.preparedSections).toEqual([0, 1]);
-  expect(disk.size).toBe(2);
-});
-
-it('a failed invalidation cannot advance the revision or authorize requests; the next launch retries it', async () => {
-  await store.catalog.saveTasks([task('queued')]);
-  vi.spyOn(store.catalog, 'prepareAgain').mockRejectedValueOnce(new Error('migration write failed'));
-  await launch();
-  expect(runtime.downloadError()).toContain('migration write failed');
-  expect(await revision()).toBeNull();
-  expect((await repository.tasks())[0].state).toBe('paused');
   runtime.toggleTask(runtime.downloadTasks('book')[0]);
-  runtime.toggleChapter(runtime.downloadTasks('book')[0], 'section-0');
-  runtime.enqueue('book', voice, ['section-0']);
+  await runtime.enqueue('book', voice, ['section-0']);
   mock.connectivity(true);
   await flush();
-  expect(runtime.downloadTasks('book')[0].state).toBe('paused');
-  expect(runtime.downloadError()).toContain('migration write failed');
+  expect(runtime.downloadsReady()).toBe(false);
   expect(mock.asked).toEqual([]);
-  await launch();
-  expect(await revision()).toBe(CURRENT_SEGMENTATION);
-  expect((await shown()).complete).toBe(false);
-  expect(runtime.downloadTasks('book')[0].state).toBe('paused');
+  await launch(); await ready();
+  await recheck(false);
 });

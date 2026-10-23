@@ -47,7 +47,8 @@ it('keeps the chapters the owner paused paused across a restart and when other c
   const voice = { provider: 'fish' as const, voice: 'A', label: 'A' };
   const stored: DownloadTask = { id: 't', document: 'book', voice, chapters: ['a', 'b'], state: 'downloading', error: null, failed: [], paused: ['a'] };
   const saveTasks = vi.fn(async (_tasks: DownloadTask[]) => {});
-  mock.open.mockResolvedValue({ tasks: async () => [stored], catalog: { saveTasks, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => null } });
+  mock.open.mockResolvedValue({ tasks: async () => [stored], catalog: {
+      recheckHolds: async () => [], recheckSections: async () => [], saveTasks, preparedWalk: async () => BLOCK_WALK, preparedSegmentation: async () => SEGMENTATION, speechKeying: async () => null } });
   const stop = startDownloads();
   try {
     mock.connectivity!({ connected: false });

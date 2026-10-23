@@ -91,7 +91,8 @@ status line appears only when `playing`, `known`, `section`, `rendered` or
 | `[debug-note]` | (from #305) a Debug Note: the time `Debug` was tapped, the cut title and short id, and the author's comment, or `(no comment)` |
 | `[playback]` | from #152: native route/interruption and engine lifecycle, remote commands, source pause/resume, and page hold requests. Native records retain `nativeMs` (Unix milliseconds), `uptimeMs`, `sequence` and `receivedMs`; the line's stamp is JS receipt/write time, not necessarily event time. `lastReportedPosition` and `reportAgeMs` name the latest callback, not the last word heard. `native dropped=N` means the 128-event native buffer overflowed. |
 | `[renderer] playback received=hold` | from #152: the page actually handled the hold; `pageMs`, utterance and word indices, `held` and elapsed milliseconds. A sent hold alone is not proof the page received it. |
-| `[sync]`, `[download]`, `[provider]` | skipped by the timeline by default; `--skip ''` shows them |
+| `[offline]` | preparation rule revisions, per-Document/Voice launch summaries, Recheck starts/finishes/interruption/failure, and checks withdrawn with the remaining sentence count. A Debug Note adds `snapshot, Debug Note <time>` for its Document, including the selected Voice and other saved Voices. These are catalogue records, not a payload audit. The timeline shows them by default. |
+| `[sync]`, `[download]`, `[provider]` | skipped by the timeline by default; `--skip ''` shows them. Download actions name the Voice id, Model, chapter count, state, paused/failed/Recheck-held counts and the triggering control. |
 | `[warn]`, `[error]` | `console.warn` and `console.error`, uncaught errors, unhandled rejections |
 
 On a build with `[renderer]` lines, read those around the fault first: they
@@ -116,6 +117,41 @@ and the reading ran out of text 11 minutes later.
 
 Done when you can name the first line where the state went wrong, and the app's
 state at that line.
+
+### When Downloaded disagrees with the saved sentence count
+
+Read `[offline] launch` first. `Downloaded` is last-known completeness;
+`awaiting Recheck` overlaps it, rather than being missing audio. `partly saved`
+is a positive count below the required count. The per-Voice task line names
+chapters held for a fresh Download selected: Resume all cannot fetch them.
+One line per Voice keeps the evidence below the log's line-length limit. A new
+build clears old logs, but every launch restates the current catalogue state.
+A missing or failed summary is not an empty store.
+
+For a catalogue-only comparison, without changing the phone:
+
+```sh
+python3 test/manual-test/kit/offline-catalog.py IPHONE_UDID /tmp/or-offline-NAME
+python3 test/manual-test/kit/offline-catalog.py --local /path/catalog.sqlite /tmp/or-offline-local
+```
+
+The destination must not exist. Phone mode preserves the copied database, WAL
+and SHM under `raw/`, replays a working copy, and writes `snapshot.sqlite` and
+`summary.json`. Local mode uses SQLite's online backup. `--library /path/library.json`
+adds titles; task Document ids supply the catalogue-key mapping without it.
+No credentials or sentence text are printed. The report supports both the old
+schema and Recheck-aware stores; `legacyAllSavedUnprepared` identifies the old
+all-sentences-saved/no-check condition. Counts respect chapter ownership, so
+shared Clips do not make a deleted chapter look Downloaded.
+
+**A phone file copy is not an atomic SQLite snapshot.** `integrity_check=ok`
+proves structure, not that the separately copied database and WAL represent one
+instant. The tool says so on every phone report. Use a quiescent app or an
+in-app online backup for decisive comparisons; stopping or navigating the
+owner's app still needs permission. Neither this report nor the launch summary
+proves payload presence or that a Provider was not called. Successful Download
+synthesis is intentionally not logged per sentence; a fast run alone is not
+proof of zero synthesis requests.
 
 ## 3. The system log, while it is still on the phone
 
