@@ -55,10 +55,10 @@ happened in that day's `notes/` file.
   - iOS only, primary language English (U.S.), Full Access.
   - "OpenReader" was already taken as an App Store name. The Home Screen name stays OpenReader, from `CFBundleDisplayName`.
 - **Builds**
-  - The last upload is the first pair, **1.0.0 (9)** and **1.0.0 (10)-debug** (ADR 0083), from `80b5bcf`, uploaded 2026-10-21 11:13 and 11:19 and processed. Both are on TestFlight only, not submitted; build 10 has Debug Mode and is for the owner's phone only. The next pair is builds 11 and 12.
+  - The last upload is the pair **1.0.1 (11)** and **1.0.1 (12)-debug**, from `737c4e3`, uploaded 2026-10-23. Build 11 is submitted as version 1.0.1 and is **Waiting for Review**, with manual release; build 12 has Debug Mode and is for the owner's phone only. The next pair is builds 13 and 14.
+  - 1.0.0 (9) and 1.0.0 (10)-debug, the first pair (ADR 0083), from `80b5bcf`, uploaded 2026-10-21, are on TestFlight only, not submitted.
   - 1.0.0 (8), from `4227e51`, uploaded 2026-10-17 23:07, is on TestFlight only, not submitted.
   - 1.0.0 (7), from `08ec380`, uploaded 2026-10-10 12:49, is the first build that sells the Unlock (ADR 0075), and the build **on sale**: submitted with both In-App Purchases on 2026-10-10, approved, and released by the owner on 2026-10-23. Version 1.0.0 is released, so App Store Connect takes no more 1.0.0 uploads. It predates the source-bound purchase records (#162), so it writes only the unscoped `purchase.json` (#316).
-  - The next Version is 1.0.1 (owner's decision, 2026-10-23); its version is not yet created in App Store Connect.
   - 1.0.0 (6) was removed from review on 2026-10-10 (author's decision), before Apple had reviewed it, and never released. Version 1.0.0 then read Developer Rejected until build 7 replaced build 6.
   - 1.0.0 (5) was removed from review when build 6 replaced it.
   - 0.0.1 (1) tested the pipeline only. Never submit it.
@@ -72,8 +72,8 @@ happened in that day's `notes/` file.
   - On the Mac, `~/.secrets/openreader/app-store-connect-api.env` names the Key ID, the Issuer ID and the `.p8` beside it. Apple lets the `.p8` be downloaded once.
   - On GitHub, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_PRIVATE_KEY` are secrets of the `github-pages` environment, which only `main` may use.
   - If the key leaks, revoke it under Users and Access → Integrations → App Store Connect API, generate another, and set the three secrets again.
-- **Tags**: `1.0.0(2)` to `1.0.0(8)`, one per build, and `1.0.0(10)` for the pair 1.0.0 (9) and 1.0.0 (10)-debug, all pushed. On 2026-10-10 they replaced `build-2` to `build-6` and `v1.0.0`, which were deleted locally and from GitHub.
-- **App Review Information**: the notes are the Guideline 2.1 answer, revised for build 7 on 2026-10-10 (3,990 characters). The revision adds a paragraph on the In-App Purchases and removes the claims that the app sells nothing. The recording `OpenReader-Review-Demo.mp4` is still attached, and predates the purchases. The review key is saved only in App Store Connect.
+- **Tags**: `1.0.0(2)` to `1.0.0(8)`, one per build, `1.0.0(10)` for the pair 1.0.0 (9) and 1.0.0 (10)-debug, and `1.0.1(12)` for 1.0.1 (11) and 1.0.1 (12)-debug, all pushed. On 2026-10-10 they replaced `build-2` to `build-6` and `v1.0.0`, which were deleted locally and from GitHub.
+- **App Review Information**: the notes are the Guideline 2.1 answer, revised for 1.0.1 (3,987 characters). Their first line names 1.0.1 (11); a paragraph covers the In-App Purchases. The recording `OpenReader-Review-Demo.mp4` was attached to 1.0.0 (7) and predates the purchases; a new version copies the notes but not the attachment, so 1.0.1 has none, and the notes name it as attached to 1.0.0 (7). The review key is saved only in App Store Connect.
 - **Description**: since 2026-10-10 it says "Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase unlocks it for good. Reading, look-up and sync stay free." It ends "OpenReader is open source", without "free and".
 - **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), not on Apple silicon Macs or Apple Vision Pro. Books, 4+, trader under the EU Digital Services Act (below). The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
 - **In-App Purchases** (ADR 0075, #148), both Non-Consumable, approved with 1.0.0 (7) and on sale. Each has its review screenshot (2026-10-09): the phone's alert from 1.0.0 (7)-beta11 on the simulator, the Trial's for the trial and the ended one, with Unlock for $4.99, for the Unlock. Neither has review notes.
@@ -252,6 +252,7 @@ with the review key left where it was, never passes through the agent (notes
 - **Category:** Books (saved).
 - **Copyright:** 2026 Xujia Liu.
 - **Release after approval:** manual.
+- **A new version** (the + beside iOS App) copies the description, keywords, URLs, copyright and review notes from the last one, but not the review attachment. Its What's New starts empty. Add for Review warns "Newer Build Available" while the pair's Debug Mode build is the newer one; Submit keeps the odd build chosen, and the Draft Submission's Submit for Review sends it.
 - **Screenshots**
   - 6.9-inch, 1320 × 2868, from an iPhone 17 Pro Max simulator, 3 to 10 of them. iPhone only, so no iPad set.
   - Set the status bar with `xcrun simctl status_bar <udid> override --time 9:41`.
