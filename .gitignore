@@ -59,3 +59,6 @@ __pycache__/
 # The README as GitHub renders it, built for the owner to look at
 # (scripts/readme-preview.sh, MEMORY/documentation.md)
 /.docs/
+
+# Scratch files kept only on this machine, such as drafts of Reddit replies
+/.tmp/
