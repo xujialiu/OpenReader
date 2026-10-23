@@ -83,6 +83,40 @@ not exercise Document Rename, IME composition or paste; those require separate
 native checks. The mocked-field Vitest assertion protects the modifier's
 configuration, not the keyboard's behavior.
 
+## Document rename from the Library and the Reader (#318)
+
+The Library row's actions drawer and the Reader's menu are the same
+`ReaderActions`, so one script covers both entry points. It opens the drawer
+with real touches, types through `kit/alert-input.py`, presses the alert's own
+Save, and requires the new title in `display-names.json`, `library.json` and on
+screen (the Library row's actions button in `--mode library`, the reader's own
+title in `--mode reader`). Successful and failed renames stay in place.
+
+```sh
+python3 test/manual-test/library-and-reader/doc-name-save.py SIMULATOR_UDID NEW_OUTPUT_DIR \
+  --mode library --current 'A Short Test of Reading Aloud' --value 'Renamed In Library'
+python3 test/manual-test/library-and-reader/doc-name-save.py SIMULATOR_UDID NEW_OUTPUT_DIR \
+  --mode reader --current 'Renamed In Library' --value 'Renamed Twice'
+```
+
+`--mode reader` starts on the Library page and opens the Reader itself. Exit 0
+is PASS, 1 is a store/title mismatch, 2 is setup. It covers the #227 duplicate
+refusal only through `validate`'s warning, which a sibling Document's name
+raises; for that refusal's exact quoted name and Back-to-editing draft, drive
+the same alert by hand or with the store-refusal recipe below. ASCII names
+only. Verified 2026-10-23 on iOS 26.5 (`1.0.1 (14)-beta3-debug`): both modes
+renamed exactly, with the Document Id preserved in `display-names.json` across
+the two renames.
+
+## Reversible native write failure (#215)
+
+`display-names.json` is written by the native `writeJson`; making the file
+immutable (`chflags uchg`) fails that write for real, without filling the disk
+or touching other stores. With the flag set, a Document rename must say so
+under the drawer's rows and change nothing; after `chflags nouchg`, the same
+drawer's rename must succeed. The drawer is left open between the two parts on
+purpose. Restore the flag immediately after the failing part.
+
 ## Repeatable before/after loop
 
 Prepare two distinct sibling fixture folders through real input; leave Library

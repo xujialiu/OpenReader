@@ -291,3 +291,39 @@
   save. `name-save.py` now waits for the store outcome with an eight-second
   deadline before checking the name. The original early-read failures are
   invalid persistence verdicts, not evidence of dropped creates.
+- **`Back to editing` re-presents the editor a few hundred ms later, and a
+  zero-retry input helper must not race it.** Symptom (verifying #318,
+  iOS 26.5): `input-integrity.py` invoked `alert-input.py` immediately after
+  the Back-to-editing touch and read "Expected exactly one native alert titled
+  'Rename'" — the system alert was dismissed but the SwiftUI editor had not
+  re-presented yet. The app was right (the editor did re-present with the exact
+  draft; later trees show it), the script was early, and the failure left the
+  editor open, which poisoned the next runs' preconditions (a later helper saw
+  the folder editor's draft instead of the document's). Fix in
+  `input-integrity.py`: wait for `Name unavailable` to dismiss and `Rename` to
+  re-present before the checked input, and start each scenario from a clean
+  relaunch.
+- **The simulator's software keyboard is hidden while the Mac's hardware
+  keyboard is connected, and its AX rows linger off-screen as stale ghosts.**
+  Symptom (verifying #318, iOS 26.5): with the name editor open, the tree
+  listed a full QWERTY at y=952+ — past the 874-point screen — while the
+  screenshot showed no keyboard at all. `axe type` still works (HID, no
+  composition), so nothing else seems wrong until a test needs candidates, the
+  globe or the prediction bar: they are not on screen. Guest-side switches
+  tried and bounded: HID globe (keycode 63), Ctrl+Space, Cmd+Space — none
+  switched the input source, and Cmd+Space opened **Spotlight** over the app
+  (recover with `axe button home`; the app's own field keeps its draft and its
+  stores untouched). Consequence: genuine IME candidate selection/composition
+  is not automatable on this setup; non-Latin coverage came from paste instead
+  (input-integrity.md). Do not read the off-screen QWERTY rows as the live
+  keyboard state.
+- **`xcrun simctl pbcopy` loses to the simulator's Mac pasteboard sync; write
+  the device pasteboard through LLDB instead.** Symptom (verifying #318):
+  `printf '仙逆' | xcrun simctl pbcopy UDID` followed by `simctl pbpaste` read
+  back unrelated Mac-clipboard content within a second, and the field's real
+  Paste callout delivered that Mac content. Fix: with the app running,
+  `lldb -p PID --batch -s FILE` whose FILE runs
+  `expr -- @import UIKit; (void)[[UIPasteboard generalPasteboard] setString:@"仙逆"]`
+  sets the device pasteboard (verified by `simctl pbpaste`), and the paste flow
+  then read and saved `仙逆` exactly. Never edit the Mac's own clipboard to fix
+  this; the owner's clipboard is theirs.
