@@ -313,10 +313,12 @@
   tried and bounded: HID globe (keycode 63), Ctrl+Space, Cmd+Space — none
   switched the input source, and Cmd+Space opened **Spotlight** over the app
   (recover with `axe button home`; the app's own field keeps its draft and its
-  stores untouched). Consequence: genuine IME candidate selection/composition
-  is not automatable on this setup; non-Latin coverage came from paste instead
-  (input-integrity.md). Do not read the off-screen QWERTY rows as the live
-  keyboard state.
+  stores untouched). These guest-side attempts did not establish genuine IME
+  candidate selection/composition; non-Latin coverage came from paste instead
+  (input-integrity.md). They do not prove IME testing is impossible. A parent
+  check of Device Hub found only another session's simulator window, so no
+  host-side keyboard toggle was sent to that window. Do not read off-screen
+  QWERTY rows as the live keyboard state.
 - **`xcrun simctl pbcopy` loses to the simulator's Mac pasteboard sync; write
   the device pasteboard through LLDB instead.** Symptom (verifying #318):
   `printf '仙逆' | xcrun simctl pbcopy UDID` followed by `simctl pbpaste` read

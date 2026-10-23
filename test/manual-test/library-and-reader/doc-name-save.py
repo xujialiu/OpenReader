@@ -67,11 +67,11 @@ def main():
             snapshot = tree()
             scoped = snapshot
             if scope_title is not None:
-                sheets = [n for n, _, _ in ax.walk(snapshot)
+                scoped = [n for n, _, _ in ax.walk(snapshot)
                           if n.get('type') == 'Sheet' and n.get('AXLabel') == scope_title]
-                if sheets:
-                    scoped = sheets[0]
-            point = centre(label, scoped) or centre(label, snapshot)
+            # A missing alert must not fall back to a same-labelled control
+            # behind it (pitfalls/mcp.md).
+            point = centre(label, scoped)
             if point:
                 break
             if time.monotonic() >= deadline:
@@ -97,10 +97,11 @@ def main():
         return data
 
     def document_id(before):
-        for entry in before['library.json'].get('entries', []):
-            if entry.get('title') == args.current:
-                return entry.get('id')
-        return None
+        matches = [entry for entry in before['library.json'].get('entries', [])
+                   if entry.get('title') == args.current]
+        if len(matches) != 1:
+            raise RuntimeError('Use a uniquely named Document fixture in the Library')
+        return matches[0].get('id')
 
     try:
         before = snapshot_stores('before')
