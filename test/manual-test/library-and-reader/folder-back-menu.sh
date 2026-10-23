@@ -46,14 +46,19 @@ import json, sys
 line = sys.stdin.read(); state = json.loads(line[line.index("{"):])
 print(" → ".join(r["name"] + ("(" + r["params"]["id"] + ")" if r.get("params") else "") for r in state["routes"]))'
 }
+# The menu's rows: buttons at x = 16 wider than the 44-point back button, in the order shown; a blank row has no label and is not listed.
+rows_in() { awk -F' \\| ' '$1 ~ /^ *Button$/ && $4 ~ /^16,/ { split($4, f, /[ ,x]/); if (f[3] + 0 > 100) printf "%s,", $2 }' "$1" | sed 's/,$//'; }
+# Held only over the phone's back button (the caller has read its label): on a
+# page without one, (38, 84) is the Library's Settings button (pitfalls/mcp.md).
 menu_rows() {
   "$AXE" touch -x 38 -y 84 --down --udid "$UDID" >/dev/null; sleep 1.8
   xcrun simctl io "$UDID" screenshot "$OUT/$MODE-menu.png" >/dev/null 2>&1
   $AX tree > "$OUT/$MODE-menu-tree.txt"
   "$AXE" touch -x 300 -y 700 --up --udid "$UDID" >/dev/null; sleep 0.8
-  "$AXE" touch -x 300 -y 700 --down --up --udid "$UDID" >/dev/null; sleep 1
-  # The menu's rows: buttons at x = 16 wider than the 44-point back button, in the order shown; a blank row has no label and is not listed.
-  awk -F' \\| ' '$1 ~ /^ *Button$/ && $4 ~ /^16,/ { split($4, f, /[ ,x]/); if (f[3] + 0 > 100) printf "%s,", $2 }' "$OUT/$MODE-menu-tree.txt" | sed 's/,$//'
+  # Letting go outside the menu usually closes it; tap outside only if it is still up.
+  $AX tree > "$OUT/$MODE-after-release-tree.txt"
+  [[ -n $(rows_in "$OUT/$MODE-after-release-tree.txt") ]] && { "$AXE" touch -x 300 -y 700 --down --up --udid "$UDID" >/dev/null; sleep 1; }
+  rows_in "$OUT/$MODE-menu-tree.txt"
 }
 
 xcrun simctl terminate "$UDID" "$APP" 2>/dev/null; sleep 1
@@ -77,7 +82,9 @@ if [[ $MODE == moved ]]; then
   sleep 1.3
 fi
 [[ $(title) == Inner ]] || { echo "BLOCKED: not on Inner's page (title: $(title))"; exit 2; }
-got_stack=$(stack) got_label=$(back_label) got_rows=$(menu_rows)
+got_label=$(back_label)
+[[ -n $got_label ]] || { echo "BLOCKED: Inner's page shows no back button"; exit 2; }
+got_stack=$(stack) got_rows=$(menu_rows)
 verdict=PASS
 [[ $got_stack == "$WANT_STACK" && $got_label == "$WANT_LABEL" && $got_rows == "$WANT_ROWS" ]] || verdict=FAIL
 line="stack $got_stack; label ${got_label:-<none>}; menu ${got_rows:-<none>}"

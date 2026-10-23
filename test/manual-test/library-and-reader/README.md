@@ -468,6 +468,52 @@ line read `1.0.1 (14)-beta1-debug`. No audio was played. Artifacts under `/tmp/o
   and left exactly one `Library` route at index 0 with the root on screen — no
   red screen, no LogBox, no CDP warnings. The move page's rows use plain
   labels (`Other`), not the Library row labels (`Folder, Other, Empty`).
+  After the move the back button read `Back` rather than the new parent's
+  title, whose page was never shown; the swipe still went to it.
+- **Not run:** the two-finger range sweep inside a Folder page
+  (`LibraryTwoFingerProbe` seeds and measures the root, and would need adapted
+  geometry and a probe build for this device); the sweep selection itself is
+  unchanged code.
+
+The parent's check of this run against its artifacts added three things:
+
+- The move above was two moves. The first pressed `Move` at the Library root
+  (`phase7-folders-after-move.json`: Inner's parent `null`; stack `Library →
+  Folder(f-inner)`, index 1), which was correct for that destination; the
+  second went into Other.
+- After the move into Other the first edge swipe, at y = 437, did not pop
+  (`phase7-tree-swipe-to-newparent.txt` still `Inner`); a second, at y = 300,
+  did. The same steps then popped at the first swipe in 6 runs out of 6
+  (`/tmp/or317/move-repro.sh`, before and after the beta2 change), so the
+  miss is unexplained and not reproduced.
+- The `Back` label was a defect, not a harness note: pages iOS had placed but
+  never shown had no title, which also left a blank row in the back button's
+  menu after a relaunch inside Inner. Fixed by
+  `patches/react-native-screens+4.26.2.patch` (ADR 0069); next section.
+
+### The back button names every page behind (#317, `folder-back-menu.sh`)
+
+```sh
+bash test/manual-test/library-and-reader/folder-back-menu.sh SIMULATOR_UDID relaunch [DIR]  # Outer → Inner, relaunched in Inner
+bash test/manual-test/library-and-reader/folder-back-menu.sh SIMULATOR_UDID moved [DIR]     # Inner moved into Other from a drawer left open
+```
+
+Needs the Debug app and its Metro; `METRO_LOG` names Metro's log for the
+harness's `navstate` (default `/tmp/or317/metro.log`). It overwrites
+`library-folders.json`, relaunches, reads the stack, the back button's label
+and the rows of its held long-press menu, and in `moved` swipes once. PASS is
+`label Outer; menu Outer,Library` and `label Other; menu Other,Library; swipe
+→ Other`. About 20 s (`relaunch`) and 35 s (`moved`). It plays nothing. A
+blank menu row has no label, so a FAIL shows as a missing name. Exit 2
+(BLOCKED) when a step it touches is not on screen; check first that touches
+land at all (`pitfalls/mcp.md`, #317).
+
+Red and green on 1.0.1 (14)-beta2-debug, `iPhone 17 edgeswipe`, in one
+guarded phase (2026-10-23): with the patch reversed (`git apply -R`) and an
+incremental build, `FAIL relaunch: … label Outer; menu Outer` and `FAIL moved:
+… label Back; menu Library`. With it re-applied and rebuilt: `relaunch` PASS
+2/2, `moved` PASS 3/3. Run it without the patch at a react-native-screens
+upgrade to learn whether upstream now names unshown pages.
 
 ### The native patch on every stack (ios-tester, 2026-10-23, 1.0.1 (14)-beta2-debug)
 
@@ -482,7 +528,7 @@ read `Version 1.0.1 (14)-beta2-debug`; the Debug Log's launch line named
 `OpenReader 1.0.1 (14)-beta2, native 1.0.1 (11), Debug Mode on, Metro bundle`
 (the native number is the stale prebuild's — see below). No audio was played.
 Artifacts under `/tmp/or317-tester2/`. New tool:
-[`back-menu-read.sh`](.) — `folder-back-menu.sh`'s title/back-label/menu/navstate
+[`back-menu-read.sh`](back-menu-read.sh) — `folder-back-menu.sh`'s title/back-label/menu/navstate
 reads, sourceable on any page (its `navstate` prints the route's first param
 value, so `Acknowledgement(base64-js)` prints too).
 
@@ -537,13 +583,6 @@ value, so `Acknowledgement(base64-js)` prints too).
   `11` while the JS line is `(14)-beta2`: the `ios/` project was not
   re-prebuilt after the version bumps. Harmless on screen (the line is
   JS-driven), but a real upload pair would prebuild first.
-  After the move the reconciled back button can read the generic `Back`
-  rather than the new parent's title, whose page was never focused; the swipe
-  still goes to it.
-- **Not run:** the two-finger range sweep inside a Folder page
-  (`LibraryTwoFingerProbe` seeds and measures the root, and would need adapted
-  geometry and a probe build for this device); the sweep selection itself is
-  unchanged code.
 
 ## Library data preservation under storage failure (#260, #233, #261, `library-preservation.md`)
 
