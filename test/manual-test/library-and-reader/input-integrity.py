@@ -56,6 +56,20 @@ def main():
             if time.monotonic() >= end:
                 raise ValueError(f'Expected visible control {label!r}')
 
+    def wait_sheet(title, present=True):
+        # 'Back to editing' dismisses the system alert and then re-presents the
+        # editor; the helper's zero-retry input must not race that animation.
+        end = time.monotonic() + 10
+        while True:
+            snapshot = tree()
+            sheets = [n for n, _, _ in ax.walk(snapshot)
+                      if n.get('type') == 'Sheet' and n.get('AXLabel') == title]
+            if bool(sheets) == present:
+                return
+            if time.monotonic() >= end:
+                raise ValueError(f'Alert {title!r} did not {"appear" if present else "dismiss"}')
+            time.sleep(.1)
+
     def touch(label):
         x, y = wait_label(label)
         run([ax.axe_binary(), 'touch', '-x', str(x), '-y', str(y),
@@ -108,8 +122,14 @@ def main():
             for index in range(args.rounds):
                 snapshot = tree()
                 if not ax.centre_of(snapshot, 'Create folder'):
-                    touch('Add')
+                    # The Library header's button is 'Library actions' (#317's
+                    # label), and an opening drawer can expose its rows before
+                    # it accepts touches (pitfalls/mcp.md): settle, then
+                    # require the editor before input.
+                    touch('Library actions')
+                    time.sleep(1)
                 touch('Create folder')
+                wait_sheet('Create folder', present=True)
                 fields = [n for n, _, _ in ax.walk(tree()) if n.get('type') == 'TextField']
                 if len(fields) != 1 or fields[0].get('AXValue') != 'Name':
                     raise ValueError('Create field must start empty')
@@ -129,12 +149,16 @@ def main():
                 if data != initial:
                     raise ValueError('Duplicate submission mutated persisted folders')
                 touch('Cancel')
+                wait_sheet('Create folder', present=False)
                 print(f'PASS create/cancel {index}: native, exact warning, unchanged disk', flush=True)
             return 0
 
         current = args.folder
         for index in range(args.rounds):
             touch(f'Actions for folder {current}')
+            # An opening drawer can expose its rows before it accepts touches
+            # (pitfalls/mcp.md); a drawer is no AX Sheet, so settle on time.
+            time.sleep(1)
             touch('Rename')
             replace(current, args.collision, f'{index}-duplicate-input')
             touch('Save')
@@ -144,6 +168,8 @@ def main():
                 raise ValueError('Warning quoted a different name than the native field')
             persisted(current, f'{index}-refused')
             touch('Back to editing')
+            wait_sheet('Name unavailable', present=False)
+            wait_sheet('Rename', present=True)
             next_name = f'{args.folder}-input{index}x'
             if any(f['name'] == next_name and f['parent'] is None for f in initial['folders']):
                 raise ValueError('Generated fixture name already exists')
@@ -155,6 +181,7 @@ def main():
             current = next_name
             print(f'PASS round {index}: native input, warning, draft, persisted name', flush=True)
         touch(f'Actions for folder {current}')
+        time.sleep(1)
         touch('Rename')
         replace(current, args.folder, 'restore-input')
         touch('Save')
