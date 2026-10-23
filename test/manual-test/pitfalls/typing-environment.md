@@ -270,3 +270,24 @@
   autocorrection on that TextField. Same helper passed exact on iOS 27.0
   (input-integrity.md, 2026-10-02), so treat the behaviour as device/OS-bound
   until re-measured.
+
+## Keeping the name-save reproduction red-capable (#318)
+
+- **Repeated input can teach the keyboard the very spelling being tested.**
+  On the session's iOS 26.5 simulator, the unchanged app first saved `Qwrtz`
+  as `Quartz`, but a Rename and three later Create runs saved `Qwrtz` exactly.
+  Restarting the app and emptying the disposable Folder fixture did not bring
+  the failure back. Shutting down that session-owned simulator and moving its
+  `data/Library/Keyboard` into scratch artifacts before booting restored
+  `Qwrtz` → `Quartz` on two runs. With fresh keyboard data again, disabling
+  autocorrection on the field saved `Qwrtz` exactly twice. Pin learned state
+  for a before/after comparison; a successful retry in a learned dictionary
+  cannot verify the repair. The bounded recipe is in
+  [input-integrity.md](../library-and-reader/input-integrity.md).
+- **The native name editor can disappear before the saved Folder reaches disk.**
+  An immediate read after Create's dismissal reported no new Folder for
+  `Deeper` and `Innerq`; the next run's starting snapshot already held `Deeper`
+  and the corrected `Inner`. Native dismissal is not completion of the JS
+  save. `name-save.py` now waits for the store outcome with an eight-second
+  deadline before checking the name. The original early-read failures are
+  invalid persistence verdicts, not evidence of dropped creates.

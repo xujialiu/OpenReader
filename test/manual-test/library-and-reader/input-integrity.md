@@ -1,4 +1,4 @@
-# Exact native name input (#123)
+# Exact native name input (#123, #318)
 
 Use non-secret ASCII fixture names in a disposable Library. This recipe covers
 OpenReader's native Rename / Create folder alerts, not masked fields, credentials,
@@ -38,6 +38,50 @@ The helper's clear may fail on scrolled text whose end is not at the field's
 right edge. That fails closed before new text is typed; it is not permission to
 repeat a backspace burst. The placeholder defaults to `Name`; text equal to the
 placeholder is ambiguous in AX, so use another fixture name.
+
+## Exact name after Save (#318)
+
+From a disposable Library page with no drawer open:
+
+```sh
+python3 test/manual-test/kit/ios_guard.py run --wait 900 --timeout 180 \
+  --record /tmp/name-save-phase.json -- \
+  python3 test/manual-test/library-and-reader/name-save.py \
+  SIMULATOR_UDID NEW_OUTPUT_DIR --value Qwrtz
+```
+
+The default creates a Folder. Add `--folder CURRENT_NAME` to rename that
+Folder on the browsed page; `--open-alert` starts with the matching editor
+already open to remove navigation from the reproduction. Use non-secret ASCII
+names, and a name free in that Folder. It reuses `alert-input.py`, then touches
+the editor's own Create/Save, waits for the native dismissal and the store
+write, and checks the exact name, parent, identity (for Rename) and Library row.
+It never retries typing or restores a wrong name. Successful and failed saves
+stay in place. Exit 0 is PASS, 1 is a saved-name/row mismatch, 2 is a setup or
+input failure. Each run retains command/AX artifacts, `input/result.json`, and
+before/after Folder snapshots. About 10–20 seconds with the device ready.
+
+**Pin the keyboard's learned state when comparing old and fixed code.** A word
+that was corrected once may save exactly on every later attempt even in the
+old app. A green run on a learned word is not a negative control. For this
+issue's before/after comparison, on a session-owned disposable simulator only:
+stop the app, shut down the simulator, move its
+`data/Library/Keyboard` directory into the run's artifacts, then boot it,
+re-silence it, relaunch the app against the chosen Metro, and pass the readiness
+gate. This lets iOS recreate unlearned keyboard data. Do not alter the Mac's,
+a phone's or another session's keyboard; keep every moved directory until the
+session's evidence is recorded. Reset the disposable Folder fixture between
+Create runs as well, so a duplicate refusal is not mistaken for a save. Run
+these setup operations inside the shared guard. The reset is a controlled
+fixture operation on a healthy device, not an environment-recovery retry.
+
+Measured on iOS 26.5: with fresh keyboard data, the old code saved `Qwrtz` as
+`Quartz` twice; with only `autocorrectionDisabled(true)` on the shared field,
+both runs saved `Qwrtz` exactly. Subsequent Folder renames to `Innerq` and
+`Innerx` were exact too. `Deeper` is the ordinary-word control. This script does
+not exercise Document Rename, IME composition or paste; those require separate
+native checks. The mocked-field Vitest assertion protects the modifier's
+configuration, not the keyboard's behavior.
 
 ## Repeatable before/after loop
 

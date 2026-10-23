@@ -1,5 +1,5 @@
 import { Alert, Button, Host, Text, TextField, useNativeState } from '@expo/ui/swift-ui';
-import { disabled } from '@expo/ui/swift-ui/modifiers';
+import { autocorrectionDisabled, disabled } from '@expo/ui/swift-ui/modifiers';
 import { useContext, useState } from 'react';
 import { Alert as SystemAlert, StyleSheet } from 'react-native';
 
@@ -55,7 +55,8 @@ export function RenameAlert({ name, onCancel, onSave, title = 'Rename', saveLabe
         {/* An alert hangs from a view; this one shows nothing. */}
         <Alert.Trigger><Text> </Text></Alert.Trigger>
         <Alert.Actions>
-          <TextField text={text} autoFocus placeholder="Name" onTextChange={setTyped} />
+          <TextField text={text} autoFocus placeholder="Name" onTextChange={setTyped}
+            modifiers={[autocorrectionDisabled(true)]} />
           <Button label="Cancel" role="cancel" onPress={onCancel} />
           <Button label={saveLabel} onPress={submit} modifiers={[disabled(!typed.trim())]} />
         </Alert.Actions>
