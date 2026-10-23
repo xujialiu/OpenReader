@@ -3089,7 +3089,30 @@ ${EPUB_GUARDS_SOURCE}
         target = resizeAnchor.cfi;
       } else {
         try {
-          var location = rendition.located(this.scrolledLocation());
+          var visible = this.scrolledLocation();
+          // The raw mapping begins BEHIND the floating navigation bar. Capture
+          // the first visible line instead, using epub.js's same mapping API
+          // without currentLocation's layout side effect. A section ending
+          // entirely under the bar is passed over for the next visible one.
+          if (barCovered > 0 && this.container) {
+            var edge = this.container.getBoundingClientRect().top + barCovered;
+            var contents = rendition.getContents();
+            for (var i = 0; i < visible.length; i++) {
+              var entry = visible[i];
+              var content = contents.find(function (item) { return item.sectionIndex === entry.index; });
+              var frame = content && content.document.defaultView.frameElement;
+              if (!frame) continue;
+              var bounds = frame.getBoundingClientRect();
+              if (bounds.bottom <= edge) continue;
+              var from = Math.max(0, edge - bounds.top);
+              var mapped = this.mapping.page(content, content.cfiBase, from, from + 1);
+              if (!mapped.start) continue;
+              visible = visible.slice(i);
+              visible[0] = Object.assign({}, entry, { mapping: { start: mapped.start, end: entry.mapping.end } });
+              break;
+            }
+          }
+          var location = rendition.located(visible);
           if (location && location.start && location.start.cfi) {
             rendition.location = location;
             target = location.start.cfi;

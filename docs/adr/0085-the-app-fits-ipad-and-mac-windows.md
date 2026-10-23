@@ -79,9 +79,11 @@ reported viewport: during scrolling it can refer to an earlier passage.
 Capturing a location in the `resized` listener is too late; the views are gone.
 
 `keepPlaceOnResize` wraps the manager's resize entry. Before destruction it
-maps the live viewport with `manager.scrolledLocation()`, converts that mapping
-with `rendition.located()`, and passes its start CFI through the existing
-resize/redisplay path. An explicit target wins. If a
+reads the live viewport with `manager.scrolledLocation()`, then maps the upper
+**visible** edge with `manager.mapping.page` when the floating bar covers the
+viewport's top. A section wholly under that bar is passed over. It converts
+the resulting mapping with `rendition.located()` and passes its start CFI
+through the existing resize/redisplay path. An explicit target wins. If a
 rapid second resize finds no views yet, the previously captured location is
 kept. Capturing does not emit a Reading Position, a seek, or a Browsing change.
 The existing section-level blank-open recovery remains for a page with neither
@@ -108,7 +110,12 @@ methods. Only browser geometry, visible-text mapping and applying layout to
 views are doubled. Native container size changes before the resize observer
 runs, as on device. This regression fails the first wrapper because `clear`
 and redisplay never occur, and passes the side-effect-free mapping call.
-The unwrapped stale-location control and repeated-resize cases remain.
+The unwrapped stale-location control and repeated-resize cases remain. The
+header-coverage regression also distinguishes the raw viewport start from the
+upper visible text. Measured on the same stable page, raw start and a mapping
+at y0 named `/114/1:0`, while a mapping at the 54-point header boundary named
+`/116/1:70`, whose actual top was54.5. Retaining an initially occluded CFI does
+not satisfy the visible-passage contract, even with correct resize and settle.
 
 A second runtime finding separated CFI restoration from visual placement:
 a wide-to-narrow resize redisplayed the correct `/162/1:210` target, but it

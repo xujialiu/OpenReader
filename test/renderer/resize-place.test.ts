@@ -12,7 +12,7 @@ const source = (require('@epubjs-react-native/core/lib/commonjs/epubjs.js') as {
  * location/redisplay methods. Only browser geometry/mapping and view layout
  * application are doubled. currentLocation MUST retain its layout side effect:
  * A stale last-reported location is exactly what a resize during scrolling sees. */
-function page(patched: boolean) {
+function page(patched: boolean, covered = 0) {
   const module = { exports: {} as { Rendition: { prototype: { requireManager(name: string): { prototype: object } } } } };
   const global: Record<string, unknown> = {
     module, exports: module.exports, require: () => function JSZip() {},
@@ -32,6 +32,9 @@ function page(patched: boolean) {
   const layout = { width: 800, height: 800, calculate(width: number, height: number) { this.width = width; this.height = height; } };
   const rendition = Object.assign(Object.create(proto), {
     location: { start: { cfi: 'earlier-passage' } }, display,
+    getContents: () => [{ sectionIndex: 3, cfiBase: '/6/8', document: {
+      defaultView: { frameElement: { getBoundingClientRect: () => ({ top: 0, bottom: 2000 }) } },
+    } }],
     emit: vi.fn(),
     book: {
       locations: { locationFromCfi: () => null }, pageList: { pageFromCfi: () => -1 },
@@ -42,6 +45,10 @@ function page(patched: boolean) {
     _stageSize: { width: 800, height: 800 },
     stage: { size: (width = viewport.width, height = viewport.height) => ({ width, height }) },
     bounds: () => ({}), viewSettings: {}, layout, isPaginated: false, setLayout: vi.fn(),
+    container: { getBoundingClientRect: () => ({ top: 0 }) },
+    mapping: { page: (_contents: unknown, _base: string, start: number) => ({
+      start: start === 54 ? 'epubcfi(visible-below-header)' : fresh, end: 'end',
+    }) },
     clear() { trace.push('clear'); visible = false; },
     scrolledLocation() {
       trace.push('map visible text');
@@ -53,7 +60,7 @@ function page(patched: boolean) {
   });
   rendition.manager = manager;
   const environment = vm.createContext({
-    rendition, browsing: true, state: null, resizeAnchor: null,
+    rendition, browsing: true, state: null, resizeAnchor: null, barCovered: covered,
     report: (message: string) => { throw new Error(message); },
   });
   if (patched) {
@@ -79,6 +86,12 @@ function page(patched: boolean) {
 }
 
 describe('resize keeps the current upper passage, not the last reported one (#319)', () => {
+  it('captures text below the visible header, not the earlier text hidden behind it', () => {
+    const p = page(true, 54);
+    p.resize(375, 476);
+    expect(p.display).toHaveBeenCalledExactlyOnceWith('epubcfi(visible-below-header)');
+  });
+
   it('unmodified epub.js goes back to its stale reported passage', () => {
     const p = page(false);
     p.resize(500, 800);
