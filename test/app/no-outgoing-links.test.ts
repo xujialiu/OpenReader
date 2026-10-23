@@ -68,6 +68,9 @@ const PAGES_MAY_NAME = [
   'mailto:xujialiuphd@gmail.com',
   // README.md (#147): the public TestFlight link, and the badges' images and links.
   'https://testflight.apple.com/join/vjC8QejW',
+  // The App Store listing and Apple's own "Download on the App Store" badge, once 1.0.0 went on sale.
+  'https://apps.apple.com/app/id6817809106',
+  'https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us',
   `${REPOSITORY}/commits/main`,
   'https://img.shields.io/badge/iOS-17.2%2B-0071E3?style=flat-square&logo=apple',
   // The TestFlight badge reads testflight.json on SITE, which names the build (#150). The address never changes with it.

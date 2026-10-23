@@ -10,6 +10,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square" alt="License"></a>
 </p>
 
+<p align="center"><a href="https://apps.apple.com/app/id6817809106"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us" height="40" alt="Download on the App Store"></a></p>
+
 <p align="center"><img src="assets/readme/reading.gif" width="320" alt="OpenReader reading Chapter I of Pride and Prejudice aloud in the dark theme: the word being spoken highlighted over its sentence, and the page following the lines"></p>
 
 <p align="center">If you like OpenReader, give it a ⭐ on <a href="https://github.com/xujialiu/OpenReader">GitHub</a> — it helps others find it.</p>
@@ -35,11 +37,11 @@ OpenReader comes three ways. Reading, Word Lookup, translation and sync are free
 | --- | --- |
 | [TestFlight beta](https://testflight.apple.com/join/vjC8QejW) | Free |
 | [Built from source](#building) | Free |
-| App Store (coming soon) | Free for 30 days, then a one-time in-app purchase |
+| [App Store](https://apps.apple.com/app/id6817809106) | Free for 30 days, then a one-time in-app purchase |
 
 Apple charges nothing for in-app purchases in a TestFlight beta, so reading aloud stays free there.
 
-1. On an iPhone with iOS 17.2 or later, open the [TestFlight link](https://testflight.apple.com/join/vjC8QejW), install Apple's TestFlight app, then install OpenReader from it.
+1. On an iPhone with iOS 17.2 or later, install OpenReader from the [App Store](https://apps.apple.com/app/id6817809106). For the TestFlight beta instead, open the [TestFlight link](https://testflight.apple.com/join/vjC8QejW), install Apple's TestFlight app, then install OpenReader from it.
 2. In OpenReader, open **Settings → Providers**, choose a service, paste your API key and turn **Enabled** on.
 3. Add an EPUB with **⋯ → Import file** in the Library, or share one to OpenReader from Files. Open it and press **Play**.
 
