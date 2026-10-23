@@ -468,6 +468,75 @@ line read `1.0.1 (14)-beta1-debug`. No audio was played. Artifacts under `/tmp/o
   and left exactly one `Library` route at index 0 with the root on screen — no
   red screen, no LogBox, no CDP warnings. The move page's rows use plain
   labels (`Other`), not the Library row labels (`Folder, Other, Empty`).
+
+### The native patch on every stack (ios-tester, 2026-10-23, 1.0.1 (14)-beta2-debug)
+
+Re-verification after `patches/react-native-screens+4.26.2.patch` (`fd19c09`),
+whose `openReaderNameControllersBelowTop` runs on every push/pop/reset, so the
+regression surface is every stack. Same device (`iPhone 17 edgeswipe`, iOS 26.5,
+`8937CF48-74A1-4948-B803-744DEEAB4329`), parent worktree's Metro 8081, the
+parent's build (installed app's binaries byte-identical to
+`/tmp/or317/build/.../OpenReader.app`; `openReaderNameControllersBelowTop`
+in `OpenReader.debug.dylib`; bundle checked for `folderPageNames`). Settings
+read `Version 1.0.1 (14)-beta2-debug`; the Debug Log's launch line named
+`OpenReader 1.0.1 (14)-beta2, native 1.0.1 (11), Debug Mode on, Metro bundle`
+(the native number is the stale prebuild's — see below). No audio was played.
+Artifacts under `/tmp/or317-tester2/`. New tool:
+[`back-menu-read.sh`](.) — `folder-back-menu.sh`'s title/back-label/menu/navstate
+reads, sourceable on any page (its `navstate` prints the route's first param
+value, so `Acknowledgement(base64-js)` prints too).
+
+- **Baseline, `folder-back-menu.sh` (2× each mode).** `relaunch` PASS both:
+  `stack Library → Folder(f-outer) → Folder(f-inner); label Outer; menu
+  Outer,Library`. `moved` PASS both: `stack Library → Folder(f-other) →
+  Folder(f-inner); label Other; menu Other,Library; swipe → Other`.
+  `folder-edge-swipe.sh folder` PASS (`Inner → Outer → Library`), `settings`
+  PASS (`Settings → Library`).
+- **Settings' own stacks.** Settings `Library`; General `Settings`, menu
+  `Settings,Library`, left-edge swipe back to Settings; Providers → Fish Audio
+  `Providers`, menu `Providers,Settings,Library`, swipe back;
+  Acknowledgements → base64-js `Acknowledgements`, menu
+  `Acknowledgements,Settings,Library`, back taps pop one level at a time
+  (`navstate` index 3, `Acknowledgement(base64-js)`).
+- **The Reader names its page behind.** From the Library root: the nav bar
+  holds the Document's custom title (`A Short Test of Reading Aloud`, #85),
+  back `Library`, menu `Library`; back tap returns. From Library → Outer →
+  Inner (Document placed in Inner): back `Inner`, menu `Inner,Outer,Library`;
+  back tap returns to Inner.
+- **A deeper relaunch.** Seeded Language → English → Fiction, `current`
+  Fiction: relaunch opened Fiction (4 routes, back `English`), menu
+  `English,Language,Library`, and three left-edge swipes read English,
+  Language, Library; `navstate` then one `Library` route, `current` `null`.
+- **Folder pages after the patch.** Push by row taps (Outer: back `Library`;
+  Inner: back `Outer`); back by tap and by swipe. Rename from Inner's row
+  drawer opened on Outer's page while Inner's page was pushed (the moved
+  choreography): the open page's heading tracked the new name at once, three
+  times. Create folder from Inner's page's drawer saved `Deeper` exactly
+  (checked `alert-input.py`, persisted `parent: f-inner`, row on Inner).
+  Select mode (`0 selected`, Select all/Cancel where the arrow was) left the
+  edge swipe with a byte-identical `navstate`; Cancel restored the arrow and
+  the swipe popped.
+- **The drawer-left-open delete.** Inner's drawer open on Outer's page, Inner's
+  row tapped, `Delete`, confirm (`Delete "Inner"? This will delete 0 documents
+  and 1 subfolder.`): the root on screen, exactly one `Library` route at index
+  0, store cleaned, screenshot taken, no error/LogBox line in Metro's log
+  (none since the run's baseline line 302).
+- **Open finding, not #317's: the rename alert commits the keyboard's
+  autocandidate at Save.** `alert-input.py` verified the field, the Save tap
+  still stored `Qwrtz` → `Quartz`, `Innerq` → `Inner`, `Innerx` → `Inns`; the
+  dictionary word `Deeper` saved exactly. Symptom, cause (the alert's
+  `TextField` has autocorrection on; iOS commits the candidate at the tap and
+  the app's submit reads the binding), and the assert-a-name workaround are in
+  [pitfalls/typing-environment.md](../pitfalls/typing-environment.md). The
+  #317 assertion itself — the open page's title tracks a live rename — held in
+  every attempt.
+- **Harness notes, not app findings.** One labelled back tap was lost right
+  after the back menu's dismiss tap (the #103 lost-touch class); the tree re-
+  read before the next touch landed it, and the same button popped
+  deterministically twice after. The run's `CFBundleVersion` is the prebuild's
+  `11` while the JS line is `(14)-beta2`: the `ios/` project was not
+  re-prebuilt after the version bumps. Harmless on screen (the line is
+  JS-driven), but a real upload pair would prebuild first.
   After the move the reconciled back button can read the generic `Back`
   rather than the new parent's title, whose page was never focused; the swipe
   still goes to it.

@@ -386,3 +386,20 @@ Set up on 2026-09-28; see MEMORY/device-testing.md for which to use when.
 - **`ax.py touch LABEL` picks the first tree match, and behind a native alert the app's own row with the same label comes first.** Symptom (same run): with the folder's actions drawer up under the `Delete "Inner"?` confirm, `ax.py touch Delete` tapped the drawer's Delete **row** (8,660) — first in the tree — not the alert's Delete button (205,513); the alert stayed up and the store was unchanged through two such attempts. Fix: read the alert's buttons from `ax.py alert`/the tree and touch the alert's button by its own coordinates, and prefer a fresh tree read over a remembered label whenever two controls can share a label.
 - **`axe tap` does not answer a native alert's destructive button even at the right point; a touch pair does.** Symptom (same run): `axe tap -x 275 -y 537` on the alert's Delete answered "completed successfully" and the alert stayed. `axe touch -x 275 -y 537 --down`, 0.4 s, `--up` dismissed it and the deletion ran. The #109 Allow-button entry, met again on a destructive confirm.
 - **A failed `ax.py touch` is silent under `>/dev/null`, and row labels drift as content changes.** `touch` prints `no element '…'` to **stdout** and exits 1 (ax.py:136); `>/dev/null` in a `;`-chained sequence swallows both signals, and the sequence keeps running from the wrong screen. Met twice (same run): a Folder row labelled `Folder, Inner, Empty` became `Folder, Inner, 1 document` after an import, and the move drawer's rows use plain labels (`Other`), not the Library's (`Folder, Other, Empty`) — each missed touch left the next step acting on the previous screen. Fix: never bury a touch's output while establishing that a change happened (the ADR 0077 entry below), and take each label from a fresh tree read immediately before the touch.
+- **A fixed-point menu probe on a page with no back button presses whatever
+  sits at the probe's coordinates, and its dismiss tap opens a row** (2026-10-23,
+  #317 run, iOS 26.5). Symptom: a back-menu hold (`axe touch -x 38 -y 84
+  --down`, 1.8 s) run on the Library root — no back button there — left Safari
+  in the foreground with the app's Privacy Policy page open (the app's Debug
+  Log: `[app] app inactive` seconds after the probe), plus Safari's first-run
+  tip. Cause: (38, 84) is inside the Library's `Settings` button (20,62
+  44x44) when the back arrow is absent, and the probe's dismiss tap at
+  (300, 700) is inside the Settings page's `Privacy Policy` row (20,659
+  362x53), which `Linking`-opens Safari. Not an app defect and not another
+  session: the probe's own tree artifact (taken mid-hold) shows the Library
+  root under the hold. Fix: assert the back button's label before the hold
+  and refuse without one (`back-menu-read.sh` does), and only send the dismiss
+  tap when the menu's rows are still in the tree — the touch-up outside an
+  open menu dismisses it without choosing, so the second tap is usually
+  unneeded. Recovery: foreground the app again with `simctl launch` (it
+  activates the running process; nothing in the app's state changed).
