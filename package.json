@@ -1,12 +1,12 @@
 {
   "name": "openreader",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "main": "index.ts",
   "scripts": {
-    "start": "expo start",
+    "start": "EXPO_PUBLIC_OPENREADER_VARIANT=debug expo start",
     "android": "expo run:android",
-    "ios": "expo run:ios",
+    "ios": "EXPO_PUBLIC_OPENREADER_VARIANT=debug expo run:ios",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -61,7 +61,9 @@
   "expo": {
     "autolinking": {
       "ios": {
-        "buildFromSource": ["expo"]
+        "buildFromSource": [
+          "expo"
+        ]
       }
     }
   }

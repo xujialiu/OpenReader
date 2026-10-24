@@ -1,9 +1,11 @@
 /**
  * Imported by `index.ts` before the app itself, so that the Debug Log is
- * listening before any of the app's own modules run (ADR 0054). Nothing but
- * this call: `install.ts` says what it does, and in a build without Debug Mode
- * it does nothing.
+ * listening before the app runs (ADR 0054). First reject a stale native shell
+ * whose build role differs from Metro's fixed role (#324).
  */
+import { debugLogNative } from '../../modules/open-reader-debug-log';
+import { assertNativeVariant } from '../build/variant-check';
 import { installDebugLog } from './install';
 
+assertNativeVariant(debugLogNative?.buildVariant);
 installDebugLog();

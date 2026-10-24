@@ -48,7 +48,7 @@ than overwriting their evidence. It:
 
 - takes the machine-wide iOS build lane with the existing guard;
 - prebuilds with Debug Mode if `ios/` is absent, otherwise checks its native
-  Version/Build before reuse (it never deletes a generated tree automatically);
+  Version/Build and Debug role before reuse (it never deletes a generated tree automatically);
 - discovers the exact **Designed for [iPad,iPhone]** destination and verifies
   that it is the current Mac;
 - builds Release with Debug Mode, embedded JS, an isolated module/cache path,
@@ -61,13 +61,15 @@ than overwriting their evidence. It:
 The primary output is `/tmp/openreader-mac-attempt-01/OpenReader.app`.
 `build.log`, `build-phase.json` and `destinations.log` are beside it. Hardware
 identifiers and provisioning files stay in these local artifacts, not in git.
-The build has the even Build Number and `-debug` line used on the owner's
-phone, for example `1.0.1 (14)-beta8-debug`.
+The build has the Debug role's Build Number (formal base + 2) and `-debug`
+line, as on the owner's phone (ADR 0086).
 
 **Release with Debug Mode** is intentional. Release embeds JavaScript, so it
-runs without Metro. Debug Mode retains diagnostic logs and uses the project's
-pretend purchase store; `Purchase: Unlocked` in this local copy is not proof
-of a real StoreKit purchase. No speech key is bundled.
+runs without Metro. Debug retains diagnostic logs and excludes the purchase
+module/UI entirely; it never fabricates an Unlock or touches the purchase
+record. The build script verifies the actual embedded/native artifact with
+`scripts/verify-build.ts`. Formal purchase testing uses a separate formal
+configuration. No speech key is bundled.
 
 ## The Mac wrapper
 

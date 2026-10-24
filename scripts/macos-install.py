@@ -98,9 +98,9 @@ def inspect_app(path, device):
 
 def expected_version(source):
     match = re.search(r"export const APP_VERSION = '((\d+\.\d+\.\d+) \(([1-9]\d*)\)(?:-beta[1-9]\d*)?)';", source)
-    if not match or int(match[3]) % 2 == 0:
-        raise ValueError("APP_VERSION must name an odd upload Build Number.")
-    return match[1], match[2], str(int(match[3]) + 1)
+    if not match or int(match[3]) > 2**53 - 3:
+        raise ValueError("APP_VERSION must name a safe formal base Build Number.")
+    return match[1], match[2], str(int(match[3]) + 2)
 
 
 def mac_destination(text):
@@ -122,7 +122,8 @@ def build(args):
     native = ROOT / "ios/OpenReader/Info.plist"
     if (ROOT / "ios").exists():
         info = plistlib.loads(native.read_bytes())
-        if info.get("CFBundleVersion") != number or info.get("CFBundleShortVersionString") != short:
+        if (info.get("CFBundleVersion") != number or info.get("CFBundleShortVersionString") != short
+                or info.get("OpenReaderBuildVariant") != "debug"):
             raise ValueError("Generated ios/ has another version. Use a fresh session-owned sub-worktree; it is not deleted automatically.")
         prepare = ""
     else:
@@ -134,7 +135,7 @@ def build(args):
     phase = output / "build-phase.sh"
     q = shlex.quote
     phase.write_text("#!/bin/bash\nset -euo pipefail\n" +
-                     f"cd {q(str(ROOT))}\nexport EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1\n" +
+                     f"cd {q(str(ROOT))}\nexport EXPO_PUBLIC_OPENREADER_VARIANT=debug\nexport EXPO_NO_DOTENV=1\n" +
                      f"export TMPDIR={q(str(output / 'cache') + '/')}\n" + prepare +
                      f"xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader -showdestinations > {q(str(destination_log))} 2>&1\n" +
                      f"DEST=$(python3 {q(str(Path(__file__).resolve()))} destination {q(str(destination_log))})\n" +
@@ -144,8 +145,9 @@ def build(args):
                      f"ENABLE_USER_SCRIPT_SANDBOXING=NO CLANG_MODULE_CACHE_PATH={q(str(output / 'module-cache'))} -jobs 6 -quiet build " +
                      f"> {q(str(output / 'build.log'))} 2>&1\n")
     env = dict(os.environ)
-    # Explicit owner Debug Mode; no accidental permanent unlock from the shell.
+    # Select the whole Debug role at prebuild and bundling, not a runtime unlock.
     env.pop("EXPO_PUBLIC_OPENREADER_UNLOCKED", None)
+    env.pop("EXPO_PUBLIC_OPENREADER_DEBUG_MODE", None)
     run([sys.executable, ROOT / "test/manual-test/kit/ios_guard.py", "run", "--wait", "900", "--timeout", "1500",
          "--record", output / "build-phase.json", "--", "bash", phase], env=env)
     device = mac_destination(destination_log.read_text())
@@ -154,11 +156,10 @@ def build(args):
     product = output / "build/Build/Products/Release-iphoneos/OpenReader.app"
     inspect_app(product, device)
     info = plistlib.loads((product / "Info.plist").read_bytes())
-    bundle = (product.parent / "main.jsbundle").read_text()
     if (info["CFBundleVersion"], info["CFBundleShortVersionString"]) != (number, short):
         raise ValueError("Native version differs from this checkout.")
-    if version not in bundle or "var DEBUG_MODE = true;" not in bundle or "var PURCHASE_LOCK = true;" not in bundle:
-        raise ValueError("Embedded bundle does not contain this Version/Debug Mode/purchase policy.")
+    run(["node", "--require", "tsx/cjs", ROOT / "scripts/verify-build.ts",
+         "--app", product, "--variant", "debug"], cwd=ROOT)
     wrapper = output / "OpenReader.app"
     (wrapper / "Wrapper").mkdir(parents=True)
     run(["ditto", product, wrapper / "Wrapper/OpenReader.app"])

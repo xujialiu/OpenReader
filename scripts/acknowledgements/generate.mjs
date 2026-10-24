@@ -89,7 +89,9 @@ function bundledPackages() {
   const scratch = mkdtempSync(join(tmpdir(), 'openreader-acknowledgements-'));
   try {
     const environment = { ...process.env };
-    delete environment.EXPO_PUBLIC_OPENREADER_DEBUG_MODE; // the release bundle, as a submission carries it (ADR 0054)
+    environment.EXPO_PUBLIC_OPENREADER_VARIANT = 'formal';
+    delete environment.EXPO_PUBLIC_OPENREADER_DEBUG_MODE;
+    delete environment.EXPO_PUBLIC_OPENREADER_UNLOCKED;
     execFileSync('npx', ['expo', 'export:embed', '--platform', 'ios', '--dev', 'false', '--entry-file', 'index.ts',
       '--bundle-output', join(scratch, 'main.jsbundle'), '--sourcemap-output', join(scratch, 'main.map'),
       '--assets-dest', join(scratch, 'assets')], { cwd: ROOT, env: environment, stdio: ['ignore', 'ignore', 'inherit'] });

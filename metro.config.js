@@ -1,11 +1,25 @@
 // https://docs.expo.dev/guides/customizing-metro/
-// The Expo default configuration, plus two changes: every `EXPO_PUBLIC_` value
-// in the transform cache key (ADR 0054), and the sub-worktrees in ./.worktrees
-// left out (AGENTS.md, "Sub-worktrees").
+// Expo defaults, with a fixed release role (#324), environment-safe caching
+// (ADR 0054), and sub-worktrees excluded from this app's graph.
+require('tsx/cjs');
 const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
+const { resolveBuildVariant } = require('./build-variant.ts');
+const { resolveVariantFile } = require('./scripts/build/metro-resolution.ts');
+const variant = resolveBuildVariant({
+  variant: process.env.EXPO_PUBLIC_OPENREADER_VARIANT,
+  debugMode: process.env.EXPO_PUBLIC_OPENREADER_DEBUG_MODE,
+  unlocked: process.env.EXPO_PUBLIC_OPENREADER_UNLOCKED,
+});
+const originalResolve = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const resolution = originalResolve
+    ? originalResolve(context, moduleName, platform)
+    : context.resolveRequest(context, moduleName, platform);
+  return resolveVariantFile(__dirname, variant, resolution);
+};
 
 /**
  * Every `EXPO_PUBLIC_` value, in Metro's transform cache key (ADR 0054).
@@ -22,6 +36,7 @@ const config = getDefaultConfig(__dirname);
  */
 config.transformer = {
   ...config.transformer,
+  openReaderVariant: variant,
   publicEnvironment: Object.keys(process.env)
     .filter((name) => name.startsWith('EXPO_PUBLIC_'))
     .sort()

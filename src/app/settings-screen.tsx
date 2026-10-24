@@ -2,10 +2,9 @@ import { APP_VERSION } from '../../app-version';
 import { shownVersion } from '../debug/mode';
 import { ActionRow, DetailRow, Footnote, LinkRow, NavigationRow, SettingsGroup, SettingsPage } from './controls';
 import { AUTHOR, EMAIL, emailAuthor, openPrivacyPolicy, openRepository, REPOSITORY_NAME } from './own-site';
-import { PURCHASE, purchaseValue } from './purchase';
+import { PurchaseSettingsRow } from './purchase-ui';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
-import { usePurchases } from './use-purchases';
 
 /**
  * Why the Author's card asks for a star. It is the one standing line
@@ -19,8 +18,8 @@ export const STAR_LINE = 'If you like OpenReader, give it a ⭐ on GitHub — it
  * The front page of Settings: the card of settings, then the Author's card
  * (#129), then a card holding the privacy policy (#110) and the
  * acknowledgements (#111), with the version under it (design 0041). In a build
- * with Debug Mode the version names that build's own Build Number, one above
- * `APP_VERSION`'s (#310), and ends in `-debug` (design 0054).
+ * with Debug Mode the version names base + 2 and ends in `-debug`; the free
+ * copy names base + 1 and ends in `-free` (#324, ADR 0086).
  *
  * Each row says on its right only what is true behind it now, a count or a
  * state. General says nothing: the `Theme` it used to carry described what was
@@ -49,9 +48,7 @@ export const STAR_LINE = 'If you like OpenReader, give it a ⭐ on GitHub — it
  */
 export function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
   const { settings } = useShell();
-  const { access, now } = usePurchases();
   const version = shownVersion(APP_VERSION);
-  const purchase = purchaseValue(access, now);
   return (
     <SettingsPage>
       <SettingsGroup>
@@ -60,9 +57,7 @@ export function SettingsScreen({ navigation }: ScreenProps<'Settings'>) {
         <NavigationRow label="Providers" value={`${settings.enabledProviders.length} enabled`}
           onPress={() => navigation.navigate('Providers')} />
         <NavigationRow label="Sync" value={settings.sync.enabled ? 'On' : 'Off'} onPress={() => navigation.navigate('Sync')} />
-        {access && access.kind === 'unlocked' ? <DetailRow label={PURCHASE} value={purchase!} /> : null}
-        {access && access.kind !== 'unlocked' && access.kind !== 'off'
-          ? <NavigationRow label={PURCHASE} value={purchase} tint onPress={() => navigation.navigate('Purchase')} /> : null}
+        <PurchaseSettingsRow navigation={navigation} />
       </SettingsGroup>
       <SettingsGroup footer={<Footnote>{STAR_LINE}</Footnote>}>
         <DetailRow label="Author" value={AUTHOR} />

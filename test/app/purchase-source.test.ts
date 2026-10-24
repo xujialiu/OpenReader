@@ -8,7 +8,7 @@ const phone = vi.hoisted(() => ({
   environment: 'sandbox', account: 'internal', sourceKnown: true,
   owned: [] as { productId: string; purchaseDate: number }[],
   revoked: [] as string[],
-  alerts: [] as string[],
+  alerts: [] as string[], nativeReads: 0,
 }));
 vi.mock('expo-file-system', () => {
   class Directory {
@@ -38,10 +38,11 @@ vi.mock('../../modules/open-reader-store', () => ({ storeNative: {
     { id: UNLOCK, displayName: 'Unlock', displayPrice: '$4.99' },
   ],
   purchase: async () => ({ outcome: 'cancelled' }),
-  snapshot: async () => ({
-    source: phone.sourceKnown ? { environment: phone.environment, appTransactionId: phone.account } : null,
-    owned: phone.owned, revoked: phone.revoked,
-  }),
+  snapshot: async () => {
+    phone.nativeReads++;
+    return { source: phone.sourceKnown ? { environment: phone.environment, appTransactionId: phone.account } : null,
+      owned: phone.owned, revoked: phone.revoked };
+  },
   environment: async () => phone.sourceKnown ? phone.environment : 'unavailable',
   sync: async () => 'restored',
   addListener: () => ({ remove() {} }),
@@ -67,10 +68,36 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: START });
   phone.files.clear();
   phone.sourceKnown = true;
+  phone.nativeReads = 0;
   phone.owned = [];
   phone.revoked = [];
 });
 afterEach(() => { stop(); vi.useRealTimers(); });
+
+it.each(['not-started', 'unlocked', 'ended'] as const)('free copies leave the formal %s purchase and app data untouched (#324)', async (kind) => {
+  phone.owned = kind === 'unlocked' ? [{ productId: UNLOCK, purchaseDate: START }]
+    : kind === 'ended' ? [{ productId: TRIAL, purchaseDate: START - 40 * 86400000 }] : [];
+  expect((await launch('production')).access()?.kind).toBe(kind);
+  phone.files.set('Container/Documents/library.json', 'keep documents');
+  phone.files.set('Container/Library/settings.json', 'keep settings and positions');
+  stop(); stop = () => {};
+  const kept = [...phone.files];
+  const reads = phone.nativeReads;
+  vi.resetModules();
+  const { purchases: free } = await import('../../src/app/purchase-free');
+  const { startPurchases } = await import('../../src/app/purchase-setup-free');
+  const finish = startPurchases();
+  expect(await free.askForSpeech()).toBe(true);
+  expect(free.access()).toEqual({ kind: 'off' });
+  expect(await free.unlock()).toBe(false);
+  finish();
+  expect([...phone.files]).toEqual(kept);
+  expect(phone.nativeReads).toBe(reads);
+  phone.owned = []; // Apple's same-source empty read must retain only genuine previous ownership.
+  expect((await launch('production')).access()?.kind).toBe(kind);
+  expect(phone.files.get('Container/Documents/library.json')).toBe('keep documents');
+  expect(phone.files.get('Container/Library/settings.json')).toBe('keep settings and positions');
+});
 
 it('does not carry a verified sandbox Unlock into production across fresh JS runtimes', async () => {
   phone.owned = [{ productId: UNLOCK, purchaseDate: START }];

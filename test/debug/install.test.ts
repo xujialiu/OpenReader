@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APP_VERSION } from '../../app-version';
 
 /** `APP_VERSION` as a build with Debug Mode names itself: its Build Number one higher (#310, ADR 0083). */
-const DEBUG_BUILD = APP_VERSION.replace(/\((\d+)\)/, (_, build: string) => `(${Number(build) + 1})`);
+const DEBUG_BUILD = APP_VERSION.replace(/\((\d+)\)/, (_, build: string) => `(${Number(build) + 2})`);
 
 /**
  * `installDebugLog` against a file system, an AppState and a native module in

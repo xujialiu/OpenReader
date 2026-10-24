@@ -4,14 +4,16 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { IOSConfig, type ExportedConfig, type ExportedConfigWithProps, type InfoPlist } from 'expo/config-plugins';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import config from '../app.config';
+import { prebuiltConfig } from './build/config';
 import { APP_VERSION } from '../app-version';
 import { shownVersion } from '../src/debug/mode';
 import manifest from '../package.json';
 import withContinuedProcessing from '../plugins/with-continued-processing';
 import { pin } from './structural';
+
+const config = prebuiltConfig('formal');
 
 /**
  * Five ADR decisions live in app.config.ts and package.json rather than in
@@ -157,41 +159,33 @@ describe('MEMORY/app-change.md: every app change carries a beta version (#127)',
   });
 });
 
-describe('ADR 0083: an upload is a pair, the odd number without Debug Mode and the even one with it (#310)', () => {
-  const shown = /^\d+\.\d+\.\d+ \(([1-9]\d*)\)/.exec(APP_VERSION);
+describe('ADR 0086: one prebuild identity per release role (#324)', () => {
+  const base = Number(/\(([1-9]\d*)\)/.exec(APP_VERSION)![1]);
 
-  /** app.config.ts as a prebuild made with this value of Debug Mode's switch reads it. */
-  async function prebuiltWith(debugSwitch: string | undefined) {
-    vi.resetModules();
-    vi.stubEnv('EXPO_PUBLIC_OPENREADER_DEBUG_MODE', debugSwitch as string);
-    return (await import('../app.config')).default;
-  }
-
-  afterEach(() => vi.unstubAllEnvs());
-
-  it('names the build without Debug Mode in APP_VERSION, on an odd Build Number', () => {
-    expect(Number(shown![1]) % 2, `${APP_VERSION} has an even Build Number`).toBe(1);
+  it.each([['formal', 0], ['free', 1], ['debug', 2]] as const)('writes matching native and visible identity for %s', (variant, offset) => {
+    const built = prebuiltConfig(variant);
+    expect(built.version).toBe(config.version);
+    expect(built.ios?.buildNumber).toBe(String(base + offset));
+    expect(built.ios?.infoPlist?.OpenReaderBuildVariant).toBe(variant);
+    expect(shownVersion(APP_VERSION, variant)).toContain(`(${built.ios?.buildNumber})`);
+    const entries = (built.plugins ?? []).map(entry => typeof entry === 'string' ? entry : entry[0]);
+    expect(entries.includes('./plugins/with-storekit-configuration.ts')).toBe(variant === 'formal');
   });
 
-  it('stops a prebuild whose APP_VERSION has an even Build Number', async () => {
-    vi.resetModules();
-    vi.doMock('../app-version', () => ({ APP_VERSION: '1.0.0 (10)-beta1' }));
-    await expect(import('../app.config')).rejects.toThrow(/even Build Number/);
-    vi.doUnmock('../app-version');
+  it('accepts an even formal base for the next set instead of imposing obsolete parity', () => {
+    expect(prebuiltConfig('formal', {}, '1.0.2 (16)-beta1').ios?.buildNumber).toBe('16');
+    expect(prebuiltConfig('debug', {}, '1.0.2 (16)-beta1').ios?.buildNumber).toBe('18');
   });
 
-  it('writes the odd number in a prebuild made without the switch, or with anything but 1', async () => {
-    for (const value of [undefined, '0', 'true', '', ' 1']) {
-      expect((await prebuiltWith(value)).ios?.buildNumber, String(value)).toBe(shown![1]);
-    }
+  it('keeps source-build invocations compatible as complete native roles', () => {
+    const legacy = { EXPO_PUBLIC_OPENREADER_VARIANT: undefined };
+    expect(prebuiltConfig('formal', { ...legacy, EXPO_PUBLIC_OPENREADER_UNLOCKED: '1' }).ios?.buildNumber).toBe(String(base + 1));
+    expect(prebuiltConfig('formal', { ...legacy, EXPO_PUBLIC_OPENREADER_DEBUG_MODE: '1' }).ios?.buildNumber).toBe(String(base + 2));
   });
 
-  it('writes the even number after it in a prebuild made with EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1, the number Settings shows there', async () => {
-    const debug = await prebuiltWith('1');
-    expect(debug.ios?.buildNumber).toBe(String(Number(shown![1]) + 1));
-    expect(shownVersion(APP_VERSION, true)).toContain(`(${debug.ios?.buildNumber})`);
-    // The Version is the pair's, the same for both.
-    expect(debug.version).toBe(config.version);
+  it('rejects conflicting switches before a prebuild can create a mixed artifact', () => {
+    expect(() => prebuiltConfig('formal', { EXPO_PUBLIC_OPENREADER_UNLOCKED: '1' })).toThrow(/Conflicting/);
+    expect(() => prebuiltConfig('free', { EXPO_PUBLIC_OPENREADER_DEBUG_MODE: '1' })).toThrow(/Conflicting/);
   });
 });
 

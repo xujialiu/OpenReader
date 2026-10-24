@@ -32,7 +32,8 @@ describe('support and release text disclose the Trial and Unlock (#223)', () => 
   });
 
   it('the listing draft states the free download, Trial and one-time purchase', () => {
-    const guide = read('docs/release-to-app-store.md');
+    expect(read('docs/release-to-app-store.md')).toContain('app-store-connect.md#metadata-and-review');
+    const guide = read('docs/app-store-connect.md');
     const start = guide.indexOf('### Store listing (draft');
     expect(start).toBeGreaterThan(-1);
     const draft = guide.slice(start);
@@ -42,7 +43,7 @@ describe('support and release text disclose the Trial and Unlock (#223)', () => 
   });
 
   it('the first Play in the review template starts the Trial before Consent', () => {
-    const guide = read('docs/release-to-app-store.md');
+    const guide = read('docs/app-store-connect.md');
     const start = guide.indexOf('4. Press Play.');
     expect(start).toBeGreaterThan(-1);
     const step = guide.slice(start, guide.indexOf('\n\n', start));

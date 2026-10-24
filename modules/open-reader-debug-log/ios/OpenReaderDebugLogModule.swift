@@ -48,6 +48,7 @@ public final class OpenReaderDebugLogModule: Module {
     Name("OpenReaderDebugLog")
     Constant("nativeVersion") { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
     Constant("nativeBuild") { Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "" }
+    Constant("buildVariant") { Bundle.main.infoDictionary?["OpenReaderBuildVariant"] as? String ?? "" }
     Function("startPlaybackCapture") { self.startPlaybackCapture() }
     Function("drainPlaybackCapture") { self.playback.drain() }
     OnDestroy {

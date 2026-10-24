@@ -5,14 +5,13 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { APP_VERSION } from '../../app-version';
 import { DEFAULT_SETTINGS } from '../../src/app/settings';
 
-/** `APP_VERSION` as a build with Debug Mode names itself: its Build Number one higher (#310, ADR 0083). */
-const DEBUG_BUILD = APP_VERSION.replace(/\((\d+)\)/, (_, build: string) => `(${Number(build) + 1})`);
+/** Debug is two above the formal base (#324, ADR 0086). */
+const DEBUG_BUILD = APP_VERSION.replace(/\((\d+)\)/, (_, build: string) => `(${Number(build) + 2})`);
 
 /**
  * Settings' version line (#30) says when a build has Debug Mode (#82, design
- * 0054), and gives it its own Build Number, one above `APP_VERSION`'s (#310):
- * `1.0.0 (9)-beta1` shows `1.0.0 (10)-beta1-debug` (#127), read aloud as
- * `Version 1.0.0 (10)-beta1-debug`, and the version alone in a build without it.
+ * 0054), with its own Build Number two above the formal base (#324). Free
+ * uses base + 1 and -free. Formal has no role suffix; VoiceOver adds Version.
  * Nothing else on the screen changes. Above it, the Author's card (#129, design
  * 0072) names the Author, his email and the repository, and asks for a star.
  * The real screen, with the settings controls replaced by probes that keep
@@ -61,12 +60,13 @@ vi.mock('../../src/app/controls', () => ({
 vi.mock('../../src/app/routes', () => ({ useShell: () => ({ settings: DEFAULT_SETTINGS }) }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-async function shown(debugMode: boolean) {
+async function shown(debugMode: boolean | 'free') {
   vi.resetModules();
   // The build's answer, as `DEBUG_MODE` would be fixed in it; `shownVersion` is the real one.
   vi.doMock('../../src/debug/mode', async (original) => {
     const real = await original<typeof import('../../src/debug/mode')>();
-    return { DEBUG_MODE: debugMode, shownVersion: (version: string) => real.shownVersion(version, debugMode) };
+    const variant = debugMode === 'free' ? 'free' : debugMode ? 'debug' : 'formal';
+    return { DEBUG_MODE: variant === 'debug', shownVersion: (version: string) => real.shownVersion(version, variant) };
   });
   footnotes.length = 0;
   rows.length = 0;
@@ -104,6 +104,14 @@ it('shows the beta alone in a build without Debug Mode, and the rows above it ar
 it('asks for a star under the Author\'s card, the one footnote above the version (#129, design 0072)', async () => {
   const { footnotes: notes } = await shown(false);
   expect(notes).toEqual(['If you like OpenReader, give it a ⭐ on GitHub — it helps others find it.', APP_VERSION]);
+});
+
+it('names the free copy with its own number and -free, without a Purchase row', async () => {
+  const { footnote, rows: shownRows } = await shown('free');
+  const free = APP_VERSION.replace(/\((\d+)\)/, (_, build: string) => `(${Number(build) + 1})`);
+  expect(footnote.text).toBe(`${free}-free`);
+  expect(footnote.label).toBe(`Version ${free}-free`);
+  expect(shownRows.some(row => row.startsWith('Purchase'))).toBe(false);
 });
 
 it('starts an email to the Author from the Email row, and opens the repository from the GitHub row (#129)', async () => {

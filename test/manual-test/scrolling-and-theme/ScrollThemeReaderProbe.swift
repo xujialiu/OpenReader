@@ -34,11 +34,11 @@ final class ScrollThemeReaderProbe: XCTestCase {
   }
 
   /// `APP_VERSION` as a build with Debug Mode names itself: its Build Number
-  /// one higher, the even build of the pair (#310, ADR 0083).
+  /// two higher, the Debug copy of the set (#324, ADR 0086).
   func debugBuild(_ version: String) -> String {
     guard let open = version.firstIndex(of: "("), let close = version[open...].firstIndex(of: ")"),
           let build = Int(version[version.index(after: open)..<close]) else { return version }
-    return version.replacingCharacters(in: open...close, with: "(\(build + 1))")
+    return version.replacingCharacters(in: open...close, with: "(\(build + 2))")
   }
 
   /// The player footer can mount before epub.js has laid the section out.

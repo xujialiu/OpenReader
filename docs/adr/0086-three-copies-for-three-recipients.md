@@ -14,10 +14,10 @@ This supersedes ADR 0083's pair, odd/even and Debug-offset rules, and ADR
 0075's use of the same purchasing binary for public testers and App Review.
 The App Store copy's Trial, Unlock and purchase-source isolation remain.
 
-**This is an accepted specification, not a completed implementation.** App
-configuration, module inclusion and the upload recipe still require migration
-and verification. The release guide blocks the legacy pair procedure until
-that work is done. No App Store Connect group change or upload is implied.
+The source implementation and host bundle/autolinking checks are in place;
+**compiled-native and simulator acceptance are pending**. The release guide
+keeps uploads blocked until those checks pass. No App Store Connect group
+change or upload is implied.
 
 ## One Upload Set, three roles
 
@@ -98,6 +98,31 @@ roles or submit a partial set automatically. After every upload attempt,
 the release guide requires an explicit owner-facing table and a statement
 naming the sole formal candidate and the two copies never to submit. Ledger
 updates alone do not satisfy that receipt.
+
+## As implemented
+
+`build-variant.ts` derives the complete identity; native configuration and
+Metro use the same selector. Canonical `EXPO_PUBLIC_OPENREADER_VARIANT` accepts
+formal/free/debug; old DEBUG_MODE=1 and UNLOCKED=1 commands select complete
+Debug/free roles for compatibility. Missing switches default to formal and
+conflicting selections fail. Xcode/Metro development optimization does not
+choose a role.
+
+`with-release-variant.ts` passes the local package name `open-reader-store`
+to SDK 57's supported `use_expo_modules!` exclusion, affecting both Pods and
+the generated provider. Only formal adds the local StoreKit test configuration.
+Metro substitutes static identity modules and no-purchase startup/API/UI
+seams before traversing the graph, and rejects other purchase imports in the
+two free roles. The shell has no store command. Free access is `off`, never
+a synthetic `unlocked` purchase; unsupported purchase actions answer false.
+
+Info.plist records the role, exposed by the existing diagnostic native module.
+Startup compares it to Metro's static role before running the app. The build
+verifiers check actual bytecode/source inventories and native Mach-O contents,
+including framework symlinks. They do not upload or read app data containers.
+Use [the current verification recipe](../../test/manual-test/purchase/release-variants.md)
+for scope and limits. SDK 57 prebuild recreates native folders by default;
+`--no-clean` opts out, while the old `--clean` flag is not supported.
 
 ## Trade-off and policy boundary
 

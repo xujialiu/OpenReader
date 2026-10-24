@@ -2,10 +2,10 @@
 
 ## Readiness gate
 
-**Uploads are blocked:** #324's three-copy build configuration, native purchase
-exclusion and build procedure are not yet implemented or verified. Complete
-that migration before archiving. The superseded pair recipe is historical
-evidence in ADR 0083, not a fallback.
+**Uploads are blocked pending native/UI verification of #324.** The three-role
+implementation and host bundle/native-resolution checks exist; compiled
+artifact and simulator acceptance are still required. The superseded pair
+recipe in ADR 0083 is historical evidence, not a fallback.
 
 ## Prepare and upload
 
@@ -19,20 +19,19 @@ evidence in ADR 0083, not a fallback.
    with HEAD equal to `origin/main`. Run `npm ci`, the unit tests, TypeScript,
    ESLint and configuration checks. Drop the Beta for uploads; change
    `package.json`/lockfile only when the owner names a new Version.
-3. **Build and inspect each artifact.** Use the verified three-variant procedure
-   required by the readiness gate, starting each archive with
-   `npx expo prebuild --platform ios --clean`. Check for competing Xcode builds;
-   use separate DerivedData for concurrent work. Verify native Version/Build
-   Number, Settings suffix, Debug Mode and actual purchase-module inclusion
-   against the role before exporting. An unlocked flag alone does not prove
-   the purchase module is absent. For signing/setup, read
-   [App Store Connect reference](app-store-connect.md#identity-and-signing).
-4. **Upload formal → free test → Debug.** Verify internal `owner` delivers only
-   Debug by default before the first upload. Check each accepted upload in
-   Apple, its processing state, What to Test role label and group assignments.
-   Only the free copy may go to `public`; Debug stays internal. On any partial
-   failure, stop and do the record/receipt steps below, then ask the owner to
-   choose retry or rebuild. Keep identities and roles unchanged.
+3. **Gate distribution before exporting.** Verify internal `owner` no longer
+   automatically receives every upload; only Debug is delivered there by
+   default. Resolve this before starting
+   [the archive/upload branch](build-app-store-copies.md), whose export step
+   uploads. For signing/API/group setup, read
+   [App Store Connect reference](app-store-connect.md).
+4. **Build, inspect and upload formal → free test → Debug.** Follow that branch
+   with a fresh native tree and matching role at every step. Inspect actual
+   native/embedded identity and purchase presence before exporting. Read each
+   accepted build and its processing state from Apple; label What to Test,
+   then assign the processed Debug copy to internal `owner`. Public testing
+   remains separately approved. On partial failure, stop, record/report below
+   and ask the owner whether to retry or rebuild; preserve identities/roles.
 5. **Tag the complete set.** Once all three are verified and processed, create
    one annotated `X.Y.Z(N+2)` tag on their common commit, naming all three in
    its message. Earlier tags stay unchanged. Ask before pushing `main` or tags.

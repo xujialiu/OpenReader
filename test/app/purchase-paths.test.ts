@@ -134,12 +134,10 @@ describe('a download speaks only through the gate', () => {
 });
 
 describe('the pretend App Store and the build without the lock', () => {
-  it('builds the pretend App Store only in a build with Debug Mode, and the harness reaches it only there', () => {
-    expect(calling(/createFakeStore\(/)).toEqual(['src/app/purchase-setup.ts', 'src/purchase/fake-store.ts']);
-    const setup = read('src/app/purchase-setup.ts');
-    pin(setup, 'const choice = DEBUG_MODE ? readDebugChoice() : null;', 'src/app/purchase-setup.ts');
-    pin(setup, "if (choice?.use === 'fake') {", 'src/app/purchase-setup.ts');
-    pin(setup.slice(setup.indexOf('export function storeCommand(')), 'if (!DEBUG_MODE) return;', 'storeCommand()');
+  it('has no pretend store or store-command dispatcher in the shipped app', () => {
+    expect(calling(/createFakeStore\(/)).toEqual(['src/purchase/fake-store.ts']);
+    expect(read('src/app/purchase-setup.ts')).not.toMatch(/createFakeStore|storeCommand|DEBUG_MODE/);
+    expect(read('src/app/shell.tsx')).not.toContain("what === 'store'");
   });
 
   it('configures nothing, and so calls no StoreKit, without the lock', () => {
@@ -181,18 +179,20 @@ describe('what the app says (#148)', () => {
   it('draws the Purchase row in the tint with a grey value and a chevron, plain once unlocked, last in the first card', () => {
     expect(PURCHASE).toBe('Purchase');
     const settings = read('src/app/settings-screen.tsx');
-    const card = between(settings, '        <NavigationRow label="General"', '      <SettingsGroup footer={<Footnote>{STAR_LINE}</Footnote>}>', 'the first card of src/app/settings-screen.tsx');
-    pin(card, "? <NavigationRow label={PURCHASE} value={purchase} tint onPress={() => navigation.navigate('Purchase')} /> : null}", 'the first card');
-    pin(card, "{access && access.kind === 'unlocked' ? <DetailRow label={PURCHASE} value={purchase!} /> : null}", 'the first card');
-    // Last: nothing after the two Purchase rows in the card.
-    expect(card.lastIndexOf('<NavigationRow label="Sync"')).toBeLessThan(card.indexOf('label={PURCHASE}'));
+    const card = between(settings, '        <NavigationRow label="General"', '      <SettingsGroup footer={<Footnote>{STAR_LINE}</Footnote>}>', 'the first settings card');
+    pin(card, '<PurchaseSettingsRow navigation={navigation} />', 'the first card');
+    expect(card.indexOf('<PurchaseSettingsRow')).toBeGreaterThan(card.indexOf('<NavigationRow label="Sync"'));
+    const ui = read('src/app/purchase-ui.tsx');
+    pin(ui, "<NavigationRow label={PURCHASE} value={value} tint onPress={() => navigation.navigate('Purchase')} />", 'the paid row');
+    pin(ui, "<DetailRow label={PURCHASE} value={value} />", 'the paid row');
     const controls = read('src/app/controls.tsx');
     pin(controls, '<RowWords label={label} value={value} tint={tint ? accent.reading : undefined} />', 'NavigationRow in src/app/controls.tsx');
     pin(controls, "<Text style={[styles.settingLabel, styles.completeWord, tint ? { color: tint } : null]}>{label}</Text>", 'RowWords in src/app/controls.tsx');
     // The value keeps the quiet ink.
     pin(controls, '{value ? <Text style={[styles.settingDetail, styles.completeWord]}>{value}</Text> : null}', 'RowWords in src/app/controls.tsx');
     const shell = read('src/app/shell.tsx');
-    pin(shell, '<Stack.Screen name="Purchase" component={PurchaseScreen} options={{ title: PURCHASE,', 'src/app/shell.tsx');
+    pin(shell, '{purchaseScreen(Stack, settingsScreen)}', 'src/app/shell.tsx');
+    pin(ui, '<Stack.Screen name="Purchase" component={PurchaseScreen} options={{ title: PURCHASE,', 'the formal route');
     const page = read('src/app/purchase-screen.tsx');
     pin(page, '<ActionRow label="Start Free Trial"', 'src/app/purchase-screen.tsx');
     pin(page, '<ActionRow label="Restore Purchase"', 'src/app/purchase-screen.tsx');
@@ -210,8 +210,8 @@ describe('what the app says (#148)', () => {
 
   it('names no free route anywhere the app can show: not TestFlight, not building from source', () => {
     const naming = files.filter((path) => /testflight|from source|build it yourself|EXPO_PUBLIC_OPENREADER_UNLOCKED/i.test(code(read(path))));
-    // The switch's own read, which no screen shows.
-    expect(naming).toEqual(['src/purchase/mode.ts']);
-    expect(code(read('src/purchase/mode.ts')).match(/EXPO_PUBLIC_OPENREADER_UNLOCKED/g)).toHaveLength(1);
+    // Node/test fallback only; Metro substitutes one static role module.
+    expect(naming).toEqual(['src/build/variant.ts']);
+    expect(code(read('src/build/variant.ts')).match(/EXPO_PUBLIC_OPENREADER_UNLOCKED/g)).toHaveLength(1);
   });
 });

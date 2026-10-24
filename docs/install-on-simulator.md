@@ -30,7 +30,10 @@ xcrun simctl bootstatus SIMULATOR_UDID -b
 ```
 
 This project has custom native modules, so use the OpenReader app rather than
-Expo Go. An installed Debug app whose native dependencies still match can load
+Expo Go. Select `EXPO_PUBLIC_OPENREADER_VARIANT=debug` on every native and
+Metro command for the usual diagnostic app. Formal/free testing selects that
+role explicitly instead; changing role requires a fresh prebuild and native
+build. The startup guard rejects a stale native shell with another role. An installed Debug app whose native dependencies still match can load
 the latest JavaScript from Metro directly. Changes to native modules, plugins,
 dependencies, or native configuration require a new build and installation.
 A Release build contains its JavaScript bundle, so restarting Metro does not
@@ -54,7 +57,7 @@ start Metro from the current repository:
 
 ```bash
 kill METRO_PID
-npx expo start --port 8081
+EXPO_PUBLIC_OPENREADER_VARIANT=debug npx expo start --port 8081
 ```
 
 If no service is running, only run the start command. If the existing service is
@@ -80,11 +83,11 @@ the update is complete.
 
 ## The Trial and the Unlock in a simulator build
 
-A Debug build has Debug Mode, so it asks a pretend App Store that starts as if
-the Unlock were owned (#148, ADR 0075): Play plays as it always did. The
-harness puts it into any other state, and `storekit/OpenReader.storekit` is the
-real StoreKit's answer only when Xcode itself launches the app
-(`test/manual-test/purchase/README.md`).
+Free and Debug roles have no purchase module, controller or Purchase row
+(#324). The removed `store` harness controls cannot simulate purchases there.
+Use the formal role and the current
+[purchase recipe](../test/manual-test/purchase/README.md) for StoreKit testing;
+Xcode Debug/Release optimization does not change the selected role.
 
 ## First installation or native changes: build a Debug simulator app
 
@@ -94,19 +97,19 @@ Install the repository dependencies. Run the following only when the native
 directory does not exist or the relevant configuration needs to be regenerated:
 
 ```bash
-npx expo prebuild --platform ios
+EXPO_PUBLIC_OPENREADER_VARIANT=debug npx expo prebuild --platform ios
 ```
 
 The usual build and launch entry point is:
 
 ```bash
-npx expo run:ios --device SIMULATOR_UDID --port 8081
+EXPO_PUBLIC_OPENREADER_VARIANT=debug npx expo run:ios --device SIMULATOR_UDID --port 8081
 ```
 
 You can also build, install, and launch separately to identify which step fails:
 
 ```bash
-xcodebuild \
+EXPO_PUBLIC_OPENREADER_VARIANT=debug xcodebuild \
   -workspace ios/OpenReader.xcworkspace \
   -scheme OpenReader \
   -configuration Debug \

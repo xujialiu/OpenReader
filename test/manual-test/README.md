@@ -71,14 +71,13 @@ a shut-down device has no file at all. So: boot, `set`, then launch the app.
 `kit/run-probe.sh` (every XCTest probe), `reading.cjs play-for`, `voice-playback.cjs` and
 `offline-playback.cjs` all `check` it before they play.
 
-## The Trial and the Unlock in a build with Debug Mode
+## Purchase behavior follows the release role
 
-A build with Debug Mode asks a pretend App Store that starts **as if the Unlock
-were owned** (#148), so a probe that presses Play plays as it always did, with
-no alert in front of it. To test the Trial, its end, the Unlock or a store out
-of reach, put the pretend App Store into that state with the harness
-(`{"do":"store","state":"not-started"}` and the rest), and put it back with
-`{"do":"store","state":"unlocked"}`: [purchase/README.md](purchase/README.md).
+Free and Debug copies have no purchase module or `store` harness command
+(#324); Play and Downloads need no Trial/Unlock. Formal uses real StoreKit,
+even in Xcode Debug configuration. Read [purchase/README.md](purchase/README.md)
+before testing purchase behavior or switching roles; its current recipe
+separates compiled-artifact, UI and genuine StoreKit evidence.
 
 ## Real books
 
@@ -230,7 +229,7 @@ recipe goes.
 - [The lock screen and the playback icon](lock-screen/README.md): Lock-screen screenshot and button inspection; The lock screen's playing state on a physical iPhone; Inspect the simulator's playback icon resource.
 - [Sync](sync/README.md): Sync: the Sync screen, the switch, and places crossing devices (#20).
 - [Native audio queue (#63)](native-audio/README.md): Native queue position versus actual rendered audio (#63); Output-driven audio/position prototype (#63, validation only); Production output-driven queue (#63).
-- [The Trial and the Unlock](purchase/README.md): which App Store each build asks, the harness's `store` command, and the gate, the alerts and the end of the Trial mid-use (#148); `trial-end.sh`, `download-across-end.sh` and what beta11 measured (the least Trial, a Pronunciation's resume, a Download's drawer, the Lock Screen, StoreKit on a simulator).
+- [Purchase and release copies](purchase/README.md): the formal/free/Debug artifact and UI matrix (#324), formal StoreKit testing, source/cache handoff, and separately labelled historical Trial/harness records.
 - [The kit](kit/README.md): Read the accessibility tree and touch what it lists (`ax.py`); Run an XCTest probe; Read runtime warnings or evaluate a targeted expression; Inspect, stop or briefly exercise the reading handler; Pull the Debug Log off the phone (#82, `debug-log.py`) and list its Debug Notes (#305, `debug-notes.py`); Ask the app on the phone (`phone-hx.cjs`, `debug-log-timeline.py`, `probes/`).
 
 ### Verifying #218/#197/#144 (1.0.0 (9)-beta1) on a 390-point iPhone (2026-10-17)

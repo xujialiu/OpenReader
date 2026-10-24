@@ -11,7 +11,7 @@ different.
 
 When App Review asks for a screen recording on a physical device, as its
 Guideline 2.1 request did. What App Review Information holds now is in
-[release-to-app-store.md](release-to-app-store.md).
+[App Store Connect reference](app-store-connect.md#metadata-and-review).
 
 ## Rules
 
@@ -38,9 +38,10 @@ Guideline 2.1 request did. What App Review Information holds now is in
   Mode, so it would ask StoreKit, and App Store Connect sells nothing under
   `top.xujialiu.openreader.demo`. Every Play would raise "Purchases
   Unavailable". So it is built with `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`, and it
-  reads aloud with no alert and no Purchase row (owner's decision). If App
-  Review asks to see the purchase, that is recorded from the owner's own app
-  with a Sandbox Apple Account.
+  selects the free role with no purchase module or Purchase row. Set the
+  free selector during prebuild as well as bundling. If App Review asks to
+  see purchases, use a formal test copy with a Sandbox Apple Account, not
+  the author's purchase-free Debug copy.
 
 ## Why another identifier keeps the owner's app untouched
 
@@ -96,24 +97,23 @@ install-on-iphone.md):
 2. **Two edits, never committed**:
    - `app.config.ts`: `bundleIdentifier: 'top.xujialiu.openreader.demo',`
    - `src/debug/mode.ts`, `shownVersion`:
-     ``return `${debugMode ? `${buildVersion(version, true)}-debug` : version}-demo`;``
+     ``return `${buildIdentity(version, variant).versionLine}-demo`;``
 
    `APP_VERSION` stays as it is: `app.config.ts` stops the prebuild on any line
    that is not `x.y.z (n)` or `x.y.z (n)-betaN`.
-3. **Prebuild**: `npx expo prebuild --platform ios`. Check that the project's
+3. **Prebuild**: `EXPO_PUBLIC_OPENREADER_VARIANT=free npx expo prebuild --platform ios`. Check that the project's
    `PRODUCT_BUNDLE_IDENTIFIER` is the demo one, that Info.plist's
    `BGTaskSchedulerPermittedIdentifiers` is
    `top.xujialiu.openreader.demo.download.*` and its `CFBundleDisplayName`
    `OpenReader`, that the entitlements file is still empty, and that
    `node_modules/expo-sqlite/ios/sqlite3.h` exists.
-4. **Build** without `EXPO_PUBLIC_OPENREADER_DEBUG_MODE` anywhere (shell,
-   `.env*`, `ios/.xcode.env.local`) and with `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`
-   in the build's environment, with the sub-worktree's own DerivedData and
+4. **Build** with `EXPO_PUBLIC_OPENREADER_VARIANT=free`, with conflicting
+   role switches removed from the shell, `.env*` and `ios/.xcode.env.local`, with the sub-worktree's own DerivedData and
    module cache (install-on-iphone.md, step 3), so that it neither waits on nor
    disturbs a build of the owner's app:
 
    ```bash
-   EXPO_PUBLIC_OPENREADER_UNLOCKED=1 xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \
+   EXPO_PUBLIC_OPENREADER_VARIANT=free xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \
      -configuration Release -destination 'id=IPHONE_UDID' \
      -derivedDataPath /tmp/openreader-iphone-demo \
      -allowProvisioningUpdates -allowProvisioningDeviceRegistration \
@@ -126,8 +126,11 @@ install-on-iphone.md):
    has no capabilities, so Xcode signs it with the team's wildcard profile,
    `iOS Team Provisioning Profile: *`, rather than one for an explicit App ID.
 5. **Check** the product, `/tmp/openreader-iphone-demo/Build/Products/Release-iphoneos/`:
-   `main.jsbundle` beside the app reads `var DEBUG_MODE = false;` and
-   `var PURCHASE_LOCK = false;`, and holds the `-demo` template; `codesign -d --entitlements :- OpenReader.app` shows
+   require native `OpenReaderBuildVariant=free`, its derived number and an
+   embedded `openreader-variant:free` marker with no purchase strings. The
+   `nativeEvidence` helper in `scripts/build/artifact.ts` must find no native
+   Store module. The official `verify-build` CLI checks the main app identifier,
+   so it is not a Demo App validator. `codesign -d --entitlements :- OpenReader.app` shows
    `application-identifier` `UPR29WR8FC.top.xujialiu.openreader.demo`.
 6. **Install and launch**:
 

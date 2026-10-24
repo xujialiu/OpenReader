@@ -38,7 +38,8 @@ and is recorded nowhere: its build, installation and launch go in the reply
 5. In the right pane, open Signing & Capabilities → All, check that Automatically manage signing is on and the team is `UPR29WR8FC`. Select the physical iPhone in the run destination at the top, rather than a simulator.
 
 The repository's `ios/` directory is generated. If it does not exist, install the
-project dependencies and run `npx expo prebuild --platform ios` first, then open
+project dependencies and run
+`EXPO_PUBLIC_OPENREADER_VARIANT=debug npx expo prebuild --platform ios` first, then open
 the workspace. There is no need to delete or clean the native directory for
 routine installation.
 
@@ -68,11 +69,12 @@ end, so check these first:
    in the manifest and the lockfile can still be absent from `node_modules`; a
    missing one otherwise surfaces only when the JavaScript is bundled. The
    repair is in Troubleshooting.
-2. `ios/` exists and is this build's: `/usr/libexec/PlistBuddy -c 'Print
-   :CFBundleVersion' ios/OpenReader/Info.plist` prints the Build Number in
-   `app-version.ts`. If there is none, `npx expo prebuild --platform ios`,
-   which runs `pod install`. If it is an older build's, `CI=1 npx expo prebuild
-   --platform ios --clean`.
+2. `ios/` belongs to the Debug role: Info.plist's `OpenReaderBuildVariant`
+   is `debug`, and `CFBundleVersion` is the formal base in `app-version.ts`
+   plus two. For a missing/stale native tree or changed modules/configuration,
+   run `EXPO_PUBLIC_OPENREADER_VARIANT=debug npx expo prebuild --platform ios`,
+   which runs pod install. SDK 57 recreates native folders by default;
+   `--no-clean` opts out, and there is no `--clean` flag.
 3. `node_modules/expo-sqlite/ios/sqlite3.h` exists. Pods generate it and
    `npm ls` does not check it. If it is missing, `(cd ios && pod install)`.
 4. **After an `npm ci` over an existing `ios/`**: `npm ci` also removes the
@@ -89,7 +91,7 @@ regenerating the dependencies recompiles most of the native code.
 
 ```bash
 CHECKOUT=$(basename "$PWD")
-xcodebuild \
+EXPO_PUBLIC_OPENREADER_VARIANT=debug xcodebuild \
   -workspace ios/OpenReader.xcworkspace \
   -scheme OpenReader \
   -configuration Release \
@@ -99,7 +101,6 @@ xcodebuild \
   -allowProvisioningDeviceRegistration \
   ENABLE_USER_SCRIPT_SANDBOXING=NO \
   CLANG_MODULE_CACHE_PATH="/tmp/openreader-iphone-module-cache-$CHECKOUT" \
-  EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1 \
   -quiet build > "/tmp/openreader-iphone-$CHECKOUT.log" 2>&1
 echo "exit $?"
 ```
@@ -114,7 +115,7 @@ echo "exit $?"
 - `-allowProvisioningUpdates`: allows Xcode to create or update signing profiles using the logged-in account.
 - `-allowProvisioningDeviceRegistration`: allows automatic signing to register the target device.
 - `ENABLE_USER_SCRIPT_SANDBOXING=NO`: lets the React Native bundling script read the project and write the JavaScript bundle. It applies only to this command and does not modify the project configuration.
-- `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1`: Debug Mode ([ADR 0054](adr/0054-debug-mode-is-fixed-when-the-app-is-built.md)), always set for the owner's phone, so that a fault met away from the Mac leaves a Debug Log on the phone to be read back afterwards. Settings then shows the version ending in `-debug`. The Debug Log is in the app's container at `Library/Application Support/debug-log/`; copy it off with `python3 test/manual-test/kit/debug-log.py IPHONE_UDID OUT_DIR` (`test/manual-test/kit/README.md`, "Pull the Debug Log off the phone"); the whole diagnosis is [debug-on-iphone.md](debug-on-iphone.md).
+- `EXPO_PUBLIC_OPENREADER_VARIANT=debug`: the diagnostic, no-purchase Debug copy ([ADR 0054](adr/0054-debug-mode-is-fixed-when-the-app-is-built.md)), always set for the owner's phone, so that a fault met away from the Mac leaves a Debug Log on the phone to be read back afterwards. Settings then shows the version ending in `-debug`. The Debug Log is in the app's container at `Library/Application Support/debug-log/`; copy it off with `python3 test/manual-test/kit/debug-log.py IPHONE_UDID OUT_DIR` (`test/manual-test/kit/README.md`, "Pull the Debug Log off the phone"); the whole diagnosis is [debug-on-iphone.md](debug-on-iphone.md).
 - Release bundles the JavaScript and resources into the app, so Metro and a computer connection are not required at runtime. Online speech services and other features still require a network connection.
 
 **Success is exit code 0**, not the log's wording and not the presence of an
@@ -128,47 +129,20 @@ build in the background with its exit code written to a file and poll that. A
 quiet log is not a hang: check whether compiler processes are still running
 before restarting anything.
 
-**The Trial and the Unlock** (#148, ADR 0075). A build with Debug Mode, which
-the owner's phone build always is, asks a pretend App Store that starts as if
-the Unlock were owned. So the phone reads aloud as before, and Settings ends
-its first card with a plain `Purchase  Unlocked` row. To try StoreKit itself on the
-phone, send `{"do":"store","use":"real"}` through the phone's harness
-(`test/manual-test/kit/phone-hx.cjs`) and sign in with a Sandbox Apple Account
-(App Store Connect → Users and Access → Sandbox) when the App Store's sheet
-asks. On the owner's iPhone (iOS 27.0.1) this bought the Trial and the Unlock
-and ran Restore, with the products loading in about a second. Where the
-phone's own Settings keeps that account was not checked.
-`{"do":"store","use":"fake"}` goes back. What the pretend App Store can be
-made to do is in `test/manual-test/purchase/README.md`.
+**Purchase behavior.** The owner's Debug copy has no purchase module, row,
+listener or fake-store controls (#324). All features are available, without
+writing an Unlock or changing legitimate purchase records. The free role is
+also purchase-free but keeps no Debug Log. Use the formal role, selected at
+both prebuild and bundling, for genuine StoreKit testing; a development-signed
+formal copy uses Apple's sandbox. Such account/purchase tests require their
+own explicit scope, not an install-only request.
 
-A build **without** Debug Mode asks StoreKit. Signed for development, that is
-the App Store's sandbox: a Sandbox Apple Account buys the Trial and the Unlock
-for nothing, once their App Store Connect metadata is complete. To build one
-that never asks, add `EXPO_PUBLIC_OPENREADER_UNLOCKED=1` to the command, beside
-the Debug Mode line, which is what the README tells anyone building from
-source. Like Debug Mode, it is decided when the JavaScript is bundled, Metro's
-cache is guarded against it, and the shell, `ios/.xcode.env.local` and `.env`
-files are not: pass it on the command line only.
-
-**A build without Debug Mode**, which is what a release is: the same command
-without the `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` line. Its Settings shows the
-version with no `-debug`, and it keeps no Debug Log, never reads the
-walkthrough harness's `Documents/harness.json`, and its reading page cannot be
-opened in Safari's Web Inspector. Debug Mode is decided when the JavaScript is
-bundled during the build and cannot be switched on afterwards.
-
-Where the switch's value could go stale:
-
-- **Metro's cache: guarded.** `metro.config.js` puts every `EXPO_PUBLIC_` value
-  in Metro's cache key, so the two kinds can be built one after the other, in
-  either order, with no clean (ADR 0054).
-- **The shell, `ios/.xcode.env.local` and `.env` files: not guarded.** The
-  bundling phase inherits the shell's environment and sources
-  `ios/.xcode.env.local`, and Expo loads `.env`, `.env.local`, `.env.production`
-  and `.env.production.local` from the repository root when it bundles. A
-  `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` in any of them makes every build, a
-  release included, one with Debug Mode. Pass the switch on the command line
-  only, as above.
+Use the same explicit role on prebuild and build commands. The old
+`EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` and `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`
+source-build commands still select Debug and free respectively; conflicting
+selections fail. Keep role switches out of persistent shell/`.env*` and
+`.xcode.env.local` configuration. Metro's role/cache selection and the native
+identity guard prevent a stale shell from silently running another role.
 
 ### 4. Check and install
 
@@ -197,16 +171,15 @@ Then check the build and install it:
 
 ```bash
 APP="/tmp/openreader-iphone-$CHECKOUT/Build/Products/Release-iphoneos/OpenReader.app"
-grep -o 'var DEBUG_MODE = [a-z]*;' "${APP%/*}/main.jsbundle"
+node --require tsx/cjs scripts/verify-build.ts --app "$APP" --variant debug
 codesign --verify --deep --strict "$APP"
 xcrun devicectl device install app --device IPHONE_UDID "$APP"
 ```
 
-- `main.jsbundle` beside the app is the plain bundle: it prints `true` for a
-  build with Debug Mode and `false` for one without. The copy inside the app is
-  Hermes bytecode. `grep -o 'var PURCHASE_LOCK = [a-z]*;'` on the same file
-  prints `true` for a build with the lock and `false` for one made with
-  `EXPO_PUBLIC_OPENREADER_UNLOCKED=1`.
+- The verifier inspects the embedded Hermes bundle and every native Mach-O,
+  not a requested flag or the plain intermediate bundle. It requires the
+  current Version, matching Debug role/number and no native or JS purchase
+  capability. For these checks, use the final `.app` that will be installed.
 - Successful installation prints `App installed` and
   `bundleID: top.xujialiu.openreader`.
 - Install over the existing app. Never uninstall it first: uninstalling deletes

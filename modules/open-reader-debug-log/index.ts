@@ -13,6 +13,8 @@ interface DebugLogNative {
   readonly nativeVersion: string;
   /** `CFBundleVersion`, the `(n)` of `APP_VERSION` at the last prebuild (#127). */
   readonly nativeBuild: string;
+  /** Build-time role; a stale native shell cannot run another role's bundle (#324). */
+  readonly buildVariant: string;
   /** One line to the system log at the default level, subsystem `top.xujialiu.openreader`, category `debug-log`, public. */
   systemLog(line: string): void;
   /** Debug Mode only; fixed-name/scalar native events, at most 128 waiting. */

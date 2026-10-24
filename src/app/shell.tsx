@@ -54,14 +54,13 @@ import { importDocument } from './import-document';
 import { useHandedOverDocuments, type HandedOverFile } from './opened-document';
 import { ProviderScreen } from './provider-screen';
 import { ProvidersScreen } from './providers-screen';
-import { PurchaseScreen } from './purchase-screen';
+import { purchaseScreen } from './purchase-ui';
 import { ReaderScreen } from './reader-screen';
 import { navigationRef, ShellContext, type RootStackParamList, type Shell } from './routes';
 import { ReadingHost } from './reading-host';
 import { configureConsent } from './consent';
 import { askWithAlert } from './consent-alert';
-import { startPurchases, storeCommand } from './purchase-setup';
-import { PURCHASE } from './purchase';
+import { startPurchases } from './purchase-setup';
 import { DEFAULT_SETTINGS, resolveTheme, type AppSettings } from './settings';
 import { readSettings, writeSettings } from './settings-storage';
 import { SettingsScreen } from './settings-screen';
@@ -165,7 +164,6 @@ export function OpenReader() {
   // WALKTHROUGH-HARNESS
   useHarnessCommands((command: HarnessCommand) => {
     const what = String(command.do);
-    if (what === 'store') return storeCommand(command);
     if (what === 'add') {
       void library.add(new HxFile(HxPaths.document, 'Inbox', String(command.file)), { move: false }).then(
         // Without `nameTaken` a name taken in the Folder is refused, never cancelled (#227).
@@ -421,7 +419,7 @@ export function OpenReader() {
               {/* Its title is the Provider's own name and is set by the screen, which is the one place that knows the route's id. */}
               <Stack.Screen name="Provider" component={ProviderScreen} options={settingsScreen} />
               <Stack.Screen name="Sync" component={SyncScreen} options={{ title: 'Sync', headerBackTitle: 'Settings', ...settingsScreen }} />
-              <Stack.Screen name="Purchase" component={PurchaseScreen} options={{ title: PURCHASE, headerBackTitle: 'Settings', ...settingsScreen }} />
+              {purchaseScreen(Stack, settingsScreen)}
               <Stack.Screen name="Acknowledgements" component={AcknowledgementsScreen} options={{ title: 'Acknowledgements', headerBackTitle: 'Settings', ...settingsScreen }} />
               {/* Its title is the component's name and is set by the screen, as the Provider screen sets its own. */}
               <Stack.Screen name="Acknowledgement" component={AcknowledgementScreen} options={settingsScreen} />

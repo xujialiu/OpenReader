@@ -38,7 +38,7 @@ import { recordNativePlayback } from './playback';
 export const DEBUG_LOG_FOLDER = ['Library', 'Application Support', 'debug-log'] as const;
 /**
  * Beside the log, the version of the build that wrote it (#305): `APP_VERSION`
- * with the Debug Mode build's own number (`buildVersion`, #310). Not
+ * with the Debug copy's own number (`buildVersion`, #324). Not
  * `debug-log-….txt`, which the kit's scripts read as the log.
  */
 export const DEBUG_LOG_VERSION_FILE = 'version.txt';
@@ -76,8 +76,8 @@ export function installDebugLog(): void {
     systemLog?.(`[app] the Debug Log's folder could not be made: ${describeValue(problem)}`);
   }
   const files = folderFiles(folder);
-  // Only a build with Debug Mode gets here, so it names its own, even, number (#310).
-  const version = buildVersion(APP_VERSION, true);
+  // Only Debug gets here; its Build Number is the formal base + 2 (#324).
+  const version = buildVersion(APP_VERSION, 'debug');
   let cleared: ClearedLog | null = null;
   try {
     cleared = clearForVersion(files, versionFile(folder), version);

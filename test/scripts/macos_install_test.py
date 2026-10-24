@@ -103,11 +103,13 @@ class MacInstallTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             installer.mac_destination(text.replace("Designed for [iPad,iPhone]", "Mac Catalyst"))
 
-    def test_version_reads_even_debug_build_and_keeps_beta(self):
-        self.assertEqual(installer.expected_version("export const APP_VERSION = '1.0.1 (13)-beta8';"),
-                         ("1.0.1 (13)-beta8", "1.0.1", "14"))
+    def test_version_derives_debug_base_plus_two_without_a_parity_rule(self):
+        self.assertEqual(installer.expected_version("export const APP_VERSION = '1.0.2 (13)-beta8';"),
+                         ("1.0.2 (13)-beta8", "1.0.2", "15"))
+        self.assertEqual(installer.expected_version("export const APP_VERSION = '1.0.2 (16)-beta1';"),
+                         ("1.0.2 (16)-beta1", "1.0.2", "18"))
         with self.assertRaises(ValueError):
-            installer.expected_version("export const APP_VERSION = '1.0.1 (14)-beta8';")
+            installer.expected_version("export const APP_VERSION = '1.0.2 (9007199254740991)';")
 
     def test_replacement_requires_both_permissions_before_authorization(self):
         source, inner = self.wrapper("New.app")
