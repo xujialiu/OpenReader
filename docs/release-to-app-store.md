@@ -35,8 +35,9 @@ The owner set these.
   since the last one raises it itself. The commit that sets the pair's
   `APP_VERSION` is the commit both builds are made from. Up to build 8 each
   upload was a single build.
-- **Tags.**
+- **GitHub tags.**
   - Every upload pair gets one annotated tag `X.Y.Z(N)`, named by its higher number, the build with Debug Mode, on the commit both were built from, such as `1.0.0(10)` for 1.0.0 (9) and 1.0.0 (10) (ADR 0083). Up to build 8 each upload had its own tag, such as `1.0.0(7)`. It is the form every record names a build in, `X.Y.Z (N)` (MEMORY/app-change.md), without the space, which git refuses in a tag name (owner's decision, 2026-10-10). Quote it in a shell.
+  - Create the GitHub tag only after both uploads have succeeded. It points to the formal release commit whose `APP_VERSION` has no `-betaN`, never to a later commit that starts the next Beta. Keep the exact upload commit SHA; do not let the tag command default to the current HEAD.
   - There is no `v` tag: the submitted build is named by its own `X.Y.Z(N)`.
   - Push `main` and tags only after the owner agrees. The repository is public.
 
@@ -100,6 +101,7 @@ store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
    - Set `APP_VERSION` in `app-version.ts` to `X.Y.Z (N)`: drop the `-betaN`. `N` must be one more than the last uploaded build (the highest `X.Y.Z(N)` tag), and odd. It is already, unless nothing has changed since that pair; then raise it by two.
    - Only if the owner named a new Version: `npm version <X.Y.Z> --no-git-tag-version`, so that `package.json` and the lockfile match.
    - `npx vitest run test/app-config.test.ts` checks that `APP_VERSION`, `app.config.ts` and `package.json` agree, and that `N` is odd.
+   - After that formal-version commit reaches `main`, with the clean checkout again equal to `origin/main`, record `RELEASE_COMMIT=$(git rev-parse HEAD)`. Both builds below come from that SHA, and the GitHub tag uses that same SHA even if development has moved on by the time the upload finishes.
 
 Steps 3 to 5 make and upload the build without Debug Mode, `N`. Step 6 makes
 and uploads the build with Debug Mode, `N + 1`, from the same commit.
@@ -176,9 +178,19 @@ and uploads the build with Debug Mode, `N + 1`, from the same commit.
 
    The Team key can set it too: `PATCH /v1/betaBuildLocalizations/{id}` with `whatsNew`, the id from `GET /v1/builds/{build}/betaBuildLocalizations`. Sign that one token without a `scope`: with `scope` set to the `PATCH`, App Store Connect answers 405.
 
-8. **Tag**, on the pair's commit:
-   - `git tag -a "X.Y.Z(N+1)" -m "OpenReader X.Y.Z (N) and X.Y.Z (N+1)-debug, uploaded YYYY-MM-DD"`, such as `1.0.0(10)`.
-   - Ask the owner before `git push origin main --tags`.
+8. **GitHub tag**, after both uploads succeed, on the pair's formal release commit:
+   - Check `git show "${RELEASE_COMMIT}:app-version.ts"`: its exported `APP_VERSION` must be the uploaded `X.Y.Z (N)` with no Beta. Do not tag the next Beta's commit, even if it is now HEAD. If the recorded SHA is unavailable, recover and verify the exact commit used for both archives before continuing; do not guess from the current version.
+   - Create the annotated tag with an explicit target, such as `1.0.0(10)`:
+
+     ```bash
+     git tag -a "X.Y.Z(N+1)" \
+       -m "OpenReader X.Y.Z (N) and X.Y.Z (N+1)-debug, uploaded YYYY-MM-DD" \
+       "$RELEASE_COMMIT"
+     git rev-parse "X.Y.Z(N+1)^{commit}"
+     ```
+
+   - The resolved tag target must equal `RELEASE_COMMIT`. This is the repository tag GitHub shows under Tags/Releases, not an App Store Connect setting; its existing `X.Y.Z(N+1)` naming convention is unchanged.
+   - Ask the owner before `git push origin main --tags`. Do not move or replace an already-pushed tag without the owner's explicit instruction.
 
 ## The README follows Apple's answers
 
