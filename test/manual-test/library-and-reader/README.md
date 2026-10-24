@@ -97,6 +97,70 @@ Method order matters for the drawer, not only for the selection state: every met
 
 The probe uses real settings taps, native selection long presses, drawer drags, copy, and service-menu touches. It proves Youdao dictionary content, UK/US pronunciation controls, a Google refusal with Retry, and an explicit Youdao switch. `testHandleDragOnPreparedReader` also proves that releasing a native handle changes the selected `The` word to Translation and displays Youdao's real `这个` response. Beta35 had a longer native selection that reached `This is a short test` with `Service, Youdao` but stayed on its spinner for more than 100 seconds; beta37's native wrapper release fix was retested with `testSelectionHandleExpansionTranslatesSentence` followed by `testPreparedHandleReleaseFinishesRequest`, and the root-owned green artifacts `/tmp/openreader-translation-fix-prepare2.xcresult` and `/tmp/openreader-translation-fix-release2.xcresult` show real selected sentence text with Youdao Chinese output (`只写第一句话`, then `第一个句子`).
 
+Its defaults method predates the #323 defaults: it still expects lookup to default off and the settings row to read `Word Lookup & Translation`, so on a current build `testSettingsDefaultsMenusAndPersistence` fails on those stale expectations — they are the old spec, not app defects. Use the probe below for the current spec.
+
+## The Preferred Lookup Mode and word boundaries (#323/#274, `LookupModeProbe.swift`)
+
+With the current Debug app connected to Metro, `Word Boundaries for Lookup`
+(`../fixtures/lookup-words-fixture.ts`) in the Library, and consent for the
+Free Dictionary API and Youdao already allowed:
+
+```sh
+bash test/manual-test/kit/run-probe.sh LookupModeProbe SIMULATOR_UDID /tmp/openreader-lookup-mode \
+  -only-testing:LookupModeProbe/testSettingsEntryHeaderAndCurrentSwitches
+bash test/manual-test/kit/run-probe.sh LookupModeProbe SIMULATOR_UDID /tmp/openreader-lookup-mode \
+  -only-testing:LookupModeProbe/testExplicitTranslationPersistsAcrossRelaunch
+```
+
+The first method proves the renamed Settings entry and header
+(`Dictionary & Translation`), both switches on, `Direction, English → English`
+and `Translate into, English`. The second long-presses the fixture's `hope`
+(a real coordinate press above the drawer's top edge), taps Translation on the
+real segmented control, cold-relaunches the app, and requires a new single-word
+selection to open Translation with no second touch — the saved preference
+applying, not the default.
+
+The relaunch method needs Dictionary saved as the Preferred Lookup Mode before
+it starts, so that its Translation tap is a real change. If rerunning after a
+pass, explicitly switch back to Dictionary and close the drawer first. Tapping
+the already-selected segment records nothing, including an automatic
+Translation; that is the accepted native change-only behavior.
+
+For the deeper mode matrix, use these additional manual procedures. They are
+not an automated script:
+
+- **Real touches**: long presses select the page's own words — `hope,`
+  (punctuation), `Don't`, `reader’s`, a hyphen compound's part (`known`),
+  `stays`, `学习`, `give`/`up`, `study`, `The` — and real handle drags expand
+  `stays` to `stays a sin` (automatic Translation) and shrink to `st`
+  (automatic Dictionary). Explicit segmented-control touches write
+  `preferredMode` to the container's `Documents/settings.json` at the touch's
+  second; read that file with the app terminated to date the write.
+- **Programmatic, through the real page program** (the injected renderer code
+  in the section iframe — real Safari `Intl.Segmenter`, no real touch):
+  `test/manual-test/kit/hx.cjs` with a `js` command that `addRange`s the exact
+  text in the iframe's document — full `well-known`, `well‑known` (U+2011),
+  `give up`, `give up hope`, `学习语言`. A single long press in this fixture
+  selected only part of a hyphenated compound. Exact programmatic ranges check
+  the full boundary examples independently of that native selection behavior;
+  the drawer's segmented state is the classification's output. Re-emitting the same range twice after an
+  explicit Dictionary on `give up` is the same-text-release check: the mode
+  must stay put.
+- **What the drawer cannot prove about the service**: en-en dictionary routes
+  to `api.dictionaryapi.dev`, and en-en translation still posts to the selected
+  translator (`aidemo.youdao.com` for Youdao). A refused dictionary entry or a
+  same-language translation the service cannot provide is not itself a mode
+  failure. Verify mode, source and Retry independently; the Debug Log's
+  `[lookup]` lines name mode, service, direction, URL and status for every request.
+- **Geometry**: the drawer's Half-screen top is at y≈432 pt on an iPhone 17;
+  long-press targets below it are under the drawer (pitfalls/webview.md). The
+  fixture keeps its examples in one screen, so close the drawer (clear the
+  iframe selection, swipe the grabber down) between examples.
+- **What this recipe cannot prove**: it does not plant prior-version settings
+  (the preserved-off/en-zh/zh-CN check needs `settings.json` planted with the
+  app terminated), it does not re-test Consent's wording (allowed keys
+  suppress the alert), and it never plays pronunciation audio.
+
 ## A long press that starts no selection, on the phone (#74, `long-press-watch.py`)
 
 ```sh

@@ -15,10 +15,11 @@ recipe in ADR 0083 is historical evidence, not a fallback.
    and the Version's state. Only the owner changes the Version; if it is
    already released (ITMS-90186), stop and ask for the next one, recommending
    the next patch.
-2. **Verify the source.** All three copies come from one clean commit on `main`,
-   with HEAD equal to `origin/main`. Run `npm ci`, the unit tests, TypeScript,
-   ESLint and configuration checks. Drop the Beta for uploads; change
-   `package.json`/lockfile only when the owner names a new Version.
+2. **Verify the source.** Drop the Beta and commit the upload identity on `main`;
+   change package/lockfile Version only when the owner names it. Require a clean
+   checkout equal to `origin/main`, then record `RELEASE_COMMIT=$(git rev-parse HEAD)`.
+   All three archives come from that SHA. Run dependencies, unit, type, lint
+   and configuration checks before building.
 3. **Gate distribution before exporting.** Verify internal `owner` no longer
    automatically receives every upload; only Debug is delivered there by
    default. Resolve this before starting
@@ -32,9 +33,12 @@ recipe in ADR 0083 is historical evidence, not a fallback.
    then assign the processed Debug copy to internal `owner`. Public testing
    remains separately approved. On partial failure, stop, record/report below
    and ask the owner whether to retry or rebuild; preserve identities/roles.
-5. **Tag the complete set.** Once all three are verified and processed, create
-   one annotated `X.Y.Z(N+2)` tag on their common commit, naming all three in
-   its message. Earlier tags stay unchanged. Ask before pushing `main` or tags.
+5. **Tag the complete set.** After all three are verified and processed, check
+   `git show "${RELEASE_COMMIT}:app-version.ts"` has the uploaded identity and no
+   Beta. Annotate `X.Y.Z(N+2)` with all three identities, explicitly targeting
+   `"$RELEASE_COMMIT"`, never defaulting to a later HEAD. Verify its resolved
+   commit equals that SHA; recover the actual upload SHA rather than guessing.
+   Earlier/pushed tags stay unchanged. Ask before pushing `main` or tags.
 
 ## Record and report — required after every attempt
 

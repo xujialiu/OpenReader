@@ -95,7 +95,7 @@ it('shows the beta alone in a build without Debug Mode, and the rows above it ar
   const on = await shown(true);
   expect(on.rows).toEqual(off.rows);
   expect(off.rows).toEqual([
-    'General', 'Word Lookup & Translation', 'Providers: 0 enabled', 'Sync: Off',
+    'General', 'Dictionary & Translation', 'Providers: 0 enabled', 'Sync: Off',
     'Author: Xujia Liu', 'link: Email: xujialiuphd@gmail.com', 'link: GitHub: xujialiu/OpenReader',
     'link: Privacy Policy', 'Acknowledgements',
   ]);

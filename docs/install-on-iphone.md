@@ -74,7 +74,8 @@ end, so check these first:
    plus two. For a missing/stale native tree or changed modules/configuration,
    run `EXPO_PUBLIC_OPENREADER_VARIANT=debug npx expo prebuild --platform ios`,
    which runs pod install. SDK 57 recreates native folders by default;
-   `--no-clean` opts out, and there is no `--clean` flag.
+   `--no-clean` opts out. `--clean` remains an accepted hidden argument but is
+   unnecessary; help does not list it.
 3. `node_modules/expo-sqlite/ios/sqlite3.h` exists. Pods generate it and
    `npm ls` does not check it. If it is missing, `(cd ios && pod install)`.
 4. **After an `npm ci` over an existing `ios/`**: `npm ci` also removes the

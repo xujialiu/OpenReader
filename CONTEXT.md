@@ -359,6 +359,11 @@ _Avoid_: translation (for dictionary definitions), synthesis
 Rendering a selected passage of a document in another language.
 _Avoid_: word lookup, speech text
 
+**Preferred Lookup Mode**:
+The owner's explicit choice between Word Lookup and Text Translation, distinct
+from the kind of result a selection calls for automatically.
+_Avoid_: last-used mode, automatic mode
+
 **Translation Service**:
 A source of text translations, separate from a provider of synthesized speech.
 _Avoid_: provider, voice, dictionary

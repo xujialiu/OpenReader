@@ -49,17 +49,17 @@ let handle: LookupHandle | null = null;
 let tree: ReactTestRenderer | null = null;
 /** The real hook, handing its result out through `seen`. */
 function Probe({ settings, seen }: { settings: LookupSettings; seen(handle: LookupHandle): void }) {
-  seen(useLookup(settings, reading, true));
+  seen(useLookup(settings, reading, true, reading.pause, () => {}));
   return null;
 }
 const seen = (next: LookupHandle) => { handle = next; };
 
-async function mount(settings: LookupSettings = { ...DEFAULT_LOOKUP, enabled: true }) {
+async function mount(settings: LookupSettings = { ...DEFAULT_LOOKUP, enabled: true, direction: 'en-zh' }) {
   await act(async () => { tree = create(createElement(Probe, { settings, seen })); });
 }
 /** A selection as the page reports it once the owner lets go. */
 async function selected(text: string) {
-  await act(async () => { select({ text, expanded: false, selecting: false } as Selected); });
+  await act(async () => { select({ text, multipleWords: false, selecting: false } as Selected); });
 }
 async function answer(yes: boolean) {
   await vi.waitFor(() => expect(mock.asked.length).toBeGreaterThan(0));

@@ -122,7 +122,8 @@ verifiers check actual bytecode/source inventories and native Mach-O contents,
 including framework symlinks. They do not upload or read app data containers.
 Use [the current verification recipe](../../test/manual-test/purchase/release-variants.md)
 for scope and limits. SDK 57 prebuild recreates native folders by default;
-`--no-clean` opts out, while the old `--clean` flag is not supported.
+`--no-clean` opts out. The parser still accepts the hidden `--clean` flag;
+it is omitted from help and does not control the default.
 
 ## Trade-off and policy boundary
 

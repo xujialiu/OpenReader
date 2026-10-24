@@ -31,7 +31,8 @@ or purchase-cache strings. Formal must retain them.
 
 Generate each native tree with the same role and
 `npx expo prebuild --platform ios --no-install`. SDK 57 recreates native
-folders by default; `--no-clean` opts out. It has no `--clean` option.
+folders by default; `--no-clean` opts out. The parser still accepts hidden
+`--clean`; its absence from help does not mean it is unsupported.
 Inspect Info.plist's `OpenReaderBuildVariant` and derived Build Number, the
 Podfile's `use_expo_modules!` exclusion, and autolinking's module provider.
 Only formal may register `open-reader-store`/`OpenReaderStore`. This is native

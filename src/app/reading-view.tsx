@@ -288,7 +288,8 @@ export function ReadingView({
   /** The lookup's pause is this screen's `pause`, defined below (#216). */
   const pauseRef = useRef<() => void>(() => {});
   const pauseForLookup = useCallback(() => pauseRef.current(), []);
-  const lookup = useLookup(settings.lookup, reading, shown, pauseForLookup);
+  const lookup = useLookup(settings.lookup, reading, shown, pauseForLookup,
+    (preferredMode) => setSettings((was) => ({ ...was, lookup: { ...was.lookup, preferredMode } })));
   useDownloads();
   useEffect(()=>{void requestInventory(document.identity.id,withFishModel({provider:settings.provider,voice:settings.voice}, settings.fish.model)).catch(()=>{});},[document.identity.id,settings.provider,settings.voice,settings.fish.model]);
   const savedVoice = hasSavedVoice(document.identity.id, settings.provider, settings.voice, settings.fish.model);

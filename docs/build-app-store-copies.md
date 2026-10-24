@@ -16,6 +16,9 @@ commands belong inside a bounded phase under the shared iOS guard.
 
 ```sh
 set -euo pipefail
+: "${RELEASE_COMMIT:?record the exact approved Beta-less upload commit}"
+test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+git diff --quiet && git diff --cached --quiet
 : "${OUT:?set a new absolute output directory}"
 test ! -e "$OUT"
 mkdir -p "$OUT"
