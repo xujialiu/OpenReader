@@ -8,9 +8,9 @@ is not the [simulator verification recipe](../test/manual-test/purchase/release-
 
 Start from the clean, approved commit on `main`, with matching `origin/main`,
 dependencies/checks complete, and unused identities agreed under ADR 0086.
-First verify the internal `owner` group no longer auto-receives all uploads;
-this branch's export uploads before returning to the main workflow. If that
-routing gate cannot be confirmed, stop before executing it.
+This branch's export uploads before returning to the main workflow, and
+internal `owner` receives each copy once Apple processes it (release guide,
+step 3).
 Use a new absolute `OUT` directory. Keep one admitted build lane; these
 commands belong inside a bounded phase under the shared iOS guard.
 

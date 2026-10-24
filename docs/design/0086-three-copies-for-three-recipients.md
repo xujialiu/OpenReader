@@ -76,9 +76,11 @@ the store copy has no extra role label. The testing service's description
 also names the recipient and permitted use, so the author does not have to
 remember which number was which.
 
-The author's internal test group receives only the author's own copy by
-default. The other two are selected deliberately when the author wants to
-test them, rather than arriving automatically while the three copies upload.
+The author's internal test group receives all three copies as they upload.
+The testing service fixes that choice when a group is made and offers no way
+to change it. Rather than replace the group, the author chose to keep it and
+pick the own copy by hand in the testing app; the other two are installed
+only when the author wants to test them.
 
 If only part of an upload succeeds, work pauses. The author gets each copy's
 actual result and chooses whether to retry or rebuild. Nothing is renumbered,

@@ -20,17 +20,18 @@ to upload or proof of App Store processing. ADR 0083's pair recipe is historical
    checkout equal to `origin/main`, then record `RELEASE_COMMIT=$(git rev-parse HEAD)`.
    All three archives come from that SHA. Run dependencies, unit, type, lint
    and configuration checks before building.
-3. **Gate distribution before exporting.** Verify internal `owner` no longer
-   automatically receives every upload; only Debug is delivered there by
-   default. Resolve this before starting
+3. **Know where the copies go.** Internal `owner` receives every copy as soon
+   as Apple processes it; that setting cannot be turned off, and the owner
+   installs the Debug copy from TestFlight by hand. External `public` receives
+   a build only when one is added to it. For signing/API/group setup, read
+   [App Store Connect reference](app-store-connect.md) before starting
    [the archive/upload branch](build-app-store-copies.md), whose export step
-   uploads. For signing/API/group setup, read
-   [App Store Connect reference](app-store-connect.md).
+   uploads.
 4. **Build, inspect and upload formal → free test → Debug.** Follow that branch
    with a fresh native tree and matching role at every step. Inspect actual
    native/embedded identity and purchase presence before exporting. Read each
-   accepted build and its processing state from Apple; label What to Test,
-   then assign the processed Debug copy to internal `owner`. Public testing
+   accepted build and its processing state from Apple, and label each one's
+   What to Test with its role and permitted use. Public testing
    remains separately approved. On partial failure, stop, record/report below
    and ask the owner whether to retry or rebuild; preserve identities/roles.
 5. **Tag the complete set.** After all three are verified and processed, check

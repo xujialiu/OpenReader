@@ -78,11 +78,14 @@ buyer-protection exception in ADR 0075 remain the formal copy's responsibility.
 
 ## Routing and completion
 
-The desired internal `owner` group receives Debug copies by default, not all
-uploads. This protects the author's installation while the lower-numbered
-formal and free copies upload first. Other copies are selected explicitly for
-the author's testing. Verify and record the real group configuration before
-an upload; this document does not claim the change has already been applied.
+The internal `owner` group receives every upload. Its Build Distribution reads
+"Automatic for Xcode Builds", its Settings tab offers no control to change
+it, and `PATCH /v1/betaGroups/{id}` with `hasAccessToAllBuilds: false` answers
+409 `ENTITY_ERROR.ATTRIBUTE.NOT_ALLOWED`: the attribute "can not be included
+in a 'UPDATE' operation". Offered a new manual-distribution group in its
+place, the owner chose to keep this one and to install the Debug copy from
+TestFlight by hand. The formal and free copies therefore reach the author's
+TestFlight too; the Debug copy, highest of each set, is the one to install.
 
 Public testing, App Review submission and App Store release remain separate
 owner decisions. TestFlight's What to Test names each role and allowed use;
