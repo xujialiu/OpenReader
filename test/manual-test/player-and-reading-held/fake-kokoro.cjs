@@ -42,6 +42,8 @@
 //                              as the Provider's message. A refused Clip made to
 //                              happen at a chosen sentence (#155, 2026-10-13);
 //                              remove the file to stop refusing.
+// OPENREADER_FAKE_TTS_VOICE_NAME   the one voice's name (default "Bella (fake)");
+//                                  the App Store screenshots show it as "Bella"
 
 const { Buffer } = require('node:buffer');
 const fs = require('node:fs');
@@ -53,6 +55,7 @@ const LOG = process.env.OPENREADER_FAKE_TTS_LOG ?? '/tmp/openreader-issue86/fake
 const DELAY_MS = Number(process.env.OPENREADER_FAKE_TTS_DELAY_MS ?? 0);
 const SAMPLE_RATE = 24000;
 const SILENCE_SECONDS = Number(process.env.OPENREADER_FAKE_TTS_SECONDS ?? 2.5);
+const VOICE_NAME = process.env.OPENREADER_FAKE_TTS_VOICE_NAME ?? 'Bella (fake)';
 
 fs.mkdirSync(path.dirname(LOG), { recursive: true });
 
@@ -83,7 +86,7 @@ const server = http.createServer((req, res) => {
     const auth = req.headers.authorization ? 'present' : 'absent';
     if (req.method === 'GET' && req.url.includes('/v1/audio/voices')) {
       record(`GET ${req.url} ${new Date().toISOString()} auth=${auth}`);
-      const body = JSON.stringify({ voices: [{ id: 'af_bella', name: 'Bella (fake)' }] });
+      const body = JSON.stringify({ voices: [{ id: 'af_bella', name: VOICE_NAME }] });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(body);
       return;

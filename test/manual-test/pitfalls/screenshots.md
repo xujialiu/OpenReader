@@ -990,3 +990,43 @@
   sRGB references within a few units. Check the profile before converting
   anyway — `sips --matchTo .../sRGB.icc` on an already-sRGB file is harmless.
 - **`ink.py` measures phone screenshots only: it assumes 3×, and iPad shots are 2×** (#319, 2026-10-23, 1.0.1 (14)-beta5-debug). On an iPad Pro 13-inch shot (2064×2752 px, 2× of 1032×1376 pt) `ink.py` printed the same fixed band (`band y 130.0..688.0 pt ink x 210.7..914.3`) for screenshots of different content — the point scale and band search are built for the phone's 3× shots. On the iPad read text insets and caps from the AX tree's frames or measure the pixels directly (scan for non-background runs at 2 px = 1 pt).
+
+## App Store screenshots on new simulators (1.0.2, 2026-10-24)
+
+What `app-store-screenshots/shoot.py` had to work around, on new iOS 27.0
+simulators (iPhone 17, iPad Pro 13-inch (M5)):
+
+- **The status bar says "09:41" after `status_bar override --time 9:41`.** A
+  new simulator copies the Mac's `AppleICUForce24HourTime = 1` into its global
+  domain, and the override is drawn in that clock. Setting `AppleLocale en_US`
+  alone moved the date to "Sat Oct 24" and left "09:41". Fix: also
+  `defaults write -g AppleICUForce12HourTime -bool true` and
+  `AppleICUForce24HourTime -bool false` through `simctl spawn`, then shut down
+  and boot again; the next boot reads "9:41".
+- **An iPad app shows a resize handle in its bottom-right corner, and the
+  status bar names the app.** iPadOS starts in Windowed Apps. Fix: Settings →
+  Multitasking & Gestures → Full Screen Apps before launching the app. A launch
+  from another app (Settings) also leaves "◀ Settings" in the status bar until
+  the app is terminated and launched again from `simctl`.
+- **On iPhone a drawer has no Close button, so a later touch lands inside it.**
+  The iPad's Voice, Contents, Download and Lookup drawers carry
+  `Close Voice`, `Close Contents`, … ; the iPhone's are sheets with only a
+  `Sheet Grabber`. The player's buttons stay in the accessibility tree at their
+  old frames behind the sheet: a touch on `Contents` with the Voice sheet still
+  up hit the sheet, and a touch on `Choose a Voice` with Contents up opened
+  `CHAPTER V.` from the list. Fix: drag the grabber down 450 pt
+  (`axe swipe`, 0.4 s) when there is no `Close …`.
+- **A long-press right after opening a long book lands on another line.** Pride
+  and Prejudice kept reflowing for several seconds after the page first showed
+  text: a word found by text recognition at y 602 pt was at 653 pt by the time
+  the touch arrived, and the touch moved the Reading instead of opening Word
+  Lookup. Wait about 8 s after a Contents jump, read the screen, then press.
+- **Text recognition misreads the book's serif face.** Vision read
+  "acknowledged" on the iPhone as "Lacknowleulged" (the drop cap "I" glued on,
+  "d" as "ul"), so an exact search found nothing. `find-word.swift` falls back
+  to a word starting with the first six letters and takes the line's centre
+  for the height; the drop cap still lifts that centre about 6 pt above the
+  word's own, which is inside the word.
+- **`snapshot_ui` timed out twice** ("Timed out creating the simulator remote
+  automation session") right after the app was opened by `simctl openurl`; a
+  `wait_for_ui` with `settled` a moment later succeeded and later calls worked.

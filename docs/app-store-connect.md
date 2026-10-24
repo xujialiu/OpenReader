@@ -35,9 +35,10 @@ saved reference values. Upload history belongs in notes and the confirmed
   current build from Apple, not the last upload; use
   [the badge diagnostics](testflight-badge.md) when checking that link or badge.
 - Read [ADR 0086](adr/0086-three-copies-for-three-recipients.md#routing-and-completion)
-  before changing group assignments. Its required Debug-only default for
-  internal `owner` has not been applied by this documentation work; verify
-  actual assignments. `public` receives only owner-selected free test copies.
+  before changing group assignments. Internal `owner` distributes
+  automatically and cannot be switched to manual (neither its Settings tab
+  nor the API allows it), so it receives every upload; the owner installs
+  the Debug copy by hand. `public` receives only owner-selected free test copies.
 - The Team key OpenReader README badge has the Developer role, which is
   read-only for TestFlight builds/external groups, not globally read-only.
   The key does not expire and its role cannot be edited.
@@ -103,12 +104,10 @@ with the review key left where it was, never passes through the agent.
 - **Release after approval:** manual.
 - **A new version** (the + beside iOS App) copies the description, keywords, URLs, copyright and review notes from the last one, but not the review attachment. Its What's New starts empty. Add for Review can warn "Newer Build Available" because free/Debug copies have higher numbers. Keep the exact formal build from [versions.md](versions.md) selected and recheck the Draft Submission before the owner authorizes Submit for Review. A newer or odd-numbered build is not evidence of the formal role.
 - **Screenshots**
-  - Keep the iPhone set and verify the current required slots in App Store Connect against Apple's [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
-  - With iPad support (#319), also provide a 13-inch iPad set: 2064 × 2752 or 2048 × 2732 portrait, or those dimensions reversed for landscape. At least one is required; use captures of the actual iPad layout, not enlarged phone screenshots.
-  - Set the status bar with `xcrun simctl status_bar <udid> override --time 9:41`.
+  - The uploaded sets and the script that makes them are in [`app-store-screenshots/`](../app-store-screenshots/README.md): reading with the spoken word highlighted, Word Lookup, the Download drawer and the Library, for iPhone and iPad.
+  - Required slots: iPhone with Dynamic Island (medium display), 1206 × 2622 or 1179 × 2556; with iPad support (#319), iPad 13" display, 2064 × 2752 or 2048 × 2732. Recheck them in Media Manager against Apple's [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/); use captures of the actual iPad layout, not enlarged phone screenshots.
   - Show only public-domain books, for example from Project Gutenberg.
   - Show no API key and no Provider's prices (ADR 0017).
-  - Suggested set: the Library, a page with the spoken word highlighted, the player, Word Lookup, Settings.
 - **Review notes and demo key**
   - The owner keeps one review-only Fish Audio API key with a small prepaid balance, pasted only into App Store Connect.
   - It stays from one version to the next: every submission is reviewed, and a reviewer without a working key cannot test reading aloud (Guideline 2.1). Before each submission the owner checks that the key still works and that its balance covers a review.
