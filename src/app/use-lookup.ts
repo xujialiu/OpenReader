@@ -20,7 +20,7 @@ export interface LookupSelection { text: string; mode: LookupMode; selecting: bo
  */
 export function useLookup(settings: LookupSettings, reading: {
   bridge: ReaderBridge; pause(): void; play(): void; carryOn(): void; status: { playing: boolean };
-}, focused: boolean, pause: () => void = reading.pause) {
+}, focused: boolean, pause: () => void = reading.pause, rememberMode: (mode: LookupMode) => void) {
   const [selection, setSelection] = useState<LookupSelection | null>(null);
   const [result, setResult] = useState<LookupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,8 +28,15 @@ export function useLookup(settings: LookupSettings, reading: {
   const [pronouncing, setPronouncing] = useState(false);
   const [loading, setLoading] = useState(false);
   const opened = useRef(false);
-  const latest = useRef({ settings, reading, pause });
-  useEffect(() => { latest.current = { settings, reading, pause }; }, [settings, reading, pause]);
+  const latest = useRef({ settings, reading, pause, rememberMode });
+  const preferred = useRef(settings.preferredMode);
+  useEffect(() => { latest.current = { settings, reading, pause, rememberMode }; }, [settings, reading, pause, rememberMode]);
+  useEffect(() => { preferred.current = settings.preferredMode; }, [settings.preferredMode]);
+  // Saving the explicit mode must not send a duplicate request or change an
+  // already-open selection. Only these settings affect the service request.
+  const requestSettings = useMemo(() => ({
+    direction: settings.direction, target: settings.target, service: settings.service, microsoftRegion: settings.microsoftRegion,
+  }), [settings.direction, settings.target, settings.service, settings.microsoftRegion]);
   // The controller stores callbacks; reading state is consulted only on playback events.
   // eslint-disable-next-line react-hooks/refs
   const pronunciation = useMemo(() => createPronunciationController({
@@ -61,9 +68,12 @@ export function useLookup(settings: LookupSettings, reading: {
         if (latest.current.settings.pauseReading) latest.current.pause();
       }
       if (message.selecting) pronunciation.stop();
+      const initialMode = message.multipleWords ? 'translation' : preferred.current;
       setSelection((previous) => {
-        if (previous?.text === message.text && previous.selecting === message.selecting) return previous;
-        return { text: message.text, mode: message.expanded ? 'translation' : 'dictionary', selecting: message.selecting, attempt: 0 };
+        if (previous?.text === message.text) {
+          return previous.selecting === message.selecting ? previous : { ...previous, selecting: message.selecting };
+        }
+        return { text: message.text, mode: initialMode, selecting: message.selecting, attempt: 0 };
       });
     });
     return unsubscribe;
@@ -83,12 +93,12 @@ export function useLookup(settings: LookupSettings, reading: {
     const abort = new AbortController();
     let live = true;
     setLoading(true);
-    const asked = `${selection.mode} by ${selection.mode === 'translation' ? settings.service : 'dictionary'}, ${settings.direction}`;
+    const asked = `${selection.mode} by ${selection.mode === 'translation' ? requestSettings.service : 'dictionary'}, ${requestSettings.direction}`;
     const started = Date.now();
     debugLog('lookup', `${asked}: ${cutText(selection.text)}`);
     void (async () => {
       let microsoftKey: string | undefined;
-      if (selection.mode === 'translation' && settings.service === 'microsoft') {
+      if (selection.mode === 'translation' && requestSettings.service === 'microsoft') {
         const saved = await readTranslationKey();
         if (saved.outcome === 'refused') throw new Error('The Microsoft Translator key could not be read.');
         if (saved.outcome === 'found') microsoftKey = saved.secret;
@@ -97,7 +107,7 @@ export function useLookup(settings: LookupSettings, reading: {
       // Asked before the selection leaves the phone (#109, ADR 0064). Each lookup
       // is the owner asking, so an earlier no is asked about again. A no sends
       // nothing and closes the lookup, as its own close button does.
-      const recipient = lookupRecipient({ ...settings, mode: selection.mode }, microsoftKey !== undefined);
+      const recipient = lookupRecipient({ ...requestSettings, mode: selection.mode }, microsoftKey !== undefined);
       consent.again(recipient.key);
       if (!(await consent.ensure(recipient))) {
         debugLog('lookup', `${asked}: not allowed to reach ${recipient.name}`);
@@ -105,7 +115,7 @@ export function useLookup(settings: LookupSettings, reading: {
         return;
       }
       if (!live) return;
-      const answer = await lookup({ ...settings, ...selection, microsoftKey }, {
+      const answer = await lookup({ ...requestSettings, ...selection, microsoftKey }, {
         fetch: loggedFetch('lookup', selection.mode, (url, init) => fetch(url, init)), signal: abort.signal,
       });
       debugLog('lookup', `${asked} answered in ${Date.now() - started} ms from ${answer.source}: ${cutText(answer.text)}`);
@@ -115,9 +125,15 @@ export function useLookup(settings: LookupSettings, reading: {
       if (live) setError(failure instanceof Error ? failure.message : 'The request failed. Try again.');
     }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; abort.abort(); };
-  }, [selection, settings, pronunciation, close]);
+  }, [selection, requestSettings, pronunciation, close]);
 
-  const mode = (next: LookupMode) => setSelection((was) => was ? { ...was, mode: next, selecting: false } : null);
+  const mode = (next: LookupMode) => {
+    if (!selection) return;
+    // Also update the event-time preference before React publishes settings.
+    preferred.current = next;
+    latest.current.rememberMode(next);
+    setSelection((was) => was ? { ...was, mode: next, selecting: false } : null);
+  };
   const retry = () => setSelection((was) => was ? { ...was, selecting: false, attempt: was.attempt + 1 } : null);
   const pronounce = (url: string) => { setAudioError(null); void pronunciation.play(url); };
   return { selection, result, error, audioError, loading, pronouncing, close, mode, retry, pronounce, stopPronunciation: pronunciation.stop };

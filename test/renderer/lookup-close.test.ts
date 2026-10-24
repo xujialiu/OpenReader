@@ -33,7 +33,7 @@ function run(destroyed: boolean) {
   const displayed = page.displays.slice(shown);
   const before = page.posted.length;
   page.select(second, 'Another');
-  const next = page.posted.slice(before).filter((m) => m.type === SELECTION_MESSAGE).map((m) => m.expanded);
+  const next = page.posted.slice(before).filter((m) => m.type === SELECTION_MESSAGE).map((m) => m.multipleWords);
   return { problems, displayed, next };
 }
 
@@ -50,7 +50,7 @@ describe('closing a lookup', () => {
     expect(run(true).displayed).toEqual(['epubcfi(/6/6!/4)']);
   });
 
-  it('after the word’s section was destroyed takes the next first selection as not expanded', () => {
+  it('after the word’s section was destroyed reports the next first selection as a single word', () => {
     expect(run(true).next).toEqual([false, false]);
   });
 });

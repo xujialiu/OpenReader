@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { lookup, parseFreeDictionary, parseTranslation, parseYoudaoDictionary, type LookupRequest } from '../../src/translation/services';
 import { DEFAULT_LOOKUP, parseLookupSettings } from '../../src/translation/settings';
 
-const request: LookupRequest = { ...DEFAULT_LOOKUP, text: 'hello', mode: 'translation' };
+const request: LookupRequest = { ...DEFAULT_LOOKUP, target: 'zh-CN', text: 'hello', mode: 'translation' };
 describe('lookup adapters', () => {
   it('keeps usage labels and decodes entities in a malformed Chinese/English page without executing it', () => {
     const page = `<div id="phrsListTab"><span class="phonetic">[test]</span><a data-rel="hello&type=1"></a>
@@ -40,6 +40,13 @@ describe('lookup adapters', () => {
     expect(init?.body).toBe('from=auto&to=zh-CHS&q=hello');
     expect(JSON.stringify(init)).not.toContain('must-not-leak');
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('still sends English text to the selected translator when the target is English', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ errorCode: '0', translation: ['hello'] })));
+    await lookup({ ...request, target: 'en' }, { fetch: fetcher });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0]).toBe('https://aidemo.youdao.com/trans');
+    expect(fetcher.mock.calls[0][1]?.body).toBe('from=auto&to=en&q=hello');
   });
   it('keeps Microsoft credentials on its own request, never in the URL', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify([{ translations: [{ text: '你好' }] }])));

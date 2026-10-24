@@ -733,11 +733,28 @@ ${constants}
   var lookupKeepBrowsing = false;
   var beforeLookupBrowsing = false;
   var selectionDoc = null;
-  var selectedText = '';
   var selectionTimer = null;
   var selectionTouching = false;
   var suppressTapUntil = 0;
-  var selectionExpanded = false;
+  var lookupWords = null;
+
+  /* Native word boundaries in Safari, where the selection lives, not Hermes.
+     Count only until a second word: no character/drag-history heuristic for CJK.
+     Segmenter separates hyphenated compounds; an adjacent single hyphen or
+     apostrophe joins those parts, but spaces, em dashes and punctuation do not. */
+  function multipleLookupWords(text) {
+    if (!lookupWords) lookupWords = new Intl.Segmenter(undefined, { granularity: 'word' });
+    var parts = lookupWords.segment(text)[Symbol.iterator]();
+    var next;
+    var end = -1;
+    while (!(next = parts.next()).done) {
+      var part = next.value;
+      if (!part.isWordLike) continue;
+      if (end >= 0 && !/^[-'’‐‑]$/.test(text.slice(end, part.index))) return true;
+      end = part.index + part.segment.length;
+    }
+    return false;
+  }
 
   function selected(doc) {
     var selection = doc && doc.getSelection ? doc.getSelection() : null;
@@ -757,15 +774,13 @@ ${constants}
     holdForLookup();
     selectionDoc = doc;
     suppressTapUntil = Date.now() + 700;
-    post({ type: SELECTION, text: text.slice(0, 5001), expanded: selectionExpanded, selecting: selecting });
-    if (!selecting) selectedText = text;
+    post({ type: SELECTION, text: text.slice(0, 5001), multipleWords: multipleLookupWords(text), selecting: selecting });
   }
   function selectionChanged(event) {
     if (!lookupEnabled) return;
     var doc = event.currentTarget;
     var text = selected(doc);
     if (!text) return;
-    if (selectedText && selectedText !== text) selectionExpanded = true;
     clearTimeout(selectionTimer);
     emitSelection(doc, true);
     if (!selectionTouching) selectionTimer = setTimeout(function () { emitSelection(doc, false); }, 180);
@@ -793,8 +808,6 @@ ${constants}
     var selection = selectionDoc && selectionDoc.getSelection ? selectionDoc.getSelection() : null;
     if (selection) selection.removeAllRanges();
     selectionDoc = null;
-    selectedText = '';
-    selectionExpanded = false;
     suppressTapUntil = Date.now() + 400;
     if (resumeFollow && !browsing && state) {
       state.placed = new WeakSet();

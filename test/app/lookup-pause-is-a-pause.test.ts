@@ -275,7 +275,7 @@ describe('a Word Lookup pauses a Reading while the Player is collapsed', () => {
   it('a long-pressed word pauses the Reading and the Drawer is closed', async () => {
     const r = await collapsed();
     // The page's first message for a long-pressed word, as the bridge hands it to useLookup.
-    await act(async () => { world.select!({ text: 'word', expanded: false, selecting: true }); });
+    await act(async () => { world.select!({ text: 'word', multipleWords: false, selecting: true }); });
     await settle();
     // The owner swipes the Drawer away.
     await act(async () => { world.drawer!.close(); });

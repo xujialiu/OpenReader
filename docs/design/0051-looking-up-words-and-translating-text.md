@@ -2,19 +2,25 @@
 
 ## What has been chosen
 
-The owner wants to understand unfamiliar words and passages without leaving the document. Long-press lookup and translation will have a switch, initially off. The app remembers the owner's choice.
+The owner wants to understand unfamiliar words and passages without leaving the document. Long-press lookup and translation have a switch, initially on. The app remembers the owner's choice.
 
 The owner has chosen Youdao for Chinese–English and English–Chinese word lookup and Free Dictionary API for English definitions. Text translation defaults to Youdao, with Google as another option requiring no credentials and Microsoft Translator as an optional service the owner configures.
 
-The owner chooses the lookup language direction in settings, initially English–Chinese. Language direction is a saved setting rather than a choice repeated with every result. Text translation detects the source and uses a fixed target language chosen by the owner: Simplified Chinese or English in the first version, initially Simplified Chinese. Selecting Chinese text must not silently change the target to English.
+The owner chooses the lookup language direction in settings, initially English–English. Language direction is a saved setting rather than a choice repeated with every result. Text translation detects the source and uses a fixed target language chosen by the owner: Simplified Chinese or English in the first version, initially English. Selecting Chinese text must not silently change the target to English. Selecting English text when the target is English likewise leaves the target and the choice of translation unchanged: it still asks the selected Translation Service, rather than switching to Chinese or to dictionary meanings. A translation is not promised to rewrite or explain an English selection merely because English is its target; English definitions belong to Word Lookup.
 
 Importing dictionaries is excluded from the first version. Lookup uses online services, so there is no local-dictionary miss or local-to-online fallback to configure. This postpones the owner's original import request and means lookup will need a connection.
 
 ## Selecting text and seeing the result
 
-With the feature enabled, a long press selects a word and opens its meanings immediately, without a second menu action. It does not change the reading position. The owner can drag the selection to include part of a sentence, a whole sentence or several sentences; translation is requested after the drag ends, not repeatedly while the selection is moving.
+With the feature enabled, a long press selects a word and opens its result immediately, without a second menu action. It does not change the reading position. The owner can drag the selection to include part of a sentence, a whole sentence or several sentences; translation is requested after the drag ends, not repeatedly while the selection is moving.
 
-The initial word selection opens dictionary meanings; expanding the selection defaults to translation. The owner can switch between dictionary meanings and translation in the result drawer, so a phrase such as “give up” can still be looked up as a dictionary entry. This is a choice of the kind of result, separate from the saved language direction.
+Opening a word lookup again uses the owner's Preferred Lookup Mode: the last explicit choice of dictionary meanings or translation in the result drawer. Before any explicit choice, a word opens dictionary meanings. Both choices are remembered on the current device across documents and app restarts. Only an explicit choice of Dictionary or Translation changes this preference. This preference is a choice of the kind of result, separate from the saved language direction. Always reopening dictionary meanings was turned down because it would make an owner who prefers translation choose it again for every word.
+
+Selecting multiple words defaults to translation for that selection only and never changes the Preferred Lookup Mode. Shrinking it back to one word restores the Preferred Lookup Mode. Long-pressing another word is a new selection even while the result drawer remains open; it uses the Preferred Lookup Mode, rather than being mistaken for an expansion of the previous selection. Remembering an automatic switch was turned down because expanding one passage is not a request to change future word lookups; leaving that temporary translation in place after shrinking or selecting a new word would make an unrelated word inherit it.
+
+The automatic choice follows the selected text's word boundaries, not whether the owner has dragged the selection or changed any characters. Surrounding punctuation, a contraction such as “don't”, and a hyphenated word such as “well-known” still count as one word; “give up” counts as multiple words. A Chinese word such as “学习” does not become multiple words merely because it contains more than one character. Adjusting the selection within one word does not itself call for translation.
+
+An explicit mode choice takes precedence for the current selection while its text stays the same. The owner can switch “give up” to Dictionary and keep its dictionary result while lifting their finger, waiting for the result or retrying. Changing the selected text applies the single-word or multiword rule again: expanding it to “give up hope” chooses Translation without overwriting the Preferred Lookup Mode. Immediately switching back after an explicit choice was turned down because it would prevent the owner from looking up a phrase as a dictionary entry.
 
 Results appear in a drawer rising from the bottom of the screen, initially leaving part of the document visible. The owner can expand it for longer definitions or translations. Word lookup and text translation share that surface. A small floating bubble beside the word was turned down in favor of space for longer results.
 
@@ -26,7 +32,9 @@ Dictionary results show the word, phonetics, part of speech, meanings and exampl
 
 ## Settings
 
-A dedicated “Word Lookup and Translation” page opens from Settings. It contains the feature switch, lookup direction, translation target, translation service and the option to pause speech during lookup. Microsoft credential fields appear only when Microsoft is selected. These choices are remembered on the current device and apply to every document; cross-device synchronization is outside this first version.
+A dedicated “Dictionary & Translation” page opens from Settings, under the same name. It contains the feature switch, lookup direction, translation target, translation service and the option to pause speech during lookup. Microsoft credential fields appear only when Microsoft is selected. These choices and the Preferred Lookup Mode are remembered on the current device and apply to every document; cross-device synchronization is outside this first version.
+
+The initial values apply only when there is no saved choice for the setting. Existing switch states, lookup directions and translation targets are kept, rather than replacing choices the owner has already made when the app is updated.
 
 ## Speech during lookup
 
@@ -48,8 +56,8 @@ Requiring credentials before the first lookup would add setup to a small reading
 
 ## What it costs
 
-Online lookup needs a connection and sends the selected text to the chosen service. Youdao's free access depends on how its website behaves, so changes there can interrupt lookup or translation. The shortlist has been checked against another reader's integration, but has not yet been tested live in this app.
+Online lookup needs a connection and sends the selected text to the chosen service. Youdao's free access depends on how its website behaves, so changes there can interrupt lookup or translation. A service being offered does not guarantee it is currently reachable, and a failure never silently sends the selection elsewhere.
 
 ## Design confirmation
 
-The owner confirmed the complete design and authorized implementation. Live service availability and selection behavior on the device still need verification during implementation; the service shortlist is not a claim that those checks have passed.
+The owner confirmed the complete refined behavior and authorized implementation, including correcting a new word being mistaken for an expansion while the result drawer remains open. The service shortlist is not a claim that current live availability has been verified.

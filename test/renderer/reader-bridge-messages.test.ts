@@ -109,9 +109,9 @@ describe('a message with a known type is taken only whole', () => {
     const selected = vi.fn();
     bridge.setLookupEnabled(true);
     bridge.onSelection(selected);
-    arrive(bridge, { type: SELECTION_MESSAGE, expanded: true, selecting: false });
+    arrive(bridge, { type: SELECTION_MESSAGE, multipleWords: true, selecting: false });
     expect(selected).not.toHaveBeenCalled();
-    arrive(bridge, { type: SELECTION_MESSAGE, text: 'word', expanded: true, selecting: false });
+    arrive(bridge, { type: SELECTION_MESSAGE, text: 'word', multipleWords: false, selecting: false });
     expect(selected).toHaveBeenCalledWith(expect.objectContaining({ text: 'word' }));
   });
 });

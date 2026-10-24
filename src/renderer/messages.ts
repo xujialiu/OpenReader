@@ -667,7 +667,8 @@ export const SELECTION_MESSAGE = 'openreader:selection';
 export interface SelectionMessage {
   type: typeof SELECTION_MESSAGE;
   text: string;
-  expanded: boolean;
+  /** Current word boundaries, not whether this or a previous selection changed. */
+  multipleWords: boolean;
   selecting: boolean;
 }
 export interface LookupControlMessage {
@@ -715,7 +716,7 @@ export function readWebViewMessage(event: unknown): WebViewMessage | null {
     case TAP_MESSAGE:
       return typeof event.block === 'string' && isIndex(event.offset) ? (event as unknown as TapMessage) : null;
     case SELECTION_MESSAGE:
-      return typeof event.text === 'string' && typeof event.expanded === 'boolean' && typeof event.selecting === 'boolean'
+      return typeof event.text === 'string' && typeof event.multipleWords === 'boolean' && typeof event.selecting === 'boolean'
         ? (event as unknown as SelectionMessage)
         : null;
     case RENDERER_MESSAGE:
