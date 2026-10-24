@@ -120,8 +120,14 @@ real segmented control, cold-relaunches the app, and requires a new single-word
 selection to open Translation with no second touch — the saved preference
 applying, not the default.
 
-The deeper mode matrix was verified interactively (2026-10-24, beta12;
-`notes/NOTES_2026-10-24.md`), and the recipe is the method, not a script:
+The relaunch method needs Dictionary saved as the Preferred Lookup Mode before
+it starts, so that its Translation tap is a real change. If rerunning after a
+pass, explicitly switch back to Dictionary and close the drawer first. Tapping
+the already-selected segment records nothing, including an automatic
+Translation; that is the accepted native change-only behavior.
+
+For the deeper mode matrix, use these additional manual procedures. They are
+not an automated script:
 
 - **Real touches**: long presses select the page's own words — `hope,`
   (punctuation), `Don't`, `reader’s`, a hyphen compound's part (`known`),
@@ -134,19 +140,18 @@ The deeper mode matrix was verified interactively (2026-10-24, beta12;
   in the section iframe — real Safari `Intl.Segmenter`, no real touch):
   `test/manual-test/kit/hx.cjs` with a `js` command that `addRange`s the exact
   text in the iframe's document — full `well-known`, `well‑known` (U+2011),
-  `give up`, `give up hope`, `学习语言`. A long press cannot select a compound
-  or a two-word phrase, so these ranges are the only way to ask the page
-  program about the exact boundary examples; the drawer's segmented state is
-  the classification's output. Re-emitting the same range twice after an
+  `give up`, `give up hope`, `学习语言`. A single long press in this fixture
+  selected only part of a hyphenated compound. Exact programmatic ranges check
+  the full boundary examples independently of that native selection behavior;
+  the drawer's segmented state is the classification's output. Re-emitting the same range twice after an
   explicit Dictionary on `give up` is the same-text-release check: the mode
   must stay put.
 - **What the drawer cannot prove about the service**: en-en dictionary routes
-  to `api.dictionaryapi.dev` (200 for plain words, live 530 refusals during
-  the run for `Don't`, `well‑known`, `give up`, `stays`) and en-en translation
-  still posts to the selected translator (`aidemo.youdao.com`), which answered
-  200 but could not translate a single English word during the run. Those are
-  live-availability facts, not mode failures; the Debug Log's `[lookup]`
-  lines name mode, service, direction, URL and status for every request.
+  to `api.dictionaryapi.dev`, and en-en translation still posts to the selected
+  translator (`aidemo.youdao.com` for Youdao). A refused dictionary entry or a
+  same-language translation the service cannot provide is not itself a mode
+  failure. Verify mode, source and Retry independently; the Debug Log's
+  `[lookup]` lines name mode, service, direction, URL and status for every request.
 - **Geometry**: the drawer's Half-screen top is at y≈432 pt on an iPhone 17;
   long-press targets below it are under the drawer (pitfalls/webview.md). The
   fixture keeps its examples in one screen, so close the drawer (clear the
