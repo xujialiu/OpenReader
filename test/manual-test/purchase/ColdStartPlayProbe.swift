@@ -16,11 +16,12 @@ import XCTest
 final class ColdStartPlayProbe: XCTestCase {
   func testColdStartOfflinePlay() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
-    if app.state == .runningForeground { app.terminate() }
+    app.terminate()
     app.launch() // cold launch: empty clip cache
     let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'A Short Test of Reading Aloud'")).firstMatch
     XCTAssertTrue(row.waitForExistence(timeout: 20), "Library row did not appear")
-    print("COLDSTART row label: \(row.label)")
+    let beforePosition = row.label
+    print("COLDSTART before-position: \(beforePosition)")
     row.tap()
 
     var play = app.buttons["Play"]
@@ -44,6 +45,12 @@ final class ColdStartPlayProbe: XCTestCase {
     play = app.buttons["Play"]
     XCTAssertTrue(play.waitForExistence(timeout: 8), "Pause did not return the centre button to Play")
     print("COLDSTART after: centre button label=Play (real touch pause accepted)")
+    let back = app.buttons.matching(identifier: "BackButton").firstMatch
+    XCTAssertTrue(back.waitForExistence(timeout: 5), "Reader back control did not appear")
+    back.tap()
+    XCTAssertTrue(row.waitForExistence(timeout: 8), "Library did not return after playback")
+    print("COLDSTART after-position: \(row.label)")
+    XCTAssertNotEqual(row.label, beforePosition, "No sentence progress was observed; Pause alone cannot prove saved audio played")
 
     let imageAfter = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     imageAfter.name = "coldstart-paused"; imageAfter.lifetime = .keepAlways; add(imageAfter)

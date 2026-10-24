@@ -17,9 +17,19 @@ final class SettingsVersionProbe: XCTestCase {
   /// From wherever the last session left the app (state restoration can land
   /// in a reader) to the Library, then into Settings.
   func openSettings(_ app: XCUIApplication) {
-    if app.buttons["Back"].exists { app.buttons["Back"].tap() }
+    // A Debug harness command or restoration can already leave Settings open.
+    // BackButton is the stable native id; its label may be Library, not Back.
+    if app.navigationBars["Settings"].exists && app.buttons["General"].exists { return }
     let settings = app.buttons["Settings"]
-    XCTAssertTrue(settings.waitForExistence(timeout: 15), "Library header did not appear")
+    if !settings.exists {
+      let back = app.buttons.matching(identifier: "BackButton").firstMatch
+      if back.exists { back.tap() }
+      else if app.buttons["Back"].exists { app.buttons["Back"].tap() }
+    }
+    guard settings.waitForExistence(timeout: 15) else {
+      XCTFail("Library header did not appear; capture the restored route, not a guessed Back label")
+      return
+    }
     settings.tap()
   }
 
