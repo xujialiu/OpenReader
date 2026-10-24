@@ -88,6 +88,22 @@ StoreKit test configuration for actual purchase scenarios. The host source-
 cache tests cover owned/expired/not-started → free → formal round trips; do
 not relabel them as real Apple-account handoff evidence.
 
+The cold-start and refusal controls are probes, so they work even when the AXe
+session is dead (`pitfalls/mcp.md`): `ColdStartPlayProbe` cold-launches the app
+and plays a saved chapter by real touch with the provider port closed — the
+centre button's Play→Pause→Play is the observable check that disk narration
+plays in a fresh process (`bash test/manual-test/kit/run-probe.sh
+ColdStartPlayProbe UDID OUT -only-testing:testColdStartOfflinePlay`), and
+`FormalRefusedPlayProbe` asserts the formal copy refuses the same touch with a
+closed provider and captures the screen (`-only-testing:testRefusedPlay`).
+A Library row's changed “Last read” line is supporting evidence only: cached
+clips explain an unchanged provider log, so a same-process play never proves
+fresh synthesis. `scripts/verify-build.ts` needs the embedded `main.jsbundle`,
+so it applies to Release-configuration artifacts; a Metro-delivered Debug
+build is verified by its Info.plist (`CFBundleVersion`,
+`OpenReaderBuildVariant`, `RCTMetroPort`), the Debug Log launch line's
+“Metro bundle”, Metro's own bundle record and the on-screen footer.
+
 ## 4. Final delivery and limits
 
 Leave the latest Debug copy open with playback stopped. For a Metro delivery,
