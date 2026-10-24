@@ -7,8 +7,9 @@ In order: set the beta version, hand the tree to the tester, then leave the late
 Settings shows the version derived from `APP_VERSION` in `app-version.ts`, so
 the owner can identify the running copy. The accepted rule is
 [ADR 0086](../docs/adr/0086-three-copies-for-three-recipients.md), replacing
-ADR 0083's pairs. **The implementation is present; #324 native/UI acceptance
-is still pending, so keep uploads blocked until it passes.**
+ADR 0083's pairs. The three-copy implementation has local native/UI
+acceptance; every actual upload still follows the release guide's explicit
+authorization, identity, routing and artifact gates.
 
 `APP_VERSION` is `x.y.z (n)-betaN`: the Version, formal base Build Number and
 Beta of CONTEXT.md. An Upload Set derives formal `n`, free test `n + 1`, and

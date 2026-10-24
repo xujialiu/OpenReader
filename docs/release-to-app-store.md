@@ -2,10 +2,10 @@
 
 ## Readiness gate
 
-**Uploads are blocked pending native/UI verification of #324.** The three-role
-implementation and host bundle/native-resolution checks exist; compiled
-artifact and simulator acceptance are still required. The superseded pair
-recipe in ADR 0083 is historical evidence, not a fallback.
+Proceed only for an explicit owner upload request, after current source,
+Apple identities, signing and group routing pass the checks below. The
+three-role pipeline has local native/UI acceptance; that is not permission
+to upload or proof of App Store processing. ADR 0083's pair recipe is historical.
 
 ## Prepare and upload
 

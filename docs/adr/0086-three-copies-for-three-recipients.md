@@ -14,10 +14,11 @@ This supersedes ADR 0083's pair, odd/even and Debug-offset rules, and ADR
 0075's use of the same purchasing binary for public testers and App Review.
 The App Store copy's Trial, Unlock and purchase-source isolation remain.
 
-The source implementation and host bundle/autolinking checks are in place;
-**compiled-native and simulator acceptance are pending**. The release guide
-keeps uploads blocked until those checks pass. No App Store Connect group
-change or upload is implied.
+The implementation has local host, compiled-native and simulator UI
+acceptance, including fresh free synthesis/Download, cold-start narration and
+formal purchase gates. The release guide still requires explicit upload
+permission and live identity/signing/group checks. No real purchase,
+purchasing-account handoff, Apple group change or upload is implied.
 
 ## One Upload Set, three roles
 
