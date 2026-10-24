@@ -4,31 +4,43 @@ In order: set the beta version, hand the tree to the tester, then leave the late
 
 ## Every app change carries a beta version
 
-Settings shows `APP_VERSION` from `app-version.ts`, so the owner can read off
-the device which build is running. It is `x.y.z (n)-betaN`: the Version, Build
-Number and Beta of CONTEXT.md (#127, ADR 0070). Its Build Number is odd: the
-build without Debug Mode. A build with Debug Mode shows the even number after
-it, the other build of the upload pair, and adds `-debug` (#310, ADR 0083).
-Every app change sets it before the tree goes to the tester, meaning each change
-that ends with the latest app in the simulator:
+Settings shows the version derived from `APP_VERSION` in `app-version.ts`, so
+the owner can identify the running copy. The accepted rule is
+[ADR 0086](../docs/adr/0086-three-copies-for-three-recipients.md), replacing
+ADR 0083's pairs. **The #324 build migration is not yet implemented or
+verified; keep uploads blocked until it is.**
 
-- **The first change after an upload pair** raises the Build Number by two and
-  starts the Beta at 1. Builds 9 and 10 were `1.0.0 (9)`, so the next change is
-  `1.0.0 (11)-beta1`, which the simulator and the owner's phone show as
-  `1.0.0 (12)-beta1-debug`.
-- **Each later change** takes the next Beta: `1.0.0 (11)-beta2`, `-beta3`, ….
-- **The upload pair** drops the Beta: `1.0.0 (11)`, uploaded as 1.0.0 (11) and
-  1.0.0 (12). The procedure is in `docs/release-to-app-store.md`.
-- **The Version** (`x.y.z`) changes only when the owner says so. Uploads,
-  submissions and new features leave it as it is. When the owner names a new
-  Version, `npm version <x.y.z> --no-git-tag-version` moves `package.json` with
-  it.
+`APP_VERSION` is `x.y.z (n)-betaN`: the Version, formal base Build Number and
+Beta of CONTEXT.md. An Upload Set derives formal `n`, free test `n + 1`, and
+Debug `n + 2`. Settings adds no role suffix for formal, `-free` for free test,
+and `-debug` for Debug. There is no odd/even constraint. Every app change sets
+the Beta before the tree goes to the tester, meaning each change that ends
+with the latest app in the simulator:
 
-Write it exactly like that: no `v`, and a space before the bracket. A git tag is the one exception: it cannot hold a space, so the tag of an upload pair is `1.0.0(10)` (docs/release-to-app-store.md). Every
-record that names a build uses the same form, including notes, test records,
-commit subjects and issue comments. Records written before #127 stay as they
-were written. `app.config.ts` reads both native numbers from `APP_VERSION`, and
-test/app-config.test.ts fails on any other form.
+- **The first change after a complete Upload Set** raises the formal base by
+  three and starts Beta 1. After base 13's copies 13/14/15, the next base is
+  16: `1.0.2 (16)-beta1`, shown in Debug as `1.0.2 (18)-beta1-debug`.
+- **Each later change** takes the next Beta at the same base.
+- **An Upload Set** drops the Beta and uses three consecutive numbers from
+  one commit. A partial failure does not authorize a new base, role change or
+  submission; stop and ask the owner. Planned identities are in ADR 0086.
+  [versions.md](../docs/versions.md) contains only a table of confirmed
+  uploads: keep its empty template until an upload is confirmed, and never
+  add planned or failed-attempt rows. The upload procedure and mandatory
+  per-copy owner receipt are in
+  [release-to-app-store.md](../docs/release-to-app-store.md).
+- **The Version** (`x.y.z`) changes only when the owner says so. The owner has
+  explicitly chosen `1.0.2` for the next set. Uploads, submissions and new
+  features do not change it. When the owner names a new Version,
+  `npm version <x.y.z> --no-git-tag-version` moves `package.json` with it.
+
+Write it exactly like that: no `v`, and a space before the bracket. A tag is
+an exception: one complete set uses its highest number without a space, such
+as `1.0.2(15)`, and its message identifies all three copies. Earlier tags stay
+unchanged. Every record naming a build uses the same version form, including
+notes, test records, commit subjects and issue comments. Records written
+before #127 stay as written. Configuration and tests must derive the native
+numbers and Settings lines from the same formal base and selected role.
 
 Worktrees that start from the same base can pick the same Beta. Before naming
 one, read `app-version.ts` on `main` and in each worktree (`git worktree list`)

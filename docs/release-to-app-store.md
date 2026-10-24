@@ -1,330 +1,72 @@
 # Release OpenReader to the App Store
 
-Use this guide to build a version for TestFlight or App Review, upload it, tag it,
-and fill in App Store Connect. For signing and provisioning in general, see
-[install-on-iphone.md](install-on-iphone.md).
+## Readiness gate
 
-## Rules
+**Uploads are blocked:** #324's three-copy build configuration, native purchase
+exclusion and build procedure are not yet implemented or verified. Complete
+that migration before archiving. The superseded pair recipe is historical
+evidence in ADR 0083, not a fallback.
 
-The owner set these.
+## Prepare and upload
 
-- **Build only from a commit on `main`.**
-  - The working tree must be clean, and HEAD must equal `origin/main`.
-  - Start every build from `npx expo prebuild --platform ios --clean`, never from an `ios/` left over from earlier work.
-- **Every upload is a pair** from one commit (ADR 0083, #310).
-  - The odd Build Number is the build without Debug Mode, for testers and App Review. The even number after it is the same code with Debug Mode (ADR 0054), for the owner's phone: 1.0.0 (9) and 1.0.0 (10)-debug.
-  - Upload the odd one first. The even one is then both the higher number and the newer upload, so TestFlight keeps the owner's phone on the build with Debug Mode.
-  - The build with Debug Mode goes to the internal group `owner` only. Never add it to `public` and never submit it for review; its "What to Test" says so. Only the owner adds a build to `public` or submits one.
-- **The version line.** `APP_VERSION` in `app-version.ts` is
-  `x.y.z (n)-betaN`: the Version, Build Number and Beta of CONTEXT.md (#127,
-  ADR 0070). `app.config.ts` reads `CFBundleShortVersionString` (`x.y.z`) and
-  `CFBundleVersion` (`n`) from it. `n` is odd: the build without Debug Mode.
-  A prebuild made with `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` writes `n + 1`,
-  and a build with Debug Mode shows `n + 1` in Settings (ADR 0083). The beta
-  changes before an upload already carry the number that upload will take:
-  `1.0.0 (9)-beta21` uploads as 1.0.0 (9) and 1.0.0 (10). Every upload pair,
-  TestFlight-only or submitted, is made from `APP_VERSION` with no Beta,
-  `1.0.0 (9)`.
-- **Version.** Only the owner changes `x.y.z`; an upload or a submission does
-  not. App Store Connect refuses uploads to a version that is already released
-  (ITMS-90186). If the version is live on the App Store, stop before archiving
-  and ask the owner for the next one, recommending the next patch.
-- **Build number.** Each upload pair takes the next two numbers, across all
-  versions, and a number is never reused. The first app change after a pair
-  raises `APP_VERSION`'s by two (MEMORY/app-change.md). A pair with no change
-  since the last one raises it itself. The commit that sets the pair's
-  `APP_VERSION` is the commit both builds are made from. Up to build 8 each
-  upload was a single build.
-- **Tags.**
-  - Every upload pair gets one annotated tag `X.Y.Z(N)`, named by its higher number, the build with Debug Mode, on the commit both were built from, such as `1.0.0(10)` for 1.0.0 (9) and 1.0.0 (10) (ADR 0083). Up to build 8 each upload had its own tag, such as `1.0.0(7)`. It is the form every record names a build in, `X.Y.Z (N)` (MEMORY/app-change.md), without the space, which git refuses in a tag name (owner's decision, 2026-10-10). Quote it in a shell.
-  - There is no `v` tag: the submitted build is named by its own `X.Y.Z(N)`.
-  - Push `main` and tags only after the owner agrees. The repository is public.
+1. **Fix the identities.** Read [ADR 0086](adr/0086-three-copies-for-three-recipients.md)
+   for roles, numbering and the owner's next planned set. Check
+   [confirmed uploads](versions.md) and live App Store Connect for used numbers
+   and the Version's state. Only the owner changes the Version; if it is
+   already released (ITMS-90186), stop and ask for the next one, recommending
+   the next patch.
+2. **Verify the source.** All three copies come from one clean commit on `main`,
+   with HEAD equal to `origin/main`. Run `npm ci`, the unit tests, TypeScript,
+   ESLint and configuration checks. Drop the Beta for uploads; change
+   `package.json`/lockfile only when the owner names a new Version.
+3. **Build and inspect each artifact.** Use the verified three-variant procedure
+   required by the readiness gate, starting each archive with
+   `npx expo prebuild --platform ios --clean`. Check for competing Xcode builds;
+   use separate DerivedData for concurrent work. Verify native Version/Build
+   Number, Settings suffix, Debug Mode and actual purchase-module inclusion
+   against the role before exporting. An unlocked flag alone does not prove
+   the purchase module is absent. For signing/setup, read
+   [App Store Connect reference](app-store-connect.md#identity-and-signing).
+4. **Upload formal → free test → Debug.** Verify internal `owner` delivers only
+   Debug by default before the first upload. Check each accepted upload in
+   Apple, its processing state, What to Test role label and group assignments.
+   Only the free copy may go to `public`; Debug stays internal. On any partial
+   failure, stop and do the record/receipt steps below, then ask the owner to
+   choose retry or rebuild. Keep identities and roles unchanged.
+5. **Tag the complete set.** Once all three are verified and processed, create
+   one annotated `X.Y.Z(N+2)` tag on their common commit, naming all three in
+   its message. Earlier tags stay unchanged. Ask before pushing `main` or tags.
 
-## Current state
+## Record and report — required after every attempt
 
-Checked 2026-10-23. When a fact here changes, change it here, and record what
-happened in that day's `notes/` file.
+6. **Update only confirmed uploads.** [versions.md](versions.md) contains only a
+   table: add a row after Apple confirms that upload, including actual role,
+   purchases, Debug Mode, distribution, processing state and source commit.
+   Until its first confirmed entry, leave the empty template unchanged.
+   Preserve confirmed rows even if later processing fails. Plans and failed
+   uploads belong in the owner receipt and run notes, not this ledger.
+7. **Send the owner an explicit table for every attempted copy**, successful or
+   failed, containing:
+   - exact `X.Y.Z (N)` and formal/free/Debug identity;
+   - purchase presence, Debug Mode and permitted channel;
+   - observed upload/processing state and TestFlight group/App Store review state;
+   - source commit and any incomplete-set or artifact-mismatch warning.
 
-- **Team and signing**
-  - Team `UPR29WR8FC`, a paid team. The owner is Account Holder/Admin.
-  - The Apple Development certificate is valid until 2027-09-20.
-  - Exporting with `-allowProvisioningUpdates` creates what distribution needs: `iOS Team Store Provisioning Profile: top.xujialiu.openreader`, which expires 2027-09-30, and a cloud-managed distribution certificate.
-- **App ID** `top.xujialiu.openreader` ("OpenReader"), with no capabilities. New App's Bundle ID menu also lists `top.xujialiu.openreader.systemvoices`. That other ID is unrelated: do not use it.
-- **App Store Connect record**
-  - "OpenReader: Read Aloud", Apple ID 6817809106, SKU `openreader`.
-  - iOS only, primary language English (U.S.), Full Access.
-  - "OpenReader" was already taken as an App Store name. The Home Screen name stays OpenReader, from `CFBundleDisplayName`.
-- **Builds**
-  - The last upload is the pair **1.0.1 (11)** and **1.0.1 (12)-debug**, from `737c4e3`, uploaded 2026-10-23. Build 11 is submitted as version 1.0.1 and is **Waiting for Review**, with manual release; build 12 has Debug Mode and is for the owner's phone only. The next pair is builds 13 and 14.
-  - 1.0.0 (9) and 1.0.0 (10)-debug, the first pair (ADR 0083), from `80b5bcf`, uploaded 2026-10-21, are on TestFlight only, not submitted.
-  - 1.0.0 (8), from `4227e51`, uploaded 2026-10-17 23:07, is on TestFlight only, not submitted.
-  - 1.0.0 (7), from `08ec380`, uploaded 2026-10-10 12:49, is the first build that sells the Unlock (ADR 0075), and the build **on sale**: submitted with both In-App Purchases on 2026-10-10, approved, and released by the owner on 2026-10-23. Version 1.0.0 is released, so App Store Connect takes no more 1.0.0 uploads. It predates the source-bound purchase records (#162), so it writes only the unscoped `purchase.json` (#316).
-  - 1.0.0 (6) was removed from review on 2026-10-10 (author's decision), before Apple had reviewed it, and never released. Version 1.0.0 then read Developer Rejected until build 7 replaced build 6.
-  - 1.0.0 (5) was removed from review when build 6 replaced it.
-  - 0.0.1 (1) tested the pipeline only. Never submit it.
-- **TestFlight**
-  - The TestFlight Beta's public link is https://testflight.apple.com/join/vjC8QejW ("Join the OpenReader: Read Aloud beta"). Anyone with it can join while it accepts testers.
-  - Two groups. The internal group `owner` gets every upload. The external group `public` owns the public link, and gets a build only when the owner adds the group to it.
-  - The owner's Apple account is a tester in both groups, and TestFlight offers him the newest build of either. That is why the build with Debug Mode takes the higher number of a pair (ADR 0083).
-  - Which build the link installs is not written here, because it changes without a commit. Read it from App Store Connect ("The README follows Apple's answers", below), never from memory: the 1.0.0 (5) this line named until 2026-10-10 was never in `public` (notes 2026-10-10 13:53).
-- **App Store Connect API** (#150): access was approved on 2026-10-10.
-  - One Team key, "OpenReader README badge", with the Developer role. Apple's role table gives that role read-only access to TestFlight builds and external groups; no role is read-only throughout. A key does not expire and its role cannot be changed: revoke it and generate another.
-  - On the Mac, `~/.secrets/openreader/app-store-connect-api.env` names the Key ID, the Issuer ID and the `.p8` beside it. Apple lets the `.p8` be downloaded once.
-  - On GitHub, `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_PRIVATE_KEY` are secrets of the `github-pages` environment, which only `main` may use.
-  - If the key leaks, revoke it under Users and Access → Integrations → App Store Connect API, generate another, and set the three secrets again.
-- **Tags**: `1.0.0(2)` to `1.0.0(8)`, one per build, `1.0.0(10)` for the pair 1.0.0 (9) and 1.0.0 (10)-debug, and `1.0.1(12)` for 1.0.1 (11) and 1.0.1 (12)-debug, all pushed. On 2026-10-10 they replaced `build-2` to `build-6` and `v1.0.0`, which were deleted locally and from GitHub.
-- **App Review Information**: the notes are the Guideline 2.1 answer, revised for 1.0.1 (3,987 characters). Their first line names 1.0.1 (11); a paragraph covers the In-App Purchases. The recording `OpenReader-Review-Demo.mp4` was attached to 1.0.0 (7) and predates the purchases; a new version copies the notes but not the attachment, so 1.0.1 has none, and the notes name it as attached to 1.0.0 (7). The review key is saved only in App Store Connect.
-- **Description**: since 2026-10-10 it says "Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase unlocks it for good. Reading, look-up and sync stay free." It ends "OpenReader is open source", without "free and".
-- **Store**: free, in 174 countries or regions (every one except China mainland; Apple adds future territories automatically), available on Apple silicon Macs (enabled by the owner and downloadable through the direct link), not on Apple Vision Pro. Mac availability is not a claim of verified Mac compatibility. Books, 4+, trader under the EU Digital Services Act (below). The privacy label is published (below). Three 1320 × 2868 screenshots: Library, Contents, Settings; the 6.5-inch set uses them.
-- **In-App Purchases** (ADR 0075, #148), both Non-Consumable, approved with 1.0.0 (7) and on sale. Each has its review screenshot (2026-10-09): the phone's alert from 1.0.0 (7)-beta11 on the simulator, the Trial's for the trial and the ended one, with Unlock for $4.99, for the Unlock. Neither has review notes.
-  - "30-day Trial": `top.xujialiu.openreader.trial`, Apple ID 6820864102, US$0.00. English (U.S.) display name "30-day Trial", description "Read aloud free for 30 days."
-  - "Unlock": `top.xujialiu.openreader.unlock`, Apple ID 6820865303, US$4.99 with the United States as base. Apple's generated prices hold elsewhere (Australia A$7.99, for example). English (U.S.) display name "Unlock Read Aloud", description "Read aloud and offline narration, for good."
-  - Both: 174 countries or regions (every one except China mainland), future territories added automatically, Family Sharing off, tax category matched to the app. An In-App Purchase's availability list starts with China mainland ticked, so untick it there. (notes 2026-10-09 14:20)
-- **Web pages**, from `site/` through `.github/workflows/pages.yml`:
-  - Support URL: https://xujialiu.github.io/OpenReader/
-  - Privacy Policy URL: https://xujialiu.github.io/OpenReader/privacy.html
+   End by naming the **one exact formal build eligible for App Store review**
+   and the free/Debug builds as **never for App Store review or release**.
+   If verification is incomplete, say no build is cleared for submission.
+   Completion requires the receipt and confirmed ledger rows to match the
+   artifacts and Apple's answers; “all uploaded” or “choose the latest” fails
+   that check. Uploading alone authorizes no public testing, submission or release.
 
-The uploads, submissions and App Review's answers are in the notes of their
-days: `NOTES_2026-09-30.md` (0.0.1 (1)), `NOTES_2026-10-03.md` (builds 3 and 4,
-store setup), `NOTES_2026-10-04.md` (Guideline 2.1, build 5) and
-`NOTES_2026-10-05.md` (build 6).
+## Publish only on the owner's explicit decision
 
-## Build and upload
-
-1. **Preflight**
-   - Run `git fetch` and `git status`. The tree is clean and `git rev-parse HEAD` equals `git rev-parse origin/main`.
-   - Run `npm ci`.
-   - Run the unit tests, `npx tsc --noEmit` and `npx eslint .`.
-   - Check for other heavy Xcode builds (`pgrep -fl xcodebuild`). A build in the same workspace at the same time needs its own `-derivedDataPath`, because two builds cannot share one DerivedData.
-2. **Version and build number**, as a commit that reaches `main` through the usual merge:
-   - Set `APP_VERSION` in `app-version.ts` to `X.Y.Z (N)`: drop the `-betaN`. `N` must be one more than the last uploaded build (the highest `X.Y.Z(N)` tag), and odd. It is already, unless nothing has changed since that pair; then raise it by two.
-   - Only if the owner named a new Version: `npm version <X.Y.Z> --no-git-tag-version`, so that `package.json` and the lockfile match.
-   - `npx vitest run test/app-config.test.ts` checks that `APP_VERSION`, `app.config.ts` and `package.json` agree, and that `N` is odd.
-
-Steps 3 to 5 make and upload the build without Debug Mode, `N`. Step 6 makes
-and uploads the build with Debug Mode, `N + 1`, from the same commit.
-
-3. **Prebuild:** `npx expo prebuild --platform ios --clean`, then check that `node_modules/expo-sqlite/ios/sqlite3.h` exists.
-4. **Archive**, without `EXPO_PUBLIC_OPENREADER_DEBUG_MODE` or `EXPO_PUBLIC_OPENREADER_UNLOCKED` anywhere: not on the command line, not in the shell, not in `.env*`, and not in `ios/.xcode.env.local`. The first would ship Debug Mode; the second would ship the app with no Trial and no Unlock (ADR 0075).
-
-   ```bash
-   xcodebuild -workspace ios/OpenReader.xcworkspace -scheme OpenReader \
-     -configuration Release -destination 'generic/platform=iOS' \
-     -archivePath "$HOME/Library/Developer/Xcode/Archives/$(date +%F)/OpenReader X.Y.Z (N).xcarchive" \
-     -allowProvisioningUpdates ENABLE_USER_SCRIPT_SANDBOXING=NO \
-     CLANG_MODULE_CACHE_PATH=/tmp/openreader-module-cache-release \
-     -quiet archive
-   ```
-
-   - Success is exit code 0. Expect a few minutes.
-   - The log's lines `error: the following command failed with exit code 0 but produced no further output` do not fail the build.
-   - Check the archive's `Products/Applications/OpenReader.app/Info.plist`:
-     - the version and build are the intended ones;
-     - `ITSAppUsesNonExemptEncryption` is false;
-     - `UIDeviceFamily` is `[1, 2]` (#319);
-     - `UIRequiresFullScreen` is false; the base orientations remain portrait and upside-down portrait, and `UISupportedInterfaceOrientations~ipad` includes both landscape orientations too;
-     - `NSMicrophoneUsageDescription` is present;
-     - `UIBackgroundModes` is `[audio]`.
-   - Check the JavaScript bundle the archive used:
-
-     ```bash
-     grep -o 'var DEBUG_MODE = [a-z]*;' \
-       ~/Library/Developer/Xcode/DerivedData/OpenReader-*/Build/Intermediates.noindex/ArchiveIntermediates/OpenReader/BuildProductsPath/Release-iphoneos/main.jsbundle
-     ```
-
-     It must print `false`. Take the newest file if there are several. In the same file,
-
-     ```bash
-     grep -o 'var PURCHASE_LOCK = [a-z]*;' \
-       ~/Library/Developer/Xcode/DerivedData/OpenReader-*/Build/Intermediates.noindex/ArchiveIntermediates/OpenReader/BuildProductsPath/Release-iphoneos/main.jsbundle
-     ```
-
-     must print `true`: the build sells read-aloud. `false` means `EXPO_PUBLIC_OPENREADER_UNLOCKED=1` reached the bundle; find where, and archive again (notes 2026-10-09 15:22).
-   - The archive is signed for development. The export re-signs it.
-5. **Export and upload.** `ExportOptions.plist`:
-
-   ```xml
-   <dict>
-     <key>method</key><string>app-store-connect</string>
-     <key>destination</key><string>upload</string>
-     <key>teamID</key><string>UPR29WR8FC</string>
-     <key>signingStyle</key><string>automatic</string>
-     <key>uploadSymbols</key><true/>
-     <key>manageAppVersionAndBuildNumber</key><false/>
-   </dict>
-   ```
-
-   ```bash
-   xcodebuild -exportArchive -archivePath "<archive>" \
-     -exportOptionsPlist ExportOptions.plist -exportPath "<out dir>" \
-     -allowProvisioningUpdates
-   ```
-
-   - It ends with `Upload succeeded` and `** EXPORT SUCCEEDED **`. Expect a few minutes, the upload included.
-   - Warnings about missing dSYMs are expected, and they fail nothing. They name React, ReactNativeDependencies, hermesvm, libavcodec, libavformat, libavutil and libswresample: prebuilt frameworks that ship no dSYMs.
-   - `App record with bundle identifier … not found` means no App Store Connect record uses this bundle ID.
-6. **The build with Debug Mode**, `N + 1`, from the same commit, after build `N`'s export has succeeded. Steps 3 to 5 again, with these differences:
-   - Prebuild with the switch on the command line: `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1 npx expo prebuild --platform ios --clean`. Expo writes `CFBundleVersion` into `Info.plist` at prebuild, so this is what gives the archive `N + 1`; nothing passed to `xcodebuild` can.
-   - Archive with `EXPO_PUBLIC_OPENREADER_DEBUG_MODE=1` on the `xcodebuild` command line, beside `ENABLE_USER_SCRIPT_SANDBOXING=NO`, and with the archive named `OpenReader X.Y.Z (N+1)-debug.xcarchive`. Still not in the shell, `.env*` or `ios/.xcode.env.local`, and still no `EXPO_PUBLIC_OPENREADER_UNLOCKED`.
-   - Check `Info.plist` as before, but with the build `N + 1`. In the bundle, `var DEBUG_MODE = true;` and `var PURCHASE_LOCK = true;`. Check the bundle straight after this archive: it replaces the first archive's in the same DerivedData folder.
-   - Export with the same `ExportOptions.plist`.
-7. **Processing.** App Store Connect → the app → TestFlight → Build Uploads shows Processing, then Complete, within about 10 to 25 minutes. Apple emails any ITMS problem. Then, on build `N + 1` (TestFlight → the build → Test Details), set "What to Test" to:
-
-   ```text
-   Debug Mode build for the owner's phone only. Never add it to an external group, and never submit it for review.
-   ```
-
-   The Team key can set it too: `PATCH /v1/betaBuildLocalizations/{id}` with `whatsNew`, the id from `GET /v1/builds/{build}/betaBuildLocalizations`. Sign that one token without a `scope`: with `scope` set to the `PATCH`, App Store Connect answers 405.
-
-8. **Tag**, on the pair's commit:
-   - `git tag -a "X.Y.Z(N+1)" -m "OpenReader X.Y.Z (N) and X.Y.Z (N+1)-debug, uploaded YYYY-MM-DD"`, such as `1.0.0(10)`.
-   - Ask the owner before `git push origin main --tags`.
-
-## The README follows Apple's answers
-
-README.md says which build people can install (MEMORY/documentation.md,
-"README.md").
-
-- **The TestFlight badge follows by itself** (#150). It names the build the TestFlight Beta's public link installs: the highest Build Number in the group `public` that App Store Connect lists as Testing. No commit names a build.
-  - `scripts/testflight-badge.mjs` asks the App Store Connect API. `.github/workflows/pages.yml` runs it every hour and publishes the answer as `testflight.json` on the project's site, and the badge reads that file through shields.io. An hourly run deploys only when the answer has changed.
-  - So the badge is up to an hour behind App Store Connect, and then as long again as shields.io and GitHub cache the image.
-  - To read the build now:
-
-    ```bash
-    node --env-file="$HOME/.secrets/openreader/app-store-connect-api.env" scripts/testflight-badge.mjs
-    ```
-
-  - To make the badge follow now: `gh workflow run pages.yml`.
-  - It reads `none` when no build in `public` is in testing, or the public link is off.
-  - If App Store Connect cannot be read, the run fails and GitHub mails the owner. The badge keeps the last build, and a push still publishes the site.
-  - GitHub stops a scheduled workflow after 60 days without activity in the repository. Turn it on again under Actions → Pages.
-- **When a Version goes live on the App Store:**
-  - Add Apple's "Download on the App Store" badge to README.md, linking to https://apps.apple.com/app/id6817809106. Add both addresses to `PAGES_MAY_NAME`.
-  - The TestFlight badge stays beside it (owner's decision, 2026-10-10).
-  - Run `bash scripts/readme-preview.sh` and give the owner `.docs/README.html` to look at before committing.
-
-## App Store Connect
-
-The decisions are the owner's. Items marked "draft" still need the owner's approval.
-
-**Editing a field from a script**: a value written by script (the native value
-setter plus `input`/`change` events) shows in the field but is not saved.
-Select the field's text by script and type over it; that saves, and keeps a
-secret such as the review key out of the agent's output (notes 2026-10-05,
-build 6). `document.execCommand('insertText', false, text)` on the selected
-field also saves. So a revision built in the page from the field's own value,
-with the review key left where it was, never passes through the agent (notes
-2026-10-10 13:05).
-
-- **App Privacy.** Published:
-  - **Other User Content**: App Functionality and Other Purposes;
-  - **User ID**: App Functionality;
-  - both linked to identity; neither used for tracking.
-
-  Apple's [definition of linked data](https://developer.apple.com/app-store/app-privacy-details/)
-  includes linkage by third-party partners through an account, not just an
-  OpenReader account. Requests authenticate with the user's own service key.
-  [OpenAI's data controls](https://platform.openai.com/docs/guides/your-data)
-  list 30-day abuse-monitoring retention for `/v1/audio/speech`; zero retention
-  is not the default for every account. [Fish Audio's policy](https://fish.audio/privacy/)
-  permits content retention; its [Customer Agreement §4.4](https://fish.audio/enterprise-terms/)
-  describes optional, eligible Zero Data Retention, not a universal guarantee.
-  Conversely, [Azure's real-time TTS policy](https://learn.microsoft.com/en-us/azure/foundry/responsible-ai/speech-service/text-to-speech/data-privacy-security)
-  says it does not store synthesis text or output. Provider behavior differs.
-  [Speechify's general policy](https://speechify.com/privacy/) covers stored user
-  content and account association, but an API-specific no-retention commitment
-  has not been verified. Do not apply website advertising/cookie provisions
-  to API calls without evidence. Account credentials justify the User ID
-  disclosure; text and credentials are treated as linked rather than claiming
-  anonymization. Content/model improvement permitted by provider terms is
-  disclosed under Other Purposes. The app does not send ad identifiers or
-  implement cross-app advertising tracking. The public policy distinguishes
-  developer behavior from independent provider behavior; future changes to
-  provider practices require reassessment.
-- **Age rating**, in the new questionnaire: answer None or No throughout, because the app supplies no content of its own. Expect 4+. The owner confirms.
-- **Pricing and Availability**
-  - Free.
-  - Every country or region except China mainland, which requires an ICP filing and falls under the deep-synthesis rules.
-  - To take the app off the store, Remove App From Sale is at the bottom of the page. It leaves every storefront within 24 hours; people who downloaded it keep it and its updates, and can download it again from their purchase history.
-  - Preserve the owner's enabled availability on Macs with Apple silicon. Mark compatibility as verified only after testing the uploaded app on Mac; iPad simulator results alone do not establish it. Apple Vision Pro remains off.
-- **EU Digital Services Act:** trader, since the app sells the Unlock (ADR 0075). Business → Compliance shows it Active for 27 countries or regions: verified, so it no longer holds back the EU storefronts. Opening its row opens the trader or non-trader form; close it with Cancel.
-- **Export compliance:** nothing to answer, because `ITSAppUsesNonExemptEncryption = NO` is in the build.
-- **Content rights:** the owner answers. The app shows documents the person adds themselves, and ships none.
-- **Category:** Books (saved).
-- **Copyright:** 2026 Xujia Liu.
-- **Release after approval:** manual.
-- **A new version** (the + beside iOS App) copies the description, keywords, URLs, copyright and review notes from the last one, but not the review attachment. Its What's New starts empty. Add for Review warns "Newer Build Available" while the pair's Debug Mode build is the newer one; Submit keeps the odd build chosen, and the Draft Submission's Submit for Review sends it.
-- **Screenshots**
-  - Keep the iPhone set and verify the current required slots in App Store Connect against Apple's [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/).
-  - With iPad support (#319), also provide a 13-inch iPad set: 2064 × 2752 or 2048 × 2732 portrait, or those dimensions reversed for landscape. At least one is required; use captures of the actual iPad layout, not enlarged phone screenshots.
-  - Set the status bar with `xcrun simctl status_bar <udid> override --time 9:41`.
-  - Show only public-domain books, for example from Project Gutenberg.
-  - Show no API key and no Provider's prices (ADR 0017).
-  - Suggested set: the Library, a page with the spoken word highlighted, the player, Word Lookup, Settings.
-- **Review notes and demo key**
-  - The owner keeps one review-only Fish Audio API key with a small prepaid balance, pasted only into App Store Connect.
-  - It stays from one version to the next (owner's decision, 2026-10-23): every submission is reviewed, and a reviewer without a working key cannot test reading aloud (Guideline 2.1). Before each submission the owner checks that the key still works and that its balance covers a review.
-  - It is never committed, logged or shown in a screenshot.
-  - Before submitting, check every step of the template below on a fresh install. A fresh install's Provider is OpenAI, so the reviewer must choose a Fish Audio voice.
-- **App Transport Security**: the build sets `NSAllowsArbitraryLoads` (ADR 0080), and Apple asks for a justification at review. The notes carry this sentence, or the answer to App Review's question does: `OpenReader connects to a speech server or WebDAV folder whose address the user enters, often a computer at home reached over plain HTTP by a local or VPN host name, so it allows HTTP connections (NSAllowsArbitraryLoads). The hosted speech services it supports are reached over HTTPS.`
-
-### Review notes (template)
-
-```text
-OpenReader reads EPUB documents aloud with a speech service the user chooses,
-using the user's own API key for that service. It has no account and no server
-of its own. Reading aloud is free for 30 days, then a one-time In-App Purchase.
-
-To test:
-1. In Safari, download a public-domain EPUB, for example
-   https://www.gutenberg.org/ebooks/1342.epub3.images (Pride and Prejudice).
-   In the Files app, share it to OpenReader (or long-press > Share > OpenReader).
-2. In OpenReader: Settings > Providers > Fish Audio. Keep "Enabled" off and paste
-   this test key into "API key": <KEY>. Then turn "Enabled" on and confirm
-   "Connection successful". Fields are locked while the provider is enabled.
-3. Open the book, open the voice list in the player, and choose a Fish Audio voice.
-4. Press Play. On the first use, choose Start Free Trial and complete Apple's
-   purchase sheet for the free 30-day Trial. Then, when the app asks before sending
-   the document's text to Fish Audio, choose Allow. Each word is highlighted as it
-   is spoken.
-
-Text goes only to the service the user chooses, and only after the user allows it.
-Word Lookup (long-press a word) asks the same way before it sends a selection to a
-dictionary or translation service.
-```
-
-The notes saved in App Store Connect are the longer Guideline 2.1 answer,
-close to the field's 4,000-character limit.
-
-### Store listing (draft, for the owner to approve)
-
-- **Subtitle** (30 max): `EPUBs in the voice you choose`
-- **Promotional text** (170 max): `Listen to your EPUB books in natural voices from the speech service you choose, with every word highlighted as it is spoken.`
-- **Keywords** (100 max; no other companies' names):
-  `text to speech,tts,epub,ebook,audiobook,read along,listen,voice,highlight,offline,kokoro,narrator`
-- **Description:**
-
-  ```text
-  OpenReader reads your EPUB books aloud and highlights each word as it is spoken,
-  so you can listen, read along, or both.
-
-  OpenReader uses your own account with a speech service. You need an API key
-  from one of these: OpenAI, Fish Audio, Microsoft Azure Speech, Speechify, or a
-  server you run yourself (OpenAI-compatible or Kokoro-FastAPI).
-
-  • Word by word: the page follows the voice and marks each word as it is spoken.
-  • Keeps reading with the screen locked, with controls on the Lock Screen.
-  • Download chapters to listen without a connection.
-  • Look up a word or translate a passage without leaving the page.
-  • Pick up where you left off on another device, through WebDAV storage you own.
-  • Your way: font, text size, margins, alignment, pauses between sentences and
-    paragraphs, light and dark.
-
-  No account, no subscription, no server of its own. Your documents stay on your
-  iPhone, and text goes only to the service you choose, after you allow it.
-  Free to download. Reading aloud is free for 30 days, then a one-time in-app purchase
-  unlocks it for good. Reading, look-up and sync stay free.
-  OpenReader is open source: github.com/xujialiu/OpenReader
-  ```
-
-- **Marketing URL:** `https://github.com/xujialiu/OpenReader`.
+- **Public testing:** use the free copy; TestFlight Beta App Review is separate
+  from App Store version review. Keep Debug internal-only.
+- **App Store submission:** read [metadata and review](app-store-connect.md#metadata-and-review)
+  before preparing fields, screenshots, the review key and fresh-install review
+  steps. Select the exact formal build from the confirmed ledger and recheck
+  the Draft Submission. A newer free/Debug build is not a substitute.
+- **Release:** preserve manual release; the owner decides when to publish.
+- **Public link or README badges:** read [badge diagnostics](testflight-badge.md)
+  when checking what testers can install or changing installation badges.

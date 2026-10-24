@@ -12,6 +12,17 @@ Developer Program License Agreement (DPLA) "last updated August 18, 2026". Code
 places in the sections before "As built" are at `7b039fd`, as they were read
 before the build; "As built" says what the code is now._
 
+## Scope amendment: three release copies (#324)
+
+[ADR 0086](0086-three-copies-for-three-recipients.md) keeps this Trial,
+Unlock and purchase-source model in the formal App Store copy, but replaces
+the same-purchasing-binary policy for testers and the author. The free test
+and Debug copies must exclude purchase capability, including the native
+module and the Debug purchase controls. The old one-binary environment
+argument and debug-store behavior below record the earlier choice, not an
+exception to the new policy. Actual module exclusion and three-copy
+verification are still pending; the formal copy's buyer protection remains.
+
 ## The products
 
 There are two Non-Consumables in App Store Connect, created on 2026-10-09

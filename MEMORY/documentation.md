@@ -104,8 +104,9 @@ what the app does and how to install it.
   or key page never goes on.
 - **The TestFlight badge** names the build the TestFlight Beta's public link
   installs. It reads that from the project's site, where a workflow publishes
-  what App Store Connect answers (#150). Never write a build into the README;
-  `docs/release-to-app-store.md` says how the badge follows.
+  what App Store Connect answers (#150). Never write a build into the README.
+  Read [the badge guide](../docs/testflight-badge.md) before checking the public
+  TestFlight build or changing installation badges.
 - **The owner sees it before it is committed.** Once a change is ready, run
   `bash scripts/readme-preview.sh`: it renders the README with GitHub's own
   renderer into `.docs/README.html` (ignored by git) and opens it. Give the

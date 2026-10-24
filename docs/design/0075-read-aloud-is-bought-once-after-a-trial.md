@@ -4,6 +4,13 @@
 [ADR 0075](../adr/0075-read-aloud-is-bought-once-after-a-trial.md). Issue #148;
 the author's decisions of 2026-10-09 are its plan comment.*
 
+[Design 0086](0086-three-copies-for-three-recipients.md) replaces the
+purchase experience in test copies and the author's own copy: both are to
+have all features without purchases. The store copy's Trial and Unlock stay
+as described here. The older shared-purchase choice and its alternatives
+below explain that earlier decision, rather than the current test-copy
+policy. The new behavior is agreed but not yet implemented.
+
 ## What was decided
 
 OpenReader stays a free download. Everything that turns a Document's text into

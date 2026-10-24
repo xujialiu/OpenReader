@@ -422,14 +422,15 @@ _Avoid_: permission, approval, opt-in, agreement, privacy prompt
 ### Paying for speech
 
 **Trial**:
-Thirty days in which the app speaks without the Unlock, begun by the owner the
-first time they ask it to speak. One per Apple Account; it never begins again.
+Thirty days in which the App Store copy speaks without the Unlock, begun by the
+owner the first time they ask it to speak. One per Apple Account; it never
+begins again.
 _Avoid_: free period, demo, evaluation, free version
 
 **Unlock**:
-The one-time purchase that keeps the app speaking for good: playing a Reading,
-and making or playing Offline Narration. Opening, Browsing, Word Lookup, Text
-Translation and sync are free without it. Narration saved during the Trial
+The one-time purchase that keeps the App Store copy speaking for good: playing
+a Reading, and making or playing Offline Narration. Opening, Browsing, Word
+Lookup, Text Translation and sync are free without it. Narration saved during the Trial
 stays on the device but does not play until it is bought.
 _Avoid_: pro, premium, full version, licence, subscription
 
@@ -446,31 +447,33 @@ The three numbers the App Store knows a release by, such as 1.0.0. Only the
 author changes it; uploads, submissions and new features leave it as it is.
 _Avoid_: release (for the number), marketing version, `v1.0.0`
 
+**Upload Set**:
+The three copies prepared together for one publication, in order: the App Store
+copy, the free TestFlight Beta, and the author's own copy with Debug Mode.
+_Avoid_: pair, three versions, release (for the set)
+
 **Build Number**:
 The number of one upload to App Store Connect, shown in brackets after the
-Version: 1.0.0 (5). Uploads go in pairs made from the same code: an odd number
-for testers and App Review, and the even number after it, the same build with
-Debug Mode, for the author's phone: 1.0.0 (9) and 1.0.0 (10)-debug. Numbers
-rise across all Versions, and no number is used twice. A Beta shows the number
-of the upload it leads to.
+Version: 1.0.0 (5). Numbers rise across all Versions, and no number is used
+twice. A Beta shows the number of the upload it leads to.
 _Avoid_: build (alone), upload number
 
 **Beta**:
-One app change since the last upload, counted from 1 again after each upload:
-1.0.0 (11)-beta3 is the third change since builds 9 and 10; with Debug Mode it
-shows 1.0.0 (12)-beta3-debug. An uploaded build has none, although TestFlight
-calls every upload a beta.
+One app change since the last complete Upload Set, counted from 1 again after
+that set and shown after the Build Number as `-betaN`. An uploaded build
+has none, although TestFlight calls every upload a beta.
 _Avoid_: beta build, pre-release; "TestFlight beta" names the TestFlight Beta
 
 **TestFlight Beta**:
-The test copies of OpenReader that anyone can install through the author's
-public TestFlight link. A newcomer gets the newest build the author has put in
-it and Apple has passed, which is not always the last upload.
+The free, full-featured test copies of OpenReader available through the
+author's public TestFlight link, without a Trial or Unlock. A newcomer gets
+the newest build the author has put in it and Apple has passed, which is not
+always the last upload.
 _Avoid_: external testing, public beta, beta (alone: that is a Beta)
 
 **Debug Mode**:
-What a build of the app installed on the author's own devices has and a released
-build never has: it keeps a Debug Log, and the line in Settings that names its
+What a copy of the app on the author's own devices has and the App Store copy
+never has: it keeps a Debug Log, and the line in Settings that names its
 Version ends in `-debug`, as in 1.0.0 (12)-beta1-debug.
 _Avoid_: debug build, diagnostic build, dev build, debug configuration, logging mode
 
