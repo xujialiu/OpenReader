@@ -35,8 +35,17 @@
  * - **The bottom row holds the Tap Lock and the Sleep Timer** (#325, #326,
  *   ADRs 0087 and 0088): the lock at the left, under Contents, the timer at
  *   the right, under the speed, each as wide as the speed's column, with
- *   nothing between them. A row of its own in both layouts, at the cost of
- *   about 50 points more of the page covered (owner's Q12).
+ *   nothing between them. A row of its own in both layouts (owner's Q12).
+ * - **The rows are drawn closer than their touch areas** (#325, owner's
+ *   Q16–Q18): the head row and the bottom row are as tall as their 44-point
+ *   touch areas and take only 32 points of the column, by a negative margin
+ *   on the row, and rows are 4 points apart, so row centres are 46 points
+ *   apart instead of 54. The bottom row sits on the home indicator's safe line
+ *   (`playerBottomPadding`). At the default size on an iPhone 16 Pro the open
+ *   player is 146 points tall, against 184 with fixed 44-point rows and 134
+ *   before the bottom row. A negative margin on the row and not `hitSlop`:
+ *   React Native never lets a `hitSlop` reach past the parent's bounds, and
+ *   the row is the parent.
  *
  * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
@@ -44,6 +53,7 @@
 import { Host, Popover, RNHostView } from '@expo/ui/swift-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MAX_STEPPER_RATE, MIN_STEPPER_RATE, snapRate, stepRate } from '../playback';
 
@@ -54,15 +64,20 @@ import type { SkipTarget } from './use-reading';
 import { LoadingSpinner } from './loading-spinner';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
-import { playerLayout } from './player-layout';
+import { playerBottomPadding, playerLayout } from './player-layout';
 import { LAYOUT_WIDTH } from './layout-widths';
 import type { SleepChoice } from './sleep-timer';
 import { SleepTimerButton } from './sleep-timer-button';
 import type { SleepTimerState } from './use-sleep-timer';
 
-/** The open player's padding above and below its rows: part of the height the Line Position is measured above (`onOpenHeight`). */
+/**
+ * The open player's padding above its rows: part of the height the Line
+ * Position is measured above (`onOpenHeight`). The padding below them is the
+ * device's (`playerBottomPadding`, #325): it puts the bottom row on the home
+ * indicator's safe line, 34 points above the bottom of an iPhone 16 Pro, where
+ * a fixed 28 points of padding left it at 50.
+ */
 const PLAYER_PADDING_TOP = 4;
-const PLAYER_PADDING_BOTTOM = 28;
 
 /**
  * The width of each end of the transport row: Contents at the left, the speed at
@@ -226,6 +241,9 @@ export function Player({
   const { width, height, fontScale } = useWindowDimensions();
   // The row must fit the Player, not the wider window around it (#319).
   const layout = playerLayout(Math.min(width, LAYOUT_WIDTH.player), fontScale);
+  const paddingBottom = playerBottomPadding(useSafeAreaInsets().bottom, layout.footHeight);
+  /** How far a head-row control's 44-point touch area reaches past its drawn row, above and below. */
+  const headReach = (layout.headEnd - layout.headHeight) / 2;
   const [speedOpen, setSpeedOpen] = useState(false);
   const [speedGeometry, setSpeedGeometry] = useState({ fontScale, width, height });
   // Close before children commit against a moved popover anchor, not in an
@@ -264,14 +282,14 @@ export function Player({
   // player whenever no note is showing: its padding and its hairline border.
   const measureControls = useCallback(
     (event: LayoutChangeEvent) => {
-      onOpenHeight(event.nativeEvent.layout.height + PLAYER_PADDING_TOP + PLAYER_PADDING_BOTTOM + 2 * StyleSheet.hairlineWidth);
+      onOpenHeight(event.nativeEvent.layout.height + PLAYER_PADDING_TOP + paddingBottom + 2 * StyleSheet.hairlineWidth);
     },
-    [onOpenHeight],
+    [onOpenHeight, paddingBottom],
   );
 
   const voice = <View style={styles.voiceSlot}>
     <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
-      style={({ pressed }) => [styles.voice, pressed && styles.pressed]}>
+      style={({ pressed }) => [styles.voice, { minHeight: layout.headEnd }, pressed && styles.pressed]}>
       <Text style={styles.voiceLabel}>{voiceLine(settings, voiceInUse)}</Text>
     </Pressable>
   </View>;
@@ -292,7 +310,7 @@ export function Player({
     // to the bottom of the screen (#312); it sits at the bottom of it and grows
     // upwards. `box-none`, so the part it does not cover is still the page.
     <View style={[styles.room, { top: barHeight }]} pointerEvents="box-none">
-    <View style={[styles.player, { borderColor: borders.line }]} onLayout={measure}>
+    <View style={[styles.player, { borderColor: borders.line, paddingBottom }]} onLayout={measure}>
       {/* Remounted on a text-size change (ADR 0061), and nothing else is. */}
       <View key={fontScale} style={styles.rows}>
       {/* The one part that may scroll, and only once the room above runs out:
@@ -308,7 +326,9 @@ export function Player({
           notes above them (onOpenHeight, #71). The box carries the gap the
           player puts between its rows. */}
       <View style={styles.controls} onLayout={measureControls}>
-        <View style={styles.head}>
+        {/* 44 points tall, for the touch areas, and drawn as 32: the row
+            reaches past its place above and below (#325). */}
+        <View style={[styles.head, { marginVertical: -headReach }]}>
           {/* As wide as the collapse arrow, so the name is centred on the whole
               player rather than on what the arrow leaves (#70), and holding A or
               M (#71). */}
@@ -321,7 +341,7 @@ export function Player({
             <Icon name="down" color={INK.quiet} size={20} />
           </Pressable>
         </View>
-        {layout.split ? voice : null}
+        {layout.split ? <View style={{ marginVertical: -headReach }}>{voice}</View> : null}
 
         <View style={styles.transport}>
           {!layout.split ? <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
@@ -344,7 +364,8 @@ export function Player({
           <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen}
             width={layout.endWidth} height={layout.rateHeight} />
         </View> : null}
-        <View style={styles.transport}>
+        {/* As tall as its touch areas, and drawn as `footHeight` (#325). */}
+        <View style={[styles.transport, { height: layout.rateHeight, marginVertical: -(layout.rateHeight - layout.footHeight) / 2 }]}>
           <TapLockButton on={tapLock} onPress={() => onTapLock(!tapLock)} width={layout.endWidth} height={layout.rateHeight} />
           <SleepTimerButton sleep={sleep} chapterOffered={chapterOffered} onSleep={onSleep}
             width={layout.endWidth} height={layout.rateHeight} />
@@ -608,7 +629,7 @@ const styles = StyleSheet.create({
   collapsed: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   // The player's own gap between its rows, carried by the box the rows are
   // measured in (onOpenHeight). Never shrunk: the notes give way instead.
-  controls: { flexShrink: 0, gap: 6 },
+  controls: { flexShrink: 0, gap: 4 },
   disabled: { opacity: 0.35 },
   footTap: { width: TRANSPORT_END, height: 44, alignItems: 'center', justifyContent: 'center' },
   head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
@@ -631,14 +652,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     flexShrink: 1,
-    paddingBottom: PLAYER_PADDING_BOTTOM,
     paddingHorizontal: 12,
     paddingTop: PLAYER_PADDING_TOP,
   },
   pressed: { opacity: 0.65 },
   rateTap: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   room: { bottom: 0, justifyContent: 'flex-end', left: 0, position: 'absolute', right: 0 },
-  rows: { flexShrink: 1, gap: 6 },
+  rows: { flexShrink: 1, gap: 4 },
   // A step above the voice's 14 beside it; at 13 it was the smallest thing on
   // the row of 24-point icons it ends.
   rateLabel: { ...TEXT_EMPHASIZED.subhead, color: INK.text, fontVariant: ['tabular-nums'] },
@@ -649,7 +669,7 @@ const styles = StyleSheet.create({
   // `hitSlop` making up the 44-point target.
   step: { alignItems: 'center', backgroundColor: INK.line, borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
   transport: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  voice: { alignItems: 'center', justifyContent: 'center', maxWidth: '100%', minHeight: 44, minWidth: 44 },
+  voice: { alignItems: 'center', justifyContent: 'center', maxWidth: '100%', minWidth: 44 },
   voiceLabel: { ...TEXT.subhead, color: INK.text, textAlign: 'center' },
   voiceSlot: { alignItems: 'center', flexShrink: 1, flexGrow: 1 },
 });

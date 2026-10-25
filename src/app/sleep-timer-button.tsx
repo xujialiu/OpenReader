@@ -47,7 +47,11 @@ export function SleepTimerButton({ sleep, chapterOffered, onSleep, width, height
   const said = sleep.choice === null ? 'Sleep Timer'
     : left !== null ? `Sleep Timer, ${left} left` : `Sleep Timer, ${sleepLabel(sleep.choice)}`;
   return (
-    <Host style={{ width, height }}>
+    // The home indicator's safe area is not this button's to keep clear of:
+    // the Player already puts the row on its line (#325). Kept, SwiftUI shrank
+    // the menu's label by the part of the host inside it, which drew the moon
+    // 11 points above the lock beside it (measured on an iPhone 16 Pro).
+    <Host style={{ width, height }} ignoreSafeArea="container">
       <Menu
         label={<RNHostView>
           <View style={styles.face} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

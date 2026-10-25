@@ -30,6 +30,7 @@ vi.mock('@expo/ui/swift-ui', () => {
 vi.mock('@expo/ui/swift-ui/modifiers', () => Object.fromEntries(
   ['menuOrder', 'accessibilityElement', 'accessibilityLabel', 'accessibilityAddTraits'].map((name) => [name, (value: unknown) => ({ name, value })]),
 ));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 34, left: 0 }) }));
 vi.mock('../../src/playback', () => import('../../src/playback/rate'));
 vi.mock('../../src/app/controls', () => ({
   INK: { text: 'ink' }, useBorders: () => ({ line: 'grey' }), useAccent: () => ({ following: 'orange', reading: 'blue' }),
@@ -58,8 +59,9 @@ async function player(overrides: Partial<PlayerProps> = {}) {
 
 /** The rows of controls, top to bottom, each as the names of what is in it. */
 function rows(root: ReactTestInstance): string[][] {
-  return root.findAll((node) => String(node.type) === 'View' && node.props.style?.flexDirection === 'row' && node.props.style?.justifyContent === 'space-between'
-    && node.parent?.props.style?.gap === 6)
+  const style = (node: ReactTestInstance) => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean));
+  return root.findAll((node) => String(node.type) === 'View' && style(node).flexDirection === 'row' && style(node).justifyContent === 'space-between'
+    && node.parent !== null && style(node.parent).gap === 4)
     .map((row) => row.children.filter((child): child is ReactTestInstance => typeof child !== 'string')
       .map((child) => String(child.props.accessibilityLabel ?? (typeof child.type === 'function' ? child.type.name : child.type))));
 }
@@ -78,6 +80,22 @@ describe('the bottom row', () => {
     expect(all.length).toBe(4);
     expect(all[2]).toEqual(['Contents', 'SpeedBubble']);
     expect(all.at(-1)).toEqual(['TapLockButton', 'SleepTimerButton']);
+  });
+
+  it('takes 32 points of the column, its two controls keeping 44-point touch areas (#325)', async () => {
+    const { root } = await player();
+    const style = (node: ReactTestInstance) => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean));
+    let row: ReactTestInstance | null = root.find((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Lock Taps');
+    while (row && String(row.type) !== 'View') row = row.parent;
+    expect(style(row!)).toMatchObject({ height: 44, marginVertical: -6 });
+    expect(root.findByType(SleepTimerButton).props).toMatchObject({ height: 44 });
+    // The head row the same way.
+    let head: ReactTestInstance | null = root.find((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Collapse the player');
+    while (head && String(head.type) !== 'View') head = head.parent;
+    expect(style(head!)).toMatchObject({ marginVertical: -6 });
+    // Its centre on the iPhone's safe line, 34 points above the bottom: 18 of padding and half of 32.
+    const panel = root.findAll((node) => String(node.type) === 'View' && style(node).maxWidth === 600)[0];
+    expect(style(panel).paddingBottom).toBe(18);
   });
 
   it('switches the Tap Lock with one press, and says what a press will do', async () => {

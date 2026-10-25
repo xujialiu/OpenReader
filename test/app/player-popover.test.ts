@@ -17,6 +17,7 @@ vi.mock('@expo/ui/swift-ui', () => {
   return { Host: host('Host'), RNHostView: host('RNHostView'),
     Popover: Object.assign(host('Popover'), { Trigger: host('Trigger'), Content: host('Content') }) };
 });
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 34, left: 0 }) }));
 vi.mock('../../src/playback', () => import('../../src/playback/rate'));
 vi.mock('../../src/app/controls', () => ({
   INK: {}, useBorders: () => ({ line: 'grey' }), useAccent: () => ({ following: 'orange' }),

@@ -397,8 +397,8 @@ _Avoid_: sheet height, detent, drawer size
 
 **Player**:
 The Reading's controls, floating over the bottom of the page in the reader: the
-voice, the transport, the contents and the speed. Collapsed, it is down to the
-Reading Button.
+voice, the transport, the contents, the speed, the Tap Lock and the Sleep
+Timer. Collapsed, it is down to the Reading Button.
 _Avoid_: control bar, toolbar, mini player, transport bar
 
 **Reading Button**:

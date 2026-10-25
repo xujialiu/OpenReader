@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { playerLayout } from '../../src/app/player-layout';
+import { playerBottomPadding, playerLayout } from '../../src/app/player-layout';
 it('keeps the compact transport at default size on a 402-point phone', () => {
   expect(playerLayout(402, 1)).toMatchObject({ split: false, endWidth: 58, rateHeight: 44 });
 });
@@ -27,4 +27,31 @@ it('shrinks back without a remembered large layout', () => {
   const before = playerLayout(402, 1);
   playerLayout(402, 3.571);
   expect(playerLayout(402, 1)).toEqual(before);
+});
+
+it('draws the head and bottom rows 32 points tall, so rows are 46 points apart around the 52-point Play (#325)', () => {
+  const layout = playerLayout(402, 1);
+  expect(layout).toMatchObject({ headHeight: 32, footHeight: 32, headEnd: 44, rateHeight: 44 });
+  // Centre to centre, with the 4-point gap between rows: 16 + 4 + 26.
+  expect(layout.headHeight / 2 + 4 + 52 / 2).toBe(46);
+  expect(52 / 2 + 4 + layout.footHeight / 2).toBe(46);
+  // Grows with the text, never under the touch areas' reach of 6 a side at the default size.
+  for (const scale of [1, 1.353, 2.143, 3.571]) {
+    const big = playerLayout(402, scale);
+    expect(big.headHeight).toBeGreaterThanOrEqual(26 * scale);
+    expect(big.footHeight).toBeGreaterThanOrEqual(24 * scale);
+    expect(big.headEnd).toBeGreaterThanOrEqual(big.headHeight);
+    expect(big.rateHeight).toBeGreaterThanOrEqual(big.footHeight);
+  }
+});
+it('puts the bottom row on the home indicator\'s safe line, and never under 28 points above the bottom (#325)', () => {
+  // An iPhone with a home indicator: 34. The row's centre is its padding plus half its height.
+  expect(playerBottomPadding(34, 32) + 16).toBe(34);
+  // An iPhone SE, a Mac (no inset) and an iPad (20): 28.
+  expect(playerBottomPadding(0, 32) + 16).toBe(28);
+  expect(playerBottomPadding(20, 32) + 16).toBe(28);
+  // A row grown with the text keeps at least 4 points under it.
+  expect(playerBottomPadding(34, 80)).toBe(4);
+  // The open Player at the default size on an iPhone 16 Pro: 4 + 32 + 4 + 52 + 4 + 32 + 18.
+  expect(4 + 32 + 4 + 52 + 4 + 32 + playerBottomPadding(34, 32)).toBe(146);
 });

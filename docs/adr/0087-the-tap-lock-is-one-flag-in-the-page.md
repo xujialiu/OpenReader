@@ -34,6 +34,41 @@ _The product argument is
   speed and, in the compact layout, as Contents. `lock` and `unlock` are new
   paths in the app's own icon set; the shut one is drawn in `useAccent().reading`.
   VoiceOver reads `Lock Taps` or `Unlock Taps`.
+- **The Player's geometry, after the owner found it too tall** (184 points
+  with the row, against 134 without, at the default text size on an iPhone 16
+  Pro). The head row and the bottom row keep 44-point touch areas but take
+  32 points of the column (`headHeight`, `footHeight` in `player-layout.ts`),
+  by a negative vertical margin on the row; rows are 4 points apart instead of
+  6, so row centres are 46 points apart around the 52-point Play instead of
+  54. The padding under the bottom row is `playerBottomPadding`: the row's
+  centre on the bottom safe-area inset, never less than 28 points above the
+  bottom. The open Player is 146 points there.
+
+## The geometry's facts
+
+- **A `hitSlop` cannot reach past the parent's bounds** (React Native's own
+  documentation for `Pressable`), and each control's parent is its row; a
+  negative margin on the row lets the row's frame keep the touch area while
+  Yoga counts only the drawn height.
+- **The screen's corner, measured.** The iPhone 16 Pro device type's
+  `framebufferMask` (Xcode 27's CoreSimulator profile), rendered and walked
+  from the bottom edge: the curve is 70.3 points tall, 12.3 points in at 25
+  points above the bottom and 19.3 at 17. The lock's drawn body starts 34
+  points from the left edge and ends 25 points above the bottom at the new
+  height, about 22 points clear, so the row's ends stay in the columns of
+  Contents and the speed. The iPhone 16 Pro Max and 17 Pro have the same
+  curve to a tenth of a point; the iPhone Air's is 76.8 points tall; a 16e's
+  53.0.
+- **Apple's own corner buttons on the same phone** (iOS 27.0, measured from
+  the accessibility tree): Safari's Back and Tabs are 48-point circles at
+  34 points from the sides with their lower edge 34 points above the bottom;
+  Files' tab bar buttons end 25 points above it. The bottom safe-area inset is
+  34.
+- **A SwiftUI host keeps the safe area.** With the bottom row on the inset's
+  line, the Sleep Timer's `Host` lies 22 points inside the home indicator's
+  safe area, and SwiftUI shrank the menu's label by that much (its frame read
+  58 by 22 in the accessibility tree), drawing the moon 11 points above the
+  lock. `ignoreSafeArea="container"` on that `Host` gave back 58 by 44.
 
 ## Facts it rests on
 

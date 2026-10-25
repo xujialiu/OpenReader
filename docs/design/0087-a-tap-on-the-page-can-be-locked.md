@@ -45,11 +45,16 @@ the same for the words, when the owner says so.
 
 ## What it costs
 
-- **The player is taller by one row while it is open**, about two or three
-  lines of the book, and the line being read is held that much higher. The
-  sleep timer shares the row ([decision 0088](0088-the-reading-can-pause-by-itself.md)),
-  so the two together cost one row. The owner chose the row at the bottom over
-  squeezing both buttons into the rows already there.
+- **The player is a little taller while it is open.** The sleep timer shares
+  the new row ([decision 0088](0088-the-reading-can-pause-by-itself.md)), and
+  the owner chose a row at the bottom over squeezing both buttons into the
+  rows already there. The first version simply added the row, and the player
+  grew by about a line and a half of the book; the owner found it covered too
+  much.
+  So the row sits low, on the line just above the phone's home bar, and all
+  three rows stand closer together, with the same room for a finger on each
+  button. On the owner's phone the open player is now taller than before the
+  row by about a third of a line of the book.
 - **With the player folded away, a locked tap does nothing and nothing says
   why.** The round button left on the page shows only whether the book is
   being read. To see the lock, the owner opens the player.
@@ -69,6 +74,13 @@ the same for the words, when the owner says so.
   lands.** The lock is said once, by the padlock. The round button says one
   thing, whether the book is being read, and a flash would be a second way of
   saying what the padlock already says.
+- **Moving the lock and the moon in from the screen's rounded corners** so that
+  the row could go lower. At the height chosen, the corner's curve is still
+  about twenty points from either of them, so moving them would only have
+  taken them out of line with the contents button and the speed above.
+- **The row lower still, into the band of the phone's home bar.** It would
+  save a few more points, but that band is where the phone's own swipe home
+  begins, and the phone's own buttons keep above it.
 - **Opening the lock again when the book is closed.** It would be safer for an
   owner who forgets it is on, but the padlock is in plain sight whenever the
   player is open, and a lock the owner has to close again every evening is one
