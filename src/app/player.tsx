@@ -32,20 +32,19 @@
  *   button that brings the page back to the reading without starting it (#53).
  *   Collapsed to the Reading Button, neither is shown, because collapsed the
  *   page only follows.
- * - **The bottom row holds the Tap Lock and the Sleep Timer** (#325, #326,
- *   ADRs 0087 and 0088): the lock at the left, under Contents, the timer at
- *   the right, under the speed, each as wide as the speed's column, with
- *   nothing between them. A row of its own in both layouts (owner's Q12).
- * - **The rows are drawn closer than their touch areas** (#325, owner's
- *   Q16–Q18): the head row and the bottom row are as tall as their 44-point
- *   touch areas and take only 32 points of the column, by a negative margin
- *   on the row, and rows are 4 points apart, so row centres are 46 points
- *   apart instead of 54. The bottom row sits on the home indicator's safe line
- *   (`playerBottomPadding`). At the default size on an iPhone 16 Pro the open
- *   player is 146 points tall, against 184 with fixed 44-point rows and 134
- *   before the bottom row. A negative margin on the row and not `hitSlop`:
- *   React Native never lets a `hitSlop` reach past the parent's bounds, and
- *   the row is the parent.
+ * - **It is a card that floats clear of the home bar** (#325, #326, after the
+ *   owner's reference, Speechify): `CARD_MARGIN` in from the sides, its bottom
+ *   edge `playerBottomGap` above the bottom of the window, rounded on all four
+ *   corners, so nothing of it lies over the phone's home bar and no control's
+ *   touch area reaches it. Two rows at the default size: the head, with the
+ *   Tap Lock beside A or M and the Sleep Timer beside the collapse arrow, and
+ *   the transport. The head row is drawn 32 points tall and its controls keep
+ *   44-point touch areas by a negative margin on the row (React Native never
+ *   lets a `hitSlop` reach past the parent's bounds, and the row is the
+ *   parent). On an iPhone 16 Pro at the default size the card is 102 points
+ *   tall and stands 20 above the bottom: 122 points of the page, against 184
+ *   for the first version with a row of its own for the lock and the timer,
+ *   and 134 before either existed.
  *
  * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
@@ -64,20 +63,20 @@ import type { SkipTarget } from './use-reading';
 import { LoadingSpinner } from './loading-spinner';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
-import { playerBottomPadding, playerLayout } from './player-layout';
+import { CARD_PADDING, CARD_RADIUS_BOTTOM, CARD_RADIUS_TOP, cardWidth, playerBottomGap, playerLayout } from './player-layout';
 import { LAYOUT_WIDTH } from './layout-widths';
 import type { SleepChoice } from './sleep-timer';
 import { SleepTimerButton } from './sleep-timer-button';
 import type { SleepTimerState } from './use-sleep-timer';
 
 /**
- * The open player's padding above its rows: part of the height the Line
- * Position is measured above (`onOpenHeight`). The padding below them is the
- * device's (`playerBottomPadding`, #325): it puts the bottom row on the home
- * indicator's safe line, 34 points above the bottom of an iPhone 16 Pro, where
- * a fixed 28 points of padding left it at 50.
+ * The open player's padding above and below its rows: part of the height the
+ * Line Position is measured above (`onOpenHeight`), with the gap under the
+ * card (`playerBottomGap`, #325). Close to equal, so the head row's marks sit
+ * as far from the card's top as Play does from its bottom.
  */
-const PLAYER_PADDING_TOP = 4;
+const PLAYER_PADDING_TOP = 6;
+const PLAYER_PADDING_BOTTOM = CARD_PADDING;
 
 /**
  * The width of each end of the transport row: Contents at the left, the speed at
@@ -86,10 +85,11 @@ const PLAYER_PADDING_TOP = 4;
  * One number for both, because the row spreads its buttons with equal gaps, and
  * Play is in its middle only while the two ends are as wide as each other. With
  * Contents at 44 and the speed at 58, Play sat 7 points left of the player's
- * centre, under a Voice name that is centred (#70). 58 is the speed's: `1.00×`
- * needs it.
+ * centre, under a Voice name that is centred (#70). 58 was the speed's; 52
+ * since the Player became a card (#325), which still holds `1.00×` and lets the
+ * row fit the 350 points inside the card on a 390-point phone.
  */
-const TRANSPORT_END = 58;
+const TRANSPORT_END = 52;
 
 /**
  * How a held stepper button repeats, and why it is not simply "fast".
@@ -239,9 +239,10 @@ export function Player({
   onSleep,
 }: PlayerProps) {
   const { width, height, fontScale } = useWindowDimensions();
-  // The row must fit the Player, not the wider window around it (#319).
-  const layout = playerLayout(Math.min(width, LAYOUT_WIDTH.player), fontScale);
-  const paddingBottom = playerBottomPadding(useSafeAreaInsets().bottom, layout.footHeight);
+  // The row must fit the card, not the wider window around it (#319, #325).
+  const card = cardWidth(width, LAYOUT_WIDTH.player);
+  const layout = playerLayout(card, fontScale);
+  const bottomGap = playerBottomGap(useSafeAreaInsets().bottom);
   /** How far a head-row control's 44-point touch area reaches past its drawn row, above and below. */
   const headReach = (layout.headEnd - layout.headHeight) / 2;
   const [speedOpen, setSpeedOpen] = useState(false);
@@ -274,22 +275,27 @@ export function Player({
   const borders = useBorders();
   const measure = useCallback(
     (event: LayoutChangeEvent) => {
-      onHeight(event.nativeEvent.layout.height);
+      // The band of the page it takes, the gap under the floating card
+      // included: no sentence is read in that strip either.
+      onHeight(event.nativeEvent.layout.height + (collapsed && notes.length === 0 ? 0 : bottomGap));
     },
-    [onHeight],
+    [onHeight, collapsed, notes.length, bottomGap],
   );
   // The controls plus what the player puts around them, which is the whole open
   // player whenever no note is showing: its padding and its hairline border.
   const measureControls = useCallback(
     (event: LayoutChangeEvent) => {
-      onOpenHeight(event.nativeEvent.layout.height + PLAYER_PADDING_TOP + paddingBottom + 2 * StyleSheet.hairlineWidth);
+      onOpenHeight(event.nativeEvent.layout.height + PLAYER_PADDING_TOP + PLAYER_PADDING_BOTTOM + 2 * StyleSheet.hairlineWidth + bottomGap);
     },
-    [onOpenHeight, paddingBottom],
+    [onOpenHeight, bottomGap],
   );
 
   const voice = <View style={styles.voiceSlot}>
     <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
       style={({ pressed }) => [styles.voice, { minHeight: layout.headEnd }, pressed && styles.pressed]}>
+      {/* Wraps rather than being cut short (#101): between the head row's two
+          sides it has 158 points on a 390-point phone, and a longer name
+          makes the card a line taller. */}
       <Text style={styles.voiceLabel}>{voiceLine(settings, voiceInUse)}</Text>
     </Pressable>
   </View>;
@@ -310,7 +316,7 @@ export function Player({
     // to the bottom of the screen (#312); it sits at the bottom of it and grows
     // upwards. `box-none`, so the part it does not cover is still the page.
     <View style={[styles.room, { top: barHeight }]} pointerEvents="box-none">
-    <View style={[styles.player, { borderColor: borders.line, paddingBottom }]} onLayout={measure}>
+    <View style={[styles.player, { borderColor: borders.line, width: card, marginBottom: bottomGap }]} onLayout={measure}>
       {/* Remounted on a text-size change (ADR 0061), and nothing else is. */}
       <View key={fontScale} style={styles.rows}>
       {/* The one part that may scroll, and only once the room above runs out:
@@ -329,17 +335,27 @@ export function Player({
         {/* 44 points tall, for the touch areas, and drawn as 32: the row
             reaches past its place above and below (#325). */}
         <View style={[styles.head, { marginVertical: -headReach }]}>
-          {/* As wide as the collapse arrow, so the name is centred on the whole
-              player rather than on what the arrow leaves (#70), and holding A or
-              M (#71). */}
-          <FollowingMark following={following} onReturn={onReturn} size={layout.headEnd} />
+          {/* A or M with the Tap Lock, and opposite them the Sleep Timer with
+              the collapse arrow: two sides of one width, so the name is centred
+              on the whole player (#70, #325). */}
+          <View style={styles.headSide}>
+            <FollowingMark following={following} onReturn={onReturn} size={layout.headEnd} />
+            {/* As wide as the Sleep Timer while the name sits between them;
+                its icon alone once the name has a row of its own, so both
+                sides fit at the largest text size on an iPhone SE. */}
+            <TapLockButton on={tapLock} onPress={() => onTapLock(!tapLock)} width={layout.split ? 44 : layout.sideWidth} height={layout.headEnd} />
+          </View>
           {/* Only the name opens the Voices: its button hugs the text, and a tap
               beside it lands on this plain box and does nothing. */}
           {!layout.split ? voice : null}
-          <Pressable accessibilityRole="button" accessibilityLabel="Collapse the player"
-            onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, { width: layout.headEnd, height: layout.headEnd }, pressed && styles.pressed]}>
-            <Icon name="down" color={INK.quiet} size={20} />
-          </Pressable>
+          <View style={styles.headSide}>
+            <SleepTimerButton sleep={sleep} chapterOffered={chapterOffered} onSleep={onSleep}
+              width={layout.sideWidth} height={layout.headEnd} />
+            <Pressable accessibilityRole="button" accessibilityLabel="Collapse the player"
+              onPress={() => onCollapsed(true)} style={({ pressed }) => [styles.chevronTap, { width: layout.headEnd, height: layout.headEnd }, pressed && styles.pressed]}>
+              <Icon name="down" color={INK.quiet} size={20} />
+            </Pressable>
+          </View>
         </View>
         {layout.split ? <View style={{ marginVertical: -headReach }}>{voice}</View> : null}
 
@@ -364,12 +380,6 @@ export function Player({
           <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen}
             width={layout.endWidth} height={layout.rateHeight} />
         </View> : null}
-        {/* As tall as its touch areas, and drawn as `footHeight` (#325). */}
-        <View style={[styles.transport, { height: layout.rateHeight, marginVertical: -(layout.rateHeight - layout.footHeight) / 2 }]}>
-          <TapLockButton on={tapLock} onPress={() => onTapLock(!tapLock)} width={layout.endWidth} height={layout.rateHeight} />
-          <SleepTimerButton sleep={sleep} chapterOffered={chapterOffered} onSleep={onSleep}
-            width={layout.endWidth} height={layout.rateHeight} />
-        </View>
       </View>
       </View>
       {/* A tap outside the phone's bubble closes it, and without this it also
@@ -626,13 +636,14 @@ const styles = StyleSheet.create({
   // taller, and every point of it is a point of the page it covers.
   buttonPrimary: { backgroundColor: INK.text, width: 52, minWidth: 52, height: 52, borderRadius: 26 },
   chevronTap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headSide: { alignItems: 'center', flexDirection: 'row', flexShrink: 0 },
   collapsed: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   // The player's own gap between its rows, carried by the box the rows are
   // measured in (onOpenHeight). Never shrunk: the notes give way instead.
   controls: { flexShrink: 0, gap: 4 },
   disabled: { opacity: 0.35 },
   footTap: { width: TRANSPORT_END, height: 44, alignItems: 'center', justifyContent: 'center' },
-  head: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
+  head: { alignItems: 'center', flexDirection: 'row', gap: 4, justifyContent: 'space-between' },
   // The box A or M sits in: as wide as the collapse arrow opposite (#70), and as
   // tall, so M's whole box is its 44-point target.
   headEnd: { alignItems: 'center', justifyContent: 'center' },
@@ -645,14 +656,21 @@ const styles = StyleSheet.create({
   // A scroll view grows by default; this one only ever gives way.
   notes: { flexGrow: 0, flexShrink: 1 },
   notesBody: { gap: 6 },
+  // A card, centred, as wide as `cardWidth` and lifted by `playerBottomGap`
+  // (#325). Its corners follow the phone's: `continuous`, as the system draws
+  // its own, and larger at the bottom, near the screen's own curve.
   player: {
-    alignSelf: 'center', width: '100%', maxWidth: LAYOUT_WIDTH.player,
+    alignSelf: 'center',
     backgroundColor: INK.panel,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderBottomLeftRadius: CARD_RADIUS_BOTTOM,
+    borderBottomRightRadius: CARD_RADIUS_BOTTOM,
+    borderCurve: 'continuous',
+    borderTopLeftRadius: CARD_RADIUS_TOP,
+    borderTopRightRadius: CARD_RADIUS_TOP,
     borderWidth: StyleSheet.hairlineWidth,
     flexShrink: 1,
-    paddingHorizontal: 12,
+    paddingBottom: PLAYER_PADDING_BOTTOM,
+    paddingHorizontal: CARD_PADDING,
     paddingTop: PLAYER_PADDING_TOP,
   },
   pressed: { opacity: 0.65 },

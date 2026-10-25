@@ -496,8 +496,8 @@ describe('Play is in the middle of the player (#115)', () => {
     pin(player, "transport: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }", 'player.tsx');
     pin(player, 'footTap: { width: TRANSPORT_END,', 'player.tsx');
     pin(player, '{ width: layout.endWidth }', 'player.tsx');
-    // The speed in either layout, and the two ends of the bottom row under it (#325, #326).
-    expect(player.match(/width=\{layout.endWidth\} height=\{layout.rateHeight\}/g)).toHaveLength(4);
+    // The speed, in either layout.
+    expect(player.match(/width=\{layout.endWidth\} height=\{layout.rateHeight\}/g)).toHaveLength(2);
     pin(player, '<Host style={{ width, height }}>', 'player.tsx');
 
     const row = within(player, '<View style={styles.transport}>', '<SpeedBubble');

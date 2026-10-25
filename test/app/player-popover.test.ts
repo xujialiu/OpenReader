@@ -66,8 +66,9 @@ describe('the capped Player measures its own width (#319)', () => {
     expect(transportLabels()).toContain('Contents'); // unchanged 390-pt phone
     await p.update({ width: 1200, fontScale: 3.571 });
     expect(transportLabels()).not.toContain('Contents'); // 600-pt cap, not 1200
+    // The card: 600 points, not the window less its margins (#325).
     expect(p.root().findAll((node) => String(node.type) === 'View').some((node) =>
-      [node.props.style].flat().some((style) => style?.maxWidth === 600 && style.width === '100%' && style.alignSelf === 'center'))).toBe(true);
+      [node.props.style].flat().some((style) => style?.width === 600))).toBe(true);
     await p.update({ width: 390, fontScale: 1 });
     expect(transportLabels()).toContain('Contents');
     await p.unmount();

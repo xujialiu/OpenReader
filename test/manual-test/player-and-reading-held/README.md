@@ -31,7 +31,7 @@ that names the script or probe you are about to run.
   (`fake-kokoro.cjs`) and `Tap86Probe.swift` for the real touches.
 
 - [tap-lock-and-sleep-timer.md](tap-lock-and-sleep-timer.md) (#325, #326):
-  the Player's bottom row: taps under the Tap Lock, and the Sleep Timer's
+  the Player's Tap Lock and Sleep Timer: taps under the lock, and the timer's
   native menu, length and chapter stops, also with the device locked.
   `SleepMenuProbe.swift`.
 

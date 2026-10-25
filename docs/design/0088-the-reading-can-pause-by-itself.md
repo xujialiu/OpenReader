@@ -9,8 +9,9 @@ it to stop._
 
 ## What changed
 
-The player's new bottom row ([decision 0087](0087-a-tap-on-the-page-can-be-locked.md))
-has a moon at its right end, under the speed. Tapping it opens the phone's own
+The player's top row has a moon, just left of the arrow that folds the player
+away, opposite the tap lock's padlock ([decision 0087](0087-a-tap-on-the-page-can-be-locked.md)).
+Tapping it opens the phone's own
 small menu, as Theme and Alignment do ([decision 0035](0035-a-short-choice-opens-where-you-tapped.md)):
 
 - When Current Chapter Ends
@@ -65,7 +66,7 @@ looking at the screen.
 
 ## What it costs
 
-- **The extra row**, shared with the tap lock and described there.
+- **Room in the player**, shared with the tap lock and described there.
 - **A chapter is only as exact as the book's contents.** Where a book's
   contents names only its volumes, the timer ends a volume. The contents and
   the timer always agree, because they use the same answer.

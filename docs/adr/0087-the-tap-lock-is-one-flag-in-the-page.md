@@ -29,20 +29,46 @@ _The product argument is
   touch listeners and the selection listeners of Word Lookup are untouched, so
   a drag still browses and a long press still selects. The collapsed Player's
   `lockPage()` (no finger scroll) is a different thing and is unchanged.
-- **The button** is in the Player's new bottom row (`player.tsx`), at the left,
-  `layout.endWidth` wide and `layout.rateHeight` tall, the same column as the
-  speed and, in the compact layout, as Contents. `lock` and `unlock` are new
-  paths in the app's own icon set; the shut one is drawn in `useAccent().reading`.
+- **The button** is in the Player's head row (`player.tsx`), right of A or M,
+  `layout.sideWidth` wide (48 at the default size, the Sleep Timer's width, so
+  the Voice name between the two sides stays centred; 44 once the name has a
+  row of its own) and `layout.headEnd` tall. `lock` and `unlock` are new paths
+  in the app's own icon set; the shut one is drawn in `useAccent().reading`.
   VoiceOver reads `Lock Taps` or `Unlock Taps`.
-- **The Player's geometry, after the owner found it too tall** (184 points
-  with the row, against 134 without, at the default text size on an iPhone 16
-  Pro). The head row and the bottom row keep 44-point touch areas but take
-  32 points of the column (`headHeight`, `footHeight` in `player-layout.ts`),
-  by a negative vertical margin on the row; rows are 4 points apart instead of
-  6, so row centres are 46 points apart around the 52-point Play instead of
-  54. The padding under the bottom row is `playerBottomPadding`: the row's
-  centre on the bottom safe-area inset, never less than 28 points above the
-  bottom. The open Player is 146 points there.
+
+## The Player became a card
+
+The first version put the lock and the Sleep Timer in a row of their own
+under the transport, and the open Player grew from 134 to 184 points at the
+default text size on an iPhone 16 Pro. A second version drew the rows closer
+and put that row on the bottom safe-area line (146 points); the owner then
+pointed at Speechify's player, a card lifted clear of the home bar, so that
+no control lies near it. What was done (`player-layout.ts`, `player.tsx`):
+
+- **A card.** `cardWidth`: the window less `CARD_MARGIN` (12) a side, capped
+  at `LAYOUT_WIDTH.player` (600), centred. `CARD_PADDING` 8 at the sides, 6 on
+  top and 8 under the transport. Corners 24 at the top and 36 at the bottom,
+  `borderCurve: 'continuous'`; a hairline border all round.
+- **Lifted by `playerBottomGap`**: 20 points where the window has a bottom
+  safe-area inset (a home bar), `CARD_MARGIN` where it has none. The band
+  `onHeight` reports, and the open height the Line Position is measured above
+  (`onOpenHeight`), include the gap: no sentence is held in it.
+- **Two rows.** The head: A or M and the Tap Lock, the Voice name, the Sleep
+  Timer and the collapse arrow, the two sides in `headSide` boxes of one
+  width. The transport as before, its ends 52 points rather than 58 so it fits
+  the 350 points inside the card on a 390-point phone (2 × 52 + 4 × 44 + 52
+  plus six gaps of 3). In the split layout the name, and Contents with the
+  speed, take rows of their own as before; the head keeps its four controls.
+- **The head row keeps 44-point touch areas and takes 32 points** of the
+  column (`headHeight`), by a negative vertical margin on the row, with 4
+  points between rows: row centres 46 apart around the 52-point Play.
+- **The countdown is drawn at most 1.5 times larger** (`SIDE_TEXT_SCALE`,
+  `maxFontSizeMultiplier`), so `sideWidth` stops growing there and both sides
+  of the head row fit at the largest text size on a 375-point phone.
+- **The Voice name still wraps** rather than being cut short (#101); between
+  the sides it has 158 points on a 390-point phone.
+- At the default size on an iPhone 16 Pro the card is 102 points tall and
+  stands 20 above the bottom: 122 points of the page.
 
 ## The geometry's facts
 
@@ -50,25 +76,27 @@ _The product argument is
   documentation for `Pressable`), and each control's parent is its row; a
   negative margin on the row lets the row's frame keep the touch area while
   Yoga counts only the drawn height.
-- **The screen's corner, measured.** The iPhone 16 Pro device type's
-  `framebufferMask` (Xcode 27's CoreSimulator profile), rendered and walked
-  from the bottom edge: the curve is 70.3 points tall, 12.3 points in at 25
-  points above the bottom and 19.3 at 17. The lock's drawn body starts 34
-  points from the left edge and ends 25 points above the bottom at the new
-  height, about 22 points clear, so the row's ends stay in the columns of
-  Contents and the speed. The iPhone 16 Pro Max and 17 Pro have the same
-  curve to a tenth of a point; the iPhone Air's is 76.8 points tall; a 16e's
-  53.0.
+- **The screen's corner, measured**, when the bottom row was still there. The
+  iPhone 16 Pro device type's `framebufferMask` (Xcode 27's CoreSimulator
+  profile), rendered and walked from the bottom edge: the curve is 70.3
+  points tall, 12.3 points in at 25 points above the bottom and 19.3 at 17.
+  The iPhone 16 Pro Max and 17 Pro have the same curve to a tenth of a point;
+  the iPhone Air's is 76.8 points tall; a 16e's 53.0.
 - **Apple's own corner buttons on the same phone** (iOS 27.0, measured from
   the accessibility tree): Safari's Back and Tabs are 48-point circles at
   34 points from the sides with their lower edge 34 points above the bottom;
   Files' tab bar buttons end 25 points above it. The bottom safe-area inset is
   34.
+- **Speechify's card, measured from the owner's screenshot** (1206 pixels
+  wide, an iPhone at 3×): 20 points in from each side, 115 points tall, its
+  top corners about 22 points round and its bottom ones following the
+  screen's own curve, about 40 points tall.
 - **A SwiftUI host keeps the safe area.** With the bottom row on the inset's
-  line, the Sleep Timer's `Host` lies 22 points inside the home indicator's
+  line, the Sleep Timer's `Host` lay 22 points inside the home indicator's
   safe area, and SwiftUI shrank the menu's label by that much (its frame read
   58 by 22 in the accessibility tree), drawing the moon 11 points above the
-  lock. `ignoreSafeArea="container"` on that `Host` gave back 58 by 44.
+  lock. `ignoreSafeArea="container"` on that `Host` gave back 58 by 44; it is
+  kept, though the card no longer reaches that area.
 
 ## Facts it rests on
 

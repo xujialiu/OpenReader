@@ -8,8 +8,9 @@ import { DEFAULT_SETTINGS } from '../../src/app/settings';
 import type { SleepTimerState } from '../../src/app/use-sleep-timer';
 
 /**
- * The Player's bottom row (#325, #326): the Tap Lock at its left end and the
- * Sleep Timer at its right, in both layouts; and the Sleep Timer's menu.
+ * The Player as a card (#325, #326): the Tap Lock beside A or M and the Sleep
+ * Timer beside the collapse arrow in its head row, in both layouts; the card's
+ * place; and the Sleep Timer's menu.
  */
 
 const dimensions = vi.hoisted(() => ({ width: 402, height: 874, fontScale: 1, scale: 3 }));
@@ -57,45 +58,50 @@ async function player(overrides: Partial<PlayerProps> = {}) {
   return { root: view.root, props };
 }
 
-/** The rows of controls, top to bottom, each as the names of what is in it. */
+const style = (node: ReactTestInstance) => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean));
+/** What a control is called, by its label or its component. */
+const name = (node: ReactTestInstance) => String(node.props.accessibilityLabel ?? (typeof node.type === 'function' ? node.type.name : node.type));
+
+/** The rows of controls, top to bottom, each as the names of what is in it, a side of the head row flattened. */
 function rows(root: ReactTestInstance): string[][] {
-  const style = (node: ReactTestInstance) => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean));
   return root.findAll((node) => String(node.type) === 'View' && style(node).flexDirection === 'row' && style(node).justifyContent === 'space-between'
     && node.parent !== null && style(node.parent).gap === 4)
     .map((row) => row.children.filter((child): child is ReactTestInstance => typeof child !== 'string')
-      .map((child) => String(child.props.accessibilityLabel ?? (typeof child.type === 'function' ? child.type.name : child.type))));
+      .flatMap((child) => (String(child.type) === 'View' && style(child).flexDirection === 'row'
+        ? child.children.filter((inner): inner is ReactTestInstance => typeof inner !== 'string').map(name) : [name(child)])));
 }
 
-describe('the bottom row', () => {
-  it('is the last row, the lock at its left and the Sleep Timer at its right', async () => {
+describe('the head row (#325, after Speechify\'s card)', () => {
+  it('holds the Tap Lock beside A and the Sleep Timer beside the collapse arrow, over the transport, in two rows', async () => {
     const { root } = await player();
-    expect(rows(root).at(-1)).toEqual(['TapLockButton', 'SleepTimerButton']);
+    const all = rows(root);
+    expect(all.length).toBe(2);
+    expect(all[0].map((one) => one.replace(/^Following the reading$/, 'A'))).toEqual(['FollowingMark', 'TapLockButton', 'View', 'SleepTimerButton', 'Collapse the player']);
+    expect(all[1][0]).toBe('Contents');
   });
 
-  it('is the last row in the layout that gives Contents and the speed a row of their own', async () => {
+  it('keeps them in the head row when the Voice name and Contents and the speed get rows of their own', async () => {
     Object.assign(dimensions, { width: 390, fontScale: 3 });
     const { root } = await player();
     const all = rows(root);
-    // The head, the transport, Contents and the speed, then this one.
-    expect(all.length).toBe(4);
-    expect(all[2]).toEqual(['Contents', 'SpeedBubble']);
-    expect(all.at(-1)).toEqual(['TapLockButton', 'SleepTimerButton']);
+    expect(all[0]).toEqual(['FollowingMark', 'TapLockButton', 'SleepTimerButton', 'Collapse the player']);
+    expect(all.at(-1)).toEqual(['Contents', 'SpeedBubble']);
+    // The Tap Lock is its icon's width there, so both sides fit.
+    expect(root.findByType(SleepTimerButton).props.width).toBeGreaterThan(44);
   });
 
-  it('takes 32 points of the column, its two controls keeping 44-point touch areas (#325)', async () => {
+  it('takes 32 points of the column, its controls keeping 44-point touch areas (#325)', async () => {
     const { root } = await player();
-    const style = (node: ReactTestInstance) => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean));
-    let row: ReactTestInstance | null = root.find((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Lock Taps');
-    while (row && String(row.type) !== 'View') row = row.parent;
-    expect(style(row!)).toMatchObject({ height: 44, marginVertical: -6 });
-    expect(root.findByType(SleepTimerButton).props).toMatchObject({ height: 44 });
-    // The head row the same way.
     let head: ReactTestInstance | null = root.find((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Collapse the player');
-    while (head && String(head.type) !== 'View') head = head.parent;
+    while (head && !(String(head.type) === 'View' && style(head).justifyContent === 'space-between')) head = head.parent;
     expect(style(head!)).toMatchObject({ marginVertical: -6 });
-    // Its centre on the iPhone's safe line, 34 points above the bottom: 18 of padding and half of 32.
-    const panel = root.findAll((node) => String(node.type) === 'View' && style(node).maxWidth === 600)[0];
-    expect(style(panel).paddingBottom).toBe(18);
+    expect(root.findByType(SleepTimerButton).props).toMatchObject({ height: 44, width: 48 });
+  });
+
+  it('is a card 12 points in from the sides and 20 above the bottom of an iPhone with a home bar', async () => {
+    const { root } = await player();
+    const card = root.findAll((node) => String(node.type) === 'View' && style(node).width === 378)[0];
+    expect(style(card)).toMatchObject({ marginBottom: 20, alignSelf: 'center', borderTopLeftRadius: 24, borderBottomLeftRadius: 36 });
   });
 
   it('switches the Tap Lock with one press, and says what a press will do', async () => {

@@ -1,7 +1,7 @@
 # The Tap Lock and the Sleep Timer (#325, #326)
 
-The Player's bottom row: the Tap Lock at its left, the Sleep Timer at its
-right (ADRs 0087 and 0088). First run 2026-10-26 on an iPhone 16 Pro, iOS 27.0,
+The Player's head row: the Tap Lock beside A or M, the Sleep Timer beside the
+collapse arrow (ADRs 0087 and 0088). First run 2026-10-26 on an iPhone 16 Pro, iOS 27.0,
 1.0.2 (18)-beta1-debug; what it met is in the README's **Pitfalls**, under
 "Verifying #325/#326".
 

@@ -1,5 +1,5 @@
 /**
- * The Sleep Timer's button at the right end of the Player's bottom row (#326,
+ * The Sleep Timer's button in the Player's head row, beside the collapse arrow (#326,
  * design and ADR 0088), and the phone's own menu it opens.
  *
  * The menu is SwiftUI's, through `@expo/ui`, as every short choice in the app
@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { INK, useAccent } from './controls';
+import { SIDE_TEXT_SCALE } from './player-layout';
 import { Icon } from './icon';
 import { countdown, sleepChoices, sleepLabel, type SleepChoice } from './sleep-timer';
 import { TEXT_EMPHASIZED } from './text-styles';
@@ -56,7 +57,7 @@ export function SleepTimerButton({ sleep, chapterOffered, onSleep, width, height
         label={<RNHostView>
           <View style={styles.face} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             {left !== null
-              ? <Text style={[styles.left, { color: accent.reading }]}>{left}</Text>
+              ? <Text style={[styles.left, { color: accent.reading }]} maxFontSizeMultiplier={SIDE_TEXT_SCALE}>{left}</Text>
               : <Icon name="moon" color={sleep.choice === null ? INK.text : accent.reading} />}
           </View>
         </RNHostView>}

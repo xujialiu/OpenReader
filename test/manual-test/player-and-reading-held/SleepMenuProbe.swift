@@ -1,6 +1,6 @@
 import XCTest
 
-/// Real touches on the Player's bottom-row Sleep Timer (#326): the native
+/// Real touches on the Player's Sleep Timer (#326): the native
 /// SwiftUI `Menu` (through `@expo/ui`) that AXe and mobilebuildmcp taps do not
 /// open (the #311 pitfall again, "Sentences at once"), the menu's entries, and
 /// choosing one. Attaches to the already running app; the caller leaves the
@@ -29,7 +29,7 @@ final class SleepMenuProbe: XCTestCase {
     app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title)).firstMatch
   }
 
-  /// The bottom-row button, whose label carries the timer's state.
+  /// The Sleep Timer's button, whose label carries the timer's state.
   func sleepButton(_ app: XCUIApplication) -> XCUIElement {
     app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Sleep Timer'")).firstMatch
   }
