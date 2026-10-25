@@ -60,7 +60,8 @@
  *   than arriving from the app: a tap hit-tests to a text node, the enclosing
  *   Block's id and the offset within it cross the bridge, and the app turns that
  *   into an Utterance to read from (ADR 0020). It is a `click` and not a long
- *   press, for the reason `SELECTABLE` below exists.
+ *   press, for the reason `SELECTABLE` below exists. Under the Tap Lock
+ *   ('tapLock', #325) no tap acts, on text or on a link.
  * - **The clock between corrections.** One position correction arrives about once
  *   a second; `requestAnimationFrame` interpolates against a start time in
  *   between. Nothing crosses the bridge per word (ADR 0005).
@@ -821,6 +822,9 @@ ${constants}
   /* The player is collapsed and the page only follows (#71): no finger moves it
      and none starts Browsing. See the 'followOnly' message. */
   var followOnly = false;
+  /* The Tap Lock (#325): a tap on the page does nothing, on text or on a link.
+     See the 'tapLock' message, tapped() and linkHeld(). */
+  var tapLock = false;
   /* The scroll container's overflow as epub.js had set it before the page was
      locked, to be given back when it is unlocked, or null while it is not
      locked; see lockPage(). */
@@ -1303,6 +1307,9 @@ ${constants}
      gesture and taking it would mean \`user-select: none\`, which silently stops
      ::highlight() from painting (see this file's header, and the 20:10 note). */
   function tapped(event) {
+    /* Under the Tap Lock a tap on text is nothing, and one on a link never gets
+       here: linkHeld() has already stopped it (#325). */
+    if (tapLock) return;
     if (linkFollowed(event)) return;
     if (lookupEnabled && (lookupHeld || Date.now() < suppressTapUntil)) return;
     var node = event.target;
@@ -1376,10 +1383,12 @@ ${constants}
      it keeps the link's own navigation from the section's frame. Stopped, it
      no longer reaches tapped() as it bubbles back, so it is handed there. */
   function linkHeld(event) {
-    if (!followOnly || !linkOf(event.target)) return;
+    if ((!followOnly && !tapLock) || !linkOf(event.target)) return;
     event.preventDefault();
     event.stopPropagation();
-    tapped(event);
+    /* Under the Tap Lock (#325) a link is not followed and its line is not
+       read either: the tap does nothing at all. */
+    if (!tapLock) tapped(event);
   }
 
   /* A finger dragging the page is Browsing too (#52): the page goes where the
@@ -3458,6 +3467,12 @@ ${EPUB_GUARDS_SOURCE}
       if (!state) return;
       state.follow = true;
       follow(build(state.utteranceRanges));
+      return;
+    }
+    if (message.kind === 'tapLock') {
+      /* The Tap Lock, on or off (#325). Only taps read it: a drag still
+         browses, and the long press still selects a word to look up. */
+      tapLock = !!message.on;
       return;
     }
     if (message.kind === 'followOnly') {

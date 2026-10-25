@@ -471,6 +471,19 @@ export interface FollowOnlyMessage {
 }
 
 /**
+ * The **Tap Lock** (CONTEXT.md, #325, ADR 0087) is on, or off again.
+ *
+ * While `on`, a tap on the page does nothing: a tap on a Block's text posts no
+ * tap, and a tap on a link is stopped before epub.js can follow it, whether
+ * the player is open or collapsed. A finger dragging the page and the long
+ * press that selects a word are not taps, and are left alone.
+ */
+export interface TapLockMessage {
+  kind: 'tapLock';
+  on: boolean;
+}
+
+/**
  * How much of the bottom of the scroll container the player is covering.
  *
  * ADR 0011 centres the spoken Utterance against `rendition.manager.container`'s
@@ -653,6 +666,7 @@ export type HighlightMessage =
   | BrowseMessage
   | ReturnMessage
   | FollowOnlyMessage
+  | TapLockMessage
   | InsetMessage
   | FollowingMessage
   | BarMessage

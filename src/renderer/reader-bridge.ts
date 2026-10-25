@@ -382,6 +382,11 @@ export interface ReaderBridge {
    */
   setFollowOnly(on: boolean): void;
   /**
+   * The Tap Lock is on, or off again (#325): while it is on, a tap on the page,
+   * on text or on a link, does nothing. See `TapLockMessage`.
+   */
+  setTapLock(on: boolean): void;
+  /**
    * Move the document to a CFI — epub.js's own dialect, unchanged (ADR 0011), so
    * that a Reading Position stored by this app resolves in Zotero's reader and one
    * stored there resolves here (ADR 0008).
@@ -849,6 +854,17 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
     [send],
   );
 
+  /** Whether taps are locked, kept so it is sent again when the program installs, as `followOnly` is. */
+  const tapLock = useRef(false);
+  const setTapLock = useCallback(
+    (on: boolean) => {
+      if (on === tapLock.current) return;
+      tapLock.current = on;
+      send({ kind: 'tapLock', on });
+    },
+    [send],
+  );
+
   const goTo = useCallback(
     (cfi: string) => {
       // The page's own `display` line says only "injected code" of every
@@ -989,6 +1005,8 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
         // player is told the first, and the program the collapsed player it missed.
         latest.current.onFollowing?.(true);
         if (followOnly.current) send({ kind: 'followOnly', on: true });
+        // And a Tap Lock it missed (#325): a new page would otherwise act on taps.
+        if (tapLock.current) send({ kind: 'tapLock', on: true });
         latest.current.onDocument?.({ spine: message.spine, hrefs: message.hrefs });
         if (awaiting.current !== null) paintAgain();
         return;
@@ -1082,7 +1100,7 @@ export function useReaderBridge(options: ReaderBridgeOptions = {}): ReaderBridge
   );
 
   return useMemo(
-    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps }),
-    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps],
+    () => ({ releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps }),
+    [releaseSelection, resumeFollowing, setLookupEnabled, onSelection, closeLookup, clock, setUtterances, show, setInset, setOpenPlayer, setBar, setLinePosition, setScrolling, setAppearance, setTheme, hold, clear, returnToReading, setFollowOnly, setTapLock, goTo, goToSection, prepareSection, browse, snapshot, restart, readerProps],
   );
 }

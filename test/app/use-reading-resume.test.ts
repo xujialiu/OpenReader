@@ -75,7 +75,7 @@ const engines = vi.hoisted(() => {
       seek(utterance: number) { engine.seeks.push(utterance); engine.calls.push(`seek:${utterance}`); },
       setRate() {},
       switchVoice() {},
-      cancelVoiceSwitch() {},
+      cancelVoiceSwitch() {}, stopAfter() {},
       snapshot: () => ({ playing, utterance: 0, rate: 1, queued: 0, fetching: 0 }),
       dispose: async () => {},
     };
@@ -109,7 +109,7 @@ vi.mock('../../src/renderer', async () => {
         hold: bridge.hold,
         clear: bridge.clear,
         returnToReading: bridge.returnToReading,
-        setFollowOnly() {},
+        setFollowOnly() {}, setTapLock() {},
         readerProps: {},
       };
     },

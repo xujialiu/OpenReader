@@ -110,6 +110,12 @@ export interface PlaybackEngineDeps {
    * says so again.
    */
   onOutOfText?(report: OutOfTextReport): void;
+  /**
+   * Speech has finished the Utterance `stopAfter` named, and the engine has
+   * paused there by itself (the Sleep Timer, #326). Its `onState` has already
+   * said the pause; this says why.
+   */
+  onStopLine?(utterance: number): void;
   /** Memory only (ADR 0002). Left out, the engine makes its own. */
   cache?: ClipCache;
   /** The owner's reading speed. Applied here and nowhere else (ADR 0009); a Provider is never asked for it. */
@@ -195,6 +201,22 @@ export interface PlaybackEngine {
   pause(): void;
   /** Jump to an Utterance: the queue is cleared, the clock re-anchored, and the reading resumes there if it was playing. */
   seek(utterance: number): void;
+  /**
+   * The **stop line** (#326): pause by itself once speech has finished this
+   * Utterance, its pause after it included, or never again for null.
+   *
+   * Nothing past the line is fetched or queued, and Clips already queued past
+   * it are taken off the native queue and kept for the next Play, so the
+   * sentence after it is not begun. A line behind the sentence being spoken
+   * is that sentence. The line goes when it is reached and with any restart
+   * (`seek`, `load`), which may renumber; the caller states it again. A Play
+   * on a paused Reading that has already finished the line's sentence drops
+   * it: the next sentence is somewhere new.
+   *
+   * While a Voice switch has its replacement queued (`pending.armed`) nothing
+   * is taken off, and the line is reached once what is queued has played.
+   */
+  stopAfter(utterance: number | null): void;
   /**
    * Stop the sound now and wait, queueing and fetching nothing, until a `seek`
    * says where the reading goes (#86).
@@ -305,6 +327,8 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
   let pending: PendingSwitch | null = null;
   /** Set by `silence` and cleared by `seek`: nothing is fetched, queued or switched while it holds. */
   let waiting = false;
+  /** `stopAfter`'s Utterance, or null. Cleared by `restart` and by reaching it. */
+  let stopLine: number | null = null;
   let lastQueued: number | null = null;
   let chapterPause: { next: number; ready: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
   let lastState = '';
@@ -329,13 +353,63 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       publish();
       return;
     }
-    for (const index of pending?.armed ? [] : fetchWindow({ cursor, nextToEnqueue, total: availableThrough(), inFlight: inFlight.size, stateOf })) {
+    for (const index of pending?.armed ? [] : fetchWindow({ cursor, nextToEnqueue, total: queueLimit(), inFlight: inFlight.size, stateOf })) {
       startFetch(index);
     }
     void drain();
     prepareSwitch();
+    // Before the out-of-text test: a line at the end of the text is a stop the
+    // owner asked for, not the end of the book (#326).
+    reachLine();
     publish();
     outOfText();
+  }
+
+  /** How far the queue may go: the text there is, and no further than the stop line. */
+  function queueLimit(): number {
+    const through = availableThrough();
+    return stopLine === null ? through : Math.min(through, stopLine + 1);
+  }
+
+  /**
+   * The stop line's sentence has been spoken to its end: everything up to it
+   * was queued and every buffer has ended. Paused from the inside, as an output
+   * loss is, so the queue stays empty and `nextToEnqueue` stays past the line:
+   * the next Play queues the sentence after it and repeats nothing.
+   */
+  function reachLine(): void {
+    if (stopLine === null || !playing || waiting || nextToEnqueue <= stopLine || timeline.pending() > 0) return;
+    const line = stopLine;
+    stopLine = null;
+    pauseNow('stop-line');
+    deps.onStopLine?.(line);
+  }
+
+  /**
+   * Take the Clips queued past the stop line off the native queue, and keep
+   * them for the next Play.
+   *
+   * The read-ahead has usually queued up to three sentences after the one
+   * being spoken, so a line set mid-sentence would otherwise let them play. The
+   * splice is the voice switch's own: whole buffers after the last one at or
+   * before the line, which the audio thread is not reading. Not while a switch
+   * has its replacement queued, whose tail it would tear.
+   */
+  function cutAtLine(line: number): void {
+    if (nextToEnqueue <= line + 1 || !graph || pending?.armed) return;
+    let keep: QueuedClip | null = null;
+    for (const clip of timeline.clips()) if (clip.utterance <= line) keep = clip;
+    const removed = timeline.truncateAfter(keep?.bufferId ?? null);
+    graph.remove(removed.map((clip) => clip.bufferId));
+    for (const clip of removed) {
+      const audio = audioByBuffer.get(clip.bufferId);
+      audioByBuffer.delete(clip.bufferId);
+      if (audio && clip.voiceGeneration === voiceGeneration) prepared.set(clip.utterance, audio.clip);
+    }
+    nextToEnqueue = line + 1;
+    if (keep) lastQueued = keep.utterance;
+    if (chapterPause) clearTimeout(chapterPause.timer);
+    chapterPause = null;
   }
 
   /** Say, once, that there is nothing left to play. `read-ahead.ts` holds the four conditions and why each one is there. */
@@ -420,7 +494,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     draining = true;
     drainRequested = false;
     try {
-      while (!disposed && !pending?.armed && nextToEnqueue < availableThrough() && nextToEnqueue <= enqueueCeiling(cursor)) {
+      while (!disposed && !pending?.armed && nextToEnqueue < queueLimit() && nextToEnqueue <= enqueueCeiling(cursor)) {
         if (!sectionReady(nextToEnqueue)) break;
         const clip = prepared.get(nextToEnqueue);
         if (!clip) {
@@ -662,6 +736,7 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
     graph?.clear();
     timeline.reset();
     lastQueued = null;
+    stopLine = null;
     if (chapterPause) clearTimeout(chapterPause.timer);
     chapterPause = null;
     audioByBuffer.clear();
@@ -846,6 +921,9 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       // A quiet load's first cue was waiting for this press: the front is cued
       // just below, or by `enqueue` when its Clip arrives.
       quiet = false;
+      // A line whose sentence was already finished when the Reading paused is
+      // behind it: this press reads on from the sentence after it (#326).
+      if (stopLine !== null && timeline.pending() === 0 && nextToEnqueue > stopLine) stopLine = null;
       playing = true;
       // A known end can be answered synchronously by the Reading. Ask before
       // resuming an empty graph: even a same-turn suspend can leave iOS's
@@ -875,6 +953,16 @@ export function createPlaybackEngine(deps: PlaybackEngineDeps): PlaybackEngine {
       // No `resume()` here: `clearBuffers()` leaves the node in the playing
       // state and an empty queue renders silence until the next buffer arrives
       // (footgun 3). A stop to "reset" it is exactly what breaks resumption.
+      pump();
+    },
+
+    stopAfter(utterance) {
+      if (disposed) return;
+      const line = utterance === null ? null : Math.max(utterance, cursor);
+      if (line === stopLine) return;
+      trace(`stop-line.${line ?? 'none'}`);
+      stopLine = line;
+      if (line !== null) cutAtLine(line);
       pump();
     },
 

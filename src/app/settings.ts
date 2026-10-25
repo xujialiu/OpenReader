@@ -298,6 +298,14 @@ export interface AppSettings {
    */
   drawerHeight: number;
   /**
+   * The **Tap Lock** (CONTEXT.md, #325, ADR 0087): while it is on, a tap on
+   * the reading page does nothing, on text or on a link. Switched in the
+   * Player and nowhere else, and kept until the owner switches it off, on this
+   * device only, like every setting here. Not in `engineIdentity`: no Clip
+   * depends on it; it reaches an open page live (`setTapLock`).
+   */
+  tapLock: boolean;
+  /**
    * How many sentences a download asks each Provider for at once (#64),
    * carried past the end of a chapter into the next (#311): the provider's own
    * page, **Sentences at once**. Per Provider because the limit is the
@@ -497,6 +505,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   following: { scrolling: 'line', linePosition: 50 },
   // Half the screen, which the owner chose (#117).
   drawerHeight: 50,
+  // Off: a tap on the page reads from there until the owner locks it (#325).
+  tapLock: false,
   sentencesAtOnce: DEFAULT_SENTENCES_AT_ONCE,
   // Off, with nothing filled in: sync starts the moment the owner names a
   // folder and turns it on, and not before (issue #20).

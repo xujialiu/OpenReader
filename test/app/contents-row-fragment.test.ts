@@ -40,7 +40,7 @@ vi.mock('../../src/playback', async () => ({
   ...(await vi.importActual<typeof import('../../src/playback/navigation')>('../../src/playback/navigation')),
   createPlaybackEngine: () => ({
     load() {}, extend() {}, play() {}, pause() {}, silence() {}, seek() {}, setRate() {},
-    switchVoice() {}, cancelVoiceSwitch() {},
+    switchVoice() {}, cancelVoiceSwitch() {}, stopAfter() {},
     snapshot: () => ({ playing: false, utterance: 0, rate: 1, queued: 0, fetching: 0 }),
     dispose: async () => {},
   }),

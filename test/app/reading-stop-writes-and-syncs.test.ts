@@ -65,7 +65,7 @@ vi.mock('../../src/renderer', async () => {
         goTo: nothing, goToSection: nothing, prepareSection: nothing, browse: nothing, show: (at: number) => world.shown.push(at), clock: { onClip: nothing, onPosition: nothing },
         setUtterances: nothing, setInset: nothing, setOpenPlayer: nothing, setLinePosition: nothing, setScrolling: nothing, setBar: nothing,
         setAppearance: nothing, setTheme: nothing, resumeFollowing: nothing, snapshot: nothing, hold: nothing, clear: nothing,
-        returnToReading: nothing, setFollowOnly: nothing, releaseSelection: nothing, restart: () => null, readerProps: {},
+        returnToReading: nothing, setFollowOnly: nothing, setTapLock: nothing, releaseSelection: nothing, restart: () => null, readerProps: {},
       };
     },
   };

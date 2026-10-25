@@ -94,7 +94,7 @@ vi.mock('../../../src/renderer', async () => {
         clock: { onClip() {}, onPosition() {} },
         setUtterances() {}, setInset() {}, setOpenPlayer() {}, setLinePosition() {}, setScrolling() {}, setBar() {},
         setAppearance() {}, setTheme() {}, resumeFollowing() {}, hold() {}, clear() {},
-        returnToReading() {}, setFollowOnly() {}, snapshot() {}, readerProps: {},
+        returnToReading() {}, setFollowOnly() {}, setTapLock() {}, snapshot() {}, readerProps: {},
       };
     },
   };

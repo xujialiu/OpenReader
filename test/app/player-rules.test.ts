@@ -211,7 +211,7 @@ describe('a section that arrives mid-reading reaches the engine at once (notes/N
   const reading = code('use-reading.ts');
 
   it('hands a longer list over through extend, not load', () => {
-    const adopt = within(reading, 'const adopt = useCallback(', '}, [placeOf]);');
+    const adopt = within(reading, 'const adopt = useCallback(', '}, [placeOf, restateStop]);');
     // A list that continues the one the engine holds goes over whole, and returns
     // before any `load` is reached.
     const continued = within(adopt, 'if (samePrefix(held.utterances.slice(0, heldEnd), next)) {', 'return;');
@@ -283,7 +283,7 @@ describe('changing the Voice keeps the place (ADR 0025, notes/NOTES_2026-09-20.m
     // sentence again, because that sentence's own section changed (#46): every
     // other renumbering carries the cursor across (`carryUtterance`).
     expect(reading.match(/atRef\.current = null;/g)).toHaveLength(1);
-    pin(within(reading, 'const adopt = useCallback(', '}, [placeOf]);'), 'atRef.current = null;', 'use-reading.ts, adopt');
+    pin(within(reading, 'const adopt = useCallback(', '}, [placeOf, restateStop]);'), 'atRef.current = null;', 'use-reading.ts, adopt');
   });
 
   it('leaves the highlight on the sentence the cursor names, rather than clearing it', () => {
@@ -496,7 +496,8 @@ describe('Play is in the middle of the player (#115)', () => {
     pin(player, "transport: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' }", 'player.tsx');
     pin(player, 'footTap: { width: TRANSPORT_END,', 'player.tsx');
     pin(player, '{ width: layout.endWidth }', 'player.tsx');
-    expect(player.match(/width=\{layout.endWidth\} height=\{layout.rateHeight\}/g)).toHaveLength(2);
+    // The speed in either layout, and the two ends of the bottom row under it (#325, #326).
+    expect(player.match(/width=\{layout.endWidth\} height=\{layout.rateHeight\}/g)).toHaveLength(4);
     pin(player, '<Host style={{ width, height }}>', 'player.tsx');
 
     const row = within(player, '<View style={styles.transport}>', '<SpeedBubble');

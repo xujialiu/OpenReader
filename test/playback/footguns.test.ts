@@ -406,7 +406,7 @@ describe('a Clip is kept only until it is queued (#49)', () => {
 
   it('asks the window to start at the first sentence not yet queued, and keeps nothing behind it', () => {
     const pump = engine.slice(engine.indexOf('function pump()'), engine.indexOf('function outOfText()'));
-    pin(pump, 'fetchWindow({ cursor, nextToEnqueue, total: availableThrough(), inFlight: inFlight.size, stateOf })', 'engine.ts, pump');
+    pin(pump, 'fetchWindow({ cursor, nextToEnqueue, total: queueLimit(), inFlight: inFlight.size, stateOf })', 'engine.ts, pump');
     const startFetch = engine.slice(engine.indexOf('function startFetch('), engine.indexOf('async function drain('));
     pin(startFetch, 'index >= nextToEnqueue && index <= enqueueCeiling(cursor)', 'engine.ts, startFetch');
   });

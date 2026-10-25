@@ -90,6 +90,8 @@ import {
   type AppSettings,
 } from './settings';
 import { samePlace } from './sync-items';
+import type { ContentsRow } from '../core/document/contents';
+import { chapterEnd } from './sleep-timer';
 
 /** How much text is marked as it is spoken (CONTEXT.md). Which one is in use is the Provider's answer, never a preference. */
 export type HighlightLevel = 'word' | 'utterance';
@@ -102,6 +104,13 @@ export type HighlightLevel = 'word' | 'utterance';
  * screen that computed its own target would be a second copy of that rule.
  */
 export type SkipTarget = 'previous-paragraph' | 'previous-sentence' | 'next-sentence' | 'next-paragraph';
+
+/**
+ * What the Sleep Timer asks of the Reading (#326): to pause by itself once
+ * speech has finished the sentence being spoken, or the last sentence of the
+ * Contents row it is in. Null asks for nothing.
+ */
+export type StopRequest = { kind: 'sentence' } | { kind: 'chapter'; rows: readonly ContentsRow[] } | null;
 
 /** Everything the player bar and the status line show. Nothing in here changes more than once per Utterance. */
 export interface ReadingStatus {
@@ -247,6 +256,17 @@ export interface Reading {
   /** One of the four skips, computed by `playback/navigation.ts` from where the reading is. */
   skip(target: SkipTarget): void;
   /**
+   * The Sleep Timer's request (#326), kept until it is reached or replaced.
+   *
+   * The engine's stop line is stated again from it at every cue, every new or
+   * renumbered list and every seek, because the line is an Utterance index and
+   * a seek or a renumbering clears it: for a sentence, the one being spoken;
+   * for a chapter, the last before the Contents row changes (`chapterEnd`), or
+   * none while the text laid out does not reach it. When speech reaches it the
+   * engine pauses by itself and `onSlept` is called.
+   */
+  stopAt(request: StopRequest): void;
+  /**
    * M on the player (#71, #53): the page goes back to the reading's sentence and
    * follows it again. It moves nothing else and starts nothing — a paused
    * reading stays paused, a playing one keeps its words.
@@ -348,6 +368,8 @@ export interface KnownCredentials {
  * write. A stop is a sync moment (ADR 0031); see the stop effect at the end.
  * @param onReached a new sentence starts playing, or null when a remote place
  * supersedes local writeback. A paused cursor change never calls it (#96).
+ * @param onSlept the engine has paused by itself at the Sleep Timer's line
+ * (`stopAt`, #326). The stop itself also reaches `onStopped`, as every stop does.
  */
 export function useReading(
   settings: AppSettings,
@@ -356,14 +378,17 @@ export function useReading(
   document: string,
   onStopped?: (place: ReadingPlace | null) => void,
   onReached?: (place: ReadingPlace | null) => void,
+  onSlept?: () => void,
 ): Reading {
   const { hasKey, writtenAt } = credentials;
   const onStoppedRef = useRef(onStopped);
   const onReachedRef = useRef(onReached);
+  const onSleptRef = useRef(onSlept);
   useEffect(() => {
     onStoppedRef.current = onStopped;
     onReachedRef.current = onReached;
-  }, [onStopped, onReached]);
+    onSleptRef.current = onSlept;
+  }, [onStopped, onReached, onSlept]);
   /**
    * The theme the page is painted in (ADR 0022), resolved the same way the shell
    * resolves the app's own — one function, so the chrome and the document cannot
@@ -608,6 +633,42 @@ export function useReading(
   /** The spine item alone, for the engine's chapter pause. */
   const sectionOf = useCallback((utterance: number): number | null => placeOf(utterance).section, [placeOf]);
 
+  /** The Sleep Timer's request (`stopAt`, #326), until it is reached or replaced. */
+  const stopRef = useRef<StopRequest>(null);
+  /**
+   * Hand the engine its stop line again, from the Sleep Timer's request and
+   * where the reading is now (#326).
+   *
+   * The line is an Utterance index, and a seek or a renumbering load clears
+   * it in the engine, so it is stated again after each of them and at every
+   * cue: the cue is where a chapter's end moves on, and where a seek's
+   * sentence becomes the one being spoken. The engine ignores a line it
+   * already holds.
+   */
+  const restateStop = useCallback(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const request = stopRef.current;
+    const from = atRef.current;
+    if (!request || from === null) {
+      engine.stopAfter(null);
+      return;
+    }
+    if (request.kind === 'sentence') {
+      engine.stopAfter(from);
+      return;
+    }
+    const extent = readingExtent(loadedRef.current, loadedBlocksRef.current, from, reportedSectionsRef.current, renderedRef.current?.spine ?? 0);
+    engine.stopAfter(chapterEnd({
+      from, through: extent.end, ended: extent.next === null, placeOf, anchors: anchorsRef.current, rows: request.rows,
+    }));
+  }, [placeOf]);
+  const stopAt = useCallback((request: StopRequest) => {
+    debugLog('reading', `sleep timer: stop after ${request ? request.kind : 'nothing'}`);
+    stopRef.current = request;
+    restateStop();
+  }, [restateStop]);
+
   /**
    * The sentence at an Utterance, written as a place (ADR 0008): the Block's
    * CFI and the Utterance's own characters quoted out of the Block's text.
@@ -650,6 +711,7 @@ export function useReading(
         bridgeRef.current?.clock.onClip(cue, !playIntent.current ? { reveal: false } : asked ? { reveal: true } : { reveal: false, recover: true });
         if (!playIntent.current) bridgeRef.current?.hold();
         atRef.current = cue.utterance;
+        restateStop();
         // A paused seek, speed change or refusal also cues the page. The engine
         // pauses before cueing a refusal; only a playing cue establishes a place
         // (#96), after the Clip is prepared and the graph resumed, never at Play
@@ -689,7 +751,7 @@ export function useReading(
         lockScreenPosition(correction.contentPosition);
       },
     }),
-    [placeOf, placeAt],
+    [placeOf, placeAt, restateStop],
   );
 
   /**
@@ -753,6 +815,8 @@ export function useReading(
     // may renumber that unused tail, but must not restart the audible sentence.
     if (samePrefix(held.utterances.slice(0, heldEnd), next)) {
       engine?.extend(next);
+      // More text may reach the end of the chapter the Sleep Timer waits for.
+      restateStop();
       return;
     }
 
@@ -799,9 +863,10 @@ export function useReading(
     // (react-native-audio-api 0.13.5 advances its position dispatcher only while
     // `isPlaying()`), and `play()` cues the front before it corrects.
     engine?.load(next, at ?? 0, { quiet: !playIntent.current });
+    restateStop();
     if (at === null) return;
     setStatus((was) => ({ ...was, utterance: at, ...placeOf(at) }));
-  }, [placeOf]);
+  }, [placeOf, restateStop]);
 
   /**
    * One spine item on, or the end of the document.
@@ -884,7 +949,8 @@ export function useReading(
     // without having pressed Play, `atRef` holds it, and the engine that gets
     // built will be loaded there.
     engineRef.current?.seek(at);
-  }, [placeOf, abandonResume]);
+    restateStop();
+  }, [placeOf, abandonResume, restateStop]);
 
   /**
    * A tapped word or a skip: the owner pointing the reading at a sentence.
@@ -1443,6 +1509,12 @@ export function useReading(
           ? { playing: true, buffering: true } : state) }));
       },
       onOutOfText: ranOutOfText,
+      onStopLine: (utterance) => {
+        if (generation !== engineGeneration.current) return;
+        debugLog('reading', `the Sleep Timer paused the reading after utterance ${utterance}`);
+        stopRef.current = null;
+        onSleptRef.current?.();
+      },
       sectionOf,
       availableThrough: (from) => readingExtent(loadedRef.current, loadedBlocksRef.current, from, reportedSectionsRef.current, renderedRef.current?.spine ?? 0).end,
       rate: settings.rate,
@@ -1460,9 +1532,10 @@ export function useReading(
     // reading starts. It survives an engine rebuild (ADR 0025), so it is no longer the
     // fallback a Voice change fell through.
     engine.load(loadedRef.current, atRef.current ?? 0);
+    restateStop();
     setStatus((was) => ({ ...was, reportsWordTimings: provider.capabilities.wordTimestamps, note: null }));
     return engine;
-  }, [settings, hasKey, clock, report, ranOutOfText, document, sectionOf]);
+  }, [settings, hasKey, clock, report, ranOutOfText, document, sectionOf, restateStop]);
 
   /**
    * What a press of Play starts, once `play` below has let it through, and what
@@ -1951,5 +2024,5 @@ export function useReading(
     onStoppedRef.current?.(readingPosition());
   }, [stopped, readingPosition, resumeAt, takeLatePlace]);
 
-  return { bridge, status, opened, play, carryOn: start, pause, chooseVoice, seekTo: pointAt, skip, returnToReading, goToSection, readingPosition, resumeAt };
+  return { bridge, status, opened, play, carryOn: start, pause, chooseVoice, seekTo: pointAt, skip, stopAt, returnToReading, goToSection, readingPosition, resumeAt };
 }

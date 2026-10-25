@@ -35,7 +35,7 @@ const engines = vi.hoisted(() => {
     built.push(engine);
     return {
       load(list: readonly unknown[], from = 0) { engine.loads.push({ length: list.length, from }); },
-      extend() {}, play() {}, pause() {}, silence() {}, seek() {}, setRate() {}, switchVoice() {}, cancelVoiceSwitch() {},
+      extend() {}, play() {}, pause() {}, silence() {}, seek() {}, setRate() {}, switchVoice() {}, cancelVoiceSwitch() {}, stopAfter() {},
       snapshot: () => ({ playing: false, utterance: 0, rate: 1, queued: 0, fetching: 0 }),
       dispose: async () => {},
     };

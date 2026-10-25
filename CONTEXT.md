@@ -185,6 +185,12 @@ owner leaves the reader while it is paused, opens another document, or deletes
 this one.
 _Avoid_: session, playback, now playing
 
+**Sleep Timer**:
+The owner's request that the Reading pause by itself, either after a chosen
+length of listening or when speech reaches the end of the Contents row it is in.
+It belongs to one Reading and pauses it once.
+_Avoid_: timer (alone), stop timer, auto-stop, sleep mode
+
 ### Keeping place and settings
 
 **Library**:
@@ -401,6 +407,13 @@ the Player when it is collapsed, and in the Library, the way back to the
 document being read. It shows whether the Reading is playing, and a press
 brings its controls back; it never plays or pauses.
 _Avoid_: play button, mini player, floating button, now playing
+
+**Tap Lock**:
+The owner's switch in the Player under which a tap on the reading page does
+nothing: a tap on its words does not move the Reading, and a tap on a link does
+not take the page away. Dragging the page and pressing on a word to look it up
+are untouched. It stays on, on that device, until the owner turns it off.
+_Avoid_: lock (alone), page lock, touch lock, screen lock
 
 **Live Activity**:
 The phone's own display of the Downloads going on while the app is not in

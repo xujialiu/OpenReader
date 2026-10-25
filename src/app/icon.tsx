@@ -32,6 +32,13 @@ const paths = {
   // Two chevrons, one up one down: what iOS puts on a row that opens a menu.
   menu: 'm8 10 4-4 4 4 M8 14l4 4 4-4',
   check: 'm5 12 4 4L19 6',
+  // The Tap Lock (#325): a padlock, shut, and open with its shackle swung up
+  // off the body's right side. The app's own drawing, in this set's stroke.
+  lock: 'M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z M8 11V7a4 4 0 0 1 8 0v4',
+  unlock: 'M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z M8 11V7a4 4 0 0 1 7.76-1.37',
+  // The Sleep Timer (#326): a crescent moon, the phone's own sign for a
+  // sleep timer, redrawn in this set's stroke.
+  moon: 'M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z',
   // A beetle seen from above, for the reader's Debug row (#305): head, a
   // body split down its back, three legs a side and two feelers. The app's
   // own drawing, in this set's stroke.

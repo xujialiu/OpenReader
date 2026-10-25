@@ -69,7 +69,7 @@ vi.mock('../../src/renderer', async () => {
         setUtterances: nothing, setInset: nothing, setOpenPlayer: nothing, setScrolling: nothing, setBar: nothing,
         setLinePosition: (percent: number) => { world.linePositions.push(percent); },
         setAppearance: nothing, setTheme: nothing, resumeFollowing: nothing, snapshot: nothing, hold: nothing, clear: nothing,
-        returnToReading: nothing, setFollowOnly: nothing, releaseSelection: nothing, restart: () => null, readerProps: {},
+        returnToReading: nothing, setFollowOnly: nothing, setTapLock: nothing, releaseSelection: nothing, restart: () => null, readerProps: {},
       };
     },
   };

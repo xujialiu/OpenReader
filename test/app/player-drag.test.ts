@@ -38,6 +38,7 @@ vi.mock('../../src/app/controls', () => ({
 vi.mock('../../src/app/icon', () => ({ Icon: 'Icon' }));
 vi.mock('../../src/app/loading-spinner', () => ({ LoadingSpinner: 'LoadingSpinner' }));
 vi.mock('../../src/app/reading-button', () => ({ ReadingButton: 'ReadingButton', READING_BUTTON_PLACE: {} }));
+vi.mock('../../src/app/sleep-timer-button', () => ({ SleepTimerButton: 'SleepTimerButton' }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const NOTE = { said: 'No provider is enabled. Enable one in Settings to listen.', attention: true };
@@ -48,6 +49,7 @@ async function openPlayer(notes: PlayerProps['notes']) {
     voiceInUse: null, notes, following: true, barHeight: 64,
     onCollapsed: vi.fn(), onPlay: vi.fn(), onPause: vi.fn(), onSkip: vi.fn(), onRate: vi.fn(),
     onContents: vi.fn(), onVoices: vi.fn(), onReturn: vi.fn(), onHeight: vi.fn(), onOpenHeight: vi.fn(),
+    tapLock: false, onTapLock: vi.fn(), sleep: { choice: null, left: 0, since: null, expired: false }, chapterOffered: true, onSleep: vi.fn(),
   };
   let view!: ReturnType<typeof create>;
   await act(async () => { view = create(createElement(Player, props)); });

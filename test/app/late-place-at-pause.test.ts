@@ -55,7 +55,7 @@ vi.mock('../../src/renderer', async () => {
         goTo: nothing, goToSection: nothing, prepareSection: nothing, browse: nothing, show: nothing, clock: { onClip: nothing, onPosition: nothing },
         setUtterances: nothing, setInset: nothing, setOpenPlayer: nothing, setLinePosition: nothing, setScrolling: nothing, setBar: nothing,
         setAppearance: nothing, setTheme: nothing, resumeFollowing: nothing, snapshot: nothing, hold: nothing, clear: nothing,
-        returnToReading: nothing, setFollowOnly: nothing, releaseSelection: nothing, restart: () => null, readerProps: {},
+        returnToReading: nothing, setFollowOnly: nothing, setTapLock: nothing, releaseSelection: nothing, restart: () => null, readerProps: {},
       };
     },
   };
@@ -67,7 +67,7 @@ vi.mock('../../src/playback', async () => ({
     const engine = { deps, calls: [] as string[] };
     world.engines.push(engine);
     return {
-      load(_list: unknown, from = 0) { engine.calls.push(`load:${from}`); }, extend() {}, silence() {}, setRate() {}, switchVoice() {}, cancelVoiceSwitch() {},
+      load(_list: unknown, from = 0) { engine.calls.push(`load:${from}`); }, extend() {}, silence() {}, setRate() {}, switchVoice() {}, cancelVoiceSwitch() {}, stopAfter() {},
       play() { playing = true; engine.calls.push('play'); deps.onState?.({ playing: true, buffering: false }); },
       pause() { playing = false; engine.calls.push('pause'); deps.onState?.({ playing: false, buffering: false }); },
       seek(at: number) { engine.calls.push(`seek:${at}`); },

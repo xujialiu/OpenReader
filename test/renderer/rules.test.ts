@@ -1255,7 +1255,10 @@ describe('tapping a word reads from there, and it is a tap (ADR 0020)', () => {
     pin(fn(program, 'linkOf'), "return href.indexOf('mailto:') === 0 || href.indexOf('://') > -1 ? null : at;", 'highlighter.ts, function linkOf');
     // Heard as the click goes down, so that it runs before epub.js's onclick on the link.
     pin(fn(program, 'adopt'), "contents.document.addEventListener('click', linkHeld, true);", 'highlighter.ts, function adopt');
-    pin(fn(program, 'linkHeld'), 'if (!followOnly || !linkOf(event.target)) return;', 'highlighter.ts, function linkHeld');
+    pin(fn(program, 'linkHeld'), 'if ((!followOnly && !tapLock) || !linkOf(event.target)) return;', 'highlighter.ts, function linkHeld');
+    // Under the Tap Lock (#325) a stopped link reads nothing either; run in tap-lock.test.ts.
+    pin(fn(program, 'linkHeld'), 'if (!tapLock) tapped(event);', 'highlighter.ts, function linkHeld');
+    pin(tapped, 'if (tapLock) return;', 'highlighter.ts, function tapped');
   });
 
   it('reports a place in a Block rather than an Utterance, the Utterances being on the other side', () => {

@@ -66,6 +66,7 @@ import { TEXT } from './text-styles';
 import { NO_PROVIDER_SENTENCE, PROVIDER_LABELS, readiness, readinessNote, type AppSettings } from './settings';
 import type { SecretPresence } from './use-provider-secrets';
 import { useReading, type ReadingStatus } from './use-reading';
+import { useSleepTimer } from './use-sleep-timer';
 import { useVoiceLists } from './use-voices';
 import { voiceInList } from './voices';
 import { knownVoice } from './voice-catalog';
@@ -284,7 +285,10 @@ export function ReadingView({
   const onStopped = useCallback((place: ReadingPlace | null) => stoppedRef.current(place), []);
   const speechRef = useRef<(place: ReadingPlace | null) => void>(() => {});
   const onSpeech = useCallback((place: ReadingPlace | null) => speechRef.current(place), []);
-  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id, onStopped, onSpeech);
+  /** Where the Reading reports the Sleep Timer's pause (#326); filled in beside the timer below. */
+  const sleptRef = useRef<() => void>(() => {});
+  const onSlept = useCallback(() => sleptRef.current(), []);
+  const reading = useReading(settings, { hasKey: keyPresence.state === 'held', writtenAt: credentialsWrittenAt }, position, document.identity.id, onStopped, onSpeech, onSlept);
   /** The lookup's pause is this screen's `pause`, defined below (#216). */
   const pauseRef = useRef<() => void>(() => {});
   const pauseForLookup = useCallback(() => pauseRef.current(), []);
@@ -479,6 +483,23 @@ export function ReadingView({
    * `core/document/contents.ts` will trust, and nesting comes from `subitems`.
    */
   const contents = useMemo(() => contentsOf(toc as readonly NavigationEntry[], status.spineHrefs), [toc, status.spineHrefs]);
+
+  /**
+   * The Sleep Timer (#326, ADR 0088), held here because this view lives as
+   * long as the Reading does. `When Current Chapter Ends` only for a Document
+   * whose Contents names somewhere to go (owner's Q6). Its pause is like any
+   * other: the place is written and a sync starts (`stoppedRef`), and the
+   * player opens with the bar, as the owner's own pause opens them (owner's Q9).
+   */
+  const chapterOffered = contents.rows.some((row) => row.target !== null);
+  const sleep = useSleepTimer(status.playing, contents.rows, reading.stopAt);
+  const sleepSlept = sleep.slept;
+  useEffect(() => {
+    sleptRef.current = () => {
+      sleepSlept();
+      setCollapsed(false);
+    };
+  }, [sleepSlept]);
 
   /**
    * Where the contents list marks: the section the **reading** is in, or the last
@@ -693,6 +714,10 @@ export function ReadingView({
   useEffect(() => {
     reading.bridge.setFollowOnly(followOnly);
   }, [reading.bridge, followOnly]);
+  /** The Tap Lock (#325, ADR 0087): the page is told, and told again by the bridge when it opens again. */
+  useEffect(() => {
+    reading.bridge.setTapLock(settings.tapLock);
+  }, [reading.bridge, settings.tapLock]);
 
   /**
    * The Voice in use as its own Provider describes it — the name it publishes and
@@ -727,6 +752,8 @@ export function ReadingView({
     if (what === 'section') return reading.goToSection(Number(command.section), typeof command.fragment === 'string' ? command.fragment : '');
     if (what === 'rate') return onRate(Number(command.rate));
     if (what === 'collapse') return setCollapsed(Boolean(command.on));
+    if (what === 'taplock') return setSettings((was) => ({ ...was, tapLock: Boolean(command.on) }));
+    if (what === 'sleep') return sleep.choose(command.choice === 'chapter' ? 'chapter' : command.choice === null || command.choice === undefined ? null : Number(command.choice));
     if (what === 'contents') return setContentsOpen(Boolean(command.on));
     if (what === 'voicesheet') {
       setVoicesOpen(Boolean(command.on));
@@ -763,6 +790,7 @@ export function ReadingView({
       hlog(`line=${JSON.stringify(readingLine(status, settings))} highlight=${JSON.stringify(highlightLine(status))}`);
       hlog(`voiceInUse=${JSON.stringify(voiceInUse)} provider=${settings.provider} voice=${settings.voice} rate=${settings.rate}`);
       hlog(`appearance=${JSON.stringify(settings.appearance)} theme=${settings.theme} ready=${ready.ready}`);
+      hlog(`tapLock=${settings.tapLock} sleep=${JSON.stringify({ choice: sleep.choice, left: sleep.left, since: sleep.since, expired: sleep.expired })} chapterOffered=${chapterOffered}`);
       for (const one of notes) hlog(`note attention=${one.attention} ${JSON.stringify(one.said)}`);
       return;
     }
@@ -850,6 +878,11 @@ export function ReadingView({
         onHeight={reading.bridge.setInset}
         onOpenHeight={reading.bridge.setOpenPlayer}
         barHeight={barHeight}
+        tapLock={settings.tapLock}
+        onTapLock={(on) => setSettings((was) => ({ ...was, tapLock: on }))}
+        sleep={sleep}
+        chapterOffered={chapterOffered}
+        onSleep={sleep.choose}
       /> : null}
 
       <LookupDrawer lookup={lookup} service={settings.lookup.service}

@@ -32,6 +32,11 @@
  *   button that brings the page back to the reading without starting it (#53).
  *   Collapsed to the Reading Button, neither is shown, because collapsed the
  *   page only follows.
+ * - **The bottom row holds the Tap Lock and the Sleep Timer** (#325, #326,
+ *   ADRs 0087 and 0088): the lock at the left, under Contents, the timer at
+ *   the right, under the speed, each as wide as the speed's column, with
+ *   nothing between them. A row of its own in both layouts, at the cost of
+ *   about 50 points more of the page covered (owner's Q12).
  *
  * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
@@ -51,6 +56,9 @@ import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 import { playerLayout } from './player-layout';
 import { LAYOUT_WIDTH } from './layout-widths';
+import type { SleepChoice } from './sleep-timer';
+import { SleepTimerButton } from './sleep-timer-button';
+import type { SleepTimerState } from './use-sleep-timer';
 
 /** The open player's padding above and below its rows: part of the height the Line Position is measured above (`onOpenHeight`). */
 const PLAYER_PADDING_TOP = 4;
@@ -168,6 +176,14 @@ export interface PlayerProps {
    * the player is open (#67), so this is never a bar that is not there.
    */
   barHeight: number;
+  /** The Tap Lock (#325): whether a tap on the page does nothing. */
+  tapLock: boolean;
+  onTapLock(on: boolean): void;
+  /** The Sleep Timer (#326), as `useSleepTimer` holds it. */
+  sleep: SleepTimerState;
+  /** Whether the Document has Contents rows, so `When Current Chapter Ends` is offered. */
+  chapterOffered: boolean;
+  onSleep(choice: SleepChoice | null): void;
 }
 
 /**
@@ -201,6 +217,11 @@ export function Player({
   onHeight,
   onOpenHeight,
   barHeight,
+  tapLock,
+  onTapLock,
+  sleep,
+  chapterOffered,
+  onSleep,
 }: PlayerProps) {
   const { width, height, fontScale } = useWindowDimensions();
   // The row must fit the Player, not the wider window around it (#319).
@@ -323,6 +344,11 @@ export function Player({
           <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen}
             width={layout.endWidth} height={layout.rateHeight} />
         </View> : null}
+        <View style={styles.transport}>
+          <TapLockButton on={tapLock} onPress={() => onTapLock(!tapLock)} width={layout.endWidth} height={layout.rateHeight} />
+          <SleepTimerButton sleep={sleep} chapterOffered={chapterOffered} onSleep={onSleep}
+            width={layout.endWidth} height={layout.rateHeight} />
+        </View>
       </View>
       </View>
       {/* A tap outside the phone's bubble closes it, and without this it also
@@ -369,6 +395,21 @@ function FollowingMark({ following, onReturn, size }: { following: boolean; onRe
     <Pressable accessibilityRole="button" accessibilityLabel="Return to the reading" onPress={onReturn}
       style={({ pressed }) => [styles.headEnd, { width: size, minHeight: size }, pressed && styles.pressed]}>
       {mark}
+    </Pressable>
+  );
+}
+
+/**
+ * The Tap Lock's button (#325, ADR 0087): an open padlock in the ink of the
+ * Player's other icons, or a shut one in the App Colour. One tap switches it,
+ * with nothing to confirm; a screen reader is told what a tap will do.
+ */
+function TapLockButton({ on, onPress, width, height }: { on: boolean; onPress(): void; width: number; height: number }) {
+  const accent = useAccent();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={on ? 'Unlock Taps' : 'Lock Taps'} onPress={onPress}
+      style={({ pressed }) => [styles.footTap, { width, height }, pressed && styles.pressed]}>
+      <Icon name={on ? 'lock' : 'unlock'} color={on ? accent.reading : INK.text} />
     </Pressable>
   );
 }
