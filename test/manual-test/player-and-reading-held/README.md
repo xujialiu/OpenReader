@@ -30,6 +30,11 @@ that names the script or probe you are about to run.
   the fetch; a fake Kokoro provider that logs every request
   (`fake-kokoro.cjs`) and `Tap86Probe.swift` for the real touches.
 
+- [tap-lock-and-sleep-timer.md](tap-lock-and-sleep-timer.md) (#325, #326):
+  the Player's bottom row: taps under the Tap Lock, and the Sleep Timer's
+  native menu, length and chapter stops, also with the device locked.
+  `SleepMenuProbe.swift`.
+
 - [engine-scheduling.md](engine-scheduling.md) (#157, #169, #158, #181):
   the playback engine's guards on the simulator — short late Clips at 3×
   reading a whole fixture to the end, rate changes mid-starvation, on a

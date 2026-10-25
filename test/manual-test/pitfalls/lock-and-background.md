@@ -139,3 +139,4 @@
   `kit/ios_guard.py` so the diagnose hang is bounded by the guard's process-tree cleanup. After the
   fix the same scenario passed: tap at 1792238286.98, `Pause` when the tap returned, `Play` 2 s
   later, `Executed 1 test, with 0 failures in 3.222`.
+- **Two `lock-device.sh lock-on` runners share one `$work/<action>.log` and one simulator** (verifying #325/#326, iOS 27.0, 2026-10-26). Symptom: the second launch truncated `lock-on.log`, erasing the first runner's `waiting`/`pressing at` lines; its XCUITest session then kept the first from ever pressing (no `pressing at` anywhere), and killing the duplicate left the app on the Home screen, so a pause timed in that window proves nothing about the lock. Fix: one runner at a time — kill a stale runner's `xcodebuild` before touching any signal file — and treat `LOCKPROBE pressing at <unix>` plus a lock-screen screenshot during the window as the only proof the device was locked.
