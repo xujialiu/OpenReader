@@ -1,8 +1,12 @@
 ---
-status: accepted
+status: superseded by ADR-0089
 ---
 
 # A voice belongs to a document, with a global default
+
+[ADR 0089](0089-one-voice-for-every-document.md) replaces this with one Voice
+for every Document (#327). This document retains the earlier decision and its
+measured facts; it is not the current rule.
 
 The provider configuration UI, player eligibility and new-document voice default
 are revised by [ADR 0026](0026-a-coherent-reading-interface.md). Historical

@@ -137,6 +137,9 @@ There is no separate default-voice setting. A new document takes the most recent
 selected voice whose provider is still enabled, or asks for a choice when none
 is available. Existing documents keep their own voices. This revises the explicit
 default for new documents in decision 0010; its per-document memory remains.
+_Revised by [decision 0089](0089-one-voice-for-every-document.md): the app now
+has one voice for every document, and turning its provider off keeps that voice
+rather than moving to another provider's._
 
 Existing installations retain their configuration, but start with every provider
 disabled when this change arrives. The owner enables each with a successful test.

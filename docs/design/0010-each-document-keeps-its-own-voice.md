@@ -1,5 +1,9 @@
 # Each document keeps the voice it was started in
 
+[Decision 0089](0089-one-voice-for-every-document.md) replaces this: the app now
+has one voice for every document. What follows is the earlier decision, kept as
+it was argued.
+
 Provider configuration, availability and the initial voice for new documents are
 revised in [decision 0026](0026-a-coherent-reading-interface.md). The earlier
 choices below retain their original context.

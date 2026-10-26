@@ -96,9 +96,8 @@ voices, that is no order anyone can search by eye.
   made the drawer two kinds of choice. The owner asked for the voice to be
   chosen the way the provider and the language are.
 - **Choosing the new language's first voice automatically.** Just looking at
-  another language would then change this document's voice and the default for
-  new documents (decision 0010), and could leave the audio already downloaded
-  unused.
+  another language would then change the voice every document is read in
+  (decision 0089), and could leave the audio already downloaded unused.
 - **Merging the Chinese regions, as the desktop plugin does.** The plugin
   merges them because Zotero's own menu does. Here, merging would hide which
   voices are Cantonese.

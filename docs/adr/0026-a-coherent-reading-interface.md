@@ -98,7 +98,10 @@ enabled Provider on the next play attempt rather than silently falling back.
 A new Document inherits the most recently selected Voice whose Provider remains
 enabled, or requires selection if none qualifies. There is no separately edited
 default Voice. This supersedes the explicit new-document default in ADR 0010,
-while retaining per-document Voice assignments. Existing settings migrate with
+while retaining per-document Voice assignments. _Revised by
+[ADR 0089](0089-one-voice-for-every-document.md) (#327): there is one Voice for
+every Document, `recentVoices` is gone, and a disabled Provider's Voice is kept
+rather than replaced by an enabled one._ Existing settings migrate with
 configuration retained and all Providers disabled; each must pass the explicit
 enablement test. Configuration edits, including credentials, persist automatically
 while disabled and survive leaving the detail screen. Enable is a test and state
@@ -110,7 +113,7 @@ ordinary configuration and enabled ids; credentials remain in the Keychain.
 This is a local preferences file, not the unimplemented shared sync format.
 The parser projects known non-secret fields and migrates unversioned settings
 with all providers disabled. New documents use `recentVoices`, ordered by the
-owner's selections, skipping disabled providers.
+owner's selections, skipping disabled providers (removed by ADR 0089).
 
 A settings write uses the existing synchronous `OpenReaderOffline.writeJson`
 primitive, whose Foundation call writes atomically (#186). `File.write` in the

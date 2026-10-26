@@ -72,7 +72,7 @@ _Avoid_: voice, speaker, provider, engine
 
 **Voice**:
 One named speaker a provider offers. A voice belongs to exactly one provider.
-_Avoid_: model, speaker, persona
+_Avoid_: model, speaker, persona, default voice, document voice
 
 **Language**:
 One way of speaking that a Provider offers Voices in: a language and, where
