@@ -274,7 +274,7 @@ describe('what the Reading tells the Library about its order (#228)', () => {
 });
 
 /**
- * One Voice for the app (#327, ADR 0089): "Use downloaded voice" in any
+ * One Voice for the app (#327, ADR 0089): Switch voice (#329) in any
  * Document's Download drawer changes the Voice a held Reading is read in.
  */
 describe('a Voice chosen from the Download drawer', () => {

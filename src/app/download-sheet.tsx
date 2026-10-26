@@ -7,9 +7,9 @@ import * as downloads from '../offline/runtime';
 import { inFishModel, withFishModel } from '../offline/narration-voice';
 import { useShell } from './routes';
 import { PROVIDER_LABELS } from './settings';
-import { INK, useAccent, useBorders } from './controls';
+import { ChoiceMenu, INK, useAccent, useBorders } from './controls';
 import { DownloadRing } from './download-ring';
-import { chapterCount, downloadedChapters, listedInManage, marker, readingChapter, type Marker } from './download-rows';
+import { chapterCount, downloadedChapters, listedInManage, marker, readingChapter, voiceChoices, voiceKey, type Marker } from './download-rows';
 import { DRAWER, DrawerList, DrawerRow, DrawerRowText, type DrawerAction } from './drawer';
 import { Icon } from './icon';
 import { useSweep } from './use-sweep';
@@ -39,11 +39,18 @@ const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.le
  * a chapter saved, the ring of one being written, and a volume's arrow before
  * them. Two fingers over the list select the rows under them (#57, ADR 0045).
  *
- * Over the list: the voice, the count, and the download's state with Pause all
- * or Resume all at its end. Under it, fixed whatever the list is scrolled to:
- * the other voices with saved audio, and Download selected, or on Manage,
- * Delete all audio and Delete all current voice audio on one row, and Delete
- * selected. Select all is the drawer's header
+ * Over the list: the voice with Switch voice at its end, the count, and the
+ * download's state with Pause all or Resume all at its end. Under it, fixed
+ * whatever the list is scrolled to: Download selected, or on Manage, Delete all
+ * audio and Delete all current voice audio on one row, and Delete selected.
+ *
+ * **Switch voice** (#329) is the phone's own menu of the Voices this Document
+ * has Offline Narration in, in the Fish Audio Model shown: the way back to
+ * saved audio in another Voice. On Download the Voice chosen becomes the one
+ * Voice (ADR 0089); on Manage it is only the Voice managed. It replaced a row
+ * per Voice under the list, which took a chapter row from the list for every
+ * Voice saved. It is offered only when the menu holds a Voice other than the
+ * one shown. Select all is the drawer's header
  * action, handed up through `onSelectAll`, because only this knows the rows.
  *
  * `manage` is which page this is. Manage lists only what has audio to delete
@@ -61,7 +68,7 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
   onManage(open: boolean): void;
   /** The header's Select all / Deselect all, or null when this page is gone. */
   onSelectAll: Dispatch<SetStateAction<DrawerAction | null>>;
-  /** "Use downloaded voice": the one Voice becomes this one, for every Document (ADR 0089). */
+  /** Switch voice on Download: the one Voice becomes this one, for every Document (ADR 0089, #329). */
   onVoice?(voice: OfflineVoice): void;
 }) {
   downloads.useDownloads();
@@ -134,7 +141,17 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
   const completed = [...progress.values()].filter((p) => p.complete).length;
   const whole = !!plan && fullyPrepared(plan) && full > 0 && completed === full;
   const state = downloads.indexingState(document);
-  const otherVoices = downloads.savedVoices(document).filter((v) => inFishModel(v, settings.fish.model) && !downloads.sameVoice(v, choice) && downloads.occupied(document, v) > 0);
+  // Switch voice's menu (#329): every Voice with saved audio here, in the Model shown, the one shown among them.
+  const shownKey = voiceKey(choice);
+  const switchable = voiceChoices(downloads.savedVoices(document).filter((v) => inFishModel(v, settings.fish.model) && downloads.occupied(document, v) > 0), PROVIDER_LABELS);
+  const switchTo = (key: string) => {
+    const next = switchable.find((entry) => entry.value === key)?.voice;
+    // The checked entry is the Voice already shown: choosing it again changes nothing.
+    if (!next || key === shownKey) return;
+    setSelected(new Set());
+    if (manage) setManagedVoice(next);
+    else onVoice?.({ provider: next.provider, voice: next.voice, label: next.label });
+  };
   // Nothing saved for any voice and nothing under way: there is nothing to manage, so Manage is not offered (#37).
   const manageable = downloads.occupied(document) > 0 || downloads.downloadTasks(document).some((t) => inFishModel(t.voice, settings.fish.model) && t.state !== 'done');
   const status = task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length && (whole || !!task.recheckHeld?.length)) ? task : null;
@@ -243,7 +260,14 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
   return <View style={styles.page}>
     <View style={styles.lines}>
       {choice.provider === 'fish' ? <Text style={styles.voice}>Model · {PROVIDER_LABELS.fish} · {choice.model}</Text> : null}
-      <Text style={styles.voice}>Voice · {choice.label || 'Choose a voice in the player'}</Text>
+      <View style={styles.line}>
+        <Text style={[styles.voice, styles.grow]}>Voice · {choice.label || 'Choose a voice in the player'}</Text>
+        {switchable.some((entry) => entry.value !== shownKey) ? <View style={styles.switchVoice}>
+          <ChoiceMenu label="Switch voice" choices={switchable} chosen={shownKey} onChoose={switchTo}>
+            <View style={styles.switchWords}><Text style={link}>Switch voice</Text></View>
+          </ChoiceMenu>
+        </View> : null}
+      </View>
       {downloads.downloadError() ? <Text style={styles.error}>{downloads.downloadError()}</Text> : null}
       {plan && !progressReady ? <Text style={styles.secondary}>Checking saved downloads…</Text> : null}
       {plan ? <View style={styles.line}>
@@ -270,10 +294,6 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
         keyExtractor={(c) => c.id} renderItem={({ item }) => chapterRow(item)}
         ListEmptyComponent={!manage ? <Text style={[styles.secondary, styles.empty]}>No readable text in this document.</Text> : null} />
     </GestureDetector>}
-    {otherVoices.map((v) => <DrawerRow key={`${v.provider}/${v.voice}`}
-      onPress={() => { setSelected(new Set()); if (manage) setManagedVoice(v); else onVoice?.({ provider: v.provider, voice: v.voice, label: v.label }); }}>
-      <DrawerRowText style={{ color: accent.reading }}>{manage ? 'Manage' : 'Use downloaded voice'} · {v.label}</DrawerRowText>
-    </DrawerRow>)}
     {manage && downloads.occupied(document) > 0 ? <DrawerRow>
       <View style={styles.deletes}>
         <Pressable accessibilityRole="button" onPress={deleteEverything} hitSlop={DELETE_SLOP} style={({ pressed }) => pressed && styles.pressed}>
@@ -303,6 +323,9 @@ const styles = StyleSheet.create({
   error: { ...TEXT.footnote, color: INK.text },
   link: { ...TEXT.subhead },
   manage: { alignItems: 'center', flexDirection: 'row', gap: 2 },
+  // The menu's words, pressable a little either side as Manage downloads is (`hitSlop` 8), without moving the line.
+  switchVoice: { margin: -8 },
+  switchWords: { padding: 8 },
   preparing: { alignItems: 'center', flex: 1, gap: 14, padding: 20 },
   // Fills what the lines and the button leave it, so the button is at the drawer's bottom.
   list: { flexGrow: 1 },

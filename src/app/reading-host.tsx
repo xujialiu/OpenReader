@@ -72,7 +72,7 @@ export interface ReadingHandle {
   setBarHeight(points: number): void;
   /**
    * The one Voice, chosen away from the Voice drawer: the Download drawer's
-   * "Use downloaded voice", for the Document being read or any other (#327,
+   * Switch voice (#329), for the Document being read or any other (#327,
    * ADR 0089). A Reading playing anywhere is read in it next.
    *
    * An enabled Provider's Voice is handed over as the Voice drawer hands one

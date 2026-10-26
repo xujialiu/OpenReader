@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chapterCount, downloadedRows, listedInManage, marker, readingChapter, type Marker } from '../../src/app/download-rows';
+import { chapterCount, downloadedRows, listedInManage, marker, readingChapter, voiceChoices, type Marker } from '../../src/app/download-rows';
 import { fragmentOf, type ContentsRow } from '../../src/core/document/contents';
 import type { Chapter, DownloadTask } from '../../src/offline/model';
 
@@ -208,5 +208,20 @@ describe('the counts the Download drawer writes (#144)', () => {
     expect(chapterCount(2, 'downloaded')).toBe('2 chapters downloaded');
     expect(chapterCount(1, 'failed')).toBe('1 chapter failed');
     expect(chapterCount(3, 'failed')).toBe('3 chapters failed');
+  });
+});
+
+describe('Switch voice\'s entries (#329)', () => {
+  const providers = { fish: 'Fish Audio', azure: 'Azure' } as Parameters<typeof voiceChoices>[1];
+  it('lists a Voice once, by its id where it has no name, and names the Provider only where two names are the same', () => {
+    expect(voiceChoices([
+      { provider: 'fish', voice: 'b', label: 'Bea' },
+      { provider: 'fish', voice: 'b', label: 'Bea' },
+      { provider: 'azure', voice: 'en-US-Ava', label: '' },
+      { provider: 'azure', voice: 'a', label: 'Adam' },
+      { provider: 'fish', voice: 'a', label: 'Adam' },
+    ], providers).map(({ value, label }) => [value, label])).toEqual([
+      ['azure/a', 'Adam (Azure)'], ['fish/a', 'Adam (Fish Audio)'], ['fish/b', 'Bea'], ['azure/en-US-Ava', 'en-US-Ava'],
+    ]);
   });
 });

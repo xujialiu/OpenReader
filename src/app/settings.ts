@@ -623,8 +623,8 @@ export function selectVoice(settings: AppSettings, provider: ProviderId, voice: 
 }
 
 /**
- * The one Voice, chosen from a Document's saved audio ("Use downloaded voice",
- * ADR 0089): taken even when its Provider is disabled, because saved audio plays
+ * The one Voice, chosen from a Document's saved audio (the Download drawer's
+ * Switch voice, ADR 0089, #329): taken even when its Provider is disabled, because saved audio plays
  * without it (design 0027). The Reading then stops at the first sentence not
  * saved in it, saying the Provider is disabled, as it does for a Voice whose
  * Provider was disabled after it was chosen.

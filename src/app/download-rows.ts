@@ -1,7 +1,9 @@
 import { fragmentOf, rowOfPlace, type ContentsRow, type ReadingSpineItem } from '../core/document/contents';
 import type { ChapterProgress } from '../offline/catalog';
-import { chapterTextCount, speaks, type Chapter, type DownloadTask, type TaskState } from '../offline/model';
+import type { ProviderId } from '../core/providers/types';
+import { chapterTextCount, speaks, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import { isPaused } from '../offline/pausing';
+import { compareLabels } from './voices';
 
 /**
  * What the right-hand column of a chapter row shows, decided here so that the
@@ -192,3 +194,27 @@ export function listedInManage(chapters: readonly Chapter[], markers: ReadonlyMa
  */
 export const chapterCount = (count: number, what: 'downloaded' | 'failed'): string =>
   `${count} ${count === 1 ? 'chapter' : 'chapters'} ${what}`;
+
+/** A Voice as an entry of `Switch voice`'s menu: a Voice belongs to exactly one Provider (CONTEXT.md). */
+export const voiceKey = (voice: Pick<OfflineVoice, 'provider' | 'voice'>): string => `${voice.provider}/${voice.voice}`;
+
+/**
+ * The entries of `Switch voice` (#329): the Voices given, each once, in the
+ * order the Voice drawer's Voice menu sorts by (`compareLabels`, design 0081).
+ * An entry is the Voice's name alone, as the rows it replaced were; where two
+ * entries share a name, each carries its Provider in brackets, which is what
+ * tells them apart.
+ *
+ * Which Voices are given is the drawer's: those the Document has Offline
+ * Narration in, in the Fish Audio Model shown.
+ */
+export function voiceChoices(voices: readonly OfflineVoice[], providers: Readonly<Record<ProviderId, string>>): { value: string; label: string; voice: OfflineVoice }[] {
+  const once = new Map<string, OfflineVoice>();
+  for (const voice of voices) if (!once.has(voiceKey(voice))) once.set(voiceKey(voice), voice);
+  const keep = [...once.values()];
+  const name = (voice: OfflineVoice) => voice.label || voice.voice;
+  const shared = new Set(keep.map(name).filter((label, at, all) => all.indexOf(label) !== at));
+  return keep
+    .map((voice) => ({ value: voiceKey(voice), label: shared.has(name(voice)) ? `${name(voice)} (${providers[voice.provider]})` : name(voice), voice }))
+    .sort((a, b) => compareLabels(a.label, b.label));
+}

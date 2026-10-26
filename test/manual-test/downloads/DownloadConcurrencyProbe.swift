@@ -26,7 +26,7 @@ final class DownloadConcurrencyProbe: XCTestCase {
   /// runtime directly and changes no Voice): unless the app's one Voice
   /// (ADR 0089) is already this one, the drawer counts "0 chapters downloaded"
   /// even with two chapters actually saved, so `openDownloadDrawer` picks this
-  /// one for real with the drawer's own "Use downloaded voice" link before
+  /// one for real from the drawer's own Switch voice menu (#329) before
   /// anything else.
   let voiceLabel = "en/179b5cc736974d96913c7849d0bb68c5"
   /// nav.104: about 95 sentences, never downloaded before this run.
@@ -193,12 +193,18 @@ final class DownloadConcurrencyProbe: XCTestCase {
     app.buttons["More actions"].tap()
     XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 3))
     app.buttons["Download"].tap()
-    // Real touch: pick the voice nav.102/103 are already saved under, offered
-    // whenever the drawer's own choice does not already match it. Absent once
-    // this run has already switched.
-    let useDownloadedVoice = app.buttons.matching(NSPredicate(format: "label == %@", "Use downloaded voice · \(voiceLabel)")).firstMatch
-    if useDownloadedVoice.waitForExistence(timeout: 3) {
-      useDownloadedVoice.tap()
+    // Real touch: pick the voice nav.102/103 are already saved under from the
+    // drawer's own Switch voice menu (#329), unless it is already the one
+    // shown, as it is once this run has switched. The menu is one button,
+    // "Switch voice" or "Switch voice, <entry shown>" (`ChoiceMenu`), and each
+    // entry a button named by its words.
+    if !app.staticTexts["Voice · \(voiceLabel)"].waitForExistence(timeout: 3) {
+      let switchVoice = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Switch voice")).firstMatch
+      XCTAssertTrue(switchVoice.waitForExistence(timeout: 3), "No Switch voice in the Download drawer")
+      switchVoice.tap()
+      let entry = app.buttons[voiceLabel]
+      XCTAssertTrue(entry.waitForExistence(timeout: 3), "No \(voiceLabel) in Switch voice's menu")
+      entry.tap()
       Thread.sleep(forTimeInterval: 0.6)
     }
   }

@@ -9,6 +9,8 @@ const mock = vi.hoisted(() => ({
   model: 'drama-3', alert: vi.fn(), requestProgress: vi.fn(), releaseProgress: vi.fn(),
   /** What `occupied` answers for the whole Document, and for one Voice. */
   document: 30, voice: 10,
+  /** What `savedVoices` answers, when a test sets it. */
+  saved: null as OfflineVoice[] | null,
   removeVoiceDownloads: vi.fn(async () => {}),
 }));
 const hosts = vi.hoisted(() => async (...names: string[]) => {
@@ -19,7 +21,7 @@ vi.mock('react-native', async () => ({ ...await hosts('View', 'Text', 'Pressable
   StyleSheet: { create: (styles: unknown) => styles }, Alert: { alert: mock.alert },
 }));
 vi.mock('react-native-gesture-handler', () => hosts('GestureDetector'));
-vi.mock('../../src/app/controls', () => ({ INK: {}, useAccent: () => ({}), useBorders: () => ({}) }));
+vi.mock('../../src/app/controls', async () => ({ ...await hosts('ChoiceMenu'), INK: {}, useAccent: () => ({}), useBorders: () => ({}) }));
 vi.mock('../../src/app/drawer', async () => ({ ...await hosts('DrawerList', 'DrawerRow', 'DrawerRowText'), DRAWER: { row: {} } }));
 vi.mock('../../src/app/download-ring', () => hosts('DownloadRing'));
 vi.mock('../../src/app/icon', () => hosts('Icon'));
@@ -31,7 +33,7 @@ vi.mock('../../src/offline/runtime', () => ({
   requestProgress: mock.requestProgress, releaseProgress: mock.releaseProgress,
   planOf: () => ({ version: 2, chapters: [] }), chapterProgress: () => new Map(),
   sameVoice: (a: OfflineVoice, b: OfflineVoice) => narrationIdentity(a) === narrationIdentity(b),
-  savedVoices: () => [
+  savedVoices: () => mock.saved ?? [
     { provider: 'fish', voice: 'old', label: 'Hidden old-model Voice' },
     { provider: 'fish', model: 'drama-3', voice: 'other', label: 'Current-model Voice' },
     { provider: 'azure', voice: 'azure', label: 'Azure Voice' },
@@ -41,6 +43,9 @@ vi.mock('../../src/offline/runtime', () => ({
   formatBytes: (n: number) => `${n} bytes`, downloadError: () => null, downloadsReady: () => true,
 }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+/** Switch voice's menu (#329), or undefined where it is not offered. */
+const switchVoice = (view: ReactTestRenderer) => view.root.findAll((node) => String(node.type) === 'ChoiceMenu' && node.props.label === 'Switch voice')[0];
 
 /** The button whose words are `label`. */
 const pressable = (view: ReactTestRenderer, label: string) => view.root.findAll((node) => String(node.type) === 'Pressable')
@@ -54,13 +59,13 @@ it('shows Provider and Model on their own row, filters saved Fish Voices, and ke
     place: null, manage, onManage: vi.fn(), onSelectAll: vi.fn(), onVoice,
   });
   const words = (type: string) => view.root.findAll((node) => String(node.type) === type).map((node) => [node.props.children].flat().join(''));
+  /** What Switch voice's menu lists (#329). */
+  const entries = () => (switchVoice(view)?.props.choices as { label: string }[]).map((c) => c.label);
   await act(async () => { view = create(render(false)); });
   try {
     expect(words('Text')).toContain('Model · Fish Audio · drama-3');
     expect(words('Text')).toContain('Voice · A very long narrator name that needs its own row');
-    expect(words('DrawerRowText')).not.toContain('Use downloaded voice · Hidden old-model Voice');
-    expect(words('DrawerRowText')).toContain('Use downloaded voice · Current-model Voice');
-    expect(words('DrawerRowText')).toContain('Use downloaded voice · Azure Voice');
+    expect(entries()).toEqual(['Azure Voice', 'Current-model Voice']);
     expect(mock.requestProgress).toHaveBeenLastCalledWith('book', expect.objectContaining({ model: 'drama-3' }));
     await act(async () => { view.update(render(true)); });
     expect(words('Text')).toContain('Model · Fish Audio · drama-3');
@@ -71,8 +76,7 @@ it('shows Provider and Model on their own row, filters saved Fish Voices, and ke
     mock.model = 's2.1-pro-free';
     await act(async () => { view.update(render(false)); });
     expect(words('Text')).toContain('Model · Fish Audio · s2.1-pro-free');
-    expect(words('DrawerRowText')).toContain('Use downloaded voice · Hidden old-model Voice');
-    expect(words('DrawerRowText')).not.toContain('Use downloaded voice · Current-model Voice');
+    expect(entries()).toEqual(['Azure Voice', 'Hidden old-model Voice']);
     expect(onVoice).not.toHaveBeenCalled(); // displaying a Model never selects one
   } finally { await act(async () => view.unmount()); }
 });
@@ -116,6 +120,58 @@ it('deletes all of the managed Voice\'s audio in its Model from the right of Del
   } finally {
     mock.document = 30;
     mock.voice = 10;
+    await act(async () => view.unmount());
+  }
+});
+
+it('Switch voice lists the saved Voices by name in the Voice menu\'s order, checks the one shown, and chooses on Download or Manage (#329)', async () => {
+  mock.model = 'drama-3';
+  mock.saved = [
+    { provider: 'fish', model: 'drama-3', voice: 'A', label: 'Aarav' },
+    { provider: 'azure', voice: 'x', label: 'Gregory' },
+    { provider: 'fish', model: 'drama-3', voice: 'g', label: 'Gregory' },
+    { provider: 'fish', model: 'drama-3', voice: 'z', label: '晓晓' },
+  ];
+  let view!: ReactTestRenderer;
+  const onVoice = vi.fn();
+  const render = (manage: boolean) => createElement(DownloadContent, {
+    document: 'book', title: 'Book', voice: { provider: 'fish', voice: 'A', label: 'Aarav' },
+    place: null, manage, onManage: vi.fn(), onSelectAll: vi.fn(), onVoice,
+  });
+  const menu = () => switchVoice(view);
+  const voiceLine = () => view.root.findAll((node) => String(node.type) === 'Text').map((node) => [node.props.children].flat().join('')).find((words) => words.startsWith('Voice · '));
+  await act(async () => { view = create(render(false)); });
+  try {
+    // Han first by pinyin, then A to Z; a shared name carries its Provider; no row per Voice under the list.
+    expect((menu().props.choices as { label: string }[]).map((c) => c.label)).toEqual(['晓晓', 'Aarav', 'Gregory (Azure)', 'Gregory (Fish Audio)']);
+    expect(menu().props.chosen).toBe('fish/A');
+    expect(view.root.findAll((node) => String(node.type) === 'DrawerRowText')).toHaveLength(0);
+    // The checked entry changes nothing; another becomes the one Voice.
+    await act(async () => { menu().props.onChoose('fish/A'); });
+    expect(onVoice).not.toHaveBeenCalled();
+    await act(async () => { menu().props.onChoose('azure/x'); });
+    expect(onVoice).toHaveBeenLastCalledWith({ provider: 'azure', voice: 'x', label: 'Gregory' });
+    // On Manage only the Voice managed changes.
+    onVoice.mockClear();
+    await act(async () => { view.update(render(true)); });
+    await act(async () => { menu().props.onChoose('fish/g'); });
+    expect(onVoice).not.toHaveBeenCalled();
+    expect(voiceLine()).toBe('Voice · Gregory');
+    expect(menu().props.chosen).toBe('fish/g');
+    // Offered only when the menu holds a Voice other than the one shown.
+    await act(async () => { view.update(render(false)); });
+    mock.saved = [{ provider: 'fish', model: 'drama-3', voice: 'A', label: 'Aarav' }];
+    await act(async () => { view.update(render(false)); });
+    expect(menu()).toBeUndefined();
+    mock.saved = [];
+    await act(async () => { view.update(render(false)); });
+    expect(menu()).toBeUndefined();
+    mock.saved = [{ provider: 'azure', voice: 'x', label: 'Gregory' }];
+    await act(async () => { view.update(render(false)); });
+    expect((menu().props.choices as { label: string }[]).map((c) => c.label)).toEqual(['Gregory']);
+    expect(menu().props.chosen).toBe('fish/A');
+  } finally {
+    mock.saved = null;
     await act(async () => view.unmount());
   }
 });

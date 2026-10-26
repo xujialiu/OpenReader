@@ -28,7 +28,7 @@ voice that spoke it. After a change, a book downloaded in the old voice is read
 in the new one, fetched from the provider again, which needs a connection and
 costs what the provider charges. Its downloaded marks follow the new voice. None
 of the old audio is deleted. Switching back to the old voice, for which the
-Download page offers "Use downloaded voice", makes it play again.
+Download page offers "Switch voice", makes it play again.
 
 A book with downloaded audio could have kept its downloaded voice. That was
 turned down because it brings back a voice per book, with the same surprise:
@@ -58,13 +58,19 @@ makes after turning a provider off is the smaller cost.
 
 ## The Download page
 
-The Download page shows the one voice, and downloads in it. "Use downloaded
-voice" makes the voice it names the one voice, for every book, and the page then
-shows that voice. If a book is being read aloud at that moment, whichever book it
-is, it moves to the new voice as it would from the voice list: the old voice
-reads on until the new one is ready. A voice whose provider is turned off cannot
-be prepared ahead, so choosing one stops the reading. Play then reads what is
-saved in it.
+The Download page shows the one voice, and downloads in it. "Switch voice", at
+the end of the voice's line, opens the phone's menu of the voices the book has
+saved audio in, in alphabetical order, with a check on the one shown. Choosing
+one makes it the one voice, for every book, and the page then shows that voice.
+If a book is being read aloud at that moment, whichever book it is, it moves to
+the new voice as it would from the voice list: the old voice reads on until the
+new one is ready. A voice whose provider is turned off cannot be prepared ahead,
+so choosing one stops the reading. Play then reads what is saved in it.
+
+On the page that manages downloads, the same menu changes only whose audio is
+managed. The menu replaced a row per voice under the chapter list, which left a
+book saved in several voices room for one or two chapters
+([issue 329](https://github.com/xujialiu/OpenReader/issues/329)).
 
 ## On updating
 

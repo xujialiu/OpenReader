@@ -875,10 +875,11 @@
   when it is opened for real, even chapters deep into saved clips, unless the
   app's one Voice (ADR 0089) is the Voice they were saved in.** `enqueue`
   changes no Voice, and the drawer counts against the app's Voice. The saved
-  audio is not lost: the drawer's own "Use downloaded voice ·
-  `provider/voice`" link is offered (`otherVoices` in `download-sheet.tsx`),
-  and a real tap on it makes that the Voice, after which the count and the
-  checkmarks appear. Tap it before selecting any chapter. Before #327 the
+  audio is not lost: the drawer's own `Switch voice` menu lists it
+  (`switchable` in `download-sheet.tsx`, #329; before #329 a "Use downloaded
+  voice · `provider/voice`" row under the list), and a real tap on its entry
+  makes that the Voice, after which the count and the checkmarks appear. Do it
+  before selecting any chapter. Before #327 the
   drawer counted against the Library entry's own Voice, which `enqueue` left
   unset, so the drawer also said "Choose a voice in the player". Before #226 the same first
   real open also retitled the Library entry from the EPUB's own metadata,

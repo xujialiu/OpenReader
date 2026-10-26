@@ -31,9 +31,10 @@ Two of ADR 0010's costs are accepted as they are:
 - **Offline Narration in another Voice is used only after switching back to it.**
   Saved audio is filed under the Voice that spoke it (ADR 0027), so after a
   change the Reading fetches from the Provider again and the Downloaded checks
-  follow the new Voice. Nothing is deleted. "Use downloaded voice" in the
-  Download drawer is the way back. A Document with a Download does not keep its
-  downloaded Voice: that would bring the per-Document Voice back.
+  follow the new Voice. Nothing is deleted. `Switch voice` in the Download
+  drawer is the way back ([#329](https://github.com/xujialiu/OpenReader/issues/329)).
+  A Document with a Download does not keep its downloaded Voice: that would
+  bring the per-Document Voice back.
 - **A shelf with Documents in different languages shares the one Voice.** A
   Voice per language stays out of scope, for ADR 0010's reason: it would mean
   the language detector ADR 0006 avoided.
@@ -66,9 +67,11 @@ again. So `recentVoices` and `recentEnabledVoice` are gone.
 
 - **`settings.ts`.** `selectVoice` sets the pair, and only for an enabled
   Provider, as the Voice drawer offers only those. `selectSavedVoice` sets it
-  for any Provider: it is the Download drawer's "Use downloaded voice", which
+  for any Provider: it is the Download drawer's `Switch voice`, whose menu
   lists the Voices a Document has saved audio in, a disabled Provider's
-  included. `settingsForDocument`, `unusableVoiceSentence`, `DocumentVoice` and
+  included (#329; it replaced a "Use downloaded voice" row per Voice under the
+  chapter list, which took a chapter row for every Voice saved).
+  `settingsForDocument`, `unusableVoiceSentence`, `DocumentVoice` and
   `recentVoices` are removed; `settings-storage.ts` no longer reads or writes
   `recentVoices`, and an older `settings.json` that has it is read past.
 - **`reading-host.tsx`.** The Reading is handed the owner's settings. The
