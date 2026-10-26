@@ -101,9 +101,9 @@ export interface SegmenterOptions {
  *
  * `language` is the document's own — an EPUB's `dc:language` — and is never
  * sniffed. ADR 0006 keeps `eld` and its two megabytes out on exactly that
- * ground, and ADR 0010 accepts the consequence: a document with more than one
- * language in it is read in its one voice, because detecting per sentence would
- * reinstate the detector that was avoided.
+ * ground, and ADR 0089 accepts the consequence: a document with more than one
+ * language in it is read in the app's one Voice, because detecting per sentence
+ * would reinstate the detector that was avoided.
  *
  * Every utterance returned is non-empty and trimmed; a Block that holds nothing
  * but whitespace produces none. Utterances do not overlap and are in order, and

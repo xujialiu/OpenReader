@@ -16,11 +16,12 @@ here is this run's measurement, not a general recipe.
   configured with the harness settings patch (`provider: compatible`,
   `enabledProviders`, `compatible.baseURL`, `compatible.model: fake-tts`).
   The consent alert was answered once, after reading its title — it named
-  `127.0.0.1:8891`, the fake, and nobody else. **The voice is per document
-  (ADR 0010)**: a harness `play` on a fresh Document silently does nothing
+  `127.0.0.1:8891`, the fake, and nobody else. **The voice was per document
+  (ADR 0010)** then: a harness `play` on a fresh Document silently did nothing
   (`[reading] play at utterance none, compatible ` — an empty voice) where
   the Play button would have opened the Voice sheet; each Document under test
-  got `{"do":"voice","provider":"compatible","voice":"alloy"}` first.
+  got `{"do":"voice","provider":"compatible","voice":"alloy"}` first. Since
+  #327 (ADR 0089) one such command serves every Document.
 - **Sync**: `delaying-webdav.cjs 8723 4000` (the GET and PUT of the Positions
   File held 4 s) at `http://127.0.0.1:8723/pos19-sync/`. The URL and username
   went in with the settings patch; the password was typed per character into

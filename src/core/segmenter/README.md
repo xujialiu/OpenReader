@@ -29,9 +29,9 @@ chapter text is not falsely presented as complete under different rules
 
 **No language detector.** An EPUB declares its own `dc:language`, which removes
 any need for `eld` and the two megabytes it carries. This is also why a document
-with more than one language in it is not handled specially (ADR 0010): it is
-read in its one voice, and detecting per sentence would mean reinstating exactly
-what was avoided here.
+with more than one language in it is not handled specially (ADR 0089): it is
+read in the app's one Voice, and detecting per sentence would mean reinstating
+exactly what was avoided here.
 
 `unicode-segmenter` is a dependency for the grapheme work that `Intl.Segmenter`
 would otherwise do, and it is **required, not optional**: measured on Hermes

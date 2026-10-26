@@ -28,12 +28,12 @@ Without a note, enable a Provider and give the Document a Voice:
 `{"do":"settings","patch":{"enabledProviders":["local"]}}`, then
 `{"do":"voice","provider":"local","voice":"af_heart"}`.
 
-**A long note** (about 210 characters, three lines at the default size): stop
-the app, set the entry's `voice.provider` in `Documents/library.json` to a name
-the app does not have (`"bogus"`), and relaunch. The Player then says `This book
-remembers being read by "bogus", …` (`unusableVoiceSentence`). The harness's
-`voice` command will not store such a name. Put the Provider back the same way
-afterwards.
+**A long note** (about 210 characters, three lines at the default size): the
+way this recipe made one, a Library entry whose `voice.provider` names a
+Provider the app does not have, went with #327 (ADR 0089), which removed the
+per-Document Voice and its sentence (`unusableVoiceSentence`). No other note of
+that length reachable from the harness has been verified yet; find one and
+write it here before the next long-note run.
 
 ## Run
 

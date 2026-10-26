@@ -10,7 +10,7 @@ import { migrationSentence, planIdMigration } from '../../src/app/document-ids';
  * Re-adding makes a **second entry** with `position: null` and leaves the first
  * one unopenable, so the owner's place in each book is the price. These are the
  * assertions that say it is not paid: the entry survives with its Reading
- * Position, its title and its Voice, and only its id moves.
+ * Position and its title, and only its id moves.
  *
  * The file system is not here by design (`test/README.md`); the seam is
  * `identify`, which in the app opens the file and digests its central directory
@@ -27,7 +27,6 @@ function entry(id: string, title: string, at: number, position = true): LibraryE
     publicationIdSource: 'none',
     title,
     position: position ? readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/4)'), 'A sentence in the book.', 2, 10, { at: 1, device: 'phone' }) : null,
-    voice: { provider: 'fish', voice: 'a-voice' },
     stamp: stamp(at),
   };
 }
@@ -53,7 +52,7 @@ describe('a shelf named under the rule ADR 0004 replaced', () => {
     expect(migrationSentence(plan)).toBeNull();
   });
 
-  it('keeps the Reading Position, the title and the Voice, and moves only the id', () => {
+  it('keeps the Reading Position and the title, and moves only the id', () => {
     // The whole argument for renaming rather than re-adding, as an assertion.
     const was = entry(OLD_ONE, '仙逆', 3);
     const plan = planIdMigration([was], answers({ [OLD_ONE]: NEW_ONE }));

@@ -22,8 +22,8 @@
  *
  * Everything the Reader screen used to work out for its `<ReadingView>` is
  * worked out here instead, from the entry of the document that is held: the
- * bytes, the Voice it inherits, a place adopted from another device, and the
- * callbacks that write back to the Library.
+ * bytes, a place adopted from another device, and the callbacks that write
+ * back to the Library. Not a Voice: the app has one, in the settings (ADR 0089).
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -39,7 +39,7 @@ import { prioritizeRecheck, setReadingPlays } from '../offline/runtime';
 import { openDocument, type OpenDocument } from './document';
 import { ReadingView } from './reading-view';
 import { useShell } from './routes';
-import { recentEnabledVoice, selectVoice, settingsForDocument, unusableVoiceSentence } from './settings';
+import { selectSavedVoice, selectVoice } from './settings';
 import { useProviderKey } from './use-provider-secrets';
 
 /** What the screens are told about the Reading. */
@@ -70,6 +70,19 @@ export interface ReadingHandle {
   end(id: DocumentId): void;
   /** The navigation bar's height, which the Reader measures and the page keeps room for (#67). */
   setBarHeight(points: number): void;
+  /**
+   * The one Voice, chosen away from the Voice drawer: the Download drawer's
+   * "Use downloaded voice", for the Document being read or any other (#327,
+   * ADR 0089). A Reading playing anywhere is read in it next.
+   *
+   * An enabled Provider's Voice is handed over as the Voice drawer hands one
+   * over (ADR 0026): the old Voice reads on until the new one is ready, and a
+   * failure leaves the old one in place, saying why. A disabled Provider's Voice
+   * cannot be prepared ahead of the place, so it is taken at once, which stops
+   * a playing Reading as disabling its Provider would; the next Play reads what
+   * is saved in it and stops at the first sentence that is not.
+   */
+  chooseVoice(provider: ProviderId, voice: string): void;
 }
 
 const ReadingContext = createContext<ReadingHandle | null>(null);
@@ -199,13 +212,11 @@ export function ReadingHost({ children }: { children: ReactNode }) {
 
   const opened = held?.opened ?? null;
   const openedId = opened?.document.identity.id ?? null;
-  /** This Document's own entry, read live: its Voice is chosen here and its title can change (ADR 0010). */
+  /** This Document's own entry, read live: its title can change, and a place can arrive from another device. */
   const openedEntry = useMemo(
     () => (openedId ? library.entries.find((one) => one.id === openedId) ?? null : null),
     [library.entries, openedId],
   );
-  const voiceProvider = openedEntry?.voice?.provider ?? '';
-  const voiceId = openedEntry?.voice?.voice ?? '';
   /** A place taken from another device since the open, and only since (#20, #55). */
   const adoptedAt = openedId ? library.adoptedAt[openedId] ?? null : null;
   const adoptedPosition = openedEntry?.position ?? null;
@@ -218,26 +229,24 @@ export function ReadingHost({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [adoptedAt, opened],
   );
-  const documentVoice = useMemo(() => (voiceId ? { provider: voiceProvider, voice: voiceId } : null), [voiceProvider, voiceId]);
-  const forDocument = useMemo(() => settingsForDocument(settings, documentVoice), [settings, documentVoice]);
-  const key = useProviderKey(forDocument.provider);
+  const key = useProviderKey(settings.provider);
 
-  /** A Document opened for the first time inherits the default Voice of that moment, and keeps it (ADR 0010). */
-  useEffect(() => {
-    if (!openedId || voiceId) return;
-    const recent = recentEnabledVoice(settings);
-    if (recent) library.voiced(openedId, recent);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openedId, voiceId]);
-
-  /** A Voice for this Document, which is also the default for the next new one (design 0010). */
+  /** The one Voice, for every Document (ADR 0089). */
   const setVoice = useCallback(
+    (provider: ProviderId, voice: string) => setSettings((previous) => selectVoice(previous, provider, voice)),
+    [setSettings],
+  );
+  /** The mounted view's handover, while there is one (`ReadingHandle.chooseVoice`). */
+  const chooserRef = useRef<((provider: ProviderId, voice: string) => void) | null>(null);
+  const onVoiceChooser = useCallback((choose: ((provider: ProviderId, voice: string) => void) | null) => {
+    chooserRef.current = choose;
+  }, []);
+  const chooseVoice = useCallback(
     (provider: ProviderId, voice: string) => {
-      if (!settings.enabledProviders.includes(provider)) return;
-      if (openedId) library.voiced(openedId, { provider, voice });
-      setSettings((previous) => selectVoice(previous, provider, voice));
+      if (settings.enabledProviders.includes(provider) && chooserRef.current) chooserRef.current(provider, voice);
+      else setSettings((previous) => selectSavedVoice(previous, provider, voice));
     },
-    [openedId, library, settings, setSettings],
+    [settings.enabledProviders, setSettings],
   );
   const setRate = useCallback((rate: number) => setSettings((previous) => ({ ...previous, rate })), [setSettings]);
   /**
@@ -291,8 +300,9 @@ export function ReadingHost({ children }: { children: ReactNode }) {
       left,
       end,
       setBarHeight,
+      chooseVoice,
     }),
-    [held, live, mine, show, left, end],
+    [held, live, mine, show, left, end, chooseVoice],
   );
 
   return (
@@ -319,14 +329,14 @@ export function ReadingHost({ children }: { children: ReactNode }) {
             shown={held.shown}
             key={opened.document.identity.id}
             document={{ ...opened.document, title: openedEntry?.title ?? opened.document.title }}
-            settings={forDocument}
-            voiceNote={unusableVoiceSentence(documentVoice)}
+            settings={settings}
             keyPresence={key.presence}
-            credentialsWrittenAt={secretRevisions[forDocument.provider] ?? 0}
+            credentialsWrittenAt={secretRevisions[settings.provider] ?? 0}
             position={opened.position}
             adopted={adopted}
             onRate={setRate}
             onVoice={setVoice}
+            onVoiceChooser={onVoiceChooser}
             onReached={reached}
             barHeight={barHeight}
             onChrome={onChrome}

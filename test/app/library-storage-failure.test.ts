@@ -41,7 +41,7 @@ const uri = 'file:///documents/library.json';
 const sentence = 'The sentence that was saved.';
 const saved: LibraryEntry = {
   id: asDocumentId(`sha256:${'a'.repeat(64)}`)!, format: 'epub', publicationId: null, publicationIdSource: 'none',
-  title: 'Kept Document', voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: 1, device: 'phone' },
+  title: 'Kept Document', stamp: { at: 1, device: 'phone' },
   position: readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/4)'), sentence, 0, sentence.length, { at: 2, device: 'phone' }),
 };
 const changed = { ...saved, title: 'Changed Document' };

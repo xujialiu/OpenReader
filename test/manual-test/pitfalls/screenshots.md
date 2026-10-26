@@ -871,17 +871,16 @@
   *its own* frame (`list.frame.maxY - 12` to `list.frame.minY + 12`); the
   same run then reached a chapter about 100 rows down in under 40 drags.
 - **A document whose saved audio was written by `download-chapter.cjs`
-  (CDP, calling `runtime.enqueue` directly) shows "Choose a voice in the
-  player" and "0 chapters downloaded" the first time it is opened for real,
-  even chapters deep into that same voice's saved clips.** `enqueue` never
-  calls `library.voiced()` — that is a UI-level side effect
-  (`reader-actions.tsx`'s `onStart`/`onVoice`), so the Library entry's own
-  voice stays unset and the drawer computes progress against the settings'
-  default voice instead, which owns nothing. The saved audio is not lost: the
-  drawer's own "Use downloaded voice · `provider/voice`" link is offered
-  (`otherVoices` in `download-sheet.tsx`) and a real tap on it calls
-  `library.voiced()` for real, after which the count and the checkmarks
-  appear. Tap it before selecting any chapter. Before #226 the same first
+  (CDP, calling `runtime.enqueue` directly) shows "0 chapters downloaded"
+  when it is opened for real, even chapters deep into saved clips, unless the
+  app's one Voice (ADR 0089) is the Voice they were saved in.** `enqueue`
+  changes no Voice, and the drawer counts against the app's Voice. The saved
+  audio is not lost: the drawer's own "Use downloaded voice ·
+  `provider/voice`" link is offered (`otherVoices` in `download-sheet.tsx`),
+  and a real tap on it makes that the Voice, after which the count and the
+  checkmarks appear. Tap it before selecting any chapter. Before #327 the
+  drawer counted against the Library entry's own Voice, which `enqueue` left
+  unset, so the drawer also said "Choose a voice in the player". Before #226 the same first
   real open also retitled the Library entry from the EPUB's own metadata,
   so a `BEGINSWITH` match on a seeded title stopped working after it. Since
   #226 nothing retitles an entry: it keeps the title `add` gave it (the

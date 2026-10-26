@@ -23,11 +23,11 @@ final class DownloadConcurrencyProbe: XCTestCase {
   let bookTitle = "My Vampire System — Chapters 1–250"
   /// The voice nav.102/nav.103's saved audio already exists under (downloaded
   /// earlier through the CDP-based `download-chapter.cjs`, which calls the
-  /// runtime directly and so never ran `library.voiced()`): a fresh real open
-  /// of the book has no voice chosen at all ("Choose a voice in the player",
-  /// "0 chapters downloaded", even with two chapters actually saved), so
-  /// `openDownloadDrawer` picks this one for real with the drawer's own "Use
-  /// downloaded voice" link before anything else.
+  /// runtime directly and changes no Voice): unless the app's one Voice
+  /// (ADR 0089) is already this one, the drawer counts "0 chapters downloaded"
+  /// even with two chapters actually saved, so `openDownloadDrawer` picks this
+  /// one for real with the drawer's own "Use downloaded voice" link before
+  /// anything else.
   let voiceLabel = "en/179b5cc736974d96913c7849d0bb68c5"
   /// nav.104: about 95 sentences, never downloaded before this run.
   let newChapterOneTitle = "Chapter 103: Buying from the shop"

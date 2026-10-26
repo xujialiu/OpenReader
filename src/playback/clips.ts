@@ -101,7 +101,7 @@ export interface ClipProvider extends TTSProvider {
 export interface ClipFetcherDeps {
   /** The Provider, already configured with its key by whatever built it (ADR 0002: a key arrives as a setting, never as a side effect). */
   provider: ClipProvider;
-  /** The Voice, which is per document (ADR 0010). */
+  /** The Voice to speak in: the app's one (ADR 0089), until a handover moves it (ADR 0026). */
   voice: string;
   /** Where Clips are kept. Memory only (ADR 0002); `createMemoryCache` is the only implementation. */
   cache?: ClipCache;

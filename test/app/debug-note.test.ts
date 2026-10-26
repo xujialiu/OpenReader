@@ -42,10 +42,10 @@ vi.mock('../../src/app/highlight-section', () => hosts('HighlightPage'));
 vi.mock('../../src/app/folder-actions', () => ({ useMovePage: () => ({ header: {}, body: null, restart() {} }) }));
 vi.mock('../../src/app/reading-host', () => ({ useHeldReading: () => ({ current: null }) }));
 vi.mock('../../src/app/routes', () => ({ useShell: () => ({
-  library: { entries: [{ id: 'sha256:5f1c9a2b7e0d4c3a', title: 'The Count of Monte Cristo', voice: null, position: null }], folderSnapshot: { tree: { documents: {} } } },
-  settings: { appearance: {} }, setSettings: vi.fn(),
+  library: { entries: [{ id: 'sha256:5f1c9a2b7e0d4c3a', title: 'The Count of Monte Cristo', position: null }], folderSnapshot: { tree: { documents: {} } } },
+  settings: { appearance: {}, provider: 'openai', voice: '' }, setSettings: vi.fn(),
 }) }));
-vi.mock('../../src/app/settings', () => ({ PROVIDER_LABELS: {}, selectVoice: vi.fn(), settingsForDocument: () => ({ provider: 'openai', voice: '' }) }));
+vi.mock('../../src/app/settings', () => ({ PROVIDER_LABELS: {} }));
 vi.mock('../../src/app/share-document', () => ({ shareDocument: vi.fn() }));
 vi.mock('../../src/app/voice-catalog', () => ({ knownVoice: () => null }));
 vi.mock('../../src/renderer', () => ({ spineIndexOf: () => 0 }));

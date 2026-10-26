@@ -35,7 +35,7 @@ const other = asDocumentId(`sha256:${'b'.repeat(64)}`)!;
 const place = (text: string) => readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/4)'), text, 0, text.length, { at: 1, device: 'phone' });
 const entry: LibraryEntry = {
   id, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'Existing Document',
-  position: place('First sentence.'), voice: null, stamp: { at: 1, device: 'phone' },
+  position: place('First sentence.'), stamp: { at: 1, device: 'phone' },
 };
 const message = '“Refused.epub” was not added: not an EPUB.';
 const launchWarning = '1 entry in the Library file could not be read and is not shown.';

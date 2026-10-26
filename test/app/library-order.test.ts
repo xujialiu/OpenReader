@@ -39,7 +39,7 @@ function entry(id: DocumentId, at: number): LibraryEntry {
   return {
     id, format: 'epub', publicationId: null, publicationIdSource: 'none', title: `Book ${id.slice(7, 8)}`,
     position: readingPositionAt(locator, 'Saved sentence.', 0, 15, { at, device: 'test' }),
-    voice: null, stamp: { at, device: 'test' },
+    stamp: { at, device: 'test' },
   };
 }
 

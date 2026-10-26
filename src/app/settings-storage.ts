@@ -5,7 +5,7 @@ import { offlineNative } from '../../modules/open-reader-offline';
 import { FONT_SIZES, MARGINS, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type Margin, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
 import { readHighlightColours } from '../renderer/highlight-colours';
 import { CONSENT_KEY } from './consent';
-import { DEFAULT_SETTINGS, DRAWER_HEIGHTS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLINGS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type DocumentVoice, type Scrolling } from './settings';
+import { DEFAULT_SETTINGS, DRAWER_HEIGHTS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLINGS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type Scrolling } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -79,11 +79,6 @@ export function parseSettings(value: unknown): AppSettings {
   const openai = object(data.openai), compatible = object(data.compatible), local = object(data.local), azure = object(data.azure);
   const fish = object(data.fish), appearance = object(data.appearance), sync = object(data.sync), pauses = object(data.pauses);
   const following = object(data.following);
-  const voices: DocumentVoice[] = Array.isArray(data.recentVoices) ? data.recentVoices.flatMap((entry: unknown) => {
-    const item = object(entry);
-    return typeof item.provider === 'string' && isProviderId(item.provider) && typeof item.voice === 'string' && item.voice.trim()
-      ? [{ provider: item.provider, voice: item.voice }] : [];
-  }) : [];
   return {
     lookup: parseLookupSettings(data.lookup),
     provider: typeof data.provider === 'string' && isProviderId(data.provider) ? data.provider : DEFAULT_SETTINGS.provider,
@@ -91,7 +86,6 @@ export function parseSettings(value: unknown): AppSettings {
     // Only this version knows explicit enablement. Older configurations migrate disabled.
     enabledProviders: root.version === 1 && Array.isArray(data.enabledProviders)
       ? [...new Set(data.enabledProviders.filter((id): id is AppSettings['provider'] => typeof id === 'string' && isProviderId(id)))] : [],
-    recentVoices: voices,
     openai: { model: string(openai.model, DEFAULT_SETTINGS.openai.model) },
     compatible: { baseURL: string(compatible.baseURL, ''), model: string(compatible.model, '') },
     azure: { region: string(azure.region, '') },

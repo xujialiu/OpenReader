@@ -37,7 +37,7 @@ const id = asDocumentId(`sha256:${'a'.repeat(64)}`)!;
 const entry: LibraryEntry = {
   id, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'The existing title',
   position: readingPositionAt(createLocator('epub', 'epubcfi(/6/8!/4/2/4)'), 'Saved sentence.', 0, 15, { at: 10, device: 'test' }),
-  voice: null, stamp: { at: 20, device: 'test' },
+  stamp: { at: 20, device: 'test' },
 };
 async function mount() {
   let library: Library;

@@ -137,7 +137,7 @@ const DOCUMENT = ('sha256:' + 'd'.repeat(64)) as DocumentId;
 const START: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
 const ENTRY: LibraryEntry = {
   id: DOCUMENT, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A book',
-  position: null, voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: 1, device: 'iPhone-test' },
+  position: null, stamp: { at: 1, device: 'iPhone-test' },
 };
 /** One section of eight paragraphs, a sentence each, so every sentence is followed by the Pause between paragraphs. */
 const PARAGRAPHS: ReportedBlock[] = Array.from({ length: 8 }, (_, at) => ({
@@ -158,7 +158,7 @@ function ShellStandIn({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({
     settings, setSettings, secretsWritten: 0, secretRevisions: {}, noteSecretWritten() {}, syncLast: null,
     sync: { poke() {}, wait: async () => null },
-    library: { entries: [ENTRY], adoptedAt: {}, current: () => ENTRY, opened() {}, voiced() {}, reached() {}, heard() {}, retitled() {} },
+    library: { entries: [ENTRY], adoptedAt: {}, current: () => ENTRY, opened() {}, reached() {}, heard() {}, retitled() {} },
   }) as unknown as Shell, [settings, setSettings]);
   return createElement(ShellContext.Provider, { value }, children);
 }

@@ -106,12 +106,12 @@ const DOCUMENT = ('sha256:' + 'd'.repeat(64)) as DocumentId;
 const SETTINGS: AppSettings = { ...DEFAULT_SETTINGS, provider: 'local', enabledProviders: ['local'], voice: 'af_bella' };
 const ENTRY: LibraryEntry = {
   id: DOCUMENT, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A novel', position: null,
-  voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: 1, device: 'iPhone-test0001' },
+  stamp: { at: 1, device: 'iPhone-test0001' },
 };
 world.shell = {
   settings: SETTINGS, setSettings() {}, secretRevisions: {},
   sync: { poke() {}, wait: async () => null },
-  library: { entries: [ENTRY], adoptedAt: {}, current: () => ENTRY, opened() {}, voiced() {}, reached() {}, heard() {}, retitled() {} },
+  library: { entries: [ENTRY], adoptedAt: {}, current: () => ENTRY, opened() {}, reached() {}, heard() {}, retitled() {} },
 };
 
 /** One section's Blocks as the page reports them, a sentence to a paragraph. */

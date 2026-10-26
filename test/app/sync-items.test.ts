@@ -20,7 +20,6 @@ const entry = (id: DocumentId, over: Partial<LibraryEntry> = {}): LibraryEntry =
   publicationIdSource: 'unique-identifier',
   title: 'A Book',
   position: readingPositionAt(createLocator('epub', 'epubcfi(/6/8[cop]!/4/2/4/4[p2])'), 'Copyright by the author. Then more.', 0, 24, { at: 100, device: 'iPhone-aaaaaaaa' }),
-  voice: null,
   // The shelf's Stamp is newer than the position's: the book was opened again since.
   stamp: { at: 500, device: 'iPhone-aaaaaaaa' },
   ...over,

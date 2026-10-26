@@ -81,15 +81,14 @@ final class OfflineFixProbe: XCTestCase {
     capture("fish-provider-enabled", app)
   }
 
-  // MARK: - Choosing a Voice for the first time (ADR 0010: also becomes the default)
+  // MARK: - Choosing the Voice (ADR 0089: the one every Document is read in)
 
   /// Picking any Fish voice is enough for a mechanical download/playback check;
   /// this is not a voice-quality or locale-picker test (`ReaderProbe`'s `fish` mode already
   /// covers real navigation to a specific locale). Chosen while paused, so the
   /// picker stays open (by design) and is dismissed with the same drag gesture
-  /// `ReaderProbe.testReaderSheets` uses. Because a Voice choice becomes the
-  /// global default too, doing this once for the short fixture is also what the
-  /// mini fixture's own first open inherits.
+  /// `ReaderProbe.testReaderSheets` uses. Because there is one Voice, choosing
+  /// it once for the short fixture is also what the mini fixture is read in.
   func testChooseVoiceForShortFixture() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     app.terminate()

@@ -105,7 +105,6 @@ export {
   type LibraryEntry,
   type LibraryParse,
   type LibraryProblem,
-  type VoiceChoice,
 } from './library';
 
 export {

@@ -127,7 +127,9 @@ exactly.
 ## What a store keeps
 
 One **Library entry** per Document: its identity, its format, its title, its
-Reading Position and its Voice (ADR 0010). ADR 0003 shapes the record because two
+Reading Position and its Stamp. No Voice: the app reads every Document in one
+(ADR 0089), and the `voice` key a file written before that still carries is read
+past and not written again. ADR 0003 shapes the record because two
 of the three properties it verified apply from the first line. The file is at
 **version 2** since the position carries its own Stamp; a version-1 file is read,
 and its positions, which had none, are given the oldest Stamp there is.
@@ -146,7 +148,7 @@ and its positions, which had none, are given the oldest Stamp there is.
 
 Parsing is defensive and asymmetrically so: a malformed file costs everything, a
 malformed entry costs that entry, a malformed field costs that field. An
-unreadable Voice must not cost the owner a Reading Position.
+unreadable title must not cost the owner a Reading Position.
 
 ## What is here
 

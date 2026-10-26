@@ -152,11 +152,12 @@ node test/manual-test/kit/hx.cjs UDID '{"do":"settings","patch":{"provider":"loc
 node test/manual-test/kit/hx.cjs UDID '{"do":"voice","provider":"local","voice":"af_bella"}'
 ```
 
-The `settings` patch alone is not enough: the reader reads the **Document's**
-voice (`settingsForDocument`), and without the `voice` command the next
-`{"do":"play"}` is refused in silence — the Debug Log's
-`[reading] play at utterance none, local ` names it: the voice after
-`local` is empty (see `../pitfalls/verification-runs.md`). `consent` holds the
+Since #327 (ADR 0089) the `settings` patch's `voice` is the Voice every
+Document is read in, and the `voice` command repeats it harmlessly. Before
+it, the reader read the **Document's** own voice, and without the `voice`
+command the next `{"do":"play"}` was refused in silence — the Debug Log's
+`[reading] play at utterance none, local ` named it: the voice after
+`local` was empty (see `../pitfalls/verification-runs.md`). `consent` holds the
 provider's recipient key (`provider:local@http://127.0.0.1:PORT`), which
 answers the first-send question without the alert.
 

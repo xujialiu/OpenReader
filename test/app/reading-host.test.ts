@@ -1,10 +1,10 @@
 import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DocumentId, LibraryEntry } from '../../src/core/document';
 import { ReadingHost, readerSlot, useHeldReading, type ReadingHandle } from '../../src/app/reading-host';
-import { DEFAULT_SETTINGS } from '../../src/app/settings';
+import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
 
 /**
  * When the Reading ends (#68, ADR 0049): the real shell-level host, with the
@@ -16,7 +16,9 @@ import { DEFAULT_SETTINGS } from '../../src/app/settings';
  */
 
 const views = vi.hoisted(() => ({ shown: false, mounted: [] as string[], unmounted: [] as string[], state: null as null | ((playing: boolean, buffering: boolean) => void),
-  section: null as null | ((place: { sectionIndex: number } | null) => void), reached: null as null | ((place: unknown) => void) }));
+  section: null as null | ((place: { sectionIndex: number } | null) => void), reached: null as null | ((place: unknown) => void),
+  /** What reached the view's own handover, the one its Voice drawer uses (#327). */
+  chosen: [] as [string, string][] }));
 /** What the host told the Library that orders it (#228). */
 const told = vi.hoisted(() => ({ heard: [] as string[], opened: [] as string[], reached: [] as string[] }));
 const portal = vi.hoisted(() => ({ hostName: undefined as string | undefined }));
@@ -37,7 +39,8 @@ vi.mock('react-native-teleport', () => ({
 vi.mock('../../src/app/reading-view', async () => {
   const { useEffect } = await vi.importActual<typeof import('react')>('react');
   return {
-    ReadingView: (props: { shown: boolean; document: { identity: { id: string } }; onState(playing: boolean, buffering: boolean): void; onSection(place: { sectionIndex: number } | null): void; onReached(place: unknown): void }) => {
+    ReadingView: (props: { shown: boolean; document: { identity: { id: string } }; onState(playing: boolean, buffering: boolean): void; onSection(place: { sectionIndex: number } | null): void; onReached(place: unknown): void;
+      onVoiceChooser?(choose: ((provider: string, voice: string) => void) | null): void }) => {
       const id = props.document.identity.id;
       views.state = props.onState;
       views.reached = props.onReached;
@@ -47,6 +50,11 @@ vi.mock('../../src/app/reading-view', async () => {
         views.mounted.push(id);
         return () => { views.unmounted.push(id); };
       }, [id]);
+      const { onVoiceChooser } = props;
+      useEffect(() => {
+        onVoiceChooser?.((provider, voice) => { views.chosen.push([provider, voice]); });
+        return () => onVoiceChooser?.(null);
+      }, [onVoiceChooser]);
       return null;
     },
   };
@@ -64,7 +72,7 @@ const B = ('sha256:' + 'b'.repeat(64)) as DocumentId;
 function entry(id: DocumentId): LibraryEntry {
   return {
     id, format: 'epub', publicationId: null, publicationIdSource: 'none', title: id === A ? 'Book A' : 'Book B',
-    position: null, voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: 1, device: 'iPhone-test' },
+    position: null, stamp: { at: 1, device: 'iPhone-test' },
   };
 }
 
@@ -79,7 +87,6 @@ shell.current = {
     opened: (id: string) => { told.opened.push(id); },
     heard: (id: string) => { told.heard.push(id); },
     reached: (id: string) => { told.reached.push(id); },
-    voiced: () => {},
   },
 };
 
@@ -262,6 +269,51 @@ describe('what the Reading tells the Library about its order (#228)', () => {
     await h.run((r) => r.left(A));
     await h.run(() => views.reached!(place));
     expect(told.heard).toEqual([A, A]);
+    await h.close();
+  });
+});
+
+/**
+ * One Voice for the app (#327, ADR 0089): "Use downloaded voice" in any
+ * Document's Download drawer changes the Voice a held Reading is read in.
+ */
+describe('a Voice chosen from the Download drawer', () => {
+  const written: AppSettings[] = [];
+  const was = shell.current as { settings: AppSettings; setSettings: unknown };
+  const fishOnly: AppSettings = { ...DEFAULT_SETTINGS, enabledProviders: ['fish'], provider: 'fish', voice: 'one' };
+  beforeEach(() => {
+    written.length = 0;
+    views.chosen.length = 0;
+    shell.current = { ...was, settings: fishOnly, setSettings: (how: (previous: AppSettings) => AppSettings) => { written.push(how(fishOnly)); } };
+  });
+  afterEach(() => { shell.current = was; });
+
+  it('goes through the held view’s handover when its Provider is enabled, as the Voice drawer’s does', async () => {
+    const h = await host();
+    await h.run((r) => r.show(A));
+    await h.run(() => views.state!(true, false));
+    await h.run((r) => r.left(A));
+    await h.run((r) => r.chooseVoice('fish', 'two'));
+    expect(views.chosen).toEqual([['fish', 'two']]);
+    expect(written).toEqual([]);
+    await h.close();
+  });
+
+  it('is taken at once when its Provider is disabled, which is what stops a playing Reading', async () => {
+    const h = await host();
+    await h.run((r) => r.show(A));
+    await h.run(() => views.state!(true, false));
+    await h.run((r) => r.chooseVoice('local', 'af_bella'));
+    expect(views.chosen).toEqual([]);
+    expect(written).toEqual([{ ...fishOnly, provider: 'local', voice: 'af_bella' }]);
+    await h.close();
+  });
+
+  it('is written to the settings when no Reading is held', async () => {
+    const h = await host();
+    await h.run((r) => r.chooseVoice('fish', 'two'));
+    expect(views.chosen).toEqual([]);
+    expect(written).toEqual([{ ...fishOnly, voice: 'two' }]);
     await h.close();
   });
 });

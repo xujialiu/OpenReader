@@ -34,7 +34,6 @@ const entry = (over: Partial<LibraryEntry> = {}): LibraryEntry => ({
   publicationIdSource: 'unique-identifier',
   title: 'A Small Book',
   position: readingPositionAt(createLocator('epub', '/6/2!/4/4'), BLOCK, 0, 43, STAMP),
-  voice: { provider: 'openai-official', voice: 'alloy' },
   stamp: { at: 1_758_240_000_000, device: 'phone' },
   ...over,
 });
@@ -50,7 +49,7 @@ describe('serializeLibrary', () => {
   });
 
   it('writes exactly the fields this version knows, in a fixed order, nulls included', () => {
-    const file = JSON.parse(serializeLibrary([entry({ position: null, voice: null })]));
+    const file = JSON.parse(serializeLibrary([entry({ position: null })]));
     expect(Object.keys(file.entries[0])).toEqual([
       'id',
       'format',
@@ -58,11 +57,9 @@ describe('serializeLibrary', () => {
       'publicationIdSource',
       'title',
       'position',
-      'voice',
       'stamp',
     ]);
     expect(file.entries[0].position).toBeNull();
-    expect(file.entries[0].voice).toBeNull();
   });
 
   it('flattens the opaque locator to its own string', () => {
@@ -91,7 +88,7 @@ describe('serializeLibrary', () => {
 });
 
 describe('parseLibrary, round trip', () => {
-  it('reads back what it wrote, identity, position, Voice and Stamp', () => {
+  it('reads back what it wrote, identity, position and Stamp', () => {
     const parsed = reparse([entry()]);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
@@ -105,7 +102,6 @@ describe('parseLibrary, round trip', () => {
       publicationId: 'urn:uuid:9f1b2c3d-1111-4000-8000-abcdefabcdef',
       publicationIdSource: 'unique-identifier',
       title: 'A Small Book',
-      voice: { provider: 'openai-official', voice: 'alloy' },
       stamp: { at: 1_758_240_000_000, device: 'phone' },
     });
     expect(readLocator(read.position!.locator, 'epub')).toBe('/6/2!/4/4');
@@ -115,7 +111,7 @@ describe('parseLibrary, round trip', () => {
 
   it('writes what it read back to the same bytes', () => {
     const another = documentIdOf(bytesAsArchive(epub(opf('    <dc:title>Another Book</dc:title>'))));
-    const text = serializeLibrary([entry(), entry({ id: another, position: null, voice: null })]);
+    const text = serializeLibrary([entry(), entry({ id: another, position: null })]);
     const parsed = parseLibrary(text);
     expect(parsed.ok && serializeLibrary(parsed.entries)).toBe(text);
   });
@@ -179,6 +175,39 @@ describe('parseLibrary, a file that is not one', () => {
  * added to an entry — for every machine, with nothing reported. Silent stripping
  * is the defect, so every key this build does not know is named.
  */
+/**
+ * Until ADR 0089 each entry carried the Voice its Document was read in. A file
+ * written then is on every device that updates, so the key is known and read
+ * past: reported in `ignored`, it would freeze the Library and tell the owner the
+ * file holds things this version does not understand (#327).
+ */
+describe('parseLibrary, the retired voice key', () => {
+  const written = (voice: unknown) => {
+    const file = JSON.parse(serializeLibrary([entry()]));
+    file.entries[0] = { ...file.entries[0], voice };
+    return JSON.stringify(file);
+  };
+
+  it.each([
+    { provider: 'openai-official', voice: 'alloy' },
+    { provider: 'something-later', voice: 'unknown', pitch: 1 },
+    null,
+    {},
+    'alloy',
+  ])('reads a file whose entry holds %j with nothing ignored and nothing reported', (voice) => {
+    const parsed = parseLibrary(written(voice));
+    expect(parsed.ok && parsed.ignored).toEqual([]);
+    expect(parsed.ok && parsed.problems).toEqual([]);
+    expect(parsed.ok && parsed.entries[0]).toEqual(entry());
+    expect(parsed.ok && 'voice' in parsed.entries[0]).toBe(false);
+  });
+
+  it('writes such a file back without the key', () => {
+    const parsed = parseLibrary(written({ provider: 'openai-official', voice: 'alloy' }));
+    expect(parsed.ok && serializeLibrary(parsed.entries)).toBe(serializeLibrary([entry()]));
+  });
+});
+
 describe('parseLibrary, keys this build does not know', () => {
   it('names them by path rather than dropping them in silence', () => {
     const file = JSON.parse(serializeLibrary([entry()]));
@@ -186,7 +215,6 @@ describe('parseLibrary, keys this build does not know', () => {
     file.entries[0].readingSpeed = 2;
     file.entries[0].position.chapter = 4;
     file.entries[0].position.anchor.language = 'en';
-    file.entries[0].voice.pitch = 1;
     file.entries[0].stamp.timezone = 'UTC';
     const parsed = parseLibrary(JSON.stringify(file));
     expect(parsed.ok && parsed.ignored).toEqual([
@@ -194,7 +222,6 @@ describe('parseLibrary, keys this build does not know', () => {
       'entries[0].readingSpeed',
       'entries[0].position.chapter',
       'entries[0].position.anchor.language',
-      'entries[0].voice.pitch',
       'entries[0].stamp.timezone',
     ]);
   });
@@ -247,20 +274,6 @@ describe('parseLibrary, entries it cannot fully read', () => {
     expect(parsed.ok && parsed.entries[0]).toMatchObject({ id: ID, title: '' });
     expect(parsed.ok && parsed.entries[0].position).not.toBeNull();
     expect(parsed.ok && parsed.problems).toEqual([{ at: 0, id: ID, dropped: 'title', why: 'malformed' }]);
-  });
-
-  it('keeps an entry whose Voice is unreadable, and lets it fall back to the global default', () => {
-    for (const voice of [{}, { provider: 'openai-official' }, { provider: '', voice: 'alloy' }, 'alloy']) {
-      const parsed = withEntries({ ...sound(), voice });
-      expect(parsed.ok && parsed.entries[0].voice).toBeNull();
-      expect(parsed.ok && parsed.problems).toEqual([{ at: 0, id: ID, dropped: 'voice', why: 'malformed' }]);
-    }
-  });
-
-  it('accepts a Voice naming a provider this build has never heard of, rather than losing the entry', () => {
-    const parsed = withEntries({ ...sound(), voice: { provider: 'something-later', voice: 'unknown' } });
-    expect(parsed.ok && parsed.entries[0].voice).toEqual({ provider: 'something-later', voice: 'unknown' });
-    expect(parsed.ok && parsed.problems).toEqual([]);
   });
 
   /**

@@ -187,7 +187,7 @@ async function open(stored: boolean, deps: SyncDeps, page: readonly ReportedBloc
   const entry: LibraryEntry = {
     id: DOCUMENT, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A document',
     position: stored ? readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/2)'), SENTENCES[0], 0, SENTENCES[0].length, { at: START - 60_000, device: PHONE }) : null,
-    voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: START - 60_000, device: PHONE },
+    stamp: { at: START - 60_000, device: PHONE },
   };
   world.disk.entries = [entry, { ...entry, id: OTHER, title: 'Another document', position: null }];
   const seen: { library: Library | null; handle: ReadingHandle | null } = { library: null, handle: null };

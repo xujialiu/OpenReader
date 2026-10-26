@@ -367,34 +367,26 @@ describe('the player names the Voice, and a resume is not an error (design 0020)
   });
 });
 
-describe('each Document is read in the Voice it remembers (ADR 0010)', () => {
+describe('every Document is read in the one Voice (ADR 0089, #327)', () => {
   /**
-   * `LibraryEntry.voice` was in the file format, parsed and written, and **nothing
-   * ever set it** — so design 0010 described an app that did not exist, and the
-   * owner's shelf read an English document in a Mandarin Voice (07:38).
-   *
-   * What `settingsForDocument` decides is tested in `settings.test.ts`. What cannot
-   * be tested there is the wiring: that the shell's Reading (the Reader screen's
-   * until #68) hands the reading the Document's
-   * settings rather than the app's, asks the Keychain about *that* Provider, and
-   * writes the choice down. Each is one line, and each fails by reading the book
-   * perfectly in the wrong Voice.
+   * What `selectVoice` and `selectSavedVoice` decide is tested in
+   * `settings.test.ts`, and the routing of `chooseVoice` in
+   * `reading-host.test.ts`. What is pinned here is the wiring that would bring a
+   * second Voice back: a Reading handed anything but the owner's settings, and
+   * a Download drawer that writes a Voice past the Reading's handover.
    */
-  const screen = code('reading-host.tsx');
+  const host = code('reading-host.tsx');
+  const actions = code('reader-actions.tsx');
 
-  it('hands the reading this Document settings, and asks the Keychain about its Provider', () => {
-    pin(screen, 'settings={forDocument}', 'reading-host.tsx');
-    pin(screen, 'const key = useProviderKey(forDocument.provider);', 'reading-host.tsx');
-    expect(screen).not.toContain('settings={settings}');
+  it('hands the Reading the owner’s settings, and asks the Keychain about their Provider', () => {
+    pin(host, 'settings={settings}', 'reading-host.tsx');
+    pin(host, 'const key = useProviderKey(settings.provider);', 'reading-host.tsx');
+    expect(host).not.toContain('library.voiced');
   });
 
-  it('writes the Voice down when it is chosen, and inherits the default only at the first open', () => {
-    // The two writes are different: one is the owner choosing, the other is the
-    // inheritance design 0010 promises — "and from then on the document keeps it",
-    // which is only true if it is written.
-    pin(screen, 'if (openedId) library.voiced(openedId, { provider, voice });', 'reading-host.tsx, setVoice');
-    pin(screen, 'if (recent) library.voiced(openedId, recent);', 'reading-host.tsx');
-    pin(screen, 'if (!openedId || voiceId) return;', 'reading-host.tsx, the inheritance');
+  it('sends the Download drawer’s Voice through the held Reading', () => {
+    pin(actions, 'onVoice={(next) => reading.chooseVoice(next.provider, next.voice)}', 'reader-actions.tsx');
+    expect(actions).not.toContain('selectVoice');
   });
 });
 

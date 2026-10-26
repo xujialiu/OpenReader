@@ -5,7 +5,7 @@
  * is for here is not keeping clips between sessions but never paying twice
  * inside one — philosophy rule 4, "never re-spends it for audio it already
  * had". The key is the provider, the voice and the text, and deliberately not
- * the speed (ADR 0009, ADR 0010): put speed in the key and nudging 1.5× to 1.6×
+ * the speed (ADR 0009): put speed in the key and nudging 1.5× to 1.6×
  * discards every clip the owner has already paid for.
  *
  * Pure JS, no globals. It holds bytes and knows nothing about how they were

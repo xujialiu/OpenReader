@@ -76,7 +76,6 @@ function entry(id: DocumentId, position: ReadingPosition | null): LibraryEntry {
     publicationIdSource: 'none',
     title: id === A ? 'Book A' : 'Book B',
     position,
-    voice: { provider: 'local', voice: 'af_bella' },
     stamp: { at: 1, device: 'iPhone-test' },
   };
 }
@@ -93,7 +92,6 @@ function library(entries: readonly LibraryEntry[], adoptedAt: Partial<Record<Doc
       adoptedAt,
       current: (id: DocumentId) => entries.find((one) => one.id === id) ?? null,
       opened: () => {},
-      voiced: () => {},
       reached: () => {},
     },
   };

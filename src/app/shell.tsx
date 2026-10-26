@@ -176,7 +176,7 @@ export function OpenReader() {
       hlog(`shelf loading=${library.loading} note=${JSON.stringify(library.note)}`);
       for (const entry of library.entries) {
         hlog(
-          `shelf ${entry.id.slice(7, 15)} "${entry.title}" voice=${entry.voice ? `${entry.voice.provider}/${entry.voice.voice}` : 'null'} ` +
+          `shelf ${entry.id.slice(7, 15)} "${entry.title}" ` +
             `place=${entry.position ? JSON.stringify(entry.position.anchor.exact.slice(0, 40)) : 'null'} stamp=${entry.stamp.at}`,
         );
       }

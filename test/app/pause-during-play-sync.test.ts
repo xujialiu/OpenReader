@@ -245,7 +245,7 @@ beforeEach(() => {
   world.nowPlaying.claimed = false; world.nowPlaying.listener = null; world.nowPlaying.playing = null;
   world.disk.entries = [{
     id: DOCUMENT, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A novel', position: null,
-    voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: 1, device: 'iPhone-test0001' },
+    stamp: { at: 1, device: 'iPhone-test0001' },
   } satisfies LibraryEntry];
   world.folder.slow = false; world.folder.unreachable = false; world.folder.waiting.length = 0;
   world.sync = null; world.connectivity = null;

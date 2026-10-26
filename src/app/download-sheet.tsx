@@ -54,14 +54,15 @@ const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.le
  * there is none: the row it names is marked, and the list opens at it (#88,
  * #212).
  */
-export function DownloadContent({ document, title, voice, place, manage, onManage, onSelectAll, onVoice, onStart }: {
+export function DownloadContent({ document, title, voice, place, manage, onManage, onSelectAll, onVoice }: {
   document: string; title: string; voice: OfflineVoice; place: ReadingSpineItem | null;
   manage: boolean;
   /** Go to Manage (`true`), or back to Download. */
   onManage(open: boolean): void;
   /** The header's Select all / Deselect all, or null when this page is gone. */
   onSelectAll: Dispatch<SetStateAction<DrawerAction | null>>;
-  onVoice?(voice: OfflineVoice): void; onStart?(): void;
+  /** "Use downloaded voice": the one Voice becomes this one, for every Document (ADR 0089). */
+  onVoice?(voice: OfflineVoice): void;
 }) {
   downloads.useDownloads();
   const { settings } = useShell();
@@ -147,7 +148,6 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
       // The Provider is asked about first (#109): "Don't Allow" starts nothing and keeps the selection.
       else void downloads.startDownload(document, choice, chosen).then((started) => {
         if (!started) return;
-        onStart?.();
         setSelected(new Set());
       }, (e) => Alert.alert('Download could not start', String(e)));
     } catch (e) { Alert.alert('Download could not start', String(e)); }

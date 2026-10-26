@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   andList,
   enabledProviders,
-  recentEnabledVoice,
+  selectSavedVoice,
   selectVoice,
   DEFAULT_SETTINGS,
   headersAreOffered,
@@ -20,11 +20,9 @@ import {
   PROVIDER_ORDER,
   providerDeps,
   resolveTheme,
-  settingsForDocument,
   synthesisOrigin,
   THEME_LABELS,
   THEME_SETTINGS,
-  unusableVoiceSentence,
   type AppSettings,
 } from '../../src/app/settings';
 import { createProvider } from '../../src/core/providers/factory';
@@ -238,11 +236,11 @@ describe('explicit provider enablement', () => {
   it('offers only enabled providers, in display order', () => {
     expect(enabledProviders({ ...DEFAULT_SETTINGS, enabledProviders: ['local', 'fish'] })).toEqual(['fish', 'local']);
   });
-  it('invalidates the active engine on disable, without losing the document voice', () => {
+  it('invalidates the active engine on disable, without losing the Voice', () => {
     const settings = settingsWith({ provider: 'fish', voice: 'voice' });
     const disabled = { ...settings, enabledProviders: [] };
     expect(engineIdentity(disabled)).not.toBe(engineIdentity(settings));
-    expect(settingsForDocument(disabled, { provider: 'fish', voice: 'voice' }).voice).toBe('voice');
+    expect(disabled).toMatchObject({ provider: 'fish', voice: 'voice' });
     expect(readiness(disabled, true).ready).toBe(false);
   });
   it('does not interrupt the active engine when another provider is disabled', () => {
@@ -250,14 +248,9 @@ describe('explicit provider enablement', () => {
     expect(engineIdentity({ ...settings, enabledProviders: ['fish'] })).toBe(engineIdentity(settings));
     expect(engineIdentity({ ...settings, local: { ...settings.local, baseURL: 'https://changed.example' } })).toBe(engineIdentity(settings));
   });
-  it('finds the latest still-enabled voice for new documents and rejects disabled selections', () => {
-    const first = selectVoice(settingsWith({}), 'fish', 'one');
-    const second = selectVoice(first, 'local', 'two');
-    const disabled = { ...second, enabledProviders: ['fish'] as const };
-    expect(recentEnabledVoice(disabled)).toEqual({ provider: 'fish', voice: 'one' });
-    expect(settingsForDocument(disabled, null)).toMatchObject({ provider: 'fish', voice: 'one' });
-    expect(selectVoice(disabled, 'local', 'three')).toBe(disabled);
-    expect(recentEnabledVoice({ ...disabled, enabledProviders: [] })).toBeNull();
+  it('rejects a Voice drawer selection from a disabled Provider', () => {
+    const chosen = selectVoice(settingsWith({ enabledProviders: ['fish'] }), 'fish', 'one');
+    expect(selectVoice(chosen, 'local', 'two')).toBe(chosen);
   });
   it('only includes official Fish voices by default and forwards changes', () => {
     expect(providerSettings(DEFAULT_SETTINGS, { key: '', headers: '' }).fish).toMatchObject({ includeOfficial: true, includeOwn: false, includeManual: false });
@@ -441,63 +434,39 @@ describe('the theme (ADR 0022)', () => {
 });
 
 /**
- * A Voice belongs to a **Document** (ADR 0010, design 0010), and this is where the
- * one it remembers becomes the one it is read with.
- *
- * The file format has carried `LibraryEntry.voice` since it was written and nothing
- * ever set it, so design 0010 described an app that did not exist — one global Voice,
- * which on a shelf holding a Chinese novel and an English document is wrong for one
- * of them whichever way it is set (notes/NOTES_2026-09-20.md, 07:38). These are the
- * two halves that could not be tested through a screen: which settings a Document is
- * read with, and what is said about one this build cannot honour.
+ * One **Voice** for the app (ADR 0089, #327): every Document is read in the one
+ * most recently chosen. It replaced a Voice per Document (ADR 0010), under which a
+ * Voice chosen in one book never reached a book already opened.
  */
-describe('settingsForDocument', () => {
+describe('the one Voice', () => {
   const chosen = selectVoice(settingsWith({ openai: { model: 'tts-1' } }), 'openai-official', 'alloy');
 
-  it('reads a Document in the Voice it remembers, not the global default', () => {
-    const forDocument = settingsForDocument(chosen, { provider: 'fish', voice: 'zh/74c6aba5' });
-    expect(forDocument.provider).toBe('fish');
-    expect(forDocument.voice).toBe('zh/74c6aba5');
+  it('is the latest choice, whichever Provider the one before it belonged to', () => {
+    expect(chosen).toMatchObject({ provider: 'openai-official', voice: 'alloy' });
+    expect(selectVoice(chosen, 'fish', 'zh/74c6aba5')).toMatchObject({ provider: 'fish', voice: 'zh/74c6aba5' });
   });
 
-  it('moves the pair and nothing else: a model, an address and the Appearance are the app’s', () => {
-    const forDocument = settingsForDocument(chosen, { provider: 'fish', voice: 'zh/74c6aba5' });
-    expect(forDocument.openai.model).toBe('tts-1');
-    expect(forDocument.rate).toBe(chosen.rate);
-    expect(forDocument.appearance).toBe(chosen.appearance);
-    expect(forDocument.theme).toBe(chosen.theme);
+  it('moves the pair and nothing else: a model, the speed and the Appearance stay', () => {
+    const next = selectVoice(chosen, 'fish', 'zh/74c6aba5');
+    expect(next.openai.model).toBe('tts-1');
+    expect(next.rate).toBe(chosen.rate);
+    expect(next.appearance).toBe(chosen.appearance);
   });
 
-  it('is the global default for a Document that remembers nothing', () => {
-    // Which is what "opening one for the first time gives it whatever the default is
-    // at that moment" needs: until it is written down, the default *is* the answer.
-    expect(settingsForDocument(chosen, null)).toEqual(chosen);
+  it('is kept, not swapped for another Provider’s, when its Provider is disabled', () => {
+    // Design 0027: what is saved in it still plays. Nothing falls back to the
+    // Voice chosen before it, which would change who reads without being asked.
+    const disabled = { ...selectVoice(selectVoice(chosen, 'fish', 'one'), 'local', 'two'), enabledProviders: ['fish'] as const };
+    expect(disabled).toMatchObject({ provider: 'local', voice: 'two' });
+    expect(readiness(disabled, true)).toEqual({ ready: false, missing: ['enabling'] });
   });
 
-  it('is a different engine, which is what makes the two books not disturb each other', () => {
-    // `engineIdentity` is what `use-reading.ts` rebuilds on, so this is the property
-    // that stops one book's Voice being spoken in another's.
-    const one = settingsForDocument(chosen, { provider: 'fish', voice: 'zh/74c6aba5' });
-    const other = settingsForDocument(chosen, { provider: 'speechify', voice: 'george' });
-    expect(engineIdentity(one)).not.toBe(engineIdentity(other));
-    expect(engineIdentity(settingsForDocument(chosen, null))).toBe(engineIdentity(chosen));
-  });
-
-  it('ignores a Voice from a Provider this build does not have, rather than throwing one', () => {
-    // ADR 0003 keeps the Library file readable by a build with fewer Providers than
-    // wrote it; `core/document/library.ts` carries the pair as written for exactly
-    // this reason. Losing a place because a Voice named something unfamiliar would be
-    // the worst possible trade.
-    expect(settingsForDocument(chosen, { provider: 'elevenlabs', voice: 'rachel' })).toEqual(chosen);
-    expect(settingsForDocument(chosen, { provider: 'fish', voice: '   ' })).toEqual(chosen);
-  });
-
-  it('says so, in a sentence, rather than reading the book in a stranger in silence', () => {
-    const said = unusableVoiceSentence({ provider: 'elevenlabs', voice: 'rachel' });
-    expect(said).toContain('elevenlabs');
-    expect(said).toContain('this version of the app does not have');
-    expect(unusableVoiceSentence({ provider: 'fish', voice: 'zh/74c6aba5' })).toBeNull();
-    expect(unusableVoiceSentence(null)).toBeNull();
+  it('can be a saved Voice whose Provider is disabled, chosen from the Download drawer', () => {
+    const fishOnly = settingsWith({ enabledProviders: ['fish'], provider: 'fish', voice: 'one' });
+    const saved = selectSavedVoice(fishOnly, 'local', 'af_bella');
+    expect(saved).toMatchObject({ provider: 'local', voice: 'af_bella', enabledProviders: ['fish'] });
+    expect(engineIdentity(saved)).not.toBe(engineIdentity(fishOnly));
+    expect(selectSavedVoice(fishOnly, 'local', '   ')).toBe(fishOnly);
   });
 });
 

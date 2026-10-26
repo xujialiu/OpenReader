@@ -19,8 +19,8 @@ import { splitWithSentencex } from '../core/segmenter/sentencex';
  * The Utterances of every Block the renderer has reported, in reading order.
  *
  * `language` is the document's own and is never sniffed (ADR 0006 keeps a
- * language detector and its two megabytes out; ADR 0010 accepts the consequence
- * that a document with two languages in it is read in its one Voice).
+ * language detector and its two megabytes out; ADR 0089 accepts the consequence
+ * that a document with two languages in it is read in the app's one Voice).
  */
 export function segmentDocument(blocks: readonly Block[], language: string): Utterance[] {
   return segmentBlocks(blocks, language, { splitSentences: splitWithSentencex });

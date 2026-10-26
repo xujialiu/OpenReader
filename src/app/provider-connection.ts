@@ -1,4 +1,4 @@
-/** A connection check uses the target provider's credentials, independent of the document's voice. */
+/** A connection check uses the target provider's credentials, independent of the Voice in use. */
 import { createProvider } from '../core/providers/factory';
 import type { ProviderId, VoiceInfo } from '../core/providers/types';
 import { withTimeout } from '../core/timeout';

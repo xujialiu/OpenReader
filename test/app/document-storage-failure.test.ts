@@ -87,7 +87,7 @@ const sentence = 'Keep this Reading Position.';
 const entry: LibraryEntry = {
   id, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'Kept Document',
   position: readingPositionAt(createLocator('epub', 'epubcfi(/6/2!/4/4)'), sentence, 0, sentence.length, { at: 2, device: 'phone' }),
-  voice: { provider: 'local', voice: 'af_bella' }, stamp: { at: 1, device: 'phone' },
+  stamp: { at: 1, device: 'phone' },
 };
 const source = 'file:///source.epub';
 const trees: ReactTestRenderer[] = [];

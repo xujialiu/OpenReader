@@ -2,9 +2,13 @@
  * What a store persists about a Document, and how it reads it back.
  *
  * One **Library entry** per Document: its identity (ADR 0004), its format
- * (ADR 0007), what to call it, its Reading Position (ADR 0008) and its Voice
- * (ADR 0010). An entry *is* a `DocumentIdentity` plus the four things the
- * Library remembers, which is why it extends one rather than copying its fields.
+ * (ADR 0007), what to call it, its Reading Position (ADR 0008) and its Stamp.
+ * An entry *is* a `DocumentIdentity` plus the three things the Library
+ * remembers, which is why it extends one rather than copying its fields.
+ *
+ * It remembers no Voice: every Document is read in the app's one Voice
+ * (ADR 0089). A file written before that still carries a `voice` per entry;
+ * the key is known, read past and not written again (`RETIRED_ENTRY_KEYS`).
  *
  * ## The version rule, and why it shapes this file
  *
@@ -54,29 +58,12 @@ export type { Stamp } from './stamp';
  */
 export const LIBRARY_VERSION = 2;
 
-/**
- * The **Voice** a Document is read in (ADR 0010): a document keeps its own, and
- * changing the global default does not change a document already being read.
- *
- * `provider` is a string and not the provider layer's `ProviderId` on purpose.
- * An entry written by a build with one more provider than this one must still be
- * readable — losing a Reading Position because the Voice names something
- * unfamiliar would be the worst possible trade — so the pair is carried as
- * written and validated where a provider is actually created.
- */
-export interface VoiceChoice {
-  provider: string;
-  voice: string;
-}
-
 /** One Library entry: the owner adds a Document once and this is what stays. */
 export interface LibraryEntry extends DocumentIdentity {
   /** What to call the Document. The file's own name when the document does not say (`src/app/document.ts`). */
   title: string;
   /** Where speech stopped, with its own Stamp. Null until the owner has read some of it. */
   position: ReadingPosition | null;
-  /** Null means this Document has not been opened yet and will inherit whatever the global default is at that moment (ADR 0010). */
-  voice: VoiceChoice | null;
   /** When the owner last touched this Document, on which device. Orders the shelf; never compared across devices. */
   stamp: Stamp;
 }
@@ -106,7 +93,6 @@ export function serializeLibrary(entries: readonly LibraryEntry[]): string {
         publicationIdSource: entry.publicationIdSource,
         title: entry.title,
         position: entry.position ? serializePosition(entry, entry.position) : null,
-        voice: entry.voice ? { provider: entry.voice.provider, voice: entry.voice.voice } : null,
         stamp: { at: entry.stamp.at, device: entry.stamp.device },
       })),
     },
@@ -136,10 +122,10 @@ export interface LibraryProblem {
   /**
    * What was lost. `'entry'` means the whole entry, because nothing about it
    * could be trusted; the others mean the entry was kept without that part,
-   * which is the better trade — an unreadable Voice must not cost the owner a
+   * which is the better trade — an unreadable title must not cost the owner a
    * Reading Position.
    */
-  dropped: 'entry' | 'title' | 'position' | 'voice' | 'stamp' | 'position-stamp';
+  dropped: 'entry' | 'title' | 'position' | 'stamp' | 'position-stamp';
   why: 'not-an-object' | 'id' | 'format' | 'malformed';
 }
 
@@ -172,10 +158,17 @@ export type LibraryParse =
   | { ok: false; reason: 'newer'; version: number };
 
 const FILE_KEYS = ['version', 'entries'];
-const ENTRY_KEYS = ['id', 'format', 'publicationId', 'publicationIdSource', 'title', 'position', 'voice', 'stamp'];
+const ENTRY_KEYS = ['id', 'format', 'publicationId', 'publicationIdSource', 'title', 'position', 'stamp'];
+/**
+ * Keys this build knows and no longer keeps. Read past rather than reported:
+ * `ignored` stops the file being rewritten and tells the owner it holds things
+ * this version does not understand, which would be untrue of a key this version
+ * retired on purpose. `voice` held each Document's own Voice until ADR 0089
+ * made it one Voice for the app.
+ */
+const RETIRED_ENTRY_KEYS = ['voice'];
 const POSITION_KEYS = ['locator', 'anchor', 'stamp'];
 const ANCHOR_KEYS = ['exact', 'prefix', 'suffix'];
-const VOICE_KEYS = ['provider', 'voice'];
 const STAMP_KEYS = ['at', 'device'];
 
 const SOURCES: readonly PublicationIdSource[] = ['unique-identifier', 'only', 'first-of-several', 'none'];
@@ -220,7 +213,7 @@ function parseEntry(raw: unknown, at: number, problems: LibraryProblem[], ignore
     problems.push({ at, id: null, dropped: 'entry', why: 'not-an-object' });
     return null;
   }
-  collectUnknown(raw, ENTRY_KEYS, `entries[${at}].`, ignored);
+  collectUnknown(raw, [...ENTRY_KEYS, ...RETIRED_ENTRY_KEYS], `entries[${at}].`, ignored);
 
   const id = asDocumentId(raw.id);
   if (!id) {
@@ -248,7 +241,6 @@ function parseEntry(raw: unknown, at: number, problems: LibraryProblem[], ignore
     publicationIdSource: SOURCES.includes(raw.publicationIdSource as PublicationIdSource) ? (raw.publicationIdSource as PublicationIdSource) : 'none',
     title,
     position: parsePosition(raw.position, format, at, id, problems, ignored),
-    voice: parseVoice(raw.voice, at, id, problems, ignored),
     stamp: parseStamp(raw.stamp, at, id, problems, ignored),
   };
 }
@@ -315,20 +307,6 @@ function parsePositionStamp(raw: unknown, at: number, id: DocumentId, problems: 
   }
   problems.push({ at, id, dropped: 'position-stamp', why: 'malformed' });
   return OLDEST_STAMP;
-}
-
-function parseVoice(raw: unknown, at: number, id: DocumentId, problems: LibraryProblem[], ignored: string[]): VoiceChoice | null {
-  if (raw === null || raw === undefined) return null;
-  if (!isRecord(raw)) {
-    problems.push({ at, id, dropped: 'voice', why: 'malformed' });
-    return null;
-  }
-  collectUnknown(raw, VOICE_KEYS, `entries[${at}].voice.`, ignored);
-  if (typeof raw.provider !== 'string' || !raw.provider || typeof raw.voice !== 'string' || !raw.voice) {
-    problems.push({ at, id, dropped: 'voice', why: 'malformed' });
-    return null;
-  }
-  return { provider: raw.provider, voice: raw.voice };
 }
 
 /**

@@ -43,7 +43,7 @@ const uri = 'file:///documents/library.json';
 const rule = 'file:///documents/library-id-rule';
 const entry: LibraryEntry = {
   id: asDocumentId(`sha256:${'a'.repeat(64)}`)!, format: 'epub', publicationId: null, publicationIdSource: 'none',
-  title: 'New Document', position: null, voice: null, stamp: { at: 1, device: 'phone' },
+  title: 'New Document', position: null, stamp: { at: 1, device: 'phone' },
 };
 const cases = [
   ['truncated', '{"version":2,"entries":['],
@@ -117,7 +117,7 @@ describe('an unreadable Library is kept, not reinitialized (#233)', () => {
     const before = app.library.current(entry.id);
     expect(() => app.library.rename(entry.id, 'Changed')).toThrow();
     expect(disk.saveName).not.toHaveBeenCalled();
-    await act(async () => { app.library.voiced(entry.id, { provider: 'local', voice: 'af_bella' }); });
+    await act(async () => { app.library.heard(entry.id); });
     expect(app.library.current(entry.id)).toEqual(before);
     expect(disk.files.get(uri)).toBe(original);
   });

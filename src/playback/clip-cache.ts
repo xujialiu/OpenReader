@@ -2,7 +2,7 @@
  * What a Clip is filed under, and what is filed.
  *
  * **The key is the Provider, the Voice and the text — and deliberately not the
- * speed** (ADR 0009, ADR 0010). That is not a simplification: it is the decisive
+ * speed** (ADR 0009). That is not a simplification: it is the decisive
  * reason speed is applied at playback at all. Put speed in the key and nudging
  * 1.5× to 1.6× discards every Clip the owner has already paid for, along with
  * the quota and bandwidth spent on it, which under ADR 0002 is the owner's own

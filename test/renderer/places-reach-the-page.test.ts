@@ -149,7 +149,7 @@ describe('a place reaches rendition.display as the string it is', () => {
     });
     const parsed = parsePositionsFile(file);
     if (!parsed.ok) throw new Error('the Positions File was not read');
-    const entry: LibraryEntry = { id, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A Document', position: null, voice: null, stamp: { at: 1, device: 'iPhone' } };
+    const entry: LibraryEntry = { id, format: 'epub', publicationId: null, publicationIdSource: 'none', title: 'A Document', position: null, stamp: { at: 1, device: 'iPhone' } };
     const adoption = planAdoption([entry], usableItems(parsed.items));
     const position = adoption.entries[0].position;
     const place = position ? readLocator(position.locator, 'epub') : null;

@@ -28,12 +28,8 @@
  * owner's own account (philosophy rule 4), and it is held for as long as the app
  * is open because Speechify paginates and Fish merges up to three sources.
  *
- * **What is chosen here is this book's Voice** (ADR 0010). It is written into the
- * Library entry of the Document that is open, and it becomes the global default as
- * well — so the next Document opened for the first time inherits it and a book
- * already under way keeps what it was started with. The sheet says so in as many
- * words, because a picker that quietly did two things is one the owner cannot
- * predict.
+ * **What is chosen here is the Voice** (ADR 0089): the one every Document is
+ * read in, this one and every other, from the moment it is chosen.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -131,12 +127,6 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
     <>
       {enabled.length > 0 ? (
         <>
-          {/*
-           * **Whose Voice this is**, which design 0010 names as the price of a Voice
-           * per Document: choosing here is a choice for the book in front of the
-           * owner; it becomes the default as well, which is what the next book they
-           * open for the first time inherits.
-           */}
           <DrawerMenuRow
             label="Provider"
             choices={enabled.map((provider) => ({ value: provider, label: PROVIDER_LABELS[provider] }))}
@@ -162,7 +152,7 @@ function VoicePicker({ settings, lists, onChoose, pending, error }: Omit<VoiceSh
              * being got ready, with the spinner, while it is. On another
              * Provider or Language the row names nothing and nothing changes
              * until a Voice is chosen: picking one for the owner would change
-             * this Document's Voice, and the default, by looking (#232).
+             * the Voice by looking (#232).
              */
             <DrawerMenuRow
               label="Voice"

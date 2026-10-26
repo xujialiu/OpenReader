@@ -53,14 +53,12 @@
   change (`{"do":"settings","patch":{"theme":…}}`) taken while paused there.
   Useful for comparing the two themes' highlight colours from one play: play
   once, pause on a word, screenshot, flip the theme, screenshot again.
-- **The Library's own remembered Voice re-asserts itself over a bare
-  `{"do":"settings","patch":{"voice":""}}`.** The harness's `settings` command
-  patches the global `AppSettings`, but an open Document's player reads back
-  through `voiceInList(...) ?? knownVoice(...)`, and the shelf keeps its own
-  `voice=` per entry (visible in `{"do":"shelf"}`); the screen kept showing the
-  previously-chosen Voice's name after the patch, unchanged. Reaching the
-  "choose a Voice" empty state this way was not pursued further; it likely
-  needs the per-document entry cleared too, not only the global setting.
+- **A Library entry no longer holds a Voice (#327, ADR 0089).** Before it, the
+  Library's own remembered Voice re-asserted itself over a bare
+  `{"do":"settings","patch":{"voice":""}}`, and `{"do":"shelf"}` printed a
+  `voice=` per entry. The Voice is now `AppSettings.voice` alone, and `shelf`
+  prints no `voice=`; a recipe that read one back from `shelf` reads
+  `{"do":"saysettings"}`'s `provider` and `voice` instead.
 - **No real Azure voice label is long enough to force the player's own
   ellipsis.** The longest `DisplayName` across all ~691 voices the account's
   key listed is `Xiaoshuang Dragon HD Flash Latest` (33 characters,

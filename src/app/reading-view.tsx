@@ -113,17 +113,6 @@ export interface ReadingViewProps {
    */
   keyPresence: SecretPresence;
   /**
-   * Something about this Document's own Voice that the owner has to be told, or
-   * null — which is every ordinary case.
-   *
-   * Today it is one sentence: a remembered Voice naming a Provider this build does
-   * not have, which `unusableVoiceSentence` composes and which means the book is
-   * being read in the default Voice instead (ADR 0010). It arrives as a prop rather
-   * than being worked out here because the entry it is about belongs to
-   * `reader-screen.tsx`, which is the one place that knows which Document is open.
-   */
-  voiceNote: string | null;
-  /**
    * The shell's count of credential writes, passed straight to `useReading`.
    *
    * Here rather than read from the shell inside this component because every
@@ -158,8 +147,15 @@ export interface ReadingViewProps {
    */
   adopted: { at: number; position: ReadingPlace } | null;
   onRate(rate: number): void;
-  /** A Provider and a Voice together: a Voice belongs to exactly one Provider (CONTEXT.md, ADR 0010). */
+  /** A Provider and a Voice together: a Voice belongs to exactly one Provider (CONTEXT.md). */
   onVoice(provider: ProviderId, voice: string): void;
+  /**
+   * This view's way of choosing a Voice, handed to the host while it is mounted
+   * and taken back (`null`) as it goes: the Download drawer's "Use downloaded
+   * voice" reaches a playing Reading through it, and is handed over as the Voice
+   * drawer's choice is (#327, ADR 0089).
+   */
+  onVoiceChooser?(choose: ((provider: ProviderId, voice: string) => void) | null): void;
   /** Where speech got to. Called on a Clip boundary at most every `POSITION_INTERVAL_MS`, at every stop of the Reading (#155), and once more on the way out. */
   onReached(place: ReadingPlace): void;
   /**
@@ -248,13 +244,13 @@ export function ReadingView({
   shown,
   document,
   settings,
-  voiceNote,
   keyPresence,
   credentialsWrittenAt,
   position,
   adopted,
   onRate,
   onVoice,
+  onVoiceChooser,
   onReached,
   barHeight,
   onChrome,
@@ -676,8 +672,6 @@ export function ReadingView({
     const say = (words: string, attention: boolean) => {
       if (words !== hidden && !said.some((note) => note.said === words)) said.push({ said: words, attention });
     };
-    // First, because it says which Provider the sentence below is even about.
-    if (voiceNote) say(voiceNote, true);
     const missing = sayWhatIsMissing ? readinessNote(settings.provider, ready) : null;
     if (missing) say(missing, true);
     if (keyPresence.state === 'refused' && !savedVoice) say(`The Keychain would not say whether a key is saved: ${keyPresence.message}`, true);
@@ -687,7 +681,7 @@ export function ReadingView({
     if (inventoryProblem) say(`Saved audio could not be checked: ${inventoryProblem}`, true);
     if (status.voiceError && !voicesOpen) say(status.voiceError, true);
     return said;
-  }, [voiceNote, sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status, voicesOpen, savedVoice, inventoryProblem]);
+  }, [sayWhatIsMissing, ready, settings.provider, keyPresence, displayError, status, voicesOpen, savedVoice, inventoryProblem]);
 
   /**
    * Whether the player is shown in full, and with it the navigation bar (#67).
@@ -736,6 +730,10 @@ export function ReadingView({
     },
     [onVoice, selectReadingVoice],
   );
+  useEffect(() => {
+    onVoiceChooser?.(chooseVoice);
+    return () => onVoiceChooser?.(null);
+  }, [onVoiceChooser, chooseVoice]);
 
   // WALKTHROUGH-HARNESS
   useHarnessCommands((command: HarnessCommand) => {

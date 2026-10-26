@@ -15,7 +15,7 @@ import { useHeldReading } from './reading-host';
 import { RenameAlert } from './rename-alert';
 import { useMovePage } from './folder-actions';
 import { useShell } from './routes';
-import { PROVIDER_LABELS, selectVoice, settingsForDocument } from './settings';
+import { PROVIDER_LABELS } from './settings';
 import { shareDocument } from './share-document';
 import { knownVoice } from './voice-catalog';
 
@@ -72,7 +72,8 @@ const TITLES: Record<Exclude<Page, 'menu' | 'move'>, string> = { appearance: 'Ap
 export function ReaderActions({ document, onClose, onDelete, onSelect, appearance = false, movable = false, debugNote = false }: { document: DocumentId; onClose(): void; onDelete?(): void; onSelect?(): void; appearance?: boolean; movable?: boolean; debugNote?: boolean }) {
   const { library, settings, setSettings } = useShell();
   const entry = library.entries.find((e) => e.id === document);
-  const held = useHeldReading().current;
+  const reading = useHeldReading();
+  const held = reading.current;
   /**
    * Where Download marks and opens (#88): where this Document's Reading has its
    * contents list mark, when there is one and it has said, so the two drawers
@@ -95,8 +96,8 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   if (shown !== document) {
     setShown(document); setPage('menu'); setRenaming(false); setFailure(null); setSelectAll(null); move.restart();
   }
-  const current = settingsForDocument(settings, entry?.voice ?? null);
-  const voice = { provider: current.provider, voice: current.voice, label: current.voice ? knownVoice(current)?.label ?? `${PROVIDER_LABELS[current.provider]} · ${current.voice}` : '' };
+  // The one Voice (ADR 0089): what Download writes, and what its checks are about.
+  const voice = { provider: settings.provider, voice: settings.voice, label: settings.voice ? knownVoice(settings)?.label ?? `${PROVIDER_LABELS[settings.provider]} · ${settings.voice}` : '' };
   if (!entry) return null;
   const share = () => {
     setSharing(true);
@@ -106,7 +107,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
   const saveNote = (time: string, comment: string) => {
     setNoting(null);
     writeDebugNote({ time, document: { id: document, title: entry.title }, comment,
-      voice: { ...voice, ...(voice.provider === 'fish' ? { model: current.fish.model } : {}) } });
+      voice: { ...voice, ...(voice.provider === 'fish' ? { model: settings.fish.model } : {}) } });
     Clipboard.setStringAsync(debugNoteCopy(time, comment))
       .then(onClose, (problem: unknown) => setFailure(`The Debug Note is saved, but it could not be copied: ${problem instanceof Error ? problem.message : String(problem)}`));
   };
@@ -144,9 +145,7 @@ export function ReaderActions({ document, onClose, onDelete, onSelect, appearanc
     {/* One element for both pages, so the selection and the list's place survive going to Manage and back. */}
     {page === 'download' || page === 'manage' ? <DownloadContent document={document} title={entry.title} voice={voice} place={place}
       manage={page === 'manage'} onManage={(open) => setPage(open ? 'manage' : 'download')} onSelectAll={setSelectAll}
-      onStart={() => { if (!entry.voice) library.voiced(document, voice); }} onVoice={(next) => {
-        library.voiced(document, next); setSettings((was) => selectVoice(was, next.provider, next.voice));
-      }} /> : null}
+      onVoice={(next) => reading.chooseVoice(next.provider, next.voice)} /> : null}
     {renaming ? <RenameAlert name={entry.title} onCancel={() => setRenaming(false)}
       validate={(name) => documentNameProblem(library.folderSnapshot.tree, library.entries, name, library.folderSnapshot.tree.documents[document] ?? null, document)}
       onSave={(name) => {

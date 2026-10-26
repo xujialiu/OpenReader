@@ -38,7 +38,7 @@ import { documentNameProblem, freeDocumentName, type FolderId, type FolderSnapsh
 import { openFolderStore } from './folder-storage';
 
 import { APP_NAME } from '../../app-name';
-import { nextStamp, stampPlace, type DocumentId, type LibraryEntry, type ReadingPlace, type VoiceChoice } from '../core/document';
+import { nextStamp, stampPlace, type DocumentId, type LibraryEntry, type ReadingPlace } from '../core/document';
 import type { PositionsItem } from '../core/sync/positions-file';
 
 import { identifyFile, keepFile } from './document';
@@ -130,20 +130,6 @@ export interface Library {
    * one screen that has to notice — the Reader with that book open.
    */
   adoptedAt: Readonly<Partial<Record<DocumentId, number>>>;
-  /**
-   * The Voice this Document is read in (ADR 0010).
-   *
-   * Written when the owner chooses one while the book is open, and once more when a
-   * Document that remembers none inherits the global default — which is the whole of
-   * "opening one for the first time gives it whatever the default is at that moment,
-   * and from then on the document keeps it". Unchanged when the entry already holds
-   * this pair, so an open costs no write of its own.
-   *
-   * It does **not** move the Stamp, which orders the shelf by when each Document
-   * was last heard (#228): a Voice chosen or inherited is not the Document being
-   * read aloud.
-   */
-  voiced(id: DocumentId, voice: VoiceChoice): void;
   /**
    * Something went wrong out here rather than in the file — a book handed over
    * by another app that would not open, say.
@@ -262,9 +248,8 @@ export function useLibrary(): Library {
       const parentOf = (tree: FolderTree) => destination !== null && !tree.folders.some((folder) => folder.id === destination) ? null : destination;
       /**
        * The same book added twice from two places is one entry (ADR 0019), and
-       * the one it is is the one already in the Library: its Reading Position, its
-       * Voice and its name are each worth more than a second reading of a file
-       * name. A duplicate now asks before opening;
+       * the one it is is the one already in the Library: its Reading Position
+       * and its name are each worth more than a second reading of a file name. A duplicate now asks before opening;
        * cancelling that alert must not move the entry or its Stamp (#121).
        *
        * Its file is still kept over the one in the Library, which is how adding
@@ -307,7 +292,7 @@ export function useLibrary(): Library {
        */
       if (displayNames()[added.identity.id] !== undefined) forgetDisplayName(added.identity.id);
       keepFile(added, source, options);
-      const entry: LibraryEntry = { ...added.identity, title, position: null, voice: null, stamp: stamp() };
+      const entry: LibraryEntry = { ...added.identity, title, position: null, stamp: stamp() };
       // Membership is saved first: an interrupted import may leave an unused
       // mapping, but can never expose a successfully imported book in the wrong folder.
       folders.place(entry.id, parent);
@@ -361,15 +346,6 @@ export function useLibrary(): Library {
     [commit],
   );
 
-  const voiced = useCallback(
-    (id: DocumentId, voice: VoiceChoice) => {
-      const held = entriesRef.current.find((one) => one.id === id)?.voice;
-      if (held && held.provider === voice.provider && held.voice === voice.voice) return;
-      change(id, (entry) => ({ ...entry, voice }));
-    },
-    [change],
-  );
-
   const report = useCallback((text: string, operation: LibraryOperation | null = null) => {
     putReport({ text, operation });
   }, [putReport]);
@@ -397,7 +373,7 @@ export function useLibrary(): Library {
     }
   }, [change, folders]);
   const remove = useCallback((id: DocumentId) => commit((was) => was.filter((entry) => entry.id !== id), true), [commit]);
-  return { folders, folderSnapshot, entries, loading, note, dismissNote, beginOperation, add, heard, rename, remove, reached, voiced, report, device, current, positionsItems, adopt, adoptedAt };
+  return { folders, folderSnapshot, entries, loading, note, dismissNote, beginOperation, add, heard, rename, remove, reached, report, device, current, positionsItems, adopt, adoptedAt };
 }
 
 /**

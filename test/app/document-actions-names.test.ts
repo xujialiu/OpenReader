@@ -41,7 +41,7 @@ vi.mock('../../src/app/download-sheet', () => hosts('DownloadContent'));
 vi.mock('../../src/app/highlight-section', () => hosts('HighlightPage'));
 vi.mock('../../src/app/reading-host', () => ({ useHeldReading: () => ({ current: null }) }));
 vi.mock('../../src/app/routes', () => ({ useShell: () => shell.current }));
-vi.mock('../../src/app/settings', () => ({ PROVIDER_LABELS: {}, selectVoice: vi.fn(), settingsForDocument: () => ({ provider: 'openai', voice: '' }) }));
+vi.mock('../../src/app/settings', () => ({ PROVIDER_LABELS: {} }));
 vi.mock('../../src/app/share-document', () => ({ shareDocument: vi.fn() }));
 vi.mock('../../src/app/voice-catalog', () => ({ knownVoice: () => null }));
 vi.mock('../../src/renderer', () => ({ spineIndexOf: () => 0 }));
@@ -66,7 +66,7 @@ const EMMA = idOf('a');
 const PERSUASION = idOf('b');
 const LOOSE = idOf('c');
 const entry = (id: DocumentId, title: string, at: number): LibraryEntry => ({
-  id, format: 'epub', publicationId: null, publicationIdSource: 'none', title, position: null, voice: null, stamp: { at, device: 'test' },
+  id, format: 'epub', publicationId: null, publicationIdSource: 'none', title, position: null, stamp: { at, device: 'test' },
 });
 const TAKEN = 'A document with this name already exists here. Rename it first.';
 
@@ -83,7 +83,7 @@ async function open(document: DocumentId) {
   const onClose = vi.fn();
   function Screen() {
     library = useLibrary();
-    shell.current = { library, settings: {}, setSettings: vi.fn() };
+    shell.current = { library, settings: { provider: 'openai', voice: '' }, setSettings: vi.fn() };
     return library.loading ? null : createElement(ReaderActions, { document, movable: true, onClose });
   }
   await act(async () => { view = create(createElement(Screen)); });
