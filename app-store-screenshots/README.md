@@ -44,7 +44,7 @@ OUT=/tmp/openreader-screenshots
 python3 test/manual-test/kit/ios_guard.py run --wait 900 --timeout 1800 \
   --record "$OUT/build.json" -- python3 app-store-screenshots/shoot.py build "$OUT/build"
 APP="$OUT/build/derived/Build/Products/Release-iphonesimulator/OpenReader.app"
-# 2. Each set, on a new simulator that is deleted afterwards (--keep keeps it).
+# 2. Each set, on a new simulator deleted afterwards with its work directory (--keep keeps both).
 for device in iphone ipad; do
   python3 test/manual-test/kit/ios_guard.py run --wait 900 --timeout 1500 \
     --record "$OUT/$device.json" -- python3 app-store-screenshots/shoot.py shoot "$device" --app "$APP"

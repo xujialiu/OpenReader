@@ -17,7 +17,7 @@ timings, voice "Bella"), and writes four PNGs into DIR (default: this folder's
   4-library.png   the Library with the book's "Last read" line
 
 Run both under the shared iOS guard (test/manual-test/kit/ios-verification.md);
-README.md has the commands. The simulator is deleted afterwards unless --keep.
+README.md has the commands. The simulator and the work directory are deleted afterwards unless --keep.
 """
 import argparse
 import glob
@@ -381,11 +381,12 @@ def shoot(device, app, epub, out, keep):
         server.terminate()
         subprocess.run(['xcrun', 'simctl', 'terminate', udid, BUNDLE], capture_output=True)
         if keep:
-            log(f'kept simulator {udid}')
+            log(f'kept simulator {udid} and {work}')
         else:
             subprocess.run(['xcrun', 'simctl', 'shutdown', udid], capture_output=True)
             subprocess.run(['xcrun', 'simctl', 'delete', udid], capture_output=True)
-            log(f'deleted simulator {udid}')
+            shutil.rmtree(work, ignore_errors=True)  # the book's copy and the fake server's log, about 24 MB
+            log(f'deleted simulator {udid} and {work}')
 
 
 def main():
