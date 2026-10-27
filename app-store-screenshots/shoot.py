@@ -177,19 +177,26 @@ class Screen:
     def key(self, code):
         run(self.axe, 'key', str(code), '--udid', self.udid, stdout=subprocess.DEVNULL)
 
+    def height(self):
+        """The screen's height in points."""
+        return max(f.get('y', 0) + f.get('height', 0) for f in
+                   ((n.get('frame') or {}) for n, _ in self.elements() if n.get('type') == 'Application'))
+
     def close_drawer(self, name):
         """The iPad's drawers have a Close button; the iPhone's are sheets, closed by dragging the grabber down.
-        A drag can leave the sheet at a lower detent, so check, and drag again."""
-        for _ in range(3):
+        A drag often leaves the sheet where it was (test/manual-test/pitfalls/screenshots.md), so check, and
+        drag again. The drag ends on the screen rather than below it."""
+        for _ in range(5):
             if self.find(f'Close {name}'):
                 self.touch(f'Close {name}')
             else:
                 at = self.find('Sheet Grabber')
                 if not at:
                     return
+                end = min(at[1] + 450, self.height() - 4)
                 run(self.axe, 'swipe', '--start-x', f'{at[0]:.0f}', '--start-y', f'{at[1]:.0f}', '--end-x', f'{at[0]:.0f}',
-                    '--end-y', f'{at[1] + 450:.0f}', '--duration', '0.4', '--udid', self.udid, stdout=subprocess.DEVNULL)
-                log(f'dragged the {name} drawer down')
+                    '--end-y', f'{end:.0f}', '--duration', '0.4', '--udid', self.udid, stdout=subprocess.DEVNULL)
+                log(f'dragged the {name} drawer down from y {at[1]:.0f} to {end:.0f}')
                 time.sleep(1.5)
             if not self.find(f'Close {name}') and not self.find('Sheet Grabber'):
                 return

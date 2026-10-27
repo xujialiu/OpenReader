@@ -1016,6 +1016,14 @@ simulators (iPhone 17, iPad Pro 13-inch (M5)):
   up hit the sheet, and a touch on `Choose a Voice` with Contents up opened
   `CHAPTER V.` from the list. Fix: drag the grabber down 450 pt
   (`axe swipe`, 0.4 s) when there is no `Close …`.
+- **A drag on an iPhone sheet's grabber often leaves the sheet where it was.**
+  Three runs of 1.0.3 (17)-free, 2026-10-27, iPhone 17, iOS 27.0: the grabber
+  sat at y 445 pt before and after each drag. The Voice sheet closed after one
+  drag, after four, and not within three (that run ended "the Voice drawer
+  would not close"); Download and Lookup took one to three. A drag ending at
+  y 870, on the 874-pt screen, did no better than one ending at 895, below it.
+  Cause not found. Fix: `close_drawer` drags up to five times, reading the
+  grabber after each.
 - **A long-press right after opening a long book lands on another line.** Pride
   and Prejudice kept reflowing for several seconds after the page first showed
   text: a word found by text recognition at y 602 pt was at 653 pt by the time
