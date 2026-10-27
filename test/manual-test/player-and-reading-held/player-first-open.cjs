@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // #331: the first Document opening, not only the collapse/reopen cycles of
 // player-opening.cjs. Run inside kit/ios_guard.py; see tap-lock-and-sleep-timer.md.
-// Closes the reader with the walkthrough harness's own `shut` (the collapse
-// arrow's handler), records the native screen while `open` re-enters the
+// Closes the reader with the walkthrough harness's own `shut` (navigation
+// back to the Library), records the native screen while `open` re-enters the
 // Document, and measures with player-opening-measure.py. Never plays audio.
 // Same shape prerequisites as player-opening.cjs: a 402x874-point, 3x
 // simulator at default text size, dark Theme, an open Document with the Player

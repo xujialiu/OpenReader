@@ -20,9 +20,8 @@ import XCTest
 /// SLEEP_DISMISS_X/SLEEP_DISMISS_Y override the outside tap that closes the
 /// menu after testOpenSleepMenu (normalized to the app's frame). The default
 /// moved from the title bar (0.5, 0.05) to the page (0.5, 0.30): on iOS 26.5
-/// the title-bar tap did not dismiss the menu (it stayed open over the reader,
-/// 2026-10-27), while the nav bar's title consumes touches; a tap on the page
-/// above the menu dismisses it.
+/// the title-bar tap left the menu open over the reader (2026-10-27), while
+/// changing only the tap location to the page above the menu dismissed it.
 final class SleepMenuProbe: XCTestCase {
 
   func capture(_ name: String, _ app: XCUIApplication) {
@@ -58,8 +57,7 @@ final class SleepMenuProbe: XCTestCase {
     // The menu opens upward and its last row covers the button, so a second
     // tap on the button chooses that row (measured: it chose 1 Hour).
     // Dismiss by tapping outside it; the title bar's tap does not dismiss the
-    // menu on iOS 26.5 (the nav bar consumes it), so the default is the page
-    // above the menu.
+    // menu on iOS 26.5, so the default is the page above the menu.
     let env = ProcessInfo.processInfo.environment
     let dismissX = env["SLEEP_DISMISS_X"].flatMap(Double.init) ?? 0.5
     let dismissY = env["SLEEP_DISMISS_Y"].flatMap(Double.init) ?? 0.30

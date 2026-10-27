@@ -55,7 +55,9 @@ for path in files:
   template=templates[key]; best=(-1,None)
   bx=box(spec,scale,h)
   for shift in range(-args.shift,args.shift+1):
-   candidate=im.crop((bx[0],max(0,bx[1]+shift),bx[2],min(h,bx[3]+shift)))
+   # The sweep and verdict are in points; Pillow's crop is in pixels.
+   pixel_shift=round(shift*scale)
+   candidate=im.crop((bx[0],bx[1]+pixel_shift,bx[2],bx[3]+pixel_shift))
    union=count(ImageChops.lighter(template,candidate)); common=count(ImageChops.darker(template,candidate))
    score=common/union if union else 0
    if score>best[0]:best=(score,shift)

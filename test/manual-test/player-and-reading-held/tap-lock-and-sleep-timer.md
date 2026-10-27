@@ -35,11 +35,12 @@ TEST_RUNNER_SLEEP_ITEM='5 Minutes' TEST_RUNNER_SLEEP_EXPECT='Sleep Timer, 5:00 l
 nothing. A failed run terminates the app (`run-probe.sh`), so restage before
 the next one. Closing the open menu without choosing taps outside it:
 `testOpenSleepMenu`'s default dismissal point is the page above the menu
-(`0.5, 0.30`; `SLEEP_DISMISS_X`/`SLEEP_DISMISS_Y` override it). On iOS 26.5 a
+(`0.5, 0.30`; pass `TEST_RUNNER_SLEEP_DISMISS_X`/`TEST_RUNNER_SLEEP_DISMISS_Y`
+to the runner to override it). On iOS 26.5 a
 tap on the reader's title bar (`0.5, 0.05`, the dismissal the probe used
-before) did not dismiss the menu — the nav bar consumes the touch and the menu
-stayed open over the reader until the wait timed out (2026-10-27); the page
-tap dismisses it first try.
+before) left the menu open until the wait timed out (2026-10-27); changing only
+the outside-tap location to the page dismissed it first try. The recordings
+establish that gesture difference, not which native view consumed the tap.
 
 For the length path without waiting minutes, the harness takes a fraction:
 `{"do":"sleep","choice":0.1}` is 6 s. The Debug Log then says
@@ -130,4 +131,42 @@ Its verdict is the original's (±3 pt, no hidden mover, exit 0/1/2). It shares
 the original's limit: it measures the transient against the settled layout,
 not that layout's absolute correctness, and its boxes are specific to the
 measured shape — read new boxes for every new width or text size. Its white-ink
-mask assumes the dark Theme.
+mask assumes the dark Theme. `--shift` and the displacement verdict are in
+points; the crop displacement converts them to screenshot pixels. The first
+version of the generic analyser added points directly to pixel coordinates:
+at 3× it reported a 2 pt move as 6 pt and searched only 10 pt for `--shift 30`.
+The scale check below failed before that correction and covers 1×, 2× and 3×
+images, including the original 22 pt jump:
+
+```sh
+python3 test/manual-test/player-and-reading-held/test_player_jump_check.py
+```
+
+### Verified correction: 1.0.3 (21)-beta1-debug
+
+App code `509090a`: the inner face uses the Player's supplied width and height,
+not flex-fill sizing. Independent `ios-tester` verification used iOS 26.5;
+the parent re-read every XCTest run and recomputed the pixel verdicts from the
+retained frames after correcting the generic analyser's point/pixel units.
+
+| Scenario | Comparable frames | Displaced / missing moon |
+| --- | ---: | --- |
+| 402 pt, default text, 3 collapse/reopens | 188 | 0 / 0 |
+| 402 pt, first Document opening | 107 | 0 / 0 |
+| 402 pt, accessibility-large, 3 collapse/reopens | 183 | 0 / 0 |
+| 390 pt, default text, 3 collapse/reopens | 183 | 0 / 0 |
+
+All four measured 0 pt movement relative to the lock. The same corrected
+analyser still fails the retained original-code recording: -22 pt on every
+open (5 displaced sampled frames of 190 comparable frames).
+
+Eleven native XCTest runs include one failed title-bar dismissal and ten
+passing runs after the gesture correction described above. Choices of
+5 Minutes, Turn Off Timer and When Current Chapter Ends worked; default,
+accessibility-large and 390 pt checks retained their supplied touch bounds.
+The large-text countdown was readable and centred. No audio was played.
+
+Limits: native pixels are handler/navigation-driven; only menu checks use
+XCTest taps. The enlarged tier was accessibility-large, not every accessibility
+size; first-open at that tier, rotation, physical iPhone and audio behavior
+were not tested. The speed control is unchanged and outside this fix.
