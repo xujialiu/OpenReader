@@ -16,6 +16,13 @@ import XCTest
 /// must read afterwards (prefix, or exact with SLEEP_EXPECT_EXACT=1). With
 /// SLEEP_CAPTURE=1 the post-choice screen is attached as `after-choose` even
 /// when the label assertion passes.
+///
+/// SLEEP_DISMISS_X/SLEEP_DISMISS_Y override the outside tap that closes the
+/// menu after testOpenSleepMenu (normalized to the app's frame). The default
+/// moved from the title bar (0.5, 0.05) to the page (0.5, 0.30): on iOS 26.5
+/// the title-bar tap did not dismiss the menu (it stayed open over the reader,
+/// 2026-10-27), while the nav bar's title consumes touches; a tap on the page
+/// above the menu dismisses it.
 final class SleepMenuProbe: XCTestCase {
 
   func capture(_ name: String, _ app: XCUIApplication) {
@@ -50,8 +57,13 @@ final class SleepMenuProbe: XCTestCase {
     XCTAssertFalse(menuItem(app, "Turn Off Timer").exists, "Turn Off Timer is offered while the timer is off")
     // The menu opens upward and its last row covers the button, so a second
     // tap on the button chooses that row (measured: it chose 1 Hour).
-    // Dismiss by tapping outside it, on the empty title bar.
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)).tap()
+    // Dismiss by tapping outside it; the title bar's tap does not dismiss the
+    // menu on iOS 26.5 (the nav bar consumes it), so the default is the page
+    // above the menu.
+    let env = ProcessInfo.processInfo.environment
+    let dismissX = env["SLEEP_DISMISS_X"].flatMap(Double.init) ?? 0.5
+    let dismissY = env["SLEEP_DISMISS_Y"].flatMap(Double.init) ?? 0.30
+    app.coordinate(withNormalizedOffset: CGVector(dx: dismissX, dy: dismissY)).tap()
     let chapterGone = NSPredicate(format: "exists == false")
     expectation(for: chapterGone, evaluatedWith: chapter, handler: nil)
     waitForExpectations(timeout: 5, handler: nil)

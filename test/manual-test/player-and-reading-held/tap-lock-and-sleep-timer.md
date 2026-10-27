@@ -33,7 +33,13 @@ TEST_RUNNER_SLEEP_ITEM='5 Minutes' TEST_RUNNER_SLEEP_EXPECT='Sleep Timer, 5:00 l
 
 `TEST_RUNNER_SLEEP_CAPTURE=1` attaches the screen after the choice. It plays
 nothing. A failed run terminates the app (`run-probe.sh`), so restage before
-the next one.
+the next one. Closing the open menu without choosing taps outside it:
+`testOpenSleepMenu`'s default dismissal point is the page above the menu
+(`0.5, 0.30`; `SLEEP_DISMISS_X`/`SLEEP_DISMISS_Y` override it). On iOS 26.5 a
+tap on the reader's title bar (`0.5, 0.05`, the dismissal the probe used
+before) did not dismiss the menu — the nav bar consumes the touch and the menu
+stayed open over the reader until the wait timed out (2026-10-27); the page
+tap dismisses it first try.
 
 For the length path without waiting minutes, the harness takes a fraction:
 `{"do":"sleep","choice":0.1}` is 6 s. The Debug Log then says
