@@ -82,3 +82,21 @@ absolute correctness. Its crops are specific to this width, text size, theme
 and timer-off state; larger text, other widths, countdown text, menu choices
 and touch targets require separate checks. Re-sampling the recording at 60 fps
 can duplicate frames, so frame counts alone are not precise native timings.
+
+`player-first-open.cjs` gives the same check to the first Document opening, not
+only the collapse/reopen cycles: it closes the reader with the walkthrough
+harness's own `shut`, records while `open` re-enters the Document, then runs
+the same analyser.
+
+```sh
+OPENREADER_METRO=http://127.0.0.1:METRO_PORT \
+  python3 test/manual-test/kit/ios_guard.py run --timeout 120 \
+  --record OUT_DIR/phase.json -- \
+  node test/manual-test/player-and-reading-held/player-first-open.cjs \
+  SIMULATOR_UDID OUT_DIR sha256:DOCUMENT_ID
+```
+
+Frames before the head row first appears (Library, transition) are not
+comparable and are skipped; the verdict covers every frame from its first
+appearance, so a hidden moon on the first frame fails the run. It is still the
+app's own navigation, not a physical-touch test.
