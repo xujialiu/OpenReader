@@ -58,13 +58,16 @@ const base64url = (/** @type {string | Buffer} */ value) => Buffer.from(value).t
  * request does: a scope of `GET /v1/betaGroups` alone is refused (403) for
  * that path with a query (notes 2026-10-10).
  *
- * @param {{ keyId: string, issuerId: string, privateKey: string, path: string, now?: number }} request `privateKey` is the text of the `.p8`; `path` is the path and query to read; `now` is in milliseconds.
+ * A write (`scripts/asc-api.mjs`) is signed without a scope: App Store Connect
+ * answers a PATCH whose token is scoped to it with 405.
+ *
+ * @param {{ keyId: string, issuerId: string, privateKey: string, path: string, method?: string, now?: number }} request `privateKey` is the text of the `.p8`; `path` is the path and query; `method` is `GET` unless the request writes; `now` is in milliseconds.
  * @returns {string}
  */
-export function token({ keyId, issuerId, privateKey, path, now = Date.now() }) {
+export function token({ keyId, issuerId, privateKey, path, method = 'GET', now = Date.now() }) {
   const issued = Math.floor(now / 1000);
   const header = { alg: 'ES256', kid: keyId, typ: 'JWT' };
-  const payload = { iss: issuerId, iat: issued, exp: issued + TOKEN_LIFE, aud: 'appstoreconnect-v1', scope: [`GET ${path}`] };
+  const payload = { iss: issuerId, iat: issued, exp: issued + TOKEN_LIFE, aud: 'appstoreconnect-v1', ...(method === 'GET' ? { scope: [`GET ${path}`] } : {}) };
   const signed = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
   // A JWT's signature is the two numbers side by side, not the DER that `sign` writes by default.
   const signature = sign('sha256', Buffer.from(signed), { key: createPrivateKey(privateKey), dsaEncoding: 'ieee-p1363' });

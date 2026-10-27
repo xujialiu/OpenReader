@@ -48,10 +48,14 @@ saved reference values. Upload history belongs in notes and the confirmed
   `ASC_PRIVATE_KEY`; only `main` may use it.
 - If leaked, revoke the key under Users and Access → Integrations → App Store
   Connect API, generate another and replace the three secrets.
-- To set What to Test through the API, get its localization ID from
+- `scripts/asc-api.mjs` makes one request with this key and prints the
+  status, then the JSON; its header shows a read and a write. A release reads
+  everything back through it: builds and their processing, the version and its
+  fields, screenshot states, review submissions.
+- To set What to Test, get its localization ID from
   `GET /v1/builds/{build}/betaBuildLocalizations`, then
-  `PATCH /v1/betaBuildLocalizations/{id}` with `whatsNew`. Sign that token
-  **without `scope`**: scoping it to the PATCH produces HTTP 405.
+  `PATCH /v1/betaBuildLocalizations/{id}` with `whatsNew`. The helper signs a
+  write without a `scope`; a token scoped to the PATCH gets HTTP 405.
 
 ## Metadata and review
 
@@ -64,6 +68,20 @@ secret such as the review key out of the agent's output.
 `document.execCommand('insertText', false, text)` on the selected field also
 saves. So a revision built in the page from the field's own value,
 with the review key left where it was, never passes through the agent.
+On the version page, What's New is `#whatsNew` and the review notes `#notes`.
+
+**Working in the page**: use the Claude in Chrome browser whose `osPlatform`
+is macOS; the names "Browser 1" and "Browser 2" swap between sessions. Its
+App Store Connect sign-in lapses: a run can open on the login page (blank,
+`authResult=FAILED`), and a session can end mid-run or right after Submit for
+Review. Open the app's page before the first web step; on the login page, ask
+the owner to sign in in that tab, and wait for the answer. A page that turns
+blank, or whose buttons have no text, comes back when entered again from
+Apps → OpenReader about ten seconds later; click a button once its label shows.
+Read every web change back through `scripts/asc-api.mjs`, which needs no web
+session: a submission whose click ends on the login page went through when
+the version reads `WAITING_FOR_REVIEW` with the formal build, and
+`/v1/reviewSubmissions?filter[app]=6817809106` lists it with a `submittedDate`.
 
 - **App Privacy.** Published:
   - **Other User Content**: App Functionality and Other Purposes;
@@ -102,7 +120,7 @@ with the review key left where it was, never passes through the agent.
 - **Category:** Books (saved).
 - **Copyright:** 2026 Xujia Liu.
 - **Release after approval:** manual.
-- **A new version** (the + beside iOS App) copies the description, keywords, URLs, copyright and review notes from the last one, but not the review attachment. Its What's New starts empty. Add for Review can warn "Newer Build Available" because free/Debug copies have higher numbers. Keep the exact formal build from [versions.md](versions.md) selected and recheck the Draft Submission before the owner authorizes Submit for Review. A newer or odd-numbered build is not evidence of the formal role.
+- **A new version** (the + beside iOS App) copies the description, keywords, URLs, copyright and review notes from the last one, but not the review attachment. Its What's New starts empty. The notes' first line names the formal build under review (`Review notes for OpenReader 1.0.3 (16), …`); replace that build with the new formal one. Add Build as soon as the formal copy reads `VALID`, while the free and Debug copies are still uploading or processing: the picker then lists the formal build alone. Add for Review can warn "Newer Build Available" because free/Debug copies have higher numbers. Keep the exact formal build from [versions.md](versions.md) selected and recheck the Draft Submission before the owner authorizes Submit for Review. A newer or odd-numbered build is not evidence of the formal role.
 - **Screenshots**
   - The uploaded sets and the script that makes them are in [`app-store-screenshots/`](../app-store-screenshots/README.md): reading with the spoken word highlighted, Word Lookup, the Download drawer and the Library, for iPhone and iPad.
   - Required slots: iPhone with Dynamic Island (medium display), 1206 × 2622 or 1179 × 2556; with iPad support (#319), iPad 13" display, 2064 × 2752 or 2048 × 2732. Recheck them in Media Manager against Apple's [screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/); use captures of the actual iPad layout, not enlarged phone screenshots.

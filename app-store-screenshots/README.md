@@ -65,4 +65,17 @@ the paused word falls change from run to run.
 App Store Connect → the version → Media Manager. Put each folder's four files
 in its slot above, in file order. Smaller devices use the scaled-down set
 unless one of their own is added. See
-[App Store Connect reference](../docs/app-store-connect.md#metadata-and-review).
+[App Store Connect reference](../docs/app-store-connect.md#metadata-and-review),
+whose **Working in the page** covers the sign-in and blank pages.
+
+- **Replacing a set**: Remove All, then confirm. It removes the set from this
+  version only; the pictures stay in the media library.
+- **The file input** of each slot sits in a shadow root, out of reach of
+  `document.querySelectorAll`. Claude in Chrome's `find` returns a ref to it,
+  and `file_upload` takes that ref with the four files in file order.
+- **The iPad slot**: after its upload a notice says the 13" set serves every
+  iPad size; OK closes it.
+- **Done** is every screenshot's `assetDeliveryState` reading `COMPLETE`, read
+  through `scripts/asc-api.mjs` from the version localization's
+  `appScreenshotSets` with `include=appScreenshots`. The largest iPad files
+  stay at `UPLOAD_COMPLETE` for several minutes; Add for Review waits for them.

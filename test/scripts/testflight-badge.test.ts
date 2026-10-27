@@ -106,6 +106,11 @@ describe('#150: the token a read is made with', () => {
   it('allows the one read it was signed for, query included', () => {
     expect(decoded(payload).scope).toEqual([`GET ${path}`]);
   });
+
+  it('carries no scope for a write, which App Store Connect answers with 405 when scoped', () => {
+    const write = token({ keyId: 'KEYID12345', issuerId: 'issuer-id', privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(), path: '/v1/betaBuildLocalizations/1', method: 'PATCH', now });
+    expect(decoded(write.split('.')[1])).not.toHaveProperty('scope');
+  });
 });
 
 describe('#150: the README reads the file the workflow publishes', () => {
