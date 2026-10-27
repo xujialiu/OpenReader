@@ -59,7 +59,12 @@ const sleep = ms => new Promise(r=>setTimeout(r, ms));
  const frames=path.join(directory,'frames','%04d.png');
  const extracted=spawnSync('ffmpeg',['-v','error','-i',output,'-vf','fps=60',frames],{stdio:'inherit',timeout:15000});
  if(extracted.status!==0) throw new Error('Frame extraction failed');
- const measured=spawnSync('python3',[require.resolve('./player-opening-measure.py'),path.join(directory,'frames','*.png')],{stdio:'inherit',timeout:15000});
+ // OPENREADER_MEASURE (with OPENREADER_MEASURE_ARGS, space-separated) swaps in
+ // another analyser for shapes player-opening-measure.py cannot take — any
+ // width or text size (player-jump-check.py). The default is unchanged.
+ const measurer=process.env.OPENREADER_MEASURE ?? require.resolve('./player-opening-measure.py');
+ const measureArgs=(process.env.OPENREADER_MEASURE_ARGS ?? '').split(' ').filter(Boolean);
+ const measured=spawnSync('python3',[measurer,path.join(directory,'frames','*.png'),...measureArgs],{stdio:'inherit',timeout:15000});
  if(measured.status!==0 && measured.status!==1) throw new Error('Frame measurement did not complete');
  process.exitCode=measured.status;
 })().catch(e=>{console.error(e);process.exitCode=2});

@@ -106,3 +106,28 @@ Frames before the head row first appears (Library, transition) are not
 comparable and are skipped; the verdict covers every frame from its first
 appearance, so a hidden moon on the first frame fails the run. It is still the
 app's own navigation, not a physical-touch test.
+
+For other shapes — another width, an enlarged text size — `player-opening.cjs`
+takes `OPENREADER_MEASURE` (with `OPENREADER_MEASURE_ARGS`) to swap the
+analyser while keeping the same handler drive and recording.
+`player-jump-check.py` is that analyser: it templates two glyphs of the row
+from the settled last frame, so it needs their point boxes instead of assuming
+the 402-point dark default layout. Read the boxes off the accessibility tree's
+head-row frames, with the anchor (the lock, which never moves) and the mover
+(the moon, or the countdown) each alone in its box and page text excluded:
+
+```sh
+OPENREADER_METRO=http://127.0.0.1:METRO_PORT \
+OPENREADER_MEASURE=test/manual-test/player-and-reading-held/player-jump-check.py \
+OPENREADER_MEASURE_ARGS='POINTS_WIDTH LOCK_BOX MOON_BOX [--shift 30]' \
+  python3 test/manual-test/kit/ios_guard.py run --timeout 120 \
+  --record OUT_DIR/phase.json -- \
+  node test/manual-test/player-and-reading-held/player-opening.cjs \
+  SIMULATOR_UDID OUT_DIR 3
+```
+
+Its verdict is the original's (±3 pt, no hidden mover, exit 0/1/2). It shares
+the original's limit: it measures the transient against the settled layout,
+not that layout's absolute correctness, and its boxes are specific to the
+measured shape — read new boxes for every new width or text size. Its white-ink
+mask assumes the dark Theme.
