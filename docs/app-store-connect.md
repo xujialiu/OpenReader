@@ -81,7 +81,8 @@ Apps → OpenReader about ten seconds later; click a button once its label shows
 Read every web change back through `scripts/asc-api.mjs`, which needs no web
 session: a submission whose click ends on the login page went through when
 the version reads `WAITING_FOR_REVIEW` with the formal build, and
-`/v1/reviewSubmissions?filter[app]=6817809106` lists it with a `submittedDate`.
+`/v1/reviewSubmissions?filter[app]=6817809106` lists it `WAITING_FOR_REVIEW`
+with a `submittedDate`.
 
 - **App Privacy.** Published:
   - **Other User Content**: App Functionality and Other Purposes;

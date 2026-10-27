@@ -73,8 +73,8 @@ whose **Working in the page** covers the sign-in and blank pages.
 - **The file input** of each slot sits in a shadow root, out of reach of
   `document.querySelectorAll`. Claude in Chrome's `find` returns a ref to it,
   and `file_upload` takes that ref with the four files in file order.
-- **The iPad slot**: after its upload a notice says the 13" set serves every
-  iPad size; OK closes it.
+- **After an upload** a notice says the set serves every iPhone, or every
+  iPad, size; OK closes it.
 - **Done** is every screenshot's `assetDeliveryState` reading `COMPLETE`, read
   through `scripts/asc-api.mjs` from the version localization's
   `appScreenshotSets` with `include=appScreenshots`. The largest iPad files
