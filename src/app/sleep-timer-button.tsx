@@ -55,7 +55,7 @@ export function SleepTimerButton({ sleep, chapterOffered, onSleep, width, height
     <Host style={{ width, height }} ignoreSafeArea="container">
       <Menu
         label={<RNHostView>
-          <View style={styles.face} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <View style={[styles.face, { width, height }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             {left !== null
               ? <Text style={[styles.left, { color: accent.reading }]} maxFontSizeMultiplier={SIDE_TEXT_SCALE}>{left}</Text>
               : <Icon name="moon" color={sleep.choice === null ? INK.text : accent.reading} />}
@@ -75,7 +75,9 @@ export function SleepTimerButton({ sleep, chapterOffered, onSleep, width, height
 }
 
 const styles = StyleSheet.create({
-  face: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  // RNHostView first reports height 0, then the Host's height (#331). Size
+  // the face from the same props as the Host so centring never uses that 0.
+  face: { alignItems: 'center', justifyContent: 'center' },
   // The speed's own size above it, and figures of one width, so the time does
   // not shift sideways as it counts down.
   left: { ...TEXT_EMPHASIZED.subhead, fontVariant: ['tabular-nums'] },

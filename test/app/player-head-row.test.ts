@@ -117,10 +117,10 @@ describe('the head row (#325, after Speechify\'s card)', () => {
   });
 });
 
-async function button(sleep: SleepTimerState, chapterOffered = true) {
+async function button(sleep: SleepTimerState, chapterOffered = true, size = { width: 58, height: 44 }) {
   const onSleep = vi.fn();
   let view!: ReactTestRenderer;
-  await act(async () => { view = create(createElement(SleepTimerButton, { sleep, chapterOffered, onSleep, width: 58, height: 44 })); });
+  await act(async () => { view = create(createElement(SleepTimerButton, { sleep, chapterOffered, onSleep, ...size })); });
   const entries = () => view.root.findAll((node) => ['Toggle', 'Button', 'Divider'].includes(String(node.type)))
     .map((node) => `${String(node.type)}:${node.props.label ?? ''}${node.props.isOn ? ' ✓' : ''}`);
   const face = () => view.root.findAll((node) => String(node.type) === 'Text' || String(node.type) === 'Icon').map((node) =>
@@ -130,6 +130,19 @@ async function button(sleep: SleepTimerState, chapterOffered = true) {
 }
 
 describe('the Sleep Timer menu', () => {
+  it.each([{ width: 48, height: 44 }, { width: 69, height: 89 }])('gives its face the supplied size before any native layout report: %j (#331)', async (size) => {
+    // A structural guard, not a simulation of SwiftUI: player-opening.cjs
+    // measures the real first-frame jump. The face must not wait for the
+    // RNHostView's initial zero height to become the Host's height.
+    const states: SleepTimerState[] = [OFF, { ...OFF, choice: 'chapter' }, { ...OFF, choice: 30, left: 30 * 60_000 }];
+    for (const sleep of states) {
+      const b = await button(sleep, true, size);
+      const face = b.view.root.findByType('RNHostView' as never).findByType('View' as never);
+      expect(style(face)).toMatchObject({ ...size, alignItems: 'center', justifyContent: 'center' });
+      expect(style(face).flex ?? 0).toBe(0);
+    }
+  });
+
   it('off: the chapter, then the lengths, nothing checked, and the moon in ink', async () => {
     const b = await button(OFF);
     expect(b.entries()).toEqual([

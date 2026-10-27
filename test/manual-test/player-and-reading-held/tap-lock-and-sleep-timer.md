@@ -49,3 +49,36 @@ pause line.
 What it cannot prove: the audio a person would hear at the boundary; the
 engine's own tests (`test/playback/engine-stop-line.test.ts`) pin that nothing
 past the line is queued.
+
+## The moon drops when the Player opens (#331)
+
+`player-opening.cjs` drives the real Player's collapse/expand handlers through
+CDP, records the native screen, then runs `player-opening-measure.py`. It never
+plays audio. Prerequisites: a session-owned 402×874-point, 3× iPhone simulator
+(for example iPhone 17), a connected Debug app, dark Theme, default text size,
+and an open Document with the Player expanded, paused, without notes and with
+the Sleep Timer off. Use a fresh output directory on every run.
+
+```sh
+OPENREADER_METRO=http://127.0.0.1:METRO_PORT \
+  python3 test/manual-test/kit/ios_guard.py run --timeout 45 \
+  --record OUT_DIR/phase.json -- \
+  node test/manual-test/player-and-reading-held/player-opening.cjs \
+  SIMULATOR_UDID OUT_DIR 3
+```
+
+The final argument is the number of collapse/expand cycles (1–9, default 3).
+The output keeps `open.mp4` and its 60 fps `frames/`. The analyser matches the
+moon and lock against their settled white-ink silhouettes, excluding the page's
+text. It fails if the moon moves more than 3 pt relative to the lock, or if the
+lock is visible without a matching moon. Exit 0 is PASS, 1 is a visual failure,
+and 2 is a setup/measurement failure. The unfixed Player moves the moon -22 pt
+relative to its settled position for the first one or two frames of every open,
+then back to 0.
+
+This is a handler-driven native-pixel check, not a physical-touch or menu-choice
+test. It measures the transient against the settled layout, not that layout's
+absolute correctness. Its crops are specific to this width, text size, theme
+and timer-off state; larger text, other widths, countdown text, menu choices
+and touch targets require separate checks. Re-sampling the recording at 60 fps
+can duplicate frames, so frame counts alone are not precise native timings.

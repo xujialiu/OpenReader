@@ -89,8 +89,24 @@ every second. Its menu is `@expo/ui`'s SwiftUI `Menu`, as `ChoiceMenu`'s
 `Toggle` per choice, `menuOrder('fixed')`, `accessibilityElement('ignore')`
 with the label and the `isButton` trait put back.
 
+The menu label's React Native face takes the same explicit `width` and `height`
+as its outer `Host` (#331), not `flex: 1`. This gives it the final centring box
+before `RNHostView` reports its size. The native menu, `RNHostView`'s default
+sizing mode and `ignoreSafeArea="container"` stay unchanged; no delay, visibility
+gate or positional compensation is needed.
+
 ## Facts it rests on
 
+- **The menu label's first height is zero even with a sized outer Host (#331).**
+  On an iPhone 17 simulator, the outer Host reported 48×44 while `RNHostView`
+  and its flex-filled face reported 48×0; 30 ms later both reported 48×44.
+  The vertically centred moon moved down 22 points. Three collapse/reopen
+  cycles reproduced it; giving only the face the supplied dimensions removed
+  the movement in all three, without hiding the moon. Restoring flex-fill
+  sizing restored the jump. The mocked component tests cannot measure this
+  native size handoff; `test/manual-test/player-and-reading-held/player-opening.cjs`
+  records and checks the actual native pixels. An explicitly sized face with
+  `matchContents` also passed, but changing the sizing mode was unnecessary.
 - **A JavaScript timer fires while the phone is locked here.** The Reading's
   audio keeps the app running in the background, and React Native's timer
   module, on `UIApplicationDidEnterBackgroundNotification`, stops its display
