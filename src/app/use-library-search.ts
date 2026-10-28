@@ -20,7 +20,7 @@ export function useLibrarySearch(
   const list = useRef<Pick<FlatList<LibraryRow>, 'scrollToOffset'>>(null);
   const live = useRef({
     active: false, query: '', blocked, y: 0, inset: 0, browseY: 0, resultY: 0,
-    restore: null as 'browse' | 'results' | 'top' | null, reader: null as DocumentId | null, suspended: false,
+    restore: null as 'browse' | 'results' | 'top' | 'closed-browse' | null, reader: null as DocumentId | null, suspended: false,
   });
   useLayoutEffect(() => { live.current.blocked = blocked; }, [blocked]);
 
@@ -30,7 +30,7 @@ export function useLibrarySearch(
     if (Platform.OS === 'ios') {
       bar.current?.restoreScrollPosition(now.restore);
     } else {
-      const position = now.restore === 'browse' ? now.browseY : now.restore === 'results' ? now.resultY : 0;
+      const position = now.restore === 'browse' || now.restore === 'closed-browse' ? now.browseY : now.restore === 'results' ? now.resultY : 0;
       list.current?.scrollToOffset({ offset: position - now.inset, animated: false });
     }
   }, []);
@@ -50,7 +50,7 @@ export function useLibrarySearch(
   const cancel = useCallback(() => {
     const now = live.current;
     if (!now.active && !now.query) return;
-    now.restore = 'browse';
+    now.restore = 'closed-browse';
     now.active = false; now.query = ''; now.reader = null; now.suspended = false;
     setState({ active: false, query: '' });
   }, []);
@@ -145,7 +145,7 @@ export function useLibrarySearch(
       now.inset = event.nativeEvent.contentInset.top;
       if (now.suspended) return;
       now.y = Math.max(0, event.nativeEvent.contentOffset.y + now.inset);
-      const expected = now.restore === 'browse' ? now.browseY : now.restore === 'results' ? now.resultY : 0;
+      const expected = now.restore === 'browse' || now.restore === 'closed-browse' ? now.browseY : now.restore === 'results' ? now.resultY : 0;
       if (now.restore !== null && Math.abs(expected - now.y) < 1) now.restore = null;
     },
     onScrollBeginDrag: () => { live.current.restore = null; },

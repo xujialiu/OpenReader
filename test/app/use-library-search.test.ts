@@ -127,7 +127,7 @@ describe('page-local Library search lifecycle (#332)', () => {
     await act(async () => page.search.exit()); flush();
     expect(page.search).toMatchObject({ active: false, query: '' });
     expect(page.field.captureScrollPosition).toHaveBeenCalledExactlyOnceWith('browse');
-    expect(page.field.restoreScrollPosition).toHaveBeenLastCalledWith('browse');
+    expect(page.field.restoreScrollPosition).toHaveBeenLastCalledWith('closed-browse');
     expect(page.list.scrollToOffset).not.toHaveBeenCalled();
     expect(page.options?.hideWhenScrolling).toBe(true);
     // Reapply when the original, larger list finishes laying out; a user drag retires the request.
@@ -136,6 +136,18 @@ describe('page-local Library search lifecycle (#332)', () => {
     expect(vi.mocked(page.field.restoreScrollPosition).mock.calls).toHaveLength(calls + 1);
     page.search.onScrollBeginDrag(); page.search.onContentSizeChange();
     expect(vi.mocked(page.field.restoreScrollPosition).mock.calls).toHaveLength(calls + 1);
+    await page.close();
+  });
+  it('a new search retires a queued closed-browse restore before focusing again', async () => {
+    const page = await open();
+    await page.focus(); await page.type('body'); flush();
+    vi.mocked(page.field.restoreScrollPosition).mockClear();
+    await act(async () => page.search.exit());
+    await act(async () => page.search.start());
+    flush(); page.search.onContentSizeChange();
+    expect(page.search.active).toBe(true);
+    expect(page.field.captureScrollPosition).toHaveBeenCalledTimes(2);
+    expect(page.field.restoreScrollPosition).not.toHaveBeenCalled();
     await page.close();
   });
   it('clearing input restores ordinary browsing without ending search', async () => {

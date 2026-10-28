@@ -248,20 +248,20 @@ final class LibrarySearchProbe: XCTestCase {
     search.tap()
     // Reacquire the native field type on every poll (the cached-query bug of
     // the 18:19 run waited on a TextField while the field was a SearchField).
-    var field = waitForSearchField(app, timeout: 20)
+    guard let field = waitForSearchField(app, timeout: 20) else { return }
     let closeDuringInput = app.navigationBars.firstMatch.buttons["Close"]
     XCTAssertTrue(closeDuringInput.waitForExistence(timeout: 20), "Search must reach input (Close control appears)")
-    field?.typeText("Short")
+    field.typeText("Short")
     sleep(1)
     let close = app.navigationBars.firstMatch.buttons["Close"]
     XCTAssertTrue(close.waitForExistence(timeout: 5), "Close must exist while a query is present")
     close.tap()
     sleep(2)
-    // Reacquire after Close as well; the element type can change again.
-    field = waitForSearchField(app, timeout: 5)
+    // Absence after Close is correct; observe without waiting for a field to appear.
+    let afterField = searchField(app)
     let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
     let bar = app.navigationBars.firstMatch
-    let line = "post-cancel: field exists=\(field?.exists ?? false) hittable=\(field?.isHittable ?? false) frame=\(field != nil && field!.exists ? NSCoder.string(for: field!.frame) : "none") | topRow frame=\(row.exists ? NSCoder.string(for: row.frame) : "none") | bar frame=\(bar.exists ? NSCoder.string(for: bar.frame) : "none")"
+    let line = "post-cancel: field exists=\(afterField.exists) hittable=\(afterField.exists && afterField.isHittable) frame=\(afterField.exists ? NSCoder.string(for: afterField.frame) : "none") | topRow frame=\(row.exists ? NSCoder.string(for: row.frame) : "none") | bar frame=\(bar.exists ? NSCoder.string(for: bar.frame) : "none")"
     print("[diag] \(line)")
     let attachment = XCTAttachment(string: line)
     attachment.name = "post-cancel-frames"; attachment.lifetime = .keepAlways; add(attachment)
@@ -279,22 +279,21 @@ final class LibrarySearchProbe: XCTestCase {
     let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
     XCTAssertTrue(row.waitForExistence(timeout: 10), "ordinary list must show a Document")
     let ordinaryY = row.frame.minY
+    let ordinaryLabel = row.label
 
-    func beginSearch() {
+    func beginSearch() -> XCUIElement? {
       let actions = app.buttons["Library actions"]
       XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
       actions.tap()
       let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
       XCTAssertTrue(search.waitForExistence(timeout: 5), "The actions drawer must offer Search")
       search.tap()
-      let field = searchField(app)
-      XCTAssertTrue(field.waitForExistence(timeout: 5), "Search must reach input")
+      return waitForSearchField(app, timeout: 5)
     }
 
     // iOS 26's search-cancel icon is labelled Close in the native AX tree,
     // distinct from the field's Clear text button; scope it to the bar.
-    beginSearch()
-    var field = searchField(app)
+    guard var field = beginSearch() else { return }
     field.typeText("Short")
     sleep(1)
     XCTAssertTrue((field.value as? String ?? "").contains("Short"), "query typed")
@@ -308,14 +307,14 @@ final class LibrarySearchProbe: XCTestCase {
     let clippedOrGone = !afterField.exists || afterField.frame.maxY < 10 || (bar.exists && bar.frame.intersection(afterField.frame).height < 10)
     XCTAssertTrue(clippedOrGone, "Cancel must hide/collapse the field (field: \(afterField.exists ? NSCoder.string(for: afterField.frame) : "gone"), bar: \(bar.exists ? NSCoder.string(for: bar.frame) : "none"))")
     XCTAssertEqual(app.keyboards.count, 0, "Cancel must dismiss the keyboard")
-    let restoredRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    let restoredRow = app.buttons[ordinaryLabel]
     XCTAssertTrue(restoredRow.waitForExistence(timeout: 5), "Ordinary list must be back after cancel")
     XCTAssertEqual(restoredRow.frame.minY, ordinaryY, accuracy: 8, "Cancel must restore the ordinary list position (\(restoredRow.frame.minY) vs \(ordinaryY))")
 
     // Clear: the field's clear control empties the query, the ordinary list
     // returns, and the field stays revealed and available (still searching).
-    beginSearch()
-    field = searchField(app)
+    guard let reopened = beginSearch() else { return }
+    field = reopened
     field.typeText("zzz")
     sleep(1)
     let clear = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Clear")).firstMatch
@@ -380,12 +379,7 @@ final class LibrarySearchProbe: XCTestCase {
     search.tap()
     sleep(1)
     shot("after-actions-search")
-    let field = searchField(app)
-    guard field.exists else {
-      tree(app, "no-field-after-menu-search")
-      XCTFail("No search field after `...` > Search")
-      return
-    }
+    guard let field = waitForSearchField(app, timeout: 5) else { return }
     field.typeText("zzzz-no-match")
     sleep(1)
     shot("after-typing-no-match")

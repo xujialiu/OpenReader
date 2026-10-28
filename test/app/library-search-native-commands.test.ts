@@ -42,11 +42,12 @@ it('the patched real SearchBar ref forwards semantic position commands to its ge
   ref.current!.restoreScrollPosition('top');
   ref.current!.restoreScrollPosition('browse');
   ref.current!.restoreScrollPosition('results');
+  ref.current!.restoreScrollPosition('closed-browse');
   expect(native.commands.captureScrollPosition.mock.calls).toEqual([
     [native.target, 'browse'], [native.target, 'results'],
   ]);
   expect(native.commands.restoreScrollPosition.mock.calls).toEqual([
-    [native.target, 'top'], [native.target, 'browse'], [native.target, 'results'],
+    [native.target, 'top'], [native.target, 'browse'], [native.target, 'results'], [native.target, 'closed-browse'],
   ]);
   await act(async () => view.unmount());
 });

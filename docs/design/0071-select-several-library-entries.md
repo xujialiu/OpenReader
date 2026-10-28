@@ -6,6 +6,8 @@ The Library's top-right `+` becomes `…`, listing Import file, Create folder, t
 
 Select in an entry's actions starts selection with that entry already selected. It sits directly above Delete, so the red Delete stays at the bottom. A long press still opens those same actions rather than starting selection by itself, so it keeps reaching Rename, Move and Delete. The Reader's actions for the open Document do not offer Select, because there is no list behind them.
 
+[Library Search](0090-library-search-stays-out-of-the-way.md) adds Search after Create folder in the Library's actions. Search and selection are mutually exclusive; search results do not offer Select.
+
 Selection is limited to the current level of the Library. Documents and Folders can be selected together. A Folder is selected rather than opened while selecting; selecting across different levels is not supported.
 
 In selection mode, each Document's and Folder's existing `…` is replaced by a selection control, rather than adding another column of controls.

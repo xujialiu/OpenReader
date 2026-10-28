@@ -37,7 +37,7 @@ Reader for another page cannot leave an abandoned query waiting behind it.
 Native snapshots store the logical content position: `contentOffset.y` plus
 `adjustedContentInset.top`. Restoration reads the current adjusted inset,
 clamps the logical target to the current content range and sets `UIScrollView`
-directly. JavaScript keeps only a pending slot (`browse`, `results` or `top`)
+directly. JavaScript keeps only a pending slot (`browse`, `closed-browse`, `results` or `top`)
 and retries that semantic request when content size changes, because the first
 request may still meet the old, shorter result list. A manual drag or a new
 search action retires the request. Native scroll changes while the Reader is
@@ -161,15 +161,17 @@ did not exercise this native boundary.
 The confirmed correction keeps page-local search lifecycle in JavaScript but
 captures/restores positions at the native search control. The patch adds
 `captureScrollPosition('browse' | 'results')` and
-`restoreScrollPosition('browse' | 'results' | 'top')` to the source/public ref,
+`restoreScrollPosition('browse' | 'closed-browse' | 'results' | 'top')` to the source/public ref,
 runtime distributions and Fabric command schema. `RNSSearchBar` keeps two
 logical positions and a weak `owningScreen`, assigned while the header attaches
 its search controller. It acts only while that page still owns this controller,
 and obtains its real list through `contentScrollViewForEdge:Top`.
 
-Capture is sent before focus or result navigation; cancellation/clear restores
-`browse`, return from the result Reader restores `results`, and a changed query
-requests `top`. Native focus also captures before activating UIKit (Command-F
+Capture is sent before focus or result navigation. Clearing input restores
+`browse` while keeping input available; cancellation requests `closed-browse`,
+which restores the same position AND hidden presentation in one native
+transaction. Returning from the result Reader restores `results`, and a
+changed query requests `top`. Native focus also captures before activating UIKit (Command-F
 uses that same entry); the browse capture is idempotent until cancellation,
 so the later focus callback or refocusing input cannot replace the original
 position. Cancellation rearms capture while keeping the saved value for the
@@ -185,6 +187,23 @@ commands requires code generation and a new native build; reloading Metro
 alone is insufficient. Host tests exercise the real patched ref's forwarding
 and the hook's capture/restore order, including the misleading zero-inset event.
 Native position restoration still requires the simulator acceptance check.
+
+The first native-command check restored the correct logical position but left
+the search field expanded: saved browse zero, raw offset -176, adjusted top
+176, header height 114, with `active=0`, `hides=1` and the collapse guard nil.
+That held state does not establish the exact event ordering; it does establish
+that correct coordinates alone do not guarantee hidden presentation, and that
+waiting for another screen-layout callback is insufficient.
+
+`RNSScreen.openReaderRestoreLibraryPosition:closed:` now owns the combined
+operation for both initial collapse and explicit restoration. It sets position,
+finishes layout, enforces the requested collapsed presentation, then restores
+against the final inset/content range. The explicit closed request does not
+rely on another layout callback to start that operation. It does nothing while
+another page is on top; focus can retry it when the Library returns. A queued
+closed restore is ignored after a new native browse capture, so it cannot
+close newly reopened input. Clear and result-return requests do not force
+collapse. These postconditions still require native retesting.
 
 ## Verification boundary
 
