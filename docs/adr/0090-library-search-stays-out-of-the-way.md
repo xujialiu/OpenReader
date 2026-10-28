@@ -95,7 +95,23 @@ search bar's own `_performCancelAction:` Escape command had priority 0; the
 Library Escape command retains priority over system behavior. Registration
 therefore belongs on the navigation controller shared by both responder paths,
 with actions forwarded to the current page and its existing scope checks.
-This routing still requires native acceptance.
+Moving registration onto that chain alone did not fix focused Escape: the
+native check confirmed the navigation controller's priority-1 command and
+valid page gate, but search stayed active. This rules out absent registration;
+it does not trace which UIKit handler consumes the event.
+
+The search bar now replaces its own unmodified Escape command with the same
+scoped Library command. `RNSOpenReaderSearchController` lazily returns an
+`RNSOpenReaderSearchBar`; this is Apple's documented
+[`UISearchController.searchBar` customization point](https://developer.apple.com/documentation/uikit/uisearchcontroller/searchbar).
+The subclass changes only keyboard registration/forwarding, not rendering,
+the text field, touch handling or scroll behavior. Non-Escape commands remain
+inherited; when the page gate or marked-text condition disallows cancellation,
+UIKit's commands remain intact. Dispatch verifies the bar still belongs to the
+current search controller and reuses the page's cancellation guard. The
+navigation-controller commands remain for list focus. No private selector is
+implemented and no existing UIKit object has its runtime class changed. This
+closer-responder routing and native bar integration still require acceptance.
 
 A process-wide key listener was rejected because it could intercept Reader or
 modal actions. A separate native search module would duplicate the controller

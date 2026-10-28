@@ -355,7 +355,7 @@ index 32efddb..00bd424 100644
  #if RNS_IPHONE_OS_VERSION_AVAILABLE(16_0) && !TARGET_OS_TV
  - (UINavigationItemSearchBarPlacement)placementAsUINavigationItemSearchBarPlacement API_AVAILABLE(ios(16.0))
 diff --git a/node_modules/react-native-screens/ios/RNSSearchBar.mm b/node_modules/react-native-screens/ios/RNSSearchBar.mm
-index 2345734..f3432c3 100644
+index 2345734..a0042cf 100644
 --- a/node_modules/react-native-screens/ios/RNSSearchBar.mm
 +++ b/node_modules/react-native-screens/ios/RNSSearchBar.mm
 @@ -2,6 +2,7 @@
@@ -366,7 +366,72 @@ index 2345734..f3432c3 100644
  
  #import <React/RCTComponent.h>
  
-@@ -17,6 +18,9 @@
+@@ -14,9 +15,74 @@
+ 
+ namespace react = facebook::react;
+ 
++#if !TARGET_OS_TV
++// OpenReader (#332): UISearchBar supplies its own Escape command ahead of the
++// navigation controller. Replace that command on this bar, not UIKit globally.
++@interface RNSOpenReaderSearchBar : UISearchBar
++@end
++
++@implementation RNSOpenReaderSearchBar
++- (RNSScreen *)openReaderLibraryScreen
++{
++  if (![self.delegate isKindOfClass:RNSSearchBar.class]) {
++    return nil;
++  }
++  UIViewController *owner = ((RNSSearchBar *)self.delegate).owningScreen;
++  if (![owner isKindOfClass:RNSScreen.class] || owner.navigationItem.searchController.searchBar != self) {
++    return nil;
++  }
++  return (RNSScreen *)owner;
++}
++
++- (NSArray<UIKeyCommand *> *)keyCommands
++{
++  NSArray<UIKeyCommand *> *inherited = [super keyCommands] ?: @[];
++  for (UIKeyCommand *command in [[self openReaderLibraryScreen] openReaderLibraryKeyCommands]) {
++    if (command.action == @selector(openReaderCancelLibrarySearch:)) {
++      NSMutableArray<UIKeyCommand *> *commands = [NSMutableArray new];
++      for (UIKeyCommand *systemCommand in inherited) {
++        if (![systemCommand.input isEqualToString:UIKeyInputEscape] || systemCommand.modifierFlags != 0) {
++          [commands addObject:systemCommand];
++        }
++      }
++      [commands addObject:command];
++      return commands;
++    }
++  }
++  // No eligible Library cancel (including marked text): keep UIKit behavior.
++  return inherited;
++}
++
++- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command
++{
++  [[self openReaderLibraryScreen] openReaderCancelLibrarySearch:command];
++}
++@end
++
++@interface RNSOpenReaderSearchController : UISearchController
++@end
++
++@implementation RNSOpenReaderSearchController {
++  RNSOpenReaderSearchBar *_openReaderBar;
++}
++// Apple's documented searchBar customization point requires lazy creation.
++// Leave appearance, the text field, scrolling and gestures to UISearchBar.
++- (UISearchBar *)searchBar
++{
++  if (_openReaderBar == nil) {
++    _openReaderBar = [RNSOpenReaderSearchBar new];
++  }
++  return _openReaderBar;
++}
++@end
++#endif
++
  @implementation RNSSearchBar {
    UISearchController *_controller;
    UIColor *_textColor;
@@ -376,7 +441,15 @@ index 2345734..f3432c3 100644
  
    // We use those booleans to log a warning if user attempts to restore
    // default behavior after setting explicit value for the prop.
-@@ -46,6 +50,10 @@ - (void)initCommonProps
+@@ -39,13 +105,17 @@ - (instancetype)init
+ - (void)initCommonProps
+ {
+ #if !TARGET_OS_TV
+-  _controller = [[UISearchController alloc] initWithSearchResultsController:nil];
++  _controller = [[RNSOpenReaderSearchController alloc] initWithSearchResultsController:nil];
+ #else
+   // on TVOS UISearchController must contain searchResultsController.
+   _controller = [[UISearchController alloc] initWithSearchResultsController:[UIViewController new]];
  #endif
  
    _controller.searchBar.delegate = self;
@@ -387,7 +460,7 @@ index 2345734..f3432c3 100644
  
    _isObscureBackgroundSet = NO;
    _isHideNavigationBarSet = NO;
-@@ -258,6 +266,7 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
+@@ -258,6 +328,7 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
    }
  #endif
  
@@ -395,7 +468,7 @@ index 2345734..f3432c3 100644
    [self showCancelButton];
    [self becomeFirstResponder];
    [self emitOnFocusEvent];
-@@ -283,6 +292,7 @@ - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
+@@ -283,6 +354,7 @@ - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
  - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar
  {
    _controller.searchBar.text = @"";
@@ -403,7 +476,7 @@ index 2345734..f3432c3 100644
    [self resignFirstResponder];
    [self hideCancelButton];
  
-@@ -298,6 +308,10 @@ - (void)blur
+@@ -298,6 +370,10 @@ - (void)blur
  
  - (void)focus
  {
@@ -414,7 +487,7 @@ index 2345734..f3432c3 100644
    [_controller.searchBar becomeFirstResponder];
  }
  
-@@ -326,6 +340,60 @@ - (void)cancelSearch
+@@ -326,6 +402,60 @@ - (void)cancelSearch
  #endif
  }
  
