@@ -178,6 +178,8 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(list.waitForExistence(timeout: 5), "list must exist")
     let field0 = searchField(app)
     let stoodCold = field0.exists && field0.isHittable
+    XCTAssertFalse(stoodCold, "Pull-reveal must start with a hidden field, not a standing one")
+    guard !stoodCold else { return }
     let rowBefore = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
     let beforeY = rowBefore.exists ? rowBefore.frame.minY : CGFloat.nan
     drag(list, fromY: 0.2, toY: 0.7)
@@ -188,16 +190,15 @@ final class LibrarySearchProbe: XCTestCase {
     shot("pull-reveal-after-pull")
     XCTAssertEqual(app.keyboards.count, 0, "Pull-reveal must not open the keyboard")
     let field = searchField(app)
-    if !gestureMoved && !field.exists {
-      let note = XCTAttachment(string: "Pull moved no content (topRow minY \(beforeY) -> \(atTouchUpY)). Synthetic swipes are eaten on this device; pull-reveal stays unverified.")
+    if !gestureMoved {
+      let note = XCTAttachment(string: "Pull moved no observed content (topRow minY \(beforeY) -> \(atTouchUpY)); pull-reveal is unverified, not a pass. AX existence alone cannot prove a revealed field.")
       note.name = "pull-reveal-unverified"; note.lifetime = .keepAlways; add(note)
-      throw XCTSkip("Pull gesture not delivered (no observed offset change); unverified, not failed")
+      throw XCTSkip("No observed gesture movement; pull-reveal remains unverified")
     }
-    guard field.exists else {
-      let note = XCTAttachment(string: "Pull gesture did not reveal a field. Stood cold: \(stoodCold). Synthetic swipes are eaten on this device; pull-reveal is unverified here.")
-      note.name = "pull-reveal-unverified"; note.lifetime = .keepAlways; add(note)
-      throw XCTSkip("Pull-reveal could not be delivered on this device (eaten synthetic swipes); unverified, not failed")
-    }
+    let bar = app.navigationBars.firstMatch
+    let revealed = field.exists && field.isHittable && bar.exists && bar.frame.intersection(field.frame).height >= 10
+    XCTAssertTrue(revealed, "A delivered pull must reveal an interactive field BEFORE any tap; native tap auto-scrolling is not pull-to-reveal")
+    guard revealed else { return }
     tree(app, "pull-reveal-tree")
     field.tap()
     sleep(1)
