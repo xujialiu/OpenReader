@@ -662,3 +662,33 @@ refused rename leaving `library.json` and `display-names.json` consistent. It
 also met two pitfalls (harness replay committing an orphan kept file after a
 permission restore; kept files carrying cloned timestamps), recorded in the
 root README's Pitfalls.
+
+## Library Search's first acceptance checkpoint (#332, `LibrarySearchProbe.swift`)
+
+With the current Debug app connected to Metro and `A Short Test of Reading
+Aloud` in the Library:
+
+```sh
+bash test/manual-test/kit/run-probe.sh LibrarySearchProbe SIMULATOR_UDID /tmp/openreader-search-01 \
+  -only-testing:LibrarySearchProbe/testColdLibraryShowsNoSearchField
+bash test/manual-test/kit/run-probe.sh LibrarySearchProbe SIMULATOR_UDID /tmp/openreader-search-01 \
+  -only-testing:LibrarySearchProbe/testTappingFieldFocusesAndTypes
+bash test/manual-test/kit/run-probe.sh LibrarySearchProbe SIMULATOR_UDID /tmp/openreader-search-01 \
+  -only-testing:LibrarySearchProbe/testActionsMenuSearchFocusesDirectly
+```
+
+Run the methods one at a time: each cold-launches the app itself, and the last
+leaves the Library with a typed query in the field. The first method encodes
+design 0090's presentation contract — a cold ordinary Library shows no search
+field or magnifier — and on 1.0.3 (24)-beta1-debug (6f73fad) it **fails by
+design**: the stacked native field stands at {{16, 117}, {370, 44}}, hittable,
+on every cold Library presentation (the reported #332 checkpoint defect; the
+empty Library shows it too). The second taps the field, types `Short`, and
+requires the typed text read back from the field plus the fragment still
+matching the fixture row — first-responder proof that does not rely on the
+software keyboard, which a connected Mac keyboard can hide. The third opens
+`…` › Search and requires input with no second tap on the field, then
+`No documents found` for a no-match query; both passed on the same build.
+What these cannot prove: pull-to-reveal on a non-standing field, scroll
+restoration, cancellation identity, Folder-page behavior, lifetime across
+background/relaunch, keyboard shortcuts, large text, iPad layout.
