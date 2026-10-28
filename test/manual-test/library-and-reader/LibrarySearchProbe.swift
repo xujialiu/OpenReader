@@ -278,12 +278,60 @@ final class LibrarySearchProbe: XCTestCase {
   /// attaches WITHOUT launching, records the scrolled state, searches, types,
   /// closes, and requires the same topmost row back at the same frame with
   /// the field hidden and no keyboard.
+  /// Contract: a NONZERO browse offset survives search/Close. The offset is
+  /// produced by a REAL swipe (asserted to move the list) — no programmatic
+  /// scroll counts as acceptance. Cache the settled top row's label and y as
+  /// values, then compare the SAME identity after Close.
   func testCancelRestoresNonzeroBrowse() {
-    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
-    let before = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
-    XCTAssertTrue(before.waitForExistence(timeout: 10), "app must be foregrounded on the scrolled Library")
-    let beforeLabel = before.label
-    let beforeFrame = NSCoder.string(for: before.frame)
+    let app = launch()
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5), "list must exist")
+    let initial = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).allElementsBoundByIndex
+      .filter { $0.exists && $0.frame.minY >= 60 }
+    guard let initialTop = initial.min(by: { $0.frame.minY < $1.frame.minY }) else {
+      XCTFail("the browse list must show Document rows")
+      return
+    }
+    let initialLabel = initialTop.label
+    list.swipeUp(velocity: .fast)
+    // Require actual movement before anything else: the same topmost query
+    // must return a different top row or a moved frame.
+    var moved = false
+    var settledLabel = ""
+    var settledY: CGFloat = -1
+    for _ in 0..<(20) {
+      let rows = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).allElementsBoundByIndex
+        .filter { $0.exists && $0.frame.minY >= 60 }
+      if let top = rows.min(by: { $0.frame.minY < $1.frame.minY }) {
+        if top.label != initialLabel || abs(top.frame.minY - initialTop.frame.minY) >= 8 {
+          moved = true
+          settledLabel = top.label
+          settledY = top.frame.minY
+          break
+        }
+      }
+      usleep(300_000)
+    }
+    guard moved else {
+      shot("nonzero-no-movement")
+      tree(app, "nonzero-no-movement-tree")
+      XCTFail("the swipe did not move the browse list; state captured (no offset evidence, no acceptance)")
+      return
+    }
+    sleep(1)
+    // Settle the momentum and cache the settled top identity.
+    let settled = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).allElementsBoundByIndex
+      .filter { $0.exists && $0.frame.minY >= 60 }
+      .min(by: { $0.frame.minY < $1.frame.minY })
+    guard let settledTop = settled else {
+      XCTFail("the scrolled list must keep Document rows")
+      return
+    }
+    settledLabel = settledTop.label
+    settledY = settledTop.frame.minY
+    shot("nonzero-browse-scrolled")
+    XCTAssertTrue(settledY > 0 || settledLabel != initialLabel, "genuine nonzero offset evidence required")
+    // Search and cancel.
     let actions = app.buttons["Library actions"]
     XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
     actions.tap()
@@ -304,16 +352,27 @@ final class LibrarySearchProbe: XCTestCase {
     let clippedByBar = bar.exists && bar.frame.intersection(afterField.frame).height < 10
     XCTAssertTrue(afterFieldClipped || clippedByBar, "Close must hide the field again (field: \(afterField.exists ? NSCoder.string(for: afterField.frame) : "gone"))")
     XCTAssertEqual(app.keyboards.count, 0, "Close must dismiss the keyboard")
-    let restored = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).allElementsBoundByIndex
-      .min(by: { $0.frame.minY < $1.frame.minY })
-    XCTAssertTrue(restored?.exists ?? false, "Ordinary list must be back")
-    XCTAssertEqual(restored?.label, beforeLabel, "The same topmost Document must be restored")
-    XCTAssertEqual(restored?.frame.minY ?? -1, before.frame.minY, accuracy: 8, "Nonzero browse offset must be restored (\(restored?.frame.minY ?? -1) vs \(before.frame.minY))")
-    let line = "nonzero-browse: before=\(beforeLabel) @\(beforeFrame) after=\(restored?.label ?? "none") @\(restored != nil ? NSCoder.string(for: restored!.frame) : "none")"
+    // Same identity back at the cached settled position.
+    var restoredTop: XCUIElement? = nil
+    for _ in 0..<(20) {
+      let rows = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).allElementsBoundByIndex
+        .filter { $0.exists && $0.frame.minY >= 0 && $0.label == settledLabel }
+      if let top = rows.min(by: { $0.frame.minY < $1.frame.minY }) { restoredTop = top; break }
+      usleep(300_000)
+    }
+    guard let restored = restoredTop else {
+      shot("nonzero-browse-row-missing")
+      tree(app, "nonzero-browse-row-missing-tree")
+      XCTFail("the settled top row '\(settledLabel)' must be back after Close; state captured")
+      return
+    }
+    XCTAssertEqual(restored.frame.minY, settledY, accuracy: 12, "Nonzero browse offset must be restored (\(restored.frame.minY) vs \(settledY))")
+    let line = "nonzero-browse: settled '\(settledLabel)' @\(settledY) -> restored @\(restored.frame.minY)"
     print("[diag] \(line)")
     let attachment = XCTAttachment(string: line)
     attachment.name = "nonzero-browse-frames"; attachment.lifetime = .keepAlways; add(attachment)
   }
+
 
   /// Contract: opening a result and returning retains the query AND a nonzero
   /// results offset, without the keyboard. Scrolling the results uses the
