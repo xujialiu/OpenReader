@@ -23,8 +23,10 @@ provide the field and its imperative focus, blur, set-text and cancel commands.
 insets, as the navigator requires. Text and action colours follow the app's
 existing palette and accent; UIKit draws the search control.
 
-`useLibrarySearch` owns the query, the pre-search list offset and the result
-return offset. These are page-local, never route parameters or stored data.
+`useLibrarySearch` owns the query and navigation lifetime. On iOS the native
+search control owns the browsing and result scroll positions, captured before
+focus or Reader navigation changes the view. These are page-local, never route
+parameters or stored data.
 Focus begins search, but blur only dismisses input: opening an action Drawer or
 hiding the keyboard must not drop results. A result marks its Document Id
 before navigation, so only that Reader round trip retains search. Other
@@ -32,19 +34,23 @@ navigation, including an external Reader open, ends it. Navigation-state
 changes are observed even while the Library is blurred, so leaving the retained
 Reader for another page cannot leave an abandoned query waiting behind it.
 
-Offsets are kept in content coordinates, with the current native top inset
-removed when issuing a scroll request. A pending restoration is retried when
-content size changes: the first request can otherwise be clamped against the
-old, shorter result list. The target is retired when its position is observed
-or the next manual drag starts. Native scroll changes while the Reader is in
-front do not replace the saved result offset.
+Native snapshots store the logical content position: `contentOffset.y` plus
+`adjustedContentInset.top`. Restoration reads the current adjusted inset,
+clamps the logical target to the current content range and sets `UIScrollView`
+directly. JavaScript keeps only a pending slot (`browse`, `results` or `top`)
+and retries that semantic request when content size changes, because the first
+request may still meet the old, shorter result list. A manual drag or a new
+search action retires the request. Native scroll changes while the Reader is
+in front do not replace the saved result snapshot.
 
 Cancellation is idempotent. `RNSSearchBar.cancelSearch` emits Cancel and then
 an empty text change. A second cancellation must not overwrite the original
 browsing offset with the result-list offset, and the empty change must not
-reopen the search. The hook regression first failed with a 720-point browsing
-offset restored as zero, then passed with repeated cancellation keeping 720;
-with a 50-point native inset the native scroll request is 670.
+reopen the search. The original hook regression first failed with a 720-point
+browsing offset restored as zero, then passed with repeated cancellation
+keeping 720 (request 670 with its doubled 50-point inset). That coordinate test
+now covers the non-iOS fallback; the iOS regression instead requires one native
+browse capture and native restoration, never the clamping RN scroll command.
 
 The Library actions Drawer defers Search until its native dismissal callback,
 as it already defers the document picker. Focusing before dismissal risks
@@ -135,6 +141,50 @@ kept the field hidden and the first row fully visible. The patch now performs
 that complete operation rather than keeping only its first half or removing
 it altogether. Native fresh-launch, pull and cancellation acceptance are still
 required; the runtime experiment is not a substitute for them.
+
+## Native scroll-position commands
+
+The next native checkpoint passes cold hidden search, an unclipped first row,
+a real pull reveal without keyboard, and menu-driven input. Cancellation hides
+the field but leaves raw offset zero with adjusted top inset 116, putting the
+first row at y 12 instead of 128.
+
+Two React Native Fabric source facts explain why the former JavaScript
+conversion was insufficient. `_scrollViewMetrics` reports `contentInset`, not
+`adjustedContentInset`: the event carries the explicit zero inset, not UIKit's
+116-point top adjustment. The native `scrollTo` command also computes its
+minimum allowed offset from that explicit inset and, unless overflow is
+enabled, clamps a negative offset to zero. The host hook doubles supplied an
+inset and accepted negative requests, so their passing coordinate assertions
+did not exercise this native boundary.
+
+The confirmed correction keeps page-local search lifecycle in JavaScript but
+captures/restores positions at the native search control. The patch adds
+`captureScrollPosition('browse' | 'results')` and
+`restoreScrollPosition('browse' | 'results' | 'top')` to the source/public ref,
+runtime distributions and Fabric command schema. `RNSSearchBar` keeps two
+logical positions and a weak `owningScreen`, assigned while the header attaches
+its search controller. It acts only while that page still owns this controller,
+and obtains its real list through `contentScrollViewForEdge:Top`.
+
+Capture is sent before focus or result navigation; cancellation/clear restores
+`browse`, return from the result Reader restores `results`, and a changed query
+requests `top`. Native focus also captures before activating UIKit (Command-F
+uses that same entry); the browse capture is idempotent until cancellation,
+so the later focus callback or refocusing input cannot replace the original
+position. Cancellation rearms capture while keeping the saved value for the
+queued restoration. iOS scroll-event metrics are deliberately ignored, and that
+path never calls `FlatList.scrollToOffset`. Android retains the prior list
+fallback; its generated command interface has iOS-only no-op implementations
+which the fallback never invokes. Android code generation is checked, not
+claimed as an Android device run.
+
+This extends the existing screens boundary rather than changing React Native's
+global event semantics or estimating a delayed header height. Adding Fabric
+commands requires code generation and a new native build; reloading Metro
+alone is insufficient. Host tests exercise the real patched ref's forwarding
+and the hook's capture/restore order, including the misleading zero-inset event.
+Native position restoration still requires the simulator acceptance check.
 
 ## Verification boundary
 

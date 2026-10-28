@@ -16,7 +16,7 @@ const hosts = vi.hoisted(() => async (...names: string[]) => {
 vi.mock('react-native', async () => {
   const { createElement: element } = await import('react');
   return {
-    ...await hosts('View', 'Text'), StyleSheet: { create: (styles: unknown) => styles }, Alert: { alert: vi.fn() },
+    ...await hosts('View', 'Text'), Platform: { OS: 'ios' }, StyleSheet: { create: (styles: unknown) => styles }, Alert: { alert: vi.fn() },
     FlatList: ({ data, renderItem, ListHeaderComponent, ListEmptyComponent, ...props }: {
       data: unknown[]; renderItem(value: { item: unknown }): ReactNode; ListHeaderComponent: ReactNode; ListEmptyComponent: ReactNode;
     }) => element('FlatList', props, ListHeaderComponent, data.length
@@ -68,7 +68,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 async function open() {
   let options: Record<string, unknown> = {};
-  const field: SearchBarCommands = { focus: vi.fn(), blur: vi.fn(), clearText: vi.fn(), setText: vi.fn(), cancelSearch: vi.fn(), toggleCancelButton: vi.fn() };
+  const field: SearchBarCommands = { focus: vi.fn(), blur: vi.fn(), clearText: vi.fn(), setText: vi.fn(), cancelSearch: vi.fn(), toggleCancelButton: vi.fn(), captureScrollPosition: vi.fn(), restoreScrollPosition: vi.fn() };
   const visit = vi.fn();
   const navigation = {
     setOptions: (next: Record<string, unknown>) => {

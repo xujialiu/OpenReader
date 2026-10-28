@@ -1,8 +1,33 @@
+diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/SearchBarManager.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/SearchBarManager.kt
+index 59f9f97..4658b99 100644
+--- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/SearchBarManager.kt
++++ b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/SearchBarManager.kt
+@@ -171,7 +171,11 @@ class SearchBarManager :
+         view?.handleCancelSearchJsRequest()
+     }
+ 
+-    // iOS only
++    // iOS only. OpenReader retains the JS list-position path on Android;
++    // these commands are never dispatched there.
++    override fun captureScrollPosition(view: SearchBarView?, slot: String?) = Unit
++
++    override fun restoreScrollPosition(view: SearchBarView?, slot: String?) = Unit
+ 
+     override fun setPlacement(
+         view: SearchBarView,
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..ea87cb3 100644
+index 9b66012..9590295 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
-@@ -1406,6 +1406,8 @@ + (void)load
+@@ -5,6 +5,7 @@
+ #import "RNSScreenContainer.h"
+ #import "RNSScreenContentWrapper.h"
+ #import "RNSScreenWindowTraits.h"
++#import "RNSSearchBar.h"
+ 
+ #import <React/RCTConversions.h>
+ #import <React/RCTFabricComponentsPlugins.h>
+@@ -1406,6 +1407,8 @@ + (void)load
  
  @implementation RNSScreen {
    __weak id _previousFirstResponder;
@@ -11,7 +36,7 @@ index 9b66012..ea87cb3 100644
    CGRect _lastViewFrame;
    RNSScreenView *_initialView;
    UIView *_fakeView;
-@@ -1433,6 +1435,95 @@ - (instancetype)initWithView:(UIView *)view
+@@ -1433,6 +1436,98 @@ - (instancetype)initWithView:(UIView *)view
    return self;
  }
  
@@ -62,8 +87,11 @@ index 9b66012..ea87cb3 100644
 +- (void)openReaderFindInLibrary:(UIKeyCommand *)command
 +{
 +  UISearchController *search = [self openReaderLibrarySearchController];
-+  [search setActive:YES];
-+  [search.searchBar becomeFirstResponder];
++  // Use the same entry as the JS/menu command: capture before UIKit may move
++  // a long list to present input, then focus. Refocus never replaces the capture.
++  if ([search.searchBar.delegate isKindOfClass:RNSSearchBar.class]) {
++    [(RNSSearchBar *)search.searchBar.delegate focus];
++  }
 +}
 +
 +- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command
@@ -107,7 +135,7 @@ index 9b66012..ea87cb3 100644
  // TODO: Find out why this is executed when screen is going out
  - (void)viewWillAppear:(BOOL)animated
  {
-@@ -1558,6 +1649,47 @@ - (void)viewDidLayoutSubviews
+@@ -1558,6 +1653,47 @@ - (void)viewDidLayoutSubviews
    if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
      [self.screenView updateBounds];
    }
@@ -210,11 +238,46 @@ index 192f5d2..547bfeb 100644
  }
  
  - (void)updateContainer
+diff --git a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm b/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm
+index 1c84484..612a9ce 100644
+--- a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm
++++ b/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm
+@@ -603,6 +603,7 @@ + (void)updateViewController:(UIViewController *)vc
+ #if !TARGET_OS_TV
+           RNSSearchBar *searchBar = subview.subviews[0];
+           searchBarPresent = true;
++          searchBar.owningScreen = vc;
+           navitem.searchController = searchBar.controller;
+           navitem.hidesSearchBarWhenScrolling = searchBar.hideWhenScrolling;
+ #if RNS_IPHONE_OS_VERSION_AVAILABLE(16_0)
+diff --git a/node_modules/react-native-screens/ios/RNSSearchBar.h b/node_modules/react-native-screens/ios/RNSSearchBar.h
+index 32efddb..00bd424 100644
+--- a/node_modules/react-native-screens/ios/RNSSearchBar.h
++++ b/node_modules/react-native-screens/ios/RNSSearchBar.h
+@@ -24,6 +24,8 @@
+ @property (nonatomic) BOOL allowToolbarIntegration;
+ 
+ @property (nonatomic, retain) UISearchController *controller;
++// OpenReader: the page whose real scroll view owns these transient positions.
++@property (nonatomic, weak) UIViewController *owningScreen;
+ 
+ #if RNS_IPHONE_OS_VERSION_AVAILABLE(16_0) && !TARGET_OS_TV
+ - (UINavigationItemSearchBarPlacement)placementAsUINavigationItemSearchBarPlacement API_AVAILABLE(ios(16.0))
 diff --git a/node_modules/react-native-screens/ios/RNSSearchBar.mm b/node_modules/react-native-screens/ios/RNSSearchBar.mm
-index 2345734..fec187d 100644
+index 2345734..6b20490 100644
 --- a/node_modules/react-native-screens/ios/RNSSearchBar.mm
 +++ b/node_modules/react-native-screens/ios/RNSSearchBar.mm
-@@ -46,6 +46,10 @@ - (void)initCommonProps
+@@ -17,6 +17,9 @@
+ @implementation RNSSearchBar {
+   UISearchController *_controller;
+   UIColor *_textColor;
++  CGFloat _browseScrollPosition;
++  CGFloat _resultScrollPosition;
++  BOOL _hasBrowseScrollPosition;
+ 
+   // We use those booleans to log a warning if user attempts to restore
+   // default behavior after setting explicit value for the prop.
+@@ -46,6 +49,10 @@ - (void)initCommonProps
  #endif
  
    _controller.searchBar.delegate = self;
@@ -225,13 +288,239 @@ index 2345734..fec187d 100644
  
    _isObscureBackgroundSet = NO;
    _isHideNavigationBarSet = NO;
-@@ -298,6 +302,9 @@ - (void)blur
+@@ -258,6 +265,7 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
+   }
+ #endif
+ 
++  [self captureScrollPosition:@"browse"];
+   [self showCancelButton];
+   [self becomeFirstResponder];
+   [self emitOnFocusEvent];
+@@ -283,6 +291,7 @@ - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
+ - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar
+ {
+   _controller.searchBar.text = @"";
++  _hasBrowseScrollPosition = NO; // Keep its value for the queued restore, rearm the next search.
+   [self resignFirstResponder];
+   [self hideCancelButton];
+ 
+@@ -298,6 +307,10 @@ - (void)blur
  
  - (void)focus
  {
 +  // OpenReader (#332): Search from a menu must reveal a stacked field even
 +  // when its list is scrolled far below it, not just focus an offscreen field.
++  [self captureScrollPosition:@"browse"];
 +  [_controller setActive:YES];
    [_controller.searchBar becomeFirstResponder];
  }
  
+@@ -326,6 +339,57 @@ - (void)cancelSearch
+ #endif
+ }
+ 
++// OpenReader (#332): capture and restore in the coordinate system UIKit
++// actually displays. RN's scroll event exposes only the explicit contentInset,
++// and its scrollTo command clamps negative offsets against that same inset.
++- (UIScrollView *)openReaderScrollView
++{
++#if !TARGET_OS_TV
++  if (self.owningScreen.navigationItem.searchController == _controller) {
++    return [self.owningScreen contentScrollViewForEdge:NSDirectionalRectEdgeTop];
++  }
++#endif
++  return nil;
++}
++
++- (void)captureScrollPosition:(NSString *)slot
++{
++  UIScrollView *scroll = [self openReaderScrollView];
++  if (scroll == nil) {
++    return;
++  }
++  CGFloat logical = MAX(0, scroll.contentOffset.y + scroll.adjustedContentInset.top);
++  if ([slot isEqualToString:@"browse"] && !_hasBrowseScrollPosition) {
++    _browseScrollPosition = logical;
++    _hasBrowseScrollPosition = YES;
++  } else if ([slot isEqualToString:@"results"]) {
++    _resultScrollPosition = logical;
++  }
++}
++
++- (void)restoreScrollPosition:(NSString *)slot
++{
++  UIScrollView *scroll = [self openReaderScrollView];
++  if (scroll == nil) {
++    return;
++  }
++  CGFloat logical;
++  if ([slot isEqualToString:@"browse"]) {
++    logical = _browseScrollPosition;
++  } else if ([slot isEqualToString:@"results"]) {
++    logical = _resultScrollPosition;
++  } else if ([slot isEqualToString:@"top"]) {
++    logical = 0;
++  } else {
++    return;
++  }
++  UIEdgeInsets inset = scroll.adjustedContentInset;
++  CGFloat last = MAX(0, scroll.contentSize.height + inset.top + inset.bottom - CGRectGetHeight(scroll.bounds));
++  CGPoint offset = scroll.contentOffset;
++  offset.y = MIN(logical, last) - inset.top;
++  [scroll setContentOffset:offset animated:NO];
++}
++
+ #pragma mark-- Fabric specific
+ 
+ - (void)updateProps:(react::Props::Shared const &)props oldProps:(react::Props::Shared const &)oldProps
+diff --git a/node_modules/react-native-screens/lib/commonjs/components/SearchBar.js b/node_modules/react-native-screens/lib/commonjs/components/SearchBar.js
+index 2b49816..fa13bbb 100644
+--- a/node_modules/react-native-screens/lib/commonjs/components/SearchBar.js
++++ b/node_modules/react-native-screens/lib/commonjs/components/SearchBar.js
+@@ -34,6 +34,12 @@ function SearchBar(props, forwardedRef) {
+     },
+     cancelSearch: () => {
+       _callMethodWithRef(ref => NativeSearchBarCommands.cancelSearch(ref));
++    },
++    captureScrollPosition: slot => {
++      _callMethodWithRef(ref => NativeSearchBarCommands.captureScrollPosition(ref, slot));
++    },
++    restoreScrollPosition: slot => {
++      _callMethodWithRef(ref => NativeSearchBarCommands.restoreScrollPosition(ref, slot));
+     }
+   }));
+   const _callMethodWithRef = _react.default.useCallback(method => {
+diff --git a/node_modules/react-native-screens/lib/commonjs/fabric/SearchBarNativeComponent.js b/node_modules/react-native-screens/lib/commonjs/fabric/SearchBarNativeComponent.js
+index e463ca4..d4ac426 100644
+--- a/node_modules/react-native-screens/lib/commonjs/fabric/SearchBarNativeComponent.js
++++ b/node_modules/react-native-screens/lib/commonjs/fabric/SearchBarNativeComponent.js
+@@ -9,7 +9,7 @@ var _reactNative = require("react-native");
+ // eslint-disable-next-line @typescript-eslint/ban-types
+ 
+ const Commands = exports.Commands = (0, _reactNative.codegenNativeCommands)({
+-  supportedCommands: ['blur', 'focus', 'clearText', 'toggleCancelButton', 'setText', 'cancelSearch']
++  supportedCommands: ['blur', 'focus', 'clearText', 'toggleCancelButton', 'setText', 'cancelSearch', 'captureScrollPosition', 'restoreScrollPosition']
+ });
+ var _default = exports.default = (0, _reactNative.codegenNativeComponent)('RNSSearchBar', {});
+ //# sourceMappingURL=SearchBarNativeComponent.js.map
+\ No newline at end of file
+diff --git a/node_modules/react-native-screens/lib/module/components/SearchBar.js b/node_modules/react-native-screens/lib/module/components/SearchBar.js
+index 59faf32..8f47465 100644
+--- a/node_modules/react-native-screens/lib/module/components/SearchBar.js
++++ b/node_modules/react-native-screens/lib/module/components/SearchBar.js
+@@ -29,6 +29,12 @@ function SearchBar(props, forwardedRef) {
+     },
+     cancelSearch: () => {
+       _callMethodWithRef(ref => NativeSearchBarCommands.cancelSearch(ref));
++    },
++    captureScrollPosition: slot => {
++      _callMethodWithRef(ref => NativeSearchBarCommands.captureScrollPosition(ref, slot));
++    },
++    restoreScrollPosition: slot => {
++      _callMethodWithRef(ref => NativeSearchBarCommands.restoreScrollPosition(ref, slot));
+     }
+   }));
+   const _callMethodWithRef = React.useCallback(method => {
+diff --git a/node_modules/react-native-screens/lib/module/fabric/SearchBarNativeComponent.js b/node_modules/react-native-screens/lib/module/fabric/SearchBarNativeComponent.js
+index 36572b6..900be65 100644
+--- a/node_modules/react-native-screens/lib/module/fabric/SearchBarNativeComponent.js
++++ b/node_modules/react-native-screens/lib/module/fabric/SearchBarNativeComponent.js
+@@ -5,7 +5,7 @@ import { codegenNativeCommands, codegenNativeComponent } from 'react-native';
+ // eslint-disable-next-line @typescript-eslint/ban-types
+ 
+ export const Commands = codegenNativeCommands({
+-  supportedCommands: ['blur', 'focus', 'clearText', 'toggleCancelButton', 'setText', 'cancelSearch']
++  supportedCommands: ['blur', 'focus', 'clearText', 'toggleCancelButton', 'setText', 'cancelSearch', 'captureScrollPosition', 'restoreScrollPosition']
+ });
+ export default codegenNativeComponent('RNSSearchBar', {});
+ //# sourceMappingURL=SearchBarNativeComponent.js.map
+\ No newline at end of file
+diff --git a/node_modules/react-native-screens/lib/typescript/fabric/SearchBarNativeComponent.d.ts b/node_modules/react-native-screens/lib/typescript/fabric/SearchBarNativeComponent.d.ts
+index 643718d..34ae093 100644
+--- a/node_modules/react-native-screens/lib/typescript/fabric/SearchBarNativeComponent.d.ts
++++ b/node_modules/react-native-screens/lib/typescript/fabric/SearchBarNativeComponent.d.ts
+@@ -43,6 +43,8 @@ interface NativeCommands {
+     toggleCancelButton: (viewRef: React.ElementRef<ComponentType>, flag: boolean) => void;
+     setText: (viewRef: React.ElementRef<ComponentType>, text: string) => void;
+     cancelSearch: (viewRef: React.ElementRef<ComponentType>) => void;
++    captureScrollPosition: (viewRef: React.ElementRef<ComponentType>, slot: string) => void;
++    restoreScrollPosition: (viewRef: React.ElementRef<ComponentType>, slot: string) => void;
+ }
+ export declare const Commands: NativeCommands;
+ declare const _default: HostComponent<NativeProps>;
+diff --git a/node_modules/react-native-screens/lib/typescript/types.d.ts b/node_modules/react-native-screens/lib/typescript/types.d.ts
+index 10a3134..43eb3b2 100644
+--- a/node_modules/react-native-screens/lib/typescript/types.d.ts
++++ b/node_modules/react-native-screens/lib/typescript/types.d.ts
+@@ -8,6 +8,9 @@ export type SearchBarCommands = {
+     toggleCancelButton: (show: boolean) => void;
+     setText: (text: string) => void;
+     cancelSearch: () => void;
++    /** OpenReader: iOS-only adjusted-inset scroll-position commands. */
++    captureScrollPosition: (slot: 'browse' | 'results') => void;
++    restoreScrollPosition: (slot: 'browse' | 'results' | 'top') => void;
+ };
+ export type BackButtonDisplayMode = 'default' | 'generic' | 'minimal';
+ export type StackPresentationTypes = 'push' | 'modal' | 'transparentModal' | 'containedModal' | 'containedTransparentModal' | 'fullScreenModal' | 'formSheet' | 'pageSheet';
+diff --git a/node_modules/react-native-screens/src/components/SearchBar.tsx b/node_modules/react-native-screens/src/components/SearchBar.tsx
+index 14c40aa..0faf97d 100644
+--- a/node_modules/react-native-screens/src/components/SearchBar.tsx
++++ b/node_modules/react-native-screens/src/components/SearchBar.tsx
+@@ -38,6 +38,8 @@ type SearchBarCommandsType = {
+   toggleCancelButton: (viewRef: NativeSearchBarRef, flag: boolean) => void;
+   setText: (viewRef: NativeSearchBarRef, text: string) => void;
+   cancelSearch: (viewRef: NativeSearchBarRef) => void;
++  captureScrollPosition: (viewRef: NativeSearchBarRef, slot: string) => void;
++  restoreScrollPosition: (viewRef: NativeSearchBarRef, slot: string) => void;
+ };
+ 
+ function SearchBar(
+@@ -67,6 +69,12 @@ function SearchBar(
+     cancelSearch: () => {
+       _callMethodWithRef(ref => NativeSearchBarCommands.cancelSearch(ref));
+     },
++    captureScrollPosition: (slot: 'browse' | 'results') => {
++      _callMethodWithRef(ref => NativeSearchBarCommands.captureScrollPosition(ref, slot));
++    },
++    restoreScrollPosition: (slot: 'browse' | 'results' | 'top') => {
++      _callMethodWithRef(ref => NativeSearchBarCommands.restoreScrollPosition(ref, slot));
++    },
+   }));
+ 
+   const _callMethodWithRef = React.useCallback(
+diff --git a/node_modules/react-native-screens/src/fabric/SearchBarNativeComponent.ts b/node_modules/react-native-screens/src/fabric/SearchBarNativeComponent.ts
+index cb87683..a7ecc3b 100644
+--- a/node_modules/react-native-screens/src/fabric/SearchBarNativeComponent.ts
++++ b/node_modules/react-native-screens/src/fabric/SearchBarNativeComponent.ts
+@@ -85,6 +85,8 @@ interface NativeCommands {
+   ) => void;
+   setText: (viewRef: React.ElementRef<ComponentType>, text: string) => void;
+   cancelSearch: (viewRef: React.ElementRef<ComponentType>) => void;
++  captureScrollPosition: (viewRef: React.ElementRef<ComponentType>, slot: string) => void;
++  restoreScrollPosition: (viewRef: React.ElementRef<ComponentType>, slot: string) => void;
+ }
+ 
+ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+@@ -95,6 +97,8 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+     'toggleCancelButton',
+     'setText',
+     'cancelSearch',
++    'captureScrollPosition',
++    'restoreScrollPosition',
+   ],
+ });
+ 
+diff --git a/node_modules/react-native-screens/src/types.tsx b/node_modules/react-native-screens/src/types.tsx
+index 9c3ab4c..63ee887 100644
+--- a/node_modules/react-native-screens/src/types.tsx
++++ b/node_modules/react-native-screens/src/types.tsx
+@@ -23,6 +23,9 @@ export type SearchBarCommands = {
+   toggleCancelButton: (show: boolean) => void;
+   setText: (text: string) => void;
+   cancelSearch: () => void;
++  /** OpenReader: iOS owns adjusted-inset coordinates, not the JS scroll event. */
++  captureScrollPosition: (slot: 'browse' | 'results') => void;
++  restoreScrollPosition: (slot: 'browse' | 'results' | 'top') => void;
+ };
+ 
+ export type BackButtonDisplayMode = 'default' | 'generic' | 'minimal';

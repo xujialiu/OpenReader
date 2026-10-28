@@ -7,12 +7,14 @@ import { asDocumentId } from '../../src/core/document';
 import type { ScreenProps } from '../../src/app/routes';
 import { useLibrarySearch } from '../../src/app/use-library-search';
 
+const platform = vi.hoisted(() => ({ OS: 'ios' }));
+vi.mock('react-native', () => ({ Platform: platform }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const document = asDocumentId(`sha256:${'a'.repeat(64)}`)!;
 let frames: Map<number, FrameRequestCallback>;
 let nextFrame: number;
 beforeEach(() => {
-  frames = new Map(); nextFrame = 0;
+  frames = new Map(); nextFrame = 0; platform.OS = 'ios';
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.set(++nextFrame, callback); return nextFrame; });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
 });
@@ -27,6 +29,7 @@ async function open() {
   let options: SearchBarProps | undefined;
   const field: SearchBarCommands = {
     focus: vi.fn(), blur: vi.fn(), clearText: vi.fn(), setText: vi.fn(), toggleCancelButton: vi.fn(),
+    captureScrollPosition: vi.fn(), restoreScrollPosition: vi.fn(),
     cancelSearch: vi.fn(() => { options?.onCancelButtonPress?.(focusEvent()); options?.onChangeText?.(textEvent('')); }),
   };
   const navigation = {
@@ -77,6 +80,9 @@ describe('page-local Library search lifecycle (#332)', () => {
     expect(page.field.focus).not.toHaveBeenCalled();
     await act(async () => page.search.start());
     expect(page.field.focus).toHaveBeenCalledOnce();
+    expect(page.field.captureScrollPosition).toHaveBeenCalledExactlyOnceWith('browse');
+    expect(vi.mocked(page.field.captureScrollPosition).mock.invocationCallOrder[0])
+      .toBeLessThan(vi.mocked(page.field.focus).mock.invocationCallOrder[0]);
     expect(page.search.active).toBe(true);
     expect(page.options?.hideWhenScrolling).toBe(false);
     await page.close();
@@ -89,7 +95,8 @@ describe('page-local Library search lifecycle (#332)', () => {
     expect(page.search).toMatchObject({ active: true, query: '三体' });
     await page.close();
   });
-  it('cancel plus the native trailing empty-text event leaves search closed and restores the original scroll', async () => {
+  it('the non-iOS fallback retains its explicit-inset scroll behavior without calling iOS commands', async () => {
+    platform.OS = 'android';
     const page = await open();
     page.search.onScroll(scroll(720));
     await act(async () => page.search.start());
@@ -105,6 +112,30 @@ describe('page-local Library search lifecycle (#332)', () => {
     // Old short content may clamp the request. The new content size retries it.
     page.search.onScroll(scroll(10)); page.search.onContentSizeChange();
     expect(page.list.scrollToOffset).toHaveBeenLastCalledWith({ offset: 670, animated: false });
+    expect(page.field.captureScrollPosition).not.toHaveBeenCalled();
+    expect(page.field.restoreScrollPosition).not.toHaveBeenCalled();
+    await page.close();
+  });
+  it('iOS cancellation ignores the misleading explicit zero inset and never uses the clamping RN scroll command', async () => {
+    const page = await open();
+    // The real cold event: raw -116, explicit inset 0, while adjusted inset is 116.
+    page.search.onScroll(scroll(-116, 0));
+    await act(async () => page.search.start());
+    await page.type('body'); flush();
+    expect(page.field.restoreScrollPosition).toHaveBeenLastCalledWith('top');
+    page.search.onScroll(scroll(0, 0));
+    await act(async () => page.search.exit()); flush();
+    expect(page.search).toMatchObject({ active: false, query: '' });
+    expect(page.field.captureScrollPosition).toHaveBeenCalledExactlyOnceWith('browse');
+    expect(page.field.restoreScrollPosition).toHaveBeenLastCalledWith('browse');
+    expect(page.list.scrollToOffset).not.toHaveBeenCalled();
+    expect(page.options?.hideWhenScrolling).toBe(true);
+    // Reapply when the original, larger list finishes laying out; a user drag retires the request.
+    const calls = vi.mocked(page.field.restoreScrollPosition).mock.calls.length;
+    page.search.onContentSizeChange();
+    expect(vi.mocked(page.field.restoreScrollPosition).mock.calls).toHaveLength(calls + 1);
+    page.search.onScrollBeginDrag(); page.search.onContentSizeChange();
+    expect(vi.mocked(page.field.restoreScrollPosition).mock.calls).toHaveLength(calls + 1);
     await page.close();
   });
   it('clearing input restores ordinary browsing without ending search', async () => {
@@ -114,14 +145,20 @@ describe('page-local Library search lifecycle (#332)', () => {
     page.search.onScroll(scroll(0));
     await page.type(''); flush();
     expect(page.search).toMatchObject({ active: true, query: '' });
-    expect(page.list.scrollToOffset).toHaveBeenLastCalledWith({ offset: 350, animated: false });
+    expect(page.field.restoreScrollPosition).toHaveBeenLastCalledWith('browse');
+    expect(page.field.captureScrollPosition).toHaveBeenCalledExactlyOnceWith('browse');
+    expect(page.list.scrollToOffset).not.toHaveBeenCalled();
     await page.close();
   });
   it('keeps a result round trip but ignores late native cancel/change events while away, and does not refocus on return', async () => {
     const page = await open();
     await page.focus(); await page.type('body');
     page.search.onScroll(scroll(300));
+    vi.mocked(page.field.blur).mockClear();
     page.search.openingResult(document);
+    expect(page.field.captureScrollPosition).toHaveBeenLastCalledWith('results');
+    expect(vi.mocked(page.field.captureScrollPosition).mock.invocationCallOrder.at(-1))
+      .toBeLessThan(vi.mocked(page.field.blur).mock.invocationCallOrder[0]);
     await page.leave('Reader');
     await act(async () => page.options?.onCancelButtonPress?.(focusEvent()));
     await page.type('');
@@ -130,7 +167,8 @@ describe('page-local Library search lifecycle (#332)', () => {
     await page.return();
     expect(page.search).toMatchObject({ active: true, query: 'body' });
     expect(page.field.setText).toHaveBeenLastCalledWith('body');
-    expect(page.list.scrollToOffset).toHaveBeenLastCalledWith({ offset: 250, animated: false });
+    expect(page.field.restoreScrollPosition).toHaveBeenLastCalledWith('results');
+    expect(page.list.scrollToOffset).not.toHaveBeenCalled();
     expect(page.field.focus).not.toHaveBeenCalled();
     await page.close();
   });

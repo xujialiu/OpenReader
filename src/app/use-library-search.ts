@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { FlatList, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { Platform, type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import type { SearchBarCommands, SearchBarProps } from 'react-native-screens';
 import type { DocumentId } from '../core/document';
 import type { ScreenProps } from './routes';
@@ -20,19 +20,28 @@ export function useLibrarySearch(
   const list = useRef<Pick<FlatList<LibraryRow>, 'scrollToOffset'>>(null);
   const live = useRef({
     active: false, query: '', blocked, y: 0, inset: 0, browseY: 0, resultY: 0,
-    restore: null as number | null, reader: null as DocumentId | null, suspended: false,
+    restore: null as 'browse' | 'results' | 'top' | null, reader: null as DocumentId | null, suspended: false,
   });
   useLayoutEffect(() => { live.current.blocked = blocked; }, [blocked]);
 
   const restoreScroll = useCallback(() => {
     const now = live.current;
-    if (now.restore !== null) list.current?.scrollToOffset({ offset: now.restore - now.inset, animated: false });
+    if (now.restore === null) return;
+    if (Platform.OS === 'ios') {
+      bar.current?.restoreScrollPosition(now.restore);
+    } else {
+      const position = now.restore === 'browse' ? now.browseY : now.restore === 'results' ? now.resultY : 0;
+      list.current?.scrollToOffset({ offset: position - now.inset, animated: false });
+    }
   }, []);
   const begin = useCallback(() => {
     const now = live.current;
     if (now.blocked || now.suspended || !navigation.isFocused()) return false;
     if (!now.active) {
-      now.browseY = now.y;
+      // Capture before focus changes the native header/insets or rows change.
+      if (Platform.OS === 'ios') bar.current?.captureScrollPosition('browse');
+      else now.browseY = now.y;
+      now.restore = null;
       now.active = true;
       setState({ active: true, query: now.query });
     }
@@ -41,7 +50,7 @@ export function useLibrarySearch(
   const cancel = useCallback(() => {
     const now = live.current;
     if (!now.active && !now.query) return;
-    now.restore = now.browseY;
+    now.restore = 'browse';
     now.active = false; now.query = ''; now.reader = null; now.suspended = false;
     setState({ active: false, query: '' });
   }, []);
@@ -61,7 +70,7 @@ export function useLibrarySearch(
     if (!begin()) return;
     if (now.query === text) return;
     now.query = text;
-    now.restore = libraryQuery(text) ? 0 : now.browseY;
+    now.restore = libraryQuery(text) ? 'top' : 'browse';
     setState({ active: true, query: text });
   }, [begin, navigation]);
 
@@ -83,7 +92,7 @@ export function useLibrarySearch(
     const unstate = navigation.addListener('state', leave);
     const unfocus = navigation.addListener('focus', () => {
       const now = live.current;
-      if (now.suspended) now.restore = now.resultY;
+      if (now.suspended) now.restore = 'results';
       now.suspended = false; now.reader = null;
       bar.current?.setText(now.query);
       bar.current?.blur();
@@ -92,9 +101,10 @@ export function useLibrarySearch(
     return () => { unblur(); unstate(); unfocus(); };
   }, [exit, navigation, restoreScroll, routeKey]);
 
-  // Restore after rows have committed, and again after native content sizes
-  // change. Keep a pending target until it is observed, so a restore is not
-  // lost when native clamps it against the old (shorter) result list.
+  // Restore after rows commit and again if native content size changes after
+  // that request. A short result list may still be laid out at the first call.
+  // On iOS retain the semantic request until the next drag/search action: only
+  // UIKit knows its adjusted inset; RN's event reports the explicit inset.
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(restoreScroll);
     return () => cancelAnimationFrame(frame);
@@ -121,17 +131,22 @@ export function useLibrarySearch(
     openingResult: (id: DocumentId) => {
       if (!live.current.active || !libraryQuery(live.current.query)) return;
       live.current.reader = id;
-      live.current.resultY = live.current.y;
+      if (Platform.OS === 'ios') bar.current?.captureScrollPosition('results');
+      else live.current.resultY = live.current.y;
       live.current.restore = null;
       live.current.suspended = true;
       bar.current?.blur();
     },
     onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      // The iOS event says contentInset.top=0 even when UIKit adds 116 pt.
+      // Neither its raw offset nor its explicit inset owns our saved position.
+      if (Platform.OS === 'ios') return;
       const now = live.current;
       now.inset = event.nativeEvent.contentInset.top;
       if (now.suspended) return;
       now.y = Math.max(0, event.nativeEvent.contentOffset.y + now.inset);
-      if (now.restore !== null && Math.abs(now.restore - now.y) < 1) now.restore = null;
+      const expected = now.restore === 'browse' ? now.browseY : now.restore === 'results' ? now.resultY : 0;
+      if (now.restore !== null && Math.abs(expected - now.y) < 1) now.restore = null;
     },
     onScrollBeginDrag: () => { live.current.restore = null; },
     onContentSizeChange: restoreScroll,
