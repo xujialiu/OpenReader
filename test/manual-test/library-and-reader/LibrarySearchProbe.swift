@@ -234,13 +234,14 @@ final class LibrarySearchProbe: XCTestCase {
       XCTAssertTrue(field.waitForExistence(timeout: 5), "Search must reach input")
     }
 
-    // Cancel with text present (the cancel control exists only then).
+    // iOS 26's search-cancel icon is labelled Close in the native AX tree,
+    // distinct from the field's Clear text button; scope it to the bar.
     beginSearch()
     var field = searchField(app)
     field.typeText("Short")
     sleep(1)
     XCTAssertTrue((field.value as? String ?? "").contains("Short"), "query typed")
-    let cancel = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Cancel")).firstMatch
+    let cancel = app.navigationBars.firstMatch.buttons["Close"]
     XCTAssertTrue(cancel.exists, "Cancel control must exist while a query is present")
     cancel.tap()
     sleep(1)

@@ -63,9 +63,12 @@ fix and adds the Library keyboard/focus behavior at the native boundary:
   a search controller is present. It uses the normal lookup first, then a
   breadth-first search of this page, excluding header and nested-screen
   branches. The cached association changes only when the scroll view changes;
-  removing search restores UIKit's default lookup. UIKit owns the collapse
-  and the corresponding content-inset adjustment; app code adds no initial
-  search-bar-height offset to the content.
+  removing search restores UIKit's default lookup. Initial presentation and
+  the end of input use one no-animation layout transaction: preserve the
+  logical list offset, trigger native collapse using the search bar's measured
+  height, finish layout, then restore that offset against the final adjusted
+  inset. The per-controller guard prevents collapsing later deliberate pulls;
+  active input rearms it so cancellation returns to ordinary hidden search.
 - `RNSScreen.keyCommands` adds Command-F and Escape only when the visible page
   has a search controller and no other modal presentation. Reader and Settings
   have no search controller. Escape leaves an unfinished IME composition to
@@ -121,10 +124,17 @@ left the bar collapsed and the first row fully visible; both native geometry
 and the screenshot confirmed it. This was a runtime experiment, not evidence
 that a fresh launch was fixed.
 
-The extra initial offset and its once-per-controller flag are removed. UIKit
-owns inset/offset adaptation after binding. Cold presentation, pull reveal,
-cancellation and unclipped content still require retesting on the new binary.
-No separate collapse animation or measured-height scroll workaround remains.
+Removing the collapse trigger returned the standing field on a fresh launch,
+with the correct binding intact. The complete native operation was then tested
+on that cold expanded state in one no-animation transaction: preserve logical
+offset zero, move by the measured 60-point search-bar height, force bar/view
+layout, then restore logical zero against the final adjusted inset. Readback
+was `-176 / inset 176 / bar 114` before, `-56 / inset 116 / bar 54` after
+collapse, and `-116 / inset 116 / bar 54` after restoration. The later screenshot
+kept the field hidden and the first row fully visible. The patch now performs
+that complete operation rather than keeping only its first half or removing
+it altogether. Native fresh-launch, pull and cancellation acceptance are still
+required; the runtime experiment is not a substitute for them.
 
 ## Verification boundary
 

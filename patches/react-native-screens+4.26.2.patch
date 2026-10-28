@@ -1,16 +1,17 @@
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..5f9f1b0 100644
+index 9b66012..ea87cb3 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
-@@ -1406,6 +1406,7 @@ + (void)load
+@@ -1406,6 +1406,8 @@ + (void)load
  
  @implementation RNSScreen {
    __weak id _previousFirstResponder;
 +  __weak UIScrollView *_openReaderSearchScrollView;
++  __weak UISearchController *_openReaderCollapsedSearchController;
    CGRect _lastViewFrame;
    RNSScreenView *_initialView;
    UIView *_fakeView;
-@@ -1433,6 +1434,95 @@ - (instancetype)initWithView:(UIView *)view
+@@ -1433,6 +1435,95 @@ - (instancetype)initWithView:(UIView *)view
    return self;
  }
  
@@ -106,7 +107,7 @@ index 9b66012..5f9f1b0 100644
  // TODO: Find out why this is executed when screen is going out
  - (void)viewWillAppear:(BOOL)animated
  {
-@@ -1558,6 +1648,18 @@ - (void)viewDidLayoutSubviews
+@@ -1558,6 +1649,47 @@ - (void)viewDidLayoutSubviews
    if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
      [self.screenView updateBounds];
    }
@@ -120,6 +121,35 @@ index 9b66012..5f9f1b0 100644
 +  if (searchScrollView != _openReaderSearchScrollView) {
 +    _openReaderSearchScrollView = searchScrollView;
 +    [self setContentScrollView:searchScrollView forEdge:NSDirectionalRectEdgeTop];
++  }
++  if (search.active) {
++    // Ending input must return to ordinary hidden search, including when the
++    // field was revealed by a pull rather than by the menu.
++    _openReaderCollapsedSearchController = nil;
++  } else if (search != nil && search != _openReaderCollapsedSearchController &&
++             self.navigationItem.hidesSearchBarWhenScrolling &&
++             self.navigationController.topViewController == self && search.searchBar.window != nil &&
++             searchScrollView != nil && CGRectGetHeight(searchScrollView.bounds) > 0) {
++    _openReaderCollapsedSearchController = search;
++    CGFloat searchHeight = CGRectGetHeight(search.searchBar.bounds);
++    if (searchHeight > 0 && !searchScrollView.tracking && !searchScrollView.dragging) {
++      // Collapsing changes adjustedContentInset AND UIKit compensates offset.
++      // Measured: -176 + 60 collapsed the bar but settled at -56 / inset 116,
++      // clipping the first row. Preserve the logical position and restore it
++      // against the FINAL inset in the same no-animation transaction.
++      CGFloat logicalOffset = MAX(0, searchScrollView.contentOffset.y + searchScrollView.adjustedContentInset.top);
++      [UIView performWithoutAnimation:^{
++        CGPoint trigger = searchScrollView.contentOffset;
++        trigger.y += searchHeight;
++        [searchScrollView setContentOffset:trigger animated:NO];
++        [self.navigationController.navigationBar layoutIfNeeded];
++        [self.view layoutIfNeeded];
++        [searchScrollView layoutIfNeeded];
++        CGPoint restored = searchScrollView.contentOffset;
++        restored.y = logicalOffset - searchScrollView.adjustedContentInset.top;
++        [searchScrollView setContentOffset:restored animated:NO];
++      }];
++    }
 +  }
 +#endif
  }
