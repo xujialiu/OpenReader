@@ -212,6 +212,42 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(row.waitForExistence(timeout: 5), "Query 'Short' must keep matching the fixture")
   }
 
+  /// Diagnostic (beta5): reproduce menu-Search -> type -> Close, then HOLD
+  /// the post-cancel state for a native LLDB read. Records frames only.
+  func testReproCancelThenHold() {
+    let app = launch()
+    let actions = app.buttons["Library actions"]
+    XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
+    actions.tap()
+    let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
+    XCTAssertTrue(search.waitForExistence(timeout: 5), "drawer must offer Search")
+    search.tap()
+    // The AX query layer on this device intermittently misses the focused
+    // field (a stuck-state tree showed it focused while the query said
+    // absent). Detect search-active via the bar's Close control instead,
+    // polling up to 30 s, and re-snapshot the field before typing.
+    let closeDuringInput = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(closeDuringInput.waitForExistence(timeout: 30), "Search must reach input (Close control appears)")
+    var field = searchField(app)
+    if !field.exists { field = app.searchFields.firstMatch }
+    XCTAssertTrue(field.exists, "the focused search field must be in the tree (Close is up)")
+    field.typeText("Short")
+    sleep(1)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 5), "Close must exist while a query is present")
+    close.tap()
+    sleep(2)
+    field = searchField(app)
+    let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    let bar = app.navigationBars.firstMatch
+    let line = "post-cancel: field exists=\(field.exists) hittable=\(field.isHittable) frame=\(field.exists ? NSCoder.string(for: field.frame) : "none") | topRow frame=\(row.exists ? NSCoder.string(for: row.frame) : "none") | bar frame=\(bar.exists ? NSCoder.string(for: bar.frame) : "none")"
+    print("[diag] \(line)")
+    let attachment = XCTAttachment(string: line)
+    attachment.name = "post-cancel-frames"; attachment.lifetime = .keepAlways; add(attachment)
+    shot("beta5-post-cancel-hold")
+    tree(app, "beta5-post-cancel-tree")
+  }
+
   /// Contract: clearing input shows the ordinary list again but stays in
   /// search (field available); cancelling ends search, hides/collapses the
   /// field and restores the ordinary position. Gesture-free: `...` › Search
