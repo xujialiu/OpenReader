@@ -66,13 +66,26 @@ final class LibrarySearchProbe: XCTestCase {
     tree(app, "cold-library-tree")
     shot("cold-library")
     if field.exists {
-      XCTAssertFalse(field.isHittable, "Contract 0090: the search field must not be hittable during ordinary browsing (frame: \(NSCoder.string(for: field.frame)))")
-      XCTAssertFalse(field.frame.minY >= 0 && field.frame.maxY <= app.frame.maxY && field.frame.height >= 20, "Contract 0090: the search field must not stand on screen (frame: \(NSCoder.string(for: field.frame)), window height \(app.frame.maxY))")
+      // A collapsed navigation bar CLIPS the field, so window frames prove
+      // nothing: judge visibility by hittability AND intersection with the
+      // navigation bar's own visible frame.
+      let bar = app.navigationBars.firstMatch
+      let clipped = bar.exists ? bar.frame.intersection(field.frame).height < 10 : field.frame.maxY < 10
+      XCTAssertFalse(field.isHittable, "Contract 0090: the search field must not be hittable during ordinary browsing (frame: \(NSCoder.string(for: field.frame)), bar: \(bar.exists ? NSCoder.string(for: bar.frame) : "none"))")
+      XCTAssertTrue(clipped, "Contract 0090: the search field must be clipped by the collapsed navigation bar (field: \(NSCoder.string(for: field.frame)), bar: \(bar.exists ? NSCoder.string(for: bar.frame) : "none"))")
     }
     XCTAssertTrue(row.exists, "First Document must be present")
-    XCTAssertLessThan(row.frame.minY, 170, "Contract 0090: the header must not reserve search-field space (first row minY \(row.frame.minY); beta1's standing field pushed it to 188)")
+    XCTAssertLessThan(row.frame.minY, 170, "Contract 0090: the header must not reserve search-field space (first row minY \(row.frame.minY); beta1/beta2's standing field pushed it to 188)")
+    let barForClip = app.navigationBars.firstMatch
+    // AX frames do not account for bar overlap: a row half-hidden under the
+    // bar can also drop out of the firstMatch order entirely (seen on beta3),
+    // so this check needs the screenshot alongside it.
+    if barForClip.exists {
+      XCTAssertGreaterThanOrEqual(row.frame.minY, barForClip.frame.maxY - 4, "Contract 0090: the first Document must not be clipped under the navigation bar (row minY \(row.frame.minY), bar maxY \(barForClip.frame.maxY))")
+    }
     XCTAssertGreaterThanOrEqual(row.frame.minY, 0, "First Document must not be clipped at the top")
     XCTAssertLessThanOrEqual(row.frame.maxY, app.frame.maxY, "First Document must not be clipped at the bottom")
+    XCTAssertEqual(app.keyboards.count, 0, "Cold ordinary browsing must have no keyboard")
   }
 
   /// Parent follow-up diagnostic (2026-10-28), H1/H2/H3 discrimination on the
@@ -161,10 +174,21 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(list.waitForExistence(timeout: 5), "list must exist")
     let field0 = searchField(app)
     let stoodCold = field0.exists && field0.isHittable
+    let rowBefore = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    let beforeY = rowBefore.exists ? rowBefore.frame.minY : CGFloat.nan
     drag(list, fromY: 0.2, toY: 0.7)
+    let rowAtTouchUp = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    let atTouchUpY = rowAtTouchUp.exists ? rowAtTouchUp.frame.minY : CGFloat.nan
+    let gestureMoved = !beforeY.isNaN && !atTouchUpY.isNaN && abs(atTouchUpY - beforeY) >= 1
     sleep(1)
     shot("pull-reveal-after-pull")
+    XCTAssertEqual(app.keyboards.count, 0, "Pull-reveal must not open the keyboard")
     let field = searchField(app)
+    if !gestureMoved && !field.exists {
+      let note = XCTAttachment(string: "Pull moved no content (topRow minY \(beforeY) -> \(atTouchUpY)). Synthetic swipes are eaten on this device; pull-reveal stays unverified.")
+      note.name = "pull-reveal-unverified"; note.lifetime = .keepAlways; add(note)
+      throw XCTSkip("Pull gesture not delivered (no observed offset change); unverified, not failed")
+    }
     guard field.exists else {
       let note = XCTAttachment(string: "Pull gesture did not reveal a field. Stood cold: \(stoodCold). Synthetic swipes are eaten on this device; pull-reveal is unverified here.")
       note.name = "pull-reveal-unverified"; note.lifetime = .keepAlways; add(note)
@@ -183,16 +207,87 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(row.waitForExistence(timeout: 5), "Query 'Short' must keep matching the fixture")
   }
 
+  /// Contract: clearing input shows the ordinary list again but stays in
+  /// search (field available); cancelling ends search, hides/collapses the
+  /// field and restores the ordinary position. Gesture-free: `...` › Search
+  /// begins input without needing the pull. The field reads back its
+  /// placeholder as the value when empty.
+  func testClearAndCancelRestoreOrdinaryPosition() {
+    let app = launch()
+    let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 10), "ordinary list must show a Document")
+    let ordinaryY = row.frame.minY
+
+    func beginSearch() {
+      let actions = app.buttons["Library actions"]
+      XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
+      actions.tap()
+      let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
+      XCTAssertTrue(search.waitForExistence(timeout: 5), "The actions drawer must offer Search")
+      search.tap()
+      let field = searchField(app)
+      XCTAssertTrue(field.waitForExistence(timeout: 5), "Search must reach input")
+    }
+
+    // Cancel with text present (the cancel control exists only then).
+    beginSearch()
+    var field = searchField(app)
+    field.typeText("Short")
+    sleep(1)
+    XCTAssertTrue((field.value as? String ?? "").contains("Short"), "query typed")
+    let cancel = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Cancel")).firstMatch
+    XCTAssertTrue(cancel.exists, "Cancel control must exist while a query is present")
+    cancel.tap()
+    sleep(1)
+    shot("cancel-restores-ordinary")
+    let afterField = searchField(app)
+    let bar = app.navigationBars.firstMatch
+    let clippedOrGone = !afterField.exists || afterField.frame.maxY < 10 || (bar.exists && bar.frame.intersection(afterField.frame).height < 10)
+    XCTAssertTrue(clippedOrGone, "Cancel must hide/collapse the field (field: \(afterField.exists ? NSCoder.string(for: afterField.frame) : "gone"), bar: \(bar.exists ? NSCoder.string(for: bar.frame) : "none"))")
+    XCTAssertEqual(app.keyboards.count, 0, "Cancel must dismiss the keyboard")
+    let restoredRow = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    XCTAssertTrue(restoredRow.waitForExistence(timeout: 5), "Ordinary list must be back after cancel")
+    XCTAssertEqual(restoredRow.frame.minY, ordinaryY, accuracy: 8, "Cancel must restore the ordinary list position (\(restoredRow.frame.minY) vs \(ordinaryY))")
+
+    // Clear: the field's clear control empties the query, the ordinary list
+    // returns, and the field stays revealed and available (still searching).
+    beginSearch()
+    field = searchField(app)
+    field.typeText("zzz")
+    sleep(1)
+    let clear = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Clear")).firstMatch
+    XCTAssertTrue(clear.exists, "The field's clear control must exist while a query is present")
+    clear.tap()
+    sleep(1)
+    field = searchField(app)
+    let value = field.value as? String ?? ""
+    XCTAssertTrue(value.isEmpty || value == "Search Library", "Clear must empty the field; value '\(value)'")
+    let ordinaryAgain = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    XCTAssertTrue(ordinaryAgain.waitForExistence(timeout: 5), "An empty query must show the ordinary list again")
+    XCTAssertTrue(field.isHittable, "Clear must leave the field revealed and available, not cancelled")
+    shot("clear-restores-list")
+    tree(app, "clear-final-tree")
+  }
+
   /// Contract: tapping the field begins input (first responder + typing lands).
   /// Typing landing in the field and filtering the list is the first-responder
   /// proof (a software keyboard may be hidden under a connected Mac keyboard).
   func testTappingFieldFocusesAndTypes() {
     let app = launch()
-    let field = searchField(app)
-    guard field.exists else {
-      shot("tap-field-absent")
-      XCTFail("Search field not present to tap; the cold-Library presentation already fails contract 0090")
-      return
+    var field = searchField(app)
+    if !field.exists {
+      // The cold field is collapsed now: reveal it. A synthetic pull does not
+      // arrive on this device (recorded), so use the gesture-free `...` >
+      // Search entry and say so in the attachment.
+      let actions = app.buttons["Library actions"]
+      XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
+      actions.tap()
+      let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
+      XCTAssertTrue(search.waitForExistence(timeout: 5), "The actions drawer must offer Search")
+      search.tap()
+      sleep(1)
+      field = searchField(app)
+      XCTAssertTrue(field.waitForExistence(timeout: 5), "Search must reveal the field for tapping")
     }
     field.tap()
     sleep(1)
