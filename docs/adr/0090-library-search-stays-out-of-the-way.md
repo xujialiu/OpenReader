@@ -60,8 +60,13 @@ fix and adds the Library keyboard/focus behavior at the native boundary:
 
 - `RNSScreen.viewDidLayoutSubviews` explicitly associates the Library's actual
   `UIScrollView` with the top bar through `setContentScrollView:forEdge:` when
-  a search controller is present. The cached association changes only when
-  the scroll view changes; removing search restores UIKit's default lookup.
+  a search controller is present. It uses the normal lookup first, then a
+  breadth-first search of this page, excluding header and nested-screen
+  branches. The cached association changes only when the scroll view changes;
+  removing search restores UIKit's default lookup. A newly laid-out search
+  controller starts at the collapsed offset computed from its own search-bar
+  height and the scroll view's adjusted top inset, once per controller, never
+  repeatedly while a person pulls to reveal it.
 - `RNSScreen.keyCommands` adds Command-F and Escape only when the visible page
   has a search controller and no other modal presentation. Reader and Settings
   have no search controller. Escape leaves an unfinished IME composition to
@@ -96,11 +101,23 @@ The classic stack's scroll-view lookup is insufficient here. UIKit's public
 exists specifically to designate the scroll view bars observe when the view
 hierarchy heuristic is insufficient. The installed screens package already
 uses it in its newer stack and tab implementations, not in this classic stack.
-The patch registers the view returned by the classic screen's existing
-`tryFindDescendantScrollView` for the top edge. This is the first isolated fix;
-its native collapse and initial presentation must still be retested before
-claiming the hidden-on-demand contract. No fixed pixel scroll or separate
-collapse animation is introduced.
+The first binding attempt used only the classic screen's existing
+`tryFindDescendantScrollView`; native behavior stayed unchanged. LLDB then
+showed all three pointers nil: that lookup, the patch's cached view and
+`contentScrollViewForEdge:Top`. It was not evidence that UIKit ignored a valid
+binding. The actual hierarchy was `RNSScreenContentWrapper` →
+`RNSSafeAreaViewComponentView`, with an empty background view as its first
+child, and a sibling wrapper containing `RCTScrollViewComponentView`. The
+first-child search stopped at the background; the iOS 26 fallback checked only
+immediate children, missing the wrapped list. The actual list had offset
+`(0, -176)`, adjusted top inset 176 and content height 1116.
+
+The search-only breadth-first fallback finds the wrapped list without changing
+the generic lookup used elsewhere. The same native layout also initializes a
+new inactive controller's collapsed offset from the search bar's actual laid-out
+height, not a phone-specific constant. These corrections still require native
+verification of initial presentation, pull reveal, cancellation and unclipped
+content. No separate collapse animation is introduced.
 
 ## Verification boundary
 

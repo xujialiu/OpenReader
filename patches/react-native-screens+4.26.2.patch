@@ -1,16 +1,17 @@
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..ec2e3e8 100644
+index 9b66012..2e97d6a 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
-@@ -1406,6 +1406,7 @@ + (void)load
+@@ -1406,6 +1406,8 @@ + (void)load
  
  @implementation RNSScreen {
    __weak id _previousFirstResponder;
 +  __weak UIScrollView *_openReaderSearchScrollView;
++  __weak UISearchController *_openReaderCollapsedSearchController;
    CGRect _lastViewFrame;
    RNSScreenView *_initialView;
    UIView *_fakeView;
-@@ -1433,6 +1434,69 @@ - (instancetype)initWithView:(UIView *)view
+@@ -1433,6 +1435,95 @@ - (instancetype)initWithView:(UIView *)view
    return self;
  }
  
@@ -77,10 +78,36 @@ index 9b66012..ec2e3e8 100644
 +}
 +#endif
 +
++#if !TARGET_OS_TV
++- (UIScrollView *)openReaderFindLibraryScrollView
++{
++  UIScrollView *direct = [self.screenView tryFindDescendantScrollView].scrollView;
++  if (direct != nil) {
++    return direct;
++  }
++  // Fabric puts the navigator's empty background before the Library's wrapped
++  // list under RNSSafeAreaView. The first-child-only lookup stops at that
++  // background; look breadth-first through the page, never another screen.
++  NSMutableArray<UIView *> *views = [NSMutableArray arrayWithObject:self.screenView];
++  for (NSUInteger index = 0; index < views.count; index++) {
++    UIView *view = views[index];
++    if ([view isKindOfClass:RCTScrollViewComponentView.class]) {
++      return ((RCTScrollViewComponentView *)view).scrollView;
++    }
++    if ([view isKindOfClass:RNSScreenStackHeaderConfig.class] ||
++        (view != self.screenView && [view isKindOfClass:RNSScreenView.class])) {
++      continue;
++    }
++    [views addObjectsFromArray:view.subviews];
++  }
++  return nil;
++}
++#endif
++
  // TODO: Find out why this is executed when screen is going out
  - (void)viewWillAppear:(BOOL)animated
  {
-@@ -1558,6 +1622,19 @@ - (void)viewDidLayoutSubviews
+@@ -1558,6 +1649,31 @@ - (void)viewDidLayoutSubviews
    if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
      [self.screenView updateBounds];
    }
@@ -89,12 +116,24 @@ index 9b66012..ec2e3e8 100644
 +  // wrapped FlatList. Its contents scrolled 400 pt while the search header
 +  // stayed 114 pt tall. Bind the actual scroll view through the public API,
 +  // rather than drawing a separate collapse animation or guessing an offset.
-+  UIScrollView *searchScrollView = self.navigationItem.searchController != nil
-+      ? [self.screenView tryFindDescendantScrollView].scrollView
-+      : nil;
++  UISearchController *search = self.navigationItem.searchController;
++  UIScrollView *searchScrollView = search != nil ? [self openReaderFindLibraryScrollView] : nil;
 +  if (searchScrollView != _openReaderSearchScrollView) {
 +    _openReaderSearchScrollView = searchScrollView;
 +    [self setContentScrollView:searchScrollView forEdge:NSDirectionalRectEdgeTop];
++  }
++  // Start once at UIKit's collapsed position, using the field's own laid-out
++  // height rather than a phone-specific distance. Later pulls remain UIKit's:
++  // this must not keep collapsing a field the user has deliberately revealed.
++  CGFloat searchHeight = CGRectGetHeight(search.searchBar.bounds);
++  if (search != nil && search != _openReaderCollapsedSearchController && !search.active &&
++      self.navigationItem.hidesSearchBarWhenScrolling && searchScrollView != nil &&
++      CGRectGetHeight(searchScrollView.bounds) > 0 && searchHeight > 0) {
++    _openReaderCollapsedSearchController = search;
++    CGFloat collapsedTop = -searchScrollView.adjustedContentInset.top + searchHeight;
++    if (searchScrollView.contentOffset.y < collapsedTop) {
++      [searchScrollView setContentOffset:CGPointMake(searchScrollView.contentOffset.x, collapsedTop) animated:NO];
++    }
 +  }
 +#endif
  }
