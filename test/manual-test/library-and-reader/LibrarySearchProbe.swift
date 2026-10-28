@@ -799,6 +799,38 @@ final class LibrarySearchProbe: XCTestCase {
     sleep(1)
   }
 
+  /// Diagnostic on the SAME running process: a printable key is the delivery
+  /// control, then Escape. Never launches/terminates; safe to pair with an
+  /// already-attached, auto-continuing debugger. Not acceptance on its own.
+  func testTypeKeysInRunningSearch() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    guard let field = waitForSearchField(app, timeout: 5) else { return }
+    app.typeKey("f", modifierFlags: .command)
+    let before = field.value as? String ?? ""
+    app.typeKey("z", modifierFlags: [])
+    let typed = field.value as? String ?? ""
+    XCTAssertEqual(typed, before + "z", "Printable typeKey must actually reach the focused input")
+    let nativeEscape = XCUIKeyboardKey.escape.rawValue
+    print("[diag] Escape constant scalars=\(nativeEscape.unicodeScalars.map { $0.value }); literal scalars=\("\u{1b}".unicodeScalars.map { $0.value })")
+    app.typeKey(nativeEscape, modifierFlags: [])
+    sleep(1)
+    let after = searchField(app)
+    let bar = app.navigationBars.firstMatch
+    let hidden = !after.exists || after.frame.maxY < 10 || (bar.exists && bar.frame.intersection(after.frame).height < 10)
+    let line = "same-process keys: before='\(before)' typed='\(typed)' escapeHidden=\(hidden) field='\(after.exists ? after.value as? String ?? "" : "absent")'"
+    print("[diag] \(line)")
+    let attachment = XCTAttachment(string: line)
+    attachment.name = "same-process-keys"; attachment.lifetime = .keepAlways; add(attachment)
+    shot("same-process-escape")
+    if hidden { return }
+    app.typeKey(XCUIKeyboardKey.return.rawValue, modifierFlags: [])
+    app.typeKey(nativeEscape, modifierFlags: [])
+    sleep(1)
+    let afterReturn = searchField(app)
+    let hiddenAfterReturn = !afterReturn.exists || afterReturn.frame.maxY < 10 || (bar.exists && bar.frame.intersection(afterReturn.frame).height < 10)
+    print("[diag] same-process Return then Escape hidden=\(hiddenAfterReturn)")
+  }
+
   /// Diagnostic (beta7): CmdF -> type -> Escape, then HOLD the post-Escape
   /// state for the native keyCommands split. Records frames only.
   func testEscapeHold() {

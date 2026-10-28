@@ -113,6 +113,15 @@ navigation-controller commands remain for list focus. No private selector is
 implemented and no existing UIKit object has its runtime class changed. This
 closer-responder routing and native bar integration still require acceptance.
 
+The closer command also failed the synthesized-Escape checkpoint. A corrected
+same-process trace proves CmdF reaches both find handlers, both command getters
+are consulted, and none of the cancel/blur/end-editing handlers run in that
+sequence. It does not establish which subsystem consumes Escape. Independent
+HID input failed its printable-key delivery control; GUI key input was refused
+for lack of window focus. Do not infer a UIKit text-input fault or add deeper
+interception from those observations. Escape remains unresolved while the
+remaining UI checks proceed independently; partial results are not acceptance.
+
 A process-wide key listener was rejected because it could intercept Reader or
 modal actions. A separate native search module would duplicate the controller
 already owned by the stack and make its scroll/header integration our own.
