@@ -58,6 +58,10 @@ two-finger sweep. Selection removes the native search controller altogether.
 `patches/react-native-screens+4.26.2.patch` retains the existing Folder back-menu
 fix and adds the Library keyboard/focus behavior at the native boundary:
 
+- `RNSScreen.viewDidLayoutSubviews` explicitly associates the Library's actual
+  `UIScrollView` with the top bar through `setContentScrollView:forEdge:` when
+  a search controller is present. The cached association changes only when
+  the scroll view changes; removing search restores UIKit's default lookup.
 - `RNSScreen.keyCommands` adds Command-F and Escape only when the visible page
   has a search controller and no other modal presentation. Reader and Settings
   have no search controller. Escape leaves an unfinished IME composition to
@@ -75,6 +79,28 @@ The cost of using the existing boundary is another native patch to check at a
 screens upgrade. `patch-package` must continue to apply both this change and
 #317's back-menu change, and the keyboard/focus checks must run against a new
 native build, not just a Metro refresh.
+
+## Collapse association
+
+The first native check found a standing search field, including in an empty
+Library. In the expanded state, the navigation bar was 114 points tall and the
+field occupied `(16, 117, 370, 44)` on the tested iPhone. A later diagnostic
+with 13 Documents moved the list to offset 400 through its own scroll API:
+rows moved, but the field and bar stayed expanded. Synthetic scroll gestures
+in that diagnostic did not move the list, so they are not evidence of native
+collapse. These observations support a missing scroll/header association;
+they do not establish behavior at every possible offset or on another device.
+
+The classic stack's scroll-view lookup is insufficient here. UIKit's public
+[`setContentScrollView(_:for:)`](https://developer.apple.com/documentation/uikit/uiviewcontroller/setcontentscrollview(_:for:))
+exists specifically to designate the scroll view bars observe when the view
+hierarchy heuristic is insufficient. The installed screens package already
+uses it in its newer stack and tab implementations, not in this classic stack.
+The patch registers the view returned by the classic screen's existing
+`tryFindDescendantScrollView` for the top edge. This is the first isolated fix;
+its native collapse and initial presentation must still be retested before
+claiming the hidden-on-demand contract. No fixed pixel scroll or separate
+collapse animation is introduced.
 
 ## Verification boundary
 

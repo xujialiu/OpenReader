@@ -1,8 +1,16 @@
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..e34eed5 100644
+index 9b66012..ec2e3e8 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
-@@ -1433,6 +1433,69 @@ - (instancetype)initWithView:(UIView *)view
+@@ -1406,6 +1406,7 @@ + (void)load
+ 
+ @implementation RNSScreen {
+   __weak id _previousFirstResponder;
++  __weak UIScrollView *_openReaderSearchScrollView;
+   CGRect _lastViewFrame;
+   RNSScreenView *_initialView;
+   UIView *_fakeView;
+@@ -1433,6 +1434,69 @@ - (instancetype)initWithView:(UIView *)view
    return self;
  }
  
@@ -72,6 +80,26 @@ index 9b66012..e34eed5 100644
  // TODO: Find out why this is executed when screen is going out
  - (void)viewWillAppear:(BOOL)animated
  {
+@@ -1558,6 +1622,19 @@ - (void)viewDidLayoutSubviews
+   if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
+     [self.screenView updateBounds];
+   }
++#if !TARGET_OS_TV
++  // OpenReader (#332): UIKit's hierarchy heuristic misses the Library's
++  // wrapped FlatList. Its contents scrolled 400 pt while the search header
++  // stayed 114 pt tall. Bind the actual scroll view through the public API,
++  // rather than drawing a separate collapse animation or guessing an offset.
++  UIScrollView *searchScrollView = self.navigationItem.searchController != nil
++      ? [self.screenView tryFindDescendantScrollView].scrollView
++      : nil;
++  if (searchScrollView != _openReaderSearchScrollView) {
++    _openReaderSearchScrollView = searchScrollView;
++    [self setContentScrollView:searchScrollView forEdge:NSDirectionalRectEdgeTop];
++  }
++#endif
+ }
+ 
+ - (BOOL)isModalWithHeader
 diff --git a/node_modules/react-native-screens/ios/RNSScreenStack.mm b/node_modules/react-native-screens/ios/RNSScreenStack.mm
 index 192f5d2..547bfeb 100644
 --- a/node_modules/react-native-screens/ios/RNSScreenStack.mm
