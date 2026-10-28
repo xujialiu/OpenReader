@@ -63,10 +63,9 @@ fix and adds the Library keyboard/focus behavior at the native boundary:
   a search controller is present. It uses the normal lookup first, then a
   breadth-first search of this page, excluding header and nested-screen
   branches. The cached association changes only when the scroll view changes;
-  removing search restores UIKit's default lookup. A newly laid-out search
-  controller starts at the collapsed offset computed from its own search-bar
-  height and the scroll view's adjusted top inset, once per controller, never
-  repeatedly while a person pulls to reveal it.
+  removing search restores UIKit's default lookup. UIKit owns the collapse
+  and the corresponding content-inset adjustment; app code adds no initial
+  search-bar-height offset to the content.
 - `RNSScreen.keyCommands` adds Command-F and Escape only when the visible page
   has a search controller and no other modal presentation. Reader and Settings
   have no search controller. Escape leaves an unfinished IME composition to
@@ -113,11 +112,19 @@ immediate children, missing the wrapped list. The actual list had offset
 `(0, -176)`, adjusted top inset 176 and content height 1116.
 
 The search-only breadth-first fallback finds the wrapped list without changing
-the generic lookup used elsewhere. The same native layout also initializes a
-new inactive controller's collapsed offset from the search bar's actual laid-out
-height, not a phone-specific constant. These corrections still require native
-verification of initial presentation, pull reveal, cancellation and unclipped
-content. No separate collapse animation is introduced.
+the generic lookup used elsewhere. The next native run confirmed that cached,
+fallback and observed pointers name the same actual list, with a collapsed
+54-point navigation bar. But the added initial scroll shifted content another
+60 points: offset -56 with adjusted top inset 116 put the first row at y 68,
+under the bar ending at y 116. A diagnostic changing only the offset to -116
+left the bar collapsed and the first row fully visible; both native geometry
+and the screenshot confirmed it. This was a runtime experiment, not evidence
+that a fresh launch was fixed.
+
+The extra initial offset and its once-per-controller flag are removed. UIKit
+owns inset/offset adaptation after binding. Cold presentation, pull reveal,
+cancellation and unclipped content still require retesting on the new binary.
+No separate collapse animation or measured-height scroll workaround remains.
 
 ## Verification boundary
 

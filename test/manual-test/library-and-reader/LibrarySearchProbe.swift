@@ -60,9 +60,14 @@ final class LibrarySearchProbe: XCTestCase {
   func testColdLibraryShowsNoSearchField() {
     let app = launch()
     let field = searchField(app)
-    // The actual first row (topmost Document), not a name-coupled fixture:
-    // with the diagnostic fixtures staged, the old fixture is the LAST row.
-    let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    // Query order is not visual order. Include clipped/offscreen rows and
+    // choose the smallest frame y, rather than a firstMatch that can select
+    // the second Document while the first is hidden under the bar.
+    let rows = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).allElementsBoundByIndex
+    guard let row = rows.min(by: { $0.frame.minY < $1.frame.minY }) else {
+      XCTFail("The staged Library must contain Document rows")
+      return
+    }
     tree(app, "cold-library-tree")
     shot("cold-library")
     if field.exists {
@@ -77,9 +82,8 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(row.exists, "First Document must be present")
     XCTAssertLessThan(row.frame.minY, 170, "Contract 0090: the header must not reserve search-field space (first row minY \(row.frame.minY); beta1/beta2's standing field pushed it to 188)")
     let barForClip = app.navigationBars.firstMatch
-    // AX frames do not account for bar overlap: a row half-hidden under the
-    // bar can also drop out of the firstMatch order entirely (seen on beta3),
-    // so this check needs the screenshot alongside it.
+    // Judge the actual topmost row against the visible navigation bar, not
+    // just the window. Keep the screenshot as independent visual evidence.
     if barForClip.exists {
       XCTAssertGreaterThanOrEqual(row.frame.minY, barForClip.frame.maxY - 4, "Contract 0090: the first Document must not be clipped under the navigation bar (row minY \(row.frame.minY), bar maxY \(barForClip.frame.maxY))")
     }

@@ -1,17 +1,16 @@
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..2e97d6a 100644
+index 9b66012..5f9f1b0 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
-@@ -1406,6 +1406,8 @@ + (void)load
+@@ -1406,6 +1406,7 @@ + (void)load
  
  @implementation RNSScreen {
    __weak id _previousFirstResponder;
 +  __weak UIScrollView *_openReaderSearchScrollView;
-+  __weak UISearchController *_openReaderCollapsedSearchController;
    CGRect _lastViewFrame;
    RNSScreenView *_initialView;
    UIView *_fakeView;
-@@ -1433,6 +1435,95 @@ - (instancetype)initWithView:(UIView *)view
+@@ -1433,6 +1434,95 @@ - (instancetype)initWithView:(UIView *)view
    return self;
  }
  
@@ -107,7 +106,7 @@ index 9b66012..2e97d6a 100644
  // TODO: Find out why this is executed when screen is going out
  - (void)viewWillAppear:(BOOL)animated
  {
-@@ -1558,6 +1649,31 @@ - (void)viewDidLayoutSubviews
+@@ -1558,6 +1648,18 @@ - (void)viewDidLayoutSubviews
    if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
      [self.screenView updateBounds];
    }
@@ -121,19 +120,6 @@ index 9b66012..2e97d6a 100644
 +  if (searchScrollView != _openReaderSearchScrollView) {
 +    _openReaderSearchScrollView = searchScrollView;
 +    [self setContentScrollView:searchScrollView forEdge:NSDirectionalRectEdgeTop];
-+  }
-+  // Start once at UIKit's collapsed position, using the field's own laid-out
-+  // height rather than a phone-specific distance. Later pulls remain UIKit's:
-+  // this must not keep collapsing a field the user has deliberately revealed.
-+  CGFloat searchHeight = CGRectGetHeight(search.searchBar.bounds);
-+  if (search != nil && search != _openReaderCollapsedSearchController && !search.active &&
-+      self.navigationItem.hidesSearchBarWhenScrolling && searchScrollView != nil &&
-+      CGRectGetHeight(searchScrollView.bounds) > 0 && searchHeight > 0) {
-+    _openReaderCollapsedSearchController = search;
-+    CGFloat collapsedTop = -searchScrollView.adjustedContentInset.top + searchHeight;
-+    if (searchScrollView.contentOffset.y < collapsedTop) {
-+      [searchScrollView setContentOffset:CGPointMake(searchScrollView.contentOffset.x, collapsedTop) animated:NO];
-+    }
 +  }
 +#endif
  }

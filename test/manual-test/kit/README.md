@@ -5,6 +5,9 @@ What every area uses:
 - [ios-verification.md](ios-verification.md): shared admission, readiness,
   one recovery and bounded process-tree cleanup (`ios_guard.py`, `ios_ready.py`).
 - `run-probe.sh`: runs any XCTest probe under that guard (below).
+- `owned-lldb.sh`: resolves OpenReader within an explicit simulator and verifies
+  that PID's executable belongs to the same simulator before LLDB attaches
+  (below).
 - `project.rb`: generates the disposable XCTest project `run-probe.sh` and the
   area scripts build, finding a probe by its file name.
 - `silence.sh`: the simulator's own volume, set to zero and checked (the top
@@ -123,6 +126,29 @@ Measured 2026-09-29 on iPhone 17e (iOS 27.0):
 - Reusing that directory for another probe, or with a `probe.txt` naming
   another worktree, exited 2 before building.
 
+
+## Inspect native state without attaching to another session
+
+If the MCP debugger cannot evaluate the needed expression, detach its session
+before using the direct LLDB fallback:
+
+```sh
+python3 test/manual-test/kit/ios_guard.py run --wait 900 --timeout 90 \
+  --record /tmp/THIS-RUN/native-inspection.json -- \
+  bash test/manual-test/kit/owned-lldb.sh SIMULATOR_UDID /tmp/inspect.lldb
+```
+
+The device must be booted with OpenReader running. The command file must end
+with `process detach` and `quit`; keep expressions task-scoped and redact
+credentials. The helper resolves the process from that device's `launchctl`,
+then requires its executable path to contain the same device's container.
+It exits 2 before attaching if the device/PID is missing, ambiguous or belongs
+to another simulator. Never substitute a PID from a host-wide process-name
+search. Check the LLDB log's target path and final detachment as well.
+
+This establishes target ownership, not read-only expressions or UI acceptance.
+Runtime mutations are diagnostic only and must be discarded by relaunching
+before acceptance. The host guard tests use fake tools, not a live debugger.
 
 ## Read runtime warnings or evaluate a targeted expression
 
