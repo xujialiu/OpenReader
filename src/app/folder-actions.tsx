@@ -9,28 +9,34 @@ import { useShell } from './routes';
 
 const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
 
-/** Kept mounted until the native dismissal finishes before handing over to Files. `folder` is the page's, where Create folder creates (#317). */
-export function AddDrawer({ visible, folder, onClose, onImport, onSelect }: { visible: boolean; folder: FolderId | null; onClose(): void; onImport(): void; onSelect(): void }) {
+/** Native dismissal finishes before opening Files or focusing search. `folder` is the page's, where Create folder creates (#317). */
+export function AddDrawer({ visible, folder, onClose, onImport, onSearch, onSelect }: { visible: boolean; folder: FolderId | null; onClose(): void; onImport(): void; onSearch(): void; onSelect?(): void }) {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
   const [naming, setNaming] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const importing = useRef(false);
+  const pending = useRef<'import' | 'search' | null>(null);
   const parent = useRef<FolderId | null>(null);
   return <Drawer visible={visible} title="Library actions" onClose={onClose} onDismiss={() => {
     setNaming(false); setFailure(null);
-    if (importing.current) { importing.current = false; onImport(); }
+    const action = pending.current;
+    pending.current = null;
+    if (action === 'import') onImport();
+    else if (action === 'search') onSearch();
   }}>
     <DrawerScroll>
-      <DrawerRow icon="plus" disabled={busy || !!problem} onPress={() => { importing.current = true; onClose(); }}>
+      <DrawerRow icon="plus" disabled={busy || !!problem} onPress={() => { pending.current = 'import'; onClose(); }}>
         <DrawerRowText>Import file</DrawerRowText>
       </DrawerRow>
       <DrawerRow icon="folder" disabled={busy || !!problem} onPress={() => { parent.current = folder; setNaming(true); }}>
         <DrawerRowText>Create folder</DrawerRowText>
       </DrawerRow>
-      <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => { onClose(); onSelect(); }}>
-        <DrawerRowText>Select</DrawerRowText>
+      <DrawerRow icon="search" disabled={busy || !!problem} onPress={() => { pending.current = 'search'; onClose(); }}>
+        <DrawerRowText>Search</DrawerRowText>
       </DrawerRow>
+      {onSelect ? <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => { onClose(); onSelect(); }}>
+        <DrawerRowText>Select</DrawerRowText>
+      </DrawerRow> : null}
       {failure ? <DrawerFooter attention>{failure}</DrawerFooter> : null}
     </DrawerScroll>
     {naming ? <RenameAlert name="" title="Create folder" saveLabel="Create" onCancel={() => setNaming(false)}
@@ -113,7 +119,7 @@ export function useMovePage(moving: { target: MoveTarget } | { targets: readonly
   };
 }
 
-export function FolderActions({ id, onClose, onDelete, onSelect }: { id: FolderId; onClose(): void; onDelete(id: FolderId): void; onSelect(id: FolderId): void }) {
+export function FolderActions({ id, onClose, onDelete, onSelect }: { id: FolderId; onClose(): void; onDelete(id: FolderId): void; onSelect?(id: FolderId): void }) {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
   const folder = tree.folders.find((one) => one.id === id);
@@ -131,7 +137,7 @@ export function FolderActions({ id, onClose, onDelete, onSelect }: { id: FolderI
     {moving ? move.body : <DrawerScroll>
       <DrawerRow icon="rename" disabled={busy || !!problem} onPress={() => setNaming(true)}><DrawerRowText>Rename</DrawerRowText></DrawerRow>
       <DrawerRow icon="folder" disabled={busy || !!problem} onPress={() => { move.restart(); setMoving(true); }} accessory={<DrawerChevron />}><DrawerRowText>Move to…</DrawerRowText></DrawerRow>
-      <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => onSelect(id)}><DrawerRowText>Select</DrawerRowText></DrawerRow>
+      {onSelect ? <DrawerRow icon="check" disabled={busy || !!problem} onPress={() => onSelect(id)}><DrawerRowText>Select</DrawerRowText></DrawerRow> : null}
       <DrawerRow icon="trash" iconColour={INK.attention} disabled={busy || !!problem} onPress={() => onDelete(id)}>
         <DrawerRowText style={{ color: INK.attention }}>Delete</DrawerRowText>
       </DrawerRow>

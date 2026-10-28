@@ -10,13 +10,15 @@ import { useIsFocused } from '@react-navigation/native';
 import { GestureDetector } from 'react-native-gesture-handler';
 
 import { asDocumentId, type LibraryEntry } from '../core/document';
-import { childFolders, directFolderCounts, folderAt, folderSubtree, targetKey, type Folder, type FolderId, type LibraryTarget } from '../core/folders';
-import { DocumentRow, FolderRow, HeaderButton, INK, Note } from './controls';
+import { directFolderCounts, folderAt, folderPath, folderSubtree, targetKey, type FolderId, type LibraryTarget } from '../core/folders';
+import { DocumentRow, FolderRow, HeaderButton, INK, Note, useAccent } from './controls';
 import { pickDocument } from './document';
 import { useDocumentCover } from './document-cover';
 import { AddDrawer, confirmFolderDeletion, FolderActions, useMovePage } from './folder-actions';
 import { Drawer } from './drawer';
 import { useLibrarySelection } from './use-library-selection';
+import { libraryQuery, libraryRows, type LibraryRow as Row } from './library-search';
+import { useLibrarySearch } from './use-library-search';
 import { LibrarySelectionAction } from './library-selection-actions';
 import { useRowSweep } from './use-sweep';
 import { importDocument } from './import-document';
@@ -39,7 +41,6 @@ function progressOf(entry: LibraryEntry, present: boolean): string {
   const quoted = entry.position.anchor.exact.trim().replace(/\s+/g, ' ');
   return `Last read: “${quoted.length > QUOTATION ? `${quoted.slice(0, QUOTATION)}…` : quoted}”`;
 }
-type Row = { kind: 'folder'; folder: Folder } | { kind: 'document'; entry: LibraryEntry };
 
 export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Folder'>) {
   const { settings, library, sync } = useShell();
@@ -47,6 +48,7 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
   /** The Folder this page shows, for as long as the page is open; `null` is the Library root. */
   const folder = route.params?.id ?? null;
   const insets = useSafeAreaInsets();
+  const accent = useAccent();
   const focused = useIsFocused();
   const [actionHeight, setActionHeight] = useState(52);
   const actionBottom = Math.max(insets.bottom, 12);
@@ -73,23 +75,23 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
     await removeDownloads(document);
     library.remove(document);
   };
-  const rows: Row[] = [
-    ...childFolders(tree, folder).map((child): Row => ({ kind: 'folder', folder: child })),
-    ...library.entries.filter((entry) => (tree.documents[entry.id] ?? null) === folder).map((entry): Row => ({ kind: 'document', entry })),
-  ];
-  const selection = useLibrarySelection(navigation, rows.map(rowTarget), removeDocument);
+  const browsingRows = libraryRows(tree, library.entries, folder, '');
+  const selection = useLibrarySelection(navigation, browsingRows.map(rowTarget), removeDocument);
   const move = useMovePage({ targets: selection.selected, from: folder }, { onMoved: selection.moved });
   const selectionRef = useRef(selection);
   useLayoutEffect(() => { selectionRef.current = selection; }, [selection]);
   const selecting = selection.active;
   const selectedCount = selection.selected.length;
   const working = selection.working;
+  const search = useLibrarySearch(navigation, route.key, selecting, { tintColor: accent.reading, textColor: INK.text });
+  const searching = !!libraryQuery(search.query);
+  const rows = searching ? libraryRows(tree, library.entries, folder, search.query) : browsingRows;
   const selectedKeys = new Set(selection.selected.map(targetKey));
   const selectionLocked = busy || selection.working || selection.moving || selection.confirming;
   const sweepIds = rows.map((row) => targetKey(rowTarget(row)));
   const sweep = useRowSweep<Row>({
     ids: sweepIds, values: sweepIds.map((id) => [id]), selected: selectedKeys,
-    enabled: focused && !selectionLocked && !adding && !actions && !folderActions && !picking && !library.loading && !problem,
+    enabled: focused && !search.active && !selectionLocked && !adding && !actions && !folderActions && !picking && !library.loading && !problem,
     scope: folder ?? 'root', bottomInset: actionBottom + actionHeight + 12,
   }, selection.sweepTo);
   const remove = (entry: LibraryEntry) => {
@@ -195,6 +197,13 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
     <GestureDetector gesture={sweep.nativeGesture}>
     <FlatList<Row>
       {...sweep.list}
+      ref={(node) => { sweep.list.ref(node); search.attachList(node); }}
+      onScroll={(event) => { sweep.list.onScroll(event); search.onScroll(event); }}
+      onScrollBeginDrag={search.onScrollBeginDrag}
+      onContentSizeChange={(width, height) => { sweep.list.onContentSizeChange(width, height); search.onContentSizeChange(); }}
+      contentInsetAdjustmentBehavior="automatic"
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       style={styles.list}
       contentContainerStyle={{ paddingTop: 12, paddingBottom: (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
       data={rows}
@@ -203,8 +212,12 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
         ? <FolderRow title={item.folder.name} summary={folderSummary(counts.get(item.folder.id)?.documents ?? 0, counts.get(item.folder.id)?.folders ?? 0)} disabled={selectionLocked} selected={selection.active ? selectedKeys.has(targetKey(rowTarget(item))) : undefined}
           onPress={() => selection.active ? selection.toggle(rowTarget(item)) : navigation.push('Folder', { id: item.folder.id })} onActions={() => setFolderActions(item.folder.id)} />
         : <LibraryDocument entry={item.entry} present={present.has(item.entry.id)} disabled={selectionLocked}
+          path={searching ? folderPath(tree, tree.documents[item.entry.id] ?? null) : undefined}
           selected={selection.active ? selectedKeys.has(targetKey(rowTarget(item))) : undefined}
-          onPress={() => selection.active ? selection.toggle(rowTarget(item)) : navigation.navigate('Reader', { id: item.entry.id })} onActions={() => setActions(item.entry)} />}
+          onPress={() => {
+            if (selection.active) selection.toggle(rowTarget(item));
+            else { search.openingResult(item.entry.id); navigation.navigate('Reader', { id: item.entry.id }); }
+          }} onActions={() => setActions(item.entry)} />}
       ListHeaderComponent={problem || library.note || busy ? <View style={styles.banner}>
         {problem ? <Note attention>{problem}</Note> : null}
         {library.note ? <View style={styles.message}>
@@ -214,8 +227,8 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
         {busy && !selection.working ? <Note>Deleting folder…</Note> : null}
       </View> : null}
       ListEmptyComponent={library.loading ? null : <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>{folder !== null ? 'No documents or folders yet' : 'Library is empty'}</Text>
-        {settings.enabledProviders.length === 0 ? <Note attention>{NO_PROVIDER_SENTENCE}</Note> : null}
+        <Text style={styles.emptyTitle}>{searching ? 'No documents found' : folder !== null ? 'No documents or folders yet' : 'Library is empty'}</Text>
+        {!searching && settings.enabledProviders.length === 0 ? <Note attention>{NO_PROVIDER_SENTENCE}</Note> : null}
       </View>}
     />
     </GestureDetector>
@@ -230,20 +243,22 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
       <ReadingButton playing={held.playing} buffering={held.buffering} label="Return to the reading"
         onPress={() => navigation.navigate('Reader', { id: held.id })} />
     </View> : null}
-    <AddDrawer visible={adding} folder={folder} onClose={() => setAdding(false)} onImport={() => void add()} onSelect={selection.begin} />
+    <AddDrawer visible={adding} folder={folder} onClose={() => setAdding(false)} onImport={() => void add()}
+      onSearch={search.start} onSelect={search.active ? undefined : selection.begin} />
     <Drawer visible={selection.moving} {...move.header} onClose={selection.closeMove}>
       {selection.moving ? move.body : null}
     </Drawer>
     {actions ? <ReaderActions document={actions.id} movable onClose={() => setActions(null)} onDelete={() => remove(actions)}
-      onSelect={() => { setActions(null); selection.begin({ kind: 'document', id: actions.id }); }} /> : null}
+      onSelect={search.active ? undefined : () => { setActions(null); selection.begin({ kind: 'document', id: actions.id }); }} /> : null}
     {folderActions ? <FolderActions id={folderActions} onClose={() => setFolderActions(null)} onDelete={removeFolder}
-      onSelect={(id) => { setFolderActions(null); selection.begin({ kind: 'folder', id }); }} /> : null}
+      onSelect={search.active ? undefined : (id) => { setFolderActions(null); selection.begin({ kind: 'folder', id }); }} /> : null}
   </View>;
 }
 function rowTarget(row: Row): LibraryTarget { return { kind: row.kind, id: row.kind === 'folder' ? row.folder.id : row.entry.id }; }
-function LibraryDocument({ entry, present, onPress, onActions, disabled, selected }: { entry: LibraryEntry; present: boolean; onPress(): void; onActions(): void; disabled?: boolean; selected?: boolean }) {
+function LibraryDocument({ entry, present, path, onPress, onActions, disabled, selected }: { entry: LibraryEntry; present: boolean; path?: string; onPress(): void; onActions(): void; disabled?: boolean; selected?: boolean }) {
   const cover = useDocumentCover(entry);
-  return <DocumentRow title={entry.title} progress={progressOf(entry, present)} cover={cover} onPress={onPress} onLongPress={onActions} onActions={onActions} disabled={disabled} selected={selected} />;
+  const progress = path === undefined ? progressOf(entry, present) : present ? path : `${path} · File not on this device`;
+  return <DocumentRow title={entry.title} progress={progress} cover={cover} onPress={onPress} onLongPress={onActions} onActions={onActions} disabled={disabled} selected={selected} />;
 }
 const READING_BUTTON_ROOM = READING_BUTTON_PLACE.bottom + 52 + 12;
 const styles = StyleSheet.create({

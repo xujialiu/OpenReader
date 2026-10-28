@@ -12,6 +12,7 @@ const paths = {
   nextParagraph: 'm5 6 6 6-6 6 M12 6l6 6-6 6',
   down: 'm6 9 6 6 6-6',
   plus: 'M12 5v14 M5 12h14',
+  search: 'M16 16l5 5 M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
   close: 'm6 6 12 12 M18 6 6 18',
   folder: 'M3 7V5h7l2 3h9v12H3V7Z',
   minus: 'M5 12h14',

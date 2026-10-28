@@ -1,3 +1,77 @@
+diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
+index 9b66012..e34eed5 100644
+--- a/node_modules/react-native-screens/ios/RNSScreen.mm
++++ b/node_modules/react-native-screens/ios/RNSScreen.mm
+@@ -1433,6 +1433,69 @@ - (instancetype)initWithView:(UIView *)view
+   return self;
+ }
+ 
++#if !TARGET_OS_TV
++// OpenReader (#332): the responder chain reaches this visible page's controller
++// whether the Library list or its native search field has focus. A page without
++// a search controller (Reader/Settings), selection, and any presented action
++// sheet get no Library commands. Never install process-wide key interception.
++- (UISearchController *)openReaderLibrarySearchController
++{
++  UISearchController *search = self.navigationItem.searchController;
++  if (search == nil || search.presentedViewController != nil ||
++      self.navigationController.topViewController != self || self.view.window == nil) {
++    return nil;
++  }
++  for (UIViewController *page = self; page != nil; page = page.parentViewController) {
++    UIViewController *presented = page.presentedViewController;
++    if (presented != nil && presented != search) {
++      return nil;
++    }
++  }
++  return search;
++}
++
++- (NSArray<UIKeyCommand *> *)keyCommands
++{
++  NSArray<UIKeyCommand *> *inherited = [super keyCommands] ?: @[];
++  UISearchController *search = [self openReaderLibrarySearchController];
++  if (search == nil) {
++    return inherited;
++  }
++  UIKeyCommand *find = [UIKeyCommand keyCommandWithInput:@"f"
++                                        modifierFlags:UIKeyModifierCommand
++                                               action:@selector(openReaderFindInLibrary:)];
++  find.discoverabilityTitle = @"Search Library";
++  // Escape must first be available to an unfinished IME composition.
++  if (search.searchBar.searchTextField.markedTextRange != nil) {
++    return [inherited arrayByAddingObject:find];
++  }
++  UIKeyCommand *cancel = [UIKeyCommand keyCommandWithInput:UIKeyInputEscape
++                                          modifierFlags:0
++                                                 action:@selector(openReaderCancelLibrarySearch:)];
++  cancel.discoverabilityTitle = @"Cancel Search";
++  cancel.wantsPriorityOverSystemBehavior = YES;
++  return [inherited arrayByAddingObjectsFromArray:@[ find, cancel ]];
++}
++
++- (void)openReaderFindInLibrary:(UIKeyCommand *)command
++{
++  UISearchController *search = [self openReaderLibrarySearchController];
++  [search setActive:YES];
++  [search.searchBar becomeFirstResponder];
++}
++
++- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command
++{
++  UISearchController *search = [self openReaderLibrarySearchController];
++  id<UISearchBarDelegate> delegate = search.searchBar.delegate;
++  if ([delegate respondsToSelector:@selector(searchBarCancelButtonClicked:)]) {
++    [delegate searchBarCancelButtonClicked:search.searchBar];
++  }
++  [search.searchBar resignFirstResponder];
++  [search setActive:NO];
++}
++#endif
++
+ // TODO: Find out why this is executed when screen is going out
+ - (void)viewWillAppear:(BOOL)animated
+ {
 diff --git a/node_modules/react-native-screens/ios/RNSScreenStack.mm b/node_modules/react-native-screens/ios/RNSScreenStack.mm
 index 192f5d2..547bfeb 100644
 --- a/node_modules/react-native-screens/ios/RNSScreenStack.mm
@@ -53,3 +127,28 @@ index 192f5d2..547bfeb 100644
  }
  
  - (void)updateContainer
+diff --git a/node_modules/react-native-screens/ios/RNSSearchBar.mm b/node_modules/react-native-screens/ios/RNSSearchBar.mm
+index 2345734..fec187d 100644
+--- a/node_modules/react-native-screens/ios/RNSSearchBar.mm
++++ b/node_modules/react-native-screens/ios/RNSSearchBar.mm
+@@ -46,6 +46,10 @@ - (void)initCommonProps
+ #endif
+ 
+   _controller.searchBar.delegate = self;
++  // OpenReader (#332): search names as typed, without replacing them with a
++  // dictionary's correction when input is submitted.
++  _controller.searchBar.autocorrectionType = UITextAutocorrectionTypeNo;
++  _controller.searchBar.spellCheckingType = UITextSpellCheckingTypeNo;
+ 
+   _isObscureBackgroundSet = NO;
+   _isHideNavigationBarSet = NO;
+@@ -298,6 +302,9 @@ - (void)blur
+ 
+ - (void)focus
+ {
++  // OpenReader (#332): Search from a menu must reveal a stacked field even
++  // when its list is scrolled far below it, not just focus an offscreen field.
++  [_controller setActive:YES];
+   [_controller.searchBar becomeFirstResponder];
+ }
+ 

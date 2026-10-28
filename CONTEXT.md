@@ -199,6 +199,11 @@ It holds what the owner put there and nothing else — it is not browsable for
 documents the owner does not have, and removing an entry leaves the file alone.
 _Avoid_: shelf, catalogue, collection, bookshelf, recents
 
+**Library Search**:
+Finding Documents anywhere in the Library by the names the Library shows for
+them, rather than by words inside their text.
+_Avoid_: file search, full-text search, find in document
+
 **Folder**:
 A named place within the Library containing Documents and other Folders. Each
 Document and Folder belongs to exactly one parent Folder or to the Library root.

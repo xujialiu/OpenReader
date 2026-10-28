@@ -231,6 +231,19 @@ Session-created `iPhone 17 v329` (iOS 26.5, `95121F63-CFFF-435A-B16D-08329D4EBDA
 - **The Voice line and the menu entries take their label text from different sources, so assertions must expect each form.** On Manage, the line reads the managed record's bare label (`Voice · af_bella`); on Download it is `knownVoice(settings)?.label` when the catalog holds the voice (`Voice · Nova (fake)`, the Provider's own name) and only falls back to `Voice · Kokoro FastAPI · af_nova` when it does not. Two of this run's probe "failures" were wrong expected strings of exactly this kind; the raw lines in the failures are the evidence the taps landed.
 - **The simulator's volume reset to 60 again with nothing played** (the #148 recurrence), caught by `silence.sh check` in the same breath as the first probe run; `set && check && probe` in one chain from then on.
 
+### Host-only readiness tests and interpreter selection
+
+If `test/scripts/ios_ready_test.py` times out at its fake-device step before
+recording any fake-tool calls, check its Python executable before diagnosing a
+simulator: this test contacts none. Xcode's Python has stalled before entering
+the generated executables while Homebrew Python runs the same tests. The exact
+launcher cause is unconfirmed. For host checks, prepend a temporary directory
+containing only a `python3` symlink to that working interpreter. Keep the normal
+Node executable and ICU unchanged: prepending all of Homebrew's bin directory
+also changes Node and can invalidate the locale-name and text-boundary checks.
+Do not relax the production readiness gate or its deadline to work around a
+synthetic-tool startup failure.
+
 ## Areas
 
 How each feature was tested, with its scripts and probes, one folder per area.
