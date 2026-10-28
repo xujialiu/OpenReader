@@ -1,5 +1,9 @@
 # The Library and the reader
 
+[Library Search (#332)](library-search.md): hidden input, global current-name
+results, native position restoration, result actions and keyboard checks;
+fixture cleanup, reliable queries and remaining coverage limits.
+
 ## Cold Library opening
 
 With the latest installed Debug app connected to Metro and the named Document

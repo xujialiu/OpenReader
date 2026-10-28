@@ -30,43 +30,21 @@ final class LibrarySearchProbe: XCTestCase {
   }
 
   private func searchField(_ app: XCUIApplication) -> XCUIElement {
-    let byPlaceholder = app.textFields.matching(NSPredicate(format: "placeholderValue == %@", "Search Library")).firstMatch
-    if byPlaceholder.exists { return byPlaceholder }
-    let byAnySearch = app.searchFields.firstMatch
-    if byAnySearch.exists { return byAnySearch }
-    return app.textFields["Search Library"].firstMatch
+    // Match the stable placeholder, not a TextField/SearchField type that
+    // UIKit changes during focus. The query re-resolves across that transition.
+    app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue == %@", "Search Library")).firstMatch.firstMatch
   }
 
-  /// Reacquires the field on every poll instead of caching a stale query:
-  /// while the input is coming up the element is a SearchField in the
-  /// navigation bar and a TextField query made too early waits forever on
-  /// the wrong type (beta6 run 18:19). Returns whichever exists.
+  /// Bounded input readiness. Absence is ALWAYS a test failure, never an
+  /// early return that turns an unexecuted assertion sequence into a pass.
   @discardableResult
   private func waitForSearchField(_ app: XCUIApplication, timeout: TimeInterval, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement? {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
-      let textField = app.textFields.matching(NSPredicate(format: "placeholderValue == %@", "Search Library")).firstMatch
-      let searchField = app.searchFields.firstMatch
-      // Prefer the SearchField: once input starts the element settles into
-      // that type, and a cached TextField query goes stale mid-test (the
-      // beta9 nonzero-browse run).
-      if searchField.exists { return searchField }
-      if textField.exists {
-        // The focused field settles into the SearchField type right after
-        // the TextField phase; wait briefly for that transition so the
-        // returned element's query stays valid for typeText.
-        for _ in 0..<(10) {
-          if searchField.exists { return searchField }
-          usleep(200_000)
-        }
-        return textField
-      }
+      let field = searchField(app)
+      if field.exists { return field }
       usleep(200_000)
     }
-    // Dead air: return nil (never a query for an element that does not
-    // exist) and let the caller retry or fail with evidence.
-    return nil
-    #if false
     XCTContext.runActivity(named: "wait for the Library search field (\(timeout)s)") { activity in
       let summary = XCTAttachment(string: "no SearchField or placeholder TextField appeared; tree follows")
       summary.name = "search-field-absent"; summary.lifetime = .keepAlways; add(summary)
@@ -75,7 +53,6 @@ final class LibrarySearchProbe: XCTestCase {
     }
     XCTFail("Library search field did not appear within \(timeout)s", file: file, line: line)
     return nil
-    #endif
   }
 
   /// Frame-only observation of the ALREADY-RUNNING app (no launch, no
@@ -112,12 +89,12 @@ final class LibrarySearchProbe: XCTestCase {
     // below it. Never treat the Folder row as reserved search space.
     let documents = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).allElementsBoundByIndex
     let folders = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Folder,")).allElementsBoundByIndex
-    let entries = (documents + folders).filter { $0.exists && $0.frame.minY >= 40 }
+    let entries = (documents + folders).filter { $0.exists }
     guard let firstEntry = entries.min(by: { $0.frame.minY < $1.frame.minY }) else {
       XCTFail("The staged Library must contain entries")
       return
     }
-    let firstDocument = documents.filter { $0.exists && $0.frame.minY >= 40 }.min(by: { $0.frame.minY < $1.frame.minY })
+    let firstDocument = documents.filter { $0.exists }.min(by: { $0.frame.minY < $1.frame.minY })
     tree(app, "cold-library-tree")
     shot("cold-library")
     if field.exists {
@@ -322,6 +299,7 @@ final class LibrarySearchProbe: XCTestCase {
       return
     }
     let initialLabel = initialTop.label
+    let initialY = initialTop.frame.minY
     list.swipeUp(velocity: .fast)
     // Require actual movement before anything else: the same topmost query
     // must return a different top row or a moved frame.
@@ -332,7 +310,7 @@ final class LibrarySearchProbe: XCTestCase {
       let rows = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).allElementsBoundByIndex
         .filter { $0.exists && $0.frame.minY >= 60 }
       if let top = rows.min(by: { $0.frame.minY < $1.frame.minY }) {
-        if top.label != initialLabel || abs(top.frame.minY - initialTop.frame.minY) >= 8 {
+        if top.label != initialLabel || abs(top.frame.minY - initialY) >= 8 {
           moved = true
           settledLabel = top.label
           settledY = top.frame.minY
@@ -359,7 +337,7 @@ final class LibrarySearchProbe: XCTestCase {
     settledLabel = settledTop.label
     settledY = settledTop.frame.minY
     shot("nonzero-browse-scrolled")
-    XCTAssertTrue(settledY > 0 || settledLabel != initialLabel, "genuine nonzero offset evidence required")
+    XCTAssertTrue(settledLabel != initialLabel || abs(settledY - initialY) >= 8, "genuine nonzero offset evidence required")
     // Search and cancel.
     let actions = app.buttons["Library actions"]
     XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
@@ -367,24 +345,7 @@ final class LibrarySearchProbe: XCTestCase {
     let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
     XCTAssertTrue(search.waitForExistence(timeout: 5), "The actions drawer must offer Search")
     search.tap()
-    var field = waitForSearchField(app, timeout: 20)
-    if field == nil {
-      // One bounded retry: the AX query layer starves intermittently right
-      // after relaunches (recorded). Re-open the drawer and wait again.
-      let actionsRetry = app.buttons["Library actions"]
-      if actionsRetry.waitForExistence(timeout: 5) {
-        actionsRetry.tap()
-        let searchRetry = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
-        if searchRetry.waitForExistence(timeout: 5) { searchRetry.tap() }
-        field = waitForSearchField(app, timeout: 30)
-      }
-    }
-    guard let field = field else {
-      shot("nonzero-no-field-after-retry")
-      tree(app, "nonzero-no-field-after-retry-tree")
-      XCTFail("Search must reach input after one bounded retry; state captured (AX query starvation is recorded, not an app claim)")
-      return
-    }
+    guard let field = waitForSearchField(app, timeout: 20) else { return }
     field.typeText("Short")
     sleep(1)
     let close = app.navigationBars.firstMatch.buttons["Close"]
@@ -395,7 +356,7 @@ final class LibrarySearchProbe: XCTestCase {
     let afterField = searchField(app)
     let afterFieldClipped = !afterField.exists || afterField.frame.maxY < 10
     let bar = app.navigationBars.firstMatch
-    let clippedByBar = bar.exists && bar.frame.intersection(afterField.frame).height < 10
+    let clippedByBar = afterField.exists && bar.exists && bar.frame.intersection(afterField.frame).height < 10
     XCTAssertTrue(afterFieldClipped || clippedByBar, "Close must hide the field again (field: \(afterField.exists ? NSCoder.string(for: afterField.frame) : "gone"))")
     XCTAssertEqual(app.keyboards.count, 0, "Close must dismiss the keyboard")
     // Same identity back at the cached settled position.
@@ -613,13 +574,81 @@ final class LibrarySearchProbe: XCTestCase {
     tree(app, "stage-final-tree")
   }
 
-  /// Matrix: global results reach the nested Folder, show its path, and a
-  /// renamed root namesake makes two same-named results with distinct paths.
-  /// Renames Scroll Diag 12 to the fixture's name, then back.
+  /// Global current-name matching, namesake paths, and live rename removal.
+  /// The root fixture may already be renamed by an interrupted earlier run.
   func testGlobalResultsPathsAndNamesakes() {
-    // Live rename inside results: search "Scroll Diag 12", rename the result
-    // to "A Short Test of Reading Aloud" — the results must update in place
-    // (current-name matching, live membership) — then rename back.
+    let app = launch()
+    let oldName = "Scroll Diag 12 of 12"
+    let sharedName = "A Short Test of Reading Aloud"
+    func rename(_ actions: XCUIElement, to name: String) -> Bool {
+      guard actions.waitForExistence(timeout: 5) else {
+        XCTFail("The intended Document actions must exist"); return false
+      }
+      actions.tap()
+      let rename = app.buttons["Rename"]
+      guard rename.waitForExistence(timeout: 5) else {
+        XCTFail("Rename must be offered"); return false
+      }
+      rename.tap()
+      let alert = app.alerts.firstMatch
+      guard alert.waitForExistence(timeout: 5) else {
+        XCTFail("Rename alert must appear"); return false
+      }
+      let input = alert.textFields.firstMatch
+      input.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.5)).tap()
+      input.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 80))
+      input.typeText(name)
+      guard input.value as? String == name else {
+        XCTFail("Name must read back exactly before Save"); return false
+      }
+      alert.buttons["Save"].tap()
+      return true
+    }
+    let originalActions = app.buttons["Actions for " + oldName]
+    if originalActions.exists {
+      guard rename(originalActions, to: sharedName) else { return }
+    }
+    // Ordinary root has just one namesake; the other lives inside Search Folder.
+    XCTAssertTrue(app.buttons["Actions for " + sharedName].waitForExistence(timeout: 5))
+    app.buttons["Library actions"].tap()
+    let search = app.buttons["Search"]
+    XCTAssertTrue(search.waitForExistence(timeout: 5))
+    search.tap()
+    guard let field = waitForSearchField(app, timeout: 10) else { return }
+    field.typeText(oldName)
+    XCTAssertTrue(app.staticTexts["No documents found"].waitForExistence(timeout: 5),
+                  "An old name must not match the renamed Document")
+    app.buttons["Clear text"].tap()
+    field.typeText("A Short")
+    let root = app.buttons[sharedName + ", Library"]
+    let nested = app.buttons[sharedName + ", Library → Search Folder"]
+    XCTAssertTrue(root.waitForExistence(timeout: 5), "Root namesake must show Library")
+    XCTAssertTrue(nested.waitForExistence(timeout: 5), "Global result must show its nested Folder path")
+    shot("namesakes-distinct-paths")
+    // Actions have identical labels; choose the one aligned with the ROOT row.
+    let rootY = root.frame.midY
+    let candidates = app.buttons.matching(NSPredicate(format: "label == %@", "Actions for " + sharedName)).allElementsBoundByIndex
+    guard let rootActions = candidates.first(where: { abs($0.frame.midY - rootY) < 5 }) else {
+      XCTFail("Root result actions must be unambiguously aligned with its row"); return
+    }
+    guard rename(rootActions, to: oldName) else { return }
+    // Current query stays A Short: the renamed root MUST disappear, not relabel
+    // itself into a nonmatching result. The nested namesake must remain.
+    XCTAssertTrue(root.waitForNonExistence(timeout: 5), "Rename must remove the now-nonmatching result")
+    XCTAssertTrue(nested.exists, "Rename must leave the other namesake intact")
+    XCTAssertEqual(field.value as? String, "A Short")
+    shot("rename-removes-only-root-result")
+    app.buttons["Clear text"].tap()
+    field.typeText(oldName)
+    XCTAssertTrue(app.buttons[oldName + ", Library"].waitForExistence(timeout: 5),
+                  "The same Document must be searchable by its restored current name")
+    app.navigationBars.firstMatch.buttons["Close"].tap()
+    XCTAssertTrue(app.buttons["Actions for " + oldName].waitForExistence(timeout: 5))
+    shot("namesake-fixture-restored")
+  }
+
+  /// Matrix: leaving the Library for Settings ends the search.
+  func testSettingsEndsSearch() {
     let app = launch()
     let actions = app.buttons["Library actions"]
     XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
@@ -628,61 +657,373 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(search.waitForExistence(timeout: 5), "drawer must offer Search")
     search.tap()
     guard let field = waitForSearchField(app, timeout: 20) else { return }
-    field.typeText("Scroll Diag 12")
+    field.typeText("Scroll Diag")
     sleep(1)
-    let original = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Scroll Diag 12 of 12")).firstMatch
-    XCTAssertTrue(original.waitForExistence(timeout: 10), "the result must appear")
-    let originalActions = app.buttons["Actions for Scroll Diag 12 of 12"]
-    XCTAssertTrue(originalActions.waitForExistence(timeout: 5), "the result's actions button must exist")
-    originalActions.tap()
+    let settings = app.buttons["Settings"]
+    XCTAssertTrue(settings.waitForExistence(timeout: 5), "Settings button must exist")
+    settings.tap()
+    sleep(2)
+    shot("matrix-settings-open")
+    let back = app.navigationBars.buttons.firstMatch
+    XCTAssertTrue(back.exists, "Settings back must exist")
+    back.tap()
+    sleep(2)
+    let fieldAfter = searchField(app)
+    let bar = app.navigationBars.firstMatch
+    let hidden = !fieldAfter.exists || fieldAfter.frame.maxY < 10 || (bar.exists && bar.frame.intersection(fieldAfter.frame).height < 10)
+    XCTAssertTrue(hidden, "Returning from Settings must end the search (field: \(fieldAfter.exists ? NSCoder.string(for: fieldAfter.frame) : "gone"))")
+    shot("matrix-settings-returned")
+  }
+
+  /// Matrix: backgrounding preserves the search; a fresh launch clears it.
+  func testBackgroundPreservesRelaunchClears() {
+    let app = launch()
+    let actions = app.buttons["Library actions"]
+    XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
+    actions.tap()
+    let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
+    XCTAssertTrue(search.waitForExistence(timeout: 5), "drawer must offer Search")
+    search.tap()
+    guard let field = waitForSearchField(app, timeout: 20) else { return }
+    field.typeText("Scroll Diag")
+    sleep(1)
+    XCUIDevice.shared.press(.home)
+    sleep(2)
+    app.activate()
+    sleep(2)
+    let afterField = searchField(app)
+    let stillThere = afterField.exists && (afterField.value as? String ?? "").contains("Scroll Diag")
+    shot("matrix-after-background")
+    XCTAssertTrue(stillThere, "Backgrounding must preserve the search; field '\(afterField.exists ? afterField.value as? String ?? "" : "gone")'")
+    app.terminate()
+    app.launch()
+    sleep(2)
+    let coldField = searchField(app)
+    let bar = app.navigationBars.firstMatch
+    let cleared = !coldField.exists || coldField.frame.maxY < 10 || (bar.exists && bar.frame.intersection(coldField.frame).height < 10)
+    shot("matrix-after-relaunch")
+    XCTAssertTrue(cleared, "A fresh launch must not restore the search")
+    tree(app, "matrix-relaunch-tree")
+  }
+
+  /// Search from a Folder remains global; moving its result changes only the
+  /// result path, and Close returns to the original Folder. Restore the fixture.
+  func testFolderGlobalSearchAndLiveMove() {
+    let app = launch()
+    let folder = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Folder, Search Folder,")).firstMatch
+    XCTAssertTrue(folder.waitForExistence(timeout: 5))
+    folder.tap()
+    XCTAssertTrue(app.navigationBars["Search Folder"].waitForExistence(timeout: 5))
+    app.buttons["Library actions"].tap()
+    let search = app.buttons["Search"]
+    XCTAssertTrue(search.waitForExistence(timeout: 5))
+    search.tap()
+    guard let field = waitForSearchField(app, timeout: 10) else { return }
+    field.typeText("Scroll Diag 12")
+    let rootResult = app.buttons["Scroll Diag 12 of 12, Library"]
+    XCTAssertTrue(rootResult.waitForExistence(timeout: 5), "Folder search must reach a root Document")
+    func openMove() {
+      app.buttons["Actions for Scroll Diag 12 of 12"].tap()
+      let move = app.buttons["Move to…"]
+      XCTAssertTrue(move.waitForExistence(timeout: 5))
+      move.tap()
+    }
+    openMove()
+    let destination = app.buttons["Search Folder"]
+    XCTAssertTrue(destination.waitForExistence(timeout: 5))
+    destination.tap()
+    let commit = app.buttons["Move"]
+    XCTAssertTrue(commit.waitForExistence(timeout: 5) && commit.isEnabled)
+    commit.tap()
+    let movedResult = app.buttons["Scroll Diag 12 of 12, Library → Search Folder"]
+    XCTAssertTrue(movedResult.waitForExistence(timeout: 5), "Move must update the result path live")
+    XCTAssertEqual(field.value as? String, "Scroll Diag 12")
+    shot("folder-search-live-move")
+    openMove()
+    let up = app.buttons["Back to Library"]
+    XCTAssertTrue(up.waitForExistence(timeout: 5))
+    up.tap()
+    XCTAssertTrue(commit.waitForExistence(timeout: 5) && commit.isEnabled)
+    commit.tap()
+    XCTAssertTrue(rootResult.waitForExistence(timeout: 5), "The fixture must be back in Library")
+    app.buttons["Clear text"].tap()
+    XCTAssertTrue(app.buttons["A Short Test of Reading Aloud, Not started."].waitForExistence(timeout: 5),
+                  "Empty input must show the original Folder's ordinary contents")
+    app.navigationBars.firstMatch.buttons["Close"].tap()
+    XCTAssertTrue(app.navigationBars["Search Folder"].exists, "Cancel must keep the original Folder")
+    shot("folder-origin-restored")
+    app.navigationBars.firstMatch.buttons.firstMatch.tap()
+  }
+
+  /// Stage #317's existing held-menu recipe without overwriting folder data.
+  /// This verifies the relaunch location, NOT menu contents. A press followed
+  /// by release can select an ancestor; inspect the menu while still held down.
+  func testStageNestedFolderForHeldBackMenu() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.terminate(); app.launch()
+    for _ in 0..<4 {
+      if app.navigationBars["Library"].waitForExistence(timeout: 2) { break }
+      app.navigationBars.firstMatch.buttons.firstMatch.tap()
+    }
+    XCTAssertTrue(app.navigationBars["Library"].exists)
+    func enter(_ name: String) {
+      let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Folder, " + name + ",")).firstMatch
+      if !row.exists {
+        app.buttons["Library actions"].tap()
+        let create = app.buttons["Create folder"]
+        XCTAssertTrue(create.waitForExistence(timeout: 5)); create.tap()
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        alert.textFields.firstMatch.typeText(name)
+        alert.buttons["Create"].tap()
+      }
+      XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
+      XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 5))
+    }
+    enter("Search Outer")
+    enter("Search Inner")
+    app.terminate(); app.launch()
+    XCTAssertTrue(app.navigationBars["Search Inner"].waitForExistence(timeout: 10))
+    shot("nested-folder-ready-for-held-menu")
+    tree(app, "nested-folder-ready-for-held-menu-tree")
+  }
+
+  /// Matrix: hardware keyboard CmdF reveals search, Escape leaves it, and
+  /// neither exists on the Reader. Runs in the current theme (dark during the
+  /// matrix) so the screenshots double as appearance evidence.
+  func testHardwareCmdFAndEscape() {
+    let app = launch()
+    let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 10), "a Document must be in the Library")
+    app.typeKey("f", modifierFlags: .command)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 10), "CmdF must reveal the search (Close appears)")
+    shot("matrix-cmdf-revealed")
+    guard let field = waitForSearchField(app, timeout: 10) else { return }
+    field.typeText("Scroll Diag")
+    sleep(1)
+    app.typeKey("\u{1b}", modifierFlags: [])
+    sleep(1)
+    let afterEscape = searchField(app)
+    let bar = app.navigationBars.firstMatch
+    let hidden = !afterEscape.exists || afterEscape.frame.maxY < 10 || (bar.exists && bar.frame.intersection(afterEscape.frame).height < 10)
+    shot("matrix-escape-hidden")
+    XCTAssertTrue(hidden, "Escape must return the hidden presentation (field: \(afterEscape.exists ? NSCoder.string(for: afterEscape.frame) : "gone"))")
+    // Reader exclusion: open a Document, CmdF must not reveal a search field.
+    let doc = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Scroll Diag 12")).firstMatch
+    XCTAssertTrue(doc.waitForExistence(timeout: 10), "a Document must exist to open")
+    doc.tap()
+    XCTAssertTrue(app.buttons["Choose a Voice"].waitForExistence(timeout: 15), "reader must open")
+    app.typeKey("f", modifierFlags: .command)
+    sleep(2)
+    let readerField = searchField(app)
+    shot("matrix-reader-cmdf")
+    XCTAssertFalse(readerField.exists, "CmdF must do nothing on the Reader (search field appeared)")
+    let back = app.navigationBars.buttons.firstMatch
+    back.tap()
+    sleep(1)
+  }
+
+  /// Diagnostic: one Escape only, without relaunching the process being traced.
+  func testEscapeOnlyInRunningSearch() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    guard let field = waitForSearchField(app, timeout: 5) else { return }
+    XCTAssertTrue(field.isHittable)
+    app.typeKey(XCUIKeyboardKey.escape.rawValue, modifierFlags: [])
+    shot("same-process-escape-only")
+  }
+
+  /// Diagnostic on the SAME running process: a printable key is the delivery
+  /// control, then Escape. Never launches/terminates; safe to pair with an
+  /// already-attached, auto-continuing debugger. Not acceptance on its own.
+  func testTypeKeysInRunningSearch() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    guard let field = waitForSearchField(app, timeout: 5) else { return }
+    app.typeKey("f", modifierFlags: .command)
+    let before = field.value as? String ?? ""
+    app.typeKey("z", modifierFlags: [])
+    let typed = field.value as? String ?? ""
+    XCTAssertEqual(typed, before + "z", "Printable typeKey must actually reach the focused input")
+    let nativeEscape = XCUIKeyboardKey.escape.rawValue
+    print("[diag] Escape constant scalars=\(nativeEscape.unicodeScalars.map { $0.value }); literal scalars=\("\u{1b}".unicodeScalars.map { $0.value })")
+    app.typeKey(nativeEscape, modifierFlags: [])
+    sleep(1)
+    let after = searchField(app)
+    let bar = app.navigationBars.firstMatch
+    let hidden = !after.exists || after.frame.maxY < 10 || (bar.exists && bar.frame.intersection(after.frame).height < 10)
+    let line = "same-process keys: before='\(before)' typed='\(typed)' escapeHidden=\(hidden) field='\(after.exists ? after.value as? String ?? "" : "absent")'"
+    print("[diag] \(line)")
+    let attachment = XCTAttachment(string: line)
+    attachment.name = "same-process-keys"; attachment.lifetime = .keepAlways; add(attachment)
+    shot("same-process-escape")
+    if hidden { return }
+    app.typeKey(XCUIKeyboardKey.return.rawValue, modifierFlags: [])
+    app.typeKey(nativeEscape, modifierFlags: [])
+    sleep(1)
+    let afterReturn = searchField(app)
+    let hiddenAfterReturn = !afterReturn.exists || afterReturn.frame.maxY < 10 || (bar.exists && bar.frame.intersection(afterReturn.frame).height < 10)
+    print("[diag] same-process Return then Escape hidden=\(hiddenAfterReturn)")
+  }
+
+  /// Diagnostic (beta7): CmdF -> type -> Escape, then HOLD the post-Escape
+  /// state for the native keyCommands split. Records frames only.
+  func testEscapeHold() {
+    let app = launch()
+    app.typeKey("f", modifierFlags: .command)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 10), "CmdF must reveal the search")
+    guard let field = waitForSearchField(app, timeout: 10) else { return }
+    field.typeText("Scroll")
+    sleep(1)
+    app.typeKey("\u{1b}", modifierFlags: [])
+    sleep(2)
+    let after = searchField(app)
+    let bar = app.navigationBars.firstMatch
+    let line = "post-escape: field exists=\(after.exists) frame=\(after.exists ? NSCoder.string(for: after.frame) : "none") | bar frame=\(bar.exists ? NSCoder.string(for: bar.frame) : "none")"
+    print("[diag] \(line)")
+    let attachment = XCTAttachment(string: line)
+    attachment.name = "post-escape-frames"; attachment.lifetime = .keepAlways; add(attachment)
+    shot("beta7-post-escape-hold")
+    tree(app, "beta7-post-escape-tree")
+  }
+
+  /// Matrix: deleting a result removes it from the live results.
+  func testDeleteFromResultsUpdatesMembership() {
+    let app = launch()
+    let actions = app.buttons["Library actions"]
+    XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
+    actions.tap()
+    let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
+    XCTAssertTrue(search.waitForExistence(timeout: 5), "drawer must offer Search")
+    search.tap()
+    guard let field = waitForSearchField(app, timeout: 20) else { return }
+    field.typeText("Scroll Diag 01")
+    sleep(1)
+    let result = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Scroll Diag 01")).firstMatch
+    XCTAssertTrue(result.waitForExistence(timeout: 10), "the result must appear")
+    let resultActions = app.buttons["Actions for Scroll Diag 01 of 12"]
+    XCTAssertTrue(resultActions.waitForExistence(timeout: 5), "the result's actions button must exist")
+    resultActions.tap()
+    let delete = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Delete")).firstMatch
+    XCTAssertTrue(delete.waitForExistence(timeout: 5), "Delete must be offered on the result")
+    delete.tap()
+    let confirm = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Delete")).firstMatch
+    XCTAssertTrue(confirm.waitForExistence(timeout: 5), "the delete confirmation must appear")
+    confirm.tap()
+    sleep(2)
+    let gone = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Scroll Diag 01")).firstMatch
+    shot("matrix-delete-live")
+    XCTAssertFalse(gone.exists, "the deleted result must disappear from the live results")
+  }
+
+  /// Matrix: a result's actions drawer retains the single-Document actions
+  /// and offers NO Select while searching (presentation only; cancel).
+  func testResultActionsPresentationNoSelect() {
+    let app = launch()
+    let actions = app.buttons["Library actions"]
+    XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
+    actions.tap()
+    let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
+    XCTAssertTrue(search.waitForExistence(timeout: 5), "drawer must offer Search")
+    search.tap()
+    guard let field = waitForSearchField(app, timeout: 20) else { return }
+    field.typeText("Scroll Diag 02")
+    sleep(1)
+    let resultActions = app.buttons["Actions for Scroll Diag 02 of 12"]
+    XCTAssertTrue(resultActions.waitForExistence(timeout: 5), "the result's actions button must exist")
+    resultActions.tap()
+    sleep(1)
+    for expected in ["Rename", "Download", "Share", "Delete", "Move"] {
+      XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", expected)).firstMatch.exists,
+        "the result actions drawer must offer \(expected)")
+    }
+    let select = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Select")).firstMatch
+    shot("matrix-result-actions-no-select")
+    XCTAssertFalse(select.exists, "result actions must NOT offer Select while searching")
+    tree(app, "matrix-result-actions-tree")
+    let close = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Close")).firstMatch
+    if close.exists { close.tap() }
+  }
+
+  /// Matrix: during selection, CmdF and pull must not reveal search (the
+  /// missing drawer button alone is not proof).
+  func testSelectionBlocksKeysAndPull() {
+    let app = launch()
+    let actions = app.buttons["Library actions"]
+    XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
+    actions.tap()
+    let select = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Select")).firstMatch
+    XCTAssertTrue(select.waitForExistence(timeout: 5), "Select must exist")
+    select.tap()
+    sleep(1)
+    // CmdF during selection.
+    app.typeKey("f", modifierFlags: .command)
+    sleep(2)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    let field = searchField(app)
+    let cmdfRevealed = close.exists || (field.exists && field.isHittable)
+    shot("matrix-selection-cmdf")
+    XCTAssertFalse(cmdfRevealed, "CmdF must not reveal search during selection")
+    // Pull during selection.
+    let list = app.scrollViews.firstMatch
+    if list.exists {
+      list.swipeDown(velocity: .fast)
+      sleep(1)
+    }
+    let fieldAfterPull = searchField(app)
+    let closeAfterPull = app.navigationBars.firstMatch.buttons["Close"]
+    let pullRevealed = closeAfterPull.exists || (fieldAfterPull.exists && fieldAfterPull.isHittable)
+    shot("matrix-selection-pull")
+    XCTAssertFalse(pullRevealed, "Pull must not reveal search during selection")
+    // Leave selection.
+    let exit = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Cancel")).firstMatch
+    XCTAssertTrue(exit.waitForExistence(timeout: 5), "selection Cancel must exist")
+    exit.tap()
+    sleep(1)
+    shot("matrix-selection-left")
+  }
+
+  /// Matrix: a modal (the rename alert) blocks CmdF.
+  func testModalBlocksCmdF() {
+    let app = launch()
+    let sourceActions = app.buttons["Actions for Scroll Diag 12 of 12"]
+    XCTAssertTrue(sourceActions.waitForExistence(timeout: 10), "root Scroll Diag 12 must exist")
+    sourceActions.tap()
     let rename = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Rename")).firstMatch
     XCTAssertTrue(rename.waitForExistence(timeout: 5), "Rename must exist")
     rename.tap()
     let alert = app.alerts.firstMatch
-    XCTAssertTrue(alert.waitForExistence(timeout: 10), "rename alert must appear")
-    let nameField = alert.textFields.firstMatch
-    nameField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 80))
-    nameField.typeText("A Short Test of Reading Aloud")
-    let save = alert.buttons["Save"]
-    XCTAssertTrue(save.waitForExistence(timeout: 5), "Save must exist")
-    save.tap()
-    // Live results update to the current name.
-    var renamed = false
-    var stillOld = true
-    for _ in 0..<(30) {
-      let newResult = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "A Short Test of Reading Aloud")).firstMatch
-      let oldResult = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Scroll Diag 12 of 12")).firstMatch
-      if newResult.exists && !oldResult.exists { renamed = true; stillOld = false; break }
-      if newResult.exists { stillOld = false }
-      usleep(300_000)
-    }
-    shot("matrix-live-rename-result")
-    XCTAssertTrue(renamed, "the results must live-update to the renamed Document (old row gone: \(!stillOld))")
-    // The renamed result keeps its actions; rename back.
-    let renamedActions = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Actions for A Short Test of Reading Aloud")).firstMatch
-    XCTAssertTrue(renamedActions.waitForExistence(timeout: 5), "the renamed result keeps its actions")
-    renamedActions.tap()
-    let rename2 = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Rename")).firstMatch
-    XCTAssertTrue(rename2.waitForExistence(timeout: 5), "Rename must still exist")
-    rename2.tap()
-    let alert2 = app.alerts.firstMatch
-    XCTAssertTrue(alert2.waitForExistence(timeout: 10), "second rename alert must appear")
-    let nameField2 = alert2.textFields.firstMatch
-    nameField2.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 80))
-    nameField2.typeText("Scroll Diag 12 of 12")
-    let save2 = alert2.buttons["Save"]
-    XCTAssertTrue(save2.waitForExistence(timeout: 5), "second Save must exist")
-    save2.tap()
-    var restored = false
-    for _ in 0..<(30) {
-      let restoredResult = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Scroll Diag 12 of 12")).firstMatch
-      if restoredResult.exists { restored = true; break }
-      usleep(300_000)
-    }
-    shot("matrix-live-rename-restored")
-    XCTAssertTrue(restored, "renaming back must restore the original name in the results")
+    XCTAssertTrue(alert.waitForExistence(timeout: 10), "the rename alert must appear")
+    app.typeKey("f", modifierFlags: .command)
+    sleep(2)
+    let field = searchField(app)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    shot("matrix-modal-cmdf")
+    XCTAssertFalse(field.exists || close.exists, "CmdF must do nothing while a modal alert is up")
+    let cancel = alert.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Cancel")).firstMatch
+    if cancel.exists { cancel.tap() }
+    sleep(1)
   }
 
+  /// Matrix (#317 regression): opening the staged Folder shows its title and
+  /// the back navigation returns to the root.
+  func testFolderOpenBackRegression() {
+    let app = launch()
+    let folder = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search Folder")).firstMatch
+    XCTAssertTrue(folder.waitForExistence(timeout: 10), "Search Folder must exist at root")
+    folder.tap()
+    let bar = app.navigationBars.firstMatch
+    XCTAssertTrue(bar.waitForExistence(timeout: 5), "the Folder bar must appear")
+    XCTAssertEqual(bar.identifier, "Search Folder", "the Folder bar must carry the Folder title (got '\(bar.identifier)')")
+    shot("matrix-folder-open")
+    let back = app.navigationBars.buttons.firstMatch
+    XCTAssertTrue(back.exists, "back must exist")
+    back.tap()
+    sleep(1)
+    let rootFolder = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search Folder")).firstMatch
+    XCTAssertTrue(rootFolder.waitForExistence(timeout: 5), "returning to root must show the Folder row")
+    shot("matrix-folder-back")
+  }
 
   /// Contract: clearing input shows the ordinary list again but stays in
   /// search (field available); cancelling ends search, hides/collapses the
