@@ -692,3 +692,37 @@ software keyboard, which a connected Mac keyboard can hide. The third opens
 What these cannot prove: pull-to-reveal on a non-standing field, scroll
 restoration, cancellation identity, Folder-page behavior, lifetime across
 background/relaunch, keyboard shortcuts, large text, iPad layout.
+
+Two diagnostic methods (2026-10-28, unchanged beta1, parent follow-up) record
+frames instead of asserting acceptance — `exists` is not visibility, so every
+observation pairs `hittable` with the exact frame:
+
+```sh
+bash test/manual-test/kit/run-probe.sh LibrarySearchProbe SIMULATOR_UDID /tmp/openreader-search-01 \
+  -only-testing:LibrarySearchProbe/testDiagnosticOneRowScrollFrames
+bash test/manual-test/kit/run-probe.sh LibrarySearchProbe SIMULATOR_UDID /tmp/openreader-search-01 \
+  -only-testing:LibrarySearchProbe/testDiagnosticLongListScrollFrames
+```
+
+The first runs on a one-row Library (no scroll range: nothing moves, field
+frame constant). The second needs real scroll range: twelve temporary `Scroll
+Diag NN of 12` fixtures staged through the Inbox + harness `add`. It found
+that **neither coordinate press-drags nor `swipeUp(velocity: .fast)` scroll
+this list at all** on this device — XCUITest taps and typing do land, so the
+eaten synthetic gestures are the same bridge class as the eaten taps in
+`pitfalls/mcp.md` — and that the collapse question must be answered by
+driving the FlatList's own `scrollToOffset({offset: 400, animated: false})`
+through `cdp.cjs --eval` (fiber walk for the 13-row FlatList instance, the
+`reading.cjs` walk pattern). With the offset genuinely at 400 (rows 12–10 out
+of view) the native field stayed standing, interactive, in an unchanged
+header: `hidesSearchBarWhenScrolling` never collapses this bar, so the cold
+defect is not an initial-layout state (H1) and not a re-expansion (H3) — the
+list and the native header are disconnected for collapse purposes (H2),
+consistent with `RNSScreenStackHeaderConfig.mm:607` mapping the prop onto a
+`UINavigationItem` whose search bar UIKit never associates with the React
+scroll view. The one-row/empty case cannot collapse at all: with content
+shorter than the viewport no offset is reachable.
+
+On this device's AXe/mobilebuildmcp bridge, synthetic swipes are eaten exactly
+like the taps recorded for 2026-10-28; scroll-collapse checks must either use
+the CDP drive above or a fresh device that accepts synthetic touches.
