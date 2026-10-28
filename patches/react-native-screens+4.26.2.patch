@@ -16,20 +16,27 @@ index 59f9f97..4658b99 100644
      override fun setPlacement(
          view: SearchBarView,
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.h b/node_modules/react-native-screens/ios/RNSScreen.h
-index b1f482c..610bf02 100644
+index b1f482c..60eadca 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.h
 +++ b/node_modules/react-native-screens/ios/RNSScreen.h
-@@ -54,6 +54,8 @@ NS_ASSUME_NONNULL_BEGIN
+@@ -54,6 +54,15 @@ NS_ASSUME_NONNULL_BEGIN
  - (CGFloat)calculateHeaderHeightIsModal:(BOOL)isModal;
  - (BOOL)isRemovedFromParent;
  - (void)notifyPresentedControllerDismissed;
-+// OpenReader: restore both list position and (when requested) hidden search atomically.
++#if !TARGET_OS_TV
++// OpenReader: the navigation controller owns command registration because
++// a focused navigation-bar field bypasses this page in the responder chain.
++- (NSArray<UIKeyCommand *> *)openReaderLibraryKeyCommands;
++- (void)openReaderFindInLibrary:(UIKeyCommand *)command;
++- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command;
++// Restore both list position and (when requested) hidden search atomically.
 +- (void)openReaderRestoreLibraryPosition:(CGFloat)logical closed:(BOOL)closed;
++#endif
  
  @end
  
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..4555ff2 100644
+index 9b66012..0acc72b 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
 @@ -5,6 +5,7 @@
@@ -49,15 +56,15 @@ index 9b66012..4555ff2 100644
    CGRect _lastViewFrame;
    RNSScreenView *_initialView;
    UIView *_fakeView;
-@@ -1433,6 +1436,98 @@ - (instancetype)initWithView:(UIView *)view
+@@ -1433,6 +1436,101 @@ - (instancetype)initWithView:(UIView *)view
    return self;
  }
  
 +#if !TARGET_OS_TV
-+// OpenReader (#332): the responder chain reaches this visible page's controller
-+// whether the Library list or its native search field has focus. A page without
-+// a search controller (Reader/Settings), selection, and any presented action
-+// sheet get no Library commands. Never install process-wide key interception.
++// OpenReader (#332): this page defines command scope; RNSNavigationController
++// registers them on the responder chain shared by the list and the nav-bar
++// search field. Reader/Settings, selection and presented action sheets get no
++// Library commands. Never install process-wide key interception.
 +- (UISearchController *)openReaderLibrarySearchController
 +{
 +  UISearchController *search = self.navigationItem.searchController;
@@ -74,12 +81,11 @@ index 9b66012..4555ff2 100644
 +  return search;
 +}
 +
-+- (NSArray<UIKeyCommand *> *)keyCommands
++- (NSArray<UIKeyCommand *> *)openReaderLibraryKeyCommands
 +{
-+  NSArray<UIKeyCommand *> *inherited = [super keyCommands] ?: @[];
 +  UISearchController *search = [self openReaderLibrarySearchController];
 +  if (search == nil) {
-+    return inherited;
++    return @[];
 +  }
 +  UIKeyCommand *find = [UIKeyCommand keyCommandWithInput:@"f"
 +                                        modifierFlags:UIKeyModifierCommand
@@ -87,14 +93,14 @@ index 9b66012..4555ff2 100644
 +  find.discoverabilityTitle = @"Search Library";
 +  // Escape must first be available to an unfinished IME composition.
 +  if (search.searchBar.searchTextField.markedTextRange != nil) {
-+    return [inherited arrayByAddingObject:find];
++    return @[ find ];
 +  }
 +  UIKeyCommand *cancel = [UIKeyCommand keyCommandWithInput:UIKeyInputEscape
 +                                          modifierFlags:0
 +                                                 action:@selector(openReaderCancelLibrarySearch:)];
 +  cancel.discoverabilityTitle = @"Cancel Search";
 +  cancel.wantsPriorityOverSystemBehavior = YES;
-+  return [inherited arrayByAddingObjectsFromArray:@[ find, cancel ]];
++  return @[ find, cancel ];
 +}
 +
 +- (void)openReaderFindInLibrary:(UIKeyCommand *)command
@@ -110,6 +116,10 @@ index 9b66012..4555ff2 100644
 +- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command
 +{
 +  UISearchController *search = [self openReaderLibrarySearchController];
++  // Recheck at dispatch too: UIKit may have cached commands before composition.
++  if (search == nil || search.searchBar.searchTextField.markedTextRange != nil) {
++    return;
++  }
 +  id<UISearchBarDelegate> delegate = search.searchBar.delegate;
 +  if ([delegate respondsToSelector:@selector(searchBarCancelButtonClicked:)]) {
 +    [delegate searchBarCancelButtonClicked:search.searchBar];
@@ -148,7 +158,7 @@ index 9b66012..4555ff2 100644
  // TODO: Find out why this is executed when screen is going out
  - (void)viewWillAppear:(BOOL)animated
  {
-@@ -1538,6 +1633,48 @@ - (void)viewDidDisappear:(BOOL)animated
+@@ -1538,6 +1636,48 @@ - (void)viewDidDisappear:(BOOL)animated
    _shouldNotify = YES;
  }
  
@@ -197,7 +207,7 @@ index 9b66012..4555ff2 100644
  - (void)viewDidLayoutSubviews
  {
    [super viewDidLayoutSubviews];
-@@ -1558,6 +1695,33 @@ - (void)viewDidLayoutSubviews
+@@ -1558,6 +1698,33 @@ - (void)viewDidLayoutSubviews
    if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
      [self.screenView updateBounds];
    }
@@ -232,10 +242,43 @@ index 9b66012..4555ff2 100644
  
  - (BOOL)isModalWithHeader
 diff --git a/node_modules/react-native-screens/ios/RNSScreenStack.mm b/node_modules/react-native-screens/ios/RNSScreenStack.mm
-index 192f5d2..547bfeb 100644
+index 192f5d2..730d24b 100644
 --- a/node_modules/react-native-screens/ios/RNSScreenStack.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreenStack.mm
-@@ -574,6 +574,39 @@ - (void)setModalViewControllers:(NSArray<UIViewController *> *)controllers
+@@ -41,6 +41,32 @@ @interface RNSScreenStackView () <UINavigationControllerDelegate,
+ @implementation RNSNavigationController
+ 
+ #if !TARGET_OS_TV
++// OpenReader (#332): UISearchBarTextField -> UISearchBar -> UINavigationBar
++// reaches this controller, not the RNSScreen displaying the Library list.
++// Resolve the top page each time so Reader/selection/modal scope stays local.
++- (NSArray<UIKeyCommand *> *)keyCommands
++{
++  NSArray<UIKeyCommand *> *inherited = [super keyCommands] ?: @[];
++  if ([self.topViewController isKindOfClass:RNSScreen.class]) {
++    return [inherited arrayByAddingObjectsFromArray:[(RNSScreen *)self.topViewController openReaderLibraryKeyCommands]];
++  }
++  return inherited;
++}
++
++- (void)openReaderFindInLibrary:(UIKeyCommand *)command
++{
++  if ([self.topViewController isKindOfClass:RNSScreen.class]) {
++    [(RNSScreen *)self.topViewController openReaderFindInLibrary:command];
++  }
++}
++
++- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command
++{
++  if ([self.topViewController isKindOfClass:RNSScreen.class]) {
++    [(RNSScreen *)self.topViewController openReaderCancelLibrarySearch:command];
++  }
++}
++
+ - (UIViewController *)childViewControllerForStatusBarStyle
+ {
+   return [self topViewController];
+@@ -574,6 +600,39 @@ - (void)setModalViewControllers:(NSArray<UIViewController *> *)controllers
    finish();
  }
  
@@ -275,7 +318,7 @@ index 192f5d2..547bfeb 100644
  - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
  {
    // when there is no change we return immediately
-@@ -669,7 +702,10 @@ - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
+@@ -669,7 +728,10 @@ - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
    } else {
      // change wasn't on the top of the stack. We don't need animation.
      [_controller setViewControllers:controllers animated:NO];

@@ -75,15 +75,27 @@ fix and adds the Library keyboard/focus behavior at the native boundary:
   height, finish layout, then restore that offset against the final adjusted
   inset. The per-controller guard prevents collapsing later deliberate pulls;
   active input rearms it so cancellation returns to ordinary hidden search.
-- `RNSScreen.keyCommands` adds Command-F and Escape only when the visible page
-  has a search controller and no other modal presentation. Reader and Settings
-  have no search controller. Escape leaves an unfinished IME composition to
-  the text field first.
+- `RNSNavigationController.keyCommands` adds the top page's Library commands
+  to its inherited commands. `RNSScreen.openReaderLibraryKeyCommands` supplies
+  them only when the visible page has a search controller and no other modal
+  presentation. Reader and Settings have no search controller. Escape is
+  omitted during marked-text composition; its action rechecks that condition
+  as well, in case UIKit cached commands before composition began.
 - Command-F activates and focuses that controller; Escape calls its search-bar
   delegate's cancellation path, so the normal JavaScript cancellation runs.
 - `RNSSearchBar.focus` activates the controller before requesting first
   responder, including when its stacked field has scrolled out of view.
 - Autocorrection and spelling substitution are disabled for name input.
+
+Registering on the page itself was insufficient: a focused field's measured
+responder chain is `UISearchBarTextField → … → UISearchBar → UINavigationBar
+→ … → RNSNavigationController → … → UIWindow`, with no `RNSScreen` in it.
+The page could report Escape as registered while the key did nothing. The
+search bar's own `_performCancelAction:` Escape command had priority 0; the
+Library Escape command retains priority over system behavior. Registration
+therefore belongs on the navigation controller shared by both responder paths,
+with actions forwarded to the current page and its existing scope checks.
+This routing still requires native acceptance.
 
 A process-wide key listener was rejected because it could intercept Reader or
 modal actions. A separate native search module would duplicate the controller

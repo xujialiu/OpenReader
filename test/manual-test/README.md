@@ -98,6 +98,8 @@ and what is committed is what was measured, never their text.
 
 ## Pitfalls
 
+Library Search's [verification controls](pitfalls/verification-runs.md#library-search-probe-controls-332) cover XCTest auto-scrolling an obscured result before capture and zero-test stale products. [LLDB inspection](pitfalls/mcp.md#attaching-lldb-through-mobilebuildmcp-119-2026-10-01) covers local-symbol collisions and keeping explicit detachment after expression errors.
+
 What has gone wrong before, and what fixed it, one file per area. Before using a tool or touching an area, read its file; when something fails, `rg` a phrase of the error across `test/manual-test/` first. When `xcrun`, Metro, XCTest or a manual step goes wrong or misleads you, add it, with its symptom, cause and fix, to the file for its area, or to a new one listed here (MEMORY/device-testing.md).
 
 - [Physical iPhone](pitfalls/physical-iphone.md): Physical iPhone Release builds; Physical iPhone screen; Physical iPhone logs and the lock screen's state (#66).

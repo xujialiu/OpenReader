@@ -371,17 +371,30 @@ final class LibrarySearchProbe: XCTestCase {
     }
     let moved = topAfter.label != topBeforeLabel || abs(topAfter.frame.minY - beforeY) >= 8
     XCTAssertTrue(moved, "The swipe must move the results list for a valid nonzero-offset claim (top '\(topBeforeLabel)' @\(beforeY) -> '\(topAfter.label)' @\(topAfter.frame.minY))")
-    // Let the flick momentum settle, then measure the position that the
-    // capture will actually see — measuring mid-momentum misreads it by a
-    // row (the beta7 60 pt false drift).
+    // Settle before measuring. The old test then tapped an obscured anchor;
+    // XCTest logged "Scroll element to visible" BEFORE opening the Reader.
+    // Keep that anchor for comparison, but tap a fully visible row by coordinate.
     sleep(1)
     let rowsSettled = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Scroll Diag")).allElementsBoundByIndex
       .filter { $0.exists && $0.frame.minY >= 60 }
     let scrolled = rowsSettled.min(by: { $0.frame.minY < $1.frame.minY }) ?? topAfter
     let scrolledLabel = scrolled.label
     let scrolledY = scrolled.frame.minY
+    let headerBottom = app.navigationBars.firstMatch.frame.maxY
+    let keyboardTop = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY : app.frame.maxY
+    guard let visibleResult = rowsSettled.first(where: {
+      $0.frame.minY > headerBottom + 8 && $0.frame.maxY < min(keyboardTop, app.frame.maxY - 80)
+    }) else {
+      tree(app, "roundtrip-no-fully-visible-target")
+      XCTFail("A fully visible result is needed; never auto-scroll an obscured anchor into view")
+      return
+    }
+    let targetFrame = visibleResult.frame
+    print("[diag] roundtrip tap '\(visibleResult.label)' @\(targetFrame); anchor '\(scrolledLabel)' @\(scrolledY)")
     shot("roundtrip-scrolled-results")
-    scrolled.tap()
+    app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+      dx: targetFrame.midX - app.frame.minX, dy: targetFrame.midY - app.frame.minY
+    )).tap()
     XCTAssertTrue(app.buttons["Choose a Voice"].waitForExistence(timeout: 15), "The result must open the reader")
     shot("roundtrip-reader")
     let back = app.navigationBars.buttons.firstMatch
