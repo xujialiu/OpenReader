@@ -35,6 +35,30 @@ final class LibrarySearchProbe: XCTestCase {
     return app.textFields["Search Library"].firstMatch
   }
 
+  /// Reacquires the field on every poll instead of caching a stale query:
+  /// while the input is coming up the element is a SearchField in the
+  /// navigation bar and a TextField query made too early waits forever on
+  /// the wrong type (beta6 run 18:19). Returns whichever exists.
+  @discardableResult
+  private func waitForSearchField(_ app: XCUIApplication, timeout: TimeInterval, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement? {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      let searchField = app.searchFields.firstMatch
+      if searchField.exists { return searchField }
+      let textField = app.textFields.matching(NSPredicate(format: "placeholderValue == %@", "Search Library")).firstMatch
+      if textField.exists { return textField }
+      usleep(200_000)
+    }
+    XCTContext.runActivity(named: "wait for the Library search field (\(timeout)s)") { activity in
+      let summary = XCTAttachment(string: "no SearchField or placeholder TextField appeared; tree follows")
+      summary.name = "search-field-absent"; summary.lifetime = .keepAlways; add(summary)
+      let image = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+      image.name = "search-field-absent-shot"; image.lifetime = .keepAlways; add(image)
+    }
+    XCTFail("Library search field did not appear within \(timeout)s", file: file, line: line)
+    return nil
+  }
+
   /// Frame-only observation of the ALREADY-RUNNING app (no launch, no
   /// touches): pairs with the CDP-driven scroll for authoritative XCUITest
   /// frames when the snapshot bridge answers with an empty tree.
@@ -222,25 +246,22 @@ final class LibrarySearchProbe: XCTestCase {
     let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
     XCTAssertTrue(search.waitForExistence(timeout: 5), "drawer must offer Search")
     search.tap()
-    // The AX query layer on this device intermittently misses the focused
-    // field (a stuck-state tree showed it focused while the query said
-    // absent). Detect search-active via the bar's Close control instead,
-    // polling up to 30 s, and re-snapshot the field before typing.
+    // Reacquire the native field type on every poll (the cached-query bug of
+    // the 18:19 run waited on a TextField while the field was a SearchField).
+    var field = waitForSearchField(app, timeout: 20)
     let closeDuringInput = app.navigationBars.firstMatch.buttons["Close"]
-    XCTAssertTrue(closeDuringInput.waitForExistence(timeout: 30), "Search must reach input (Close control appears)")
-    var field = searchField(app)
-    if !field.exists { field = app.searchFields.firstMatch }
-    XCTAssertTrue(field.exists, "the focused search field must be in the tree (Close is up)")
-    field.typeText("Short")
+    XCTAssertTrue(closeDuringInput.waitForExistence(timeout: 20), "Search must reach input (Close control appears)")
+    field?.typeText("Short")
     sleep(1)
     let close = app.navigationBars.firstMatch.buttons["Close"]
     XCTAssertTrue(close.waitForExistence(timeout: 5), "Close must exist while a query is present")
     close.tap()
     sleep(2)
-    field = searchField(app)
+    // Reacquire after Close as well; the element type can change again.
+    field = waitForSearchField(app, timeout: 5)
     let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
     let bar = app.navigationBars.firstMatch
-    let line = "post-cancel: field exists=\(field.exists) hittable=\(field.isHittable) frame=\(field.exists ? NSCoder.string(for: field.frame) : "none") | topRow frame=\(row.exists ? NSCoder.string(for: row.frame) : "none") | bar frame=\(bar.exists ? NSCoder.string(for: bar.frame) : "none")"
+    let line = "post-cancel: field exists=\(field?.exists ?? false) hittable=\(field?.isHittable ?? false) frame=\(field != nil && field!.exists ? NSCoder.string(for: field!.frame) : "none") | topRow frame=\(row.exists ? NSCoder.string(for: row.frame) : "none") | bar frame=\(bar.exists ? NSCoder.string(for: bar.frame) : "none")"
     print("[diag] \(line)")
     let attachment = XCTAttachment(string: line)
     attachment.name = "post-cancel-frames"; attachment.lifetime = .keepAlways; add(attachment)
