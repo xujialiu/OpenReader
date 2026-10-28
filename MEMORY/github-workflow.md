@@ -34,8 +34,22 @@ When an issue is required:
    [finish worktree](finish-worktree.md) workflow is the exception: close only
    after its merge and successful push.
 
-Write issues and comments in English. Keep each paragraph on one line;
-separate blocks with blank lines, because GitHub renders single newlines.
+## Issue and comment prose
+
+Write issue titles, bodies and all comments directly about the problem,
+feature, behavior, decision or verification. Make the feature or behavior the
+subject: "Search stays hidden until invoked", not "The owner wants search to
+stay hidden". Omit request/approval narration such as "The owner wants",
+"The user requested", "The owner chose" or "The owner accepted"; state the
+resulting scope and behavior instead. This applies to planning, progress and
+completion comments as well as the issue itself.
+
+Keep proposed, agreed, implemented and verified states explicit: an agreed
+design is not evidence that the feature is implemented or tested. Record
+pending approval as a gate, without retelling the conversation.
+
+Write in English. Keep each paragraph on one line; separate blocks with blank
+lines, because GitHub renders single newlines.
 
 ## Labels — match Zotero-OpenReader
 

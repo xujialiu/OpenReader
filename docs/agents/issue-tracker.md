@@ -2,7 +2,7 @@
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
-This repo's own issue rules govern every operation below: when an issue is needed, what its body holds, the solution as a separate comment, English with one-line paragraphs, the `bug`/`enhancement`/`chore` and severity labels, and closing. They are in `MEMORY/github-workflow.md`; read it first.
+This repo's own issue rules govern every operation below: when an issue is needed, what its body holds, the solution as a separate comment, issue/comment prose, the `bug`/`enhancement`/`chore` and severity labels, and closing. They are in `MEMORY/github-workflow.md`; read it first.
 
 ## Conventions
 
