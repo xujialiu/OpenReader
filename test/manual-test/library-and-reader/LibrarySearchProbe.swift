@@ -177,12 +177,16 @@ final class LibrarySearchProbe: XCTestCase {
   }
 
   private func drag(_ list: XCUIElement, fromY: CGFloat, toY: CGFloat) {
-    // Keep the established flick primitive. The separate threshold/diagnostic
-    // methods exercise coordinate drags; neither replaces the other as proof.
+    // Measured on beta11 (2026-10-30): the translation-driven pull commits
+    // only when the drag translates slowly — a SLOW velocity swipeDown
+    // reveals the field (verified) while a FAST flick releases before the
+    // threshold and coordinate press-drags do not translate this list at
+    // all on this device. Upward (ordinary scroll) stays .fast/.slow as the
+    // scroll check requires.
     if toY < fromY {
-      list.swipeUp(velocity: .fast)
+      list.swipeUp(velocity: .slow)
     } else {
-      list.swipeDown(velocity: .fast)
+      list.swipeDown(velocity: .slow)
     }
   }
 
@@ -1158,6 +1162,88 @@ final class LibrarySearchProbe: XCTestCase {
     start.press(forDuration: 0.02, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 1.5)
     sleep(3)
     shot("beta10-drag-idle-end")
+  }
+
+  /// Diagnostic (beta11): a SLOW velocity swipeDown (the primitive that
+  /// verifiably translates this list) — does it drive the new pull?
+  func testSlowFlickPullProbe() {
+    let app = launch()
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5), "list must exist")
+    list.swipeDown(velocity: .slow)
+    sleep(1)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    let field = searchField(app)
+    let line = "slow-flick: close=\(close.exists) field=\(field.exists) frame=\(field.exists ? NSCoder.string(for: field.frame) : "none") keyboard=\(app.keyboards.count)"
+    print("[diag] \(line)")
+    let attachment = XCTAttachment(string: line)
+    attachment.name = "slow-flick-frames"; attachment.lifetime = .keepAlways; add(attachment)
+    shot("slow-flick-pull")
+  }
+
+  /// Diagnostic: isolate why testPullFocusesAndCloseStaysHidden's swipe
+  /// fails while testSlowFlickPullProbe's identical swipe works — this
+  /// variant adds the cold assertHidden queries before the swipe.
+  func testSlowFlickAfterColdChecks() {
+    let app = launch()
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5), "list must exist")
+    // — the cold assertHidden block —
+    let field0 = searchField(app)
+    let bar0 = app.navigationBars.firstMatch
+    let hidden = !field0.exists || field0.frame.maxY < 10 ||
+      (bar0.exists && bar0.frame.intersection(field0.frame).height < 10)
+    XCTAssertFalse(app.navigationBars.firstMatch.buttons["Close"].exists)
+    XCTAssertEqual(app.keyboards.count, 0)
+    // — then the identical swipe —
+    list.swipeDown(velocity: .slow)
+    sleep(1)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    let field = searchField(app)
+    let line = "slow-flick-after-checks: hidden=\(hidden) close=\(close.exists) field=\(field.exists) frame=\(field.exists ? NSCoder.string(for: field.frame) : "none") keyboard=\(app.keyboards.count)"
+    print("[diag] \(line)")
+    let attachment = XCTAttachment(string: line)
+    attachment.name = "slow-flick-after-checks"; attachment.lifetime = .keepAlways; add(attachment)
+    shot("slow-flick-after-checks")
+  }
+
+  /// Diagnostic: replicate testPullFocusesAndCloseStaysHidden's EXACT
+  /// pre-swipe flow (ordinary row caching + pullIntoInput + cold
+  /// assertHidden) to isolate the swipe failure.
+  func testSlowFlickPullTestFlow() {
+    let app = launch()
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5))
+    let ordinary = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    let ordinaryLabel = ordinary.label
+    let ordinaryY = ordinary.frame.minY
+    func assertHidden(_ context: String) {
+      let field = searchField(app)
+      let bar = app.navigationBars.firstMatch
+      let hidden = !field.exists || field.frame.maxY < 10 ||
+        (bar.exists && bar.frame.intersection(field.frame).height < 10)
+      XCTAssertTrue(hidden, "\(context): search must be hidden")
+      XCTAssertFalse(app.navigationBars.firstMatch.buttons["Close"].exists,
+                     "\(context): no standing close control")
+      XCTAssertEqual(app.keyboards.count, 0, "\(context): keyboard must be dismissed")
+    }
+    func pullIntoInput() -> XCUIElement? {
+      drag(list, fromY: 0.2, toY: 0.7)
+      let close = app.navigationBars.firstMatch.buttons["Close"]
+      let closeReady = close.waitForExistence(timeout: 5)
+      let keyboardReady = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+      guard closeReady && keyboardReady else {
+        shot("flow-pull-input-not-ready"); tree(app, "flow-pull-input-not-ready-tree"); return nil
+      }
+      guard let f = waitForSearchField(app, timeout: 5) else { return nil }
+      return f
+    }
+    assertHidden("cold")
+    guard let first = pullIntoInput() else { return }
+    let line = "flow: reached input, value='\(first.value as? String ?? "")'"
+    print("[diag] \(line)")
+    let attachment = XCTAttachment(string: line)
+    attachment.name = "flow-reached"; attachment.lifetime = .keepAlways; add(attachment)
   }
 
   /// Contract: clearing input shows the ordinary list again but stays in
