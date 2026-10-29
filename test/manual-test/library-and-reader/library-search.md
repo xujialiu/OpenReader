@@ -68,7 +68,11 @@ stimulus during the live attachment, a positive control, and explicit detach.
 `testPullPreviewThreshold` uses short and full pulls through the same coordinate
 input path. Record the slow full pull and inspect intermediate frames for the
 blur-to-clear transition; an end-state pass alone cannot prove the animation.
-A short release must return to hidden search with no keyboard or Close.
+A short release must return to hidden search with no keyboard or Close AND
+remain on the original page. A prior beta12 run navigated into the touched
+Folder and falsely passed the old hidden-field-only assertion. The page check
+is now mandatory; that boundary remains open even though full entry and the
+core restore cases pass.
 
 `testPullFocusesAndCloseStaysHidden` covers the revised pull contract: keyboard
 and external Close before typing, empty Close, typed Close, repeated pull,

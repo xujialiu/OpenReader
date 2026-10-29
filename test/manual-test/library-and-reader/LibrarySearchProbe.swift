@@ -204,6 +204,7 @@ final class LibrarySearchProbe: XCTestCase {
   func testPullPreviewThreshold() {
     let app = launch()
     let bar = app.navigationBars.firstMatch
+    let originTitle = bar.identifier
     let point = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
       dx: app.frame.width / 2, dy: bar.frame.maxY - app.frame.minY + 100
     ))
@@ -211,6 +212,9 @@ final class LibrarySearchProbe: XCTestCase {
     point.press(forDuration: 0.01, thenDragTo: point.withOffset(CGVector(dx: 0, dy: 20)),
                 withVelocity: velocity, thenHoldForDuration: 0.3)
     sleep(1)
+    let samePage = app.navigationBars.firstMatch.identifier == originTitle
+    XCTAssertTrue(samePage, "A short pull must not navigate into the touched row")
+    guard samePage else { shot("short-pull-wrong-page"); return }
     let field = searchField(app)
     let hidden = !field.exists || field.frame.maxY < 10 ||
       (bar.exists && bar.frame.intersection(field.frame).height < 10)
@@ -1158,6 +1162,28 @@ final class LibrarySearchProbe: XCTestCase {
     start.press(forDuration: 0.02, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 1.5)
     sleep(3)
     shot("beta10-drag-idle-end")
+  }
+
+  /// Short-drag cancellation must not activate the row under the finger.
+  /// No launch: usable for controlled native gesture-dependency diagnostics.
+  func testPartialPullStaysOnPage() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    let bar = app.navigationBars.firstMatch
+    XCTAssertTrue(bar.waitForExistence(timeout: 5))
+    let title = bar.identifier
+    let start = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+      dx: app.frame.width / 2, dy: bar.frame.maxY - app.frame.minY + 100
+    ))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 20)),
+                withVelocity: XCUIGestureVelocity(rawValue: 40), thenHoldForDuration: 0.3)
+    sleep(1)
+    XCTAssertEqual(app.navigationBars.firstMatch.identifier, title, "A short pull must not open the row beneath it")
+    let field = searchField(app)
+    let hidden = !field.exists || field.frame.maxY < 10 ||
+      app.navigationBars.firstMatch.frame.intersection(field.frame).height < 10
+    XCTAssertTrue(hidden)
+    XCTAssertEqual(app.keyboards.count, 0)
+    shot("partial-pull-same-page")
   }
 
   /// Same-process coordinate pull, for a controlled gesture-dependency A/B.
