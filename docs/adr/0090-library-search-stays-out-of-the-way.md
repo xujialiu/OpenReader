@@ -52,6 +52,36 @@ keeping 720 (request 670 with its doubled 50-point inset). That coordinate test
 now covers the non-iOS fallback; the iOS regression instead requires one native
 browse capture and native restoration, never the clamping RN scroll command.
 
+A deliberate pull at list top now previews input and commits only at full
+clarity. The page observes the already-associated scroll view's pan recognizer
+through an additional target; it does not replace the scroll delegate or add a
+competing recognizer. Progress is the downward translation divided by the
+search bar's measured height at gesture start (using its native fitting size
+if layout has not supplied a height). Only a single-pointer pull starting at
+the native adjusted top qualifies; multi-touch invalidates entry.
+
+`RNSSearchBar` drives a paused UIKit `UIViewPropertyAnimator` over a
+`UIVisualEffectView`, from material blur at progress zero to no blur at one.
+The effect stays within the native text field, using its bounds and capsule
+geometry; UIKit still draws the real field and its dynamic appearance. During
+preview the bar is noninteractive and its accessibility subtree is hidden.
+Reaching full progress removes the preview and schedules the existing native
+focus path on the next main-loop turn, even if the finger has not yet lifted.
+The page/controller/scroll identity and modal/selection scope are checked
+again. UIKit activation supplies keyboard input and external Close while the
+query is still empty.
+
+Releasing or cancelling short uses the existing closed-position transaction
+BEFORE removing the effect, preventing a clear-field flash or half-open rest.
+A newly started gesture supersedes an older queued cancellation. Binding
+changes and deallocation clean up targets, effects and interaction flags.
+Programmatic scrolling never produces this entry gesture. The new visual and
+threshold behavior requires recorded gesture evidence, not just final frames.
+
+Close keeps using `closed-browse`: hide the field and keyboard and restore the
+original position. Empty Close is a cancellation too. A later layout must not
+focus again; only another deliberate pull or explicit Search entry does that.
+
 The Library actions Drawer defers Search until its native dismissal callback,
 as it already defers the document picker. Focusing before dismissal risks
 handing first responder to a surface still covered by the Drawer. Import and
@@ -119,8 +149,10 @@ are consulted, and none of the cancel/blur/end-editing handlers run in that
 sequence. It does not establish which subsystem consumes Escape. Independent
 HID input failed its printable-key delivery control; GUI key input was refused
 for lack of window focus. Do not infer a UIKit text-input fault or add deeper
-interception from those observations. Escape remains unresolved while the
-remaining UI checks proceed independently; partial results are not acceptance.
+interception from those observations. Physical-keyboard Escape was subsequently verified manually to close search
+on beta9. The synthesized-key failure remains a test-path discrepancy, not an
+established app defect, and does not justify deeper keyboard interception.
+IME/scoping and other unmeasured checks still need their own evidence.
 
 A process-wide key listener was rejected because it could intercept Reader or
 modal actions. A separate native search module would duplicate the controller

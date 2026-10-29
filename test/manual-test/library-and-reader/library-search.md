@@ -57,14 +57,25 @@ simulator to repair a probe query.
 
 ## Keyboard and coverage limits
 
-`testHardwareCmdFAndEscape` remains the failing keyboard checkpoint. Do not
-remove it, waive it, or infer a UIKit consumer from static command lists.
+Physical-keyboard Escape was manually verified on beta9. The synthesized
+`testHardwareCmdFAndEscape` still fails; preserve it as a test-path discrepancy,
+not an established app failure or evidence of a UIKit consumer.
 `testTypeKeysInRunningSearch` and `testEscapeOnlyInRunningSearch` do not launch
 or terminate the app, so a debugger can stay attached to the same PID. They
 are diagnostics, not acceptance. A trace needs an accepted breakpoint, actual
 stimulus during the live attachment, a positive control, and explicit detach.
 
-Two-finger search exclusion, real IME behavior, physical-key Escape, a properly
-held native back-menu read and iPad coverage remain separate checks. A missing
+`testPullPreviewThreshold` uses short and full pulls through the same coordinate
+input path. Record the slow full pull and inspect intermediate frames for the
+blur-to-clear transition; an end-state pass alone cannot prove the animation.
+A short release must return to hidden search with no keyboard or Close.
+
+`testPullFocusesAndCloseStaysHidden` covers the revised pull contract: keyboard
+and external Close before typing, empty Close, typed Close, repeated pull,
+ordinary scrolling without reactivation, and menu reopening. The earlier
+reveal-without-keyboard check is superseded, not a regression requirement.
+
+Two-finger search exclusion, real IME behavior, a properly held native
+back-menu read and iPad coverage remain separate checks. A missing
 Select action or a no-op Escape does not prove those interactions. Partial
 passing cases never imply the whole feature is accepted.

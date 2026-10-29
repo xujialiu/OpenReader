@@ -87,6 +87,24 @@ describe('page-local Library search lifecycle (#332)', () => {
     expect(page.options?.hideWhenScrolling).toBe(false);
     await page.close();
   });
+  it('closes an empty native-focused search and keeps it closed through layout until a new entry', async () => {
+    const page = await open();
+    // Native pull focus emits the same event as tapping input; no query is needed.
+    await page.focus();
+    expect(page.search).toMatchObject({ active: true, query: '' });
+    await act(async () => page.options?.onCancelButtonPress?.(focusEvent()));
+    flush(); page.search.onContentSizeChange();
+    expect(page.search).toMatchObject({ active: false, query: '' });
+    expect(page.options?.hideWhenScrolling).toBe(true);
+    expect(page.field.restoreScrollPosition).toHaveBeenLastCalledWith('closed-browse');
+    expect(page.field.focus).not.toHaveBeenCalled();
+    await page.type('');
+    expect(page.search.active).toBe(false);
+    await page.focus();
+    expect(page.search.active).toBe(true);
+    expect(page.field.captureScrollPosition).toHaveBeenCalledTimes(2);
+    await page.close();
+  });
   it('does not cancel when the field blurs or the keyboard Search button is pressed', async () => {
     const page = await open();
     await page.focus(); await page.type('三体');

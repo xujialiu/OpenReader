@@ -11,9 +11,13 @@ Search reaches the whole Library, including Documents in every nested Folder,
 regardless of where the owner starts searching. Folder names are not results.
 
 During ordinary use, neither a search field nor a magnifying-glass button is
-permanently shown. Pulling down at the top of the list reveals the search field
-without opening the keyboard; tapping the field begins input. Ordinary
-scrolling does not bring up the keyboard.
+permanently shown. Pulling down at the top of the list previews the field,
+progressively changing it from blurred to clear. Only reaching full clarity
+commits the entry: the field becomes available, receives focus and opens the
+keyboard without another tap. Releasing before that threshold retracts the
+preview and keeps search hidden; there is no half-open resting state. Ordinary
+scrolling within the list does not enter search. The close control beside the
+field is available as soon as search opens, even before any text is entered.
 
 The Library's top-right `…` also offers Search. Choosing it goes directly to
 input, without requiring a second tap on the field or a return to the top of a
@@ -51,8 +55,11 @@ a result opens its Document. Returning from that Document restores the query
 and the result-list position without automatically reopening the keyboard.
 It does not take the owner to the Document's containing Folder instead.
 
-Cancel clears the query, hides the search field and keyboard, and returns to
-the Folder and list position from before search.
+The close control beside the field cancels search: it clears the query,
+hides the search field and keyboard, and returns to the Folder and list
+position from before search. It works with empty input as well. The field
+stays hidden until another deliberate downward pull or the Search action;
+clearing text is not a substitute for closing search.
 
 An empty field shows the ordinary list of the Folder where search began,
 not every Document in the Library. Clearing the field restores that ordinary
@@ -94,9 +101,12 @@ Searching only the current Folder was turned down because finding a Document
 should not require remembering which Folder contains it. Returning Folders as
 well was left out to keep this search focused on finding a Document to open.
 
-Opening the keyboard on a downward pull was turned down because the gesture
-can happen while browsing the list. Choosing Search from the actions, in
-contrast, explicitly asks to type, so it goes straight to input.
+Revealing the field without the keyboard was initially considered to avoid
+interrupting browsing. It adds another tap after deliberately asking to
+search, so both pull and the Search action now go straight to input. An
+immediately available close control makes this easy to undo before typing.
+The blur-to-clear preview marks progress toward entry, while an incomplete
+pull can be abandoned without opening input or leaving a standing field.
 
 Simple fragment matching keeps the rule predictable. It costs the ability to
 find a name from scattered words, a phonetic spelling or a near miss.

@@ -199,49 +199,102 @@ final class LibrarySearchProbe: XCTestCase {
     return line
   }
 
-  /// Contract: the field is revealed by pulling down (no assumption that it
-  /// already stands), then tapping it begins input. One pull attempt only: on
-  /// this device synthetic swipes have been eaten by the automation bridge
-  /// (2026-10-28, pitfalls/mcp.md), so a pull that demonstrably does not
-  /// arrive is recorded as skipped-unverified, never retried in a loop.
-  func testPullRevealThenTapFocus() throws {
+  /// Record this real slow gesture to inspect blur progression, not just its
+  /// final frame. The full pull is a delivery control for the short pull.
+  func testPullPreviewThreshold() {
+    let app = launch()
+    let bar = app.navigationBars.firstMatch
+    let point = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+      dx: app.frame.width / 2, dy: bar.frame.maxY - app.frame.minY + 100
+    ))
+    let velocity = XCUIGestureVelocity(rawValue: 40)
+    point.press(forDuration: 0.01, thenDragTo: point.withOffset(CGVector(dx: 0, dy: 20)),
+                withVelocity: velocity, thenHoldForDuration: 0.3)
+    sleep(1)
+    let field = searchField(app)
+    let hidden = !field.exists || field.frame.maxY < 10 ||
+      (bar.exists && bar.frame.intersection(field.frame).height < 10)
+    XCTAssertTrue(hidden, "Releasing a short pull must not leave a half-open field")
+    XCTAssertFalse(bar.buttons["Close"].exists)
+    XCTAssertEqual(app.keyboards.count, 0)
+    shot("short-pull-remains-hidden")
+    point.press(forDuration: 0.01, thenDragTo: point.withOffset(CGVector(dx: 0, dy: 160)),
+                withVelocity: velocity, thenHoldForDuration: 0.3)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 5), "A full pull with the SAME input path must commit")
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    shot("full-pull-commits-input")
+    guard close.exists else { return }
+    close.tap()
+    sleep(1)
+    XCTAssertEqual(app.keyboards.count, 0)
+  }
+
+  /// Revised #332 contract: a real pull enters input without a field tap,
+  /// shows the external Close immediately, and Close hides even an empty query.
+  func testPullFocusesAndCloseStaysHidden() {
     let app = launch()
     let list = app.scrollViews.firstMatch
-    XCTAssertTrue(list.waitForExistence(timeout: 5), "list must exist")
-    let field0 = searchField(app)
-    let stoodCold = field0.exists && field0.isHittable
-    XCTAssertFalse(stoodCold, "Pull-reveal must start with a hidden field, not a standing one")
-    guard !stoodCold else { return }
-    let rowBefore = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
-    let beforeY = rowBefore.exists ? rowBefore.frame.minY : CGFloat.nan
-    drag(list, fromY: 0.2, toY: 0.7)
-    let rowAtTouchUp = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
-    let atTouchUpY = rowAtTouchUp.exists ? rowAtTouchUp.frame.minY : CGFloat.nan
-    let gestureMoved = !beforeY.isNaN && !atTouchUpY.isNaN && abs(atTouchUpY - beforeY) >= 1
-    sleep(1)
-    shot("pull-reveal-after-pull")
-    XCTAssertEqual(app.keyboards.count, 0, "Pull-reveal must not open the keyboard")
-    let field = searchField(app)
-    if !gestureMoved {
-      let note = XCTAttachment(string: "Pull moved no observed content (topRow minY \(beforeY) -> \(atTouchUpY)); pull-reveal is unverified, not a pass. AX existence alone cannot prove a revealed field.")
-      note.name = "pull-reveal-unverified"; note.lifetime = .keepAlways; add(note)
-      throw XCTSkip("No observed gesture movement; pull-reveal remains unverified")
+    XCTAssertTrue(list.waitForExistence(timeout: 5))
+    let ordinary = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    let ordinaryLabel = ordinary.label
+    let ordinaryY = ordinary.frame.minY
+    func assertHidden(_ context: String) {
+      let field = searchField(app)
+      let bar = app.navigationBars.firstMatch
+      let hidden = !field.exists || field.frame.maxY < 10 ||
+        (bar.exists && bar.frame.intersection(field.frame).height < 10)
+      XCTAssertTrue(hidden, "\(context): search must be hidden")
+      XCTAssertFalse(app.navigationBars.firstMatch.buttons["Close"].exists,
+                     "\(context): no standing close control")
+      XCTAssertEqual(app.keyboards.count, 0, "\(context): keyboard must be dismissed")
     }
-    let bar = app.navigationBars.firstMatch
-    let revealed = field.exists && field.isHittable && bar.exists && bar.frame.intersection(field.frame).height >= 10
-    XCTAssertTrue(revealed, "A delivered pull must reveal an interactive field BEFORE any tap; native tap auto-scrolling is not pull-to-reveal")
-    guard revealed else { return }
-    tree(app, "pull-reveal-tree")
-    field.tap()
+    func pullIntoInput() -> XCUIElement? {
+      drag(list, fromY: 0.2, toY: 0.7)
+      let close = app.navigationBars.firstMatch.buttons["Close"]
+      let closeReady = close.waitForExistence(timeout: 5)
+      let keyboardReady = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+      XCTAssertTrue(closeReady, "Pull must show Close BEFORE typing or tapping input")
+      XCTAssertTrue(keyboardReady, "Pull must open the keyboard without a second tap")
+      guard closeReady && keyboardReady else {
+        shot("pull-input-not-ready"); tree(app, "pull-input-not-ready-tree"); return nil
+      }
+      guard let field = waitForSearchField(app, timeout: 5) else { return nil }
+      XCTAssertTrue(field.isHittable)
+      return field
+    }
+    assertHidden("cold")
+    guard let first = pullIntoInput() else { return }
+    XCTAssertTrue(["", "Search Library"].contains(first.value as? String ?? ""))
+    shot("pull-empty-input-with-close")
+    app.navigationBars.firstMatch.buttons["Close"].tap()
     sleep(1)
-    shot("pull-reveal-after-tap")
-    field.typeText("Short")
+    assertHidden("empty Close")
+    XCTAssertEqual(app.buttons[ordinaryLabel].frame.minY, ordinaryY, accuracy: 8)
     sleep(1)
-    shot("pull-reveal-typed")
-    let typed = field.value as? String ?? ""
-    XCTAssertTrue(typed.contains("Short"), "Typed text must land after pull-reveal + tap; field value '\(typed)'")
-    let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", fixturePrefix)).firstMatch
-    XCTAssertTrue(row.waitForExistence(timeout: 5), "Query 'Short' must keep matching the fixture")
+    assertHidden("settled after empty Close")
+    // A second deliberate pull is a fresh entry, not an automatic reopen.
+    guard let second = pullIntoInput() else { return }
+    second.typeText("Short")
+    XCTAssertTrue((second.value as? String ?? "").contains("Short"))
+    shot("second-pull-typed")
+    app.navigationBars.firstMatch.buttons["Close"].tap()
+    sleep(1)
+    assertHidden("typed Close")
+    XCTAssertEqual(app.buttons[ordinaryLabel].frame.minY, ordinaryY, accuracy: 8)
+    // Scrolling down the list must not activate search after cancellation.
+    list.swipeUp(velocity: .slow)
+    assertHidden("ordinary scroll")
+    app.buttons["Library actions"].tap()
+    let search = app.buttons["Search"]
+    XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 5), "Menu entry also shows Close with empty input")
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    close.tap()
+    sleep(1)
+    assertHidden("menu Close")
+    shot("closed-until-next-entry")
   }
 
   /// Diagnostic (beta5): reproduce menu-Search -> type -> Close, then HOLD
