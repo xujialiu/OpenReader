@@ -177,13 +177,14 @@ final class LibrarySearchProbe: XCTestCase {
   }
 
   private func drag(_ list: XCUIElement, fromY: CGFloat, toY: CGFloat) {
-    // Coordinate press-drag did not scroll this list at all (both runs
-    // pixel-identical, 2026-10-28); a velocity flick does.
-    if toY < fromY {
-      list.swipeUp(velocity: .fast)
-    } else {
-      list.swipeDown(velocity: .fast)
-    }
+    // The pull-to-search contract drives by TRANSLATION against a measured
+    // bar height: a slow press-drag with a hold at the end (the same
+    // primitive testPullPreviewThreshold uses inline). A velocity flick
+    // releases before the threshold translation completes and does not
+    // commit (observed on beta10, 2026-10-29).
+    let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: fromY))
+    let end = start.withOffset(CGVector(dx: 0, dy: (toY - fromY) * list.frame.height))
+    start.press(forDuration: 0.01, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
   }
 
   /// One evidence line: field and first-row existence, hit-testability and
@@ -1076,6 +1077,49 @@ final class LibrarySearchProbe: XCTestCase {
     let rootFolder = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search Folder")).firstMatch
     XCTAssertTrue(rootFolder.waitForExistence(timeout: 5), "returning to root must show the Folder row")
     shot("matrix-folder-back")
+  }
+
+  /// Gesture-causality control: the SAME slow coordinate press-drag applied
+  /// to the system Settings list on this owned device. If Settings moves,
+  /// synthetic coordinate drags deliver, and a non-moving Library is an
+  /// app/target finding; if Settings also stands still, the coordinate
+  /// primitive cannot deliver on this stack at all.
+  func testControlSettingsCoordinateDrag() {
+    let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+    settings.launch()
+    XCTAssertTrue(settings.wait(for: .runningForeground, timeout: 10), "Settings must run foreground")
+    // iOS 26 Settings exposes no ScrollView; drag on the app element itself
+    // and read the visible static texts before/after.
+    let textsBefore = settings.staticTexts.allElementsBoundByIndex
+      .filter { $0.exists && $0.frame.minY >= 100 && !$0.label.isEmpty }
+      .prefix(6).map { "\($0.label)@\(Int($0.frame.minY))" }.joined(separator: " | ")
+    let start = settings.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+    let end = start.withOffset(CGVector(dx: 0, dy: -300))
+    start.press(forDuration: 0.01, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+    sleep(1)
+    let textsAfter = settings.staticTexts.allElementsBoundByIndex
+      .filter { $0.exists && $0.frame.minY >= 100 && !$0.label.isEmpty }
+      .prefix(6).map { "\($0.label)@\(Int($0.frame.minY))" }.joined(separator: " | ")
+    let line = "settings-control: before=[\(textsBefore)] after=[\(textsAfter)] moved=\(textsBefore != textsAfter)"
+    print("[diag] \(line)")
+    let attachment = XCTAttachment(string: line)
+    attachment.name = "settings-control-frames"; attachment.lifetime = .keepAlways; add(attachment)
+    shot("settings-control-after-drag")
+    settings.terminate()
+  }
+
+  /// Diagnostic (beta10): one slow coordinate drag on the Library, then
+  /// idle — pairs with an external video recording to see whether the pan
+  /// translation drives the blur preview at all.
+  func testDragAndIdle() {
+    let app = launch()
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5), "list must exist")
+    let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15))
+    let end = start.withOffset(CGVector(dx: 0, dy: 300))
+    start.press(forDuration: 0.02, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 1.5)
+    sleep(3)
+    shot("beta10-drag-idle-end")
   }
 
   /// Contract: clearing input shows the ordinary list again but stays in
