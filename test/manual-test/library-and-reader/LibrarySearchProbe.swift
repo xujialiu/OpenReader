@@ -1110,6 +1110,29 @@ final class LibrarySearchProbe: XCTestCase {
     settings.terminate()
   }
 
+  /// Basic browse-scroll regression, no relaunch: suitable for a controlled
+  /// native-handler A/B diagnostic. Capture scalar coordinates, not live refs.
+  func testBasicScrollOnRunningLibrary() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5))
+    let row = app.buttons["Scroll Diag 12 of 12, Not started."]
+    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    let beforeY = row.frame.minY
+    list.swipeUp(velocity: .slow)
+    sleep(1)
+    let upY = row.frame.minY
+    print("[diag] basic-scroll before=\(beforeY) after-up=\(upY)")
+    shot("basic-scroll-after-up")
+    XCTAssertLessThan(upY, beforeY - 40, "Ordinary upward swipe must move the Library, not snap back")
+    list.swipeDown(velocity: .slow)
+    sleep(1)
+    let downY = row.frame.minY
+    print("[diag] basic-scroll after-down=\(downY)")
+    shot("basic-scroll-after-down")
+    XCTAssertGreaterThan(downY, upY + 40, "Ordinary downward swipe must move back through the Library")
+  }
+
   /// A real pan against the already-running Library, so an owned debugger
   /// observes the SAME process throughout. No launch, app mutation or audio.
   func testPanOnRunningLibrary() {

@@ -53,12 +53,14 @@ now covers the non-iOS fallback; the iOS regression instead requires one native
 browse capture and native restoration, never the clamping RN scroll command.
 
 A deliberate pull at list top now previews input and commits only at full
-clarity. The page observes the already-associated scroll view's pan recognizer
-through an additional target; it does not replace the scroll delegate or add a
-competing recognizer. Progress is the downward translation divided by the
-search bar's measured height at gesture start (using its native fitting size
-if layout has not supplied a height). Only a single-pointer pull starting at
-the native adjusted top qualifies; multi-touch invalidates entry.
+clarity. The page subscribes to the already-associated `RCTEnhancedScrollView`
+through its documented `delegateSplitter` API, preserving React Native's own
+delegates. Begin/scroll/end callbacks observe actual content movement; no
+competing recognizer or replacement scroll delegate is installed. Only
+movement beyond the adjusted top creates a preview, whether the drag started
+there or reached it from deeper in the list. Progress is that downward native
+content displacement divided by the bar's measured height (native fitting
+size when layout has not supplied one). Multi-touch invalidates entry.
 
 `RNSSearchBar` drives a paused UIKit `UIViewPropertyAnimator` over a
 `UIVisualEffectView`, from material blur at progress zero to no blur at one.
@@ -74,9 +76,20 @@ query is still empty.
 Releasing or cancelling short uses the existing closed-position transaction
 BEFORE removing the effect, preventing a clear-field flash or half-open rest.
 A newly started gesture supersedes an older queued cancellation. Binding
-changes and deallocation clean up targets, effects and interaction flags.
+changes and deallocation remove the additive delegate and clean up effects
+and interaction flags.
 Programmatic scrolling never produces this entry gesture. The new visual and
 threshold behavior requires recorded gesture evidence, not just final frames.
+
+The first pan-target implementation regressed basic browsing: it created a
+preview on ANY drag at top, then restored logical zero whenever that drag did
+not commit. A real two-direction test stayed at y=296; removing ONLY that
+handler at runtime restored y=296 → -30.33 → 296 under the same stimulus.
+This is an application regression, not an input-path blocker. Eligibility now
+creates no effect and arms no restoration. An ordinary scroll is untouched;
+only a confirmed downward preview may be cancelled, and a reversed preview
+that becomes forward browsing preserves the current logical position. The
+original zero-translation pan trace is not evidence that the input was bad.
 
 Close keeps using `closed-browse`: hide the field and keyboard and restore the
 original position. Empty Close is a cancellation too. A later layout must not
