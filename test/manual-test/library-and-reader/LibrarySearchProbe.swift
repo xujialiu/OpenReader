@@ -177,16 +177,12 @@ final class LibrarySearchProbe: XCTestCase {
   }
 
   private func drag(_ list: XCUIElement, fromY: CGFloat, toY: CGFloat) {
-    // Measured on beta11 (2026-10-30): the translation-driven pull commits
-    // only when the drag translates slowly — a SLOW velocity swipeDown
-    // reveals the field (verified) while a FAST flick releases before the
-    // threshold and coordinate press-drags do not translate this list at
-    // all on this device. Upward (ordinary scroll) stays .fast/.slow as the
-    // scroll check requires.
+    // Keep the established flick primitive. Slow and coordinate diagnostics
+    // are separate; a revealed field without keyboard/Close is not a commit.
     if toY < fromY {
-      list.swipeUp(velocity: .slow)
+      list.swipeUp(velocity: .fast)
     } else {
-      list.swipeDown(velocity: .slow)
+      list.swipeDown(velocity: .fast)
     }
   }
 
@@ -1162,6 +1158,29 @@ final class LibrarySearchProbe: XCTestCase {
     start.press(forDuration: 0.02, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 1.5)
     sleep(3)
     shot("beta10-drag-idle-end")
+  }
+
+  /// Same-process coordinate pull, for a controlled gesture-dependency A/B.
+  func testCoordinatePullOnRunningLibrary() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5))
+    let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 160)),
+                withVelocity: XCUIGestureVelocity(rawValue: 40), thenHoldForDuration: 0.3)
+    XCTAssertTrue(app.navigationBars.firstMatch.buttons["Close"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    shot("coordinate-pull-input")
+  }
+
+  /// Same-process slow flick for native end-drag ordering inspection.
+  func testSlowFlickOnRunningLibrary() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5))
+    list.swipeDown(velocity: .slow)
+    sleep(1)
+    shot("same-process-slow-flick")
   }
 
   /// Diagnostic (beta11): a SLOW velocity swipeDown (the primitive that

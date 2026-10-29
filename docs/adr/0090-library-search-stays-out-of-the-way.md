@@ -78,8 +78,14 @@ BEFORE removing the effect, preventing a clear-field flash or half-open rest.
 A newly started gesture supersedes an older queued cancellation. Binding
 changes and deallocation remove the additive delegate and clean up effects
 and interaction flags.
-Programmatic scrolling never produces this entry gesture. The new visual and
-threshold behavior requires recorded gesture evidence, not just final frames.
+An end-drag notification does not always end movement: a measured flick
+reports `willDecelerate=YES` at the original offset, and content displacement
+arrives afterwards. An untouched candidate remains eligible through that
+remaining motion, ending at `scrollViewDidEndDecelerating`. A visible partial
+preview is instead abandoned on release, so inertia cannot finish a preview
+the person stopped short. Programmatic scrolling outside an eligible gesture
+never creates entry. Visual and threshold behavior require recorded gesture
+evidence, not just final frames.
 
 The first pan-target implementation regressed basic browsing: it created a
 preview on ANY drag at top, then restored logical zero whenever that drag did
