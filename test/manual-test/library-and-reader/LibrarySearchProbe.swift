@@ -1265,6 +1265,25 @@ final class LibrarySearchProbe: XCTestCase {
     attachment.name = "flow-reached"; attachment.lifetime = .keepAlways; add(attachment)
   }
 
+  /// Helper: navigate back until the Library root is reached.
+  func testNavigateToRoot() {
+    // Attach to the already-running app; no launch (launch() waits for a
+    // Document which does not exist inside a Folder).
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    if !app.navigationBars.firstMatch.exists {
+      app.launch()
+    }
+    for _ in 0..<4 {
+      if app.navigationBars.firstMatch.identifier == "Library" {
+        shot("at-root")
+        return
+      }
+      let back = app.navigationBars.buttons.firstMatch
+      if back.exists { back.tap(); sleep(1) } else { break }
+    }
+    XCTAssertEqual(app.navigationBars.firstMatch.identifier, "Library", "must reach the Library root")
+  }
+
   /// Contract: clearing input shows the ordinary list again but stays in
   /// search (field available); cancelling ends search, hides/collapses the
   /// field and restores the ordinary position. Gesture-free: `...` › Search
