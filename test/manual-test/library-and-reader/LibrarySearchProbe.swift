@@ -177,14 +177,13 @@ final class LibrarySearchProbe: XCTestCase {
   }
 
   private func drag(_ list: XCUIElement, fromY: CGFloat, toY: CGFloat) {
-    // The pull-to-search contract drives by TRANSLATION against a measured
-    // bar height: a slow press-drag with a hold at the end (the same
-    // primitive testPullPreviewThreshold uses inline). A velocity flick
-    // releases before the threshold translation completes and does not
-    // commit (observed on beta10, 2026-10-29).
-    let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: fromY))
-    let end = start.withOffset(CGVector(dx: 0, dy: (toY - fromY) * list.frame.height))
-    start.press(forDuration: 0.01, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+    // Keep the established flick primitive. The separate threshold/diagnostic
+    // methods exercise coordinate drags; neither replaces the other as proof.
+    if toY < fromY {
+      list.swipeUp(velocity: .fast)
+    } else {
+      list.swipeDown(velocity: .fast)
+    }
   }
 
   /// One evidence line: field and first-row existence, hit-testability and
@@ -1100,12 +1099,28 @@ final class LibrarySearchProbe: XCTestCase {
     let textsAfter = settings.staticTexts.allElementsBoundByIndex
       .filter { $0.exists && $0.frame.minY >= 100 && !$0.label.isEmpty }
       .prefix(6).map { "\($0.label)@\(Int($0.frame.minY))" }.joined(separator: " | ")
+    XCTAssertFalse(textsBefore.isEmpty, "Settings control needs a nonempty starting snapshot")
+    XCTAssertFalse(textsAfter.isEmpty, "Settings control needs a nonempty ending snapshot")
+    XCTAssertNotEqual(textsBefore, textsAfter, "The gesture control must actually move Settings")
     let line = "settings-control: before=[\(textsBefore)] after=[\(textsAfter)] moved=\(textsBefore != textsAfter)"
     print("[diag] \(line)")
     let attachment = XCTAttachment(string: line)
     attachment.name = "settings-control-frames"; attachment.lifetime = .keepAlways; add(attachment)
     shot("settings-control-after-drag")
     settings.terminate()
+  }
+
+  /// A real pan against the already-running Library, so an owned debugger
+  /// observes the SAME process throughout. No launch, app mutation or audio.
+  func testPanOnRunningLibrary() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5))
+    let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 160)),
+                withVelocity: XCUIGestureVelocity(rawValue: 80), thenHoldForDuration: 0.2)
+    shot("same-process-pan")
+    tree(app, "same-process-pan-tree")
   }
 
   /// Diagnostic (beta10): one slow coordinate drag on the Library, then
