@@ -329,10 +329,8 @@ final class TwoFingerProbe: XCTestCase {
   func testDrawerProof() throws {
     let app = openDrawer()
     drawerReport("drawer-before", app)
-    let rows = drawerRows(app)
-    XCTAssertGreaterThan(rows.count, 3, "Too few rows on screen to sweep")
-    let from = CGPoint(x: rows[0].frame.midX, y: rows[0].frame.midY), to = CGPoint(x: rows[2].frame.midX, y: rows[2].frame.midY)
-    Fingers.play(Fingers.pair(Fingers.line(from, to, start: 0, seconds: 0.8), lift: 1.0), name: "drawer-proof", in: self)
+    guard let rows = shownRows(app, atLeast: 3) else { return }
+    Fingers.play(Fingers.pair(Fingers.line(mid(rows[0]), mid(rows[2]), start: 0, seconds: 0.8), lift: 1.0), name: "drawer-proof", in: self)
     drawerReport("drawer-after", app)
   }
 
@@ -346,20 +344,22 @@ final class TwoFingerProbe: XCTestCase {
   /// One finger over the list, six times each as XCTest's swipe and as a slower drag: does a scroll ever choose the row it began on?
   func testDrawerOneFingerNeverChooses() throws {
     let app = openDrawer()
-    let list = drawerRows(app).filter { $0.frame.minY > 300 && $0.frame.maxY < 700 }
-    XCTAssertFalse(list.isEmpty)
-    let x = list[0].frame.midX
+    guard let viewport = drawerViewport(app) else { return unverified("one-finger", "chapter-list viewport not found") }
+    print("VIEWPORT one-finger: \(viewport)")
     var changes: [String] = []
     for round in 0..<6 {
       let before = chosenCount(app)
-      let rows = drawerRows(app).filter { $0.frame.minY > 300 && $0.frame.maxY < 700 }
-      if round % 2 == 0 { rows[rows.count / 2].swipeUp() } else { rows[rows.count / 2].swipeDown() }
+      guard let rows = shownRows(app, atLeast: 1), let target = rows.dropFirst(rows.count / 2).first else { return }
+      guard let element = drawerRows(app).first(where: { abs($0.frame.minY - target.frame.minY) < 1 }) else { return unverified("one-finger", "row \(target.label) vanished before the swipe") }
+      print("DRAWER swipe-\(round) on row \(target.label) frame=\(target.frame) fully inside viewport=\(viewport.contains(target.frame))")
+      if round % 2 == 0 { element.swipeUp() } else { element.swipeDown() }
       Thread.sleep(forTimeInterval: 1.2)
       changes.append("swipe\(round % 2 == 0 ? "Up" : "Down") \(before)->\(chosenCount(app))")
     }
+    let x = viewport.midX
     for round in 0..<6 {
       let before = chosenCount(app)
-      let from = CGPoint(x: x, y: round % 2 == 0 ? 560 : 400), to = CGPoint(x: x, y: round % 2 == 0 ? 400 : 560)
+      let from = CGPoint(x: x, y: round % 2 == 0 ? viewport.maxY - 25 : viewport.minY + 25), to = CGPoint(x: x, y: round % 2 == 0 ? viewport.minY + 25 : viewport.maxY - 25)
       Fingers.play([Fingers.finger(Fingers.line(from, to, start: 0, seconds: 0.5), lift: 0.55)], name: "drag-\(round)", in: self)
       Thread.sleep(forTimeInterval: 1.2)
       changes.append("drag\(round % 2 == 0 ? "Up" : "Down") \(before)->\(chosenCount(app))")
@@ -368,11 +368,161 @@ final class TwoFingerProbe: XCTestCase {
     print("ONE FINGER ROUNDS: \(changes)")
   }
 
-  /// The drawer's rows wholly inside the list: below the downloaded count, above the footer.
-  func shownRows(_ app: XCUIApplication) -> [XCUIElement] {
-    let top = app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded' OR label ENDSWITH ' saved'")).firstMatch.frame.maxY
-    let footer = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected (' OR label BEGINSWITH 'Delete selected (' OR label == 'Manage downloads' OR label == 'Back to downloads'")).allElementsBoundByIndex.map { $0.frame.minY }.min() ?? 874
-    return drawerRows(app).filter { $0.frame.minY >= top && $0.frame.maxY <= footer }
+  /// A chapter row as the AX tree reported it at one moment. Elements found by index are looked up again at every use,
+  /// so a row read later may be another one; the probes keep these and touch the screen by point.
+  struct DrawerRow {
+    let label: String
+    let frame: CGRect
+    let enabled: Bool
+    let selected: Bool
+    var mid: CGPoint { CGPoint(x: frame.midX, y: frame.midY) }
+    /// A completed chapter keeps its checkbox but is disabled and labelled `, downloaded`; a sweep chooses nothing there.
+    var choosable: Bool { enabled && !label.hasSuffix(", downloaded") }
+  }
+
+  func snapshotRows(_ app: XCUIApplication) -> [DrawerRow] {
+    drawerRows(app).map { DrawerRow(label: $0.label, frame: $0.frame, enabled: $0.isEnabled, selected: $0.isSelected) }
+  }
+
+  /// An unmet prerequisite or a synthesis error: printed as `UNVERIFIED` and failed, so nothing passes silently.
+  func unverified(_ name: String, _ why: String) {
+    print("UNVERIFIED \(name): \(why)")
+    XCTFail("UNVERIFIED \(name): \(why)")
+  }
+
+  /// The chapter list's own clipped frame from the AX tree: the smallest scroll view that holds a chapter row's centre.
+  /// Rows scrolled out of it stay in the tree with frames outside it (#334), so no screen constant stands in for this.
+  func drawerViewport(_ app: XCUIApplication) -> CGRect? {
+    let rows = snapshotRows(app)
+    var best: CGRect?
+    for view in app.scrollViews.allElementsBoundByIndex {
+      let frame = view.frame
+      guard frame.width >= 200, frame.height > 60, frame.height < 700 else { continue }
+      guard rows.contains(where: { frame.contains($0.mid) }) else { continue }
+      if best == nil || frame.height < best!.height { best = frame }
+    }
+    return best
+  }
+
+  func inside(_ frame: CGRect, _ viewport: CGRect) -> Bool {
+    frame.minY >= viewport.minY - 0.5 && frame.maxY <= viewport.maxY + 0.5 && frame.minX >= viewport.minX - 0.5 && frame.maxX <= viewport.maxX + 0.5
+  }
+
+  /// The drawer's rows wholly inside the chapter list's viewport, top to bottom.
+  func shownRows(_ app: XCUIApplication) -> [DrawerRow] {
+    guard let viewport = drawerViewport(app) else { return [] }
+    return snapshotRows(app).filter { inside($0.frame, viewport) }
+  }
+
+  /// `shownRows`, or a failure with `UNVERIFIED` when fewer than `count` are there. Callers must stop on nil: a failed assert does not.
+  func shownRows(_ app: XCUIApplication, atLeast count: Int) -> [DrawerRow]? {
+    let rows = shownRows(app)
+    guard rows.count >= count else { unverified("shown-rows", "\(rows.count) rows fully inside the viewport, need \(count)"); return nil }
+    return rows
+  }
+
+  /// The first `count` rows in a row (no gap) that are all fully inside the viewport and choosable.
+  func choosableRun(_ app: XCUIApplication, count: Int, excluding: Set<String> = []) -> (viewport: CGRect, run: [DrawerRow])? {
+    guard let viewport = drawerViewport(app) else { return nil }
+    var run: [DrawerRow] = []
+    for row in snapshotRows(app).filter({ inside($0.frame, viewport) }) {
+      if row.choosable, !excluding.contains(row.label), run.isEmpty || abs(row.frame.minY - run.last!.frame.maxY) < 4 { run.append(row) }
+      else { run = row.choosable && !excluding.contains(row.label) ? [row] : [] }
+      if run.count == count { return (viewport, run) }
+    }
+    return nil
+  }
+
+  func tap(_ app: XCUIApplication, _ point: CGPoint) {
+    app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x, dy: point.y)).tap()
+  }
+
+  /// #334. Valid two-finger paths, each between rows fully inside the chapter list's viewport, with the start and end
+  /// asserted on those rows before the gesture and the `Download selected (N)` count read back after: downward,
+  /// retraction (down, then back up) and one-finger retention. Run it on a fresh launch for the first presentation;
+  /// it then presents the drawer again (Back, Download) and repeats the same checks. Selects only; never presses Download.
+  func testDrawerValidGestures() throws {
+    let app = openDrawer()
+    Thread.sleep(forTimeInterval: 1)
+    verifyValidGestures(app, phase: "first")
+    let again = openDrawer()
+    Thread.sleep(forTimeInterval: 1)
+    verifyValidGestures(again, phase: "remount")
+  }
+
+  func verifyValidGestures(_ app: XCUIApplication, phase: String) {
+    func fail(_ why: String) { unverified(phase, why) }
+    guard let first = choosableRun(app, count: 4) else {
+      let rows = snapshotRows(app)
+      print("VIEWPORT \(phase): \(String(describing: drawerViewport(app))) rows=\(rows.map { "\($0.label)@\($0.frame)" })")
+      return fail("no viewport, or fewer than 4 choosable rows in a row fully inside it")
+    }
+    let viewport = first.viewport
+    print("VIEWPORT \(phase): \(viewport) scrollViews=\(app.scrollViews.allElementsBoundByIndex.map { $0.frame })")
+    print("ROWS \(phase): \(first.run.map { "\($0.label)@\($0.frame)" })")
+    guard chosenCount(app) == 0 else { return fail("\(chosenCount(app)) chapters chosen before the first gesture, need 0") }
+    let run = first.run
+    let chosenLabels = Set([run[0].label, run[1].label, run[2].label])
+
+    /// Both ends of a path must lie on a row of the run that is fully inside the viewport.
+    func onRows(_ points: [CGPoint]) -> Bool {
+      for point in points {
+        guard viewport.contains(point), run.contains(where: { $0.frame.contains(point) }) else { fail("point \(point) is not on a row inside the viewport \(viewport)"); return false }
+      }
+      return true
+    }
+    func read(_ name: String) -> Int {
+      Thread.sleep(forTimeInterval: 0.8)
+      capture("\(phase)-\(name)", app)
+      let count = chosenCount(app)
+      print("DRAWER \(phase) \(name): chosen=\(count) rows=\(snapshotRows(app).filter { self.inside($0.frame, viewport) }.map { "\($0.label)=\($0.selected ? 1 : 0)" })")
+      return count
+    }
+    func clear() -> Bool {
+      for row in run.prefix(3) { tap(app, row.mid); Thread.sleep(forTimeInterval: 0.5) }
+      let ok = until(4) { self.chosenCount(app) == 0 }
+      if !ok { fail("tapping the three rows back left \(chosenCount(app)) chosen") }
+      return ok
+    }
+
+    // Downward: row 0 to row 2.
+    guard onRows([run[0].mid, run[2].mid]) else { return }
+    print("GESTURE \(phase) down: from=\(run[0].mid) to=\(run[2].mid) chosen before=\(chosenCount(app))")
+    Fingers.play(Fingers.pair(Fingers.line(run[0].mid, run[2].mid, start: 0.1, seconds: 0.8), lift: 1.1), name: "\(phase)-down", in: self)
+    _ = until(5) { self.chosenCount(app) == 3 }
+    let down = read("down")
+    XCTAssertEqual(down, 3, "\(phase): downward pair over rows 0-2 inside the viewport")
+    guard down == 3, clear() else { return fail("downward selection did not give 3, the later checks cannot start from a clean state") }
+
+    // Retraction: row 0 to row 2, then back up to row 1, in one gesture; the run is row 0 to row 1.
+    guard onRows([run[0].mid, run[2].mid, run[1].mid]) else { return }
+    let out = Fingers.line(run[0].mid, run[2].mid, start: 0.1, seconds: 0.8)
+    let back = Fingers.line(run[2].mid, run[1].mid, start: 1.0, seconds: 0.5).dropFirst()
+    print("GESTURE \(phase) retract: \(run[0].mid) -> \(run[2].mid) -> \(run[1].mid) chosen before=\(chosenCount(app))")
+    Fingers.play(Fingers.pair(out + back, lift: 1.6), name: "\(phase)-retract", in: self)
+    _ = until(5) { self.chosenCount(app) == 2 }
+    let retract = read("retract")
+    XCTAssertEqual(retract, 2, "\(phase): down to row 2 and back to row 1 leaves rows 0-1")
+    guard retract == 2 else { return fail("retraction did not give 2, retention cannot be checked") }
+
+    // One-finger retention: a scroll inside the viewport, then a tap and the tap back.
+    let before = shownRows(app).map { $0.label }
+    let x = viewport.midX
+    let from = CGPoint(x: x, y: viewport.maxY - 25), to = CGPoint(x: x, y: viewport.minY + 25)
+    print("GESTURE \(phase) one-finger scroll: \(from) -> \(to)")
+    Fingers.play([Fingers.finger(Fingers.line(from, to, start: 0.1, seconds: 0.6), lift: 0.8)], name: "\(phase)-scroll", in: self)
+    Thread.sleep(forTimeInterval: 1)
+    let after = shownRows(app).map { $0.label }
+    print("DRAWER \(phase) scroll rows before=\(before) after=\(after)")
+    XCTAssertNotEqual(before, after, "\(phase): the one-finger scroll must have moved the list, or it proved nothing")
+    XCTAssertEqual(read("scroll"), 2, "\(phase): a one-finger scroll keeps the chosen rows")
+    guard let other = choosableRun(app, count: 1, excluding: chosenLabels) else { return fail("no other choosable row inside the viewport to tap") }
+    tap(app, other.run[0].mid)
+    XCTAssertTrue(until(3) { self.chosenCount(app) == 3 }, "\(phase): a one-finger tap adds a row to the two chosen")
+    print("DRAWER \(phase) tap: chosen=\(chosenCount(app)) row=\(other.run[0].label)")
+    tap(app, other.run[0].mid)
+    XCTAssertTrue(until(3) { self.chosenCount(app) == 2 }, "\(phase): the second tap takes it back, keeping the two")
+    print("DRAWER \(phase) retention final: chosen=\(read("retention"))")
   }
 
   func sweep(_ from: CGPoint, _ to: CGPoint, seconds: Double = 0.8, hold: Double = 0, name: String) {
@@ -381,15 +531,14 @@ final class TwoFingerProbe: XCTestCase {
     Thread.sleep(forTimeInterval: 0.8)
   }
 
-  func mid(_ row: XCUIElement) -> CGPoint { CGPoint(x: row.frame.midX, y: row.frame.midY) }
+  func mid(_ row: DrawerRow) -> CGPoint { row.mid }
 
   /// The drawer's copy, against the rules measured in Files.
   func testDrawerSweeps() throws {
     let app = openDrawer()
-    var rows = shownRows(app)
     // Opened at the chapter being read, whose long title eats the 50 % drawer,
     // as few as three rows show; the sweeps run over what is there.
-    XCTAssertGreaterThanOrEqual(rows.count, 3, "Too few rows inside the list")
+    guard var rows = shownRows(app, atLeast: 3) else { return }
     print("DRAWER shown rows: \(rows.map { $0.label })")
     // A run: the first shown row to the last.
     let last = rows.count - 1
@@ -398,7 +547,8 @@ final class TwoFingerProbe: XCTestCase {
     capture("drawer-run", app)
     // Back toward the start gives rows back: rows 0..3 then back to 1, from a clean start.
     let reopened = openDrawer()
-    rows = shownRows(reopened)
+    guard let reopenedRows = shownRows(reopened, atLeast: 3) else { return }
+    rows = reopenedRows
     sweep(mid(rows[0]), mid(rows[rows.count - 1]), seconds: 0.6, name: "out")
     print("DRAWER after-out: \(chosenCount(reopened))")
     // A second sweep that begins on a selected row takes rows out, and gives back those it leaves on the way back.
@@ -410,7 +560,8 @@ final class TwoFingerProbe: XCTestCase {
     capture("drawer-from-selected", reopened)
     // One finger carries on: two fingers over rows 0..1, then one lifts and the other goes on to row 3.
     let third = openDrawer()
-    rows = shownRows(third)
+    guard let thirdRows = shownRows(third, atLeast: 3) else { return }
+    rows = thirdRows
     let spread: CGFloat = 36
     let together = Fingers.line(mid(rows[0]), mid(rows[1]), start: 0, seconds: 0.5)
     let alone = Fingers.line(mid(rows[1]), mid(rows[rows.count - 1]), start: 0.7, seconds: 0.6).dropFirst()
@@ -422,7 +573,8 @@ final class TwoFingerProbe: XCTestCase {
     capture("drawer-one-finger", third)
     // Past the bottom edge onto the footer, held a second: the list scrolls by itself and the run follows.
     let fourth = openDrawer()
-    rows = shownRows(fourth)
+    guard let fourthRows = shownRows(fourth, atLeast: 3) else { return }
+    rows = fourthRows
     let below = CGPoint(x: rows[0].frame.midX, y: rows[rows.count - 1].frame.maxY + 30)
     sweep(mid(rows[0]), below, seconds: 0.6, hold: 1.0, name: "edge")
     print("DRAWER edge-past-bottom-1s: \(chosenCount(fourth)) shown now: \(shownRows(fourth).map { $0.label })")
@@ -451,9 +603,9 @@ final class TwoFingerProbe: XCTestCase {
   /// choose the row they begin on even before #57 (README, Pitfalls, XCTest),
   /// so this scrolls with a synthesized one-finger drag instead.
   func drawerScrollDown(_ app: XCUIApplication, times: Int = 3) {
-    let x = shownRows(app).first?.frame.midX ?? 200
+    guard let viewport = drawerViewport(app) else { return unverified("scroll-down", "chapter-list viewport not found") }
     for _ in 0..<times {
-      Fingers.play([Fingers.finger(Fingers.line(CGPoint(x: x, y: 650), CGPoint(x: x, y: 320), start: 0, seconds: 0.4), lift: 0.45)], name: "scroll-down", in: self)
+      Fingers.play([Fingers.finger(Fingers.line(CGPoint(x: viewport.midX, y: viewport.maxY - 25), CGPoint(x: viewport.midX, y: viewport.minY + 25), start: 0, seconds: 0.4), lift: 0.45)], name: "scroll-down", in: self)
       Thread.sleep(forTimeInterval: 1.0)
     }
   }
@@ -467,8 +619,7 @@ final class TwoFingerProbe: XCTestCase {
   func testDrawerTopEdge() throws {
     let app = openDrawer()
     drawerScrollDown(app, times: 4)
-    let before = shownRows(app)
-    XCTAssertGreaterThanOrEqual(before.count, 2, "Too few rows to find the top edge")
+    guard let before = shownRows(app, atLeast: 2) else { return }
     print("DRAWER top-edge before: \(before.map { $0.label })")
     let start = mid(before[before.count - 1])
     let end = CGPoint(x: start.x, y: before[0].frame.minY + 10)
@@ -489,8 +640,7 @@ final class TwoFingerProbe: XCTestCase {
   /// selection was lost.
   func testDrawerLongStretchSmoothness() throws {
     let app = openDrawer()
-    let rows = shownRows(app)
-    XCTAssertGreaterThanOrEqual(rows.count, 2, "Too few rows to sweep")
+    guard let rows = shownRows(app, atLeast: 2) else { return }
     let before = rows.map { $0.label }
     let anchor = mid(rows[0])
     let bottomEdge = CGPoint(x: rows[0].frame.midX, y: rows[rows.count - 1].frame.maxY + 20)
@@ -522,17 +672,17 @@ final class TwoFingerProbe: XCTestCase {
   /// one-finger scroll choosing nothing is `testDrawerOneFingerNeverChooses`).
   func testDrawerOneFingerTapToggles() throws {
     let app = openDrawer()
-    let rows = shownRows(app)
-    XCTAssertGreaterThanOrEqual(rows.count, 1, "No row to tap")
+    guard let rows = shownRows(app, atLeast: 1) else { return }
     // `.isSelected` is not a reliable read of these rows' checked state — this
     // file's own passing sweep tests only print it for the report, never
     // assert on it, and rely on `chosenCount()` (the "Download selected (N)"
     // button label) for real evidence instead. Do the same here.
     let before = chosenCount(app)
-    rows[0].tap()
+    tap(app, rows[0].mid)
     XCTAssertTrue(until(3) { self.chosenCount(app) == before + 1 }, "A one-finger tap did not select the row")
     capture("drawer-one-finger-tap-1", app)
-    shownRows(app)[0].tap()
+    guard let again = shownRows(app, atLeast: 1) else { return }
+    tap(app, again[0].mid)
     XCTAssertTrue(until(3) { self.chosenCount(app) == before }, "A second one-finger tap did not deselect the row back")
     capture("drawer-one-finger-tap-2", app)
   }
@@ -546,8 +696,8 @@ final class TwoFingerProbe: XCTestCase {
   /// `launch()`), which is the short fixture at that point.
   func testDrawerCheckedRowsUnaffectedBySweep() throws {
     let app = openDrawer()
-    let rows = shownRows(app)
-    XCTAssertGreaterThanOrEqual(rows.count, 2, "Expected the short fixture's two downloaded chapters — run this right after DownloadRingProbe.testDownloadRingLifecycle")
+    guard let rows = shownRows(app, atLeast: 2) else { return }
+    // Expected the short fixture's two downloaded chapters — run this right after DownloadRingProbe.testDownloadRingLifecycle
     print("CHECKED ROWS: \(rows.map { $0.label })")
     // The "Download selected (N)" button always exists once the drawer is
     // open, N included when N is 0 — `chosenCount()` reads that number
@@ -568,8 +718,7 @@ final class TwoFingerProbe: XCTestCase {
     let app = openDrawer()
     XCTAssertTrue(app.buttons["Manage downloads"].waitForExistence(timeout: 5))
     app.buttons["Manage downloads"].tap()
-    let rows = shownRows(app)
-    XCTAssertGreaterThanOrEqual(rows.count, 2, "Expected the short fixture's two saved chapters in Manage downloads")
+    guard let rows = shownRows(app, atLeast: 2) else { return }
     sweep(mid(rows[0]), mid(rows[rows.count - 1]), name: "manage-sweep")
     let deleteButton = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Delete selected ('")).firstMatch
     XCTAssertEqual(deleteButton.label, "Delete selected (\(rows.count))")
@@ -578,7 +727,7 @@ final class TwoFingerProbe: XCTestCase {
     let alert = app.alerts["Delete downloaded audio?"]
     XCTAssertTrue(alert.waitForExistence(timeout: 5))
     alert.buttons["Delete"].tap()
-    XCTAssertTrue(until(10) { self.shownRows(app).isEmpty }, "The deleted rows should leave nothing for Manage downloads to list")
+    XCTAssertTrue(until(10) { self.snapshotRows(app).isEmpty }, "The deleted rows should leave nothing for Manage downloads to list")
     capture("drawer-manage-sweep-deleted", app)
   }
 }
