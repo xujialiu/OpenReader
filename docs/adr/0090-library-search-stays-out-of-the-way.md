@@ -139,13 +139,12 @@ this behavior but would discard the required two-finger priority.
 `react-native-gesture-handler+2.32.0.patch` therefore fails only an immediate
 multi-pointer candidate still missing its required fingers after movement
 reaches ten points. A pair already down follows the existing activation path.
-This applies to the shared Library/download sweep and requires both to be
-verified. The Library's real two-pointer control selects exactly three
-traversed entries; the same two-pointer track while searching leaves the
-query intact and enters no selection. The native gesture also explicitly uses `runOnJS(true)`: the app
-ships Worklets for audio but not Reanimated; a native-gesture event must not
-try to dispatch through the absent ReanimatedModule. Pending native checks,
-this is a candidate fix, not proof that every short gesture is handled.
+The Library's real two-pointer control selects exactly three traversed
+entries; the same two-pointer track while searching leaves the query intact
+and enters no selection. The native gesture explicitly uses `runOnJS(true)`:
+the app has no Reanimated module to receive those events. The Download
+verification follow-up is separate (#334): its old coordinate filter started
+outside the list, so its failures did not establish a selection defect.
 
 ## The narrow native patch
 
@@ -199,7 +198,8 @@ UIKit's commands remain intact. Dispatch verifies the bar still belongs to the
 current search controller and reuses the page's cancellation guard. The
 navigation-controller commands remain for list focus. No private selector is
 implemented and no existing UIKit object has its runtime class changed. This
-closer-responder routing and native bar integration still require acceptance.
+closer-responder routing was subsequently verified through physical-keyboard
+Escape; the synthesized path has the limitation below.
 
 The closer command also failed the synthesized-Escape checkpoint. A corrected
 same-process trace proves CmdF reaches both find handlers, both command getters
@@ -266,15 +266,16 @@ was `-176 / inset 176 / bar 114` before, `-56 / inset 116 / bar 54` after
 collapse, and `-116 / inset 116 / bar 54` after restoration. The later screenshot
 kept the field hidden and the first row fully visible. The patch now performs
 that complete operation rather than keeping only its first half or removing
-it altogether. Native fresh-launch, pull and cancellation acceptance are still
-required; the runtime experiment is not a substitute for them.
+it altogether. This runtime experiment was diagnostic only; fresh-launch,
+pull and cancellation were verified later on the built implementation.
 
 ## Native scroll-position commands
 
-The next native checkpoint passes cold hidden search, an unclipped first row,
-a real pull reveal without keyboard, and menu-driven input. Cancellation hides
-the field but leaves raw offset zero with adjusted top inset 116, putting the
-first row at y 12 instead of 128.
+An intermediate native checkpoint passed cold hidden search, an unclipped
+first row, the then-agreed pull reveal without keyboard, and menu-driven input.
+Cancellation hid the field but left raw offset zero with adjusted top inset
+116, putting the first row at y 12 instead of 128. The pull contract was later
+revised to enter input; the coordinate failure motivated the commands below.
 
 Two React Native Fabric source facts explain why the former JavaScript
 conversion was insufficient. `_scrollViewMetrics` reports `contentInset`, not
@@ -313,7 +314,8 @@ global event semantics or estimating a delayed header height. Adding Fabric
 commands requires code generation and a new native build; reloading Metro
 alone is insufficient. Host tests exercise the real patched ref's forwarding
 and the hook's capture/restore order, including the misleading zero-inset event.
-Native position restoration still requires the simulator acceptance check.
+The subsequent built-app checks establish exact nonzero position restoration;
+the host tests alone cannot establish that boundary.
 
 The first native-command check restored the correct logical position but left
 the search field expanded: saved browse zero, raw offset -176, adjusted top
@@ -330,7 +332,8 @@ rely on another layout callback to start that operation. It does nothing while
 another page is on top; focus can retry it when the Library returns. A queued
 closed restore is ignored after a new native browse capture, so it cannot
 close newly reopened input. Clear and result-return requests do not force
-collapse. These postconditions still require native retesting.
+collapse. Native checks verify repeated empty/typed cancellation and the
+result-Reader round trip with the same row identity and position.
 
 ## Verification boundary
 
@@ -339,5 +342,15 @@ names after changes, real page/action wiring, deferred Drawer focus, empty
 results, selection exclusion, cancellation and navigation/scroll lifetime.
 Native views are doubles there: these tests do not prove UIKit placement,
 keyboard events, first-responder transitions, scroll restoration on the device
-or appearance. Native verification and latest-app delivery are still required
-before this implementation is complete.
+or appearance. Final native checks cover ordinary scrolling, short/full pull
+with original-page preservation, keyboard and immediate Close, repeated entry,
+nonzero cancellation, result return and selection isolation. Embedded Release
+checks cover cold presentation and the primary pull/Close flow. iPad evidence
+covers one-row and empty-Folder blank-area pulls and its explicit native Close.
+
+Actual Bopomofo composition has a marked range and omits the Library Escape
+command; physical Escape during composition is not claimed tested. Physical
+Escape without composition was verified manually; the synthesized discrepancy
+is retained. Debug tests do not substitute for Release tests, and the separate
+short-threshold case was not repeated in the final Release run. Download probe
+correction is deferred to #334, not silently counted as an application pass.

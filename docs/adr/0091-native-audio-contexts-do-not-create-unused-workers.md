@@ -37,8 +37,11 @@ constructor control creates one worker, proving the allocation counter. The
 app paths then create thirteen contexts and zero workers, with ten completed
 queues, a position callback and three completed pronunciations. This is a
 native lifecycle check, not physical-device acceptance or proof of the
-unidentified upstream fault's exact cause. Final Release verification remains
-a separate gate.
+unidentified upstream fault's exact cause. The final Release artifact verifier
+confirms the current embedded bundle, role and native identity; its UI smoke
+checks pass. The thirteen-context allocation measurement is on Debug, not a
+separately instrumented Release run. The app's two native-node call sites no
+longer enter the per-context worker-creation path.
 
 ## Alternatives and consequence
 
