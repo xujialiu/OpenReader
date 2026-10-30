@@ -45,7 +45,7 @@ index b1f482c..8608478 100644
  @end
  
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..c85059b 100644
+index 9b66012..529ed40 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
 @@ -5,11 +5,13 @@
@@ -62,7 +62,7 @@ index 9b66012..c85059b 100644
  #import <React/RCTSurfaceTouchHandler.h>
  #import <react/renderer/components/rnscreens/EventEmitters.h>
  #import <react/renderer/components/rnscreens/Props.h>
-@@ -1406,6 +1408,12 @@ + (void)load
+@@ -1406,6 +1408,13 @@ + (void)load
  
  @implementation RNSScreen {
    __weak id _previousFirstResponder;
@@ -70,12 +70,13 @@ index 9b66012..c85059b 100644
 +  __weak UISearchController *_openReaderCollapsedSearchController;
 +  BOOL _openReaderSearchPullEligible;
 +  CGFloat _openReaderSearchPullOriginY;
++  CGFloat _openReaderSearchPullFingerY;
 +  CGFloat _openReaderSearchPullDistance;
 +  __weak RNSSearchBar *_openReaderPullSearchBar;
    CGRect _lastViewFrame;
    RNSScreenView *_initialView;
    UIView *_fakeView;
-@@ -1433,6 +1441,210 @@ - (instancetype)initWithView:(UIView *)view
+@@ -1433,6 +1442,216 @@ - (instancetype)initWithView:(UIView *)view
    return self;
  }
  
@@ -201,6 +202,7 @@ index 9b66012..c85059b 100644
 +  }
 +  UISearchController *search = [self openReaderLibrarySearchController];
 +  _openReaderSearchPullOriginY = -scroll.adjustedContentInset.top;
++  _openReaderSearchPullFingerY = [scroll.panGestureRecognizer locationInView:scroll.window].y;
 +  _openReaderSearchPullEligible = search != nil && !search.active &&
 +      self.navigationItem.hidesSearchBarWhenScrolling &&
 +      scroll.panGestureRecognizer.numberOfTouches <= 1;
@@ -231,7 +233,12 @@ index 9b66012..c85059b 100644
 +    }
 +    _openReaderSearchPullDistance = MAX(1, height);
 +  }
-+  CGFloat progress = MIN(1, MAX(0, distance / _openReaderSearchPullDistance));
++  // Expanding UINavigationBar itself changes the content offset/inset by a
++  // search-bar height. That is NOT finger travel. Measure in the fixed window
++  // coordinate space; inertia after lift cannot complete a short preview.
++  CGFloat fingerTravel = scroll.panGestureRecognizer.numberOfTouches == 1
++      ? [scroll.panGestureRecognizer locationInView:scroll.window].y - _openReaderSearchPullFingerY : 0;
++  CGFloat progress = MIN(1, MAX(0, fingerTravel / _openReaderSearchPullDistance));
 +  [_openReaderPullSearchBar openReaderSetPullProgress:progress];
 +  if (progress >= 1) {
 +    [self openReaderFinishLibraryPull:YES];
@@ -286,7 +293,7 @@ index 9b66012..c85059b 100644
  // TODO: Find out why this is executed when screen is going out
  - (void)viewWillAppear:(BOOL)animated
  {
-@@ -1538,6 +1750,48 @@ - (void)viewDidDisappear:(BOOL)animated
+@@ -1538,6 +1757,48 @@ - (void)viewDidDisappear:(BOOL)animated
    _shouldNotify = YES;
  }
  
@@ -335,7 +342,7 @@ index 9b66012..c85059b 100644
  - (void)viewDidLayoutSubviews
  {
    [super viewDidLayoutSubviews];
-@@ -1558,6 +1812,42 @@ - (void)viewDidLayoutSubviews
+@@ -1558,6 +1819,42 @@ - (void)viewDidLayoutSubviews
    if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
      [self.screenView updateBounds];
    }
