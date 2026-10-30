@@ -210,14 +210,14 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
       keyExtractor={(row) => targetKey(rowTarget(row))}
       renderItem={({ item }) => item.kind === 'folder'
         ? <FolderRow title={item.folder.name} summary={folderSummary(counts.get(item.folder.id)?.documents ?? 0, counts.get(item.folder.id)?.folders ?? 0)} disabled={selectionLocked} selected={selection.active ? selectedKeys.has(targetKey(rowTarget(item))) : undefined}
-          onPress={() => selection.active ? selection.toggle(rowTarget(item)) : navigation.push('Folder', { id: item.folder.id })} onActions={() => setFolderActions(item.folder.id)} />
+          onPress={sweep.guard(() => selection.active ? selection.toggle(rowTarget(item)) : navigation.push('Folder', { id: item.folder.id }))} onActions={() => setFolderActions(item.folder.id)} />
         : <LibraryDocument entry={item.entry} present={present.has(item.entry.id)} disabled={selectionLocked}
           path={searching ? folderPath(tree, tree.documents[item.entry.id] ?? null) : undefined}
           selected={selection.active ? selectedKeys.has(targetKey(rowTarget(item))) : undefined}
-          onPress={() => {
+          onPress={sweep.guard(() => {
             if (selection.active) selection.toggle(rowTarget(item));
             else { search.openingResult(item.entry.id); navigation.navigate('Reader', { id: item.entry.id }); }
-          }} onActions={() => setActions(item.entry)} />}
+          })} onActions={() => setActions(item.entry)} />}
       ListHeaderComponent={problem || library.note || busy ? <View style={styles.banner}>
         {problem ? <Note attention>{problem}</Note> : null}
         {library.note ? <View style={styles.message}>

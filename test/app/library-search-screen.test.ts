@@ -47,7 +47,7 @@ vi.mock('../../src/app/settings', () => ({ NO_PROVIDER_SENTENCE: 'No provider is
 vi.mock('../../src/offline/runtime', () => ({ formatBytes: vi.fn(), occupied: vi.fn(), removeDownloads: vi.fn(), requestInventory: vi.fn() }));
 vi.mock('../../src/app/use-sweep', () => ({ useRowSweep: (rows: { enabled: boolean }) => {
   sweeping.enabled = rows.enabled;
-  return { gesture: {}, nativeGesture: {}, list: { ref: vi.fn(), onScroll: vi.fn(), onContentSizeChange: vi.fn() } };
+  return { gesture: {}, nativeGesture: {}, list: { ref: vi.fn(), onScroll: vi.fn(), onContentSizeChange: vi.fn() }, guard: <A extends unknown[]>(press: (...args: A) => void) => press };
 } }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 

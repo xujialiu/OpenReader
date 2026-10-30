@@ -11,6 +11,16 @@ import { beginSweep, edgeSpeed, rowAt, rowChapters, sweepTo, type Extent, type S
  */
 const EDGE_BAND = 24;
 const EDGE_FASTEST = 1500;
+/**
+ * How long after a sweep ends a row's press is still not a tap, in
+ * milliseconds. A row's `Pressable` keeps the touch that came down on it, and
+ * its press retention reaches about 20 pt above and 30 pt below it, so fingers
+ * lifted within that of the row the sweep began on fire its `onPress` as well,
+ * which toggled the row the sweep had just chosen (#335). Whether that press
+ * arrives before or after the pan's `onFinalize` is not specified, so a press
+ * is refused while a sweep is active and for this long afterwards.
+ */
+const PRESS_QUIET = 300;
 
 export interface SweepRows {
   /** The rows as shown, top to bottom. */
@@ -46,6 +56,7 @@ class SweepController<T> {
   private scrolled = 0;
   private viewport = 0;
   private content = 0;
+  private quietUntil = 0;
   private active: {
     rows: readonly (readonly string[])[]; ids: readonly string[]; state: Sweep;
     /** The row the fingers are over, and their height in the list. */
@@ -126,9 +137,17 @@ class SweepController<T> {
   }
 
   end(): void {
-    if (this.active) clearInterval(this.active.timer);
+    if (this.active) {
+      clearInterval(this.active.timer);
+      this.quietUntil = Date.now() + PRESS_QUIET;
+    }
     this.active = null;
   }
+
+  /** A row's press, ignored while a sweep runs and just after one, since its fingers' lift is not a tap. */
+  readonly guard = <A extends unknown[]>(press: (...args: A) => void) => (...args: A): void => {
+    if (this.active === null && Date.now() >= this.quietUntil) press(...args);
+  };
 }
 
 /**
@@ -189,5 +208,5 @@ export function useRowSweep<T>(rows: SelectableRows, select: (next: Set<string>)
   // After render, never during it: the gesture reads them only when fingers move.
   useEffect(() => controller.show(rows, select));
   useEffect(() => () => controller.end(), [controller]);
-  return { gesture: controller.gesture, nativeGesture: controller.nativeGesture, list: controller.list };
+  return { gesture: controller.gesture, nativeGesture: controller.nativeGesture, list: controller.list, guard: controller.guard };
 }

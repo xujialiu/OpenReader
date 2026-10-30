@@ -102,3 +102,48 @@ it('starts edge scrolling above floating actions and releases its timer on unmou
   await h.close();
   expect(vi.getTimerCount()).toBe(0);
 });
+it('refuses a row press while a sweep runs and for 300 ms after it ends, and delivers every other press (#335)', async () => {
+  vi.useFakeTimers();
+  const h = await mount();
+  const press = vi.fn();
+  const row = h.sweep.guard(press);
+  row('before');
+  expect(press).toHaveBeenCalledTimes(1);
+  // The lift of a sweep that ends on the row it began on: the press arrives before the pan finalizes, or after.
+  handlers.start({ y: 10 }); handlers.update({ y: 40 });
+  row('while the fingers are down');
+  handlers.end();
+  vi.advanceTimersByTime(299);
+  row('just after');
+  expect(press).toHaveBeenCalledTimes(1);
+  vi.advanceTimersByTime(2);
+  row('a tap afterwards', 2);
+  expect(press).toHaveBeenCalledTimes(2);
+  expect(press).toHaveBeenLastCalledWith('a tap afterwards', 2);
+  await h.close();
+});
+it('does not quiet presses when the sweep is disabled and so never began, or when no sweep ran', async () => {
+  vi.useFakeTimers();
+  const h = await mount({ enabled: false });
+  const press = vi.fn();
+  const row = h.sweep.guard(press);
+  handlers.start({ y: 10 });
+  handlers.end();
+  row('after a touch that began no sweep');
+  handlers.end();
+  row('after a second end');
+  expect(press).toHaveBeenCalledTimes(2);
+  await h.close();
+});
+it('keeps the selection of the sweep: a press dropped after a short sweep leaves the chosen start row to the sweep', async () => {
+  vi.useFakeTimers();
+  const h = await mount();
+  const toggle = vi.fn();
+  const row = h.sweep.guard(toggle);
+  handlers.start({ y: 10 }); handlers.update({ y: 70 });
+  expect([...h.select.mock.lastCall![0]]).toEqual(ids.slice(0, 2));
+  handlers.end();
+  row();
+  expect(toggle).not.toHaveBeenCalled();
+  await h.close();
+});

@@ -474,6 +474,55 @@ final class TwoFingerProbe: XCTestCase {
     }
   }
 
+  /// TEMPORARY #334 Phase A: where does a short sweep's end point have to be for the start row to survive?
+  func testDrawerEndPointDiscriminator() throws {
+    var cases: [(String, Int, Int, CGFloat)] = [
+      ("a-0-to-row0.maxY+10", 0, 0, 10), ("b-0-to-row0.maxY+40", 0, 0, 40), ("c-3-to-row3.minY-10", 3, 3, -10), ("d-3-to-row3.minY-30", 3, 3, -30),
+    ]
+    cases.append(("e-0-to-row1-mid", 0, 0, 0))
+    for (name, startRow, edgeRow, offset) in cases {
+      let app = openDrawer()
+      Thread.sleep(forTimeInterval: 1.2)
+      guard let first = choosableRun(app, count: 4) else { return unverified(name, "no run") }
+      let run = first.run
+      let start = run[startRow].mid
+      let end: CGPoint
+      if name.hasPrefix("e-") { end = run[1].mid }
+      else if startRow == 0 { end = CGPoint(x: start.x, y: run[edgeRow].frame.maxY + offset) }
+      else { end = CGPoint(x: start.x, y: run[edgeRow].frame.minY + offset) }
+      print("H1 \(name): viewport=\(first.viewport) rows=\(run.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) start=\(start) end=\(end) endOnRow=\(run.firstIndex { $0.frame.contains(end) } ?? -1)")
+      Fingers.play(Fingers.pair(Fingers.line(start, end, start: 0.1, seconds: 0.6), lift: 0.8), name: "h1-\(name)", in: self)
+      Thread.sleep(forTimeInterval: 1.2)
+      print("H1 \(name): chosen=\(chosenCount(app))")
+      capture("h1-\(name)", app)
+    }
+  }
+
+  /// TEMPORARY #334 Phase A: at first presentation, does a one-finger upward drag resize the sheet before it scrolls the list?
+  func testDrawerFirstScrollSheet() throws {
+    let app = openDrawer()
+    Thread.sleep(forTimeInterval: 1.5)
+    func frames(_ label: String) {
+      let header = app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded' OR label ENDSWITH ' saved'")).firstMatch.frame
+      let download = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected ('")).firstMatch.frame
+      print("H2 \(label): viewport=\(String(describing: drawerViewport(app))) headerText=\(header) downloadButton=\(download) rows=\(shownRows(app).map { $0.label })")
+    }
+    func drag(_ name: String, from: CGFloat, to: CGFloat, seconds: Double) {
+      guard let viewport = drawerViewport(app) else { return unverified(name, "no viewport") }
+      let x = viewport.midX
+      print("H2 \(name): from y=\(from) to y=\(to) over \(seconds)s")
+      Fingers.play([Fingers.finger(Fingers.line(CGPoint(x: x, y: from), CGPoint(x: x, y: to), start: 0.1, seconds: seconds), lift: seconds + 0.2)], name: "h2-\(name)", in: self)
+      Thread.sleep(forTimeInterval: 1.5)
+      frames("after \(name)")
+      capture("h2-\(name)", app)
+    }
+    frames("initial")
+    drag("slow-154pt", from: 733, to: 579, seconds: 0.6)
+    drag("long-fast", from: 733, to: 250, seconds: 0.35)
+    if let vp = drawerViewport(app) { drag("list-after-expand", from: vp.maxY - 25, to: vp.minY + 25, seconds: 0.6) }
+    if let vp = drawerViewport(app) { drag("list-again", from: vp.maxY - 25, to: vp.minY + 25, seconds: 0.6) }
+  }
+
   func verifyValidGestures(_ app: XCUIApplication, phase: String) {
     func fail(_ why: String) { unverified(phase, why) }
     guard let first = choosableRun(app, count: 4) else {

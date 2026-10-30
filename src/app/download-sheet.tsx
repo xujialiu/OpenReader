@@ -231,7 +231,7 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
     const label = `${name}${current ? ', being read' : ''}`;
     const folded = collapsed.has(item.id);
     const arrow = children ? <Pressable accessibilityRole="button" accessibilityLabel={`${folded ? 'Expand' : 'Collapse'} ${item.title}`} hitSlop={8}
-      onPress={() => setCollapsed((was) => { const next = new Set(was); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}
+      onPress={sweep.guard(() => setCollapsed((was) => { const next = new Set(was); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; }))}
       style={styles.arrow}>
       <Icon name={folded ? 'next' : 'down'} color={INK.quiet} size={20} strokeWidth={2} />
     </Pressable> : null;
@@ -241,7 +241,7 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
     </>;
     if (mark?.kind === 'ring' && task) {
       return <DrawerRow level={item.depth} marked={current} accessibilityLabel={label}
-        accessory={<>{arrow}<DownloadRing colour={ink} fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={() => downloads.toggleChapter(task, item.id)} /></>}>
+        accessory={<>{arrow}<DownloadRing colour={ink} fraction={mark.fraction} spinning={mark.spinning} halted={mark.halted} onPress={sweep.guard(() => downloads.toggleChapter(task, item.id))} /></>}>
         {words}
       </DrawerRow>;
     }
@@ -249,7 +249,7 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
       : ids.length || !children ? <View style={[styles.circle, { borderColor: picked ? ink : borders.quiet }, picked && { backgroundColor: ink }]}>
         {picked ? <Icon name="check" color={INK.page} size={17} /> : null}
       </View> : <View style={styles.column} />;
-    return <DrawerRow level={item.depth} marked={current} onPress={() => toggle(ids)} disabled={!ids.length}
+    return <DrawerRow level={item.depth} marked={current} onPress={sweep.guard(() => toggle(ids))} disabled={!ids.length}
       accessibilityRole="checkbox" accessibilityLabel={`${label}${done ? ', downloaded' : ''}`} accessibilityState={{ checked: picked, disabled: !ids.length }}
       accessory={<>{arrow}{box}</>}>
       {words}
