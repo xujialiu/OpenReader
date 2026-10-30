@@ -105,8 +105,11 @@ lines still reach `test.log` and a failed run does not then sit in `simctl diagn
 end within a row of where they began, each on a fresh presentation: 0 to 1, 0 to 2 and back to 1, 0 to 2 and back to 0
 (1), 0 to 3 and back to 1, 1 to 3 and back to 2, and ends 10 and 40 pt below row 0's bottom edge or 10 and 30 pt above
 row 3's top edge. A row's `Pressable` keeps the touch that came down on it and its press retention reaches about 20 pt
-above and 30 pt below the row, so without `SweepController.guard` (`use-sweep.tsx`, which refuses a row's press while a
-sweep runs and for 300 ms after) the lift fired the start row's press and toggled the row the sweep had chosen.
+above and 30 pt below the row, so without `SweepController.guard` (`use-sweep.tsx`) the lift fired the start row's press
+and toggled the row the sweep had chosen. The guard drops a row's press when a sweep began since a finger last came down on
+a row, which each list cell reports through `onTouchStart`; a tap after a sweep comes down afresh and goes through, which
+the taps of `testDrawerValidGestures` check. The Library shares the guard but did not lose its start row even without it
+(`LibraryTwoFingerProbe.testShortSweepKeepsStartRow`, `../library-and-reader/library-two-finger.md`).
 
 `testDrawerScrollKeepsChosen` checks that a one-finger scroll keeps the chosen rows, at first presentation and after a
 remount. At the half-height drawer the sheet takes an upward drag of the list at its top before the list does: a slow

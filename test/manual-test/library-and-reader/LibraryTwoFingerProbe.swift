@@ -254,6 +254,56 @@ final class LibraryTwoFingerProbe: XCTestCase {
     cancelSelection()
   }
 
+  /// #335: a sweep that ends inside its start row's press retention (about 20 pt above and 30 pt below the row) or back
+  /// on that row keeps the start row chosen. Before the fix the lift fired the start row's press as well, which in
+  /// selection mode took the row out again. Each case relaunches into the normal Library root and reads the rows'
+  /// frames from the accessibility tree; it needs three root entries. A Library row is about 84 pt tall, so the next
+  /// row's middle lies outside the start row's retention: `0-to-row1-mid` is the control that passed before the fix.
+  func testShortSweepKeepsStartRow() {
+    let port = ProcessInfo.processInfo.environment["OPENREADER_METRO_PORT"] ?? "8082"
+    enum Stop { case mid(Int); case belowRow0(CGFloat) }
+    let cases: [(String, [Stop], Int)] = [
+      ("0-to-row1-mid", [.mid(0), .mid(1)], 2), ("0-to-below-row0-10", [.mid(0), .belowRow0(10)], 2), ("0-2-0", [.mid(0), .mid(2), .mid(0)], 1),
+    ]
+    for (name, stops, expected) in cases {
+      app.terminate(); app.launchArguments = ["-RCT_jsLocation", "localhost:\(port)"]; app.launch()
+      guard app.buttons["Library actions"].waitForExistence(timeout: 20) else { XCTFail("short-\(name): the Library did not open"); return }
+      Thread.sleep(forTimeInterval: 1)
+      let top = app.navigationBars.firstMatch.frame.maxY
+      let rows = app.buttons.allElementsBoundByIndex
+        .filter { $0.exists && !$0.label.hasPrefix("Actions for") && $0.frame.minY >= top && $0.frame.width > 250 && $0.frame.height > 60 && $0.frame.height < 160 }
+        .map { (label: $0.label, frame: $0.frame) }
+        .sorted { $0.frame.minY < $1.frame.minY }
+      guard rows.count >= 3, selectedCount() == nil else { XCTFail("short-\(name): UNVERIFIED, need three root rows in normal mode, have \(rows.map { $0.label })"); return }
+      let x = app.frame.midX
+      let points = stops.map { stop -> CGPoint in
+        switch stop {
+        case .mid(let row): return CGPoint(x: x, y: rows[row].frame.midY)
+        case .belowRow0(let offset): return CGPoint(x: x, y: rows[0].frame.maxY + offset)
+        }
+      }
+      var track = Fingers.line(points[0], points[1], start: 0.1, seconds: 0.7)
+      var end = 0.8
+      if points.count == 3 { track += Fingers.line(points[1], points[2], start: 0.9, seconds: 0.5).dropFirst(); end = 1.4 }
+      print("LIBRARY short-\(name): rows=\(rows.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) gesture=\(points)")
+      Fingers.play(Fingers.pair(track, lift: end + 0.1), name: "library-short-\(name)", in: self)
+      Thread.sleep(forTimeInterval: 1.5)
+      let count = selectedCount()
+      let reader = app.buttons["More actions"].exists
+      capture("library-short-\(name)")
+      print("LIBRARY short-\(name): selected=\(count.map(String.init) ?? "none") expected=\(expected) readerOpened=\(reader)")
+      XCTAssertFalse(reader, "short-\(name): the lift opened a Document")
+      XCTAssertEqual(count, expected, "short-\(name)")
+      // A one-finger tap after the sweep comes down afresh on row 2, which no case chose, and must add it: the sweep's
+      // guard drops only the press of the sweep's own touch.
+      guard count == expected, !reader else { continue }
+      app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: x, dy: rows[2].frame.midY)).tap()
+      let tapped = waitCount(expected + 1, timeout: 4)
+      print("LIBRARY short-\(name) tap row 2: selected=\(selectedCount().map(String.init) ?? "none") expected=\(expected + 1)")
+      XCTAssertTrue(tapped, "short-\(name): a one-finger tap after the sweep must still choose row 2")
+    }
+  }
+
   /// Cancel from a two-finger-entered selection restores the normal Library.
   func testCancelAfterSweepRestoresNormal() {
     launchAtRoot()

@@ -48,7 +48,7 @@ above the chapter list, on rows that were rendered but clipped out of its viewpo
 Debug/Release differences did not measure the app. The trial native-list priority wrapper and the diagnostic logging were
 removed; they were not a proven repair. The Modal measurements above remain historical, not proof of the SwiftUI sheet.
 
-Measured again on iOS 27.0 (iPhone 17, the beta22 and beta23 trees, Debug against Metro and an embedded Release build),
+Measured again on iOS 27.0 (iPhone 17, the beta22 to beta24 trees, Debug against Metro and an embedded Release build),
 with every path asserted to lie on rows fully inside the chapter list's own viewport (`{{8, 553.9}, {386, 204.2}}`, four
 rows of 49.93 pt at the half-height drawer) and the `Download selected (N)` count read back, identical geometry in both
 builds and in both presentations:
@@ -64,10 +64,17 @@ builds and in both presentations:
   edge chose 1 and 30 pt above chose 2. That is the row `Pressable`'s press retention, about 20 pt above and 30 pt below
   the row: the touch that came down on the start row stays with its responder through the sweep, and the fingers' lift
   inside that area fires `onPress`, which toggles the row the sweep had just chosen. Narrowing the retention would not
-  mend it (0 to 2 and back to 0 ends on the row itself). `SweepController.guard` now wraps the rows' presses and refuses
-  one while a sweep is active and for 300 ms after it ends, in the drawer and in the Library, which shares the sweep; a
-  one-finger tap never activates the two-pointer pan and is unaffected. After it all nine short-sweep cases chose what the
-  rule gives, on Debug and Release. The Library's loss was not measured on a device.
+  mend it (0 to 2 and back to 0 ends on the row itself). `SweepController.guard` now wraps the rows' presses (the row,
+  its fold arrow and its download ring) and drops one when a two-finger sweep has begun since a finger last came down on
+  one of the list's rows, which each list cell reports through `onTouchStart`, or while a sweep is still active. Which of
+  the press and the pan's `onFinalize` reaches JavaScript first is not specified, so the press is told by its touch, not by
+  the time: a first version that refused presses for 300 ms after a sweep ended would still have let the sweep's own
+  press through whenever JavaScript delivered it later than that, and swallowed a real tap made within 300 ms. A one-finger
+  tap never activates the two-pointer pan, and a tap after a sweep comes down afresh, so both go through. After the change
+  all nine short-sweep cases chose what the rule gives, on Debug and Release. The Library shares the sweep and the guard,
+  but it kept its start row in the same short sweeps (to 10 pt below row 0, and 0 to 2 and back to 0) even with the guard
+  made a pass-through, and no Document opened: there the row's press does not fire after a sweep. A one-finger tap
+  straight after a sweep still chose its row in both lists.
 - **A one-finger drag at first presentation moved nothing because the sheet takes it first.** The drawer opens at the
   medium detent with the list at its top; an upward drag of a scroll view already at its top is the sheet's, to expand it.
   A slow drag (154 pt in 0.6 s) leaves the sheet and the rows where they were, a longer, faster one (to y 250 in 0.35 s)

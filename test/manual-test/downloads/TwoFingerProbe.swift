@@ -452,9 +452,10 @@ final class TwoFingerProbe: XCTestCase {
 
   /// #335: sweeps that end within a row of where they began keep their start row. Before the fix the lift of the sweep
   /// fired the start row's `onPress` (the row's press retention reaches about 20 pt above and 30 pt below it), which
-  /// toggled the row the sweep had just chosen: 0 to 1, 0 to 2 and back to 1, 3 to 3 above its top edge by 10 pt and
-  /// 0 to 0 below its bottom edge by 10 pt chose one row, 0 to 2 and back to 0 chose none (two-finger.md). Each case
-  /// is a fresh presentation of the drawer, on the first four choosable rows in a row inside the viewport.
+  /// toggled the row the sweep had just chosen: a lift 10 pt below row 0 or 10 pt above row 3 chose one row instead of
+  /// two, and so did 0 to 1, 0 to 2 and back to 1, 0 to 3 and back to 1, and 1 to 3 and back to 2; 0 to 2 and back to 0
+  /// chose none. Lifts 40 pt below row 0 and 30 pt above row 3, outside the retention, were right (two-finger.md).
+  /// Each case is a fresh presentation of the drawer, on the first four choosable rows in a row inside the viewport.
   func testDrawerShortSweeps() throws {
     // name, the path as points from the run's rows (row middles; `edge` adds an offset below row 0's bottom edge or
     // above row 3's top edge), the count the phone's rule gives: every row from the start row to the current one.
