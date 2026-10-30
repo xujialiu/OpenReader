@@ -772,6 +772,241 @@ final class TwoFingerProbe: XCTestCase {
     capture("drawer-one-finger-tap-2", app)
   }
 
+  /// #335 regression, the other direction: the guard must drop only the press of a sweep's own touch and never an ordinary
+  /// tap. After each short sweep (the kind whose lift used to fire the start row's press) the first touch is a one-finger
+  /// tap, on a row the sweep did not choose or on the row it began on, 0.15 s or 1.5 s after the fingers lift, and the next
+  /// touch is a tap on the other of the two. Every tap toggles its row: `Download selected (N)` is read back after each
+  /// against a model of the chosen rows. Each case is a fresh presentation of the drawer.
+  func testDrawerTapsAfterShortSweeps() throws {
+    enum Stop { case mid(Int); case below0(CGFloat); case above3(CGFloat) }
+    let paths: [(name: String, stops: [Stop], chosen: Set<Int>, start: Int)] = [
+      ("0-2-0", [.mid(0), .mid(2), .mid(0)], [0], 0),
+      ("0-to-below-row0-10", [.mid(0), .below0(10)], [0, 1], 0),
+      ("3-to-above-row3-10", [.mid(3), .above3(-10)], [2, 3], 3),
+    ]
+    for path in paths {
+      for first in ["other", "start"] {
+        for wait in [0.15, 1.5] {
+          let label = "\(path.name)-\(first)-first-\(Int(wait * 1000))ms"
+          let app = openDrawer()
+          Thread.sleep(forTimeInterval: 1.2)
+          guard let found = choosableRun(app, count: 4) else { return unverified("taps-\(label)", "no viewport or fewer than 4 choosable rows in a row inside it") }
+          guard chosenCount(app) == 0 else { return unverified("taps-\(label)", "\(chosenCount(app)) chosen before the sweep, need 0") }
+          let run = found.run
+          let points = path.stops.map { stop -> CGPoint in
+            switch stop {
+            case .mid(let row): return run[row].mid
+            case .below0(let offset): return CGPoint(x: run[0].mid.x, y: run[0].frame.maxY + offset)
+            case .above3(let offset): return CGPoint(x: run[3].mid.x, y: run[3].frame.minY + offset)
+            }
+          }
+          guard points.allSatisfy({ found.viewport.contains($0) }) else { return unverified("taps-\(label)", "a point is outside the viewport \(found.viewport)") }
+          var track = Fingers.line(points[0], points[1], start: 0.1, seconds: 0.7)
+          var end = 0.8
+          if points.count == 3 { track += Fingers.line(points[1], points[2], start: 0.9, seconds: 0.5).dropFirst(); end = 1.4 }
+          print("VIEWPORT taps-\(label): \(found.viewport) ROWS \(run.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) GESTURE \(points)")
+          Fingers.play(Fingers.pair(track, lift: end + 0.1), name: "taps-\(label)", in: self)
+          Thread.sleep(forTimeInterval: wait)
+          if wait > 1 {
+            let swept = chosenCount(app)
+            print("TAPCHECK taps-\(label): after the sweep chosen=\(swept) expected=\(path.chosen.count)")
+            XCTAssertEqual(swept, path.chosen.count, "taps-\(label): the sweep itself")
+          }
+          var model = path.chosen
+          let other = (0...3).last { !path.chosen.contains($0) && $0 != path.start }!
+          for row in first == "other" ? [other, path.start] : [path.start, other] {
+            tap(app, run[row].mid)
+            if model.contains(row) { model.remove(row) } else { model.insert(row) }
+            let ok = until(3) { self.chosenCount(app) == model.count }
+            print("TAPCHECK taps-\(label): tapped row \(row) (\(run[row].label)) chosen=\(chosenCount(app)) expected=\(model.count)")
+            XCTAssertTrue(ok, "taps-\(label): a one-finger tap on row \(row) after the sweep must toggle it (expected \(model.count) chosen)")
+            if !ok { break }
+          }
+          capture("taps-\(label)", app)
+        }
+      }
+    }
+  }
+
+  /// #335: a tap straight after a sweep, timed inside one synthesized event record so that the gap is the record's and not
+  /// XCTest's own latency (a separate `tap` call lands about 0.1 s after it is made, on top of any sleep: in the log of
+  /// `testDrawerTapsAfterShortSweeps` the `Tap` activity starts at t = 16.00 s and its `Synthesize event` at 16.10 s): the two sweep fingers
+  /// lift at `end + 0.1`, and a third finger comes down 0.12 s later and lifts 0.08 s after that, on a row the sweep did not
+  /// choose or on its start row. A guard that refused presses for a fixed time after a sweep (the first version, 300 ms)
+  /// would drop this tap; the touch-scoped one must toggle the row (the count follows a model of the chosen rows).
+  func testDrawerTapWithin120msOfSweep() throws {
+    enum Stop { case mid(Int); case below0(CGFloat); case above3(CGFloat) }
+    let paths: [(name: String, stops: [Stop], chosen: Set<Int>, start: Int)] = [
+      ("0-2-0", [.mid(0), .mid(2), .mid(0)], [0], 0),
+      ("0-to-below-row0-10", [.mid(0), .below0(10)], [0, 1], 0),
+      ("3-to-above-row3-10", [.mid(3), .above3(-10)], [2, 3], 3),
+    ]
+    for path in paths {
+      for first in ["other", "start"] {
+        let label = "\(path.name)-\(first)"
+        let app = openDrawer()
+        Thread.sleep(forTimeInterval: 1.2)
+        guard let found = choosableRun(app, count: 4) else { return unverified("tap120-\(label)", "no viewport or fewer than 4 choosable rows in a row inside it") }
+        guard chosenCount(app) == 0 else { return unverified("tap120-\(label)", "\(chosenCount(app)) chosen before the sweep, need 0") }
+        let run = found.run
+        let points = path.stops.map { stop -> CGPoint in
+          switch stop {
+          case .mid(let row): return run[row].mid
+          case .below0(let offset): return CGPoint(x: run[0].mid.x, y: run[0].frame.maxY + offset)
+          case .above3(let offset): return CGPoint(x: run[3].mid.x, y: run[3].frame.minY + offset)
+          }
+        }
+        guard points.allSatisfy({ found.viewport.contains($0) }) else { return unverified("tap120-\(label)", "a point is outside the viewport \(found.viewport)") }
+        var track = Fingers.line(points[0], points[1], start: 0.1, seconds: 0.7)
+        var end = 0.8
+        if points.count == 3 { track += Fingers.line(points[1], points[2], start: 0.9, seconds: 0.5).dropFirst(); end = 1.4 }
+        let other = (0...3).last { !path.chosen.contains($0) && $0 != path.start }!
+        let row = first == "other" ? other : path.start
+        let lift = end + 0.1, down = lift + 0.12, up = down + 0.08
+        print("VIEWPORT tap120-\(label): \(found.viewport) ROWS \(run.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) GESTURE \(points) sweep lift at \(lift) s, tap on row \(row) at \(down)-\(up) s, point \(run[row].mid)")
+        let tapper = Fingers.finger([(run[row].mid, down)], lift: up)
+        Fingers.play(Fingers.pair(track, lift: lift) + [tapper], name: "tap120-\(label)", in: self)
+        var model = path.chosen
+        if model.contains(row) { model.remove(row) } else { model.insert(row) }
+        let ok = until(3) { self.chosenCount(app) == model.count }
+        print("TAPCHECK tap120-\(label): tap \(Int((down - lift) * 1000)) ms after the lift on row \(row) (\(run[row].label)) chosen=\(chosenCount(app)) expected=\(model.count)")
+        XCTAssertTrue(ok, "tap120-\(label): a tap 120 ms after the sweep must toggle row \(row) (expected \(model.count) chosen)")
+        capture("tap120-\(label)", app)
+      }
+    }
+  }
+
+  /// Setup for the accessibility-activation check of #335, not a measurement: opens the drawer afresh, makes the short sweep
+  /// 0 to 2 and back to 0 (row 0 chosen, the case that used to lose its start row) and leaves the drawer open with no finger
+  /// down on a row since, which is the state in which `SweepController.guard` drops a press that has no touch of its own.
+  /// The caller then activates a row by accessibility (outside XCTest) and reads `Download selected (N)` from the AX tree.
+  func testDrawerSweepThenStay() throws {
+    let app = openDrawer()
+    Thread.sleep(forTimeInterval: 1.2)
+    guard let found = choosableRun(app, count: 4) else { return unverified("stay", "no viewport or fewer than 4 choosable rows in a row inside it") }
+    guard chosenCount(app) == 0 else { return unverified("stay", "\(chosenCount(app)) chosen before the sweep, need 0") }
+    let run = found.run
+    var track = Fingers.line(run[0].mid, run[2].mid, start: 0.1, seconds: 0.7)
+    track += Fingers.line(run[2].mid, run[0].mid, start: 0.9, seconds: 0.5).dropFirst()
+    print("VIEWPORT stay: \(found.viewport) ROWS \(run.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" })")
+    Fingers.play(Fingers.pair(track, lift: 1.5), name: "stay", in: self)
+    Thread.sleep(forTimeInterval: 1.2)
+    print("DRAWER stay: chosen=\(chosenCount(app)) expected=1 (row 0 chosen, no finger down on a row since the sweep)")
+    XCTAssertEqual(chosenCount(app), 1, "stay: the sweep leaves row 0 chosen")
+    capture("stay", app)
+  }
+
+  /// #335: a hand never lifts two fingers at once. The short sweeps again, with the second finger lifting 0.15 s after the
+  /// first (the left one lifts last in one run of each path, the right one in the other): the pan ends when the first
+  /// finger lifts, so the lone finger's own press is what reaches the row afterwards, and it must neither toggle the start
+  /// row (the count is the phone's rule: 1, 2 and 2) nor stop the tap that follows (+1 on a row the sweep did not choose).
+  func testDrawerStaggeredLifts() throws {
+    enum Stop { case mid(Int); case below0(CGFloat); case above3(CGFloat) }
+    let paths: [(name: String, stops: [Stop], chosen: Set<Int>, start: Int)] = [
+      ("0-2-0", [.mid(0), .mid(2), .mid(0)], [0], 0),
+      ("0-to-below-row0-10", [.mid(0), .below0(10)], [0, 1], 0),
+      ("3-to-above-row3-10", [.mid(3), .above3(-10)], [2, 3], 3),
+    ]
+    for path in paths {
+      for lastToLift in ["left", "right"] {
+        let label = "\(path.name)-\(lastToLift)-lifts-last"
+        let app = openDrawer()
+        Thread.sleep(forTimeInterval: 1.2)
+        guard let found = choosableRun(app, count: 4) else { return unverified("stagger-\(label)", "no viewport or fewer than 4 choosable rows in a row inside it") }
+        guard chosenCount(app) == 0 else { return unverified("stagger-\(label)", "\(chosenCount(app)) chosen before the sweep, need 0") }
+        let run = found.run
+        let points = path.stops.map { stop -> CGPoint in
+          switch stop {
+          case .mid(let row): return run[row].mid
+          case .below0(let offset): return CGPoint(x: run[0].mid.x, y: run[0].frame.maxY + offset)
+          case .above3(let offset): return CGPoint(x: run[3].mid.x, y: run[3].frame.minY + offset)
+          }
+        }
+        guard points.allSatisfy({ found.viewport.contains($0) }) else { return unverified("stagger-\(label)", "a point is outside the viewport \(found.viewport)") }
+        var track = Fingers.line(points[0], points[1], start: 0.1, seconds: 0.7)
+        var end = 0.8
+        if points.count == 3 { track += Fingers.line(points[1], points[2], start: 0.9, seconds: 0.5).dropFirst(); end = 1.4 }
+        let left = track.map { (CGPoint(x: $0.0.x - 18, y: $0.0.y), $0.1) }, right = track.map { (CGPoint(x: $0.0.x + 18, y: $0.0.y), $0.1) }
+        let first = end + 0.1, second = end + 0.25
+        print("VIEWPORT stagger-\(label): \(found.viewport) ROWS \(run.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) GESTURE \(points) lifts left=\(lastToLift == "left" ? second : first) right=\(lastToLift == "left" ? first : second)")
+        Fingers.play([Fingers.finger(left, lift: lastToLift == "left" ? second : first), Fingers.finger(right, lift: lastToLift == "left" ? first : second)], name: "stagger-\(label)", in: self)
+        Thread.sleep(forTimeInterval: 1.2)
+        let swept = chosenCount(app)
+        print("TAPCHECK stagger-\(label): after the sweep chosen=\(swept) expected=\(path.chosen.count)")
+        XCTAssertEqual(swept, path.chosen.count, "stagger-\(label): the lone finger's lift must not toggle the start row")
+        let other = (0...3).last { !path.chosen.contains($0) && $0 != path.start }!
+        tap(app, run[other].mid)
+        let ok = until(3) { self.chosenCount(app) == path.chosen.count + 1 }
+        print("TAPCHECK stagger-\(label): tapped row \(other) (\(run[other].label)) chosen=\(chosenCount(app)) expected=\(path.chosen.count + 1)")
+        XCTAssertTrue(ok, "stagger-\(label): a one-finger tap after the sweep must still choose row \(other)")
+        capture("stagger-\(label)", app)
+      }
+    }
+  }
+
+  /// #335 regression: the fold arrow's press is guarded like the row's, and a tap on it after a sweep must still fold. Needs
+  /// `Nested Volumes Fold Check` (`fixtures/nested-volumes-fixture.ts`) as the open reader: its volumes are the drawer rows
+  /// that have an arrow. The arrow is a Pressable inside the row's own accessible Pressable, so it is not in the AX tree and
+  /// is touched by point, `arrowInset` points left of the row's right edge; each fold is read back from the AX tree's rows (the
+  /// volume's first chapter must leave it and come back). The first fold has no sweep before it and so also proves the point
+  /// is the arrow's. Then the same after a sweep that begins
+  /// and ends on the volume's row (0 to 2 and back to 0), after 0.15 s, and after a sweep that ends on another row, after 1.5 s.
+  func testDrawerFoldArrows() throws {
+    let arrowInset: CGFloat = 66
+    // A fresh launch into the Library (pinned to this checkout's Metro, as `LibraryTwoFingerProbe` does; a Release app
+    // ignores the argument), then the nested fixture's reader.
+    let launcher = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    launcher.terminate()
+    launcher.launchArguments = ["-RCT_jsLocation", "localhost:\(ProcessInfo.processInfo.environment["OPENREADER_METRO_PORT"] ?? "8082")"]
+    launcher.launch()
+    let nested = launcher.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Nested Volumes Fold Check'")).firstMatch
+    guard nested.waitForExistence(timeout: 20) else { return unverified("fold", "the Library has no `Nested Volumes Fold Check` (fixtures/nested-volumes-fixture.ts, added through the harness)") }
+    nested.tap()
+    for (name, sweepBack, wait) in [("no-sweep", false, 0.0), ("after-0-2-0-immediate", true, 0.15), ("after-0-2-settled", false, 1.5)] {
+      let app = openDrawer()
+      Thread.sleep(forTimeInterval: 1.5)
+      guard let found = choosableRun(app, count: 4) else { return unverified("fold-\(name)", "no viewport or fewer than 4 choosable rows in a row inside it") }
+      let run = found.run
+      // The drawer opens at the chapter being read, so the four rows are a volume and its first chapters, whichever volume.
+      guard run[0].label.hasPrefix("Volume "), run[1].label.hasPrefix("Chapter ") else {
+        return unverified("fold-\(name)", "the open reader is not the nested fixture: rows \(run.map { $0.label })")
+      }
+      let sentinel = run[1].label.components(separatedBy: ",")[0]
+      print("VIEWPORT fold-\(name): \(found.viewport) ROWS \(run.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" })")
+      let arrow = CGPoint(x: run[0].frame.maxX - arrowInset, y: run[0].mid.y)
+      func labels() -> [String] { shownRows(app).map { $0.label } }
+      // Read from every row in the AX tree, not the rows inside the viewport: an opened volume's chapters appear below the
+      // visible four, rendered but clipped (the first runs of this test read the viewport and missed the unfold).
+      func folded() -> Bool { !snapshotRows(app).contains { $0.label.hasPrefix(sentinel) } }
+      if name != "no-sweep" {
+        var track = Fingers.line(run[0].mid, run[2].mid, start: 0.1, seconds: 0.7)
+        var end = 0.8
+        if sweepBack { track += Fingers.line(run[2].mid, run[0].mid, start: 0.9, seconds: 0.5).dropFirst(); end = 1.4 }
+        Fingers.play(Fingers.pair(track, lift: end + 0.1), name: "fold-\(name)", in: self)
+        Thread.sleep(forTimeInterval: wait)
+      }
+      let before = chosenCount(app)
+      tap(app, arrow)
+      let didFold = until(3) { folded() }
+      print("TAPCHECK fold-\(name): arrow tap at \(arrow) folded=\(didFold) rows=\(labels()) chosen before=\(before) after=\(chosenCount(app))")
+      XCTAssertTrue(didFold, "fold-\(name): a tap on the arrow must fold the volume")
+      capture("fold-\(name)-folded", app)
+      guard didFold else { continue }
+      let counted = chosenCount(app)
+      // The volume's row moved when its chapters left the list (the first run of this test tapped the old point, which was
+      // then another chapter's row, and toggled it): find the row again.
+      let volumeTitle = run[0].label.components(separatedBy: ",")[0]
+      guard let again = shownRows(app).first(where: { $0.label.hasPrefix(volumeTitle) }) else { return unverified("fold-\(name)", "the folded volume's row is not inside the viewport: rows \(labels())") }
+      let reopen = CGPoint(x: again.frame.maxX - arrowInset, y: again.mid.y)
+      tap(app, reopen)
+      let didOpen = until(3) { !folded() }
+      print("TAPCHECK fold-\(name): second arrow tap at \(reopen) unfolded=\(didOpen) rows=\(labels()) chosen=\(chosenCount(app))")
+      XCTAssertTrue(didOpen, "fold-\(name): a second tap on the arrow must open the volume again")
+      XCTAssertEqual(chosenCount(app), counted, "fold-\(name): folding must not change what is chosen")
+      capture("fold-\(name)-unfolded", app)
+    }
+  }
+
   /// #57-8, the check case: once `DownloadRingProbe.testDownloadRingLifecycle`
   /// has completed the short fixture's two chapters, both rows carry a check
   /// rather than a selection circle, and a sweep across them must choose

@@ -444,3 +444,18 @@ not proof that a button received it.
 - **The first synthetic touch on the Player's new bottom-row buttons can be lost outright** (verifying #325, 2026-10-26). Symptom: the first `ax.py touch 'Lock Taps'` changed nothing (`say` still `tapLock=false`); the identical second touch toggled first try. Six consecutive touches rechecked later all toggled; cause not established. Fix: read the button's label or `say` after every toggle and retry once before suspecting the app.
 - **A Debug build's LogBox banner (`Open debugger to view warnings.`) lies across the Player's bottom row, and an XCTest tap on a button under it does nothing** (verifying #326, 2026-10-26; here the warning was `Cannot connect to Expo CLI`). Symptom: `test.log` says `Computed hit point {-1, -1} after scrolling to visible` and the Sleep Timer menu never opens. Fix: dismiss the banner first; a `{-1, -1}` hit point means the element was covered.
 - **A first-install session device can eat every synthetic tap and keystroke while `snapshot_ui` keeps answering a complete tree** (verifying #332, iOS 26.5, 2026-10-28). Symptom: on a device created, booted, installed into and launched once, mobilebuildmcp `ui-automation tap` on a Library row, on `Library actions` and on the search field each reported success while the screen and every later snapshot stayed unchanged, and `type-text` reported characters typed with the field's value unchanged — the 2026-10-23 reinstall presentation, but from the very first install with no earlier working touch to compare against. The independent path settled it: XCUITest probes' real touches worked the whole time, so the app was never at fault. Fix: before trusting a synthetic-touch run, land one known-good navigation (a Library row must open the Reader) and treat eaten touches as the automation bridge; move acceptance touches to `run-probe.sh` probes, and spend the one recorded shutdown+boot recovery only if synthetic touches are wanted again.
+
+## Pressing an element by accessibility through the Device Hub (#335 verification, 2026-10-31, Xcode 27.0.0)
+
+- **The Device Hub exposes the simulated app's accessibility elements to macOS, so `orca computer` can `AXPress` a row that has no
+  touch of its own.** Use it for what a touch cannot show: an activation by accessibility. Symptom to expect: `list-apps` does not list
+  Device Hub (an accessory app), and `get-app-state` on it before a device is chosen says `Devices – No Selection` with only the
+  sidebar. Recipe: `orca computer list-windows --app pid:PID --json` (PID of the Xcode-27.0.0 `DeviceHub`, whose window title is `Devices`),
+  make sure the device is selected in the sidebar (the first read said `No Selection`; a later one showed this device `(selected)` with no click from the tester), then
+  `orca computer get-app-state --app pid:PID --window-id ID --no-screenshot --query 'Chapter 1' --json` finds the row and
+  `orca computer click --app pid:PID --window-id ID --element-index N --no-screenshot --json` presses it (`actionName: AXPress`,
+  `path: accessibility`, `delivery: background`, verification `unverified (accessibility action unasserted)`, so read the result
+  from the app: `ax.py UDID tree`). Every iOS element is listed twice (RN's double exposure); either index presses the same row;
+  indexes change after every state change, so query again before each press. The Device Hub's Appearance pane has a VoiceOver switch,
+  which is a device-wide setting and was not touched. A press this way is not VoiceOver, Voice Control or Switch Control, and the
+  result says only that the press arrived with a touch.

@@ -45,6 +45,9 @@ npx tsx test/manual-test/fixtures/NAME.ts OUTPUT_DIRECTORY
   unreachable (`contents.unreachable`) and the sheet says no row can be
   followed — while an NCX's `src` is kept as written and matches. The owner's
   books are NCX; make NCX contents in any fixture whose rows must open.
+- `nested-volumes-fixture.ts`: `Nested Volumes Fold Check`, an NCX of three volumes each holding three chapters (twelve
+  drawer rows, volumes at depth 0), so the Download drawer shows a fold arrow (`Collapse Volume N` / `Expand Volume N`) that
+  no flat book or the owner's web novels have (#334, #335: `../downloads/two-finger.md`, `testDrawerFoldArrows`).
 - `positions-copies-fixture.ts`: two books for the position verification of
   #249/#250/#282/#283 (`../sync/positions-late-adoption-and-copies.md`).
   `Positions and Copies` holds `Go. Go. Stop now.`, 100 ×

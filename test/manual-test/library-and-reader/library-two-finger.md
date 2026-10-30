@@ -20,6 +20,15 @@ The Debug app must be installed, its Metro running, and the simulator volume zer
 - `testCancelAfterSweepRestoresNormal`: Cancel after direct two-finger entry restores ordinary rows.
 - `testShortSweepKeepsStartRow` (#335): needs only three root entries and reads their frames from the accessibility tree, so it runs on any device. Each case relaunches into the normal root: two fingers from row 0's middle to row 1's middle choose 2 (the control: at 84 pt a row this ends outside row 0's press retention), to 10 pt below row 0 choose 2, and from row 0 to row 2 and back to row 0 choose 1, with no Document opened; a one-finger tap on row 2 straight after then adds it. The drawer lost its start row in such sweeps; the Library kept it even with the sweep's press guard made a pass-through.
 
+- `testPlainTapsOpenAfterSweeps` (#335, the guard's other direction): needs an empty root Folder named `TapCheck` and at
+  least two Documents. Each phase relaunches into the Library root (a relaunch reopens the Folder browsed last, so the probe taps
+  `Back` first): a one-finger tap on a Document opens the reader and a tap on the Folder opens it, with no sweep before them;
+  then, after a two-finger sweep that selected rows (a Document to the next, the Folder to the next Document, and a Document
+  0 to 2 and back to 0) and `Cancel`, a tap on the row the sweep began on opens it too, whichever kind it is; in selection
+  mode a tap on the Folder adds it and a second tap takes it out, and no Document opens. `testCreateTapCheckFolderFixture` makes
+  the Folder through the real Create folder alert with XCTest's `typeText` (the AXe-based `name-save.py` lost its typed name
+  there, `../pitfalls/typing-environment.md`) and does nothing when it exists.
+
 The tests cannot establish storage-failure behavior, VoiceOver operation, paid Download cancellation, or every device/text-size combination. Floating-action colour, reduced transparency and XXXL layout are separately checked with device screenshots.
 
 ## Diagnosis and failed runs, 2026-10-04

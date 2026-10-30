@@ -304,6 +304,166 @@ final class LibraryTwoFingerProbe: XCTestCase {
     }
   }
 
+  /// Setup for the accessibility-activation check of #335, not a measurement: relaunches into the Library root, makes the short
+  /// sweep row 0 to row 2 and back to row 0 (row 0 selected, selection mode on) and stops, so that no finger has come down on
+  /// a row since the sweep: the state in which `SweepController.guard` drops a press that has no touch of its own. The caller
+  /// then activates a row by accessibility, outside XCTest, and reads the header's `N selected` from the AX tree.
+  func testLibrarySweepThenStay() {
+    let port = ProcessInfo.processInfo.environment["OPENREADER_METRO_PORT"] ?? "8082"
+    app.terminate(); app.launchArguments = ["-RCT_jsLocation", "localhost:\(port)"]; app.launch()
+    guard app.buttons["Library actions"].waitForExistence(timeout: 20) else { return XCTFail("the Library did not open") }
+    if app.buttons["Back"].waitForExistence(timeout: 2) {
+      app.buttons["Back"].tap()
+      guard app.buttons["Settings"].waitForExistence(timeout: 5) else { return XCTFail("UNVERIFIED: Back did not reach the Library root") }
+    }
+    Thread.sleep(forTimeInterval: 1)
+    let top = app.navigationBars.firstMatch.frame.maxY
+    let rows = app.buttons.allElementsBoundByIndex
+      .filter { $0.exists && !$0.label.hasPrefix("Actions for") && $0.frame.minY >= top && $0.frame.width > 250 && $0.frame.height > 60 && $0.frame.height < 160 }
+      .map { (label: $0.label, frame: $0.frame) }
+      .sorted { $0.frame.minY < $1.frame.minY }
+    guard rows.count >= 4, selectedCount() == nil else { return XCTFail("UNVERIFIED: need four root rows in normal mode, have \(rows.map { $0.label })") }
+    let x = app.frame.midX
+    let from = CGPoint(x: x, y: rows[0].frame.midY), far = CGPoint(x: x, y: rows[2].frame.midY)
+    var track = Fingers.line(from, far, start: 0.1, seconds: 0.7)
+    track += Fingers.line(far, from, start: 0.9, seconds: 0.5).dropFirst()
+    print("LIBRARY stay: rows=\(rows.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) gesture=[\(from), \(far), \(from)]")
+    Fingers.play(Fingers.pair(track, lift: 1.5), name: "library-stay", in: self)
+    let chosen = waitCount(1)
+    print("LIBRARY stay: selected=\(selectedCount().map(String.init) ?? "none") expected=1 (row 0, no finger down on a row since the sweep)")
+    XCTAssertTrue(chosen, "stay: the sweep leaves row 0 selected")
+    capture("library-stay")
+  }
+
+  /// Fixture step, not a measurement: creates the root Folder `TapCheck` that `testPlainTapsOpenAfterSweeps` needs, through
+  /// the real Create folder alert and XCTest's own `typeText` (the AXe-based `name-save.py` lost its typed text on iOS 27.0,
+  /// pitfalls/typing-environment.md). Does nothing when the Folder is already there; leaves the alert's name readback and the
+  /// new row in the artifacts. Never deletes or renames anything.
+  func testCreateTapCheckFolderFixture() {
+    let port = ProcessInfo.processInfo.environment["OPENREADER_METRO_PORT"] ?? "8082"
+    let existing = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Folder, TapCheck'")).firstMatch
+    app.terminate(); app.launchArguments = ["-RCT_jsLocation", "localhost:\(port)"]; app.launch()
+    guard app.buttons["Library actions"].waitForExistence(timeout: 20) else { return XCTFail("the Library did not open") }
+    if existing.waitForExistence(timeout: 3) { print("TAPCHECK fixture: Folder TapCheck already exists"); return }
+    app.buttons["Library actions"].tap()
+    let create = app.buttons["Create folder"]
+    XCTAssertTrue(create.waitForExistence(timeout: 5), "the Library actions menu has no Create folder")
+    create.tap()
+    let field = app.textFields["Name"]
+    XCTAssertTrue(field.waitForExistence(timeout: 8), "the Create folder alert has no Name field")
+    field.tap()
+    field.typeText("TapCheck")
+    let read = field.value as? String ?? "?"
+    print("TAPCHECK fixture: Create folder field reads \(read)")
+    XCTAssertEqual(read, "TapCheck", "native readback of the typed name")
+    capture("create-folder-typed")
+    guard read == "TapCheck" else { return }
+    app.buttons["Create"].tap()
+    let row = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Folder, TapCheck'")).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 8), "the Library has no Folder TapCheck row after Create")
+    print("TAPCHECK fixture: created row \(row.label)")
+    capture("create-folder-created")
+  }
+
+  /// #335 regression, the other direction: the sweep's press guard must never swallow an ordinary tap. Outside selection mode
+  /// a one-finger tap on a Document opens the reader and a tap on a Folder opens it. Needs an empty root Folder named
+  /// `TapCheck` beside the Documents (`testCreateTapCheckFolderFixture` makes it). Each case relaunches into the normal root: the taps on a
+  /// fresh launch have no sweep before them; the others follow a two-finger sweep that selected rows and then Cancel, and
+  /// tap the row the sweep began on, which is the row whose own press the guard dropped (a Document, a Folder, and a
+  /// Document after a sweep that ended where it began). A last case taps both kinds of row in selection mode, where a tap
+  /// toggles the row and opens nothing.
+  func testPlainTapsOpenAfterSweeps() {
+    let port = ProcessInfo.processInfo.environment["OPENREADER_METRO_PORT"] ?? "8082"
+    struct Row { let label: String; let frame: CGRect; var isFolder: Bool { label.hasPrefix("Folder,") } }
+    func rootRows() -> [Row] {
+      let top = app.navigationBars.firstMatch.frame.maxY
+      return app.buttons.allElementsBoundByIndex
+        .filter { $0.exists && !$0.label.hasPrefix("Actions for") && $0.frame.minY >= top && $0.frame.width > 250 && $0.frame.height > 60 && $0.frame.height < 160 }
+        .map { Row(label: $0.label, frame: $0.frame) }
+        .sorted { $0.frame.minY < $1.frame.minY }
+    }
+    func launch() -> [Row]? {
+      app.terminate(); app.launchArguments = ["-RCT_jsLocation", "localhost:\(port)"]; app.launch()
+      guard app.buttons["Library actions"].waitForExistence(timeout: 20) else { XCTFail("UNVERIFIED: the Library did not open"); return nil }
+      // A relaunch reopens the Folder browsed last (design 0069), which a Folder tap of an earlier phase leaves behind: go
+      // up to the root first. Back is a toolbar button, not a row, so no finger comes down on the list before the case.
+      if app.buttons["Back"].waitForExistence(timeout: 2) {
+        app.buttons["Back"].tap()
+        guard app.buttons["Settings"].waitForExistence(timeout: 5) else { XCTFail("UNVERIFIED: Back did not reach the Library root"); return nil }
+      }
+      Thread.sleep(forTimeInterval: 1)
+      let rows = rootRows()
+      guard selectedCount() == nil, rows.contains(where: { $0.isFolder && $0.label.contains("TapCheck") }), rows.filter({ !$0.isFolder }).count >= 2 else {
+        XCTFail("UNVERIFIED: need the Folder TapCheck and two Documents at the root in normal mode, have \(rows.map { $0.label })"); return nil
+      }
+      return rows
+    }
+    func tap(_ row: Row) { app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: app.frame.midX, dy: row.frame.midY)).tap() }
+    func sweep(_ points: [CGPoint], name: String) {
+      var track = Fingers.line(points[0], points[1], start: 0.1, seconds: 0.7)
+      var end = 0.8
+      if points.count == 3 { track += Fingers.line(points[1], points[2], start: 0.9, seconds: 0.5).dropFirst(); end = 1.4 }
+      Fingers.play(Fingers.pair(track, lift: end + 0.1), name: name, in: self)
+    }
+    func middle(_ row: Row) -> CGPoint { CGPoint(x: app.frame.midX, y: row.frame.midY) }
+    /// The reader opened for a Document, or the empty Folder's page for the Folder.
+    func opened(_ row: Row, timeout: TimeInterval = 8) -> Bool {
+      row.isFolder ? app.staticTexts["No documents or folders yet"].waitForExistence(timeout: timeout) : app.buttons["More actions"].waitForExistence(timeout: timeout)
+    }
+
+    // Taps with no sweep before them.
+    for kind in ["document", "folder"] {
+      guard let rows = launch() else { return }
+      let row = kind == "folder" ? rows.first(where: { $0.isFolder && $0.label.contains("TapCheck") })! : rows.first(where: { !$0.isFolder })!
+      print("TAPCHECK library fresh-\(kind): rows=\(rows.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) tapping \(row.label)")
+      tap(row)
+      let result = opened(row)
+      capture("tap-fresh-\(kind)")
+      print("TAPCHECK library fresh-\(kind): opened=\(result)")
+      XCTAssertTrue(result, "fresh-\(kind): a one-finger tap with no sweep before it must open the \(kind)")
+    }
+
+    // Taps after a sweep and Cancel, on the row the sweep began on.
+    for kind in ["document", "folder", "document-short-sweep"] {
+      guard let rows = launch() else { return }
+      let folder = rows.first(where: { $0.isFolder && $0.label.contains("TapCheck") })!, documents = rows.filter { !$0.isFolder }
+      let start = kind == "folder" ? folder : documents[0]
+      let next = kind == "folder" ? documents[0] : documents[1]
+      let after = kind == "document-short-sweep" ? [middle(start), middle(next), middle(start)] : [middle(start), middle(next)]
+      let expected = kind == "document-short-sweep" ? 1 : 2
+      print("TAPCHECK library after-sweep-\(kind): rows=\(rows.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) gesture=\(after)")
+      sweep(after, name: "library-tap-\(kind)")
+      let chosen = waitCount(expected)
+      print("TAPCHECK library after-sweep-\(kind): selected=\(selectedCount().map(String.init) ?? "none") expected=\(expected)")
+      XCTAssertTrue(chosen, "after-sweep-\(kind): the sweep must select \(expected)")
+      guard chosen else { continue }
+      cancelSelection()
+      Thread.sleep(forTimeInterval: 0.5)
+      guard let again = rootRows().first(where: { $0.label == start.label }) else { XCTFail("UNVERIFIED: the row \(start.label) is gone after Cancel"); return }
+      tap(again)
+      let result = opened(again)
+      capture("tap-after-sweep-\(kind)")
+      print("TAPCHECK library after-sweep-\(kind): cancelled, tapped \(again.label) opened=\(result)")
+      XCTAssertTrue(result, "after-sweep-\(kind): a one-finger tap on the row the sweep began on, after Cancel, must open it")
+    }
+
+    // In selection mode a tap toggles the row, whichever kind it is, and opens nothing.
+    guard let rows = launch() else { return }
+    let folder = rows.first(where: { $0.isFolder && $0.label.contains("TapCheck") })!, documents = rows.filter { !$0.isFolder }
+    sweep([middle(documents[0]), middle(documents[1])], name: "library-tap-selection")
+    XCTAssertTrue(waitCount(2), "selection: the sweep must select 2")
+    tap(folder)
+    var toggled = waitCount(3)
+    print("TAPCHECK library selection-folder: selected=\(selectedCount().map(String.init) ?? "none") expected=3 reader=\(app.buttons["More actions"].exists)")
+    XCTAssertTrue(toggled, "selection: a tap on a Folder must add it")
+    tap(folder)
+    toggled = waitCount(2)
+    print("TAPCHECK library selection-folder-again: selected=\(selectedCount().map(String.init) ?? "none") expected=2")
+    XCTAssertTrue(toggled, "selection: a second tap on the Folder must take it out")
+    XCTAssertFalse(app.buttons["More actions"].exists, "selection: no tap may open a Document")
+    cancelSelection()
+  }
+
   /// Cancel from a two-finger-entered selection restores the normal Library.
   func testCancelAfterSweepRestoresNormal() {
     launchAtRoot()

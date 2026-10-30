@@ -329,3 +329,7 @@
   sets the device pasteboard (verified by `simctl pbpaste`), and the paste flow
   then read and saved `仙逆` exactly. Never edit the Mac's own clipboard to fix
   this; the owner's clipboard is theirs.
+
+## The Create folder alert lost an AXe-typed name (2026-10-31, #335 verification, iOS 27.0)
+
+- **`name-save.py` (through `alert-input.py`) failed with `Expected 'TapCheck', native field reads 'Name'` and left the Create folder alert open.** The `axe type` command exited 0 and typed nothing the field kept. The helper's own trees show the alert (`Sheet`, 320 x 190) at y 209 in its first two reads, with the field at y 274-309 where its focus touch landed (323.2, 291.5), and at y 356 after the `type`: the alert had slid back to the middle of the screen, as it does when the keyboard goes, so the field had lost focus between the touch and the typing. The cause is not established (no keyboard was in any screenshot, and the AutoFill bubble sat over Cancel). It is not the hidden-keyboard case above, where `axe type` still worked. Fix used: XCTest's own `field.tap(); field.typeText("TapCheck")` in the same alert, which read back `TapCheck` and created `Folder, TapCheck, Empty` (`LibraryTwoFingerProbe.testCreateTapCheckFolderFixture`, a fixture step that does nothing when the Folder exists). The failed helper run's artifacts: `name-save-01/` in that session's scratchpad (`01-command.json` to `07-command.json`, `failure.txt`).

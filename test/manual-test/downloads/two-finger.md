@@ -120,6 +120,52 @@ and drags again, asserting the rows changed and the 3 chosen stay chosen. The de
 so the remount phase starts expanded and its first drag scrolls. XCTest's `swipeUp()` also expands the sheet, so it is
 not used between steps of a comparison; the geometry then differs.
 
+The guard's other direction (an independent verification of `1.0.3 (22)-beta24`, 2026-10-31; a guard that swallows an
+ordinary tap fails as much as a lost start row does). Run each method after a fresh launch of the app:
+
+- `testDrawerOneFingerTapToggles`: a plain tap chooses and unchooses row 0 with no sweep before it.
+- `testDrawerTapsAfterShortSweeps`: the short paths 0 to 2 and back to 0, 10 pt below row 0 and 10 pt above row 3, each
+  followed by a one-finger tap on a row the sweep did not choose and a tap on its start row, in both orders, 0.15 s or 1.5 s
+  after the lift. `Download selected (N)` is read after every tap against a model of the chosen rows (30 reads on Debug, all
+  equal). The first of these taps is the first touch after the sweep.
+- `testDrawerTapWithin120msOfSweep`: the same taps as a third finger inside the sweep's own event record, down 0.12 s after
+  the two fingers lift. A separate `tap` call lands about 0.1 s after it is made, on top of any sleep, so it cannot time a
+  gap of a few hundred ms; a guard that refused presses for 300 ms after a sweep (the first version) would drop these.
+- `testDrawerStaggeredLifts`: the same paths with the second finger lifting 0.15 s after the first, either one last. The pan
+  ends when the first lifts, so the lone finger's press is what reaches the row afterwards: the counts stay 1, 2 and 2 and
+  the next tap still chooses.
+- `testDrawerFoldArrows`: needs `Nested Volumes Fold Check` (`../fixtures/nested-volumes-fixture.ts`, added through the
+  harness) in the Library; it launches, opens that book and its drawer. The volume's arrow is a Pressable inside the row's
+  own accessible one, so it is not in the AX tree and is tapped by point (`row.maxX - 66`); fold state is read from every row
+  in the tree, since a reopened volume's chapters sit below the viewport, rendered but clipped, and the volume's row moves
+  when its chapters leave. A tap on the arrow folds and unfolds with no sweep before it, after the short sweep 0 to 2 and
+  back to 0, and after 0 to 2, without changing what is chosen.
+- `testDrawerSweepThenStay` is a setup step for the accessibility-activation check below: the short sweep 0 to 2 and back to
+  0, then nothing, so no finger has come down on a row since the sweep.
+
+Measured 2026-10-31 on `iPhone 17 probe334` (iOS 27.0, 402 x 874 pt), Debug against Metro 8334 and the embedded Release build,
+each run `Executed 1 test, with 0 failures`: `testDrawerShortSweeps` (9 of 9 cases as the rule gives), `testDrawerValidGestures`
+and `testDrawerScrollKeepsChosen` (first presentation after a fresh launch, then the remount), `testDrawerOneFingerTapToggles`,
+`testDrawerTapsAfterShortSweeps` (30 of 30 reads equal their model), `testDrawerTapWithin120msOfSweep` (6 of 6),
+`testDrawerStaggeredLifts` (6 sweeps 1, 2, 2 as the rule gives, 6 following taps) and `testDrawerFoldArrows` (the first
+arrow tap folds and the second unfolds in all three cases, with the chosen count unchanged). The rows' `=0` flags in the
+`DRAWER … rows=` lines are not the checked state (`.isSelected` reads 0 for every checkbox row); the count in `chosen=` and the
+tree's `value: checkbox, checked` are.
+
+**Accessibility activation after a sweep** (the guard is told by touches, so a press with no touch of its own would be dropped).
+Voice Control, Switch Control and VoiceOver cannot be driven here (the simulator has none to run, and the Device Hub's
+VoiceOver switch was left alone), but a press by accessibility can: Xcode 27's Device Hub exposes the simulated app's
+elements to macOS accessibility, and `orca computer click --app pid:PID --window-id ID --element-index N` performs `AXPress` on
+one in the background (`path: accessibility`; Device Hub is not in `list-apps`, so select it by pid; select the device in its
+sidebar; each iOS element is listed twice; indexes change after every action). Setup: `testDrawerSweepThenStay` (the drawer after
+0 to 2 and back to 0: `Download selected (1)`) or `LibraryTwoFingerProbe.testLibrarySweepThenStay` (selection mode, `1 selected`),
+nothing touched since. Then an `AXPress` on another row, on the embedded Release build: the drawer's `Chapter 1: Nightmare
+Begins` went to `Download selected (2)` and the Library's `Innkeeper` to `2 selected`, and on a fresh app `AXPress` on
+`Innkeeper` opened the reader. The press passed the guard, so a touch came down on a row after the sweep: RN's
+`accessibilityActivate` (`RCTViewComponentView.mm`) returns NO without `onAccessibilityTap`, which the app never sets, and
+`Pressability` reaches `onPress` only through the responder system or an `onClick` that carries no `pointerType`, which iOS
+emits only with pointer events (`RCTSurfacePointerHandler.mm`). It says nothing of the real assistive technologies themselves.
+
 What it cannot establish: that a real hand does the same — a real finger
 trembles, flicks and lands 20–40 pt apart, where these are two exact paths 36 pt
 apart; Files' top edge band (a hold over its search field could not be read
