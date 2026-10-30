@@ -450,77 +450,45 @@ final class TwoFingerProbe: XCTestCase {
     verifyValidGestures(again, phase: "remount")
   }
 
-  /// #334: sweeps that end one row from where they began, on the first rows of the drawer's list. Measured on Debug,
-  /// 0 to 1 and 0 to 2 and back to 1 chose only row 1, and 0 to 0 (down and back) nothing, while 0 to 2 and 0 to 3 and
-  /// back to 2 chose rows 0 to 2 (two-finger.md). This asserts the phone's rule (the run is every row from the start row
-  /// to the current one) and fails today; it is kept until the owner decides what that means.
+  /// #335: sweeps that end within a row of where they began keep their start row. Before the fix the lift of the sweep
+  /// fired the start row's `onPress` (the row's press retention reaches about 20 pt above and 30 pt below it), which
+  /// toggled the row the sweep had just chosen: 0 to 1, 0 to 2 and back to 1, 3 to 3 above its top edge by 10 pt and
+  /// 0 to 0 below its bottom edge by 10 pt chose one row, 0 to 2 and back to 0 chose none (two-finger.md). Each case
+  /// is a fresh presentation of the drawer, on the first four choosable rows in a row inside the viewport.
   func testDrawerShortSweeps() throws {
-    var app = openDrawer()
-    for (name, path) in [("0-1", [0, 1]), ("0-2-1", [0, 2, 1])] {
-      app = openDrawer()
+    // name, the path as points from the run's rows (row middles; `edge` adds an offset below row 0's bottom edge or
+    // above row 3's top edge), the count the phone's rule gives: every row from the start row to the current one.
+    enum Stop { case mid(Int); case below0(CGFloat); case above3(CGFloat) }
+    let cases: [(String, [Stop], Int)] = [
+      ("0-1", [.mid(0), .mid(1)], 2), ("0-2-1", [.mid(0), .mid(2), .mid(1)], 2), ("0-2-0", [.mid(0), .mid(2), .mid(0)], 1),
+      ("0-3-1", [.mid(0), .mid(3), .mid(1)], 2), ("1-3-2", [.mid(1), .mid(3), .mid(2)], 2),
+      ("0-to-below-row0-10", [.mid(0), .below0(10)], 2), ("0-to-below-row0-40", [.mid(0), .below0(40)], 2),
+      ("3-to-above-row3-10", [.mid(3), .above3(-10)], 2), ("3-to-above-row3-30", [.mid(3), .above3(-30)], 2),
+    ]
+    for (name, stops, expected) in cases {
+      let app = openDrawer()
       Thread.sleep(forTimeInterval: 1.2)
       guard let first = choosableRun(app, count: 4) else { return unverified("short-\(name)", "no viewport or fewer than 4 choosable rows in a row inside it") }
-      let m = first.run.map { $0.mid }
-      var track = Fingers.line(m[path[0]], m[path[1]], start: 0.1, seconds: 0.8)
-      var end = 0.9
-      if path.count == 3 { track += Fingers.line(m[path[1]], m[path[2]], start: 1.0, seconds: 0.5).dropFirst(); end = 1.5 }
-      print("VIEWPORT short-\(name): \(first.viewport) ROWS \(first.run.map { "\($0.label)@\($0.frame)" }) GESTURE \(path.map { m[$0] })")
+      let run = first.run
+      let points = stops.map { stop -> CGPoint in
+        switch stop {
+        case .mid(let row): return run[row].mid
+        case .below0(let offset): return CGPoint(x: run[0].mid.x, y: run[0].frame.maxY + offset)
+        case .above3(let offset): return CGPoint(x: run[3].mid.x, y: run[3].frame.minY + offset)
+        }
+      }
+      guard points.allSatisfy({ first.viewport.contains($0) }) else { return unverified("short-\(name)", "a point is outside the viewport \(first.viewport)") }
+      var track = Fingers.line(points[0], points[1], start: 0.1, seconds: 0.7)
+      var end = 0.8
+      if points.count == 3 { track += Fingers.line(points[1], points[2], start: 0.9, seconds: 0.5).dropFirst(); end = 1.4 }
+      print("VIEWPORT short-\(name): \(first.viewport) ROWS \(run.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) GESTURE \(points)")
       Fingers.play(Fingers.pair(track, lift: end + 0.1), name: "short-\(name)", in: self)
       Thread.sleep(forTimeInterval: 1.2)
       let count = chosenCount(app)
       capture("short-\(name)", app)
-      print("DRAWER short-\(name): chosen=\(count)")
-      XCTAssertEqual(count, 2, "short-\(name): the run is rows 0 and 1")
+      print("DRAWER short-\(name): chosen=\(count) expected=\(expected)")
+      XCTAssertEqual(count, expected, "short-\(name)")
     }
-  }
-
-  /// TEMPORARY #334 Phase A: where does a short sweep's end point have to be for the start row to survive?
-  func testDrawerEndPointDiscriminator() throws {
-    var cases: [(String, Int, Int, CGFloat)] = [
-      ("a-0-to-row0.maxY+10", 0, 0, 10), ("b-0-to-row0.maxY+40", 0, 0, 40), ("c-3-to-row3.minY-10", 3, 3, -10), ("d-3-to-row3.minY-30", 3, 3, -30),
-    ]
-    cases.append(("e-0-to-row1-mid", 0, 0, 0))
-    for (name, startRow, edgeRow, offset) in cases {
-      let app = openDrawer()
-      Thread.sleep(forTimeInterval: 1.2)
-      guard let first = choosableRun(app, count: 4) else { return unverified(name, "no run") }
-      let run = first.run
-      let start = run[startRow].mid
-      let end: CGPoint
-      if name.hasPrefix("e-") { end = run[1].mid }
-      else if startRow == 0 { end = CGPoint(x: start.x, y: run[edgeRow].frame.maxY + offset) }
-      else { end = CGPoint(x: start.x, y: run[edgeRow].frame.minY + offset) }
-      print("H1 \(name): viewport=\(first.viewport) rows=\(run.map { "\($0.label)@\($0.frame.minY)-\($0.frame.maxY)" }) start=\(start) end=\(end) endOnRow=\(run.firstIndex { $0.frame.contains(end) } ?? -1)")
-      Fingers.play(Fingers.pair(Fingers.line(start, end, start: 0.1, seconds: 0.6), lift: 0.8), name: "h1-\(name)", in: self)
-      Thread.sleep(forTimeInterval: 1.2)
-      print("H1 \(name): chosen=\(chosenCount(app))")
-      capture("h1-\(name)", app)
-    }
-  }
-
-  /// TEMPORARY #334 Phase A: at first presentation, does a one-finger upward drag resize the sheet before it scrolls the list?
-  func testDrawerFirstScrollSheet() throws {
-    let app = openDrawer()
-    Thread.sleep(forTimeInterval: 1.5)
-    func frames(_ label: String) {
-      let header = app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded' OR label ENDSWITH ' saved'")).firstMatch.frame
-      let download = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected ('")).firstMatch.frame
-      print("H2 \(label): viewport=\(String(describing: drawerViewport(app))) headerText=\(header) downloadButton=\(download) rows=\(shownRows(app).map { $0.label })")
-    }
-    func drag(_ name: String, from: CGFloat, to: CGFloat, seconds: Double) {
-      guard let viewport = drawerViewport(app) else { return unverified(name, "no viewport") }
-      let x = viewport.midX
-      print("H2 \(name): from y=\(from) to y=\(to) over \(seconds)s")
-      Fingers.play([Fingers.finger(Fingers.line(CGPoint(x: x, y: from), CGPoint(x: x, y: to), start: 0.1, seconds: seconds), lift: seconds + 0.2)], name: "h2-\(name)", in: self)
-      Thread.sleep(forTimeInterval: 1.5)
-      frames("after \(name)")
-      capture("h2-\(name)", app)
-    }
-    frames("initial")
-    drag("slow-154pt", from: 733, to: 579, seconds: 0.6)
-    drag("long-fast", from: 733, to: 250, seconds: 0.35)
-    if let vp = drawerViewport(app) { drag("list-after-expand", from: vp.maxY - 25, to: vp.minY + 25, seconds: 0.6) }
-    if let vp = drawerViewport(app) { drag("list-again", from: vp.maxY - 25, to: vp.minY + 25, seconds: 0.6) }
   }
 
   func verifyValidGestures(_ app: XCUIApplication, phase: String) {
@@ -578,24 +546,67 @@ final class TwoFingerProbe: XCTestCase {
     XCTAssertEqual(retract, 3, "\(phase): down to row 3 and back to row 2 leaves rows 0-2")
     guard retract == 3 else { return fail("retraction did not give 3, retention cannot be checked") }
 
-    // One-finger retention: a scroll inside the viewport, then a tap and the tap back.
-    let before = shownRows(app).map { $0.label }
-    let x = viewport.midX
-    let from = CGPoint(x: x, y: viewport.maxY - 25), to = CGPoint(x: x, y: viewport.minY + 25)
-    print("GESTURE \(phase) one-finger scroll: \(from) -> \(to)")
-    Fingers.play([Fingers.finger(Fingers.line(from, to, start: 0.1, seconds: 0.6), lift: 0.8)], name: "\(phase)-scroll", in: self)
-    Thread.sleep(forTimeInterval: 1)
-    let after = shownRows(app).map { $0.label }
-    print("DRAWER \(phase) scroll rows before=\(before) after=\(after)")
-    XCTAssertNotEqual(before, after, "\(phase): the one-finger scroll must have moved the list, or it proved nothing")
-    XCTAssertEqual(read("scroll"), 3, "\(phase): a one-finger scroll keeps the chosen rows")
+    // One-finger tap retention: a tap on another row and the tap back keep the three.
     guard let other = choosableRun(app, count: 1, excluding: chosenLabels) else { return fail("no other choosable row inside the viewport to tap") }
     tap(app, other.run[0].mid)
     XCTAssertTrue(until(3) { self.chosenCount(app) == 4 }, "\(phase): a one-finger tap adds a row to the three chosen")
     print("DRAWER \(phase) tap: chosen=\(chosenCount(app)) row=\(other.run[0].label)")
     tap(app, other.run[0].mid)
     XCTAssertTrue(until(3) { self.chosenCount(app) == 3 }, "\(phase): the second tap takes it back, keeping the three")
-    print("DRAWER \(phase) retention final: chosen=\(read("retention"))")
+    print("DRAWER \(phase) tap retention final: chosen=\(read("tap-retention"))")
+  }
+
+  /// #334: one-finger scrolling keeps the chosen rows, at first presentation and after a remount. At the half-height
+  /// drawer the sheet takes an upward drag of the list at its top before the list does: a slow drag only bounces the sheet,
+  /// and a longer, faster one expands it (the viewport grows, the list offset stays 0); the next drag then scrolls the
+  /// list. So the scroll is preceded, when needed, by an expanding drag whose growth of the viewport is asserted, and the
+  /// scroll itself must change the rows or the step fails. The detent persists across a remount, so the second phase may
+  /// start expanded, and then its first drag scrolls the list directly.
+  func testDrawerScrollKeepsChosen() throws {
+    verifyScrollRetention(openDrawer(), phase: "first")
+    verifyScrollRetention(openDrawer(), phase: "remount")
+  }
+
+  func verifyScrollRetention(_ app: XCUIApplication, phase: String) {
+    func fail(_ why: String) { unverified("scroll-\(phase)", why) }
+    Thread.sleep(forTimeInterval: 1.2)
+    guard let first = choosableRun(app, count: 4) else { return fail("no viewport or fewer than 4 choosable rows in a row inside it") }
+    let run = first.run
+    print("VIEWPORT scroll-\(phase): \(first.viewport) ROWS \(run.map { "\($0.label)@\($0.frame)" })")
+    guard chosenCount(app) == 0 else { return fail("\(chosenCount(app)) chosen before the first gesture") }
+    Fingers.play(Fingers.pair(Fingers.line(run[0].mid, run[2].mid, start: 0.1, seconds: 0.8), lift: 1.1), name: "scroll-\(phase)-down", in: self)
+    _ = until(5) { self.chosenCount(app) == 3 }
+    guard chosenCount(app) == 3 else { return fail("downward selection gave \(chosenCount(app)), not 3") }
+    func labels() -> [String] { shownRows(app).map { $0.label } }
+    func drag(_ name: String, from: CGFloat, to: CGFloat, seconds: Double) {
+      let x = (drawerViewport(app) ?? first.viewport).midX
+      print("GESTURE scroll-\(phase) \(name): y \(from) -> \(to) over \(seconds) s")
+      Fingers.play([Fingers.finger(Fingers.line(CGPoint(x: x, y: from), CGPoint(x: x, y: to), start: 0.1, seconds: seconds), lift: seconds + 0.2)], name: "scroll-\(phase)-\(name)", in: self)
+      Thread.sleep(forTimeInterval: 1.5)
+    }
+    var viewport = first.viewport
+    let rowsBefore = labels()
+    drag("slow", from: viewport.maxY - 25, to: viewport.minY + 25, seconds: 0.6)
+    var now = drawerViewport(app) ?? viewport
+    print("DRAWER scroll-\(phase) slow: viewport \(viewport) -> \(now) rows before=\(rowsBefore) after=\(labels()) chosen=\(chosenCount(app))")
+    if now == viewport && labels() == rowsBefore {
+      // The sheet is at its half height and has not moved: expand it with a longer, faster drag.
+      drag("expand", from: viewport.maxY - 25, to: 250, seconds: 0.35)
+      now = drawerViewport(app) ?? viewport
+      print("DRAWER scroll-\(phase) expand: viewport \(viewport) -> \(now) rows=\(labels()) chosen=\(chosenCount(app))")
+      XCTAssertGreaterThan(now.height, viewport.height, "scroll-\(phase): the long drag must have expanded the sheet, or the list was not the thing that moved")
+      guard now.height > viewport.height else { return fail("the sheet did not expand, so a scroll cannot be told apart from the sheet resizing") }
+      viewport = now
+      let beforeScroll = labels()
+      drag("scroll", from: viewport.maxY - 25, to: viewport.minY + 25, seconds: 0.6)
+      let afterScroll = labels()
+      print("DRAWER scroll-\(phase) scroll: rows before=\(beforeScroll) after=\(afterScroll) chosen=\(chosenCount(app))")
+      XCTAssertNotEqual(beforeScroll, afterScroll, "scroll-\(phase): the one-finger scroll of the expanded sheet must have moved the list")
+    } else {
+      XCTAssertNotEqual(rowsBefore, labels(), "scroll-\(phase): the one-finger scroll must have moved the list")
+    }
+    XCTAssertEqual(chosenCount(app), 3, "scroll-\(phase): scrolling keeps the three chosen")
+    capture("scroll-\(phase)-final", app)
   }
 
   func sweep(_ from: CGPoint, _ to: CGPoint, seconds: Double = 0.8, hold: Double = 0, name: String) {
