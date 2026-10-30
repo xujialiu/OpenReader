@@ -7,6 +7,7 @@ import { narrationIdentity } from '../../src/offline/narration-voice';
 
 const mock = vi.hoisted(() => ({
   model: 'drama-3', alert: vi.fn(), requestProgress: vi.fn(), releaseProgress: vi.fn(),
+  sweepGesture: { kind: 'range-sweep' }, nativeGesture: { kind: 'native-scroll-with-priority' },
   /** What `occupied` answers for the whole Document, and for one Voice. */
   document: 30, voice: 10,
   /** What `savedVoices` answers, when a test sets it. */
@@ -25,7 +26,7 @@ vi.mock('../../src/app/controls', async () => ({ ...await hosts('ChoiceMenu'), I
 vi.mock('../../src/app/drawer', async () => ({ ...await hosts('DrawerList', 'DrawerRow', 'DrawerRowText'), DRAWER: { row: {} } }));
 vi.mock('../../src/app/download-ring', () => hosts('DownloadRing'));
 vi.mock('../../src/app/icon', () => hosts('Icon'));
-vi.mock('../../src/app/use-sweep', () => ({ useSweep: () => ({ list: {}, gesture: {} }) }));
+vi.mock('../../src/app/use-sweep', () => ({ useSweep: () => ({ list: {}, gesture: mock.sweepGesture, nativeGesture: mock.nativeGesture }) }));
 vi.mock('../../src/app/routes', () => ({ useShell: () => ({ settings: { fish: { model: mock.model } } }) }));
 vi.mock('../../src/app/settings', () => ({ PROVIDER_LABELS: { fish: 'Fish Audio', azure: 'Azure' } }));
 vi.mock('../../src/offline/runtime', () => ({
@@ -50,6 +51,20 @@ const switchVoice = (view: ReactTestRenderer) => view.root.findAll((node) => Str
 /** The button whose words are `label`. */
 const pressable = (view: ReactTestRenderer, label: string) => view.root.findAll((node) => String(node.type) === 'Pressable')
   .find((node) => node.findAll((child) => String(child.type) === 'DrawerRowText' && child.props.children === label).length)!;
+
+it('gives the chapter sweep priority over its actual native list, not the drawer header', async () => {
+  let view!: ReactTestRenderer;
+  await act(async () => { view = create(createElement(DownloadContent, {
+    document: 'book', title: 'Book', voice: { provider: 'fish', voice: 'A', label: 'Aarav' },
+    place: null, manage: false, onManage: vi.fn(), onSelectAll: vi.fn(),
+  })); });
+  try {
+    const detectors = view.root.findAll((node) => String(node.type) === 'GestureDetector');
+    expect(detectors.map((node) => node.props.gesture)).toEqual([mock.sweepGesture, mock.nativeGesture]);
+    expect(detectors[1].findAll((node) => String(node.type) === 'DrawerList')).toHaveLength(1);
+    expect(detectors[1].findAll((node) => node.props.accessibilityLabel === 'Download selected (0)')).toHaveLength(0);
+  } finally { await act(async () => view.unmount()); }
+});
 
 it('shows Provider and Model on their own row, filters saved Fish Voices, and keeps delete-all document-wide', async () => {
   let view!: ReactTestRenderer;

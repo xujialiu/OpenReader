@@ -28,10 +28,15 @@ one-row iPad list accepted a row-origin pull but never began dragging from
 blank space, despite alwaysBounceVertical being enabled.
 
 UIKit's automatic stacked presentation omitted the external cancel control
-on iPad even while input was focused. RNSSearchBar therefore explicitly shows
-the native control at focus and hides it only at cancellation/inactive blur.
-An active search keeps Close when the keyboard is dismissed or a result is
-visited; the control is not conditional on nonempty text.
+on iPad even while input was focused, and explicitly setting showsCancelButton
+did not make it appear there. RNSSearchBar owns cancel visibility; on iPad its
+bar subclass supplies a sibling UIKit UIButton with the system xmark image and
+glass configuration (standard tinted configuration before iOS 26), reserving
+space beside the native text field. Its frame is derived from bar bounds,
+never repeatedly subtracted from the already-sized field. It uses the same
+cancelSearch route, not a separate query lifecycle. iPhone retains UIKit's
+built-in control. An active search keeps Close when the keyboard is dismissed
+or a result is visited; it is not conditional on nonempty text.
 
 `useLibrarySearch` owns the query and navigation lifetime. On iOS the native
 search control owns the browsing and result scroll positions, captured before
