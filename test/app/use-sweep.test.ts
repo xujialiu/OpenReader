@@ -48,6 +48,8 @@ async function mount(initial: Partial<SelectableRows> = {}) {
     select, get sweep() { return sweep; },
     update: async (patch: Partial<SelectableRows>) => { rows = { ...rows, ...patch }; await act(async () => { renderer.update(createElement(Probe)); }); },
     measure, close: async () => { await act(async () => renderer.unmount()); },
+    /** A finger coming down on row `index`, as the touch bubbles through its cell. */
+    touch: (index: number) => renderer.root.findAllByType(View)[index].props.onTouchStart(),
   };
 }
 it('routes native gestures on JS while retaining two-finger sweep priority', async () => {
@@ -102,48 +104,47 @@ it('starts edge scrolling above floating actions and releases its timer on unmou
   await h.close();
   expect(vi.getTimerCount()).toBe(0);
 });
-it('refuses a row press while a sweep runs and for 300 ms after it ends, and delivers every other press (#335)', async () => {
+it('drops the press that ends a sweep\'s own touch, before or after the pan finalizes and however late (#335)', async () => {
   vi.useFakeTimers();
   const h = await mount();
   const press = vi.fn();
   const row = h.sweep.guard(press);
-  row('before');
-  expect(press).toHaveBeenCalledTimes(1);
-  // The lift of a sweep that ends on the row it began on: the press arrives before the pan finalizes, or after.
-  handlers.start({ y: 10 }); handlers.update({ y: 40 });
-  row('while the fingers are down');
+  // Row 0 to row 1, lifted inside row 0's press retention: its press reaches JavaScript before the pan finalizes...
+  h.touch(0); handlers.start({ y: 10 }); handlers.update({ y: 70 });
+  row();
   handlers.end();
-  vi.advanceTimersByTime(299);
-  row('just after');
-  expect(press).toHaveBeenCalledTimes(1);
-  vi.advanceTimersByTime(2);
-  row('a tap afterwards', 2);
-  expect(press).toHaveBeenCalledTimes(2);
-  expect(press).toHaveBeenLastCalledWith('a tap afterwards', 2);
+  expect([...h.select.mock.lastCall![0]]).toEqual(ids.slice(0, 2));
+  // ...or after it, however long a busy JavaScript thread takes to deliver it.
+  h.touch(0); handlers.start({ y: 10 }); handlers.update({ y: 70 }); handlers.end();
+  vi.advanceTimersByTime(1000);
+  row();
+  expect(press).not.toHaveBeenCalled();
   await h.close();
 });
-it('does not quiet presses when the sweep is disabled and so never began, or when no sweep ran', async () => {
-  vi.useFakeTimers();
+it('lets a tap through at once after a sweep, and the press of any touch no sweep began in (#335)', async () => {
+  const h = await mount();
+  const press = vi.fn();
+  const row = h.sweep.guard(press);
+  h.touch(2); row('a tap before any sweep');
+  h.touch(0); handlers.start({ y: 10 }); handlers.update({ y: 70 }); handlers.end();
+  h.touch(3); row('a tap straight after', 3);
+  expect(press.mock.calls).toEqual([['a tap before any sweep'], ['a tap straight after', 3]]);
+  await h.close();
+});
+it('counts a finger that comes down while a sweep runs as part of that sweep (#335)', async () => {
+  const h = await mount();
+  const press = vi.fn();
+  // The pan's start reached JavaScript before the touch's own start did.
+  handlers.start({ y: 10 }); h.touch(0); handlers.update({ y: 70 }); handlers.end();
+  h.sweep.guard(press)();
+  expect(press).not.toHaveBeenCalled();
+  await h.close();
+});
+it('keeps the press when two fingers began no sweep, as while sweeps are off (#335)', async () => {
   const h = await mount({ enabled: false });
   const press = vi.fn();
-  const row = h.sweep.guard(press);
-  handlers.start({ y: 10 });
-  handlers.end();
-  row('after a touch that began no sweep');
-  handlers.end();
-  row('after a second end');
-  expect(press).toHaveBeenCalledTimes(2);
-  await h.close();
-});
-it('keeps the selection of the sweep: a press dropped after a short sweep leaves the chosen start row to the sweep', async () => {
-  vi.useFakeTimers();
-  const h = await mount();
-  const toggle = vi.fn();
-  const row = h.sweep.guard(toggle);
-  handlers.start({ y: 10 }); handlers.update({ y: 70 });
-  expect([...h.select.mock.lastCall![0]]).toEqual(ids.slice(0, 2));
-  handlers.end();
-  row();
-  expect(toggle).not.toHaveBeenCalled();
+  h.touch(0); handlers.start({ y: 10 }); handlers.end();
+  h.sweep.guard(press)();
+  expect(press).toHaveBeenCalledOnce();
   await h.close();
 });

@@ -11,16 +11,6 @@ import { beginSweep, edgeSpeed, rowAt, rowChapters, sweepTo, type Extent, type S
  */
 const EDGE_BAND = 24;
 const EDGE_FASTEST = 1500;
-/**
- * How long after a sweep ends a row's press is still not a tap, in
- * milliseconds. A row's `Pressable` keeps the touch that came down on it, and
- * its press retention reaches about 20 pt above and 30 pt below it, so fingers
- * lifted within that of the row the sweep began on fire its `onPress` as well,
- * which toggled the row the sweep had just chosen (#335). Whether that press
- * arrives before or after the pan's `onFinalize` is not specified, so a press
- * is refused while a sweep is active and for this long afterwards.
- */
-const PRESS_QUIET = 300;
 
 export interface SweepRows {
   /** The rows as shown, top to bottom. */
@@ -56,7 +46,9 @@ class SweepController<T> {
   private scrolled = 0;
   private viewport = 0;
   private content = 0;
-  private quietUntil = 0;
+  /** How many sweeps have begun, and how many had when a finger last came down on a row: see `guard`. */
+  private sweeps = 0;
+  private touched = 0;
   private active: {
     rows: readonly (readonly string[])[]; ids: readonly string[]; state: Sweep;
     /** The row the fingers are over, and their height in the list. */
@@ -69,7 +61,7 @@ class SweepController<T> {
   // two-finger drag can become a native scroll before the selection pan starts.
   readonly nativeGesture = Gesture.Native().runOnJS(true).requireExternalGestureToFail(this.gesture);
 
-  private readonly Cell = recordingCell<T>(this.extents);
+  private readonly Cell = recordingCell<T>(this.extents, () => this.touch());
 
   readonly list = {
     ref: (list: Pick<FlatList<T>, 'scrollToOffset'> | null) => { this.flatList = list; },
@@ -100,6 +92,7 @@ class SweepController<T> {
     if (enabled === false) return;
     const anchor = this.under(ids, y);
     if (anchor < 0) return;
+    this.sweeps += 1;
     const state = beginSweep(rows, anchor, selected);
     this.active = { rows, ids, state, at: anchor, y, last: Date.now(), timer: setInterval(() => this.edge(), 16) };
     this.select(sweepTo(rows, state, anchor));
@@ -137,16 +130,28 @@ class SweepController<T> {
   }
 
   end(): void {
-    if (this.active) {
-      clearInterval(this.active.timer);
-      this.quietUntil = Date.now() + PRESS_QUIET;
-    }
+    if (this.active) clearInterval(this.active.timer);
     this.active = null;
   }
 
-  /** A row's press, ignored while a sweep runs and just after one, since its fingers' lift is not a tap. */
+  /** A finger came down on one of the list's rows. One that lands while a sweep runs belongs to that sweep. */
+  touch(): void {
+    this.touched = this.active ? -1 : this.sweeps;
+  }
+
+  /**
+   * A row's press, unless a sweep began during the touch that ends in it
+   * (#335). A row's `Pressable` keeps the first finger that came down on it,
+   * and its press retention reaches about 20 pt above and 30 pt below it, so
+   * fingers lifted that near the row a sweep began on fired its `onPress` too
+   * and toggled the row the sweep had just chosen. Whether that press reaches
+   * JavaScript before or after the pan's `onFinalize` is not specified, so it
+   * is told by the touch rather than by the time: dropped while a sweep runs,
+   * and dropped when a sweep has begun since a finger last came down on a row.
+   * A tap after a sweep, however soon, comes down afresh and goes through.
+   */
   readonly guard = <A extends unknown[]>(press: (...args: A) => void) => (...args: A): void => {
-    if (this.active === null && Date.now() >= this.quietUntil) press(...args);
+    if (this.active === null && this.touched === this.sweeps) press(...args);
   };
 }
 
@@ -155,12 +160,14 @@ class SweepController<T> {
  * is mounted, and hands the list its own layout callback as the default cell
  * would. A mounted cell reports again whenever it moves; one the list has let
  * go of forgets its place, because a volume folded or opened above it since
- * would have moved it, and a stale place could claim the fingers.
+ * would have moved it, and a stale place could claim the fingers. Every touch
+ * that starts on its row bubbles through it on the way down, which is how the
+ * controller learns that a finger came down (`guard`).
  */
-function recordingCell<T>(extents: Map<string, Extent>) {
+function recordingCell<T>(extents: Map<string, Extent>, touched: () => void) {
   return function RecordingCell({ item: _item, onLayout, cellKey, index: _index, ...cell }: CellRendererProps<T>) {
     useEffect(() => () => { extents.delete(cellKey); }, [cellKey]);
-    return <View {...cell} onLayout={(event: LayoutChangeEvent) => {
+    return <View {...cell} onTouchStart={touched} onLayout={(event: LayoutChangeEvent) => {
       extents.set(cellKey, { top: event.nativeEvent.layout.y, height: event.nativeEvent.layout.height });
       onLayout?.(event);
     }} />;

@@ -8,7 +8,7 @@ import type { ScreenProps } from '../../src/app/routes';
 import { LibraryScreen } from '../../src/app/library-screen';
 
 const shell = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
-const sweeping = vi.hoisted(() => ({ enabled: false }));
+const sweeping = vi.hoisted(() => ({ enabled: false, refuse: false }));
 const hosts = vi.hoisted(() => async (...names: string[]) => {
   const { createElement: element } = await import('react');
   return Object.fromEntries(names.map((name) => [name, ({ children, ...props }: Record<string, unknown> & { children?: ReactNode }) => element(name, props, children)]));
@@ -47,7 +47,7 @@ vi.mock('../../src/app/settings', () => ({ NO_PROVIDER_SENTENCE: 'No provider is
 vi.mock('../../src/offline/runtime', () => ({ formatBytes: vi.fn(), occupied: vi.fn(), removeDownloads: vi.fn(), requestInventory: vi.fn() }));
 vi.mock('../../src/app/use-sweep', () => ({ useRowSweep: (rows: { enabled: boolean }) => {
   sweeping.enabled = rows.enabled;
-  return { gesture: {}, nativeGesture: {}, list: { ref: vi.fn(), onScroll: vi.fn(), onContentSizeChange: vi.fn() }, guard: <A extends unknown[]>(press: (...args: A) => void) => press };
+  return { gesture: {}, nativeGesture: {}, list: { ref: vi.fn(), onScroll: vi.fn(), onContentSizeChange: vi.fn() }, guard: <A extends unknown[]>(press: (...args: A) => void) => (...args: A) => { if (!sweeping.refuse) press(...args); } };
 } }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -58,6 +58,7 @@ const entry = (digit: string, title: string): LibraryEntry => ({
 let entries: LibraryEntry[];
 let tree: FolderTree;
 beforeEach(() => {
+  sweeping.refuse = false;
   vi.stubGlobal('requestAnimationFrame', () => 1); vi.stubGlobal('cancelAnimationFrame', vi.fn());
   entries = [entry('3', 'Three Body Problem'), entry('2', '三体'), entry('1', 'Three Body Problem')];
   tree = { version: 1, current: 'inner', folders: [
@@ -179,6 +180,16 @@ describe('Library Search through the real page and actions Drawer (#332)', () =>
     expect(page.navigation.navigate).toHaveBeenLastCalledWith('Reader', { id: entries[2].id });
     entries = entries.slice(0, 2); await page.update();
     expect(page.nodes('DocumentRow')).toHaveLength(0);
+    await page.close();
+  });
+  it('sends a row\'s press through the sweep, which drops the lift of a sweep begun on it (#335)', async () => {
+    const page = await open();
+    sweeping.refuse = true;
+    await act(async () => page.nodes('DocumentRow')[0].props.onPress());
+    expect(page.navigation.navigate).not.toHaveBeenCalled();
+    sweeping.refuse = false;
+    await act(async () => page.nodes('DocumentRow')[0].props.onPress());
+    expect(page.navigation.navigate).toHaveBeenLastCalledWith('Reader', { id: entries[1].id });
     await page.close();
   });
 });
