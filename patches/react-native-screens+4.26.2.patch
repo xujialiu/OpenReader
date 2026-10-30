@@ -513,7 +513,7 @@ index 32efddb..459f333 100644
  #if RNS_IPHONE_OS_VERSION_AVAILABLE(16_0) && !TARGET_OS_TV
  - (UINavigationItemSearchBarPlacement)placementAsUINavigationItemSearchBarPlacement API_AVAILABLE(ios(16.0))
 diff --git a/node_modules/react-native-screens/ios/RNSSearchBar.mm b/node_modules/react-native-screens/ios/RNSSearchBar.mm
-index 2345734..83ef3eb 100644
+index 2345734..5b4cd6d 100644
 --- a/node_modules/react-native-screens/ios/RNSSearchBar.mm
 +++ b/node_modules/react-native-screens/ios/RNSSearchBar.mm
 @@ -2,6 +2,7 @@
@@ -524,7 +524,7 @@ index 2345734..83ef3eb 100644
  
  #import <React/RCTComponent.h>
  
-@@ -14,9 +15,80 @@
+@@ -14,9 +15,135 @@
  
  namespace react = facebook::react;
  
@@ -532,9 +532,64 @@ index 2345734..83ef3eb 100644
 +// OpenReader (#332): UISearchBar supplies its own Escape command ahead of the
 +// navigation controller. Replace that command on this bar, not UIKit globally.
 +@interface RNSOpenReaderSearchBar : UISearchBar
++- (void)openReaderShowClose:(BOOL)show;
 +@end
 +
-+@implementation RNSOpenReaderSearchBar
++@implementation RNSOpenReaderSearchBar {
++  UIButton *_openReaderClose;
++}
++
++- (void)openReaderShowClose:(BOOL)show
++{
++  // UISearchBar ignores showsCancelButton in the regular iPad presentation.
++  // Supply a native sibling button, using UIKit's own glass/standard styling.
++  if (self.traitCollection.userInterfaceIdiom != UIUserInterfaceIdiomPad) {
++    return;
++  }
++  if (_openReaderClose == nil && show) {
++    _openReaderClose = [UIButton buttonWithType:UIButtonTypeSystem];
++    UIButtonConfiguration *configuration;
++    if (@available(iOS 26.0, *)) {
++      configuration = [UIButtonConfiguration glassButtonConfiguration];
++    } else {
++      configuration = [UIButtonConfiguration tintedButtonConfiguration];
++    }
++    configuration.image = [UIImage systemImageNamed:@"xmark"];
++    configuration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
++    configuration.baseForegroundColor = UIColor.labelColor;
++    _openReaderClose.configuration = configuration;
++    _openReaderClose.accessibilityLabel = @"Close";
++    [_openReaderClose addTarget:self action:@selector(openReaderClosePressed:) forControlEvents:UIControlEventTouchUpInside];
++    [self addSubview:_openReaderClose];
++  }
++  _openReaderClose.hidden = !show;
++  [self setNeedsLayout];
++}
++
++- (void)layoutSubviews
++{
++  [super layoutSubviews];
++  if (_openReaderClose == nil) {
++    return;
++  }
++  UISearchTextField *field = self.searchTextField;
++  CGRect rect = [field.superview convertRect:field.frame toView:self];
++  CGFloat edge = CGRectGetMinX(rect);
++  CGFloat side = CGRectGetHeight(rect);
++  CGFloat reserve = _openReaderClose.hidden ? 0 : side + 8;
++  // Derive from bar bounds, never subtract repeatedly from an already sized field.
++  rect.size.width = MAX(0, CGRectGetWidth(self.bounds) - 2 * edge - reserve);
++  field.frame = [self convertRect:rect toView:field.superview];
++  _openReaderClose.frame = CGRectMake(CGRectGetWidth(self.bounds) - edge - side, CGRectGetMinY(rect), side, side);
++  [self bringSubviewToFront:_openReaderClose];
++}
++
++- (void)openReaderClosePressed:(UIButton *)sender
++{
++  if ([self.delegate isKindOfClass:RNSSearchBar.class]) {
++    [(RNSSearchBar *)self.delegate cancelSearch];
++  }
++}
 +- (RNSScreen *)openReaderLibraryScreen
 +{
 +  if (![self.delegate isKindOfClass:RNSSearchBar.class]) {
@@ -605,7 +660,7 @@ index 2345734..83ef3eb 100644
  
    // We use those booleans to log a warning if user attempts to restore
    // default behavior after setting explicit value for the prop.
-@@ -39,13 +111,20 @@ - (instancetype)init
+@@ -39,13 +166,20 @@ - (instancetype)init
  - (void)initCommonProps
  {
  #if !TARGET_OS_TV
@@ -627,7 +682,7 @@ index 2345734..83ef3eb 100644
  
    _isObscureBackgroundSet = NO;
    _isHideNavigationBarSet = NO;
-@@ -56,6 +135,61 @@ - (void)initCommonProps
+@@ -56,6 +190,61 @@ - (void)initCommonProps
    _allowToolbarIntegration = YES;
  }
  
@@ -689,7 +744,23 @@ index 2345734..83ef3eb 100644
  - (void)emitOnFocusEvent
  {
    if (_eventEmitter != nullptr) {
-@@ -258,6 +392,7 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
+@@ -184,6 +373,7 @@ - (void)hideCancelButton
+ #if !TARGET_OS_TV
+   if (!_controller.automaticallyShowsCancelButton) {
+     [_controller.searchBar setShowsCancelButton:NO animated:YES];
++    [(RNSOpenReaderSearchBar *)_controller.searchBar openReaderShowClose:NO];
+   } else {
+     // On iOS 13+ UISearchController automatically shows/hides cancel button
+     // https://developer.apple.com/documentation/uikit/uisearchcontroller/3152926-automaticallyshowscancelbutton?language=objc
+@@ -196,6 +386,7 @@ - (void)showCancelButton
+ #if !TARGET_OS_TV
+   if (!_controller.automaticallyShowsCancelButton) {
+     [_controller.searchBar setShowsCancelButton:YES animated:YES];
++    [(RNSOpenReaderSearchBar *)_controller.searchBar openReaderShowClose:YES];
+   } else {
+     // On iOS 13+ UISearchController automatically shows/hides cancel button
+     // https://developer.apple.com/documentation/uikit/uisearchcontroller/3152926-automaticallyshowscancelbutton?language=objc
+@@ -258,6 +449,7 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
    }
  #endif
  
@@ -697,7 +768,7 @@ index 2345734..83ef3eb 100644
    [self showCancelButton];
    [self becomeFirstResponder];
    [self emitOnFocusEvent];
-@@ -266,7 +401,12 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
+@@ -266,7 +458,12 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
  - (void)searchBarTextDidEndEditing:(UISearchBar *)searchBar
  {
    [self emitOnBlurEvent];
@@ -711,7 +782,7 @@ index 2345734..83ef3eb 100644
  }
  
  - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText
-@@ -283,6 +423,7 @@ - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
+@@ -283,6 +480,7 @@ - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
  - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar
  {
    _controller.searchBar.text = @"";
@@ -719,7 +790,7 @@ index 2345734..83ef3eb 100644
    [self resignFirstResponder];
    [self hideCancelButton];
  
-@@ -298,6 +439,11 @@ - (void)blur
+@@ -298,6 +496,11 @@ - (void)blur
  
  - (void)focus
  {
@@ -731,7 +802,7 @@ index 2345734..83ef3eb 100644
    [_controller.searchBar becomeFirstResponder];
  }
  
-@@ -326,6 +472,60 @@ - (void)cancelSearch
+@@ -326,6 +529,60 @@ - (void)cancelSearch
  #endif
  }
  
