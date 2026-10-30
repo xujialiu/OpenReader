@@ -83,6 +83,36 @@ the intended book cannot show four choosable rows in a row. A failed
 `XCTAssertGreaterThanOrEqual` does not stop the test: after one, indexing the
 array it guarded must not follow.
 
+The drawer is the SwiftUI sheet, whose chapter list is a scroll view of its own inside it. Rows scrolled out of that
+list stay in the accessibility tree with frames outside it, above the header or below the footer, so a row chosen by a
+screen constant or by the header and footer can be clipped out of view and a two-finger path started on it touches the
+header, not a chapter (#334). The `testDrawer…` methods therefore take `drawerViewport` (the smallest scroll view that
+holds a chapter row's centre) and use only rows fully inside it, as `DrawerRow` snapshots (an `XCUIElement` found by index
+is looked up again at every use, so a row read later may be another one) touched by point. `shownRows(_:atLeast:)` and
+`choosableRun` return nothing, and the method prints `UNVERIFIED` and fails, when there is no viewport or too few
+choosable rows in a row; callers stop on that, since a failed assert does not.
+
+`testDrawerValidGestures` is the check of the three behaviours, run on a fresh launch for the first presentation (the
+runner terminates the app after a failed run, so launch it again with `-RCT_jsLocation localhost:PORT` and
+`silence.sh set` before each) and then again after Back from Download and Download, with the same geometry printed both
+times (`VIEWPORT`, `ROWS`, `GESTURE` and `DRAWER` lines). In the 386 x 204 pt viewport at the half-height drawer four
+49.9 pt rows fit. Each path is asserted to start, turn and end on those rows, and `Download selected (N)` is read back:
+rows 0 to 2 chooses 3; rows 0 to 3 and back to 2 in one gesture chooses 3 (down alone would give 4); a one-finger drag
+across the viewport and then a tap and a tap back keep the 3 chosen. Rows are cleared between steps by one-finger taps,
+not by scrolling or by XCTest's `swipeUp()`, which expands the sheet to its large height (the viewport becomes 402 x 578
+pt) and changes the geometry under comparison. Run it with `-collect-test-diagnostics never`: the print lines still
+reach `test.log` and a failed run does not then sit in `simctl diagnose`.
+
+Two things it reports that are not yet explained, and which the probe records and does not hide. At first presentation
+a synthesized one-finger drag across the viewport (0.3 s to 1.0 s, 120 to 154 pt) leaves the list where it was, while
+after Back and Download the same drag scrolls it; XCTest's own `swipeUp()` on the list's scroll view does scroll it at
+first presentation. `testDrawerValidGestures` therefore fails its "scroll must have moved the list" assertion at first
+presentation, and the retention of the chosen rows under a scroll is unverified there (the tap and tap back keep them).
+`testDrawerShortSweeps` asserts the phone's rule that a run is every row from the start row to the current one, and
+fails: rows 0 to 1, and rows 0 to 2 and back to 1, choose 1 (the screenshots show only row 1 chosen), and 0 to 2 and
+back to 0 chooses none, while 0 to 2, 3 to 1 and 0 to 3 and back to 2 choose three rows. Both behave the same on the
+Debug build and on the embedded Release build. No app change was made for either.
+
 What it cannot establish: that a real hand does the same — a real finger
 trembles, flicks and lands 20–40 pt apart, where these are two exact paths 36 pt
 apart; Files' top edge band (a hold over its search field could not be read

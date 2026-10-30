@@ -43,14 +43,30 @@ XCTest's own `swipeUp()` on the drawer's list also chose the row it began on, 5 
 
 ## SwiftUI drawer verification follow-up
 
-[Issue #334](https://github.com/xujialiu/OpenReader/issues/334) tracks correction
-of the newer Download probes: their downward gesture started above the actual
-chapter-list viewport, on rendered-but-clipped rows. The reported direction
-failure therefore did not establish a native selection defect. The trial
-native-list priority wrapper and diagnostic logging were removed; they were
-not a proven repair. The original Modal measurements above remain historical,
-not proof of the new SwiftUI sheet. The follow-up must use the actual viewport
-and independently verify valid two-finger paths with ios-tester.
+[Issue #334](https://github.com/xujialiu/OpenReader/issues/334): the newer Download probes began their downward path
+above the chapter list, on rows that were rendered but clipped out of its viewport, so the earlier direction and
+Debug/Release differences did not measure the app. The trial native-list priority wrapper and the diagnostic logging were
+removed; they were not a proven repair. The Modal measurements above remain historical, not proof of the SwiftUI sheet.
+
+Measured again on iOS 27.0 (iPhone 17, the beta22 tree, Debug against Metro and an embedded Release build), with every
+path asserted to lie on rows fully inside the chapter list's own viewport (`{{8, 553.9}, {386, 204.2}}`, four rows of
+49.93 pt at the half-height drawer) and the `Download selected (N)` count read back, identical geometry in both builds
+and in both presentations:
+
+- Two fingers from row 0 to row 2 choose 3 rows, at first presentation and after Back from Download and Download, on
+  Debug and Release. The downward sweep reaches the app: no defect is established in the sheet's native gesture
+  arbitration.
+- Two fingers from row 0 to row 3 and back to row 2 in one gesture choose 3 (rows 0 to 2), in all four cases; a tap on
+  another row and a tap back leave the 3 chosen.
+- After Back and Download a one-finger drag across the viewport scrolls the list and keeps the 3 chosen, on both builds.
+  At first presentation the same synthesized drag does not move the list (drags of 0.3 s to 1.0 s, on five fresh
+  launches of Debug and one of Release) while XCTest's `swipeUp()` on the list's scroll view does, so retention under a
+  scroll is unverified at first presentation.
+- Short sweeps do not follow the phone's rule: row 0 to row 1, and row 0 to 2 and back to 1, choose only row 1, and row
+  0 to 2 and back to 0 chooses none, where the run should be every row from the start row to the current one; row 3 to
+  row 1 and row 0 to 3 and back to 2 give the expected three. This is identical on Debug and Release and is open: whether
+  it is the app's start-row handling when the fingers end within one row of where they began, or the synthesized
+  activation, has not been separated, and no app code was changed.
 
 ## Considered options
 
