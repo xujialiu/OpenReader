@@ -108,6 +108,24 @@ Create folder retain their leading positions; Search precedes Select. Search
 omits Select from the Library, Document and Folder actions and disables the
 two-finger sweep. Selection removes the native search controller altogether.
 
+## Single-pointer scrolling and two-pointer selection
+
+The Library's native-scroll gesture waits for the two-finger sweep to fail,
+so the sweep keeps priority. The installed immediate pan (`minPointers(2)`,
+`minDistance(0)`) did not fail a moving single finger until touch-up. A short
+pull could consequently navigate into the row under the finger instead of
+remaining on the original page. Removing the wait in a diagnostic changes
+this behavior but would discard the required two-finger priority.
+
+`react-native-gesture-handler+2.32.0.patch` therefore fails only an immediate
+multi-pointer candidate still missing its required fingers after movement
+reaches ten points. A pair already down follows the existing activation path.
+This applies to the shared Library/download sweep and requires both to be
+verified. The native gesture also explicitly uses `runOnJS(true)`: the app
+ships Worklets for audio but not Reanimated; a native-gesture event must not
+try to dispatch through the absent ReanimatedModule. Pending native checks,
+this is a candidate fix, not proof that every short gesture is handled.
+
 ## The narrow native patch
 
 `patches/react-native-screens+4.26.2.patch` retains the existing Folder back-menu

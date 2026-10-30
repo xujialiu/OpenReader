@@ -1,0 +1,21 @@
+diff --git a/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m b/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m
+index 361bf4b..468dbc7 100644
+--- a/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m
++++ b/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m
+@@ -286,6 +286,16 @@ - (BOOL)shouldFailUnderCustomCriteria
+   CGPoint trans = [self translationInView:self.view.window.contentView];
+ #else
+   CGPoint trans = [self translationInView:self.view.window];
++#endif
++#if !TARGET_OS_TV && !TARGET_OS_OSX
++  // OpenReader (#332): an immediate multi-finger selection pan must release
++  // a moving single finger to the dependent native scroll view BEFORE up.
++  // Otherwise that view receives Began/Ended together with zero translation,
++  // and a short drag can become a row tap. A pair already down keeps priority.
++  if (_minDistSq == 0 && _realMinimumNumberOfTouches > 1 &&
++      self.numberOfTouches < _realMinimumNumberOfTouches && trans.x * trans.x + trans.y * trans.y >= 100) {
++    return YES;
++  }
+ #endif
+   // Apple docs say that 10 units is the default allowable movement for UILongPressGestureRecognizer
+   if (!isnan(_activateAfterLongPress) && trans.x * trans.x + trans.y * trans.y > 100) {

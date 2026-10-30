@@ -56,7 +56,7 @@ class SweepController<T> {
   readonly gesture = sweepGesture(this);
   // The Library wraps its ScrollView with this dependency: without it a vertical
   // two-finger drag can become a native scroll before the selection pan starts.
-  readonly nativeGesture = Gesture.Native().requireExternalGestureToFail(this.gesture);
+  readonly nativeGesture = Gesture.Native().runOnJS(true).requireExternalGestureToFail(this.gesture);
 
   private readonly Cell = recordingCell<T>(this.extents);
 

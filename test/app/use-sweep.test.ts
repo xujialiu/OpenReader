@@ -5,8 +5,15 @@ import { View, type LayoutChangeEvent } from 'react-native';
 import { useRowSweep, type SelectableRows } from '../../src/app/use-sweep';
 
 const handlers = vi.hoisted(() => ({ start: (_event: { y: number }) => {}, update: (_event: { y: number }) => {}, end: () => {} }));
+const nativeConfig = vi.hoisted(() => ({ runOnJS: vi.fn(), waitFor: vi.fn() }));
 vi.mock('react-native', () => ({ View: 'View' }));
-vi.mock('react-native-gesture-handler', () => ({ Gesture: { Native: () => ({ requireExternalGestureToFail: vi.fn() }), Pan: () => {
+vi.mock('react-native-gesture-handler', () => ({ Gesture: { Native: () => {
+  const native = {
+    runOnJS: (enabled: boolean) => { nativeConfig.runOnJS(enabled); return native; },
+    requireExternalGestureToFail: (gesture: unknown) => { nativeConfig.waitFor(gesture); return native; },
+  };
+  return native;
+}, Pan: () => {
   const gesture = {
     minPointers: vi.fn(() => gesture), minDistance: vi.fn(() => gesture), runOnJS: vi.fn(() => gesture),
     onStart: (fn: typeof handlers.start) => { handlers.start = fn; return gesture; },
@@ -43,6 +50,13 @@ async function mount(initial: Partial<SelectableRows> = {}) {
     measure, close: async () => { await act(async () => renderer.unmount()); },
   };
 }
+it('routes native gestures on JS while retaining two-finger sweep priority', async () => {
+  nativeConfig.runOnJS.mockClear(); nativeConfig.waitFor.mockClear();
+  const h = await mount();
+  expect(nativeConfig.runOnJS).toHaveBeenCalledExactlyOnceWith(true);
+  expect(nativeConfig.waitFor).toHaveBeenCalledExactlyOnceWith(h.sweep.gesture);
+  await h.close();
+});
 it('selects, retracts and deselects mixed Library ranges with the real sweep controller', async () => {
   const h = await mount();
   handlers.start({ y: 70 }); handlers.update({ y: 190 });
