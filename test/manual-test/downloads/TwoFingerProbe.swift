@@ -402,6 +402,75 @@ final class TwoFingerProbe: XCTestCase {
     XCTAssertFalse(downChosen && upChosen, "Both directions selecting would contradict the one-direction finding; inspect frames")
   }
 
+  /// #332 beta21 diagnostic: phases A (first presentation in a fresh
+  /// process) and B (Back→Download remount in the SAME process), each with
+  /// the exact downward pair, gesture wall times and chosen counts. Records
+  /// everything; asserts only preconditions, so the tagged Debug Log is
+  /// fully collected even when the pair does not select.
+  func testDrawerPairPhases() {
+    let app = openDrawer()
+    func rowsSnapshot(_ label: String) {
+      let rows = drawerRows(app).filter { $0.frame.minY > 320 && $0.frame.maxY < app.frame.maxY - 100 }
+      let frames = rows.map { "\(Int($0.frame.minY))-\(Int($0.frame.maxY)):\($0.isSelected ? "S" : "-")" }.joined(separator: " ")
+      print("PHASE rows \(label): [\(frames)] chosen=\(chosenCount(app))")
+    }
+    func downwardPair() {
+      let rows = drawerRows(app).filter { $0.frame.minY > 320 && $0.frame.maxY < app.frame.maxY - 100 }
+      guard rows.count >= 3 else { print("PHASE pair skipped: only \(rows.count) rows"); return }
+      let from = CGPoint(x: rows[0].frame.midX, y: rows[0].frame.midY)
+      let to = CGPoint(x: rows[2].frame.midX, y: rows[2].frame.midY)
+      print("PHASE pair from=\(from) to=\(to) wall=\(Date().timeIntervalSince1970)")
+      Fingers.play(Fingers.pair(Fingers.line(from, to, start: 0.1, seconds: 0.8), lift: 1.1), name: "phase-pair", in: self)
+      print("PHASE pair wall-end=\(Date().timeIntervalSince1970)")
+    }
+    func pollChosen(_ label: String, expect: Int) {
+      var seen = -1
+      for _ in 0..<(20) {
+        seen = chosenCount(app)
+        if seen == expect { break }
+        usleep(300_000)
+      }
+      print("PHASE poll \(label): chosen=\(seen) expected=\(expect) wall=\(Date().timeIntervalSince1970)")
+      rowsSnapshot(label)
+    }
+    // —— Phase A: first Download presentation in this fresh process ——
+    print("PHASE A begin wall=\(Date().timeIntervalSince1970)")
+    rowsSnapshot("A-open")
+    // One-finger tap/untap control.
+    var rows = drawerRows(app).filter { $0.frame.minY > 320 && $0.frame.maxY < app.frame.maxY - 100 }
+    guard rows.count >= 4 else { print("PHASE A: only \(rows.count) rows"); return }
+    rows[3].tap()
+    let tapOn = until(5) { self.chosenCount(app) == 1 }
+    rowsSnapshot("A-tap")
+    rows = drawerRows(app).filter { $0.frame.minY > 320 && $0.frame.maxY < app.frame.maxY - 100 }
+    rows[3].tap()
+    let tapOff = until(5) { self.chosenCount(app) == 0 }
+    rowsSnapshot("A-untap")
+    print("PHASE A tap control: on=\(tapOn) off=\(tapOff)")
+    // Downward pair (settled rows re-read right before).
+    rows = drawerRows(app).filter { $0.frame.minY > 320 && $0.frame.maxY < app.frame.maxY - 100 }
+    guard rows.count >= 3 else { print("PHASE A: rows gone"); return }
+    downwardPair()
+    pollChosen("A-pair", expect: 3)
+    rowsSnapshot("A-after")
+    // —— Phase B: leave Download to actions, return in the SAME process ——
+    let back = app.buttons["Back from Download"]
+    XCTAssertTrue(back.waitForExistence(timeout: 5), "Back from Download must exist")
+    back.tap()
+    Thread.sleep(forTimeInterval: 0.6)
+    XCTAssertTrue(app.buttons["Download"].waitForExistence(timeout: 5), "actions must show Download")
+    app.buttons["Download"].tap()
+    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES '[0-9]+ chapters? downloaded'")).firstMatch.waitForExistence(timeout: 20))
+    print("PHASE B remounted wall=\(Date().timeIntervalSince1970)")
+    rowsSnapshot("B-open")
+    rows = drawerRows(app).filter { $0.frame.minY > 320 && $0.frame.maxY < app.frame.maxY - 100 }
+    guard rows.count >= 3 else { print("PHASE B: rows gone"); return }
+    downwardPair()
+    pollChosen("B-pair", expect: 3)
+    rowsSnapshot("B-after")
+    capture("beta21-phases-end", app)
+  }
+
   /// #332 follow-up diagnosis: the same two-pointer path with settled-row
   /// snapshots BEFORE and AFTER, a one-finger tap control, a reverse pass,
   /// and a one-finger scroll control. Selects only; never Download/Delete.
