@@ -345,6 +345,121 @@ final class TwoFingerProbe: XCTestCase {
     XCTAssertTrue(back.exists); back.tap()
   }
 
+  /// #332 follow-up, bounded variation: attach to the CURRENT drawer state,
+  /// first deselect everything with one tap per selected row, then sweep a
+  /// pair DOWNWARD across three deeper rows (away from the top edge) and an
+  /// UPWARD pair across them — direction asymmetry vs top-edge bounce.
+  func testDrawerPairDirectionProbe() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.activate()
+    if app.buttons["Back from Manage"].exists { app.buttons["Back from Manage"].tap(); Thread.sleep(forTimeInterval: 0.5) }
+    // State restoration can reopen inside a Folder: navigate back to the
+    // Library root first (the direction probe needs root Document rows).
+    for _ in 0..<3 {
+      if app.navigationBars.firstMatch.identifier == "Library" { break }
+      let backBtn = app.navigationBars.buttons.firstMatch
+      if backBtn.exists { backBtn.tap(); Thread.sleep(forTimeInterval: 0.8) } else { break }
+    }
+    XCTAssertTrue(app.navigationBars.firstMatch.identifier == "Library", "must reach the Library root")
+    // Open the Download drawer from the root (over the Shadow Slave reader).
+    let drawer = openDrawer()
+    func visibleRows() -> [XCUIElement] {
+      drawerRows(drawer).filter { $0.frame.minY > 320 && $0.frame.maxY < drawer.frame.maxY - 100 }
+    }
+    func deselectAll() {
+      var guardCounter = 0
+      while chosenCount(app) > 0 && guardCounter < 8 {
+        let rowsNow = visibleRows()
+        guard let target = rowsNow.first(where: { $0.isSelected }) ?? rowsNow.first else { break }
+        target.tap(); Thread.sleep(forTimeInterval: 0.6); guardCounter += 1
+      }
+    }
+    deselectAll()
+    var rows = visibleRows()
+    XCTAssertTrue(rows.count >= 4, "Need four settled choosable rows; got \(rows.count)")
+    // Deselect any pre-selected rows first.
+    deselectAll()
+    rows = visibleRows()
+    capture("dir-open", app)
+    // DOWNWARD pair across three deeper rows (rows 1 -> 3 of the visible set).
+    let downFrom = CGPoint(x: rows[1].frame.midX, y: rows[1].frame.midY)
+    let downTo = CGPoint(x: rows[3].frame.midX, y: rows[3].frame.midY)
+    Fingers.play(Fingers.pair(Fingers.line(downFrom, downTo, start: 0.1, seconds: 0.8), lift: 1.1), name: "dir-down", in: self)
+    let downChosen = until(5) { self.chosenCount(app) >= 3 }
+    capture("dir-after-down", app)
+    rows = visibleRows()
+    let yList = rows.map { String(Int($0.frame.minY)) }.joined(separator: ",")
+    print("DIAG dir DOWN: chose=\(chosenCount(app)) rows=[\(yList)]")
+    // UPWARD pair back across them.
+    let upFrom = CGPoint(x: rows.last!.frame.midX, y: rows.last!.frame.midY)
+    let upTo = CGPoint(x: rows.first!.frame.midX, y: rows.first!.frame.midY)
+    Fingers.play(Fingers.pair(Fingers.line(upFrom, upTo, start: 0.1, seconds: 0.8), lift: 1.1), name: "dir-up", in: self)
+    let upChosen = until(5) { self.chosenCount(app) == 0 }
+    capture("dir-after-up", app)
+    rows = visibleRows()
+    print("DIAG dir UP: chose=\(chosenCount(app)) rows=[\(rows.map { String(Int($0.frame.minY)) }.joined(separator: ","))]")
+    _ = downChosen; _ = upChosen
+    XCTAssertFalse(downChosen && upChosen, "Both directions selecting would contradict the one-direction finding; inspect frames")
+  }
+
+  /// #332 follow-up diagnosis: the same two-pointer path with settled-row
+  /// snapshots BEFORE and AFTER, a one-finger tap control, a reverse pass,
+  /// and a one-finger scroll control. Selects only; never Download/Delete.
+  func testDrawerPairDiagnosis() {
+    let app = openDrawer()
+    func visibleRows() -> [XCUIElement] {
+      drawerRows(app).filter { $0.frame.minY > 320 && $0.frame.maxY < app.frame.maxY - 100 }
+    }
+    var rows = visibleRows()
+    XCTAssertTrue(rows.count >= 3, "Need three settled choosable rows; got \(rows.count)")
+    func snapshot(_ label: String) {
+      let current = visibleRows()
+      let frames = current.map { "\(Int($0.frame.minY))-\(Int($0.frame.maxY)):\($0.isSelected ? "SEL" : "no")" }.joined(separator: " ")
+      print("DIAG \(label): rows=[\(frames)] chosen=\(chosenCount(app))")
+    }
+    snapshot("open")
+    // One-finger tap control: a tap must toggle one row.
+    rows[3].tap()
+    let afterTap = until(5) { self.chosenCount(app) == 1 }
+    snapshot("after-tap")
+    XCTAssertTrue(afterTap, "One-finger tap must select one row (control)")
+    rows = visibleRows()
+    rows[3].tap()
+    let afterUntap = until(5) { self.chosenCount(app) == 0 }
+    snapshot("after-untap")
+    XCTAssertTrue(afterUntap, "Second tap must deselect (control)")
+    rows = visibleRows()
+    // Two-pointer pass with a settled snapshot immediately before.
+    rows = visibleRows()
+    let from = CGPoint(x: rows[0].frame.midX, y: rows[0].frame.midY)
+    let to = CGPoint(x: rows[2].frame.midX, y: rows[2].frame.midY)
+    print("DIAG pair-plan: from=\(from) to=\(to)")
+    Fingers.play(Fingers.pair(Fingers.line(from, to, start: 0.1, seconds: 0.8), lift: 1.1), name: "diag-pair", in: self)
+    let paired = until(5) { self.chosenCount(app) == 3 }
+    sleep(1)
+    snapshot("after-pair")
+    rows = visibleRows()
+    XCTAssertTrue(paired, "Two fingers must select exactly three rows; state captured")
+    // Reverse: sweep back across the same rows.
+    let backFrom = CGPoint(x: rows[2].frame.midX, y: rows[2].frame.midY)
+    let backTo = CGPoint(x: rows[0].frame.midX, y: rows[0].frame.midY)
+    Fingers.play(Fingers.pair(Fingers.line(backFrom, backTo, start: 0.1, seconds: 0.8), lift: 1.1), name: "diag-pair-reverse", in: self)
+    let reversed = until(5) { self.chosenCount(app) == 0 }
+    snapshot("after-reverse")
+    XCTAssertTrue(reversed, "Reverse sweep must deselect the three rows")
+    // One-finger drag (scroll) must not change the chosen set.
+    let scrollFrom = CGPoint(x: rows[1].frame.midX, y: rows[1].frame.midY)
+    let scrollTo = CGPoint(x: scrollFrom.x, y: scrollFrom.y + 120)
+    Fingers.play([Fingers.finger(Fingers.line(scrollFrom, scrollTo, start: 0.1, seconds: 0.6), lift: 0.8)], name: "diag-one-finger-scroll", in: self)
+    sleep(1)
+    snapshot("after-one-finger-scroll")
+    XCTAssertEqual(chosenCount(app), 0, "One-finger scroll must not select")
+    // Scroll back up for a settled end state.
+    let backUp = CGPoint(x: scrollFrom.x, y: scrollFrom.y - 120)
+    Fingers.play([Fingers.finger(Fingers.line(CGPoint(x: scrollFrom.x, y: scrollFrom.y + 120), backUp, start: 0.1, seconds: 0.6), lift: 0.8)], name: "diag-one-finger-scroll-back", in: self)
+    sleep(1)
+  }
+
   /// The first shown row to the third, with two fingers: the smallest check that a sweep reaches the drawer.
   func testDrawerProof() throws {
     let app = openDrawer()
