@@ -205,7 +205,7 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       style={styles.list}
-      contentContainerStyle={{ paddingTop: 12, paddingBottom: (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
+      contentContainerStyle={{ flexGrow: 1, paddingTop: 12, paddingBottom: (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
       data={rows}
       keyExtractor={(row) => targetKey(rowTarget(row))}
       renderItem={({ item }) => item.kind === 'folder'

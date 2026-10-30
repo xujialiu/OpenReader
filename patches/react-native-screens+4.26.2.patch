@@ -513,7 +513,7 @@ index 32efddb..459f333 100644
  #if RNS_IPHONE_OS_VERSION_AVAILABLE(16_0) && !TARGET_OS_TV
  - (UINavigationItemSearchBarPlacement)placementAsUINavigationItemSearchBarPlacement API_AVAILABLE(ios(16.0))
 diff --git a/node_modules/react-native-screens/ios/RNSSearchBar.mm b/node_modules/react-native-screens/ios/RNSSearchBar.mm
-index 2345734..bdd0068 100644
+index 2345734..83ef3eb 100644
 --- a/node_modules/react-native-screens/ios/RNSSearchBar.mm
 +++ b/node_modules/react-native-screens/ios/RNSSearchBar.mm
 @@ -2,6 +2,7 @@
@@ -605,12 +605,15 @@ index 2345734..bdd0068 100644
  
    // We use those booleans to log a warning if user attempts to restore
    // default behavior after setting explicit value for the prop.
-@@ -39,13 +111,17 @@ - (instancetype)init
+@@ -39,13 +111,20 @@ - (instancetype)init
  - (void)initCommonProps
  {
  #if !TARGET_OS_TV
 -  _controller = [[UISearchController alloc] initWithSearchResultsController:nil];
 +  _controller = [[RNSOpenReaderSearchController alloc] initWithSearchResultsController:nil];
++  // iPad's automatic stacked presentation omits the external close control.
++  // Keep UIKit's control, but own its lifetime independently of typed text.
++  _controller.automaticallyShowsCancelButton = NO;
  #else
    // on TVOS UISearchController must contain searchResultsController.
    _controller = [[UISearchController alloc] initWithSearchResultsController:[UIViewController new]];
@@ -624,7 +627,7 @@ index 2345734..bdd0068 100644
  
    _isObscureBackgroundSet = NO;
    _isHideNavigationBarSet = NO;
-@@ -56,6 +132,61 @@ - (void)initCommonProps
+@@ -56,6 +135,61 @@ - (void)initCommonProps
    _allowToolbarIntegration = YES;
  }
  
@@ -686,7 +689,7 @@ index 2345734..bdd0068 100644
  - (void)emitOnFocusEvent
  {
    if (_eventEmitter != nullptr) {
-@@ -258,6 +389,7 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
+@@ -258,6 +392,7 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
    }
  #endif
  
@@ -694,7 +697,21 @@ index 2345734..bdd0068 100644
    [self showCancelButton];
    [self becomeFirstResponder];
    [self emitOnFocusEvent];
-@@ -283,6 +415,7 @@ - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
+@@ -266,7 +401,12 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
+ - (void)searchBarTextDidEndEditing:(UISearchBar *)searchBar
+ {
+   [self emitOnBlurEvent];
+-  [self hideCancelButton];
++#if !TARGET_OS_TV
++  // Hiding the keyboard or visiting a result does not end Library Search.
++  if (!_controller.active) {
++    [self hideCancelButton];
++  }
++#endif
+ }
+ 
+ - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText
+@@ -283,6 +423,7 @@ - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
  - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar
  {
    _controller.searchBar.text = @"";
@@ -702,7 +719,7 @@ index 2345734..bdd0068 100644
    [self resignFirstResponder];
    [self hideCancelButton];
  
-@@ -298,6 +431,10 @@ - (void)blur
+@@ -298,6 +439,11 @@ - (void)blur
  
  - (void)focus
  {
@@ -710,10 +727,11 @@ index 2345734..bdd0068 100644
 +  // when its list is scrolled far below it, not just focus an offscreen field.
 +  [self captureScrollPosition:@"browse"];
 +  [_controller setActive:YES];
++  [self showCancelButton];
    [_controller.searchBar becomeFirstResponder];
  }
  
-@@ -326,6 +463,60 @@ - (void)cancelSearch
+@@ -326,6 +472,60 @@ - (void)cancelSearch
  #endif
  }
  

@@ -1186,6 +1186,51 @@ final class LibrarySearchProbe: XCTestCase {
     shot("partial-pull-same-page")
   }
 
+  /// Works on a one-row or empty Library/Folder. Pull starts in blank content,
+  /// not a row; prove keyboard, native Close, preserved route and hidden return.
+  func testBlankSpacePullAndClose() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    app.activate()
+    let bar = app.navigationBars.firstMatch
+    XCTAssertTrue(bar.waitForExistence(timeout: 5))
+    let title = bar.identifier
+    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 160)),
+                withVelocity: XCUIGestureVelocity(rawValue: 80), thenHoldForDuration: 0.3)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 5), "Blank-space pull must offer native Close immediately")
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    XCTAssertEqual(app.navigationBars.firstMatch.identifier, title)
+    shot("blank-space-pull-input")
+    guard close.exists else { return }
+    close.tap()
+    sleep(1)
+    let field = searchField(app)
+    XCTAssertTrue(!field.exists || field.frame.maxY < 10 ||
+      app.navigationBars.firstMatch.frame.intersection(field.frame).height < 10)
+    XCTAssertEqual(app.keyboards.count, 0)
+    XCTAssertEqual(app.navigationBars.firstMatch.identifier, title)
+    shot("blank-space-pull-closed")
+  }
+
+  /// Compare a pull beginning over an actual row with one over blank list
+  /// space on a short Library. Both must use the same native scrolling surface.
+  func testPullFromVisibleRow() {
+    let app = launch()
+    let row = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).firstMatch
+    let rect = row.frame
+    let start = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+      dx: rect.midX - app.frame.minX, dy: rect.midY - app.frame.minY
+    ))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 160)),
+                withVelocity: XCUIGestureVelocity(rawValue: 80), thenHoldForDuration: 0.3)
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 5), "Row-origin pull must enter search, not open the Reader")
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    shot("visible-row-pull")
+    if close.exists { close.tap() }
+  }
+
   /// Same-process coordinate pull, for a controlled gesture-dependency A/B.
   func testCoordinatePullOnRunningLibrary() {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")

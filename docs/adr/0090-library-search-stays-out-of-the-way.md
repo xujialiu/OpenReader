@@ -21,7 +21,17 @@ provide the field and its imperative focus, blur, set-text and cancel commands.
 `allowToolbarIntegration: false` keeps it out of the bottom toolbar.
 `hideWhenScrolling` is true outside search. The list uses automatic content
 insets, as the navigator requires. Text and action colours follow the app's
-existing palette and accent; UIKit draws the search control.
+existing palette and accent; UIKit draws the search control. The content
+container grows to the viewport so empty space under a short/empty list
+remains inside the scrolling content's touch ancestry. Without that fill, the
+one-row iPad list accepted a row-origin pull but never began dragging from
+blank space, despite alwaysBounceVertical being enabled.
+
+UIKit's automatic stacked presentation omitted the external cancel control
+on iPad even while input was focused. RNSSearchBar therefore explicitly shows
+the native control at focus and hides it only at cancellation/inactive blur.
+An active search keeps Close when the keyboard is dismissed or a result is
+visited; the control is not conditional on nonempty text.
 
 `useLibrarySearch` owns the query and navigation lifetime. On iOS the native
 search control owns the browsing and result scroll positions, captured before

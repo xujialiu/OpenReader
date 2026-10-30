@@ -106,6 +106,16 @@ async function open() {
 }
 
 describe('Library Search through the real page and actions Drawer (#332)', () => {
+  it('keeps short and empty content filling the scroll viewport for blank-space pulls', async () => {
+    const page = await open();
+    expect(page.nodes('DocumentRow')).toHaveLength(1);
+    expect(page.nodes('FlatList')[0].props.contentContainerStyle).toMatchObject({ flexGrow: 1 });
+    entries = [];
+    await page.update();
+    expect(page.nodes('DocumentRow')).toHaveLength(0);
+    expect(page.nodes('FlatList')[0].props.contentContainerStyle).toMatchObject({ flexGrow: 1 });
+    await page.close();
+  });
   it('the ordinary nested Folder has only its own Documents; search reveals namesakes from every level with paths', async () => {
     const page = await open();
     expect(page.nodes('DocumentRow').map((node) => node.props.title)).toEqual(['三体']);
