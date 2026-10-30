@@ -439,7 +439,7 @@ final class TwoFingerProbe: XCTestCase {
 
   /// #334. Valid two-finger paths, each between rows fully inside the chapter list's viewport, with the start and end
   /// asserted on those rows before the gesture and the `Download selected (N)` count read back after: downward,
-  /// retraction (down, then back up) and one-finger retention. Run it on a fresh launch for the first presentation;
+  /// retraction (down to row 3, back to row 2) and one-finger retention. Run it on a fresh launch for the first presentation;
   /// it then presents the drawer again (Back, Download) and repeats the same checks. Selects only; never presses Download.
   func testDrawerValidGestures() throws {
     let app = openDrawer()
@@ -448,6 +448,30 @@ final class TwoFingerProbe: XCTestCase {
     let again = openDrawer()
     Thread.sleep(forTimeInterval: 1)
     verifyValidGestures(again, phase: "remount")
+  }
+
+  /// #334: sweeps that end one row from where they began, on the first rows of the drawer's list. Measured on Debug,
+  /// 0 to 1 and 0 to 2 and back to 1 chose only row 1, and 0 to 0 (down and back) nothing, while 0 to 2 and 0 to 3 and
+  /// back to 2 chose rows 0 to 2 (two-finger.md). This asserts the phone's rule (the run is every row from the start row
+  /// to the current one) and fails today; it is kept until the owner decides what that means.
+  func testDrawerShortSweeps() throws {
+    var app = openDrawer()
+    for (name, path) in [("0-1", [0, 1]), ("0-2-1", [0, 2, 1])] {
+      app = openDrawer()
+      Thread.sleep(forTimeInterval: 1.2)
+      guard let first = choosableRun(app, count: 4) else { return unverified("short-\(name)", "no viewport or fewer than 4 choosable rows in a row inside it") }
+      let m = first.run.map { $0.mid }
+      var track = Fingers.line(m[path[0]], m[path[1]], start: 0.1, seconds: 0.8)
+      var end = 0.9
+      if path.count == 3 { track += Fingers.line(m[path[1]], m[path[2]], start: 1.0, seconds: 0.5).dropFirst(); end = 1.5 }
+      print("VIEWPORT short-\(name): \(first.viewport) ROWS \(first.run.map { "\($0.label)@\($0.frame)" }) GESTURE \(path.map { m[$0] })")
+      Fingers.play(Fingers.pair(track, lift: end + 0.1), name: "short-\(name)", in: self)
+      Thread.sleep(forTimeInterval: 1.2)
+      let count = chosenCount(app)
+      capture("short-\(name)", app)
+      print("DRAWER short-\(name): chosen=\(count)")
+      XCTAssertEqual(count, 2, "short-\(name): the run is rows 0 and 1")
+    }
   }
 
   func verifyValidGestures(_ app: XCUIApplication, phase: String) {
@@ -494,16 +518,16 @@ final class TwoFingerProbe: XCTestCase {
     XCTAssertEqual(down, 3, "\(phase): downward pair over rows 0-2 inside the viewport")
     guard down == 3, clear() else { return fail("downward selection did not give 3, the later checks cannot start from a clean state") }
 
-    // Retraction: row 0 to row 2, then back up to row 1, in one gesture; the run is row 0 to row 1.
-    guard onRows([run[0].mid, run[2].mid, run[1].mid]) else { return }
-    let out = Fingers.line(run[0].mid, run[2].mid, start: 0.1, seconds: 0.8)
-    let back = Fingers.line(run[2].mid, run[1].mid, start: 1.0, seconds: 0.5).dropFirst()
-    print("GESTURE \(phase) retract: \(run[0].mid) -> \(run[2].mid) -> \(run[1].mid) chosen before=\(chosenCount(app))")
-    Fingers.play(Fingers.pair(out + back, lift: 1.6), name: "\(phase)-retract", in: self)
-    _ = until(5) { self.chosenCount(app) == 2 }
+    // Retraction: row 0 to row 3, then back up to row 2, in one gesture; the run ends at rows 0 to 2 (down alone would give 4).
+    guard onRows([run[0].mid, run[3].mid, run[2].mid]) else { return }
+    let out = Fingers.line(run[0].mid, run[3].mid, start: 0.1, seconds: 0.9)
+    let back = Fingers.line(run[3].mid, run[2].mid, start: 1.1, seconds: 0.5).dropFirst()
+    print("GESTURE \(phase) retract: \(run[0].mid) -> \(run[3].mid) -> \(run[2].mid) chosen before=\(chosenCount(app))")
+    Fingers.play(Fingers.pair(out + back, lift: 1.7), name: "\(phase)-retract", in: self)
+    _ = until(5) { self.chosenCount(app) == 3 }
     let retract = read("retract")
-    XCTAssertEqual(retract, 2, "\(phase): down to row 2 and back to row 1 leaves rows 0-1")
-    guard retract == 2 else { return fail("retraction did not give 2, retention cannot be checked") }
+    XCTAssertEqual(retract, 3, "\(phase): down to row 3 and back to row 2 leaves rows 0-2")
+    guard retract == 3 else { return fail("retraction did not give 3, retention cannot be checked") }
 
     // One-finger retention: a scroll inside the viewport, then a tap and the tap back.
     let before = shownRows(app).map { $0.label }
@@ -515,13 +539,13 @@ final class TwoFingerProbe: XCTestCase {
     let after = shownRows(app).map { $0.label }
     print("DRAWER \(phase) scroll rows before=\(before) after=\(after)")
     XCTAssertNotEqual(before, after, "\(phase): the one-finger scroll must have moved the list, or it proved nothing")
-    XCTAssertEqual(read("scroll"), 2, "\(phase): a one-finger scroll keeps the chosen rows")
+    XCTAssertEqual(read("scroll"), 3, "\(phase): a one-finger scroll keeps the chosen rows")
     guard let other = choosableRun(app, count: 1, excluding: chosenLabels) else { return fail("no other choosable row inside the viewport to tap") }
     tap(app, other.run[0].mid)
-    XCTAssertTrue(until(3) { self.chosenCount(app) == 3 }, "\(phase): a one-finger tap adds a row to the two chosen")
+    XCTAssertTrue(until(3) { self.chosenCount(app) == 4 }, "\(phase): a one-finger tap adds a row to the three chosen")
     print("DRAWER \(phase) tap: chosen=\(chosenCount(app)) row=\(other.run[0].label)")
     tap(app, other.run[0].mid)
-    XCTAssertTrue(until(3) { self.chosenCount(app) == 2 }, "\(phase): the second tap takes it back, keeping the two")
+    XCTAssertTrue(until(3) { self.chosenCount(app) == 3 }, "\(phase): the second tap takes it back, keeping the three")
     print("DRAWER \(phase) retention final: chosen=\(read("retention"))")
   }
 
