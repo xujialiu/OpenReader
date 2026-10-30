@@ -92,26 +92,30 @@ is looked up again at every use, so a row read later may be another one) touched
 `choosableRun` return nothing, and the method prints `UNVERIFIED` and fails, when there is no viewport or too few
 choosable rows in a row; callers stop on that, since a failed assert does not.
 
-`testDrawerValidGestures` is the check of the three behaviours, run on a fresh launch for the first presentation (the
-runner terminates the app after a failed run, so launch it again with `-RCT_jsLocation localhost:PORT` and
-`silence.sh set` before each) and then again after Back from Download and Download, with the same geometry printed both
-times (`VIEWPORT`, `ROWS`, `GESTURE` and `DRAWER` lines). In the 386 x 204 pt viewport at the half-height drawer four
-49.9 pt rows fit. Each path is asserted to start, turn and end on those rows, and `Download selected (N)` is read back:
-rows 0 to 2 chooses 3; rows 0 to 3 and back to 2 in one gesture chooses 3 (down alone would give 4); a one-finger drag
-across the viewport and then a tap and a tap back keep the 3 chosen. Rows are cleared between steps by one-finger taps,
-not by scrolling or by XCTest's `swipeUp()`, which expands the sheet to its large height (the viewport becomes 402 x 578
-pt) and changes the geometry under comparison. Run it with `-collect-test-diagnostics never`: the print lines still
-reach `test.log` and a failed run does not then sit in `simctl diagnose`.
+`testDrawerValidGestures` checks, on rows fully inside the viewport, that a path's start, turn and end points lie on them
+before the gesture and that `Download selected (N)` reads back after: rows 0 to 2 choose 3; rows 0 to 3 and back to 2 in
+one gesture choose 3 (down alone would give 4); a tap on another row and a tap back keep the 3. It runs on a fresh launch
+for the first presentation (the runner terminates the app after a failed run, so launch it again with
+`-RCT_jsLocation localhost:PORT` and `silence.sh set` before each) and then again after Back from Download and Download,
+with the same geometry printed both times (`VIEWPORT`, `ROWS`, `GESTURE` and `DRAWER` lines). At the half-height drawer
+the viewport is 386 x 204 pt and four 49.9 pt rows fit. Run every method with `-collect-test-diagnostics never`: the print
+lines still reach `test.log` and a failed run does not then sit in `simctl diagnose`.
 
-Two things it reports that are not yet explained, and which the probe records and does not hide. At first presentation
-a synthesized one-finger drag across the viewport (0.3 s to 1.0 s, 120 to 154 pt) leaves the list where it was, while
-after Back and Download the same drag scrolls it; XCTest's own `swipeUp()` on the list's scroll view does scroll it at
-first presentation. `testDrawerValidGestures` therefore fails its "scroll must have moved the list" assertion at first
-presentation, and the retention of the chosen rows under a scroll is unverified there (the tap and tap back keep them).
-`testDrawerShortSweeps` asserts the phone's rule that a run is every row from the start row to the current one, and
-fails: rows 0 to 1, and rows 0 to 2 and back to 1, choose 1 (the screenshots show only row 1 chosen), and 0 to 2 and
-back to 0 chooses none, while 0 to 2, 3 to 1 and 0 to 3 and back to 2 choose three rows. Both behave the same on the
-Debug build and on the embedded Release build. No app change was made for either.
+`testDrawerShortSweeps` is the phone's rule (a run is every row from the start row to the current one) for sweeps that
+end within a row of where they began, each on a fresh presentation: 0 to 1, 0 to 2 and back to 1, 0 to 2 and back to 0
+(1), 0 to 3 and back to 1, 1 to 3 and back to 2, and ends 10 and 40 pt below row 0's bottom edge or 10 and 30 pt above
+row 3's top edge. A row's `Pressable` keeps the touch that came down on it and its press retention reaches about 20 pt
+above and 30 pt below the row, so without `SweepController.guard` (`use-sweep.tsx`, which refuses a row's press while a
+sweep runs and for 300 ms after) the lift fired the start row's press and toggled the row the sweep had chosen.
+
+`testDrawerScrollKeepsChosen` checks that a one-finger scroll keeps the chosen rows, at first presentation and after a
+remount. At the half-height drawer the sheet takes an upward drag of the list at its top before the list does: a slow
+drag (154 pt in 0.6 s) leaves both the rows and the viewport as they were, and a longer, faster one (to y 250 in 0.35 s)
+expands the sheet, to a 402 x 578 pt viewport, with the list still at its top; the next drag then scrolls the list. So the
+method drags slowly, and when neither the rows nor the viewport changed it drags to expand, asserts the viewport grew,
+and drags again, asserting the rows changed and the 3 chosen stay chosen. The detent persists across Back and Download,
+so the remount phase starts expanded and its first drag scrolls. XCTest's `swipeUp()` also expands the sheet, so it is
+not used between steps of a comparison; the geometry then differs.
 
 What it cannot establish: that a real hand does the same — a real finger
 trembles, flicks and lands 20–40 pt apart, where these are two exact paths 36 pt

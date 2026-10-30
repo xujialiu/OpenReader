@@ -48,25 +48,33 @@ above the chapter list, on rows that were rendered but clipped out of its viewpo
 Debug/Release differences did not measure the app. The trial native-list priority wrapper and the diagnostic logging were
 removed; they were not a proven repair. The Modal measurements above remain historical, not proof of the SwiftUI sheet.
 
-Measured again on iOS 27.0 (iPhone 17, the beta22 tree, Debug against Metro and an embedded Release build), with every
-path asserted to lie on rows fully inside the chapter list's own viewport (`{{8, 553.9}, {386, 204.2}}`, four rows of
-49.93 pt at the half-height drawer) and the `Download selected (N)` count read back, identical geometry in both builds
-and in both presentations:
+Measured again on iOS 27.0 (iPhone 17, the beta22 and beta23 trees, Debug against Metro and an embedded Release build),
+with every path asserted to lie on rows fully inside the chapter list's own viewport (`{{8, 553.9}, {386, 204.2}}`, four
+rows of 49.93 pt at the half-height drawer) and the `Download selected (N)` count read back, identical geometry in both
+builds and in both presentations:
 
 - Two fingers from row 0 to row 2 choose 3 rows, at first presentation and after Back from Download and Download, on
   Debug and Release. The downward sweep reaches the app: no defect is established in the sheet's native gesture
-  arbitration.
-- Two fingers from row 0 to row 3 and back to row 2 in one gesture choose 3 (rows 0 to 2), in all four cases; a tap on
+  arbitration. Row 0 to row 3 and back to row 2 in one gesture chooses 3 (rows 0 to 2) in all four cases; a tap on
   another row and a tap back leave the 3 chosen.
-- After Back and Download a one-finger drag across the viewport scrolls the list and keeps the 3 chosen, on both builds.
-  At first presentation the same synthesized drag does not move the list (drags of 0.3 s to 1.0 s, on five fresh
-  launches of Debug and one of Release) while XCTest's `swipeUp()` on the list's scroll view does, so retention under a
-  scroll is unverified at first presentation.
-- Short sweeps do not follow the phone's rule: row 0 to row 1, and row 0 to 2 and back to 1, choose only row 1, and row
-  0 to 2 and back to 0 chooses none, where the run should be every row from the start row to the current one; row 3 to
-  row 1 and row 0 to 3 and back to 2 give the expected three. This is identical on Debug and Release and is open: whether
-  it is the app's start-row handling when the fingers end within one row of where they began, or the synthesized
-  activation, has not been separated, and no app code was changed.
+- **A sweep ending within a row of where it began lost its start row** (issue #335). Row 0 to 1, 0 to 2 and back to 1, 0
+  to 3 and back to 1, and 1 to 3 and back to 2 chose 1 row where the phone's rule gives 2, and 0 to 2 and back to 0 chose
+  none, where 0 to 2, 3 to 1 and 0 to 3 and back to 2 gave the expected three. Moving only the end point of a 0 to 1 sweep
+  decided it: 10 pt below row 0's bottom edge chose 1 and 40 pt below chose 2, and upward from row 3, 10 pt above its top
+  edge chose 1 and 30 pt above chose 2. That is the row `Pressable`'s press retention, about 20 pt above and 30 pt below
+  the row: the touch that came down on the start row stays with its responder through the sweep, and the fingers' lift
+  inside that area fires `onPress`, which toggles the row the sweep had just chosen. Narrowing the retention would not
+  mend it (0 to 2 and back to 0 ends on the row itself). `SweepController.guard` now wraps the rows' presses and refuses
+  one while a sweep is active and for 300 ms after it ends, in the drawer and in the Library, which shares the sweep; a
+  one-finger tap never activates the two-pointer pan and is unaffected. After it all nine short-sweep cases chose what the
+  rule gives, on Debug and Release. The Library's loss was not measured on a device.
+- **A one-finger drag at first presentation moved nothing because the sheet takes it first.** The drawer opens at the
+  medium detent with the list at its top; an upward drag of a scroll view already at its top is the sheet's, to expand it.
+  A slow drag (154 pt in 0.6 s) leaves the sheet and the rows where they were, a longer, faster one (to y 250 in 0.35 s)
+  expands it to a `{{0, 183.7}, {402, 578}}` viewport, and the next drag then scrolls the list, with the 3 chosen rows
+  kept. After Back and Download the detent is still expanded, so the first drag scrolls. XCTest's own `swipeUp()` also
+  expands the sheet. This is the sheet's behaviour, not a lost gesture. The detent persisting across a remount is not
+  changed here.
 
 ## Considered options
 
