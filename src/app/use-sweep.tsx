@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, type CellRendererProps, type FlatList, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
-import { debugLog } from '../debug/debug-log';
-import { DEBUG_MODE } from '../debug/mode';
 import type { Chapter } from '../offline/model';
 import { beginSweep, edgeSpeed, rowAt, rowChapters, sweepTo, type Extent, type Sweep } from './range-selection';
 
@@ -85,17 +83,11 @@ class SweepController<T> {
     return rowAt(ids.map((id) => this.extents.get(id)), this.scrolled + y);
   }
 
-  trace(phase: string, event: { y: number; numberOfPointers: number; state?: number }): void {
-    if (DEBUG_MODE) debugLog('probe', `[sweep332] ${phase} ${JSON.stringify({ y: event.y, pointers: event.numberOfPointers, state: event.state, enabled: this.rows.enabled, scrolled: this.scrolled })}`);
-  }
-
   begin(y: number): void {
     this.end();
     const { ids, values: rows, selected, enabled } = this.rows;
     if (enabled === false) return;
     const anchor = this.under(ids, y);
-    // TEMPORARY #332 dispatch/geometry split; remove before final acceptance.
-    if (DEBUG_MODE) debugLog('probe', `[sweep332] start ${JSON.stringify({ y, scrolled: this.scrolled, viewport: this.viewport, content: this.content, anchor, count: ids.length, measured: ids.slice(0, 8).map((id) => this.extents.get(id) ?? null), selected: selected.size })}`);
     if (anchor < 0) return;
     const state = beginSweep(rows, anchor, selected);
     this.active = { rows, ids, state, at: anchor, y, last: Date.now(), timer: setInterval(() => this.edge(), 16) };
@@ -104,7 +96,6 @@ class SweepController<T> {
 
   move(y: number): void {
     if (!this.active) return;
-    if (DEBUG_MODE) debugLog('probe', `[sweep332] move ${JSON.stringify({ y, scrolled: this.scrolled, at: this.active.at })}`);
     this.active.y = y;
     this.follow();
   }
@@ -135,7 +126,6 @@ class SweepController<T> {
   }
 
   end(): void {
-    if (DEBUG_MODE && this.active) debugLog('probe', `[sweep332] end ${JSON.stringify({ at: this.active.at, y: this.active.y, scrolled: this.scrolled })}`);
     if (this.active) clearInterval(this.active.timer);
     this.active = null;
   }
@@ -166,10 +156,9 @@ function recordingCell<T>(extents: Map<string, Extent>) {
  */
 function sweepGesture<T>(sweep: SweepController<T>) {
   return Gesture.Pan().minPointers(2).minDistance(0).runOnJS(true)
-    .onBegin((event) => sweep.trace('begin', event))
     .onStart((event) => sweep.begin(event.y))
     .onUpdate((event) => sweep.move(event.y))
-    .onFinalize((event) => { sweep.trace('finalize', event); sweep.end(); });
+    .onFinalize(() => sweep.end());
 }
 
 /**

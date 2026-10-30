@@ -86,7 +86,20 @@ the existing event-path kit to hold then release away; record it and inspect
 the menu while held, not after release. Stage Search Inner with the named
 LibrarySearchProbe method first.
 
-Real IME behavior, the held menu, iPad and the shared Download sweep remain
-separate checks. A missing Select action or a no-op Escape does not prove
-those interactions. Partial
-passing cases never imply the whole feature is accepted.
+`testStageIMEComposition` presses an actual Bopomofo key and requires nonempty
+input; handle the native keyboard-onboarding Continue prompt before the key.
+A read-only native inspection can then require markedTextRange and absence of
+the Library Escape command. `testRestoreKeyboardAfterIME` returns to English
+and closes search. This tests the composition gate, not physical Escape
+transport while composing.
+
+On iPad and short/empty lists, `testBlankSpacePullAndClose` checks the blank
+content area as well as row-origin pulls; input must have an external native
+× immediately. Keep the same-page and keyboard checks on both sizes.
+
+The Download Drawer probe correction/re-verification is separately tracked
+in [#334](https://github.com/xujialiu/OpenReader/issues/334), not part of Library
+Search or evidence for changing its scope. Its old screen-y filter included
+clipped rows above the actual list; no app defect was established by those
+inputs. A missing Select action, a no-op key or a static screenshot alone is
+never proof of the corresponding interaction.

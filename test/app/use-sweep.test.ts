@@ -15,12 +15,10 @@ vi.mock('react-native-gesture-handler', () => ({ Gesture: { Native: () => {
   return native;
 }, Pan: () => {
   const gesture = {
-    minPointers: vi.fn(() => gesture), minDistance: vi.fn(() => gesture), runOnJS: vi.fn(() => gesture), onBegin: vi.fn(() => gesture),
+    minPointers: vi.fn(() => gesture), minDistance: vi.fn(() => gesture), runOnJS: vi.fn(() => gesture),
     onStart: (fn: typeof handlers.start) => { handlers.start = fn; return gesture; },
     onUpdate: (fn: typeof handlers.update) => { handlers.update = fn; return gesture; },
-    onFinalize: (fn: (event: { y: number; numberOfPointers: number; state: number }) => void) => {
-      handlers.end = () => fn({ y: 0, numberOfPointers: 0, state: 5 }); return gesture;
-    },
+    onFinalize: (fn: typeof handlers.end) => { handlers.end = fn; return gesture; },
   };
   return gesture;
 } } }));

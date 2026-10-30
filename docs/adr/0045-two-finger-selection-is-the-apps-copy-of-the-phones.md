@@ -41,17 +41,16 @@ On iOS 27.0, in a list of 60 rows 64 pt tall, with two fingers synthesized by XC
 
 XCTest's own `swipeUp()` on the drawer's list also chose the row it began on, 5 times in 6 on the tree before this change and 4 in 6 with only the root view added, while a synthesized 0.5 s one-finger drag never did (notes, 02:42). So probes scroll the list with a synthesized drag, not with `swipeUp()`.
 
-## Native-list priority inside the SwiftUI drawer
+## SwiftUI drawer verification follow-up
 
-The newer Download Drawer has a measured directional failure at its initial
-top: a downward pair selected nothing, although a tap toggled and an upward
-pair selected rows. The old Modal's no-explicit-relation measurement above is
-not proof for SwiftUI BottomSheet. The candidate now wraps only the chapter
-list in the same native-scroll/sweep dependency used by Library, inside a
-non-collapsing flex view. Header/footer touches and native sheet detents remain
-outside that relation. Render tests require the association on the actual list;
-independent native verification must still establish downward selection and
-ordinary-scroll retention before this candidate is accepted.
+[Issue #334](https://github.com/xujialiu/OpenReader/issues/334) tracks correction
+of the newer Download probes: their downward gesture started above the actual
+chapter-list viewport, on rendered-but-clipped rows. The reported direction
+failure therefore did not establish a native selection defect. The trial
+native-list priority wrapper and diagnostic logging were removed; they were
+not a proven repair. The original Modal measurements above remain historical,
+not proof of the new SwiftUI sheet. The follow-up must use the actual viewport
+and independently verify valid two-finger paths with ios-tester.
 
 ## Considered options
 

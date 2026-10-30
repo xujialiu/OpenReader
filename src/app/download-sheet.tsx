@@ -290,13 +290,9 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
       <Text style={styles.secondary}>{state?.error ?? 'Loading contents…'}</Text>
       {state?.state === 'failed' ? <Pressable onPress={() => downloads.requestPlan(document, title)}><Text style={link}>Try again</Text></Pressable> : null}
     </View> : <GestureDetector gesture={sweep.gesture}>
-      <View style={styles.listFrame} collapsable={false}>
-        <GestureDetector gesture={sweep.nativeGesture}>
-          <DrawerList {...sweepList} listRef={sweepRef} data={visible} openAt={hereIndex > 0 ? hereIndex : null} style={styles.list}
-            keyExtractor={(c) => c.id} renderItem={({ item }) => chapterRow(item)}
-            ListEmptyComponent={!manage ? <Text style={[styles.secondary, styles.empty]}>No readable text in this document.</Text> : null} />
-        </GestureDetector>
-      </View>
+      <DrawerList {...sweepList} listRef={sweepRef} data={visible} openAt={hereIndex > 0 ? hereIndex : null} style={styles.list}
+        keyExtractor={(c) => c.id} renderItem={({ item }) => chapterRow(item)}
+        ListEmptyComponent={!manage ? <Text style={[styles.secondary, styles.empty]}>No readable text in this document.</Text> : null} />
     </GestureDetector>}
     {manage && downloads.occupied(document) > 0 ? <DrawerRow>
       <View style={styles.deletes}>
@@ -332,7 +328,6 @@ const styles = StyleSheet.create({
   switchWords: { padding: 8 },
   preparing: { alignItems: 'center', flex: 1, gap: 14, padding: 20 },
   // Fills what the lines and the button leave it, so the button is at the drawer's bottom.
-  listFrame: { flex: 1 },
   list: { flexGrow: 1 },
   empty: { paddingLeft: DRAWER.row.textInset, paddingTop: 12 },
   count: { ...TEXT.footnote, color: INK.quiet },
