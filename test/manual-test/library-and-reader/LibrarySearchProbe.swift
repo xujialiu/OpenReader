@@ -1244,6 +1244,55 @@ final class LibrarySearchProbe: XCTestCase {
     shot("coordinate-pull-input")
   }
 
+  /// Stage actual native marked-text input for a read-only command-scope check.
+  /// The owned simulator already has the Bopomofo keyboard; no settings change.
+  func testStageIMEComposition() {
+    let app = launch()
+    app.buttons["Library actions"].tap()
+    let search = app.buttons["Search"]
+    XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
+    guard let field = waitForSearchField(app, timeout: 5) else { return }
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    let phonetic = app.keys["ㄅ"]
+    for _ in 0..<3 {
+      if phonetic.exists { break }
+      let globe = app.buttons["Next keyboard"]
+      XCTAssertTrue(globe.exists, "Native keyboard switching must be available")
+      guard globe.exists else { return }
+      globe.tap()
+    }
+    guard phonetic.waitForExistence(timeout: 3) else {
+      tree(app, "ime-keyboard-unavailable"); XCTFail("Preinstalled Bopomofo key must exist"); return
+    }
+    // First-time system keyboard onboarding can cover otherwise-present keys.
+    let onboarding = app.buttons["Continue"]
+    if onboarding.exists { onboarding.tap() }
+    phonetic.tap()
+    XCTAssertTrue(field.exists)
+    XCTAssertFalse(["", "Search Library"].contains(field.value as? String ?? ""),
+                   "The phonetic key must actually reach the field")
+    shot("ime-composition-held")
+    tree(app, "ime-composition-held-tree")
+  }
+
+  /// Clear marked input and return the owned simulator to its English keyboard.
+  func testRestoreKeyboardAfterIME() {
+    let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
+    guard let field = waitForSearchField(app, timeout: 5) else { return }
+    field.tap()
+    for _ in 0..<3 {
+      if app.keys["q"].exists { break }
+      let globe = app.buttons["Next keyboard"]
+      XCTAssertTrue(globe.exists); guard globe.exists else { return }
+      globe.tap()
+    }
+    XCTAssertTrue(app.keys["q"].exists, "Restore the English keyboard")
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(close.exists); close.tap()
+    XCTAssertEqual(app.keyboards.count, 0)
+    shot("ime-restored-ordinary-library")
+  }
+
   /// Same-process slow flick for native end-drag ordering inspection.
   func testSlowFlickOnRunningLibrary() {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
@@ -1353,6 +1402,28 @@ final class LibrarySearchProbe: XCTestCase {
       if back.exists { back.tap(); sleep(1) } else { break }
     }
     XCTAssertEqual(app.navigationBars.firstMatch.identifier, "Library", "must reach the Library root")
+  }
+
+  /// Dismissing only input must not strand an active query without a usable X.
+  func testCloseAfterKeyboardDismissal() {
+    let app = launch()
+    app.buttons["Library actions"].tap()
+    let search = app.buttons["Search"]
+    XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
+    guard let field = waitForSearchField(app, timeout: 5) else { return }
+    field.typeText("Short")
+    let submit = app.keyboards.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "Search", "search")).firstMatch
+    XCTAssertTrue(submit.waitForExistence(timeout: 5)); submit.tap()
+    XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+    XCTAssertEqual(field.value as? String, "Short")
+    let close = app.navigationBars.firstMatch.buttons["Close"]
+    XCTAssertTrue(close.exists && close.isEnabled, "Active search must keep an enabled native Close after blur")
+    close.tap()
+    sleep(1)
+    let after = searchField(app)
+    XCTAssertTrue(!after.exists || after.frame.maxY < 10 ||
+      app.navigationBars.firstMatch.frame.intersection(after.frame).height < 10)
+    shot("close-after-input-dismissal")
   }
 
   /// Contract: clearing input shows the ordinary list again but stays in

@@ -325,6 +325,26 @@ final class TwoFingerProbe: XCTestCase {
     print("DRAWER \(name): button=\(chosen.exists ? chosen.label : "none") rows=\(rows.map { "\($0.label)=\($0.isSelected ? 1 : 0)" })")
   }
 
+  /// #332: the shared native immediate-pan change must preserve Download
+  /// selection. Select only; never press Download/Delete or call a Provider.
+  func testDrawerSharedGestureRegression() {
+    let app = openDrawer()
+    let rows = drawerRows(app).filter { $0.frame.minY > 320 && $0.frame.maxY < app.frame.maxY - 100 }
+    guard rows.count >= 3 else { capture("shared-sweep-missing-rows", app); XCTFail("Need three visible choosable chapter rows"); return }
+    XCTAssertEqual(chosenCount(app), 0)
+    let from = CGPoint(x: rows[0].frame.midX, y: rows[0].frame.midY)
+    let to = CGPoint(x: rows[2].frame.midX, y: rows[2].frame.midY)
+    Fingers.play(Fingers.pair(Fingers.line(from, to, start: 0.1, seconds: 0.8), lift: 1.1), name: "shared-download-pair", in: self)
+    XCTAssertTrue(until(5) { self.chosenCount(app) == 3 }, "Two fingers must select exactly three chapter rows")
+    capture("shared-download-pair-selected", app)
+    let before = chosenCount(app)
+    Fingers.play([Fingers.finger(Fingers.line(to, from, start: 0.1, seconds: 0.8), lift: 1.1)], name: "shared-download-single", in: self)
+    XCTAssertEqual(chosenCount(app), before, "Single-finger browsing must not change the chosen chapters")
+    capture("shared-download-single-preserved", app)
+    let back = app.buttons["Back from Download"]
+    XCTAssertTrue(back.exists); back.tap()
+  }
+
   /// The first shown row to the third, with two fingers: the smallest check that a sweep reaches the drawer.
   func testDrawerProof() throws {
     let app = openDrawer()
