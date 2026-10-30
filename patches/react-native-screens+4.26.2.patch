@@ -45,7 +45,7 @@ index b1f482c..8608478 100644
  @end
  
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..529ed40 100644
+index 9b66012..827a0ae 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
 @@ -5,11 +5,13 @@
@@ -227,11 +227,11 @@ index 9b66012..529ed40 100644
 +      return;
 +    }
 +    _openReaderPullSearchBar = (RNSSearchBar *)search.searchBar.delegate;
-+    CGFloat height = CGRectGetHeight(search.searchBar.bounds);
-+    if (height <= 0) {
-+      height = [search.searchBar sizeThatFits:CGSizeMake(CGRectGetWidth(scroll.bounds), CGFLOAT_MAX)].height;
-+    }
-+    _openReaderSearchPullDistance = MAX(1, height);
++    // UIKit grows bounds from a fraction of a point while revealing the bar.
++    // Always include its FULL fitting height; that first animation frame must
++    // never shrink the completion threshold to one point.
++    CGFloat fittingHeight = [search.searchBar sizeThatFits:CGSizeMake(CGRectGetWidth(scroll.bounds), CGFLOAT_MAX)].height;
++    _openReaderSearchPullDistance = MAX(1, MAX(CGRectGetHeight(search.searchBar.bounds), fittingHeight));
 +  }
 +  // Expanding UINavigationBar itself changes the content offset/inset by a
 +  // search-bar height. That is NOT finger travel. Measure in the fixed window
