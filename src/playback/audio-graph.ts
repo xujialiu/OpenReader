@@ -31,6 +31,13 @@ import { DEBUG_MODE } from '../debug/mode';
 
 let nextGraphId = 0;
 
+/** Narration and pronunciation use native nodes, never JS audio worklets.
+ * Keep the platform boundary here and avoid an unused worker per graph (#333).
+ */
+export function createNativeAudioContext(sampleRate?: number): AudioContext {
+  return new AudioContext({ sampleRate, enableWorklets: false });
+}
+
 /**
  * The offset that tells the native queue node to leave its read index where it
  * is: `AudioBufferQueueSourceNode::start(when, offset)` returns early for any
@@ -158,7 +165,7 @@ export async function createAudioGraph(first: PreparedClip, handlers: AudioGraph
   AudioManager.observeAudioInterruptions(true);
 
   const sampleRate = first.audio === 'samples' ? first.sampleRate : AudioManager.getDevicePreferredSampleRate();
-  const context = new AudioContext({ sampleRate });
+  const context = createNativeAudioContext(sampleRate);
 
   /**
    * Footgun 6, and the loudest one. `pitchCorrection` is opt-in **per node**:

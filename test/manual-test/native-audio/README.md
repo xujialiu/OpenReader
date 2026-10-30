@@ -1,5 +1,31 @@
 # Native audio queue (#63)
 
+## Native-only context lifecycle (#333)
+
+On the owned Debug simulator, connected to the correct Metro, first silence
+that device and ensure no reading or download is running. Under the shared
+iOS guard, evaluate `native-context-lifecycle.js` with `kit/cdp.cjs --eval`
+and the explicit Metro URL plus `OPENREADER_DEVICE` name. It returns after
+starting; then read `JSON.stringify(globalThis.__or333Lifecycle)` with the
+same CDP kit until terminal `passed`/`failed` (the in-app deadline is 30 s).
+Do not treat the initial `control` response as completion.
+
+The actual narration graph runs ten lifecycles, with pause/resume and rate
+changes; pronunciation runs three using a generated silent WAV served only
+through an intercepted `.invalid` URL. No Provider or external request occurs.
+The first graph lasts 1.3 s to cross its one-second position callback interval;
+the remaining half-second graphs only establish scheduling and cleanup.
+The default AudioContext control must allocate one worker. Afterwards require
+13 native contexts, zero worker contexts, 10 ended queues, at least one
+position callback, 3 pronunciations and no errors. All graphs are disposed,
+the original fetch/native constructors restored in finally, and the app should
+be relaunched afterwards to discard diagnostic globals. Silence is mandatory
+even though the generated samples are zero.
+
+This is a real native-node lifecycle test, not UI acceptance or a reproduction
+of the physical Worklets memory fault. It verifies that the app no longer
+creates the unused worker, not that upstream Worklets itself is repaired.
+
 ## Output loss and automatic-pause highlighting (#152)
 
 [Route-loss replay and physical acceptance](route-loss.md): a deterministic native

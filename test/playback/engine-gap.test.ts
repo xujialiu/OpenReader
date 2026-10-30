@@ -27,7 +27,10 @@ const audio = vi.hoisted(() => {
   class AudioContext {
     sampleRate: number;
     destination = {};
-    constructor(options: { sampleRate: number }) { this.sampleRate = options.sampleRate; }
+    constructor(options: { sampleRate: number; enableWorklets?: boolean }) {
+      if (options.enableWorklets !== false) throw new Error('Narration must not allocate an unused Worklets runtime');
+      this.sampleRate = options.sampleRate;
+    }
     createBufferQueueSource() {
       const source: Source = { queue: [], onBufferEnded: null };
       world.source = source;

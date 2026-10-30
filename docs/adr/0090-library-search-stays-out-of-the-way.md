@@ -57,20 +57,24 @@ clarity. The page subscribes to the already-associated `RCTEnhancedScrollView`
 through its documented `delegateSplitter` API, preserving React Native's own
 delegates. Begin/scroll/end callbacks observe actual content movement; no
 competing recognizer or replacement scroll delegate is installed. Only
-movement beyond the adjusted top creates a preview, whether the drag started
-there or reached it from deeper in the list. Progress is that downward native
-content displacement divided by the bar's measured height (native fitting
-size when layout has not supplied one). Multi-touch invalidates entry.
+movement beyond the adjusted top creates a preview. Progress itself uses
+finger travel in fixed window coordinates, not the content displacement:
+UIKit changes offsets/insets while expanding the header. The threshold is
+at least the bar's full native fitting height, never its fraction-of-a-point
+bounds during the first reveal frame. A live failure read found a threshold
+of 1 with only 2.3 points of finger travel, which committed a short pull.
+Multi-touch invalidates entry.
 
 `RNSSearchBar` drives a paused UIKit `UIViewPropertyAnimator` over a
 `UIVisualEffectView`, from material blur at progress zero to no blur at one.
 The effect stays within the native text field, using its bounds and capsule
 geometry; UIKit still draws the real field and its dynamic appearance. During
 preview the bar is noninteractive and its accessibility subtree is hidden.
-Reaching full progress removes the preview and schedules the existing native
-focus path on the next main-loop turn, even if the finger has not yet lifted.
-The page/controller/scroll identity and modal/selection scope are checked
-again. UIKit activation supplies keyboard input and external Close while the
+Reaching full progress removes the preview and cancels the now-completed
+native scrolling gesture before scheduling focus on the next main-loop turn.
+Otherwise `keyboardDismissMode=on-drag` dismisses the newly focused keyboard
+on the next movement while the finger remains down. The page/controller/scroll
+identity and modal/selection scope are checked again. UIKit activation supplies keyboard input and external Close while the
 query is still empty.
 
 Releasing or cancelling short uses the existing closed-position transaction
@@ -121,7 +125,9 @@ this behavior but would discard the required two-finger priority.
 multi-pointer candidate still missing its required fingers after movement
 reaches ten points. A pair already down follows the existing activation path.
 This applies to the shared Library/download sweep and requires both to be
-verified. The native gesture also explicitly uses `runOnJS(true)`: the app
+verified. The Library's real two-pointer control selects exactly three
+traversed entries; the same two-pointer track while searching leaves the
+query intact and enters no selection. The native gesture also explicitly uses `runOnJS(true)`: the app
 ships Worklets for audio but not Reanimated; a native-gesture event must not
 try to dispatch through the absent ReanimatedModule. Pending native checks,
 this is a candidate fix, not proof that every short gesture is handled.

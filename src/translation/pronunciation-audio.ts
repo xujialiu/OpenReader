@@ -1,4 +1,5 @@
-import { AudioContext, AudioManager, type AudioBufferSourceNode } from 'react-native-audio-api';
+import { AudioManager, type AudioContext, type AudioBufferSourceNode } from 'react-native-audio-api';
+import { createNativeAudioContext } from '../playback/audio-graph';
 
 /**
  * A short-lived graph for dictionary-supplied audio; no lock-screen ownership.
@@ -36,7 +37,7 @@ export async function playPronunciation(url: string, signal: AbortSignal, onAudi
     if (signal.aborted || abort.signal.aborted) return;
     AudioManager.setAudioSessionOptions({ iosCategory: 'playback', iosMode: 'spokenAudio' });
     await AudioManager.setAudioSessionActivity(true);
-    context = new AudioContext();
+    context = createNativeAudioContext();
     const buffer = await context.decodeAudioData(bytes);
     if (signal.aborted || abort.signal.aborted) return;
     source = context.createBufferSource();

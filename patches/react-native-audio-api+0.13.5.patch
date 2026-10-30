@@ -580,3 +580,69 @@ index 5b37cbf..5c3af17 100644
    [self.audioAPIModule
        invokeHandlerWithEventName:audioapi::AudioEvent::ROUTE_CHANGE
                           payload:audioapi::StringPayload{
+diff --git a/node_modules/react-native-audio-api/lib/commonjs/core/AudioContext.js b/node_modules/react-native-audio-api/lib/commonjs/core/AudioContext.js
+index c4bc2ed..f63c49b 100644
+--- a/node_modules/react-native-audio-api/lib/commonjs/core/AudioContext.js
++++ b/node_modules/react-native-audio-api/lib/commonjs/core/AudioContext.js
+@@ -15,7 +15,7 @@ class AudioContext extends _BaseAudioContext.default {
+     if (options && options.sampleRate && (options.sampleRate < 8000 || options.sampleRate > 96000)) {
+       throw new _errors.NotSupportedError(`The provided sampleRate is not supported: ${options.sampleRate}`);
+     }
+-    const audioRuntime = _AudioAPIModule.default.createAudioRuntime();
++    const audioRuntime = options?.enableWorklets === false ? null : _AudioAPIModule.default.createAudioRuntime();
+     super(globalThis.createAudioContext(options?.sampleRate || _system.default.getDevicePreferredSampleRate(), audioRuntime));
+   }
+   async close() {
+diff --git a/node_modules/react-native-audio-api/lib/module/core/AudioContext.js b/node_modules/react-native-audio-api/lib/module/core/AudioContext.js
+index d4a6637..7d5be16 100644
+--- a/node_modules/react-native-audio-api/lib/module/core/AudioContext.js
++++ b/node_modules/react-native-audio-api/lib/module/core/AudioContext.js
+@@ -10,7 +10,7 @@ export default class AudioContext extends BaseAudioContext {
+     if (options && options.sampleRate && (options.sampleRate < 8000 || options.sampleRate > 96000)) {
+       throw new NotSupportedError(`The provided sampleRate is not supported: ${options.sampleRate}`);
+     }
+-    const audioRuntime = AudioAPIModule.createAudioRuntime();
++    const audioRuntime = options?.enableWorklets === false ? null : AudioAPIModule.createAudioRuntime();
+     super(globalThis.createAudioContext(options?.sampleRate || AudioManager.getDevicePreferredSampleRate(), audioRuntime));
+   }
+   async close() {
+diff --git a/node_modules/react-native-audio-api/lib/typescript/types.d.ts b/node_modules/react-native-audio-api/lib/typescript/types.d.ts
+index 0530c26..384823c 100644
+--- a/node_modules/react-native-audio-api/lib/typescript/types.d.ts
++++ b/node_modules/react-native-audio-api/lib/typescript/types.d.ts
+@@ -22,6 +22,8 @@ export type AudioWorkletRuntime = 'AudioRuntime' | 'UIRuntime';
+ export type OscillatorType = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'custom';
+ export interface AudioContextOptions {
+     sampleRate?: number;
++    /** OpenReader: skip the unused worker for native-node-only graphs; defaults to true. */
++    enableWorklets?: boolean;
+ }
+ export interface OfflineAudioContextOptions {
+     numberOfChannels: number;
+diff --git a/node_modules/react-native-audio-api/src/core/AudioContext.ts b/node_modules/react-native-audio-api/src/core/AudioContext.ts
+index dd3fe69..3a52dce 100644
+--- a/node_modules/react-native-audio-api/src/core/AudioContext.ts
++++ b/node_modules/react-native-audio-api/src/core/AudioContext.ts
+@@ -19,7 +19,8 @@ export default class AudioContext extends BaseAudioContext {
+       );
+     }
+ 
+-    const audioRuntime = AudioAPIModule.createAudioRuntime();
++    // Native graphs need no worker. Preserve the default for Worklet-node callers.
++    const audioRuntime = options?.enableWorklets === false ? null : AudioAPIModule.createAudioRuntime();
+ 
+     super(
+       globalThis.createAudioContext(
+diff --git a/node_modules/react-native-audio-api/src/types.ts b/node_modules/react-native-audio-api/src/types.ts
+index 9eba289..f75269f 100644
+--- a/node_modules/react-native-audio-api/src/types.ts
++++ b/node_modules/react-native-audio-api/src/types.ts
+@@ -49,6 +49,8 @@ export type OscillatorType =
+ 
+ export interface AudioContextOptions {
+   sampleRate?: number;
++  /** OpenReader: skip the unused worker for native-node-only graphs; defaults to true. */
++  enableWorklets?: boolean;
+ }
+ 
+ export interface OfflineAudioContextOptions {

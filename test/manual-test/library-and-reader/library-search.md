@@ -71,15 +71,22 @@ blur-to-clear transition; an end-state pass alone cannot prove the animation.
 A short release must return to hidden search with no keyboard or Close AND
 remain on the original page. A prior beta12 run navigated into the touched
 Folder and falsely passed the old hidden-field-only assertion. The page check
-is now mandatory; that boundary remains open even though full entry and the
-core restore cases pass.
+is now mandatory. The corrected boundary passes on beta16 together with
+ordinary scrolling and full/repeated entry; keep the failed beta12 evidence.
 
 `testPullFocusesAndCloseStaysHidden` covers the revised pull contract: keyboard
 and external Close before typing, empty Close, typed Close, repeated pull,
 ordinary scrolling without reactivation, and menu reopening. The earlier
 reveal-without-keyboard check is superseded, not a regression requirement.
 
-Two-finger search exclusion, real IME behavior, a properly held native
-back-menu read and iPad coverage remain separate checks. A missing
-Select action or a no-op Escape does not prove those interactions. Partial
+`LibraryTwoFingerProbe.testSearchAndSweepAreMutuallyExclusive` verifies three
+selected entries as a positive control, then the same two-pointer path while
+searching must leave the query and no selection. `testHeldNestedBackMenu` uses
+the existing event-path kit to hold then release away; record it and inspect
+the menu while held, not after release. Stage Search Inner with the named
+LibrarySearchProbe method first.
+
+Real IME behavior, the held menu, iPad and the shared Download sweep remain
+separate checks. A missing Select action or a no-op Escape does not prove
+those interactions. Partial
 passing cases never imply the whole feature is accepted.

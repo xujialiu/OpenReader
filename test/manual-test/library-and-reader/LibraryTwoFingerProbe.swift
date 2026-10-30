@@ -133,6 +133,63 @@ final class LibraryTwoFingerProbe: XCTestCase {
     XCTAssertTrue(waitCount(nil), "Cancel did not leave selection mode")
   }
 
+  /// #332 regression: real two-pointer selection keeps priority, while the
+  /// same two-pointer track cannot select global search results. No seeding.
+  func testSearchAndSweepAreMutuallyExclusive() {
+    app.terminate(); app.launchArguments = []; app.launch()
+    let actions = app.buttons["Library actions"]
+    XCTAssertTrue(actions.waitForExistence(timeout: 10))
+    let browse = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ OR label CONTAINS %@", "Folder,", "Not started.")).allElementsBoundByIndex
+      .filter { $0.exists && $0.frame.minY >= app.navigationBars.firstMatch.frame.maxY }
+      .sorted { $0.frame.minY < $1.frame.minY }
+    guard browse.count >= 3 else { XCTFail("Stage at least three visible root entries"); return }
+    let center = app.frame.midX
+    Fingers.play(Fingers.pair(Fingers.line(CGPoint(x: center, y: browse[0].frame.midY),
+      CGPoint(x: center, y: browse[2].frame.midY), start: 0.1, seconds: 0.8), lift: 1.1), name: "search-sweep-control", in: self)
+    XCTAssertTrue(waitCount(3), "Two fingers must select exactly the three traversed entries")
+    capture("search-sweep-control-selected")
+    cancelSelection()
+    actions.tap()
+    let search = app.buttons["Search"]
+    XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
+    let field = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue == %@", "Search Library")).firstMatch
+    XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Scroll Diag")
+    let firstResult = app.buttons["Scroll Diag 12 of 12, Library"]
+    XCTAssertTrue(firstResult.waitForExistence(timeout: 5))
+    let results = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "Scroll Diag", ", Library")).allElementsBoundByIndex
+      .filter { $0.exists && $0.frame.minY >= app.navigationBars.firstMatch.frame.maxY }
+      .sorted { $0.frame.minY < $1.frame.minY }
+    guard results.count >= 3 else { XCTFail("Need three visible global results"); return }
+    Fingers.play(Fingers.pair(Fingers.line(CGPoint(x: center, y: results[0].frame.midY),
+      CGPoint(x: center, y: results[2].frame.midY), start: 0.1, seconds: 0.8), lift: 1.1), name: "search-sweep-excluded", in: self)
+    XCTAssertNil(selectedCount(), "The same two-finger gesture must not select search results")
+    XCTAssertEqual(field.value as? String, "Scroll Diag")
+    XCTAssertTrue(app.navigationBars["Library"].exists)
+    XCTAssertFalse(app.buttons["Move selected"].exists)
+    capture("search-sweep-remains-query")
+    app.navigationBars.firstMatch.buttons["Close"].tap()
+    XCTAssertTrue(actions.waitForExistence(timeout: 5))
+  }
+
+  /// Record this gesture to inspect the native back-menu WHILE held. Releasing
+  /// over the original button selects a row; move away before lifting instead.
+  /// Prerequisite: Search Inner, staged by LibrarySearchProbe's named helper.
+  func testHeldNestedBackMenu() {
+    app.launchArguments = []; app.activate()
+    let bar = app.navigationBars["Search Inner"]
+    XCTAssertTrue(bar.waitForExistence(timeout: 10))
+    let back = bar.buttons.firstMatch
+    let point = CGPoint(x: back.frame.midX, y: back.frame.midY)
+    var track = Fingers.hold(point, seconds: 1.8, start: 0.1)
+    track += Fingers.line(point, CGPoint(x: app.frame.midX, y: app.frame.maxY - 120), start: 2.0, seconds: 0.4).dropFirst()
+    Fingers.play([Fingers.finger(track, lift: 2.5)], name: "held-native-back-menu", in: self)
+    XCTAssertTrue(bar.exists, "Release away must dismiss the menu without selecting an ancestor")
+    back.tap()
+    XCTAssertTrue(app.navigationBars["Search Outer"].waitForExistence(timeout: 5))
+    app.navigationBars.firstMatch.buttons.firstMatch.tap()
+    XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+  }
+
   /// Two fingers down over rows 1-5 from normal mode: direct entry adds the range.
   func testSweepAddsThenReverseRetracts() {
     launchAtRoot()
