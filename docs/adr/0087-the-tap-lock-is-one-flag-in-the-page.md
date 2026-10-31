@@ -66,6 +66,11 @@ named the lock. What was done:
 - **The Debug Log.** `[reading] tap lock on` and `[reading] tap lock off`
   from the button, and `[reading] tap lock off: left the reader` when leaving
   turns it off; nothing when the Reader is left with the lock already off.
+  That line has two writers. A parked view writes it from the effect on
+  `shown`. Back with nothing playing, and another Document opened, end the
+  view in the same commit as `left()` or `show()`, before that effect could
+  run (found on the simulator: the paused Back wrote no line), so the view's
+  unmount writes it when the lock was still on.
   In the page program a tap the lock kept from acting calls `lockedTap(what)`,
   a no-op in the plain program, which Debug Mode's `rendererLogSplice()`
   replaces (ADR 0054): `[renderer] a tap on block 6.25 did nothing: the Tap

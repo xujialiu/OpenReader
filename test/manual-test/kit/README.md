@@ -46,6 +46,11 @@ What every area uses:
   invocation, artifact contract and separate submit/persistence assertions.
 - `ax.py`: the accessibility tree through AXe, and real touches on what it
   lists, the phone's own alert and the rows of a long list included (below).
+- `probes/touch-record-arm.js` and `probes/touch-record-read.js`: arm and read a recorder in the
+  reader's page for what a touch did there, the events every section document heard (with the
+  element hit) and the taps posted to the app. `hx.cjs --code-file` sends them;
+  `library-and-reader/recorded-touch.sh` does both around a real XCUITest touch and prints the
+  Debug Log since (#336).
 - `drawer-edge.py`: where a drawer's top edge is in a screenshot, from its
   grabber, which works in the dark where the drawer's grey is the reader's
   page (#117). `python3 test/manual-test/kit/drawer-edge.py SHOT.png [R G B]`;

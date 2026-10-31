@@ -22,6 +22,18 @@ and writes `[renderer] a tap on block B did nothing: the Tap Lock is on` (or
 `a tap on a link`) instead; a locked tap on blank space writes neither.
 A drag still turns A to M; a long press still opens a lookup.
 
+The page's text is not in the accessibility tree: `ax.py` touches the Player's buttons, not a
+sentence or a link. On the page take a real touch with the page's recorder armed (points, from a
+screenshot taken right before it):
+
+```sh
+OPENREADER_METRO_PORT=PORT bash test/manual-test/library-and-reader/recorded-touch.sh SIMULATOR_UDID OUT_DIR X Y
+```
+
+It prints the events the section documents heard, the taps posted, the Debug Log since the touch
+and `say`, which tells a locked tap on blank space (it writes nothing) from a touch that never
+arrived. It plays nothing. It does not tell XCUITest's touch from a finger's.
+
 The lock is for one visit (#336). Lock, then: Back while paused and open the
 Document again; Back while a Reading plays and come back with the Reading
 Button; open another Document; relaunch. Each finds `tapLock=false`, and the

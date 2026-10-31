@@ -727,6 +727,16 @@ export function ReadingView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setTapLock(false);
   }, [shown, tapLock]);
+  /* Leaving with nothing playing, or opening another Document, ends the view
+     in the same commit, before the effect above could see `shown` go false:
+     the lock goes with the view, and is said to here. */
+  const tapLockNow = useRef(false);
+  useEffect(() => {
+    tapLockNow.current = tapLock;
+  }, [tapLock]);
+  useEffect(() => () => {
+    if (tapLockNow.current) debugLog('reading', 'tap lock off: left the reader');
+  }, []);
   useEffect(() => {
     reading.bridge.setTapLock(tapLock);
   }, [reading.bridge, tapLock]);

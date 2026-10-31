@@ -235,10 +235,14 @@ describe('the Tap Lock, for one visit to the reader (#336)', () => {
     await press(true);
     await leave();
     expect(held()).toBeNull();
+    // The view goes in the same commit, before an effect on `shown` could run,
+    // and still says why the lock went with it (#336, found on the simulator).
+    expect(lockLines()).toEqual(['[reading] tap lock on', '[reading] tap lock off: left the reader']);
     await show();
     await settle();
     expect(held()).toMatchObject({ id: DOCUMENT });
     expect(world.player!.tapLock).toBe(false);
+    expect(lockLines()).toHaveLength(2);
     await act(async () => { tree.unmount(); });
   });
 
@@ -250,6 +254,7 @@ describe('the Tap Lock, for one visit to the reader (#336)', () => {
     await settle();
     expect(held()).toMatchObject({ id: OTHER });
     expect(world.player!.tapLock).toBe(false);
+    expect(lockLines()).toEqual(['[reading] tap lock on', '[reading] tap lock off: left the reader']);
     await act(async () => { tree.unmount(); });
   });
 });
