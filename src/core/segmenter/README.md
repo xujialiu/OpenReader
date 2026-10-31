@@ -20,7 +20,8 @@ mappings, source anchors and text ranges, which for EPUB are largely
 unnecessary because epub.js already supplies a DOM.
 
 The JavaScript release stays pinned to 0.4.2, with the bounded boundary repairs
-in `patches/sentencex+0.4.2.patch` (#240, #245, #241). `sentencex.ts` also maps
+in `patches/sentencex+0.4.2.patch` (#240, #245, #241; brackets and quotation
+marks #183, #244, #243). `sentencex.ts` also maps
 three-letter language aliases to the package's own rules (#242). Both shipped
 exports and the readable source are tested. Changes to boundaries, language
 resolution or rejoining must raise `SEGMENTATION` in `revision.ts`, so saved

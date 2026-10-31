@@ -89,6 +89,7 @@ describe('what starts a continuation', () => {
       'longitudinal monitoring of individuals is expected.',
       '[66] or for other instances in which no change is expected.',
       '(12) or for other instances in which no change is expected.',
+      '[66], which was expected.',
       '(Table 4) exhibited the largest effect sizes, suggesting they are the ones to keep.',
     ];
     for (const text of cases) {
@@ -105,6 +106,27 @@ describe('what starts a continuation', () => {
       expect(continuesSentence(text)).toBe(false);
       expect(blockRuns([{ text: 'the paragraph was cut after' }, { text }]).map((run) => run.blocks)).toEqual([[0], [1]]);
     }
+  });
+
+  it('refuses a numbered entry or a system line, which opens with a bracket group but no lowercase word after it (#247)', () => {
+    const cases = ['[2] Doe A, Science 7, 3-4 (2021)', '(2) The landlord shall repair the roof', '[80/100 Exp]', '[2]'];
+    for (const text of cases) {
+      expect(continuesSentence(text)).toBe(false);
+      expect(blockRuns([{ text: 'the entry before ends without a full stop' }, { text }]).map((run) => run.blocks)).toEqual([[0], [1]]);
+    }
+  });
+
+  it('reads unterminated numbered entries and system lines one paragraph to an utterance (#247)', () => {
+    expect(spoken([{ text: '[1] Smith J, Nature 5, 1-2 (2020)' }, { text: '[2] Doe A, Science 7, 3-4 (2021)' }])).toEqual([
+      '[1] Smith J, Nature 5, 1-2 (2020)',
+      '[2] Doe A, Science 7, 3-4 (2021)',
+    ]);
+    // My Vampire System: each system line is a paragraph of its own.
+    expect(spoken([{ text: '[Daily quest #1 has been completed]' }, { text: '[Reward 5 Exp]' }, { text: '[80/100 Exp]' }])).toEqual([
+      '[Daily quest #1 has been completed]',
+      '[Reward 5 Exp]',
+      '[80/100 Exp]',
+    ]);
   });
 
   it('refuses when the first Block ended a sentence of its own', () => {

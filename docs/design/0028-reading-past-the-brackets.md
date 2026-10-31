@@ -64,3 +64,13 @@ brackets plays from the download instead of being fetched again.
 "You have < 2/50 HP > left.", stays even when it was meant as brackets; and a
 reference number in square brackets becomes audible on Fish, as it already was
 on the other voices.
+
+## A bracket group that ends a sentence inside it
+
+_Added by #183._
+
+**What was wrong.** Game-style novels put the game's messages in brackets, and a message is often a sentence of its own: "<Level Up!>", "<You have absorbed enough Qi for a breakthrough!>". The app cut the message into two sentences at its exclamation mark, before the closing bracket. Each half then held only one bracket, so neither bracket went: the voice was asked to say the opening one, and the closing one became a short silence of its own. The removal was on, and failed on exactly the text it was asked for. In the owner's own web novels this happened a little over two hundred times.
+
+**What changed.** A bracket group is now one piece of reading, however many sentences it holds, the way a quotation already is. Both brackets are in that piece, so both go, and the whole message is highlighted together. The same change stops a lone "<" in a sum ("x < 5") or a key name ("<Enter>") from running every sentence after it together. Which brackets count as a group is a fixed list that includes the Chinese ones, not the owner's list: if the owner's list decided where sentences end, editing it would also move every sentence boundary and every saved reading place.
+
+**What it costs.** A long message in brackets, several sentences of a character's thoughts, say, is highlighted and skipped as one piece. A group that the book breaks across two lines is still cut at the line, because letting a group run on past a line would let one forgotten closing bracket swallow everything after it. Chapters already downloaded are checked again, and only the sentences whose cut changed are fetched again.

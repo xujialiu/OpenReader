@@ -25,9 +25,10 @@
  * 1. both blocks are paragraphs, neither excluded, and neither is already part
  *    of a chain;
  * 2. the first ends mid-sentence;
- * 3. the second begins as a continuation — a lowercase letter, a citation
- *    bracket, or a short bracket group then a lowercase word; never a capital,
- *    and never a bare digit, which opens real paragraphs too.
+ * 3. the second begins as a continuation — a lowercase letter, or a short
+ *    bracket group (a citation such as `[66]` among them) then a lowercase
+ *    word; never a capital, and never a bare digit, which opens real
+ *    paragraphs too.
  *
  * The fourth is geometry: the second block sits where the first's next line
  * would be, directly below it in its column within 36 pt, at the top of the
@@ -149,12 +150,19 @@ export interface BlockRun {
 const SENTENCE_END = /[.!?…。！？｡︒‼⁇⁈⁉][)\]}"'”’»」』】》）]*\s*$/u;
 
 /**
- * A continuation's start: a lowercase letter, a citation bracket (`[66]`,
- * `(12)`), or a short bracket group followed by a lowercase word.
- * `(Table 4) exhibited` was the one real split the plugin's first live run left
- * behind (2026-09-14). Never a capital, and never a bare digit.
+ * A continuation's start: a lowercase letter, or a short bracket group followed
+ * by a lowercase word, perhaps after a comma, semicolon or colon (`[66] that`,
+ * `(12) or`, `[66], which`). `(Table 4) exhibited` was the one real split the
+ * plugin's first live run left behind (2026-09-14). Never a capital, and never a
+ * bare digit.
+ *
+ * A citation bracket alone is not enough (#247): `[2] Doe A, Science 7` opens
+ * the next entry of a reference list, and `[80/100 Exp]` is a game novel's next
+ * system line, both paragraphs of their own after one that ends without a full
+ * stop. Measured over the development Mac's EPUBs, 152 runs welded such a
+ * paragraph onto the one before.
  */
-const CONTINUES = /^(?:\p{Ll}|[[(]\s*\p{Nd}|[[(][^\])]{1,40}[\])]\s*\p{Ll})/u;
+const CONTINUES = /^(?:\p{Ll}|[[(][^\])]{1,40}[\])][,;:]?\s*\p{Ll})/u;
 
 /** Whether the text stops short of a sentence's end. Empty text continues nothing. */
 export function endsMidSentence(text: string): boolean {

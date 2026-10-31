@@ -48,6 +48,45 @@ const ellipses: Example[] = [
   // Already green in the diagnostic run: do not claim this was broken.
   ['de', 'Ich dachte... vielleicht gehen wir. Dann gingen wir.', ['Ich dachte... vielleicht gehen wir.', 'Dann gingen wir.']],
 ];
+// #183: a bracket group with a sentence end inside it stays one sentence, so
+// the bracket stripper finds both of its brackets. The shapes are from real
+// books (Cultivation Online, My Vampire System) and the issue.
+const bracketGroups: Example[] = [
+  ['en', '<Level Up!>', ['<Level Up!>']],
+  ['en', '<You have absorbed enough Qi for a breakthrough!>', ['<You have absorbed enough Qi for a breakthrough!>']],
+  ['en', '<Congratulations! You have subdued the Silent Rippers!>', ['<Congratulations! You have subdued the Silent Rippers!>']],
+  ['en', '< Would you like to activate? >', ['< Would you like to activate? >']],
+  ['en', '<Quest complete!> <Reward: 100 gold.>', ['<Quest complete!> <Reward: 100 gold.>']],
+  ['en', '[Unique Ability(2): Requires level 3 to activate. Deals more damage.]', ['[Unique Ability(2): Requires level 3 to activate. Deals more damage.]']],
+  ['en', '[10 points spent. [Haste] obtained.]', ['[10 points spent. [Haste] obtained.]']],
+  ['zh', '【恭喜你升级了。】', ['【恭喜你升级了。】']],
+  ['zh', '〖叮！任务完成。〗他笑了。', ['〖叮！任务完成。〗他笑了。']],
+];
+// #244: an opening bracket closes only on its own kind, and a spaced or
+// letter-flanked `<` is a sign, as the bracket stripper reads it.
+const openersOfTheirOwnKind: Example[] = [
+  ['en', 'We know that x < 5. This holds in all cases. See equation (1).', ['We know that x < 5.', 'This holds in all cases.', 'See equation (1).']],
+  ['en', 'Press <Enter> to continue. Then wait. (See manual.)', ['Press <Enter> to continue.', 'Then wait.', '(See manual.)']],
+  ['en', '<Quest complete!> You gained a level. You feel stronger. [Level Up!]', ['<Quest complete!> You gained a level.', 'You feel stronger.', '[Level Up!]']],
+  ['en', 'A (note. Another. Third] here.', ['A (note.', 'Another.', 'Third] here.']],
+  ['en', 'If x<y holds. Then x>z holds. Done.', ['If x<y holds.', 'Then x>z holds.', 'Done.']],
+  ['en', 'Keep x < 5 and y > 3. Then stop. Done.', ['Keep x < 5 and y > 3.', 'Then stop.', 'Done.']],
+];
+// #243: an inch mark or a word-initial apostrophe is not a quotation mark.
+const notQuotationMarks: Example[] = [
+  ['en', 'He measured 5" of rain. Then it stopped. A 6" pipe. Done.', ['He measured 5" of rain.', 'Then it stopped.', 'A 6" pipe.', 'Done.']],
+  ['en', '"Hey, kid" The man was around 1,77 metres (5’6" tall). He had blonde hair. "What’s your name?"', ['"Hey, kid" The man was around 1,77 metres (5’6" tall).', 'He had blonde hair.', '"What’s your name?"']],
+  ['en', "He gave 'em what for. Then he ran. It's done. Stop.", ["He gave 'em what for.", 'Then he ran.', "It's done.", 'Stop.']],
+  ['en', "Music was better in the '90s. Then it changed. It's sad.", ["Music was better in the '90s.", 'Then it changed.', "It's sad."]],
+  ['en', "He said 'Tis late. Then he left. It's over.", ["He said 'Tis late.", 'Then he left.', "It's over."]],
+];
+// Quotations the #243 change must leave as they were.
+const quotations: Example[] = [
+  ['en', '"Fine. Go." He went.', ['"Fine. Go." He went.']],
+  ['en', '"I’m feeling a "but" incoming." Morok sighed.', ['"I’m feeling a "but" incoming." Morok sighed.']],
+  ['en', "She said 'go home. Now.' Then she left.", ["She said 'go home. Now.' Then she left."]],
+  ['en', '"I was born in 1990" he said. Then he left.', ['"I was born in 1990" he said.', 'Then he left.']],
+];
 const controls: Example[] = [
   ['zh', '甲。乙。', ['甲。', '乙。']],
   ['zh', '甲。Ａ。', ['甲。', 'Ａ。']],
@@ -76,7 +115,10 @@ const controls: Example[] = [
 
 for (const [name, split] of Object.entries({ Reading: reading, Download: download, ESM: esmSegment, CJS: cjsSegment, source: sourceSegment })) {
   describe(name, () => {
-    for (const [issue, examples] of [['#240', cjk], ['#245', english], ['#241', ellipses], ['controls', controls]] as const) {
+    for (const [issue, examples] of [
+      ['#240', cjk], ['#245', english], ['#241', ellipses], ['#183', bracketGroups], ['#244', openersOfTheirOwnKind],
+      ['#243', notQuotationMarks], ['#243 quotations', quotations], ['controls', controls],
+    ] as const) {
       describe(issue, () => {
         it.each(examples)('%s: %s', (language, text, expected) => expect(split(language, text)).toEqual(expected));
       });

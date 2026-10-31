@@ -133,8 +133,8 @@ describe('the angle-bracket fixture (test/fixtures/angle-brackets, issue #94)', 
    * them as the document has it — a bracket is not a sentence boundary, an
    * unmatched one is not either, and the empty pair is not an utterance split.
    *
-   * Six of the seven hold. The third does not, and is below with the other
-   * disagreements.
+   * All seven hold. The third, a group with a full stop before its `>`, was cut
+   * before the `>` until #183 taught the pinned splitter to pair `<` with `>`.
    */
   const PARAGRAPHS = [
     '<Hello world>.',
@@ -146,16 +146,14 @@ describe('the angle-bracket fixture (test/fixtures/angle-brackets, issue #94)', 
     '<The final sentence continues after the empty pair>.',
   ];
 
-  it('leaves six of the seven paragraphs as one utterance each, whole', () => {
-    const blocks = PARAGRAPHS.filter((_, i) => i !== 2).map((text) => ({ text }));
-    const utterances = segmentBlocks(blocks, 'en', options);
-    expect(utterances.map((u) => u.text)).toEqual(PARAGRAPHS.filter((_, i) => i !== 2));
-    expect(utterances.map((u) => u.spans[0].block)).toEqual([0, 1, 2, 3, 4, 5]);
+  it('leaves the seven paragraphs as one utterance each, whole', () => {
+    const utterances = segmentBlocks(PARAGRAPHS.map((text) => ({ text })), 'en', options);
+    expect(utterances.map((u) => u.text)).toEqual(PARAGRAPHS);
+    expect(utterances.map((u) => u.spans[0].block)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
-  it('calls the empty pair not Speakable and the other five Speakable', () => {
-    const blocks = PARAGRAPHS.filter((_, i) => i !== 2).map((text) => ({ text }));
-    expect(segmentBlocks(blocks, 'en', options).map((u) => u.speakable)).toEqual([true, true, true, true, false, true]);
+  it('calls the empty pair not Speakable and the other six Speakable', () => {
+    expect(segmentBlocks(PARAGRAPHS.map((text) => ({ text })), 'en', options).map((u) => u.speakable)).toEqual([true, true, true, true, true, false, true]);
   });
 
   it('does not cut at an unmatched opening bracket, or inside the wrapped comparison of #94', () => {
@@ -293,19 +291,15 @@ describe('where sentencex disagrees with a reader', () => {
   });
 
   /**
-   * The third paragraph of the angle-bracket fixture, which 1.0.31 kept whole.
-   * 0.4.2 protects a parenthesised span from being cut inside, but the regular
-   * expression that does it (`Language.parensRegex`) lists `<` as an opening
-   * character and does **not** list `>` as a closing one, so an angle group is
-   * never matched and the full stop before the `>` breaks the sentence. The
-   * result is a lone `>` utterance, which is not Speakable and so becomes
-   * silence rather than being spoken — the damage is a pause, not a bracket read
-   * aloud.
+   * A bracket group that a line break inside its Block (a `<br>`) runs across.
+   * The patched `parensRegex` (#183) keeps a group whole only within one line,
+   * because a group allowed to cross lines lets an unclosed bracket swallow the
+   * lines after it. So the sentence end before the break cuts the group, and
+   * each half keeps a bracket the stripper cannot pair. No such group was found
+   * in about two million sentences of the development Mac's EPUBs.
    */
-  it('cuts before a closing angle bracket (wrong: one utterance)', () => {
-    const utterances = segmentBlock('<The next sentence keeps its words and punctuation.>', 'en', options);
-    expect(utterances.map((u) => u.text)).toEqual(['<The next sentence keeps its words and punctuation.', '>']);
-    expect(utterances.map((u) => u.speakable)).toEqual([true, false]);
+  it('cuts a bracket group at a sentence end before a line break inside it (wrong: one utterance)', () => {
+    expect(texts('[You have slain a wolf.\nYou gained 100 exp.]', 'en')).toEqual(['[You have slain a wolf.', 'You gained 100 exp.]']);
   });
 
   /**

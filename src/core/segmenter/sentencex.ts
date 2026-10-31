@@ -41,7 +41,8 @@ import type { SplitSentences } from './sentences';
  *
  * The owner-written patch-package repairs for #240/#245/#241 narrow that
  * cost: CJK stops before digits/Latin, ambiguous English sentence-final words
- * and continuing ASCII ellipses. Both exports and the readable source are
+ * and continuing ASCII ellipses. #183/#244/#243 pair brackets by type and stop
+ * an inch mark or a clipped word ('em) from passing for a quotation mark. Both exports and the readable source are
  * patched; ADR 0006 records the limits. Raise SEGMENTATION in revision.ts when
  * changed rules alter saved texts.
  *
