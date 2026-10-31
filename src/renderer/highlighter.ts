@@ -825,6 +825,10 @@ ${constants}
   /* The Tap Lock (#325): a tap on the page does nothing, on text or on a link.
      See the 'tapLock' message, tapped() and linkHeld(). */
   var tapLock = false;
+  /* What a tap the lock kept from acting leaves behind, given what it would
+     have done: nothing here, and a \`[renderer]\` line where Debug Mode's
+     splice replaces it (rendererLogSplice(), #336). */
+  var lockedTap = function () {};
   /* The scroll container's overflow as epub.js had set it before the page was
      locked, to be given back when it is unlocked, or null while it is not
      locked; see lockPage(). */
@@ -1307,9 +1311,6 @@ ${constants}
      gesture and taking it would mean \`user-select: none\`, which silently stops
      ::highlight() from painting (see this file's header, and the 20:10 note). */
   function tapped(event) {
-    /* Under the Tap Lock a tap on text is nothing, and one on a link never gets
-       here: linkHeld() has already stopped it (#325). */
-    if (tapLock) return;
     if (linkFollowed(event)) return;
     if (lookupEnabled && (lookupHeld || Date.now() < suppressTapUntil)) return;
     var node = event.target;
@@ -1322,6 +1323,15 @@ ${constants}
     var place = blockOffsetOf(doc, caret.node, caret.offset);
     if (!place) return;
     if (!inside(place.element, event.clientX, event.clientY)) return;
+    /* Under the Tap Lock a tap on the words is nothing (#325). Asked only
+       here, once the tap has found the Block it would read, so that what the
+       lock kept from reading is said and a tap on blank space, which reads
+       nothing anyway, is not (#336). Nothing above acts on the page: a link
+       never gets here under the lock, linkHeld() having stopped it. */
+    if (tapLock) {
+      lockedTap('block ' + place.block);
+      return;
+    }
     lookupKeepBrowsing = false;
     post({ type: TAP, block: place.block, offset: place.offset });
   }
@@ -1388,7 +1398,8 @@ ${constants}
     event.stopPropagation();
     /* Under the Tap Lock (#325) a link is not followed and its line is not
        read either: the tap does nothing at all. */
-    if (!tapLock) tapped(event);
+    if (tapLock) lockedTap('a link');
+    else tapped(event);
   }
 
   /* A finger dragging the page is Browsing too (#52): the page goes where the
@@ -3614,6 +3625,9 @@ function rendererLogSplice(): string {
     '  var rendererLog = installRendererLog({ rendition: rendition, asked: asked, bySection: bySection, ' +
     'post: function (line) { post({ type: RENDERER, line: line }); } });\n' +
     '  renderAhead = rendererLog.traceRenderAhead(renderAhead);\n' +
+    /* A tap the Tap Lock kept from acting (#336): the line a "tapping does
+       nothing" report needs, which the Debug Log had none of. */
+    "  lockedTap = function (what) { post({ type: RENDERER, line: 'a tap on ' + what + ' did nothing: the Tap Lock is on' }); };\n" +
     '  var dispatchPlain = dispatch;\n' +
     "  dispatch = function (message) {\n" +
     "    if (message && message.kind === 'snapshot') {\n" +

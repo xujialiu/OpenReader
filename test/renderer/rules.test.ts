@@ -1256,9 +1256,16 @@ describe('tapping a word reads from there, and it is a tap (ADR 0020)', () => {
     // Heard as the click goes down, so that it runs before epub.js's onclick on the link.
     pin(fn(program, 'adopt'), "contents.document.addEventListener('click', linkHeld, true);", 'highlighter.ts, function adopt');
     pin(fn(program, 'linkHeld'), 'if ((!followOnly && !tapLock) || !linkOf(event.target)) return;', 'highlighter.ts, function linkHeld');
-    // Under the Tap Lock (#325) a stopped link reads nothing either; run in tap-lock.test.ts.
-    pin(fn(program, 'linkHeld'), 'if (!tapLock) tapped(event);', 'highlighter.ts, function linkHeld');
-    pin(tapped, 'if (tapLock) return;', 'highlighter.ts, function tapped');
+    // Under the Tap Lock (#325) a stopped link reads nothing either, and says so
+    // in Debug Mode (#336); run in tap-lock.test.ts.
+    pin(fn(program, 'linkHeld'), "if (tapLock) lockedTap('a link');", 'highlighter.ts, function linkHeld');
+    pin(fn(program, 'linkHeld'), 'else tapped(event);', 'highlighter.ts, function linkHeld');
+    // The lock is asked once the tap has found its Block, so a locked tap on
+    // blank space is not said to have been kept from anything (#336), and
+    // before the tap is posted, so a locked tap posts nothing (#325).
+    pin(tapped, "lockedTap('block ' + place.block);", 'highlighter.ts, function tapped');
+    expect(tapped.indexOf('inside(place.element')).toBeLessThan(tapped.indexOf('if (tapLock)'));
+    expect(tapped.indexOf('if (tapLock)')).toBeLessThan(tapped.indexOf('post({ type: TAP'));
   });
 
   it('reports a place in a Block rather than an Utterance, the Utterances being on the other side', () => {

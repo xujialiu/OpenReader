@@ -5,21 +5,27 @@ status: accepted
 # The Tap Lock is one flag in the page, read where a tap acts
 
 _The product argument is
-[design 0087](../design/0087-a-tap-on-the-page-can-be-locked.md). Issue #325._
+[design 0087](../design/0087-a-tap-on-the-page-can-be-locked.md). Issues #325
+and #336._
 
 ## What was done
 
-- **A device setting.** `AppSettings.tapLock`, default `false`, read by
-  `parseSettings` as `data.tapLock === true`, so a `settings.json` written
-  before #325 reads as unlocked. It is written with the rest of the device's
-  settings and never reaches the Sync Folder. Not in `engineIdentity`.
+- **The reader's own state, for one visit (#336).** `ReadingView` holds it
+  (`useState(false)`), switched by the Player's button and the harness's
+  `taplock`; it is not in `AppSettings` and never written to disk. A
+  `tapLock` left in a `settings.json` by a build before #336 is not read, and
+  goes at the next write. See "The lock ends with the visit" below.
 - **One message, sent again on install.** `TapLockMessage` (`{ kind: 'tapLock', on }`),
   sent by `ReaderBridge.setTapLock` when the value changes and again when the
   page program installs, as `followOnly` is, so a page opened again after its
   process ended (#120, ADR 0067) is locked too.
 - **Two guards in the page program** (`highlighter.ts`), both reading one flag,
   `tapLock`:
-  - `tapped()` returns before anything else, so no `TAP_MESSAGE` is posted.
+  - `tapped()` asks it after the hit-test has found the Block the tap would
+    read and before it posts the `TAP_MESSAGE`, and returns there (#336:
+    first it returned before anything else, but then a locked tap on blank
+    space could not be told from one the lock kept from reading). Nothing
+    above it acts on the page.
   - `linkHeld()`, the capture-phase listener on each section document that
     #191 added for the collapsed Player, now also stops a link's click while
     locked: `preventDefault()` and `stopPropagation()` before epub.js's own
@@ -35,6 +41,48 @@ _The product argument is
   row of its own) and `layout.headEnd` tall. `lock` and `unlock` are new paths
   in the app's own icon set; the shut one is drawn in `useAccent().reading`.
   VoiceOver reads `Lock Taps` or `Unlock Taps`.
+
+## The lock ends with the visit (#336)
+
+The lock was a device setting and outlived the visit: closed one night, it was
+still closed in another Document days later, where a tap on the words did
+nothing. On the owner's iPhone (1.0.3 (24)-beta24-debug) a probe saw every tap
+reach the section document as `touchstart`, `touchend` and `click` on a
+paragraph, `caretPositionFromPoint` find its text node, and no `TAP_MESSAGE`
+posted; the harness's `say` read `tapLock=true`, and nothing in the Debug Log
+named the lock. What was done:
+
+- **One visit is one `ReadingView` on screen.** `ReadingHost` renders the view
+  keyed by the Document, so another Document and every launch mount a fresh
+  one, whose lock starts off. Going Back does not always unmount it: a playing
+  Reading keeps the view parked behind the navigator with `shown` false (#68,
+  ADR 0049). So the view turns its lock off when `shown` goes false, beside
+  closing its Drawers there (#214). Coming back with the Reading Button finds
+  it off.
+- **What leaves it on.** Locking the screen and the app going to the
+  background change neither `shown` nor the view. A page that opens again
+  after its process ended (#120, ADR 0067) is told the lock again by the
+  bridge, as before.
+- **The Debug Log.** `[reading] tap lock on` and `[reading] tap lock off`
+  from the button, and `[reading] tap lock off: left the reader` when leaving
+  turns it off; nothing when the Reader is left with the lock already off.
+  In the page program a tap the lock kept from acting calls `lockedTap(what)`,
+  a no-op in the plain program, which Debug Mode's `rendererLogSplice()`
+  replaces (ADR 0054): `[renderer] a tap on block 6.25 did nothing: the Tap
+  Lock is on`, or `a tap on a link did nothing`. A locked tap on blank space
+  says nothing, since it would have read nothing either. A build without
+  Debug Mode posts nothing new.
+- **What it costs.** iOS ending the app in the background while nothing plays
+  is a new launch, so the lock is off on coming back; the app has no way to
+  tell that from the owner closing it without keeping the lock across
+  launches, which is what this removed. A playing Reading keeps the app
+  running (#75).
+
+Tests: `test/app/held-reading-tap-lock.test.ts` over the real `ReadingHost`
+and `ReadingView` (on and off, held while on screen, off after Back while
+playing and while paused, off in another Document, the log lines);
+`test/renderer/tap-lock.test.ts` for the Debug Mode lines over the stand-in
+page; `test/renderer/rules.test.ts` pins the guard's place in `tapped()`.
 
 ## The Player became a card
 

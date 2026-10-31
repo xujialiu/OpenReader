@@ -708,10 +708,28 @@ export function ReadingView({
   useEffect(() => {
     reading.bridge.setFollowOnly(followOnly);
   }, [reading.bridge, followOnly]);
-  /** The Tap Lock (#325, ADR 0087): the page is told, and told again by the bridge when it opens again. */
+  /**
+   * The **Tap Lock** (CONTEXT.md, #325, ADR 0087): this visit's, not a setting
+   * (#336). A view is mounted for each Document and each launch, so the lock
+   * starts off with every one of them; leaving the Reader turns it off, also
+   * when a playing Reading keeps this view behind the navigator. Locking the
+   * screen or going to the background leaves `shown` as it was, and the lock
+   * with it. The page is told, and told again by the bridge when it opens again.
+   */
+  const [tapLock, setTapLock] = useState(false);
+  const chooseTapLock = useCallback((on: boolean) => {
+    debugLog('reading', `tap lock ${on ? 'on' : 'off'}`);
+    setTapLock(on);
+  }, []);
   useEffect(() => {
-    reading.bridge.setTapLock(settings.tapLock);
-  }, [reading.bridge, settings.tapLock]);
+    if (shown || !tapLock) return;
+    debugLog('reading', 'tap lock off: left the reader');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTapLock(false);
+  }, [shown, tapLock]);
+  useEffect(() => {
+    reading.bridge.setTapLock(tapLock);
+  }, [reading.bridge, tapLock]);
 
   /**
    * The Voice in use as its own Provider describes it — the name it publishes and
@@ -750,7 +768,7 @@ export function ReadingView({
     if (what === 'section') return reading.goToSection(Number(command.section), typeof command.fragment === 'string' ? command.fragment : '');
     if (what === 'rate') return onRate(Number(command.rate));
     if (what === 'collapse') return setCollapsed(Boolean(command.on));
-    if (what === 'taplock') return setSettings((was) => ({ ...was, tapLock: Boolean(command.on) }));
+    if (what === 'taplock') return chooseTapLock(Boolean(command.on));
     if (what === 'sleep') return sleep.choose(command.choice === 'chapter' ? 'chapter' : command.choice === null || command.choice === undefined ? null : Number(command.choice));
     if (what === 'contents') return setContentsOpen(Boolean(command.on));
     if (what === 'voicesheet') {
@@ -788,7 +806,7 @@ export function ReadingView({
       hlog(`line=${JSON.stringify(readingLine(status, settings))} highlight=${JSON.stringify(highlightLine(status))}`);
       hlog(`voiceInUse=${JSON.stringify(voiceInUse)} provider=${settings.provider} voice=${settings.voice} rate=${settings.rate}`);
       hlog(`appearance=${JSON.stringify(settings.appearance)} theme=${settings.theme} ready=${ready.ready}`);
-      hlog(`tapLock=${settings.tapLock} sleep=${JSON.stringify({ choice: sleep.choice, left: sleep.left, since: sleep.since, expired: sleep.expired })} chapterOffered=${chapterOffered}`);
+      hlog(`tapLock=${tapLock} sleep=${JSON.stringify({ choice: sleep.choice, left: sleep.left, since: sleep.since, expired: sleep.expired })} chapterOffered=${chapterOffered}`);
       for (const one of notes) hlog(`note attention=${one.attention} ${JSON.stringify(one.said)}`);
       return;
     }
@@ -876,8 +894,8 @@ export function ReadingView({
         onHeight={reading.bridge.setInset}
         onOpenHeight={reading.bridge.setOpenPlayer}
         barHeight={barHeight}
-        tapLock={settings.tapLock}
-        onTapLock={(on) => setSettings((was) => ({ ...was, tapLock: on }))}
+        tapLock={tapLock}
+        onTapLock={chooseTapLock}
         sleep={sleep}
         chapterOffered={chapterOffered}
         onSleep={sleep.choose}

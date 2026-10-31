@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { FOLLOWING_STATE_MESSAGE, SELECTION_MESSAGE, TAP_MESSAGE } from '../../src/renderer/messages';
+import { FOLLOWING_STATE_MESSAGE, RENDERER_MESSAGE, SELECTION_MESSAGE, TAP_MESSAGE } from '../../src/renderer/messages';
 
 import { standInPage, type Section, type StandInPage } from './stand-in-page';
 
@@ -79,5 +79,58 @@ describe('with the Tap Lock off again', () => {
     page.click(section, section.document.getElementById('link'));
     expect({ followed: page.followed, taps: taps(page) })
       .toEqual({ followed: ['/OEBPS/ch7.xhtml#x'], taps: [{ type: TAP_MESSAGE, block: '5.0', offset: 1 }] });
+  });
+});
+
+/**
+ * **What a locked tap leaves in the Debug Log (#336).** A Debug Mode build's
+ * program says, as a `[renderer]` line, each tap the lock kept from acting: one
+ * on the words, naming the Block, and one on a link. A tap on blank space would
+ * have done nothing anyway, so it says nothing; and the plain program, as every
+ * build without Debug Mode has it, says nothing at all (ADR 0054).
+ */
+describe('the Debug Log under the Tap Lock', () => {
+  const BLANK = '<p id="plain">A line of plain words to tap on.</p><p id="line"><a id="link" href="ch7.xhtml#x">Chapter Seven</a></p><div id="blank"></div>';
+  function opened(debugMode: boolean): { page: StandInPage; section: Section } {
+    const page = standInPage({ debugMode });
+    const section = page.addSection(5, BLANK);
+    page.sweep();
+    return { page, section };
+  }
+  const lines = (page: StandInPage) => page.posted.filter((m) => m.type === RENDERER_MESSAGE && /Tap Lock/.test(m.line)).map((m) => m.line);
+
+  it('says which Block a locked tap on the words was kept from reading', () => {
+    const { page, section } = opened(true);
+    page.send({ kind: 'tapLock', on: true });
+    page.click(section, section.document.getElementById('plain'));
+    expect({ lines: lines(page), taps: taps(page) }).toEqual({ lines: ['a tap on block 5.0 did nothing: the Tap Lock is on'], taps: [] });
+  });
+
+  it('says a locked tap on a link was not followed', () => {
+    const { page, section } = opened(true);
+    page.send({ kind: 'tapLock', on: true });
+    page.click(section, section.document.getElementById('link'));
+    expect({ lines: lines(page), followed: page.followed }).toEqual({ lines: ['a tap on a link did nothing: the Tap Lock is on'], followed: [] });
+  });
+
+  it('says nothing for a locked tap on blank space, which would have done nothing anyway', () => {
+    const { page, section } = opened(true);
+    page.send({ kind: 'tapLock', on: true });
+    page.click(section, section.document.getElementById('blank'));
+    expect(lines(page)).toEqual([]);
+  });
+
+  it('says nothing for a tap with the lock off', () => {
+    const { page, section } = opened(true);
+    page.click(section, section.document.getElementById('plain'));
+    expect({ lines: lines(page), taps: taps(page).length }).toEqual({ lines: [], taps: 1 });
+  });
+
+  it('says nothing in a build without Debug Mode', () => {
+    const { page, section } = opened(false);
+    page.send({ kind: 'tapLock', on: true });
+    page.click(section, section.document.getElementById('plain'));
+    page.click(section, section.document.getElementById('link'));
+    expect(page.posted.filter((m) => m.type === RENDERER_MESSAGE)).toEqual([]);
   });
 });

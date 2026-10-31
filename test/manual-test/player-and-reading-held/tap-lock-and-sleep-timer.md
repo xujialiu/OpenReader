@@ -17,8 +17,18 @@ chapter test: it is false until the page reports the spine.
 Harness: `{"do":"taplock","on":true}`; `say` prints `tapLock=…`. Real touches:
 `ax.py touch 'Lock Taps'` / `'Unlock Taps'`, read back from the tree each time.
 Tap text and a link with `ax.py`, locked and unlocked, open and collapsed, and
-read `[reading] seek to utterance N` in the Debug Log: a locked tap writes none.
+read `[reading] seek to utterance N` in the Debug Log: a locked tap writes none,
+and writes `[renderer] a tap on block B did nothing: the Tap Lock is on` (or
+`a tap on a link`) instead; a locked tap on blank space writes neither.
 A drag still turns A to M; a long press still opens a lookup.
+
+The lock is for one visit (#336). Lock, then: Back while paused and open the
+Document again; Back while a Reading plays and come back with the Reading
+Button; open another Document; relaunch. Each finds `tapLock=false`, and the
+Back cases write `[reading] tap lock off: left the reader`. Locked with the
+device locked (`kit/lock-device.sh`) or the app in the background, it is still
+`tapLock=true` on coming back. The harness `taplock` writes the same
+`[reading] tap lock on` / `off` lines as the button.
 
 ## Sleep Timer
 

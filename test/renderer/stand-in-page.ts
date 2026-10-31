@@ -95,8 +95,10 @@ export interface Section {
  * @param options.toc The navigation epub.js would hold as `book.navigation.toc`,
  * which the program reads for the Contents' fragments (#212). Absent: no
  * navigation, as before it had loaded.
+ * @param options.debugMode The program as a Debug Mode build has it, with
+ * `renderer-log.ts` spliced in (ADR 0054). Absent: the plain program.
  */
-export function standInPage(options: { toc?: readonly unknown[] } = {}) {
+export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boolean } = {}) {
   const posted: any[] = [];
   /** What the program asked epub.js to display, in order. */
   const displays: unknown[] = [];
@@ -144,9 +146,11 @@ export function standInPage(options: { toc?: readonly unknown[] } = {}) {
   const window: any = {
     ReactNativeWebView: { postMessage: (data: string) => posted.push(JSON.parse(data)) },
     requestAnimationFrame: () => 1, cancelAnimationFrame() {}, setTimeout, performance: { now: () => 0 },
+    // The Debug Mode program's watchdog (`renderer-log.ts`); it never fires here.
+    setInterval: () => 0, clearInterval() {},
   };
   const top = { getElementById: () => null, createElement: () => ({ style: {}, textContent: '' }), head: { appendChild() {} } };
-  vm.runInContext(highlighterSource(), vm.createContext({ window, document: top, rendition, book, performance: window.performance, setTimeout, clearTimeout, console, Promise }));
+  vm.runInContext(highlighterSource(undefined, undefined, undefined, options.debugMode ?? false), vm.createContext({ window, document: top, rendition, book, performance: window.performance, setTimeout, clearTimeout, console, Promise }));
   const follow = linkHandler();
 
   /** A section epub.js has rendered: its links given epub.js's `onclick` first, then the content hook, as in epub.js's Contents. */

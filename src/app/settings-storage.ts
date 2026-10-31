@@ -108,8 +108,6 @@ export function parseSettings(value: unknown): AppSettings {
     },
     following: { scrolling: readScrolling(following.scrolling), linePosition: readLinePosition(following.linePosition) },
     drawerHeight: readDrawerHeight(data.drawerHeight),
-    // On only as written: a file from before #325 has none, and taps act.
-    tapLock: data.tapLock === true,
     sentencesAtOnce: readSentencesAtOnce(data.sentencesAtOnce),
     appearance: {
       font: readFont(appearance.font),

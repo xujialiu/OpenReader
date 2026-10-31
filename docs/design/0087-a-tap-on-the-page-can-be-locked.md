@@ -1,8 +1,8 @@
 # A tap on the page can be locked
 
 _The engineering half of this decision is
-[ADR 0087](../adr/0087-the-tap-lock-is-one-flag-in-the-page.md). Issue #325.
-It adds to "Tapping a sentence reads from there" and "A link in the book moves
+[ADR 0087](../adr/0087-the-tap-lock-is-one-flag-in-the-page.md). Issues #325
+and #336. It adds to "Tapping a sentence reads from there" and "A link in the book moves
 the page, and nothing else" in
 [decision 0020](0020-the-player-and-knowing-where-you-are.md)._
 
@@ -30,8 +30,11 @@ Two things still work, because neither is a tap:
 - **Pressing on a word to look it up** or to translate a passage. Looking up
   has its own switch in Settings for anyone who wants it off.
 
-The lock stays closed until the owner opens it, across books and after the app
-is closed, on this phone only. It is never sent to the owner's other devices.
+The lock is for one visit to the book. It stays closed while the owner stays
+in the reader, with the screen locked or the app in the background in between,
+and it opens again by itself when the owner goes back to the library, even
+with the book still being read aloud, when another book is opened, and
+whenever the app starts again. It is never sent to the owner's other devices.
 
 ## Who it is for
 
@@ -70,6 +73,12 @@ the same for the words, when the owner says so.
   being read. To see the lock, the owner opens the player.
 - **Locked, the only way to point the reading at a sentence is the player**:
   the sentence and paragraph buttons, and the contents.
+- **The lock has to be closed again for each listen.** Going back to the
+  library, even for a moment while the book reads on, opens it. So does the
+  phone ending the app in the background while nothing is being read: the
+  app cannot tell that from the owner closing it, and coming back is a new
+  start. While the book is being read the phone keeps the app running, so a
+  night of listening with the screen locked keeps the lock.
 
 ## Turned down
 
@@ -92,7 +101,16 @@ the same for the words, when the owner says so.
 - **The player across the full width, down to the bottom of the screen**, as
   it was. It is what let its buttons reach the home bar. As a card it keeps
   every button clear of it.
-- **Opening the lock again when the book is closed.** It would be safer for an
-  owner who forgets it is on, but the padlock is in plain sight whenever the
-  player is open, and a lock the owner has to close again every evening is one
-  they would stop using.
+- **Keeping the lock closed until the owner opens it**, across books and
+  after the app is closed, as it first was. A lock closed one night was still
+  closed when the owner opened another book days later; tapping its words
+  did nothing, with nothing to say why, and the book looked broken (#336).
+  The padlock is in plain sight only while the player is open, and nobody
+  looks for a lock they do not remember closing.
+- **Opening the lock when the screen locks or the app goes to the
+  background.** Listening in bed, the owner locks the screen and wakes it
+  again in the middle of the same listen; opening the lock there would bring
+  back the stray taps it exists to stop.
+- **Saying so when a locked tap lands**, now that the lock is easier to
+  forget. Opening it again on leaving the book means it is never left over
+  from another day, and the padlock still says it once.

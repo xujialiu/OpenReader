@@ -417,7 +417,9 @@ _Avoid_: play button, mini player, floating button, now playing
 The owner's switch in the Player under which a tap on the reading page does
 nothing: a tap on its words does not move the Reading, and a tap on a link does
 not take the page away. Dragging the page and pressing on a word to look it up
-are untouched. It stays on, on that device, until the owner turns it off.
+are untouched. It stays on while the owner stays in the reader, with the screen
+locked or the app in the background, and is off again once the owner leaves the
+reader or the app starts anew.
 _Avoid_: lock (alone), page lock, touch lock, screen lock
 
 **Live Activity**:
