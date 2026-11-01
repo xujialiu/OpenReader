@@ -168,4 +168,13 @@ describe('what the move drawer offers in each folder (#151)', () => {
   it('ignores a moved Folder that no longer exists', () => {
     expect(moveChoice(tree, [{ kind: 'folder', id: 'gone' }], null, 'a').canMove).toBe(true);
   });
+  it('for search results, acts wherever at least one selected Document is not already, the Folder search began in included (#339)', () => {
+    const found = placeDocument(placeDocument(tree, 'english', 'b'), 'fiction', 'c');
+    const moving = [{ kind: 'document' as const, id: 'english' }, { kind: 'document' as const, id: 'fiction' }];
+    expect(moveChoice(found, moving, 'b', 'b', 'results').canMove).toBe(true);
+    expect(moveChoice(found, [moving[0]], 'b', 'b', 'results').canMove).toBe(false);
+    expect(moveChoice(found, [moving[1]], 'b', 'b', 'results').canMove).toBe(true);
+    expect(moveChoice(found, moving, 'b', null, 'results').canMove).toBe(true);
+    expect(moveChoice(found, moving, 'b', 'b', 'results').folders.map((folder) => folder.id)).toEqual(['c']);
+  });
 });

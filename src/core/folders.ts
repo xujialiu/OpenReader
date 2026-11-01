@@ -152,19 +152,32 @@ export type LibraryTarget = { kind: 'folder' | 'document'; id: string };
 export const targetKey = (target: LibraryTarget): string => `${target.kind}:${target.id}`;
 
 /**
+ * Where a selection was made, which decides what it may hold (#339, design
+ * 0090). `folder`: the rows of the Folder being browsed, its Folders and
+ * Documents alike, all of one level (#128). `results`: the rows Library Search
+ * found, which are Documents only and may sit in any Folders.
+ */
+export type SelectionScope = 'folder' | 'results';
+
+/**
  * What the move drawer offers at `shown` while `moving` leaves `from` (#151):
  * whether its `Move` can act there, and the Folders it lists. Every child
  * Folder is listed, a Folder being moved included, as Files lists it; `Move`
  * cannot act where the entries already are, nor inside a Folder being moved.
+ * Search results come from many Folders, so `from` is only where the drawer
+ * opens: `Move` acts wherever at least one of them is not already (#339).
  */
-export function moveChoice(tree: FolderTree, moving: readonly LibraryTarget[], from: FolderId | null, shown: FolderId | null): { canMove: boolean; folders: Folder[] } {
+export function moveChoice(tree: FolderTree, moving: readonly LibraryTarget[], from: FolderId | null, shown: FolderId | null, scope: SelectionScope = 'folder'): { canMove: boolean; folders: Folder[] } {
+  if (scope === 'results') {
+    return { canMove: moving.some((one) => (tree.documents[one.id] ?? null) !== shown), folders: childFolders(tree, shown) };
+  }
   const inside = new Set(moving.flatMap((one) =>
     one.kind === 'folder' && tree.folders.some((folder) => folder.id === one.id) ? [...folderSubtree(tree, one.id)] : []));
   return { canMove: shown !== from && !(shown !== null && inside.has(shown)), folders: childFolders(tree, shown) };
 }
 
-/** Reject stale, cross-level or duplicate selections before any side effect. */
-export function selectionPlan(tree: FolderTree, targets: readonly LibraryTarget[], documents: readonly string[]) {
+/** Reject stale, cross-level or duplicate selections before any side effect; a selection of results holds live Documents from any level. */
+export function selectionPlan(tree: FolderTree, targets: readonly LibraryTarget[], documents: readonly string[], scope: SelectionScope = 'folder') {
   if (!targets.length) throw new Error('Select at least one entry.');
   const live = new Set(documents);
   const keys = new Set<string>();
@@ -173,8 +186,9 @@ export function selectionPlan(tree: FolderTree, targets: readonly LibraryTarget[
     const key = targetKey(target);
     if (keys.has(key)) throw new Error('An entry was selected twice.');
     keys.add(key);
+    if (scope === 'results' && target.kind !== 'document') throw new Error('The selected entries changed. Review the selection and try again.');
     const parent = target.kind === 'folder' ? folderAt(tree, target.id).parent : tree.documents[target.id] ?? null;
-    if (parent !== tree.current || (target.kind === 'document' && !live.has(target.id))) {
+    if ((scope === 'folder' && parent !== tree.current) || (target.kind === 'document' && !live.has(target.id))) {
       throw new Error('The selected entries changed. Review the selection and try again.');
     }
     const subtree = target.kind === 'folder' ? folderSubtree(tree, target.id) : new Set<FolderId>();
@@ -191,15 +205,20 @@ export function selectionPlan(tree: FolderTree, targets: readonly LibraryTarget[
  * not moved into a Folder already holding one of its name (#227); two of the
  * selection with one name refuse each other. A Document it does not name is
  * moved unchecked.
+ *
+ * A selection of results leaves the Documents already in `parent` where they
+ * are, and still counts their names; it refuses only when every one of them is
+ * already there (#339).
  */
-export function moveSelection(tree: FolderTree, targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null, titles: Readonly<Record<string, string>> = {}): FolderTree {
-  const plan = selectionPlan(tree, targets, documents);
+export function moveSelection(tree: FolderTree, targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null, titles: Readonly<Record<string, string>> = {}, scope: SelectionScope = 'folder'): FolderTree {
+  const plan = selectionPlan(tree, targets, documents, scope);
   parentExists(tree, parent);
-  if (parent === tree.current) throw new Error('Choose a different destination.');
+  const moving = scope === 'results' ? targets.filter((target) => (tree.documents[target.id] ?? null) !== parent) : targets;
+  if (scope === 'folder' ? parent === tree.current : !moving.length) throw new Error('Choose a different destination.');
   if (parent !== null && plan.folders.has(parent)) throw new Error('A selection cannot be moved into itself or its subfolders.');
   const named = Object.entries(titles).map(([id, title]) => ({ id, title }));
   let next = tree;
-  for (const target of targets) {
+  for (const target of moving) {
     if (target.kind === 'document') {
       const title: string | undefined = titles[target.id];
       const problem = title === undefined ? null : documentNameProblem(next, named, title, parent, target.id);
@@ -254,14 +273,14 @@ export function createFolderStore(io: { read(): string | null; write(text: strin
     rename(id: FolderId, name: string) { writable(); save(putFolder(snapshot.tree, { ...folderAt(snapshot.tree, id), name })); },
     moveFolder(id: FolderId, parent: FolderId | null) { writable(); save(putFolder(snapshot.tree, { ...folderAt(snapshot.tree, id), parent })); },
     place(document: string, parent: FolderId | null) { writable(); save(placeDocument(snapshot.tree, document, parent)); },
-    moveEntries(targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null, titles?: Readonly<Record<string, string>>) {
+    moveEntries(targets: readonly LibraryTarget[], documents: readonly string[], parent: FolderId | null, titles?: Readonly<Record<string, string>>, scope: SelectionScope = 'folder') {
       writable();
-      save(moveSelection(snapshot.tree, targets, documents, parent, titles));
+      save(moveSelection(snapshot.tree, targets, documents, parent, titles, scope));
     },
     /** One lock covers the whole batch, including standalone Documents and gaps between Folders. */
-    async deleteEntries(targets: readonly LibraryTarget[], documents: readonly string[], remove: (id: string) => Promise<void>, completed: (target: LibraryTarget) => void) {
+    async deleteEntries(targets: readonly LibraryTarget[], documents: readonly string[], remove: (id: string) => Promise<void>, completed: (target: LibraryTarget) => void, scope: SelectionScope = 'folder') {
       writable();
-      const { plans } = selectionPlan(snapshot.tree, targets, documents);
+      const { plans } = selectionPlan(snapshot.tree, targets, documents, scope);
       snapshot = { ...snapshot, busy: true }; emit();
       try {
         for (const plan of plans) {

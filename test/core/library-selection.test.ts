@@ -96,3 +96,59 @@ describe('current-level Library selection (#128)', () => {
     expect(store.getSnapshot().busy).toBe(false);
   });
 });
+
+describe('a selection of search results, Documents from any Folders (#339)', () => {
+  /** `one` at the root, `inside` in Nested (b), `deep` in Destination (c). */
+  function results() {
+    const base = fixture();
+    const tree = placeDocument(base.tree, 'deep', 'c');
+    const write = vi.fn();
+    const store = createFolderStore({ read: () => JSON.stringify(tree), write, id: () => 'new' });
+    return { tree, store, write, documents: ['inside', 'one', 'deep'] };
+  }
+  it('plans Documents from several levels, but refuses a Folder, a missing Document and a duplicate', () => {
+    const { tree, documents } = results();
+    const plan = selectionPlan(tree, [document('one'), document('inside'), document('deep')], documents, 'results');
+    expect([...plan.documents]).toEqual(['one', 'inside', 'deep']);
+    expect(plan.folders.size).toBe(0);
+    for (const targets of [[], [folder('a')], [document('gone')], [document('one'), document('one')]]) {
+      expect(() => selectionPlan(tree, targets, documents, 'results')).toThrow();
+    }
+    // The same cross-level selection is still refused where a Folder's own rows were selected.
+    expect(() => selectionPlan(tree, [document('one'), document('inside')], documents)).toThrow('changed');
+  });
+  it('moves the Documents not yet in the destination in one write and leaves the ones already there', () => {
+    const { store, write, documents, tree } = results();
+    store.moveEntries([document('one'), document('inside'), document('deep')], documents, 'c', undefined, 'results');
+    expect(write).toHaveBeenCalledOnce();
+    expect(store.getSnapshot().tree.documents).toEqual({ one: 'c', inside: 'c', deep: 'c' });
+    expect(store.getSnapshot().tree.current).toBe(tree.current);
+  });
+  it('moves to the Library root, including from the Folder being browsed', () => {
+    const { store, documents } = results();
+    store.moveEntries([document('inside'), document('deep')], documents, null, undefined, 'results');
+    expect(store.getSnapshot().tree.documents).toEqual({});
+  });
+  it('refuses only when every selected Document is already in the destination', () => {
+    const { tree, documents } = results();
+    expect(() => moveSelection(tree, [document('deep')], documents, 'c', {}, 'results')).toThrow('different destination');
+    expect(moveSelection(tree, [document('deep'), document('one')], documents, 'c', {}, 'results').documents.one).toBe('c');
+  });
+  it('keeps the same-name refusal, counting a namesake that stays where it is, and writes nothing (#227)', () => {
+    const { store, write, documents } = results();
+    const titles = { one: 'Notes', inside: 'Other', deep: 'notes' };
+    expect(() => store.moveEntries([document('one'), document('inside'), document('deep')], documents, 'c', titles, 'results'))
+      .toThrow('“Notes”: A document with this name already exists here. Rename it first.');
+    expect(write).not.toHaveBeenCalled();
+    expect(store.getSnapshot().tree.documents.one).toBeUndefined();
+  });
+  it('deletes Documents from several levels under one lock', async () => {
+    const { store, documents } = results();
+    const remove = vi.fn(async () => { expect(store.getSnapshot().busy).toBe(true); });
+    const complete = vi.fn();
+    await store.deleteEntries([document('inside'), document('deep')], documents, remove, complete, 'results');
+    expect(remove.mock.calls.map(([id]) => id)).toEqual(['inside', 'deep']);
+    expect(complete.mock.calls).toEqual([[document('inside')], [document('deep')]]);
+    expect(store.getSnapshot().busy).toBe(false);
+  });
+});
