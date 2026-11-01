@@ -222,6 +222,14 @@ final class LibrarySearchProbe: XCTestCase {
     let actions = app.buttons["Library actions"]
     XCTAssertTrue(actions.waitForExistence(timeout: 5), "Library actions button must exist")
     actions.tap()
+    usleep(400_000)
+    // The press itself must leave the list where it is (#339): an app-drawn `…`
+    // in the title bar reached UIKit's scroll-to-top, so search noted the top.
+    if let pressed = row(app, labelled: settledLabel) {
+      XCTAssertEqual(pressed.frame.minY, settledY, accuracy: 4, "Pressing … must not move the list (\(pressed.frame.minY) vs \(settledY))")
+    } else {
+      XCTFail("the settled top row '\(settledLabel)' left the screen when … was pressed")
+    }
     let search = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Search")).firstMatch
     XCTAssertTrue(search.waitForExistence(timeout: 5), "The actions drawer must offer Search")
     search.tap()
@@ -255,6 +263,80 @@ final class LibrarySearchProbe: XCTestCase {
     print("[diag] \(line)")
     let attachment = XCTAttachment(string: line)
     attachment.name = "nonzero-browse-frames"; attachment.lifetime = .keepAlways; add(attachment)
+  }
+
+  /// #339: Settings is a bar item the phone draws, so pressing it, and coming
+  /// back, leaves a scrolled list where it was.
+  func testSettingsRoundTripKeepsTheListWhereItWas() {
+    let app = launch()
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5), "list must exist")
+    list.swipeUp(velocity: .slow)
+    sleep(2)
+    guard let top = documentRows(app).min(by: { $0.frame.minY < $1.frame.minY }), top.frame.minY < 120 else {
+      shot("settings-round-trip-not-scrolled"); tree(app, "settings-round-trip-not-scrolled-tree")
+      XCTFail("the swipe must leave the list away from its top"); return
+    }
+    let label = top.label, y = top.frame.minY
+    let settings = app.buttons["Settings"]
+    XCTAssertTrue(settings.waitForExistence(timeout: 5), "Settings button must exist")
+    settings.tap()
+    XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5), "Settings must open")
+    app.navigationBars.buttons.firstMatch.tap()
+    XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5), "Back must return to the Library")
+    sleep(1)
+    guard let back = row(app, labelled: label) else {
+      shot("settings-round-trip-row-missing"); tree(app, "settings-round-trip-row-missing-tree")
+      XCTFail("'\(label)' must still be on screen after the Settings round trip"); return
+    }
+    XCTAssertEqual(back.frame.minY, y, accuracy: 4, "A Settings round trip must leave the list where it was (\(back.frame.minY) vs \(y))")
+    print("[diag] settings-round-trip: '\(label)' @\(y) -> @\(back.frame.minY)")
+  }
+
+  /// #339: a position at the very bottom of the list comes back exactly on
+  /// Close, not short by the home indicator's room (34 pt on an iPhone).
+  func testCancelRestoresTheBottomOfTheList() {
+    let app = launch()
+    let list = app.scrollViews.firstMatch
+    XCTAssertTrue(list.waitForExistence(timeout: 5), "list must exist")
+    for _ in 0..<4 { list.swipeUp(velocity: .fast); usleep(600_000) }
+    sleep(2)
+    let window = app.windows.firstMatch.frame
+    guard let bottom = documentRows(app).filter({ $0.frame.maxY <= window.maxY }).max(by: { $0.frame.minY < $1.frame.minY }) else {
+      shot("bottom-no-rows"); tree(app, "bottom-no-rows-tree")
+      XCTFail("the list's bottom must show Document rows"); return
+    }
+    let label = bottom.label, y = bottom.frame.minY
+    shot("bottom-before-search")
+    guard let field = openSearch(app) else { return }
+    field.typeText("Short")
+    sleep(1)
+    closeButton(app).tap()
+    sleep(2)
+    guard let back = row(app, labelled: label) else {
+      shot("bottom-row-missing"); tree(app, "bottom-row-missing-tree")
+      XCTFail("'\(label)' must be back after Close"); return
+    }
+    shot("bottom-after-close")
+    XCTAssertEqual(back.frame.minY, y, accuracy: 4, "Close must return to the list's very bottom (\(back.frame.minY) vs \(y))")
+    print("[diag] bottom-restore: '\(label)' @\(y) -> @\(back.frame.minY)")
+  }
+
+  /// Document rows on screen, below the title bar.
+  private func documentRows(_ app: XCUIApplication) -> [XCUIElement] {
+    app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Not started.")).allElementsBoundByIndex
+      .filter { $0.exists && $0.frame.minY >= 60 }
+  }
+
+  /// The row with exactly this label, waiting up to six seconds for it.
+  private func row(_ app: XCUIApplication, labelled label: String) -> XCUIElement? {
+    for _ in 0..<20 {
+      if let found = app.buttons.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex.first(where: { $0.exists }) {
+        return found
+      }
+      usleep(300_000)
+    }
+    return nil
   }
 
   /// Contract: opening a result and returning retains the query AND a nonzero

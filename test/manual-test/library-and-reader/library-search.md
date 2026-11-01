@@ -115,6 +115,14 @@ simulator to repair a probe query.
   scrolled position before Search starts, and `testCancelRestoresNonzeroBrowse` fails (464 against 72,
   twice). Bar touches made by tooling scroll the list too: do not touch the bar to "wake" a screen
   mid-measurement.
+- From `1.0.4 (25)-beta4` `…` and Settings are native bar items (ADR 0090). Before that build, on the same
+  device with real AXe touch pairs from a middle position: the React Native `…` moved the list to its top
+  1 of 1 (and 6 of 6 above); with the list's `scrollsToTop` off, 3 of 3 presses left it and Close returned
+  exactly (58 to 58, -12 to -12); with `…` as a native item, 3 of 3 left it and Close returned exactly (58,
+  -12, -82). A 0.2 s touch on the status bar never reached the app through AXe, so the status-bar tap to the
+  top is unmeasured. `testCancelRestoresNonzeroBrowse` now also fails at the press if `…` moves the list;
+  `testSettingsRoundTripKeepsTheListWhereItWas` covers Settings and
+  `testCancelRestoresTheBottomOfTheList` the 34 pt shortfall at the very bottom (-264 came back as -230).
 
 ## Keyboard and coverage limits
 
