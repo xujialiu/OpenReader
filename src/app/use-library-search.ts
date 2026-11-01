@@ -1,78 +1,64 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Platform, type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import type { SearchBarCommands, SearchBarProps } from 'react-native-screens';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { FlatList, NativeScrollEvent, NativeSyntheticEvent, TextInput } from 'react-native';
 import type { DocumentId } from '../core/document';
 import type { ScreenProps } from './routes';
 import { libraryQuery, type LibraryRow } from './library-search';
 
 /**
- * One Library page's transient search. Neither query nor scroll positions go
- * into route params or storage. The native field owns focus; blur alone is
- * not cancellation. A result-to-Reader round trip is the only navigation
- * that keeps the search (#332, design 0090).
+ * One Library page's transient search (#332, #339, design 0090). Search exists
+ * only between `start` (the Library actions' Search, or Command-F) and `exit`
+ * (the close control, Escape, or leaving the page): the field is the page's
+ * own and is drawn only while `active`. Neither the query nor a list position
+ * goes into route parameters or storage. A result-to-Reader round trip is the
+ * only navigation that keeps the search.
+ *
+ * List positions are the list's own, measured from the top of its content:
+ * the title bar no longer carries a search field, so it is opaque and UIKit
+ * adds no inset of its own above the list (ADR 0090).
  */
-export function useLibrarySearch(
-  navigation: ScreenProps<'Library' | 'Folder'>['navigation'], routeKey: string, blocked: boolean,
-  { tintColor, textColor }: Pick<SearchBarProps, 'tintColor' | 'textColor'> = {},
-) {
+export function useLibrarySearch(navigation: ScreenProps<'Library' | 'Folder'>['navigation'], routeKey: string) {
   const [state, setState] = useState({ active: false, query: '' });
-  const bar = useRef<SearchBarCommands>(null);
+  const field = useRef<TextInput>(null);
   const list = useRef<Pick<FlatList<LibraryRow>, 'scrollToOffset'>>(null);
   const live = useRef({
-    active: false, query: '', blocked, y: 0, inset: 0, browseY: 0, resultY: 0,
-    restore: null as 'browse' | 'results' | 'top' | 'closed-browse' | null, reader: null as DocumentId | null, suspended: false,
+    active: false, query: '', y: 0, inset: 0, browseY: 0, resultY: 0,
+    restore: null as 'browse' | 'results' | 'top' | null, reader: null as DocumentId | null, suspended: false,
   });
-  useLayoutEffect(() => { live.current.blocked = blocked; }, [blocked]);
 
+  const target = () => {
+    const now = live.current;
+    return now.restore === 'browse' ? now.browseY : now.restore === 'results' ? now.resultY : 0;
+  };
   const restoreScroll = useCallback(() => {
-    const now = live.current;
-    if (now.restore === null) return;
-    if (Platform.OS === 'ios') {
-      bar.current?.restoreScrollPosition(now.restore);
-    } else {
-      const position = now.restore === 'browse' || now.restore === 'closed-browse' ? now.browseY : now.restore === 'results' ? now.resultY : 0;
-      list.current?.scrollToOffset({ offset: position - now.inset, animated: false });
-    }
+    if (live.current.restore === null) return;
+    list.current?.scrollToOffset({ offset: target() - live.current.inset, animated: false });
   }, []);
-  const begin = useCallback(() => {
+
+  /** Opens search, whose field takes the keyboard as it appears; on a search already open, puts the cursor back in the field. */
+  const start = useCallback(() => {
     const now = live.current;
-    if (now.blocked || now.suspended || !navigation.isFocused()) return false;
-    if (!now.active) {
-      // Capture before focus changes the native header/insets or rows change.
-      if (Platform.OS === 'ios') bar.current?.captureScrollPosition('browse');
-      else now.browseY = now.y;
-      now.restore = null;
-      now.active = true;
-      setState({ active: true, query: now.query });
-    }
-    return true;
+    if (now.suspended || !navigation.isFocused()) return;
+    if (now.active) { field.current?.focus(); return; }
+    now.browseY = now.y;
+    now.restore = null;
+    now.active = true;
+    setState({ active: true, query: now.query });
   }, [navigation]);
-  const cancel = useCallback(() => {
+  /** Ends search: the query goes, the field and keyboard with it, and the list returns to where browsing was. */
+  const exit = useCallback(() => {
     const now = live.current;
     if (!now.active && !now.query) return;
-    now.restore = 'closed-browse';
+    now.restore = 'browse';
     now.active = false; now.query = ''; now.reader = null; now.suspended = false;
     setState({ active: false, query: '' });
   }, []);
-  const exit = useCallback(() => {
-    cancel();
-    // cancelSearch emits both Cancel and an empty change event. Neither may
-    // start a new search after the local state has been cleared.
-    bar.current?.cancelSearch();
-  }, [cancel]);
-  const start = useCallback(() => {
-    if (begin()) bar.current?.focus();
-  }, [begin]);
   const change = useCallback((text: string) => {
     const now = live.current;
-    if (now.suspended || now.blocked || !navigation.isFocused()) return;
-    if (!now.active && !text) return;
-    if (!begin()) return;
-    if (now.query === text) return;
+    if (!now.active || now.suspended || now.query === text) return;
     now.query = text;
     now.restore = libraryQuery(text) ? 'top' : 'browse';
     setState({ active: true, query: text });
-  }, [begin, navigation]);
+  }, []);
 
   useEffect(() => {
     const leave = () => {
@@ -83,7 +69,7 @@ export function useLibrarySearch(
       const params = destination.params;
       if (now.reader !== null && destination.name === 'Reader' && params && 'id' in params && params.id === now.reader) {
         now.suspended = true;
-        bar.current?.blur();
+        field.current?.blur();
       } else {
         exit();
       }
@@ -94,59 +80,39 @@ export function useLibrarySearch(
       const now = live.current;
       if (now.suspended) now.restore = 'results';
       now.suspended = false; now.reader = null;
-      bar.current?.setText(now.query);
-      bar.current?.blur();
       restoreScroll();
     });
     return () => { unblur(); unstate(); unfocus(); };
   }, [exit, navigation, restoreScroll, routeKey]);
 
-  // Restore after rows commit and again if native content size changes after
-  // that request. A short result list may still be laid out at the first call.
-  // On iOS retain the semantic request until the next drag/search action: only
-  // UIKit knows its adjusted inset; RN's event reports the explicit inset.
+  // Restore after rows commit, and again when the content size changes after
+  // that: the first request may still meet the old, shorter list.
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(restoreScroll);
     return () => cancelAnimationFrame(frame);
   }, [state, restoreScroll]);
 
-  const options = useMemo<SearchBarProps>(() => ({
-    ref: bar, placeholder: 'Search Library', placement: 'stacked', allowToolbarIntegration: false, tintColor, textColor,
-    hideWhenScrolling: !state.active, hideNavigationBar: false, obscureBackground: false, autoCapitalize: 'none',
-    onFocus: () => { begin(); },
-    onChangeText: (event) => change(event.nativeEvent.text),
-    onCancelButtonPress: () => {
-      if (!live.current.suspended && navigation.isFocused()) cancel();
-    },
-    onSearchButtonPress: () => bar.current?.blur(),
-  }), [begin, cancel, change, navigation, state.active, textColor, tintColor]);
-  useLayoutEffect(() => {
-    navigation.setOptions({ headerSearchBarOptions: blocked ? undefined : options });
-  }, [blocked, navigation, options]);
-
   return {
-    ...state, start, exit,
+    ...state, start, exit, change, field,
+    blur: () => field.current?.blur(),
     attachList: (node: Pick<FlatList<LibraryRow>, 'scrollToOffset'> | null) => { list.current = node; },
     /** Called immediately before navigating, never for imports or the Reading Button. */
     openingResult: (id: DocumentId) => {
-      if (!live.current.active || !libraryQuery(live.current.query)) return;
-      live.current.reader = id;
-      if (Platform.OS === 'ios') bar.current?.captureScrollPosition('results');
-      else live.current.resultY = live.current.y;
-      live.current.restore = null;
-      live.current.suspended = true;
-      bar.current?.blur();
+      const now = live.current;
+      if (!now.active || !libraryQuery(now.query)) return;
+      now.reader = id;
+      now.resultY = now.y;
+      now.restore = null;
+      now.suspended = true;
+      field.current?.blur();
     },
     onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      // The iOS event says contentInset.top=0 even when UIKit adds 116 pt.
-      // Neither its raw offset nor its explicit inset owns our saved position.
-      if (Platform.OS === 'ios') return;
       const now = live.current;
-      now.inset = event.nativeEvent.contentInset.top;
+      // The Reader's transition may move the list behind it; that is not where the results were left.
       if (now.suspended) return;
+      now.inset = event.nativeEvent.contentInset.top;
       now.y = Math.max(0, event.nativeEvent.contentOffset.y + now.inset);
-      const expected = now.restore === 'browse' || now.restore === 'closed-browse' ? now.browseY : now.restore === 'results' ? now.resultY : 0;
-      if (now.restore !== null && Math.abs(expected - now.y) < 1) now.restore = null;
+      if (now.restore !== null && Math.abs(target() - now.y) < 1) now.restore = null;
     },
     onScrollBeginDrag: () => { live.current.restore = null; },
     onContentSizeChange: restoreScroll,

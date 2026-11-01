@@ -1,480 +1,161 @@
-diff --git a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/SearchBarManager.kt b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/SearchBarManager.kt
-index 59f9f97..4658b99 100644
---- a/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/SearchBarManager.kt
-+++ b/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/SearchBarManager.kt
-@@ -171,7 +171,11 @@ class SearchBarManager :
-         view?.handleCancelSearchJsRequest()
-     }
- 
--    // iOS only
-+    // iOS only. OpenReader retains the JS list-position path on Android;
-+    // these commands are never dispatched there.
-+    override fun captureScrollPosition(view: SearchBarView?, slot: String?) = Unit
-+
-+    override fun restoreScrollPosition(view: SearchBarView?, slot: String?) = Unit
- 
-     override fun setPlacement(
-         view: SearchBarView,
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.h b/node_modules/react-native-screens/ios/RNSScreen.h
-index b1f482c..c7f405b 100644
+index b1f482c..b4c2734 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.h
 +++ b/node_modules/react-native-screens/ios/RNSScreen.h
-@@ -38,7 +38,7 @@ NS_ASSUME_NONNULL_BEGIN
- 
- @class RNSScreenView;
- 
--@interface RNSScreen : UIViewController <RNSViewControllerDelegate
-+@interface RNSScreen : UIViewController <RNSViewControllerDelegate, UIScrollViewDelegate
- #if !TARGET_OS_TV
-                                          ,
-                                          RNSOrientationProviding
-@@ -54,6 +54,17 @@ NS_ASSUME_NONNULL_BEGIN
+@@ -54,6 +54,13 @@ NS_ASSUME_NONNULL_BEGIN
  - (CGFloat)calculateHeaderHeightIsModal:(BOOL)isModal;
  - (BOOL)isRemovedFromParent;
  - (void)notifyPresentedControllerDismissed;
 +#if !TARGET_OS_TV
-+// OpenReader: the navigation controller owns command registration because
-+// a focused navigation-bar field bypasses this page in the responder chain.
++// OpenReader (#332, #339): the navigation controller registers this page's
++// Library commands, because it is on every responder path of the page.
 +- (NSArray<UIKeyCommand *> *)openReaderLibraryKeyCommands;
 +- (void)openReaderFindInLibrary:(UIKeyCommand *)command;
-+- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command;
-+// Restore both list position and (when requested) hidden search atomically.
-+- (void)openReaderRestoreLibraryPosition:(CGFloat)logical closed:(BOOL)closed;
-+// Reattach a list detached from the navigation bar for a coast to its top (#338).
-+- (void)openReaderRebindLibraryScrollView;
++- (void)openReaderEscapeInLibrary:(UIKeyCommand *)command;
 +#endif
  
  @end
  
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..32ddfb2 100644
+index 9b66012..0148c87 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
-@@ -5,11 +5,13 @@
- #import "RNSScreenContainer.h"
- #import "RNSScreenContentWrapper.h"
- #import "RNSScreenWindowTraits.h"
-+#import "RNSSearchBar.h"
+@@ -1404,8 +1404,22 @@ + (void)load
  
- #import <React/RCTConversions.h>
- #import <React/RCTFabricComponentsPlugins.h>
- #import <React/RCTRootComponentView.h>
- #import <React/RCTScrollViewComponentView.h>
-+#import <React/RCTEnhancedScrollView.h>
- #import <React/RCTSurfaceTouchHandler.h>
- #import <react/renderer/components/rnscreens/EventEmitters.h>
- #import <react/renderer/components/rnscreens/Props.h>
-@@ -1406,6 +1408,16 @@ + (void)load
+ #pragma mark - RNSScreen
  
++#if !TARGET_OS_TV
++// OpenReader (#339): a Library or Folder page holds a key target, a view of the
++// app's own (modules/open-reader-library-keys) that says which of its commands
++// apply now and hands a pressed one to the page's JavaScript. The page only
++// scopes them; it knows nothing else about Library Search.
++@protocol RNSOpenReaderLibraryKeyTarget <NSObject>
++- (NSArray<NSString *> *)openReaderLibraryKeys;
++- (void)openReaderPerformLibraryKey:(NSString *)key;
++@end
++#endif
++
  @implementation RNSScreen {
    __weak id _previousFirstResponder;
-+  __weak UIScrollView *_openReaderSearchScrollView;
-+  __weak UISearchController *_openReaderCollapsedSearchController;
-+  BOOL _openReaderSearchPullEligible;
-+  CGFloat _openReaderSearchPullOriginY;
-+  CGFloat _openReaderSearchPullFingerY;
-+  CGFloat _openReaderSearchPullDistance;
-+  __weak RNSSearchBar *_openReaderPullSearchBar;
-+  BOOL _openReaderCoastReachesTop;
-+  BOOL _openReaderCoastUnbound;
-+  BOOL _openReaderCoastCaught;
++#if !TARGET_OS_TV
++  __weak UIView *_openReaderLibraryKeyTarget;
++#endif
    CGRect _lastViewFrame;
    RNSScreenView *_initialView;
    UIView *_fakeView;
-@@ -1433,6 +1445,277 @@ - (instancetype)initWithView:(UIView *)view
+@@ -1433,6 +1447,100 @@ - (instancetype)initWithView:(UIView *)view
    return self;
  }
  
-+- (void)dealloc
-+{
 +#if !TARGET_OS_TV
-+  if ([_openReaderSearchScrollView isKindOfClass:RCTEnhancedScrollView.class]) {
-+    [((RCTEnhancedScrollView *)_openReaderSearchScrollView).delegateSplitter removeDelegate:self];
-+  }
-+  [_openReaderPullSearchBar openReaderEndPullPreview];
-+#endif
-+}
-+
-+#if !TARGET_OS_TV
-+// OpenReader (#332): this page defines command scope; RNSNavigationController
-+// registers them on the responder chain shared by the list and the nav-bar
-+// search field. Reader/Settings, selection and presented action sheets get no
-+// Library commands. Never install process-wide key interception.
-+- (UISearchController *)openReaderLibrarySearchController
++// OpenReader (#332, #339): Library commands belong to the top page alone, in a
++// window, with nothing presented over it (an actions drawer, an alert), so the
++// Reader, Settings and a modal never receive them. Never process-wide.
++- (nullable id<RNSOpenReaderLibraryKeyTarget>)openReaderLibraryKeyTarget
 +{
-+  UISearchController *search = self.navigationItem.searchController;
-+  if (search == nil || search.presentedViewController != nil ||
-+      self.navigationController.topViewController != self || self.view.window == nil) {
++  if (self.navigationController.topViewController != self || self.view.window == nil) {
 +    return nil;
 +  }
 +  for (UIViewController *page = self; page != nil; page = page.parentViewController) {
-+    UIViewController *presented = page.presentedViewController;
-+    if (presented != nil && presented != search) {
++    if (page.presentedViewController != nil) {
 +      return nil;
 +    }
 +  }
-+  return search;
++  UIView *cached = _openReaderLibraryKeyTarget;
++  if (cached != nil && [cached isDescendantOfView:self.view]) {
++    return (id<RNSOpenReaderLibraryKeyTarget>)cached;
++  }
++  NSMutableArray<UIView *> *queue = [NSMutableArray arrayWithObject:self.view];
++  for (NSUInteger i = 0; i < queue.count; i++) {
++    UIView *view = queue[i];
++    if ([view respondsToSelector:@selector(openReaderLibraryKeys)] &&
++        [view respondsToSelector:@selector(openReaderPerformLibraryKey:)]) {
++      _openReaderLibraryKeyTarget = view;
++      return (id<RNSOpenReaderLibraryKeyTarget>)view;
++    }
++    [queue addObjectsFromArray:view.subviews];
++  }
++  return nil;
++}
++
++// Escape and Command-F belong first to a text being composed in the page's
++// search field (marked text, as Bopomofo leaves it), so neither is offered then.
++- (BOOL)openReaderComposingText
++{
++  NSMutableArray<UIView *> *queue = [NSMutableArray arrayWithObject:self.view];
++  for (NSUInteger i = 0; i < queue.count; i++) {
++    UIView *view = queue[i];
++    if (view.isFirstResponder) {
++      return [view conformsToProtocol:@protocol(UITextInput)] && ((id<UITextInput>)view).markedTextRange != nil;
++    }
++    [queue addObjectsFromArray:view.subviews];
++  }
++  return NO;
 +}
 +
 +- (NSArray<UIKeyCommand *> *)openReaderLibraryKeyCommands
 +{
-+  UISearchController *search = [self openReaderLibrarySearchController];
-+  if (search == nil) {
++  id<RNSOpenReaderLibraryKeyTarget> target = [self openReaderLibraryKeyTarget];
++  NSArray<NSString *> *keys = target != nil ? [target openReaderLibraryKeys] : @[];
++  if (keys.count == 0 || [self openReaderComposingText]) {
 +    return @[];
 +  }
-+  UIKeyCommand *find = [UIKeyCommand keyCommandWithInput:@"f"
-+                                        modifierFlags:UIKeyModifierCommand
-+                                               action:@selector(openReaderFindInLibrary:)];
-+  find.discoverabilityTitle = @"Search Library";
-+  // Escape must first be available to an unfinished IME composition.
-+  if (search.searchBar.searchTextField.markedTextRange != nil) {
-+    return @[ find ];
++  NSMutableArray<UIKeyCommand *> *commands = [NSMutableArray array];
++  if ([keys containsObject:@"find"]) {
++    UIKeyCommand *find = [UIKeyCommand keyCommandWithInput:@"f"
++                                          modifierFlags:UIKeyModifierCommand
++                                                 action:@selector(openReaderFindInLibrary:)];
++    find.discoverabilityTitle = @"Search Library";
++    [commands addObject:find];
 +  }
-+  UIKeyCommand *cancel = [UIKeyCommand keyCommandWithInput:UIKeyInputEscape
-+                                          modifierFlags:0
-+                                                 action:@selector(openReaderCancelLibrarySearch:)];
-+  cancel.discoverabilityTitle = @"Cancel Search";
-+  cancel.wantsPriorityOverSystemBehavior = YES;
-+  return @[ find, cancel ];
++  if ([keys containsObject:@"escape"]) {
++    UIKeyCommand *escape = [UIKeyCommand keyCommandWithInput:UIKeyInputEscape
++                                            modifierFlags:0
++                                                   action:@selector(openReaderEscapeInLibrary:)];
++    escape.discoverabilityTitle = @"Cancel";
++    escape.wantsPriorityOverSystemBehavior = YES;
++    [commands addObject:escape];
++  }
++  return commands;
++}
++
++// Checked again when pressed: UIKit may have cached the commands before the
++// page changed, or before composition began.
++- (void)openReaderSendLibraryKey:(NSString *)key
++{
++  id<RNSOpenReaderLibraryKeyTarget> target = [self openReaderLibraryKeyTarget];
++  if (target == nil || ![[target openReaderLibraryKeys] containsObject:key] || [self openReaderComposingText]) {
++    return;
++  }
++  [target openReaderPerformLibraryKey:key];
 +}
 +
 +- (void)openReaderFindInLibrary:(UIKeyCommand *)command
 +{
-+  UISearchController *search = [self openReaderLibrarySearchController];
-+  // Use the same entry as the JS/menu command: capture before UIKit may move
-+  // a long list to present input, then focus. Refocus never replaces the capture.
-+  if ([search.searchBar.delegate isKindOfClass:RNSSearchBar.class]) {
-+    [(RNSSearchBar *)search.searchBar.delegate focus];
-+  }
++  [self openReaderSendLibraryKey:@"find"];
 +}
 +
-+- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command
++- (void)openReaderEscapeInLibrary:(UIKeyCommand *)command
 +{
-+  UISearchController *search = [self openReaderLibrarySearchController];
-+  // Recheck at dispatch too: UIKit may have cached commands before composition.
-+  if (search == nil || search.searchBar.searchTextField.markedTextRange != nil) {
-+    return;
-+  }
-+  id<UISearchBarDelegate> delegate = search.searchBar.delegate;
-+  if ([delegate respondsToSelector:@selector(searchBarCancelButtonClicked:)]) {
-+    [delegate searchBarCancelButtonClicked:search.searchBar];
-+  }
-+  [search.searchBar resignFirstResponder];
-+  [search setActive:NO];
-+}
-+#endif
-+
-+#if !TARGET_OS_TV
-+// OpenReader (#338): UIKit expands a hidesSearchBarWhenScrolling field whenever
-+// the bound list goes past its top, momentum included. A coast after the finger
-+// lifts is never a pull, so the list leaves the navigation bar while it coasts
-+// to the top and keeps UIKit's own bounce. Whatever reads the binding rebinds first.
-+- (void)openReaderRebindLibraryScrollView
-+{
-+  if (!_openReaderCoastUnbound) {
-+    return;
-+  }
-+  _openReaderCoastUnbound = NO;
-+  _openReaderCoastCaught = NO;
-+  [self setContentScrollView:_openReaderSearchScrollView forEdge:NSDirectionalRectEdgeTop];
-+}
-+
-+// Subscribe through RN's additive delegate API. Pan translation can be reset
-+// before external targets run; actual content movement is the source of truth.
-+- (void)openReaderFinishLibraryPull:(BOOL)commit
-+{
-+  RNSSearchBar *bar = _openReaderPullSearchBar;
-+  UIScrollView *scroll = _openReaderSearchScrollView;
-+  UISearchController *expected = bar.controller;
-+  // A reversed pull may have become ordinary forward scrolling. Never rewind it.
-+  CGFloat logical = scroll.contentOffset.y <= _openReaderSearchPullOriginY + 1
-+      ? 0 : MAX(0, scroll.contentOffset.y + scroll.adjustedContentInset.top);
-+  _openReaderPullSearchBar = nil;
-+  _openReaderSearchPullEligible = NO;
-+  if (bar == nil) {
-+    return; // No confirmed downward preview: ordinary browsing is untouched.
-+  }
-+  if (commit) {
-+    [bar openReaderEndPullPreview];
-+    // Full progress hands this gesture to input. Stop its native scroll before
-+    // focusing; otherwise keyboardDismissMode=on-drag dismisses the keyboard
-+    // again on the next movement while the finger is still held down.
-+    UIPanGestureRecognizer *pan = scroll.panGestureRecognizer;
-+    if (pan.state == UIGestureRecognizerStateBegan || pan.state == UIGestureRecognizerStateChanged) {
-+      pan.enabled = NO;
-+      pan.enabled = YES;
-+    }
-+  }
-+  __weak RNSScreen *weakSelf = self;
-+  dispatch_async(dispatch_get_main_queue(), ^{
-+    RNSScreen *screen = weakSelf;
-+    if (screen != nil && screen->_openReaderPullSearchBar == bar) {
-+      return;
-+    }
-+    UISearchController *current = [screen openReaderLibrarySearchController];
-+    if (commit && screen != nil && screen->_openReaderSearchScrollView == scroll &&
-+        current == expected && !current.active) {
-+      [bar focus];
-+    } else if (!commit && screen.navigationItem.searchController == expected && !expected.active) {
-+      [screen openReaderRestoreLibraryPosition:logical closed:YES];
-+    }
-+    [bar openReaderEndPullPreview];
-+  });
-+}
-+
-+- (void)scrollViewWillBeginDragging:(UIScrollView *)scroll
-+{
-+  if (scroll != _openReaderSearchScrollView) {
-+    return;
-+  }
-+  // A coast caught past its top stays detached until the list is back at its
-+  // top (scrollViewDidScroll): bound past it, UIKit would snap the field open
-+  // and the list down to it. That covers the fingerless drag UIKit begins to
-+  // spring a let-go list back, and a finger pushing it up. A finger pulling it
-+  // further down still commits at full progress (#338).
-+  if (!_openReaderCoastCaught) {
-+    [self openReaderRebindLibraryScrollView]; // A finger caught the coast; it may pull.
-+  }
-+  UISearchController *search = [self openReaderLibrarySearchController];
-+  _openReaderSearchPullOriginY = -scroll.adjustedContentInset.top;
-+  _openReaderSearchPullFingerY = [scroll.panGestureRecognizer locationInView:scroll.window].y;
-+  _openReaderSearchPullEligible = search != nil && !search.active &&
-+      self.navigationItem.hidesSearchBarWhenScrolling &&
-+      scroll.panGestureRecognizer.numberOfTouches <= 1;
-+  // Eligibility alone must NOT create a preview or arm a return-to-top.
-+}
-+
-+- (void)scrollViewDidScroll:(UIScrollView *)scroll
-+{
-+  if (_openReaderCoastCaught && scroll == _openReaderSearchScrollView &&
-+      scroll.contentOffset.y >= -scroll.adjustedContentInset.top - 0.01) {
-+    [self openReaderRebindLibraryScrollView]; // The caught bounce is back at the top.
-+  }
-+  if (scroll != _openReaderSearchScrollView || !_openReaderSearchPullEligible) {
-+    return;
-+  }
-+  UISearchController *search = [self openReaderLibrarySearchController];
-+  if (search == nil || search.active || scroll.panGestureRecognizer.numberOfTouches > 1) {
-+    [self openReaderFinishLibraryPull:NO];
-+    return;
-+  }
-+  CGFloat distance = _openReaderSearchPullOriginY - scroll.contentOffset.y;
-+  if (_openReaderPullSearchBar == nil) {
-+    // Movement within the list is ordinary browsing. Only movement beyond
-+    // its adjusted top can create a preview, even when the drag began deeper.
-+    if (distance <= 1 || ![search.searchBar.delegate isKindOfClass:RNSSearchBar.class]) {
-+      return;
-+    }
-+    // Momentum is never a pull (#338): its progress could only be 0.
-+    if (scroll.panGestureRecognizer.numberOfTouches == 0) {
-+      return;
-+    }
-+    _openReaderPullSearchBar = (RNSSearchBar *)search.searchBar.delegate;
-+    // UIKit grows bounds from a fraction of a point while revealing the bar.
-+    // Always include its FULL fitting height; that first animation frame must
-+    // never shrink the completion threshold to one point.
-+    CGFloat fittingHeight = [search.searchBar sizeThatFits:CGSizeMake(CGRectGetWidth(scroll.bounds), CGFLOAT_MAX)].height;
-+    _openReaderSearchPullDistance = MAX(1, MAX(CGRectGetHeight(search.searchBar.bounds), fittingHeight));
-+  }
-+  // Expanding UINavigationBar itself changes the content offset/inset by a
-+  // search-bar height. That is NOT finger travel. Measure in the fixed window
-+  // coordinate space; inertia after lift cannot complete a short preview.
-+  CGFloat fingerTravel = scroll.panGestureRecognizer.numberOfTouches == 1
-+      ? [scroll.panGestureRecognizer locationInView:scroll.window].y - _openReaderSearchPullFingerY : 0;
-+  CGFloat progress = MIN(1, MAX(0, fingerTravel / _openReaderSearchPullDistance));
-+  [_openReaderPullSearchBar openReaderSetPullProgress:progress];
-+  if (progress >= 1) {
-+    [self openReaderFinishLibraryPull:YES];
-+  }
-+}
-+
-+- (void)scrollViewWillEndDragging:(UIScrollView *)scroll
-+                     withVelocity:(CGPoint)velocity
-+              targetContentOffset:(inout CGPoint *)targetContentOffset
-+{
-+  if (scroll == _openReaderSearchScrollView) {
-+    // UIKit clamps the target to the top when the coast will reach and bounce off it.
-+    _openReaderCoastReachesTop = targetContentOffset->y <= _openReaderSearchPullOriginY + 1;
-+  }
-+}
-+
-+- (void)scrollViewDidEndDragging:(UIScrollView *)scroll willDecelerate:(BOOL)decelerate
-+{
-+  if (scroll != _openReaderSearchScrollView) {
-+    return;
-+  }
-+  // End-drag can precede all content movement (UIKit reports willDecelerate).
-+  // Keep an untouched candidate through that motion. A visible partial preview,
-+  // however, is explicitly abandoned on release rather than completed by inertia.
-+  if (!decelerate || _openReaderPullSearchBar != nil) {
-+    [self openReaderFinishLibraryPull:NO];
-+  }
-+  if (decelerate && _openReaderSearchPullEligible && _openReaderPullSearchBar == nil && _openReaderCoastReachesTop &&
-+      [self contentScrollViewForEdge:NSDirectionalRectEdgeTop] == scroll) {
-+    _openReaderCoastUnbound = YES;
-+    [self setContentScrollView:nil forEdge:NSDirectionalRectEdgeTop];
-+  }
-+}
-+
-+- (void)scrollViewDidEndDecelerating:(UIScrollView *)scroll
-+{
-+  if (scroll == _openReaderSearchScrollView) {
-+    // A finger landing on the bounce ends the coast with the list still past
-+    // its top. Bound there, UIKit would expand the field under a resting
-+    // finger; rebind once the list is back at its top or the finger drags.
-+    if (_openReaderCoastUnbound && scroll.contentOffset.y < -scroll.adjustedContentInset.top - 0.01) {
-+      _openReaderCoastCaught = YES;
-+    } else {
-+      [self openReaderRebindLibraryScrollView];
-+    }
-+    [self openReaderFinishLibraryPull:NO];
-+  }
-+}
-+
-+- (UIScrollView *)openReaderFindLibraryScrollView
-+{
-+  UIScrollView *direct = [self.screenView tryFindDescendantScrollView].scrollView;
-+  if (direct != nil) {
-+    return direct;
-+  }
-+  // Fabric puts the navigator's empty background before the Library's wrapped
-+  // list under RNSSafeAreaView. The first-child-only lookup stops at that
-+  // background; look breadth-first through the page, never another screen.
-+  NSMutableArray<UIView *> *views = [NSMutableArray arrayWithObject:self.screenView];
-+  for (NSUInteger index = 0; index < views.count; index++) {
-+    UIView *view = views[index];
-+    if ([view isKindOfClass:RCTScrollViewComponentView.class]) {
-+      return ((RCTScrollViewComponentView *)view).scrollView;
-+    }
-+    if ([view isKindOfClass:RNSScreenStackHeaderConfig.class] ||
-+        (view != self.screenView && [view isKindOfClass:RNSScreenView.class])) {
-+      continue;
-+    }
-+    [views addObjectsFromArray:view.subviews];
-+  }
-+  return nil;
++  [self openReaderSendLibraryKey:@"escape"];
 +}
 +#endif
 +
  // TODO: Find out why this is executed when screen is going out
  - (void)viewWillAppear:(BOOL)animated
  {
-@@ -1464,6 +1747,9 @@ - (void)viewWillAppear:(BOOL)animated
- - (void)viewWillDisappear:(BOOL)animated
- {
-   [super viewWillDisappear:animated];
-+#if !TARGET_OS_TV
-+  [self openReaderRebindLibraryScrollView]; // Never leave a coast's detached list behind (#338).
-+#endif
-   // self.navigationController might be null when we are dismissing a modal
-   if (!self.transitionCoordinator.isInteractive && self.navigationController != nil) {
-     // user might have long pressed ios 14 back button item,
-@@ -1538,6 +1824,49 @@ - (void)viewDidDisappear:(BOOL)animated
-   _shouldNotify = YES;
- }
- 
-+- (void)openReaderRestoreLibraryPosition:(CGFloat)logical closed:(BOOL)closed
-+{
-+#if !TARGET_OS_TV
-+  [self openReaderRebindLibraryScrollView];
-+  UISearchController *search = self.navigationItem.searchController;
-+  UIScrollView *scroll = [self contentScrollViewForEdge:NSDirectionalRectEdgeTop];
-+  if (search == nil || scroll == nil || self.navigationController.topViewController != self) {
-+    return;
-+  }
-+  if (closed) {
-+    _openReaderCollapsedSearchController = search; // Guard before UIKit can reenter layout.
-+    [search setActive:NO];
-+    self.navigationItem.hidesSearchBarWhenScrolling = YES;
-+  }
-+  [UIView performWithoutAnimation:^{
-+    void (^layout)(void) = ^{
-+      [self.navigationController.navigationBar layoutIfNeeded];
-+      [self.view layoutIfNeeded];
-+      [scroll layoutIfNeeded];
-+    };
-+    void (^restore)(void) = ^{
-+      UIEdgeInsets inset = scroll.adjustedContentInset;
-+      CGFloat last = MAX(0, scroll.contentSize.height + inset.top + inset.bottom - CGRectGetHeight(scroll.bounds));
-+      CGPoint position = scroll.contentOffset;
-+      position.y = MIN(MAX(0, logical), last) - inset.top;
-+      [scroll setContentOffset:position animated:NO];
-+    };
-+    // A restore can itself reveal the bar. Position first, then enforce the
-+    // requested presentation, then compensate against the FINAL inset.
-+    restore();
-+    layout();
-+    CGFloat searchHeight = CGRectGetHeight(search.searchBar.bounds);
-+    if (closed && searchHeight > 0) {
-+      CGPoint trigger = scroll.contentOffset;
-+      trigger.y += searchHeight;
-+      [scroll setContentOffset:trigger animated:NO];
-+      layout();
-+    }
-+    restore();
-+  }];
-+#endif
-+}
-+
- - (void)viewDidLayoutSubviews
- {
-   [super viewDidLayoutSubviews];
-@@ -1558,6 +1887,44 @@ - (void)viewDidLayoutSubviews
-   if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
-     [self.screenView updateBounds];
-   }
-+#if !TARGET_OS_TV
-+  // OpenReader (#332): UIKit's hierarchy heuristic misses the Library's
-+  // wrapped FlatList. Its contents scrolled 400 pt while the search header
-+  // stayed 114 pt tall. Bind the actual scroll view through the public API,
-+  // rather than drawing a separate collapse animation or guessing an offset.
-+  UISearchController *search = self.navigationItem.searchController;
-+  UIScrollView *searchScrollView = search != nil ? [self openReaderFindLibraryScrollView] : nil;
-+  if (searchScrollView != _openReaderSearchScrollView) {
-+    if ([_openReaderSearchScrollView isKindOfClass:RCTEnhancedScrollView.class]) {
-+      [((RCTEnhancedScrollView *)_openReaderSearchScrollView).delegateSplitter removeDelegate:self];
-+    }
-+    [_openReaderPullSearchBar openReaderEndPullPreview];
-+    _openReaderPullSearchBar = nil;
-+    _openReaderSearchPullEligible = NO;
-+    _openReaderCoastUnbound = NO;
-+    _openReaderCoastCaught = NO;
-+    _openReaderSearchScrollView = searchScrollView;
-+    if ([searchScrollView isKindOfClass:RCTEnhancedScrollView.class]) {
-+      [((RCTEnhancedScrollView *)searchScrollView).delegateSplitter addDelegate:self];
-+    }
-+    [self setContentScrollView:searchScrollView forEdge:NSDirectionalRectEdgeTop];
-+  }
-+  if (search.active) {
-+    // Ending input must return to ordinary hidden search, including when the
-+    // field was revealed by a pull rather than by the menu.
-+    _openReaderCollapsedSearchController = nil;
-+  } else if (search != nil && search != _openReaderCollapsedSearchController &&
-+             self.navigationItem.hidesSearchBarWhenScrolling &&
-+             self.navigationController.topViewController == self && search.searchBar.window != nil &&
-+             searchScrollView != nil && CGRectGetHeight(searchScrollView.bounds) > 0) {
-+    _openReaderCollapsedSearchController = search;
-+    CGFloat searchHeight = CGRectGetHeight(search.searchBar.bounds);
-+    if (searchHeight > 0 && !searchScrollView.tracking && !searchScrollView.dragging) {
-+      CGFloat logicalOffset = MAX(0, searchScrollView.contentOffset.y + searchScrollView.adjustedContentInset.top);
-+      [self openReaderRestoreLibraryPosition:logicalOffset closed:YES];
-+    }
-+  }
-+#endif
- }
- 
- - (BOOL)isModalWithHeader
 diff --git a/node_modules/react-native-screens/ios/RNSScreenStack.mm b/node_modules/react-native-screens/ios/RNSScreenStack.mm
-index 192f5d2..730d24b 100644
+index 192f5d2..3cac22e 100644
 --- a/node_modules/react-native-screens/ios/RNSScreenStack.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreenStack.mm
-@@ -41,6 +41,32 @@ @interface RNSScreenStackView () <UINavigationControllerDelegate,
+@@ -41,6 +41,33 @@ @interface RNSScreenStackView () <UINavigationControllerDelegate,
  @implementation RNSNavigationController
  
  #if !TARGET_OS_TV
-+// OpenReader (#332): UISearchBarTextField -> UISearchBar -> UINavigationBar
-+// reaches this controller, not the RNSScreen displaying the Library list.
-+// Resolve the top page each time so Reader/selection/modal scope stays local.
++// OpenReader (#332, #339): this controller is on the responder path of
++// everything in the stack, a focused field or none. It adds the top page's
++// Library commands to its own and forwards their actions to that page, which
++// decides each time whether they apply.
 +- (NSArray<UIKeyCommand *> *)keyCommands
 +{
 +  NSArray<UIKeyCommand *> *inherited = [super keyCommands] ?: @[];
@@ -491,17 +172,17 @@ index 192f5d2..730d24b 100644
 +  }
 +}
 +
-+- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command
++- (void)openReaderEscapeInLibrary:(UIKeyCommand *)command
 +{
 +  if ([self.topViewController isKindOfClass:RNSScreen.class]) {
-+    [(RNSScreen *)self.topViewController openReaderCancelLibrarySearch:command];
++    [(RNSScreen *)self.topViewController openReaderEscapeInLibrary:command];
 +  }
 +}
 +
  - (UIViewController *)childViewControllerForStatusBarStyle
  {
    return [self topViewController];
-@@ -574,6 +600,39 @@ - (void)setModalViewControllers:(NSArray<UIViewController *> *)controllers
+@@ -574,6 +601,39 @@ - (void)setModalViewControllers:(NSArray<UIViewController *> *)controllers
    finish();
  }
  
@@ -541,7 +222,7 @@ index 192f5d2..730d24b 100644
  - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
  {
    // when there is no change we return immediately
-@@ -669,7 +728,10 @@ - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
+@@ -669,7 +729,10 @@ - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
    } else {
      // change wasn't on the top of the stack. We don't need animation.
      [_controller setViewControllers:controllers animated:NO];
@@ -552,539 +233,3 @@ index 192f5d2..730d24b 100644
  }
  
  - (void)updateContainer
-diff --git a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm b/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm
-index 1c84484..612a9ce 100644
---- a/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm
-+++ b/node_modules/react-native-screens/ios/RNSScreenStackHeaderConfig.mm
-@@ -603,6 +603,7 @@ + (void)updateViewController:(UIViewController *)vc
- #if !TARGET_OS_TV
-           RNSSearchBar *searchBar = subview.subviews[0];
-           searchBarPresent = true;
-+          searchBar.owningScreen = vc;
-           navitem.searchController = searchBar.controller;
-           navitem.hidesSearchBarWhenScrolling = searchBar.hideWhenScrolling;
- #if RNS_IPHONE_OS_VERSION_AVAILABLE(16_0)
-diff --git a/node_modules/react-native-screens/ios/RNSSearchBar.h b/node_modules/react-native-screens/ios/RNSSearchBar.h
-index 32efddb..459f333 100644
---- a/node_modules/react-native-screens/ios/RNSSearchBar.h
-+++ b/node_modules/react-native-screens/ios/RNSSearchBar.h
-@@ -24,6 +24,14 @@
- @property (nonatomic) BOOL allowToolbarIntegration;
- 
- @property (nonatomic, retain) UISearchController *controller;
-+// OpenReader: the page whose real scroll view owns these transient positions.
-+@property (nonatomic, weak) UIViewController *owningScreen;
-+
-+#if !TARGET_OS_TV
-+// Native-only interactive preview; no query or focus is committed here.
-+- (void)openReaderSetPullProgress:(CGFloat)progress;
-+- (void)openReaderEndPullPreview;
-+#endif
- 
- #if RNS_IPHONE_OS_VERSION_AVAILABLE(16_0) && !TARGET_OS_TV
- - (UINavigationItemSearchBarPlacement)placementAsUINavigationItemSearchBarPlacement API_AVAILABLE(ios(16.0))
-diff --git a/node_modules/react-native-screens/ios/RNSSearchBar.mm b/node_modules/react-native-screens/ios/RNSSearchBar.mm
-index 2345734..ba68761 100644
---- a/node_modules/react-native-screens/ios/RNSSearchBar.mm
-+++ b/node_modules/react-native-screens/ios/RNSSearchBar.mm
-@@ -2,6 +2,7 @@
- 
- #import "RNSDefines.h"
- #import "RNSSearchBar.h"
-+#import "RNSScreen.h"
- 
- #import <React/RCTComponent.h>
- 
-@@ -14,9 +15,135 @@
- 
- namespace react = facebook::react;
- 
-+#if !TARGET_OS_TV
-+// OpenReader (#332): UISearchBar supplies its own Escape command ahead of the
-+// navigation controller. Replace that command on this bar, not UIKit globally.
-+@interface RNSOpenReaderSearchBar : UISearchBar
-+- (void)openReaderShowClose:(BOOL)show;
-+@end
-+
-+@implementation RNSOpenReaderSearchBar {
-+  UIButton *_openReaderClose;
-+}
-+
-+- (void)openReaderShowClose:(BOOL)show
-+{
-+  // UISearchBar ignores showsCancelButton in the regular iPad presentation.
-+  // Supply a native sibling button, using UIKit's own glass/standard styling.
-+  if (self.traitCollection.userInterfaceIdiom != UIUserInterfaceIdiomPad) {
-+    return;
-+  }
-+  if (_openReaderClose == nil && show) {
-+    _openReaderClose = [UIButton buttonWithType:UIButtonTypeSystem];
-+    UIButtonConfiguration *configuration;
-+    if (@available(iOS 26.0, *)) {
-+      configuration = [UIButtonConfiguration glassButtonConfiguration];
-+    } else {
-+      configuration = [UIButtonConfiguration tintedButtonConfiguration];
-+    }
-+    configuration.image = [UIImage systemImageNamed:@"xmark"];
-+    configuration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
-+    configuration.baseForegroundColor = UIColor.labelColor;
-+    _openReaderClose.configuration = configuration;
-+    _openReaderClose.accessibilityLabel = @"Close";
-+    [_openReaderClose addTarget:self action:@selector(openReaderClosePressed:) forControlEvents:UIControlEventTouchUpInside];
-+    [self addSubview:_openReaderClose];
-+  }
-+  _openReaderClose.hidden = !show;
-+  [self setNeedsLayout];
-+}
-+
-+- (void)layoutSubviews
-+{
-+  [super layoutSubviews];
-+  if (_openReaderClose == nil) {
-+    return;
-+  }
-+  UISearchTextField *field = self.searchTextField;
-+  CGRect rect = [field.superview convertRect:field.frame toView:self];
-+  CGFloat edge = CGRectGetMinX(rect);
-+  CGFloat side = CGRectGetHeight(rect);
-+  CGFloat reserve = _openReaderClose.hidden ? 0 : side + 8;
-+  // Derive from bar bounds, never subtract repeatedly from an already sized field.
-+  rect.size.width = MAX(0, CGRectGetWidth(self.bounds) - 2 * edge - reserve);
-+  field.frame = [self convertRect:rect toView:field.superview];
-+  _openReaderClose.frame = CGRectMake(CGRectGetWidth(self.bounds) - edge - side, CGRectGetMinY(rect), side, side);
-+  [self bringSubviewToFront:_openReaderClose];
-+}
-+
-+- (void)openReaderClosePressed:(UIButton *)sender
-+{
-+  if ([self.delegate isKindOfClass:RNSSearchBar.class]) {
-+    [(RNSSearchBar *)self.delegate cancelSearch];
-+  }
-+}
-+- (RNSScreen *)openReaderLibraryScreen
-+{
-+  if (![self.delegate isKindOfClass:RNSSearchBar.class]) {
-+    return nil;
-+  }
-+  UIViewController *owner = ((RNSSearchBar *)self.delegate).owningScreen;
-+  if (![owner isKindOfClass:RNSScreen.class] || owner.navigationItem.searchController.searchBar != self) {
-+    return nil;
-+  }
-+  return (RNSScreen *)owner;
-+}
-+
-+- (NSArray<UIKeyCommand *> *)keyCommands
-+{
-+  NSArray<UIKeyCommand *> *inherited = [super keyCommands] ?: @[];
-+  for (UIKeyCommand *command in [[self openReaderLibraryScreen] openReaderLibraryKeyCommands]) {
-+    if (command.action == @selector(openReaderCancelLibrarySearch:)) {
-+      NSMutableArray<UIKeyCommand *> *commands = [NSMutableArray new];
-+      for (UIKeyCommand *systemCommand in inherited) {
-+        if (![systemCommand.input isEqualToString:UIKeyInputEscape] || systemCommand.modifierFlags != 0) {
-+          [commands addObject:systemCommand];
-+        }
-+      }
-+      [commands addObject:command];
-+      return commands;
-+    }
-+  }
-+  // No eligible Library cancel (including marked text): keep UIKit behavior.
-+  return inherited;
-+}
-+
-+- (void)openReaderCancelLibrarySearch:(UIKeyCommand *)command
-+{
-+  [[self openReaderLibraryScreen] openReaderCancelLibrarySearch:command];
-+}
-+@end
-+
-+@interface RNSOpenReaderSearchController : UISearchController
-+@end
-+
-+@implementation RNSOpenReaderSearchController {
-+  RNSOpenReaderSearchBar *_openReaderBar;
-+}
-+// Apple's documented searchBar customization point requires lazy creation.
-+// Leave appearance, the text field, scrolling and gestures to UISearchBar.
-+- (UISearchBar *)searchBar
-+{
-+  if (_openReaderBar == nil) {
-+    _openReaderBar = [RNSOpenReaderSearchBar new];
-+  }
-+  return _openReaderBar;
-+}
-+@end
-+#endif
-+
- @implementation RNSSearchBar {
-   UISearchController *_controller;
-   UIColor *_textColor;
-+  CGFloat _browseScrollPosition;
-+  CGFloat _resultScrollPosition;
-+  BOOL _hasBrowseScrollPosition;
-+#if !TARGET_OS_TV
-+  UIVisualEffectView *_openReaderPullEffect;
-+  UIViewPropertyAnimator *_openReaderPullAnimator;
-+  BOOL _openReaderPullInteraction;
-+  BOOL _openReaderPullAccessibilityHidden;
-+#endif
- 
-   // We use those booleans to log a warning if user attempts to restore
-   // default behavior after setting explicit value for the prop.
-@@ -39,13 +166,20 @@ - (instancetype)init
- - (void)initCommonProps
- {
- #if !TARGET_OS_TV
--  _controller = [[UISearchController alloc] initWithSearchResultsController:nil];
-+  _controller = [[RNSOpenReaderSearchController alloc] initWithSearchResultsController:nil];
-+  // iPad's automatic stacked presentation omits the external close control.
-+  // Keep UIKit's control, but own its lifetime independently of typed text.
-+  _controller.automaticallyShowsCancelButton = NO;
- #else
-   // on TVOS UISearchController must contain searchResultsController.
-   _controller = [[UISearchController alloc] initWithSearchResultsController:[UIViewController new]];
- #endif
- 
-   _controller.searchBar.delegate = self;
-+  // OpenReader (#332): search names as typed, without replacing them with a
-+  // dictionary's correction when input is submitted.
-+  _controller.searchBar.autocorrectionType = UITextAutocorrectionTypeNo;
-+  _controller.searchBar.spellCheckingType = UITextSpellCheckingTypeNo;
- 
-   _isObscureBackgroundSet = NO;
-   _isHideNavigationBarSet = NO;
-@@ -56,6 +190,61 @@ - (void)initCommonProps
-   _allowToolbarIntegration = YES;
- }
- 
-+#if !TARGET_OS_TV
-+- (void)openReaderSetPullProgress:(CGFloat)progress
-+{
-+  UISearchBar *bar = _controller.searchBar;
-+  UISearchTextField *field = bar.searchTextField;
-+  if (_openReaderPullEffect == nil) {
-+    _openReaderPullInteraction = bar.userInteractionEnabled;
-+    _openReaderPullAccessibilityHidden = bar.accessibilityElementsHidden;
-+    bar.userInteractionEnabled = NO;
-+    bar.accessibilityElementsHidden = YES;
-+    UIVisualEffectView *effect = [[UIVisualEffectView alloc] initWithEffect:nil];
-+    effect.userInteractionEnabled = NO;
-+    effect.accessibilityElementsHidden = YES;
-+    effect.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-+    effect.clipsToBounds = YES;
-+    effect.layer.cornerCurve = kCACornerCurveContinuous;
-+    [field addSubview:effect];
-+    _openReaderPullEffect = effect;
-+    _openReaderPullAnimator = [[UIViewPropertyAnimator alloc] initWithDuration:1
-+                                                                      curve:UIViewAnimationCurveLinear
-+                                                                 animations:^{
-+      effect.effect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-+    }];
-+    _openReaderPullAnimator.pausesOnCompletion = YES;
-+  }
-+  _openReaderPullEffect.frame = field.bounds;
-+  _openReaderPullEffect.layer.cornerRadius = CGRectGetHeight(field.bounds) / 2;
-+  // Setting fractionComplete activates an inactive animator in a paused state.
-+  // UIKit supplies the blur and its dynamic appearance, not a private layer filter.
-+  _openReaderPullAnimator.fractionComplete = 1 - MIN(1, MAX(0, progress));
-+}
-+
-+- (void)openReaderEndPullPreview
-+{
-+  if (_openReaderPullEffect == nil) {
-+    return;
-+  }
-+  if (_openReaderPullAnimator.state == UIViewAnimatingStateActive) {
-+    [_openReaderPullAnimator stopAnimation:YES];
-+  }
-+  _openReaderPullAnimator = nil;
-+  [_openReaderPullEffect removeFromSuperview];
-+  _openReaderPullEffect = nil;
-+  _controller.searchBar.userInteractionEnabled = _openReaderPullInteraction;
-+  _controller.searchBar.accessibilityElementsHidden = _openReaderPullAccessibilityHidden;
-+}
-+#endif
-+
-+- (void)dealloc
-+{
-+#if !TARGET_OS_TV
-+  [self openReaderEndPullPreview];
-+#endif
-+}
-+
- - (void)emitOnFocusEvent
- {
-   if (_eventEmitter != nullptr) {
-@@ -184,6 +373,7 @@ - (void)hideCancelButton
- #if !TARGET_OS_TV
-   if (!_controller.automaticallyShowsCancelButton) {
-     [_controller.searchBar setShowsCancelButton:NO animated:YES];
-+    [(RNSOpenReaderSearchBar *)_controller.searchBar openReaderShowClose:NO];
-   } else {
-     // On iOS 13+ UISearchController automatically shows/hides cancel button
-     // https://developer.apple.com/documentation/uikit/uisearchcontroller/3152926-automaticallyshowscancelbutton?language=objc
-@@ -196,6 +386,7 @@ - (void)showCancelButton
- #if !TARGET_OS_TV
-   if (!_controller.automaticallyShowsCancelButton) {
-     [_controller.searchBar setShowsCancelButton:YES animated:YES];
-+    [(RNSOpenReaderSearchBar *)_controller.searchBar openReaderShowClose:YES];
-   } else {
-     // On iOS 13+ UISearchController automatically shows/hides cancel button
-     // https://developer.apple.com/documentation/uikit/uisearchcontroller/3152926-automaticallyshowscancelbutton?language=objc
-@@ -258,6 +449,7 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
-   }
- #endif
- 
-+  [self captureScrollPosition:@"browse"];
-   [self showCancelButton];
-   [self becomeFirstResponder];
-   [self emitOnFocusEvent];
-@@ -266,7 +458,12 @@ - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar
- - (void)searchBarTextDidEndEditing:(UISearchBar *)searchBar
- {
-   [self emitOnBlurEvent];
--  [self hideCancelButton];
-+#if !TARGET_OS_TV
-+  // Hiding the keyboard or visiting a result does not end Library Search.
-+  if (!_controller.active) {
-+    [self hideCancelButton];
-+  }
-+#endif
- }
- 
- - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText
-@@ -283,6 +480,7 @@ - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar
- - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar
- {
-   _controller.searchBar.text = @"";
-+  _hasBrowseScrollPosition = NO; // Keep its value for the queued restore, rearm the next search.
-   [self resignFirstResponder];
-   [self hideCancelButton];
- 
-@@ -298,6 +496,11 @@ - (void)blur
- 
- - (void)focus
- {
-+  // OpenReader (#332): Search from a menu must reveal a stacked field even
-+  // when its list is scrolled far below it, not just focus an offscreen field.
-+  [self captureScrollPosition:@"browse"];
-+  [_controller setActive:YES];
-+  [self showCancelButton];
-   [_controller.searchBar becomeFirstResponder];
- }
- 
-@@ -326,6 +529,63 @@ - (void)cancelSearch
- #endif
- }
- 
-+// OpenReader (#332): capture and restore in the coordinate system UIKit
-+// actually displays. RN's scroll event exposes only the explicit contentInset,
-+// and its scrollTo command clamps negative offsets against that same inset.
-+- (UIScrollView *)openReaderScrollView
-+{
-+#if !TARGET_OS_TV
-+  if (self.owningScreen.navigationItem.searchController == _controller) {
-+    if ([self.owningScreen isKindOfClass:RNSScreen.class]) {
-+      [(RNSScreen *)self.owningScreen openReaderRebindLibraryScrollView];
-+    }
-+    return [self.owningScreen contentScrollViewForEdge:NSDirectionalRectEdgeTop];
-+  }
-+#endif
-+  return nil;
-+}
-+
-+- (void)captureScrollPosition:(NSString *)slot
-+{
-+  UIScrollView *scroll = [self openReaderScrollView];
-+  if (scroll == nil) {
-+    return;
-+  }
-+  CGFloat logical = MAX(0, scroll.contentOffset.y + scroll.adjustedContentInset.top);
-+  if ([slot isEqualToString:@"browse"] && !_hasBrowseScrollPosition) {
-+    _browseScrollPosition = logical;
-+    _hasBrowseScrollPosition = YES;
-+  } else if ([slot isEqualToString:@"results"]) {
-+    _resultScrollPosition = logical;
-+  }
-+}
-+
-+- (void)restoreScrollPosition:(NSString *)slot
-+{
-+  UIScrollView *scroll = [self openReaderScrollView];
-+  if (scroll == nil) {
-+    return;
-+  }
-+  BOOL closed = [slot isEqualToString:@"closed-browse"];
-+  // A new native focus/capture supersedes a queued cancellation restoration.
-+  if (closed && _hasBrowseScrollPosition) {
-+    return;
-+  }
-+  CGFloat logical;
-+  if ([slot isEqualToString:@"browse"] || closed) {
-+    logical = _browseScrollPosition;
-+  } else if ([slot isEqualToString:@"results"]) {
-+    logical = _resultScrollPosition;
-+  } else if ([slot isEqualToString:@"top"]) {
-+    logical = 0;
-+  } else {
-+    return;
-+  }
-+  if ([self.owningScreen isKindOfClass:RNSScreen.class]) {
-+    [(RNSScreen *)self.owningScreen openReaderRestoreLibraryPosition:logical closed:closed];
-+  }
-+}
-+
- #pragma mark-- Fabric specific
- 
- - (void)updateProps:(react::Props::Shared const &)props oldProps:(react::Props::Shared const &)oldProps
-diff --git a/node_modules/react-native-screens/lib/commonjs/components/SearchBar.js b/node_modules/react-native-screens/lib/commonjs/components/SearchBar.js
-index 2b49816..fa13bbb 100644
---- a/node_modules/react-native-screens/lib/commonjs/components/SearchBar.js
-+++ b/node_modules/react-native-screens/lib/commonjs/components/SearchBar.js
-@@ -34,6 +34,12 @@ function SearchBar(props, forwardedRef) {
-     },
-     cancelSearch: () => {
-       _callMethodWithRef(ref => NativeSearchBarCommands.cancelSearch(ref));
-+    },
-+    captureScrollPosition: slot => {
-+      _callMethodWithRef(ref => NativeSearchBarCommands.captureScrollPosition(ref, slot));
-+    },
-+    restoreScrollPosition: slot => {
-+      _callMethodWithRef(ref => NativeSearchBarCommands.restoreScrollPosition(ref, slot));
-     }
-   }));
-   const _callMethodWithRef = _react.default.useCallback(method => {
-diff --git a/node_modules/react-native-screens/lib/commonjs/fabric/SearchBarNativeComponent.js b/node_modules/react-native-screens/lib/commonjs/fabric/SearchBarNativeComponent.js
-index e463ca4..d4ac426 100644
---- a/node_modules/react-native-screens/lib/commonjs/fabric/SearchBarNativeComponent.js
-+++ b/node_modules/react-native-screens/lib/commonjs/fabric/SearchBarNativeComponent.js
-@@ -9,7 +9,7 @@ var _reactNative = require("react-native");
- // eslint-disable-next-line @typescript-eslint/ban-types
- 
- const Commands = exports.Commands = (0, _reactNative.codegenNativeCommands)({
--  supportedCommands: ['blur', 'focus', 'clearText', 'toggleCancelButton', 'setText', 'cancelSearch']
-+  supportedCommands: ['blur', 'focus', 'clearText', 'toggleCancelButton', 'setText', 'cancelSearch', 'captureScrollPosition', 'restoreScrollPosition']
- });
- var _default = exports.default = (0, _reactNative.codegenNativeComponent)('RNSSearchBar', {});
- //# sourceMappingURL=SearchBarNativeComponent.js.map
-\ No newline at end of file
-diff --git a/node_modules/react-native-screens/lib/module/components/SearchBar.js b/node_modules/react-native-screens/lib/module/components/SearchBar.js
-index 59faf32..8f47465 100644
---- a/node_modules/react-native-screens/lib/module/components/SearchBar.js
-+++ b/node_modules/react-native-screens/lib/module/components/SearchBar.js
-@@ -29,6 +29,12 @@ function SearchBar(props, forwardedRef) {
-     },
-     cancelSearch: () => {
-       _callMethodWithRef(ref => NativeSearchBarCommands.cancelSearch(ref));
-+    },
-+    captureScrollPosition: slot => {
-+      _callMethodWithRef(ref => NativeSearchBarCommands.captureScrollPosition(ref, slot));
-+    },
-+    restoreScrollPosition: slot => {
-+      _callMethodWithRef(ref => NativeSearchBarCommands.restoreScrollPosition(ref, slot));
-     }
-   }));
-   const _callMethodWithRef = React.useCallback(method => {
-diff --git a/node_modules/react-native-screens/lib/module/fabric/SearchBarNativeComponent.js b/node_modules/react-native-screens/lib/module/fabric/SearchBarNativeComponent.js
-index 36572b6..900be65 100644
---- a/node_modules/react-native-screens/lib/module/fabric/SearchBarNativeComponent.js
-+++ b/node_modules/react-native-screens/lib/module/fabric/SearchBarNativeComponent.js
-@@ -5,7 +5,7 @@ import { codegenNativeCommands, codegenNativeComponent } from 'react-native';
- // eslint-disable-next-line @typescript-eslint/ban-types
- 
- export const Commands = codegenNativeCommands({
--  supportedCommands: ['blur', 'focus', 'clearText', 'toggleCancelButton', 'setText', 'cancelSearch']
-+  supportedCommands: ['blur', 'focus', 'clearText', 'toggleCancelButton', 'setText', 'cancelSearch', 'captureScrollPosition', 'restoreScrollPosition']
- });
- export default codegenNativeComponent('RNSSearchBar', {});
- //# sourceMappingURL=SearchBarNativeComponent.js.map
-\ No newline at end of file
-diff --git a/node_modules/react-native-screens/lib/typescript/fabric/SearchBarNativeComponent.d.ts b/node_modules/react-native-screens/lib/typescript/fabric/SearchBarNativeComponent.d.ts
-index 643718d..34ae093 100644
---- a/node_modules/react-native-screens/lib/typescript/fabric/SearchBarNativeComponent.d.ts
-+++ b/node_modules/react-native-screens/lib/typescript/fabric/SearchBarNativeComponent.d.ts
-@@ -43,6 +43,8 @@ interface NativeCommands {
-     toggleCancelButton: (viewRef: React.ElementRef<ComponentType>, flag: boolean) => void;
-     setText: (viewRef: React.ElementRef<ComponentType>, text: string) => void;
-     cancelSearch: (viewRef: React.ElementRef<ComponentType>) => void;
-+    captureScrollPosition: (viewRef: React.ElementRef<ComponentType>, slot: string) => void;
-+    restoreScrollPosition: (viewRef: React.ElementRef<ComponentType>, slot: string) => void;
- }
- export declare const Commands: NativeCommands;
- declare const _default: HostComponent<NativeProps>;
-diff --git a/node_modules/react-native-screens/lib/typescript/types.d.ts b/node_modules/react-native-screens/lib/typescript/types.d.ts
-index 10a3134..933efe0 100644
---- a/node_modules/react-native-screens/lib/typescript/types.d.ts
-+++ b/node_modules/react-native-screens/lib/typescript/types.d.ts
-@@ -8,6 +8,9 @@ export type SearchBarCommands = {
-     toggleCancelButton: (show: boolean) => void;
-     setText: (text: string) => void;
-     cancelSearch: () => void;
-+    /** OpenReader: iOS-only adjusted-inset scroll-position commands. */
-+    captureScrollPosition: (slot: 'browse' | 'results') => void;
-+    restoreScrollPosition: (slot: 'browse' | 'results' | 'top' | 'closed-browse') => void;
- };
- export type BackButtonDisplayMode = 'default' | 'generic' | 'minimal';
- export type StackPresentationTypes = 'push' | 'modal' | 'transparentModal' | 'containedModal' | 'containedTransparentModal' | 'fullScreenModal' | 'formSheet' | 'pageSheet';
-diff --git a/node_modules/react-native-screens/src/components/SearchBar.tsx b/node_modules/react-native-screens/src/components/SearchBar.tsx
-index 14c40aa..72c0a1f 100644
---- a/node_modules/react-native-screens/src/components/SearchBar.tsx
-+++ b/node_modules/react-native-screens/src/components/SearchBar.tsx
-@@ -38,6 +38,8 @@ type SearchBarCommandsType = {
-   toggleCancelButton: (viewRef: NativeSearchBarRef, flag: boolean) => void;
-   setText: (viewRef: NativeSearchBarRef, text: string) => void;
-   cancelSearch: (viewRef: NativeSearchBarRef) => void;
-+  captureScrollPosition: (viewRef: NativeSearchBarRef, slot: string) => void;
-+  restoreScrollPosition: (viewRef: NativeSearchBarRef, slot: string) => void;
- };
- 
- function SearchBar(
-@@ -67,6 +69,12 @@ function SearchBar(
-     cancelSearch: () => {
-       _callMethodWithRef(ref => NativeSearchBarCommands.cancelSearch(ref));
-     },
-+    captureScrollPosition: (slot: 'browse' | 'results') => {
-+      _callMethodWithRef(ref => NativeSearchBarCommands.captureScrollPosition(ref, slot));
-+    },
-+    restoreScrollPosition: (slot: 'browse' | 'results' | 'top' | 'closed-browse') => {
-+      _callMethodWithRef(ref => NativeSearchBarCommands.restoreScrollPosition(ref, slot));
-+    },
-   }));
- 
-   const _callMethodWithRef = React.useCallback(
-diff --git a/node_modules/react-native-screens/src/fabric/SearchBarNativeComponent.ts b/node_modules/react-native-screens/src/fabric/SearchBarNativeComponent.ts
-index cb87683..a7ecc3b 100644
---- a/node_modules/react-native-screens/src/fabric/SearchBarNativeComponent.ts
-+++ b/node_modules/react-native-screens/src/fabric/SearchBarNativeComponent.ts
-@@ -85,6 +85,8 @@ interface NativeCommands {
-   ) => void;
-   setText: (viewRef: React.ElementRef<ComponentType>, text: string) => void;
-   cancelSearch: (viewRef: React.ElementRef<ComponentType>) => void;
-+  captureScrollPosition: (viewRef: React.ElementRef<ComponentType>, slot: string) => void;
-+  restoreScrollPosition: (viewRef: React.ElementRef<ComponentType>, slot: string) => void;
- }
- 
- export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
-@@ -95,6 +97,8 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
-     'toggleCancelButton',
-     'setText',
-     'cancelSearch',
-+    'captureScrollPosition',
-+    'restoreScrollPosition',
-   ],
- });
- 
-diff --git a/node_modules/react-native-screens/src/types.tsx b/node_modules/react-native-screens/src/types.tsx
-index 9c3ab4c..7d40e04 100644
---- a/node_modules/react-native-screens/src/types.tsx
-+++ b/node_modules/react-native-screens/src/types.tsx
-@@ -23,6 +23,9 @@ export type SearchBarCommands = {
-   toggleCancelButton: (show: boolean) => void;
-   setText: (text: string) => void;
-   cancelSearch: () => void;
-+  /** OpenReader: iOS owns adjusted-inset coordinates, not the JS scroll event. */
-+  captureScrollPosition: (slot: 'browse' | 'results') => void;
-+  restoreScrollPosition: (slot: 'browse' | 'results' | 'top' | 'closed-browse') => void;
- };
- 
- export type BackButtonDisplayMode = 'default' | 'generic' | 'minimal';

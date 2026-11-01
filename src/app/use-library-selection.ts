@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { asDocumentId } from '../core/document';
-import { folderAt, selectionPlan, targetKey, type LibraryTarget } from '../core/folders';
+import { folderAt, selectionPlan, targetKey, type LibraryTarget, type SelectionScope } from '../core/folders';
 import type { ScreenProps } from './routes';
 import { useShell } from './routes';
 
 const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
 
-/** Selection is page-local; submitted work survives blur, but its completion cannot restore an old selection. */
-export function useLibrarySelection(navigation: Pick<ScreenProps<'Library' | 'Folder'>['navigation'], 'addListener'>, rows: readonly LibraryTarget[], remove: (id: string) => Promise<void>) {
+/**
+ * Selection is page-local; submitted work survives blur, but its completion cannot restore an old selection.
+ * `rows` are the rows on show, and `scope` where they come from: a Folder's own rows, or search results from
+ * any Folders (#339). Search's query cannot change while selecting, so neither can the scope.
+ */
+export function useLibrarySelection(navigation: Pick<ScreenProps<'Library' | 'Folder'>['navigation'], 'addListener'>, rows: readonly LibraryTarget[], remove: (id: string) => Promise<void>, scope: SelectionScope = 'folder') {
   const { library } = useShell();
   const [active, setActive] = useState(false);
   const [keys, setKeys] = useState<Set<string>>(new Set());
@@ -57,7 +61,7 @@ export function useLibrarySelection(navigation: Pick<ScreenProps<'Library' | 'Fo
     const snapshot = library.folders.getSnapshot().tree;
     const documentIds = library.entries.map((entry) => entry.id);
     let plan: ReturnType<typeof selectionPlan>;
-    try { plan = selectionPlan(snapshot, batch, documentIds); }
+    try { plan = selectionPlan(snapshot, batch, documentIds, scope); }
     catch (error) { library.report(describe(error), 'delete'); return; }
     setConfirming(true);
     Alert.alert('Delete selected entries?',
@@ -69,7 +73,7 @@ export function useLibrarySelection(navigation: Pick<ScreenProps<'Library' | 'Fo
           setConfirming(false);
           const now = latest.current;
           try {
-            const currentPlan = selectionPlan(now.folders.getSnapshot().tree, batch, now.entries.map((entry) => entry.id));
+            const currentPlan = selectionPlan(now.folders.getSnapshot().tree, batch, now.entries.map((entry) => entry.id), scope);
             if (now.folders.getSnapshot().tree !== snapshot || currentPlan.documents.size !== plan.documents.size ||
                 [...currentPlan.documents].some((id) => !plan.documents.has(id))) {
               throw new Error('The selected contents changed. Review them and confirm deletion again.');
@@ -85,7 +89,7 @@ export function useLibrarySelection(navigation: Pick<ScreenProps<'Library' | 'Fo
           }, (target) => {
             completed++;
             if (token === generation.current) setKeys((was) => { const next = new Set(was); next.delete(targetKey(target)); return next; });
-          }).then(() => {
+          }, scope).then(() => {
             complete();
             if (token === generation.current) clear();
           }).catch((error: unknown) => {

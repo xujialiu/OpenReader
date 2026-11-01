@@ -194,6 +194,8 @@ export const INK = {
   tertiary: ink('rgba(60,60,67,0.3)', 'rgba(235,235,245,0.3)'),
   /** The line between a card's rows, as the phone draws it: 1 point, measured #e8e8e8 and #38383b. */
   separator: ink('#e8e8e8', '#38383b'),
+  /** `Search Library` in an empty search field, on its glass: measured #979797 and #9f9ea5 (#339, notes 2026-11-01). */
+  searchPrompt: ink('#979797', '#9f9ea5'),
 };
 
 /**

@@ -1,7 +1,6 @@
 import { createElement, type ReactElement, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SearchBarCommands, SearchBarProps } from 'react-native-screens';
 import { asDocumentId, type LibraryEntry } from '../../src/core/document';
 import type { FolderTree } from '../../src/core/folders';
 import type { ScreenProps } from '../../src/app/routes';
@@ -40,6 +39,8 @@ vi.mock('../../src/app/drawer', async () => {
 vi.mock('../../src/app/rename-alert', () => hosts('RenameAlert'));
 vi.mock('../../src/app/reader-actions', () => hosts('ReaderActions'));
 vi.mock('../../src/app/library-selection-actions', () => hosts('LibrarySelectionAction'));
+vi.mock('../../src/app/library-search-field', () => hosts('LibrarySearchField'));
+vi.mock('../../modules/open-reader-library-keys', () => hosts('LibraryKeys'));
 vi.mock('../../src/app/reading-button', async () => ({ ...await hosts('ReadingButton'), READING_BUTTON_PLACE: { bottom: 12 } }));
 vi.mock('../../src/app/reading-host', () => ({ useHeldReading: () => ({ current: null, end: vi.fn() }) }));
 vi.mock('../../src/app/text-styles', () => ({ TEXT_EMPHASIZED: { title3: {} } }));
@@ -69,14 +70,10 @@ afterEach(() => vi.unstubAllGlobals());
 
 async function open() {
   let options: Record<string, unknown> = {};
-  const field: SearchBarCommands = { focus: vi.fn(), blur: vi.fn(), clearText: vi.fn(), setText: vi.fn(), cancelSearch: vi.fn(), toggleCancelButton: vi.fn(), captureScrollPosition: vi.fn(), restoreScrollPosition: vi.fn() };
   const visit = vi.fn();
+  const moveEntries = vi.fn();
   const navigation = {
-    setOptions: (next: Record<string, unknown>) => {
-      options = { ...options, ...next };
-      const bar = next.headerSearchBarOptions as SearchBarProps | undefined;
-      if (bar?.ref) bar.ref.current = field;
-    },
+    setOptions: (next: Record<string, unknown>) => { options = { ...options, ...next }; },
     isFocused: () => true, getState: () => ({ index: 0, routes: [{ key: 'folder', name: 'Folder' }] }),
     addListener: () => () => {}, navigate: vi.fn(), push: vi.fn(),
   };
@@ -84,94 +81,168 @@ async function open() {
   const populate = () => {
     shell.current = { settings: { enabledProviders: [] }, sync: { poke: vi.fn() }, library: {
       entries, folderSnapshot: { tree, busy: false, problem: null }, loading: false, note: null,
-      folders: { getSnapshot: () => ({ tree }), visit }, beginOperation: () => vi.fn(), report: vi.fn(),
+      current: (id: string) => entries.find((one) => one.id === id),
+      folders: { getSnapshot: () => ({ tree, busy: false }), visit, moveEntries }, beginOperation: () => vi.fn(), report: vi.fn(),
     } };
   };
   populate();
   let view!: ReactTestRenderer;
   await act(async () => { view = create(createElement(LibraryScreen, props)); });
   const nodes = (type: string) => view.root.findAll((node) => node.type === type);
-  const drawer = () => nodes('Drawer').find((node) => node.props.title === 'Library actions')!;
+  const drawer = (title = 'Library actions') => nodes('Drawer').find((node) => node.props.title === title)!;
   const row = (text: string) => nodes('DrawerRow').find((node) => node.findAll((child) => String(child.type) === 'DrawerRowText' && child.props.children === text).length)!;
-  const searchOptions = () => options.headerSearchBarOptions as SearchBarProps | undefined;
+  const field = () => nodes('LibrarySearchField')[0] as ReturnType<typeof nodes>[number] | undefined;
+  const keys = () => nodes('LibraryKeys')[0];
   return {
-    field, navigation, visit, nodes, drawer, row, searchOptions,
+    navigation, visit, moveEntries, nodes, drawer, row, field, keys,
+    options: () => options,
     async menu() {
       const button = (options.headerRight as () => ReactElement<{ onPress(): void }>)();
       await act(async () => button.props.onPress());
     },
-    type: (text: string) => act(async () => searchOptions()?.onChangeText?.({ nativeEvent: { text } } as Parameters<NonNullable<SearchBarProps['onChangeText']>>[0])),
+    /** The Library actions' Search, after the drawer's native dismissal. */
+    async search() {
+      await this.menu();
+      await act(async () => this.row('Search').props.onPress());
+      await act(async () => this.drawer().props.onDismiss());
+    },
+    async select() {
+      await this.menu();
+      await act(async () => this.row('Select').props.onPress());
+    },
+    type: (text: string) => act(async () => field()!.props.onChangeText(text)),
+    key: (key: 'find' | 'escape') => act(async () => keys().props.onKey({ nativeEvent: { key } })),
     update: () => act(async () => { populate(); view.update(createElement(LibraryScreen, props)); }),
     close: () => act(async () => view.unmount()),
   };
 }
 
-describe('Library Search through the real page and actions Drawer (#332)', () => {
-  it('keeps short and empty content filling the scroll viewport for blank-space pulls', async () => {
+describe('Library Search through the real page and actions Drawer (#332, #339)', () => {
+  it('shows no field and sets nothing on the title bar until Search is chosen', async () => {
     const page = await open();
+    expect(page.field()).toBeUndefined();
+    expect(page.options().headerSearchBarOptions).toBeUndefined();
     expect(page.nodes('DocumentRow')).toHaveLength(1);
-    expect(page.nodes('FlatList')[0].props.contentContainerStyle).toMatchObject({ flexGrow: 1 });
-    entries = [];
-    await page.update();
-    expect(page.nodes('DocumentRow')).toHaveLength(0);
-    expect(page.nodes('FlatList')[0].props.contentContainerStyle).toMatchObject({ flexGrow: 1 });
     await page.close();
   });
   it('the ordinary nested Folder has only its own Documents; search reveals namesakes from every level with paths', async () => {
     const page = await open();
     expect(page.nodes('DocumentRow').map((node) => node.props.title)).toEqual(['三体']);
-    expect(page.field.focus).not.toHaveBeenCalled();
+    await page.search();
     await page.type('body');
+    expect(page.field()!.props).toMatchObject({ query: 'body', locked: false });
     expect(page.nodes('DocumentRow').map((node) => node.props.progress)).toEqual(['Library', 'Library → Fiction']);
     expect(page.nodes('FolderRow')).toHaveLength(0);
     expect(page.visit).not.toHaveBeenCalled(); // search does not change the browsing/import destination
     await page.close();
   });
-  it('waits for native Drawer dismissal before focusing Search, and fires it only once', async () => {
+  it('waits for native Drawer dismissal before showing the field, and shows it only once', async () => {
     const page = await open();
     await page.menu();
     expect(page.nodes('DrawerRowText').map((node) => node.props.children)).toEqual(['Import file', 'Create folder', 'Search', 'Select']);
     await act(async () => page.row('Search').props.onPress());
     expect(page.drawer().props.visible).toBe(false);
-    expect(page.field.focus).not.toHaveBeenCalled();
+    expect(page.field()).toBeUndefined();
     await act(async () => page.drawer().props.onDismiss());
-    expect(page.field.focus).toHaveBeenCalledOnce();
+    expect(page.nodes('LibrarySearchField')).toHaveLength(1);
     await act(async () => page.drawer().props.onDismiss());
-    expect(page.field.focus).toHaveBeenCalledOnce();
+    expect(page.nodes('LibrarySearchField')).toHaveLength(1);
+    await page.close();
+  });
+  it('the close control ends search and takes the field away', async () => {
+    const page = await open();
+    await page.search(); await page.type('body');
+    await act(async () => page.field()!.props.onClose());
+    expect(page.field()).toBeUndefined();
+    expect(page.nodes('DocumentRow').map((node) => node.props.title)).toEqual(['三体']);
     await page.close();
   });
   it('no matches shows only the no-results state, while clearing the query restores the original list', async () => {
     const page = await open();
+    await page.search();
     await page.type('missing');
     expect(page.nodes('DocumentRow')).toHaveLength(0);
     expect(page.nodes('Text').map((node) => node.props.children)).toContain('No documents found');
     expect(page.nodes('Note')).toHaveLength(0); // not an empty-Library provider prompt
     await page.type('');
     expect(page.nodes('DocumentRow').map((node) => node.props.title)).toEqual(['三体']);
+    expect(page.field()).toBeDefined();
     await page.close();
   });
-  it('retains single-Document actions while removing every selection entry and the two-finger sweep', async () => {
+  it('offers every selection entry over results: the actions\' Select, a result\'s own Select and the two-finger sweep', async () => {
     const page = await open();
-    await page.type('body');
-    expect(sweeping.enabled).toBe(false);
+    await page.search(); await page.type('body');
+    expect(sweeping.enabled).toBe(true);
     await act(async () => page.nodes('DocumentRow')[0].props.onActions());
     expect(page.nodes('ReaderActions')[0].props).toMatchObject({ document: entries[0].id, movable: true });
-    expect(page.nodes('ReaderActions')[0].props.onDelete).toBeTypeOf('function');
-    expect(page.nodes('ReaderActions')[0].props.onSelect).toBeUndefined();
-    await page.menu();
-    expect(page.nodes('DrawerRowText').map((node) => node.props.children)).not.toContain('Select');
+    expect(page.nodes('ReaderActions')[0].props.onSelect).toBeTypeOf('function');
+    await act(async () => page.nodes('ReaderActions')[0].props.onSelect());
+    expect(page.nodes('DocumentRow').map((node) => node.props.selected)).toEqual([true, false]);
+    expect(page.options().title).toBe('1 selected');
     await page.close();
   });
-  it('selection removes the native search controller, so a downward pull cannot enter search', async () => {
+  it('selecting results locks the field, Select all takes every result, and Move opens where search began', async () => {
+    const page = await open();
+    await page.search(); await page.type('body');
+    await page.select();
+    expect(page.field()!.props).toMatchObject({ query: 'body', locked: true });
+    const left = (page.options().headerLeft as () => ReactElement<{ onPress(): void }>)();
+    await act(async () => left.props.onPress());
+    expect(page.options().title).toBe('2 selected');
+    const move = page.nodes('LibrarySelectionAction').find((node) => node.props.action === 'Move')!;
+    await act(async () => move.props.onPress());
+    const sheet = page.drawer('Move to…');
+    expect(sheet.props.visible).toBe(true);
+    // Opened at the Folder search began in, which holds neither result, so Move can act there.
+    expect(page.nodes('DrawerFooter').map((node) => node.props.children)).toContain('Library → Fiction → Chinese');
+    expect(sheet.props.action.disabled).toBe(false);
+    await act(async () => sheet.props.action.onPress());
+    expect(page.moveEntries).toHaveBeenCalledWith(
+      [{ kind: 'document', id: entries[0].id }, { kind: 'document', id: entries[2].id }],
+      entries.map((one) => one.id), 'inner', expect.any(Object), 'results');
+    // Selection ends; search, its query and its results stay.
+    expect(page.options().title).toBe('Chinese');
+    expect(page.field()!.props).toMatchObject({ query: 'body', locked: false });
+    expect(page.nodes('DocumentRow')).toHaveLength(2);
+    await page.close();
+  });
+  it('a selection made from an empty field is of the Folder\'s own rows, and locks the field all the same', async () => {
+    const page = await open();
+    await page.search();
+    await page.select();
+    const left = (page.options().headerLeft as () => ReactElement<{ onPress(): void }>)();
+    await act(async () => left.props.onPress());
+    expect(page.options().title).toBe('1 selected');
+    expect(page.field()!.props.locked).toBe(true);
+    await page.close();
+  });
+  it('Command-F opens search and Escape ends selection before it closes search', async () => {
+    const page = await open();
+    expect(page.keys().props).toMatchObject({ find: true, escape: false });
+    await page.key('find');
+    expect(page.field()).toBeDefined();
+    expect(page.keys().props).toMatchObject({ find: true, escape: true });
+    await page.type('body');
+    await page.select();
+    expect(page.keys().props).toMatchObject({ find: false, escape: true });
+    await page.key('find'); // nothing while selecting
+    expect(page.options().title).toBe('0 selected');
+    await page.key('escape');
+    expect(page.options().title).toBe('Chinese');
+    expect(page.field()!.props).toMatchObject({ query: 'body', locked: false });
+    await page.key('escape');
+    expect(page.field()).toBeUndefined();
+    expect(page.keys().props).toMatchObject({ find: true, escape: false });
+    await page.close();
+  });
+  it('offers no key while the Library actions are open', async () => {
     const page = await open();
     await page.menu();
-    await act(async () => page.row('Select').props.onPress());
-    expect(page.searchOptions()).toBeUndefined();
-    expect(page.nodes('DocumentRow')[0].props.selected).toBe(false);
+    expect(page.keys().props).toMatchObject({ find: false, escape: false });
     await page.close();
   });
   it('results respond to renamed, moved and deleted Documents, while actions still address their identity', async () => {
-    const page = await open(); await page.type('body');
+    const page = await open(); await page.search(); await page.type('body');
     entries = [{ ...entries[0], title: 'Changed' }, entries[1], entries[2]];
     tree = { ...tree, documents: { ...tree.documents, [entries[2].id]: 'inner' } };
     await page.update();

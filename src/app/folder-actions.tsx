@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Alert } from 'react-native';
 import type { DocumentId } from '../core/document';
-import { documentNameProblem, folderAt, folderNameProblem, folderPath, moveChoice, type FolderId, type LibraryTarget } from '../core/folders';
+import { documentNameProblem, folderAt, folderNameProblem, folderPath, moveChoice, type FolderId, type LibraryTarget, type SelectionScope } from '../core/folders';
 import { INK } from './controls';
 import { Drawer, DrawerChevron, DrawerFooter, DrawerRow, DrawerRowText, DrawerScroll, type DrawerAction } from './drawer';
 import { RenameAlert } from './rename-alert';
@@ -9,7 +9,7 @@ import { useShell } from './routes';
 
 const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
 
-/** Native dismissal finishes before opening Files or focusing search. `folder` is the page's, where Create folder creates (#317). */
+/** Native dismissal finishes before opening Files or showing search's field. `folder` is the page's, where Create folder creates (#317). */
 export function AddDrawer({ visible, folder, onClose, onImport, onSearch, onSelect }: { visible: boolean; folder: FolderId | null; onClose(): void; onImport(): void; onSearch(): void; onSelect?(): void }) {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
@@ -72,8 +72,12 @@ export interface MovePage {
  * says where the page is, and the folder's Folders, a Folder being moved
  * included. A refusal is the phone's alert, since a line under a long list is
  * out of sight of the button that was pressed.
+ *
+ * A selection of search results (`scope: 'results'`, #339) comes from many
+ * Folders: `from` is then the Folder search began in, where the page opens,
+ * and `Move` acts wherever at least one of them is not already.
  */
-export function useMovePage(moving: { target: MoveTarget } | { targets: readonly LibraryTarget[]; from: FolderId | null }, { onMoved, onLeave }: { onMoved(): void; onLeave?(): void }): MovePage {
+export function useMovePage(moving: { target: MoveTarget } | { targets: readonly LibraryTarget[]; from: FolderId | null; scope?: SelectionScope }, { onMoved, onLeave }: { onMoved(): void; onLeave?(): void }): MovePage {
   const { library } = useShell();
   const { tree, busy, problem } = library.folderSnapshot;
   const target = 'target' in moving ? moving.target : null;
@@ -83,12 +87,13 @@ export function useMovePage(moving: { target: MoveTarget } | { targets: readonly
   const [destination, setDestination] = useState<FolderId | null | undefined>(undefined);
   const shown = destination === undefined ? source : destination;
   const current = shown !== null && !tree.folders.some((folder) => folder.id === shown) ? null : shown;
-  const { canMove, folders } = moveChoice(tree, target ? [target] : 'targets' in moving ? moving.targets : [], source, current);
+  const scope = 'scope' in moving ? moving.scope ?? 'folder' : 'folder';
+  const { canMove, folders } = moveChoice(tree, target ? [target] : 'targets' in moving ? moving.targets : [], source, current, scope);
   const parent = current === null ? null : folderAt(tree, current).parent;
   const move = () => {
     try {
       if (!target) library.folders.moveEntries('targets' in moving ? moving.targets : [], library.entries.map((entry) => entry.id), current,
-        Object.fromEntries(library.entries.map((entry) => [entry.id, entry.title])));
+        Object.fromEntries(library.entries.map((entry) => [entry.id, entry.title])), scope);
       else if (target.kind === 'folder') library.folders.moveFolder(target.id, current);
       else {
         const entry = library.current(target.id);

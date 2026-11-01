@@ -11,7 +11,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 
 import { asDocumentId, type LibraryEntry } from '../core/document';
 import { directFolderCounts, folderAt, folderPath, folderSubtree, targetKey, type FolderId, type LibraryTarget } from '../core/folders';
-import { DocumentRow, FolderRow, HeaderButton, INK, Note, useAccent } from './controls';
+import { DocumentRow, FolderRow, HeaderButton, INK, Note } from './controls';
 import { pickDocument } from './document';
 import { useDocumentCover } from './document-cover';
 import { AddDrawer, confirmFolderDeletion, FolderActions, useMovePage } from './folder-actions';
@@ -19,6 +19,8 @@ import { Drawer } from './drawer';
 import { useLibrarySelection } from './use-library-selection';
 import { libraryQuery, libraryRows, type LibraryRow as Row } from './library-search';
 import { useLibrarySearch } from './use-library-search';
+import { LibrarySearchField } from './library-search-field';
+import { LibraryKeys, type LibraryKey } from '../../modules/open-reader-library-keys';
 import { LibrarySelectionAction } from './library-selection-actions';
 import { useRowSweep } from './use-sweep';
 import { importDocument } from './import-document';
@@ -48,7 +50,6 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
   /** The Folder this page shows, for as long as the page is open; `null` is the Library root. */
   const folder = route.params?.id ?? null;
   const insets = useSafeAreaInsets();
-  const accent = useAccent();
   const focused = useIsFocused();
   const [actionHeight, setActionHeight] = useState(52);
   const actionBottom = Math.max(insets.bottom, 12);
@@ -75,25 +76,41 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
     await removeDownloads(document);
     library.remove(document);
   };
-  const browsingRows = libraryRows(tree, library.entries, folder, '');
-  const selection = useLibrarySelection(navigation, browsingRows.map(rowTarget), removeDocument);
-  const move = useMovePage({ targets: selection.selected, from: folder }, { onMoved: selection.moved });
+  /**
+   * Search's results while it has a query, the Folder's own rows otherwise
+   * (design 0090). A selection is made of the rows on show, so a selection of
+   * results holds Documents from any Folders, and Move opens where search began.
+   */
+  const search = useLibrarySearch(navigation, route.key);
+  const searching = !!libraryQuery(search.query);
+  const rows = libraryRows(tree, library.entries, folder, searching ? search.query : '');
+  const scope = searching ? 'results' : 'folder';
+  const selection = useLibrarySelection(navigation, rows.map(rowTarget), removeDocument, scope);
+  const move = useMovePage({ targets: selection.selected, from: folder, scope }, { onMoved: selection.moved });
   const selectionRef = useRef(selection);
   useLayoutEffect(() => { selectionRef.current = selection; }, [selection]);
   const selecting = selection.active;
   const selectedCount = selection.selected.length;
   const working = selection.working;
-  const search = useLibrarySearch(navigation, route.key, selecting, { tintColor: accent.reading, textColor: INK.text });
-  const searching = !!libraryQuery(search.query);
-  const rows = searching ? libraryRows(tree, library.entries, folder, search.query) : browsingRows;
   const selectedKeys = new Set(selection.selected.map(targetKey));
   const selectionLocked = busy || selection.working || selection.moving || selection.confirming;
   const sweepIds = rows.map((row) => targetKey(rowTarget(row)));
   const sweep = useRowSweep<Row>({
     ids: sweepIds, values: sweepIds.map((id) => [id]), selected: selectedKeys,
-    enabled: focused && !search.active && !selectionLocked && !adding && !actions && !folderActions && !picking && !library.loading && !problem,
+    enabled: focused && !selectionLocked && !adding && !actions && !folderActions && !picking && !library.loading && !problem,
     scope: folder ?? 'root', bottomInset: actionBottom + actionHeight + 12,
   }, selection.sweepTo);
+  // Selecting locks search's query: the keyboard goes and the field greys (design 0090).
+  const searchField = search.field;
+  useEffect(() => { if (selecting) searchField.current?.blur(); }, [selecting, searchField]);
+  /** Command-F opens search or returns to its field, never while selecting; Escape ends selection first, then search. */
+  const pressKey = ({ nativeEvent: { key } }: { nativeEvent: { key: LibraryKey } }) => {
+    const now = selectionRef.current;
+    if (key === 'escape') {
+      if (now.active) now.cancel();
+      else search.exit();
+    } else if (!now.active) search.start();
+  };
   const remove = (entry: LibraryEntry) => {
     void requestInventory(entry.id).then(() => Alert.alert('Delete this book?',
       `Local downloaded audio will also be deleted, freeing ${formatBytes(occupied(entry.id))}. The original file is kept.`, [
@@ -192,6 +209,12 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
   }, [library.entries]);
   const counts = useMemo(() => directFolderCounts(tree, library.entries.map((entry) => entry.id)), [tree, library.entries]);
   return <View style={styles.screen}>
+    <LibraryKeys style={styles.keys} onKey={pressKey}
+      find={focused && !selecting && !busy && !picking && !adding && !actions && !folderActions && !library.loading && !problem}
+      escape={focused && (selecting ? !selectionLocked : search.active)} />
+    {search.active ? <View style={styles.column}>
+      <LibrarySearchField field={search.field} query={search.query} locked={selecting} onChangeText={search.change} onClose={search.exit} />
+    </View> : null}
     <GestureDetector gesture={sweep.gesture}>
     <View style={[styles.list, styles.column]} collapsable={false}>
     <GestureDetector gesture={sweep.nativeGesture}>
@@ -205,7 +228,7 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       style={styles.list}
-      contentContainerStyle={{ flexGrow: 1, paddingTop: 12, paddingBottom: (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
+      contentContainerStyle={{ paddingTop: 12, paddingBottom: (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
       data={rows}
       keyExtractor={(row) => targetKey(rowTarget(row))}
       renderItem={({ item }) => item.kind === 'folder'
@@ -244,14 +267,14 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
         onPress={() => navigation.navigate('Reader', { id: held.id })} />
     </View> : null}
     <AddDrawer visible={adding} folder={folder} onClose={() => setAdding(false)} onImport={() => void add()}
-      onSearch={search.start} onSelect={search.active ? undefined : selection.begin} />
+      onSearch={search.start} onSelect={selection.begin} />
     <Drawer visible={selection.moving} {...move.header} onClose={selection.closeMove}>
       {selection.moving ? move.body : null}
     </Drawer>
     {actions ? <ReaderActions document={actions.id} movable onClose={() => setActions(null)} onDelete={() => remove(actions)}
-      onSelect={search.active ? undefined : () => { setActions(null); selection.begin({ kind: 'document', id: actions.id }); }} /> : null}
+      onSelect={() => { setActions(null); selection.begin({ kind: 'document', id: actions.id }); }} /> : null}
     {folderActions ? <FolderActions id={folderActions} onClose={() => setFolderActions(null)} onDelete={removeFolder}
-      onSelect={search.active ? undefined : (id) => { setFolderActions(null); selection.begin({ kind: 'folder', id }); }} /> : null}
+      onSelect={(id) => { setFolderActions(null); selection.begin({ kind: 'folder', id }); }} /> : null}
   </View>;
 }
 function rowTarget(row: Row): LibraryTarget { return { kind: row.kind, id: row.kind === 'folder' ? row.folder.id : row.entry.id }; }
@@ -263,6 +286,7 @@ function LibraryDocument({ entry, present, path, onPress, onActions, disabled, s
 const READING_BUTTON_ROOM = READING_BUTTON_PLACE.bottom + 52 + 12;
 const styles = StyleSheet.create({
   list: { flex: 1 },
+  keys: { position: 'absolute', width: 0, height: 0 },
   column: { width: '100%', maxWidth: LAYOUT_WIDTH.library, alignSelf: 'center' },
   selectionActions: { position: 'absolute', width: '100%', maxWidth: LAYOUT_WIDTH.library, alignSelf: 'center', paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
