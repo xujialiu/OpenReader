@@ -133,9 +133,11 @@ final class LibraryTwoFingerProbe: XCTestCase {
     XCTAssertTrue(waitCount(nil), "Cancel did not leave selection mode")
   }
 
-  /// #332 regression: real two-pointer selection keeps priority, while the
-  /// same two-pointer track cannot select global search results. No seeding.
-  func testSearchAndSweepAreMutuallyExclusive() {
+  /// #339: the two-finger sweep selects search results as it selects a
+  /// Folder's rows. A browse control first, then the same track over results
+  /// must select exactly the three traversed results, lock the field with its
+  /// query, and offer Move. No seeding.
+  func testSweepSelectsSearchResults() {
     app.terminate(); app.launchArguments = []; app.launch()
     let actions = app.buttons["Library actions"]
     XCTAssertTrue(actions.waitForExistence(timeout: 10))
@@ -156,19 +158,25 @@ final class LibraryTwoFingerProbe: XCTestCase {
     XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Scroll Diag")
     let firstResult = app.buttons["Scroll Diag 12 of 12, Library"]
     XCTAssertTrue(firstResult.waitForExistence(timeout: 5))
+    // Results sit under the field, which sits under the title bar.
     let results = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "Scroll Diag", ", Library")).allElementsBoundByIndex
-      .filter { $0.exists && $0.frame.minY >= app.navigationBars.firstMatch.frame.maxY }
+      .filter { $0.exists && $0.frame.minY >= field.frame.maxY }
       .sorted { $0.frame.minY < $1.frame.minY }
     guard results.count >= 3 else { XCTFail("Need three visible global results"); return }
     Fingers.play(Fingers.pair(Fingers.line(CGPoint(x: center, y: results[0].frame.midY),
-      CGPoint(x: center, y: results[2].frame.midY), start: 0.1, seconds: 0.8), lift: 1.1), name: "search-sweep-excluded", in: self)
-    XCTAssertNil(selectedCount(), "The same two-finger gesture must not select search results")
-    XCTAssertEqual(field.value as? String, "Scroll Diag")
-    XCTAssertTrue(app.navigationBars["Library"].exists)
-    XCTAssertFalse(app.buttons["Move selected"].exists)
-    capture("search-sweep-remains-query")
-    app.navigationBars.firstMatch.buttons["Close"].tap()
-    XCTAssertTrue(actions.waitForExistence(timeout: 5))
+      CGPoint(x: center, y: results[2].frame.midY), start: 0.1, seconds: 0.8), lift: 1.1), name: "search-sweep-results", in: self)
+    XCTAssertTrue(waitCount(3), "The same two-finger gesture must select exactly the three traversed results")
+    XCTAssertEqual(field.value as? String, "Scroll Diag", "Selecting must keep the query")
+    XCTAssertFalse(field.isEnabled, "Selecting must lock the field")
+    XCTAssertFalse(app.buttons["Close"].isEnabled, "Selecting must lock the close control")
+    XCTAssertTrue(app.buttons["Move selected"].exists)
+    XCTAssertEqual(app.keyboards.count, 0, "Selecting must put the keyboard away")
+    capture("search-sweep-selected-results")
+    cancelSelection()
+    XCTAssertEqual(field.value as? String, "Scroll Diag", "Leaving selection must keep the query")
+    XCTAssertTrue(app.buttons["Close"].isEnabled)
+    app.buttons["Close"].tap()
+    XCTAssertTrue(field.waitForNonExistence(timeout: 5), "Close must take the field away")
   }
 
   /// Record this gesture to inspect the native back-menu WHILE held. Releasing

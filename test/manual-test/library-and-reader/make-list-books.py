@@ -1,4 +1,4 @@
-"""Tiny distinct EPUB 3 books for a long Library (#338 verification).
+"""Tiny distinct EPUB 3 books for a long Library (Library Search's `Scroll Diag` fixtures, #332, #338).
 
   python3 -I make-list-books.py OUT_DIRECTORY [PREFIX] [COUNT]
 
@@ -9,9 +9,8 @@ its content hash). Load them the way any fixture is loaded (the top README's
 **Real books**): copy into the app's `Documents/Inbox` and send
 `{"seq":N,"do":"add","file":"NAME.epub"}` through the walkthrough harness, 1.6 s
 apart, then overwrite `harness.json` with `{"do":"noop"}` so a relaunch replays
-nothing. `LibraryFlickProbe` needs about 30 rows at the root: sixteen Folders (see
-library-search.md) plus these fourteen and `A Short Test of Reading Aloud`. What it
-cannot prove: that a real book opens, it has a single short chapter.
+nothing. What it cannot prove: that a real book opens, it has a single short
+chapter.
 """
 import os
 import sys

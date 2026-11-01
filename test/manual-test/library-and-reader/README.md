@@ -1,15 +1,11 @@
 # The Library and the reader
 
-[Library Search (#332)](library-search.md): hidden input, global current-name
-results, native position restoration, result actions and keyboard checks;
-fixture cleanup, reliable queries and remaining coverage limits; a flick that
-coasts to the top keeps the field hidden (#338: `flick-to-top.sh`, `bounce.py`,
-`LibraryFlickProbe`, `record-probe.sh` with `field-visible.py --scan`, and
-`frame-track.py` for the list's frame-by-frame position); the first fix left it
-up when a finger caught the bounce and lifted, the second flashed it for 0.15 s
-when the finger dragged the bounce back up (fixed in round 3), and a pull that
-catches the bounce still makes the list jump to its top in one frame at the
-commit and at the release (F2, open).
+[Library Search (#332, #339)](library-search.md): no field until `…` > Search or
+Command-F, the app's field measured against the phone's, global current-name
+results, position restoration, result actions, selecting, moving and deleting
+results, and keyboard checks; fixture cleanup, reliable queries and remaining
+coverage limits. #338's flick tooling went with the pull in #339; its results
+are in notes 2026-11-01.
 
 ## Cold Library opening
 

@@ -3,7 +3,6 @@
 # lasts a few frames (a search field flashing for 0.15 s, #338) can be found afterwards.
 #
 #   bash test/manual-test/library-and-reader/record-probe.sh SIMULATOR_UDID OUTPUT_DIR PROBE [run-probe.sh arguments]
-#   python3 -I test/manual-test/library-and-reader/field-visible.py --scan OUTPUT_DIR/screen.mp4
 #
 # Sets the simulator's own volume to zero (kit/silence.sh), starts one `simctl io
 # recordVideo`, runs kit/run-probe.sh PROBE through the guarded runner with the same

@@ -1,34 +1,46 @@
-# Library Search verification (#332)
+# Library Search verification (#332, #339)
 
 Contract: [design 0090](../../../docs/design/0090-library-search-stays-out-of-the-way.md).
 Use `LibrarySearchProbe.swift` through the [guarded runner](../kit/ios-verification.md).
 These are real UI checks, with no playback or provider requests. Select methods;
 do not run the entire class blindly, since some methods stage or delete fixtures.
 
+Since #339 there is no field until Search is chosen from `…` or with
+Command-F: the app draws it under the title, with the keyboard, and the close
+control beside it takes it away. A pull or a flick at the top of the list has
+nothing to show, so #338's flick tooling (`LibraryFlickProbe`, `flick-to-top.sh`,
+`field-visible.py`, `bounce.py`, `frame-track.py`) went with the pull; its
+results are in [notes 2026-11-01](../../../notes/NOTES_2026-11-01.md).
+
 ## Fixture and state prerequisites
 
 - `A Short Test of Reading Aloud` is inside `Search Folder`.
-- Generated `Scroll Diag 02 of 12` through `Scroll Diag 12 of 12` are at root.
-  The delete case additionally needs `Scroll Diag 01 of 12` restaged each time.
+- Generated `Scroll Diag 02 of 12` through `Scroll Diag 12 of 12` are at root
+  (`make-list-books.py`). The delete cases additionally need `Scroll Diag 01 of 12`
+  restaged each time: `testDeleteFromResultsUpdatesMembership` and
+  `testDeleteSelectedResult` each delete it.
 - The namesake case tolerates root fixture 12 already renamed to the short
   fixture's name by an interrupted run. It restores `Scroll Diag 12 of 12`.
   Never match two same-named action buttons without their row/path context.
-- The Folder-global/Move case expects fixture 12 at root, moves it into Search
-  Folder and back, and leaves navigation at root. Run after namesake cleanup.
+- The Folder-global/Move case and `testSelectResultsAcrossFoldersAndMove` expect
+  fixtures 10 to 12 at root, move them through Search Folder and back, and leave
+  them at root. `testSameNameRefusesWholeMove` renames fixture 11 to the short
+  fixture's name and back. Run them after namesake cleanup.
 - `testStageNestedFolderForHeldBackMenu` creates/reuses Search Outer → Search
   Inner and relaunches inside Inner. It is staging, not back-menu acceptance.
-- Keep the normal text category for the cold test's compact-header threshold.
-  For a large-text run, save `simctl ui UDID content_size`, set the requested
-  category, run menu/clear checks, inspect screenshots and restore the saved
-  category in a trap. No other device or host setting changes.
+- Keep the normal text category for the cold test's header threshold and the
+  field's frames. For a large-text run, save `simctl ui UDID content_size`, set
+  the requested category, run the menu/clear checks, inspect screenshots and
+  restore the saved category in a trap. No other device or host setting changes.
 
 ## Targeted invocation
 
 ```sh
 bash test/manual-test/kit/silence.sh set SIMULATOR_UDID
 bash test/manual-test/kit/run-probe.sh LibrarySearchProbe SIMULATOR_UDID OUTPUT_DIR \
-  -only-testing:LockScreenProbe/LibrarySearchProbe/testCancelRestoresNonzeroBrowse \
-  -only-testing:LockScreenProbe/LibrarySearchProbe/testGlobalResultsPathsAndNamesakes
+  -only-testing:LockScreenProbe/LibrarySearchProbe/testColdLibraryShowsNoSearchField \
+  -only-testing:LockScreenProbe/LibrarySearchProbe/testPullAndFlickToTopShowNoField \
+  -only-testing:LockScreenProbe/LibrarySearchProbe/testSearchShowsFieldWithKeyboardWhereThePhoneDrewIt
 ```
 
 Read the raw per-case assertions and execution summary, failed attempts included.
@@ -39,321 +51,59 @@ simulator to repair a probe query.
 
 ## Measurement rules
 
-- Search input is located by its stable placeholder across UIKit's changing
-  TextField/SearchField AX types. A readiness timeout records `XCTFail`; callers
-  returning on nil must never silently convert absence into a pass.
-- A field disappearing after Close is expected. Never read its frame unless
-  `exists` is true. Nonzero cancel captures an actual swipe's settled row
-  identity and scalar y-coordinate, then compares the same row after Close.
+- Search input is located by its placeholder, `Search Library`. A readiness
+  timeout records `XCTFail`; callers returning on nil must never silently convert
+  absence into a pass.
+- The close control is the page's `Close` button, beside the field; the field's
+  own clear button inside it is `Clear text`. Neither is in the title bar.
+- After Close, Escape, Settings or a relaunch the field must not exist at all; a
+  field that exists but is clipped is a failure now, not hidden search. Never read
+  its frame unless `exists` is true.
+- The phone's own stacked field, measured on iPhone 17 (notes 2026-11-01): the
+  capsule at `{{16, 117}, {315, 44}}`, Close at `{{342, 117}, {44, 44}}`, the words
+  from x 58. `testSearchShowsFieldWithKeyboardWhereThePhoneDrewIt` compares the
+  app's field with those frames within 3 points and keeps a screenshot: compare
+  it, light and dark, with the phone's field in the notes' screenshots.
+- Nonzero Close restoration captures an actual swipe's settled row identity and
+  scalar y-coordinate, then compares the same row after Close.
 - A Reader round-trip taps a fully visible result by coordinate while retaining
   one row as its position anchor. `element.tap()` may auto-scroll an obscured
   row first, invalidating a before-tap measurement.
 - Renaming a result so it no longer matches must REMOVE it under the unchanged
   query. Change the query to find the new name. Distinct paths are `Library`
   and `Library → Search Folder` in the staged namesake case.
+- Selection is read from the title bar's `N selected`; a locked field reads
+  `isEnabled == false` with its query still as its value.
+- `testPullAndFlickToTopShowNoField` samples the field and Close every 50 ms
+  while the list moves. It cannot see a single frame; a video of the run is the
+  check for anything shorter than its sampling.
 - For #317, use the existing `back-menu-read.sh` recipe to read the menu while
   the finger remains DOWN, releasing away afterwards. A press-and-release can
   select an ancestor before the next assertion and is not a menu snapshot.
 
 ## Keyboard and coverage limits
 
-Physical-keyboard Escape was manually verified on beta9. The synthesized
-`testHardwareCmdFAndEscape` still fails; preserve it as a test-path discrepancy,
-not an established app failure or evidence of a UIKit consumer.
-`testTypeKeysInRunningSearch` and `testEscapeOnlyInRunningSearch` do not launch
-or terminate the app, so a debugger can stay attached to the same PID. They
-are diagnostics, not acceptance. A trace needs an accepted breakpoint, actual
-stimulus during the live attachment, a positive control, and explicit detach.
-
-`testPullPreviewThreshold` uses short and full pulls through the same coordinate
-input path. Record the slow full pull and inspect intermediate frames for the
-blur-to-clear transition; an end-state pass alone cannot prove the animation.
-A short release must return to hidden search with no keyboard or Close AND
-remain on the original page. A prior beta12 run navigated into the touched
-Folder and falsely passed the old hidden-field-only assertion. The page check
-is now mandatory. The corrected boundary passes on beta16 together with
-ordinary scrolling and full/repeated entry; keep the failed beta12 evidence.
-
-`testPullFocusesAndCloseStaysHidden` covers the revised pull contract: keyboard
-and external Close before typing, empty Close, typed Close, repeated pull,
-ordinary scrolling without reactivation, and menu reopening. The earlier
-reveal-without-keyboard check is superseded, not a regression requirement.
-
-`LibraryTwoFingerProbe.testSearchAndSweepAreMutuallyExclusive` verifies three
-selected entries as a positive control, then the same two-pointer path while
-searching must leave the query and no selection. `testHeldNestedBackMenu` uses
-the existing event-path kit to hold then release away; record it and inspect
-the menu while held, not after release. Stage Search Inner with the named
-LibrarySearchProbe method first.
+Command-F and Escape now reach the page through the navigation controller and the
+app's key target (ADR 0090), with the app's own text field in the page's
+responder chain. Before #339 a synthesized Escape never closed the title bar's
+search field although a physical one did; whether `XCUIApplication.typeKey`
+reaches the new path is for `testHardwareCmdFAndEscape`,
+`testEscapeEndsSelectionThenSearch` and `testSelectionBlocksCmdF` to show. A
+failure there is a test-path question until a physical keyboard is tried.
 
 `testStageIMEComposition` presses an actual Bopomofo key and requires nonempty
 input; handle the native keyboard-onboarding Continue prompt before the key.
-A read-only native inspection can then require markedTextRange and absence of
-the Library Escape command. `testRestoreKeyboardAfterIME` returns to English
-and closes search. This tests the composition gate, not physical Escape
-transport while composing.
+A read-only native inspection can then require `markedTextRange` on the field
+and the absence of both Library commands. `testRestoreKeyboardAfterIME` returns
+to English and closes search. This tests the composition gate, not physical
+Escape transport while composing.
 
-On iPad and short/empty lists, `testBlankSpacePullAndClose` checks the blank
-content area as well as row-origin pulls; input must have an external native
-× immediately. Keep the same-page and keyboard checks on both sizes.
+`LibraryTwoFingerProbe.testSweepSelectsSearchResults` verifies three selected
+entries as a positive control, then the same two-pointer path over results must
+select exactly three results, keep the query and lock the field.
+`testHeldNestedBackMenu` uses the existing event-path kit to hold then release
+away; record it and inspect the menu while held, not after release. Stage
+Search Inner with the named LibrarySearchProbe method first.
 
-The Download Drawer probe correction/re-verification is separately tracked
-in [#334](https://github.com/xujialiu/OpenReader/issues/334), not part of Library
-Search or evidence for changing its scope. Its old screen-y filter included
-clipped rows above the actual list; no app defect was established by those
-inputs. A missing Select action, a no-op key or a static screenshot alone is
-never proof of the corresponding interaction.
-
-## A flick that coasts to the top keeps search hidden (#338)
-
-Native log of the fault: the finger lifts mid-list, the coast crosses the top
-with no touch, UIKit grows the bound search bar to 54 pt and the top inset from
-116 to 170, and the #332 closed restore collapses it when the coast ends. The
-fix detaches the list from the navigation bar for a coast that reaches the top
-(`patches/react-native-screens+4.26.2.patch`). A coast nobody touches reattaches
-when it ends. A finger that lands on the bounce ends the coast with the list
-still about 186 pt past its top, and letting go makes UIKit begin a drag with no
-finger, to spring the list back; the first fix reattached the list at those
-points, so UIKit expanded the bar (the round 1 failure below). The round 2
-build kept a caught coast detached through the catch and that spring-back, but
-reattached it when a finger began to drag it, which flashed the field when the
-finger took the bounce back up (finding F1, below). The round 3 build keeps a
-caught coast detached through any drag, a finger pushing the list up or pulling
-it down included, and reattaches it when the list is back exactly at its top,
-before Search captures or restores the position, or when the page goes away.
-
-Five tools, each with what it can and cannot tell:
-
-- `flick-to-top.sh` with `field-visible.py` and `bounce.py`: a hard AXe flick
-  (400 pt in 0.12 s) from mid-list, the screen recorded, every frame scored for
-  the field (light or dark theme: the field is told from the page background) and
-  for how far the bounce carried the list past its top. It judges a flick alone.
-  It cannot put a finger on the list during the bounce: AXe starts a second
-  process about 1.1 s after the first ([pitfalls/mcp.md](../pitfalls/mcp.md)).
-- `LibraryFlickProbe.swift`: XCTest event records that put a finger on the
-  list, or a button, a chosen time after a flick lifted. The flicks are weaker
-  than AXe's (a bounce of 190 pt against 370 to 450), so it covers the catches,
-  not the flick. Run its methods one by one through the guarded runner, with
-  `-collect-test-diagnostics never` after a run that may fail (a failed test
-  holds the shared slot in `simctl diagnose` for up to ten minutes):
-
-  ```sh
-  bash test/manual-test/kit/run-probe.sh LibraryFlickProbe SIMULATOR_UDID OUTPUT_DIR \
-    -only-testing:testCatchTheBounceThenRelease -collect-test-diagnostics never
-  ```
-
-  `testCatchTheBounceThenFullPull`, `…ShortPull` and `…Release` (a finger lands on
-  the bounce 0.2 to 0.9 s after the lift, then pulls 160 pt, 25 pt or not at all),
-  `testCatchTheLongCoastThenPull` (the same before the list reaches the top),
-  `testCatchTheBounceThenDragUp` (600 pt from y 760 over 1.0 s) and `…FlickUp`
-  (450 pt from y 700 in 0.15 s): the finger lands on the bounce and takes the list
-  back up, away from its top. A drag of 200 pt or a flick of 250 pt, the gestures
-  of round 2, only unwind the overscroll and bring the list back to its top, so the
-  control that it left the top cannot hold for them: `…ShortDragUp` and
-  `…ShortFlickUp` keep them without it. `…Wiggle` pulls 30 pt first and then
-  takes the list up 500 pt, `…DragUpSweep` catches at six moments from 0.29 to
-  0.85 s after the lift. Also `testMenuSearchDuringTheLongCoast`,
-  `testSettingsDuring…ThenBack`, `testSearchResultsFlickToTop`,
-  `testOrdinaryScrolling`, and `testCatchTheBounceReleaseDetails`, which records
-  how long a stuck field stays. Each prints `[flick]` lines (wall-clock seconds)
-  that carry the state after every step and the measured gap between the flick's
-  lift and the second record. The shapes of the two flicks, why the finger is a
-  second record and what the sheet does to a coast are in the file's comments and in
-  [verification-runs.md](../pitfalls/verification-runs.md#verifying-338-a-flick-that-coasts-to-the-top-2026-11-01).
-  The tests read the state after each step, so a field that is up for 0.15 s
-  and a list that jumps by 190 pt in one frame pass every one of them: record
-  the run and scan the video, and read its frames.
-- `record-probe.sh SIMULATOR_UDID OUTPUT_DIR PROBE [run-probe.sh arguments]`
-  records the screen around a probe run (`OUTPUT_DIR/screen.mp4`), and
-  `field-visible.py --scan OUTPUT_DIR/screen.mp4` scores every frame and prints
-  the bursts of frames that show the field (exit 1 when there is one). Only
-  frames that show the app's own bar count: each relaunch's white launch screen
-  would otherwise read as a field, and a frame of more than 150 rows is the
-  Settings page. A field that flashes starts at about 130 rows and falls to 4
-  within about 0.15 s; the pre-fix coast is one burst of 50 frames. A field that
-  is up on purpose (a committed pull, the menu Search, the results) is a burst
-  too, and the commit of a pull is 7 to 9 frames of up to 68 rows: the scan of a
-  probe that opens search is read against its log, it is not 0.
-- `bounce.py` alone, on any recording, for the list's overshoot and, with
-  `--series`, its position in every frame (UIKit's own spring-back moves at
-  about 9 to 11 times the distance left per second, so a speed that falls steadily
-  along that line is a return with no jump).
-- `frame-track.py`, on any recording: `frame-track.py VIDEO TOP.png OUT.csv` makes
-  one pass (about 2 minutes for 3 minutes of video) and writes, for every frame,
-  the first row's offset from its rest place, the field's rows and whether the
-  app's bar is on screen. Then `--catches OUT.csv [LIMIT_PT]` lists each bounce
-  with its peak, where a finger held it, the first three moves after the hold and
-  the most field rows, marking `JUMP` (a step over LIMIT_PT, default 60, in those
-  three frames) and `FIELD`, and `--series OUT.csv FROM TO` prints the frames of
-  a window with their step and speed. It finds a one-frame snap of the list,
-  which `bounce.py`'s peak and `--scan`'s bursts do not; it cannot tell which
-  catch a bounce is (read them in the probe's order) and it marks a field that
-  is up on purpose as `FIELD`.
-
-Prerequisites: iPhone 17, the Debug app and its Metro, the simulator at volume
-zero, a Library at its root with the field hidden. `flick-to-top.sh` needs at
-least 12 rows and stops with `INVALID` when its first screenshot already shows
-the field; `LibraryFlickProbe` needs about 30 rows (it scrolls 1300 pt): stage
-sixteen Folders while the app is not running, then add Documents:
-
-```sh
-D="$(xcrun simctl get_app_container SIMULATOR_UDID top.xujialiu.openreader data)/Documents"
-python3 -c 'import json; print(json.dumps({"version":1,"folders":[{"id":"folder-flick-%02d"%i,"name":"Flick Folder %02d"%i,"parent":None} for i in range(1,17)],"documents":{},"current":None}))' > "$D/library-folders.json"
-python3 -I test/manual-test/library-and-reader/make-list-books.py BOOKS_DIRECTORY   # 14 books; add them and the short fixture through the harness
-```
-
-Resolve `$D` again after any `simctl install` (the data container changes),
-copy `Documents` aside first, and put it back when done.
-
-Results, 2026-11-01, `iPhone 17 bug` (iOS 27.0), Debug builds of 158fbc2 with and
-without the patch. Round 1 tested the first fix (it failed, below); round 2, from
-04:04 to 04:30, tested the build after it; round 3, from 04:57 to 05:30, tested the
-build with F1 fixed (the second table below). All four show
-`1.0.4 (27)-beta2-debug` in Settings, so the line cannot tell them apart:
-`strings -a OpenReader.debug.dylib | grep -c _openReaderCoastCaught` reads 1 on the
-last two builds and 0 on the other two, and the round 3 change (an `if` around one
-call) is in no string at all. A build is identified by its dylib's SHA-256, which
-must equal the derived-data product's; by the product's link time against
-`RNSScreen.mm`'s and `RNSScreen.o`'s; by `git hash-object` of each of the sixteen
-react-native-screens files against the `index` lines of the patch; and, for a
-change like round 3's, by `xcrun otool -arch arm64 -tV OpenReader.debug.dylib` on
-the method it touched. Round 2's dylib was `f8f3db97…`, linked at 03:48:45, five
-seconds after `RNSScreen.mm` was compiled; round 3's is `d6508ae3…`.
-
-| Check | Round 2 build | First fix (round 1) | Pre-fix |
-| --- | --- | --- | --- |
-| `flick-to-top.sh`, light | 5 `hidden`, bounce 171 to 301 pt (implementer's run, files read) | 8 `hidden`, bounce 369 to 447 pt | 4 `SHOWN` in 52 to 56 frames |
-| the same, dark | 5 `hidden`, bounce 131 to 180 pt | 8 `hidden`, bounce 400 to 482 pt | 4 `SHOWN` in 52 to 55 frames |
-| the same on a Folder page of 14 Documents | not rerun | 4 `hidden`, bounce 369 to 409 pt | 3 `SHOWN` in 50 to 53 frames |
-| catch the bounce, pull 160 pt (5 waits) | commits 5 of 5 (implementer's log) | commits 5 of 5 | commits 4 of 5 |
-| catch the bounce, pull 25 pt (4 waits) | hidden 4 of 4 (same log) | hidden 4 of 4 | hidden 4 of 4 |
-| **catch the bounce, lift without pulling (4 waits)** | **hidden, first row at 128, 4 of 4 light and 4 of 4 dark; 0 field frames in 2929 recorded frames** | **field up or first row 12 to 54 pt low, 4 of 4 (still up at +15 s)** | hidden at rest 4 of 4 |
-| the same, 0.4 s hold / 0.04 s tap / hold at y 140, field at +2, +8, +15 s | hidden at all three times in all three cases | up at all three times in the first two | not run |
-| **catch the bounce, then drag up (3 waits) or flick up (2 waits)** | **hidden at rest and 2 s later, list left its top, flick back reaches 128 (5 of 5 dark, 3 of 3 light); the field flashes for about 0.15 s, and the list jumps up under the finger, in 4 of 4 catches 69 pt or more past the top (F1, fixed in round 3, below)** | not run | not run |
-| catch the long coast, pull 450 pt / 25 pt / release | test passes (implementer's log) | commits 9 of 9 / hidden 6 of 6 / hidden 5 of 6, one with the first row 17 pt low | not run |
-| menu Search after a flick, then Close | passes | opens into input, position kept | not comparable |
-| Settings during a coast, then Back (long coast and bounce) | both pass | field hidden; list scrolls, flick shows no field, pull commits | long coast: field up after Back (first row 236) |
-| results list flicked to its top; ordinary scrolling | both pass | field, Close and query stay | the same |
-| `LibrarySearchProbe` pull preview threshold, pull focuses and Close stays hidden | 2 of 2 pass (implementer's log) | not run | not run |
-
-Round 1's failing row is kept as history. A finger that lands on the list while it
-is past its top and lifts without pulling (a touch to stop the bounce, a 0.04 s
-tap does it too) left the field fully shown with no Close or keyboard, the first
-row at 182 instead of 128, until the next scroll, with the field appearing the
-moment the finger landed at full clarity and no blur preview.
-`testCatchTheBounceThenRelease` failed 4 of 4 on the first fix and passed on the
-pre-fix build. Reading the patch, not instrumenting it: the first fix rebound the
-list at the catch while it was still past the top, so UIKit expanded the bar, and
-nothing without a preview collapsed it on release. The round 2 build passes the
-check, `testCatchTheBounceThenRelease`, on its own (73.7 s, 0 failures, gaps of
-0.22, 0.33, 0.49 and 0.63 s between the lift and the finger) and in dark (73.8 s,
-0 failures), and `testCatchTheBounceReleaseDetails` (92.9 s, 0 failures) at +2,
-+8 and +15 s. In both themes the recording of a caught bounce let go shows the
-list holding where the finger stopped it (191, 111, 32 and 9 pt past the top)
-and returning at 9 to 11 times the distance left per second, with the speed
-falling steadily from the speed it had before the catch, to exactly the top: no
-jump, no partial bar and no frame with the field.
-
-The bounce is kept. The XCTest flick is repeatable, and `bounce.py --series`
-reads its peak 193.3 to 193.7 pt past the top on the first fix (three catches) and
-on the round 2 build (seven), and 193 to 211 pt on the round 3 build (five recordings),
-against 243.3 to 243.7 pt on the pre-fix build (four), where the extra 50 pt is the
-revealed field's 54 pt pushing the first row down. The
-AXe flick of `flick-to-top.sh` bounced less today (131 to 301 pt) than in round 1
-(369 to 482 pt); the pre-fix build was not rerun under today's AXe flicks, so that
-comparison is open. AXe's flick alone varies by up to 1.8 times within one build
-(pre-fix 275 to 490 pt on the Folder page, round 2 171 to 301 pt, round 3 162 to 293 pt in light and 148 to 263 pt in dark).
-
-F1, found in round 2 on the build before this one and fixed in round 3: a finger
-that landed on the bounce while the list was still well past its top and dragged
-it back up flashed the field. `testCatchTheBounceThenDragUp` and
-`testCatchTheBounceThenFlickUp` passed, because they read the state afterwards.
-The recordings (`record-probe.sh`, then `field-visible.py --scan`) showed the
-"Search Library" field appearing fully formed within one frame as the finger
-started to move, and collapsing over about 0.13 s while the list scrolled away:
-11 to 13 frames, 130 pixel rows falling to 4, in all four catches 69 to 173 pt
-past the top (waits 0 and 0.15 s, dark and light), and one frame in the flick-up
-caught at 111 pt; the two catches about 8 and 20 pt past the top (wait 0.4 s,
-flick-up at 0.3 s) showed none. The list jumped too: from 173 pt past the top the
-first row went from 301 to 182 pt, its place under the fully expanded bar, in one
-frame (from 69 pt, 197 to 182). Expected: only a downward pull shows the field
-(design 0090); an upward drag is no pull. Reading the patch, not instrumenting it:
-`scrollViewWillBeginDragging` rebound a caught list as soon as a finger dragged,
-whichever way it moved, and UIKit expands the bar of a list that is bound while
-past its top, as it did for the first fix's catch. By hand: scroll six rows down,
-flick down hard so the list bounces, touch it about 0.2 s after the flick lifts and
-drag up at once. Round 3 skips that rebind while `_openReaderCoastCaught` is set
-(the list stays detached until `scrollViewDidScroll` finds it back at its top).
-
-Round 3, 04:57 to 05:30, `1.0.4 (27)-beta2-debug` with F1 fixed. Five recordings
-of `record-probe.sh` runs in one output directory (`screen.mp4` is overwritten by
-the next run: move it away), each scored with `field-visible.py --scan` and
-`frame-track.py`.
-
-| Check | Round 3 build |
-| --- | --- |
-| installed build | dylib `d6508ae3…` equals the derived-data product linked 04:43:20 (`RNSScreen.mm` saved 04:43:08, `RNSScreen.o` 04:43:16); 16 of 16 react-native-screens files hash to the patch's `index` lines (the patch rewritten 04:54:55); `otool -tV` of `-[RNSScreen scrollViewWillBeginDragging:]` loads `_openReaderCoastCaught` and branches past the call to `openReaderRebindLibraryScrollView` when it is set |
-| **F1: catch the bounce, drag up 600 pt (waits 0, 0.15, 0.4) and flick up 450 pt (0.1, 0.3)** | 2 tests, 0 failures, 107 s; Folder 01 at -69, -314, -446 and -28, -1460 two seconds later; **`--scan` of 2715 frames: 0 bursts**; the finger held the list 173.3, 69.3 and 8.7 pt past its top (drag), 99.3 and 23.7 pt (flick), and the first row then moved -5.0, -1.3, -6.0 and -23.3, -31.7 pt in its first frame, never faster than the finger (round 2: 173 pt to 54 pt in one frame) |
-| F1 with the round 2 gestures (200 pt drag at waits 0 and 0.15, 250 pt flick at 0.1), a wiggle (30 pt down, 500 pt up, waits 0 and 0.15), a sweep of six catches (drag up 600 pt, waits 0.05 to 0.6, gaps 0.29 to 0.85 s) | 4 tests, 0 failures, 225 s; **`--scan` of 5530 frames: 0 bursts**; `--catches`: 16 bounces, the fingers held the list 3 to 175 pt past its top, 0 `JUMP`, 0 `FIELD`; the short gestures end with Folder 01 at 128, 102 and 128 (the list is back at its top), the wiggle at 39 and -196, the sweep at -169, -259, -371, -428, -741, -624 |
-| catch the bounce, lift without pulling (4 waits) and pull 25 pt (4 waits) | both pass in one recording (159 s, 0 failures), hidden with the first row at 128; 0 bursts in 3143 frames; a let-go bounce returns at UIKit's spring speed (29 pt in the first frame from 189 pt, then 24 and 21), no step; **the 25 pt pull ends with a snap (F2)** |
-| catch the bounce, pull 160 pt (5 waits) | commits 5 of 5 (field, Close, keyboard, first row 182), 114 s, 0 failures; no field before the commit in the four catches; **the list jumps to its top at the commit (F2)** |
-| catch the long coast, pull 450 pt / 25 pt / release (7 catches) | passes, 190.5 s: the pull commits 3 of 3 (first row 180, 179, 188), the short pull stays hidden 2 of 2 (128, 121), the release 2 of 2 (117, 122) |
-| menu Search during the long coast, then Close; Settings during the bounce and during the long coast, then Back; results flicked to their top; ordinary scrolling | all pass (34.5, 48.3, 53.6, 28.4, 27.9 s): Search opens into input and Close restores the position within 8 pt; after Back the field is hidden with the first row at 128, the list scrolls, a flick shows no field and a pull commits; "restore after a second Search" Folder 06 162 to 548 pt as before (both builds, not #338); the six tests ran in one recording (383 s, 0 failures) whose 11 bursts are the 3 commits of the long coast, the menu Search, the results (2) and the Settings tests' pulls and menu Searches (5), none where the field must stay hidden |
-| `LibrarySearchProbe` `testPullPreviewThreshold`, `testPullFocusesAndCloseStaysHidden` | 2 of 2 pass, 51.7 s |
-| `flick-to-top.sh`, light | 4 `hidden`, 70 to 73 frames, none shown, bounce 286, 162, 293, 273 pt |
-| the same, dark (light restored afterwards) | 4 `hidden`, 70 to 76 frames, none shown, bounce 245, 149, 148, 263 pt |
-
-The round 3 change to the probe (the gestures above) is sound, and what it cannot
-show is stated here. The 600 pt drag and the 450 pt flick take the list away from
-its top (Folder 01 at -28 to -741), which the 200 pt and 250 pt gestures do not:
-a list caught 190 pt past its top has to be unwound first, and they leave it at or
-near the top (128, 102, 128) with no field and no step in the recording, which is
-the native rubber band and no app fault. They catch at the places that showed the
-flash in round 2 (173 and 69 pt past the top at waits 0 and 0.15; round 2: 69 to
-173), and the flash came in the first frames after the finger began to move, which
-the longer gestures share. What cannot be shown is the detector finding F1 with
-the new gestures: the round 2 build is gone. The scan did find the 7 to 9 frame
-field that every pull's commit makes, and `frame-track.py` the one-frame snaps of
-F2, so both detectors do see a change of that size in these recordings.
-
-F2, open, found in round 3: a finger that catches the bounce and pulls down moves
-the list with no preview (the bar stays collapsed, as designed), then **the list
-jumps to its top in one frame** with the finger still down: 191.7, 121.7, 54.0 and
-36.3 pt past the top in the four catches of `testCatchTheBounceThenFullPull` (waits
-0 to 0.4 s, 15 to 33 ms between the two frames, at the moment the pull has moved
-the finger the 54 pt that commit asks for). Nothing then moves for 0.18 to 0.47 s;
-the field grows in over about 0.2 s, the first row ending 54 pt down, and the
-keyboard rises. The fifth pull, at wait 0.7 s with the list settled, is an ordinary
-pull: its blur-to-clear preview shows for 39 frames (130 rows) and the first row
-goes 0 to 54 pt with no step. The same snap ends a short pull after a catch: after
-the finger lifts, the list jumps to its top in one frame, 188.7, 85.3 and 28.3 pt in
-the three catches that were past the top (`testCatchTheBounceThenShortPull`),
-where the let-go catch springs back smoothly. Every probe asserts the end states
-only (commit: field, Close, keyboard; short pull: hidden, first row at 128), so all
-of them pass. Reading the patch, not instrumenting it: the commit (`[bar focus]`)
-and the release (`openReaderRestoreLibraryPosition`) both rebind the list while it
-is still past its top, and the restore sets the offset inside
-`performWithoutAnimation`. Design 0090 asks for the blur-to-clear preview while
-pulling and for an abandoned pull to retract it; neither shows for a pull that
-catches a bounce, and the snap and the pause are what that costs. Close ends with
-the same step from the committed state (7 of 7 Closes in the regression recording:
-54 or 60 pt to the top in 10 to 20 ms), through the #332 restore that HEAD already
-has. Whether the round 2 build snapped is not measured (by its code it rebound the
-list as the pull began, and it was not recorded for this).
-
-Seen on both builds, so not part of #338: a bar button pressed with a touch pair
-(`ax.py touch`, AXe `touch --down --up`, 0.05 s or longer) leaves the field up at
-the top after Back from Settings (pre-fix 2 of 2, fixed 4 of 4) and behind the
-opened Library actions sheet (fixed); AXe's quick `tap` pressed none of Settings,
-Back or Library actions in three tries, so it is no control for that. After a
-pulled Search and Close, a menu Search from a scrolled list returns to the top on
-Close instead of the browse position (548 against 162 pt, both builds, both
-flicks), and `testCancelRestoresNonzeroBrowse` fails with this 31-row Library
-(1472 against 672 fixed, 675 pre-fix).
-
-Not covered: iPad, Command-F (AXe's `key-combo` exits 0 and nothing opens), and a
-Folder opened during a coast (a touch on a row stops the coast, so none is left
-running). Rounds 2 and 3 did not rerun the Folder page. Round 3 did not run the
-round 2 build, so F2 has no before.
-`testPartialPullStaysOnPage` passes alone and fails after a test that left search
-open.
+A missing Select action, a no-op key or a static screenshot alone is never proof
+of the corresponding interaction.
