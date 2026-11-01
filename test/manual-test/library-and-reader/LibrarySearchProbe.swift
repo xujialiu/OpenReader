@@ -41,11 +41,14 @@ final class LibrarySearchProbe: XCTestCase {
     app.buttons.matching(NSPredicate(format: "label == %@", "Close")).firstMatch
   }
 
-  /// #339 verification finding (library-search.md): while the field has the cursor, the Library actions drawer and a
-  /// result's actions drawer open under the keyboard, so Select, Move to…, Download and Delete cannot be pressed. A flow
-  /// about what those rows DO puts the keyboard away with its own Search key first; the finding itself is
-  /// `testActionsDrawersAreReachableWithTheKeyboardUp`.
+  /// #339 verification finding (library-search.md), fixed in 1.0.4 (25)-beta5: while the field had the cursor, the Library
+  /// actions drawer and a result's actions drawer opened under the keyboard, so Select, Move to…, Download and Delete could
+  /// not be pressed. On a build without the fix a flow about what those rows DO puts the keyboard away with its own Search key
+  /// first (`OPENREADER_PUT_KEYBOARD_AWAY=1`); the finding itself is `testActionsDrawersAreReachableWithTheKeyboardUp`.
   private func putKeyboardAway(_ app: XCUIApplication) {
+    // Since 1.0.4 (25)-beta5 the page blurs the field when a drawer opens, so flows go straight from the focused field.
+    // `TEST_RUNNER_OPENREADER_PUT_KEYBOARD_AWAY=1` brings the step back for a build without that fix.
+    guard ProcessInfo.processInfo.environment["OPENREADER_PUT_KEYBOARD_AWAY"] == "1" else { return }
     guard app.keyboards.firstMatch.exists else { return }
     let key = app.keyboards.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "Search", "search")).firstMatch
     XCTAssertTrue(key.waitForExistence(timeout: 5), "the keyboard's Search key must be there to put the keyboard away")
@@ -278,7 +281,7 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(search.waitForExistence(timeout: 5), "The actions drawer must offer Search")
     search.tap()
     guard let field = waitForSearchField(app, timeout: 20) else { return }
-    field.typeText("Short")
+    typeChecked(field, "Short")
     sleep(1)
     let close = closeButton(app)
     XCTAssertTrue(close.waitForExistence(timeout: 5), "Close must exist while a query is present")
@@ -353,7 +356,7 @@ final class LibrarySearchProbe: XCTestCase {
     let label = bottom.label, y = bottom.frame.minY
     shot("bottom-before-search")
     guard let field = openSearch(app) else { return }
-    field.typeText("Short")
+    typeChecked(field, "Short")
     sleep(1)
     closeButton(app).tap()
     sleep(2)
@@ -396,7 +399,7 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(search.waitForExistence(timeout: 5), "The actions drawer must offer Search")
     search.tap()
     guard let field = waitForSearchField(app, timeout: 20) else { return }
-    field.typeText("Scroll Diag")
+    typeChecked(field, "Scroll Diag")
     let list = app.scrollViews.firstMatch
     XCTAssertTrue(list.waitForExistence(timeout: 5), "results list must exist")
     // The filtered rows can lag the text by a re-render, the subtitle swaps
@@ -565,11 +568,11 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(search.waitForExistence(timeout: 5))
     search.tap()
     guard let field = waitForSearchField(app, timeout: 10) else { return }
-    field.typeText(oldName)
+    typeChecked(field, oldName)
     XCTAssertTrue(app.staticTexts["No documents found"].waitForExistence(timeout: 5),
                   "An old name must not match the renamed Document")
     app.buttons["Clear text"].tap()
-    field.typeText("A Short")
+    typeChecked(field, "A Short")
     let root = app.buttons[sharedName + ", Library"]
     let nested = app.buttons[sharedName + ", Library → Search Folder"]
     XCTAssertTrue(root.waitForExistence(timeout: 5), "Root namesake must show Library")
@@ -590,7 +593,7 @@ final class LibrarySearchProbe: XCTestCase {
     shot("rename-removes-only-root-result")
     if !app.buttons["Clear text"].exists { field.tap() }
     app.buttons["Clear text"].tap()
-    field.typeText(oldName)
+    typeChecked(field, oldName)
     XCTAssertTrue(app.buttons[oldName + ", Library"].waitForExistence(timeout: 5),
                   "The same Document must be searchable by its restored current name")
     closeButton(app).tap()
@@ -608,7 +611,7 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(search.waitForExistence(timeout: 5), "drawer must offer Search")
     search.tap()
     guard let field = waitForSearchField(app, timeout: 20) else { return }
-    field.typeText("Scroll Diag")
+    typeChecked(field, "Scroll Diag")
     sleep(1)
     let settings = app.buttons["Settings"]
     XCTAssertTrue(settings.waitForExistence(timeout: 5), "Settings button must exist")
@@ -635,7 +638,7 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(search.waitForExistence(timeout: 5), "drawer must offer Search")
     search.tap()
     guard let field = waitForSearchField(app, timeout: 20) else { return }
-    field.typeText("Scroll Diag")
+    typeChecked(field, "Scroll Diag")
     sleep(1)
     XCUIDevice.shared.press(.home)
     sleep(2)
@@ -668,7 +671,7 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(search.waitForExistence(timeout: 5))
     search.tap()
     guard let field = waitForSearchField(app, timeout: 10) else { return }
-    field.typeText("Scroll Diag 12")
+    typeChecked(field, "Scroll Diag 12")
     let rootResult = app.buttons["Scroll Diag 12 of 12, Library"]
     XCTAssertTrue(rootResult.waitForExistence(timeout: 5), "Folder search must reach a root Document")
     func openMove() {
@@ -752,7 +755,7 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(close.waitForExistence(timeout: 10), "CmdF must reveal the search (Close appears)")
     shot("matrix-cmdf-revealed")
     guard let field = waitForSearchField(app, timeout: 10) else { return }
-    field.typeText("Scroll Diag")
+    typeChecked(field, "Scroll Diag")
     sleep(1)
     app.typeKey("\u{1b}", modifierFlags: [])
     sleep(1)
@@ -784,7 +787,7 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertTrue(search.waitForExistence(timeout: 5), "drawer must offer Search")
     search.tap()
     guard let field = waitForSearchField(app, timeout: 20) else { return }
-    field.typeText("Scroll Diag 01")
+    typeChecked(field, "Scroll Diag 01")
     sleep(1)
     let result = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Scroll Diag 01")).firstMatch
     XCTAssertTrue(result.waitForExistence(timeout: 10), "the result must appear")
@@ -809,7 +812,7 @@ final class LibrarySearchProbe: XCTestCase {
   func testResultActionsOfferSelect() {
     let app = launch()
     guard let field = openSearch(app) else { return }
-    field.typeText("Scroll Diag 02")
+    typeChecked(field, "Scroll Diag 02")
     let resultActions = app.buttons["Actions for Scroll Diag 02 of 12"]
     XCTAssertTrue(resultActions.waitForExistence(timeout: 5), "the result's actions button must exist")
     putKeyboardAway(app)
@@ -969,7 +972,7 @@ final class LibrarySearchProbe: XCTestCase {
     let search = app.buttons["Search"]
     XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
     guard let field = waitForSearchField(app, timeout: 5) else { return }
-    field.typeText("Short")
+    typeChecked(field, "Short")
     let submit = app.keyboards.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "Search", "search")).firstMatch
     XCTAssertTrue(submit.waitForExistence(timeout: 5)); submit.tap()
     XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
@@ -991,7 +994,7 @@ final class LibrarySearchProbe: XCTestCase {
   func testActionsDrawersAreReachableWithTheKeyboardUp() {
     let app = launch()
     guard let field = openSearch(app) else { return }
-    field.typeText("Diag 12")
+    typeChecked(field, "Diag 12")
     XCTAssertTrue(app.keyboards.firstMatch.exists, "the keyboard is up while the field has the cursor")
     XCTAssertTrue(app.buttons["Scroll Diag 12 of 12, Library"].waitForExistence(timeout: 5))
     func reachable(_ names: [String], in drawer: String) {
@@ -1051,6 +1054,108 @@ final class LibrarySearchProbe: XCTestCase {
     }
     sleep(25)
     print("[diag] after the wait: alert exists \(alert.exists)")
+  }
+
+  /// beta5 (#339): a drawer opened from the focused field puts the keyboard away and leaves search open with its query;
+  /// closing the drawer without choosing leaves the keyboard down; `…` > Search on an open search puts the cursor back.
+  /// Covers the bar's `…`, a result's `…` and long press, and a Folder's `…` and long press over the ordinary list
+  /// (an empty query, the cursor still in the field).
+  func testDrawerBlursTheFieldAndSearchKeepsItsQuery() {
+    let app = launch()
+    guard let field = openSearch(app) else { return }
+    typeChecked(field, "Scroll Diag 1")
+    XCTAssertTrue(app.buttons["Scroll Diag 10 of 12, Library"].waitForExistence(timeout: 5))
+    func keyboardGone(_ what: String) {
+      XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "\(what): the keyboard must go when the drawer opens")
+      sleep(2)
+      XCTAssertEqual(app.keyboards.count, 0, "\(what): and stay down")
+      XCTAssertTrue(app.buttons["Sheet Grabber"].exists, "\(what): the drawer is up")
+    }
+    func closedWithoutChoosing(_ what: String, query: String) {
+      dragSheetAway(app)
+      sleep(1)
+      XCTAssertTrue(field.exists && field.isEnabled, "\(what): search stays open")
+      XCTAssertEqual(field.value as? String, query, "\(what): with its query")
+      XCTAssertEqual(app.keyboards.count, 0, "\(what): and the keyboard stays down")
+    }
+    func cursorInField() {
+      field.tap()
+      XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the keyboard comes with a touch on the field")
+    }
+    // 1. The bar's …, closed without choosing; then … > Search on the open search puts the cursor back.
+    app.buttons["Library actions"].tap()
+    keyboardGone("bar …")
+    shot("beta5-bar-drawer-keyboard-gone")
+    XCTAssertEqual(field.value as? String, "Scroll Diag 1")
+    closedWithoutChoosing("bar …", query: "Scroll Diag 1")
+    app.buttons["Library actions"].tap()
+    sleep(1)
+    app.buttons["Search"].tap()
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8), "… > Search on an open search must put the cursor back (keyboard up)")
+    XCTAssertEqual(field.value(forKey: "hasKeyboardFocus") as? Bool, true, "… > Search: the cursor is in the field")
+    XCTAssertEqual(field.value as? String, "Scroll Diag 1", "… > Search keeps the query")
+    shot("beta5-search-refocused")
+    // 2. A result's … and its long press.
+    app.buttons["Actions for Scroll Diag 12 of 12"].tap()
+    keyboardGone("result …")
+    closedWithoutChoosing("result …", query: "Scroll Diag 1")
+    cursorInField()
+    app.buttons["Scroll Diag 12 of 12, Library"].press(forDuration: 1.2)
+    keyboardGone("result long press")
+    shot("beta5-result-long-press-keyboard-gone")
+    closedWithoutChoosing("result long press", query: "Scroll Diag 1")
+    // 3. A Folder's … and long press: the ordinary list (empty query) with the cursor in the field.
+    cursorInField()
+    app.buttons["Clear text"].tap()
+    XCTAssertTrue(app.buttons["Actions for folder Search Folder"].waitForExistence(timeout: 5), "an empty query shows the Folder's own list, with its Folders")
+    app.buttons["Actions for folder Search Folder"].tap()
+    keyboardGone("Folder …")
+    closedWithoutChoosing("Folder …", query: "")
+    cursorInField()
+    app.buttons["Folder, Search Folder, 1 document"].press(forDuration: 1.2)
+    keyboardGone("Folder long press")
+    closedWithoutChoosing("Folder long press", query: "")
+    closeButton(app).tap()
+    XCTAssertTrue(field.waitForNonExistence(timeout: 5), "Close takes the field away")
+  }
+
+  /// Diagnosis, not acceptance (#339 round 3): does the field lose characters, and does speed decide it? Fifteen bursts of
+  /// `typeText("Scroll Diag 12")`, then fifteen queries typed one character per `typeText` call with a pause between, each read
+  /// back after a short wait; the counts are printed. `typeChecked` exists because a burst once left "Sl Dia", "SDiag", "D2".
+  func testTypingSpeedDropRate() {
+    let app = launch()
+    guard let field = openSearch(app) else { return }
+    let text = "Scroll Diag 12"
+    var burstDrops = 0, slowDrops = 0
+    func clear() { if app.buttons["Clear text"].exists { app.buttons["Clear text"].tap(); usleep(400_000) } }
+    for i in 0..<15 {
+      clear()
+      field.typeText(text)
+      usleep(700_000)
+      let got = field.value as? String ?? "?"
+      if got != text { burstDrops += 1; print("[diag] burst \(i): '\(got)'") }
+    }
+    for i in 0..<15 {
+      clear()
+      for character in text { field.typeText(String(character)); usleep(150_000) }
+      usleep(500_000)
+      let got = field.value as? String ?? "?"
+      if got != text { slowDrops += 1; print("[diag] slow \(i): '\(got)'") }
+    }
+    print("[diag] typing: bursts \(burstDrops) of 15 dropped characters, one character per call \(slowDrops) of 15")
+    closeButton(app).tap()
+  }
+
+  /// Staging for real-touch trials of the drawers over a focused field (beta5, #339), not an acceptance check: search is
+  /// open with "Scroll Diag 1" typed and the cursor in the field. Waits up to 420 s for search to be closed from outside.
+  func testStageFocusedSearchAndWait() {
+    let app = launch()
+    guard let field = openSearch(app) else { return }
+    typeChecked(field, "Scroll Diag 1")
+    XCTAssertTrue(app.buttons["Scroll Diag 10 of 12, Library"].waitForExistence(timeout: 5))
+    print("[diag] staged: query '\(field.value as? String ?? "?")', keyboard up \(app.keyboards.firstMatch.exists); waiting for touches")
+    XCTAssertTrue(field.waitForNonExistence(timeout: 420), "search was never closed from outside")
+    print("[diag] staged search closed from outside")
   }
 
   /// Matching rules of design 0090 (#339), through the app's own field: a name matches when it holds the typed
@@ -1121,7 +1226,7 @@ final class LibrarySearchProbe: XCTestCase {
     // The close control beside the field is `Close`; the field's own clear
     // button inside it is `Clear text`.
     guard var field = beginSearch() else { return }
-    field.typeText("Short")
+    typeChecked(field, "Short")
     sleep(1)
     XCTAssertTrue((field.value as? String ?? "").contains("Short"), "query typed")
     let cancel = closeButton(app)
@@ -1142,7 +1247,7 @@ final class LibrarySearchProbe: XCTestCase {
     // returns, and the field stays revealed and available (still searching).
     guard let reopened = beginSearch() else { return }
     field = reopened
-    field.typeText("zzz")
+    typeChecked(field, "zzz")
     sleep(1)
     let clear = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Clear")).firstMatch
     XCTAssertTrue(clear.exists, "The field's clear control must exist while a query is present")
@@ -1180,7 +1285,7 @@ final class LibrarySearchProbe: XCTestCase {
     sleep(1)
     tree(app, "after-field-tap-tree")
     shot("after-field-tap")
-    field.typeText("Short")
+    typeChecked(field, "Short")
     sleep(1)
     shot("after-typing-short")
     let typed = field.value as? String ?? ""
@@ -1205,7 +1310,7 @@ final class LibrarySearchProbe: XCTestCase {
     sleep(1)
     shot("after-actions-search")
     guard let field = waitForSearchField(app, timeout: 5) else { return }
-    field.typeText("zzzz-no-match")
+    typeChecked(field, "zzzz-no-match")
     sleep(1)
     shot("after-typing-no-match")
     let noMatch = app.staticTexts["No documents found"]
@@ -1236,7 +1341,7 @@ final class LibrarySearchProbe: XCTestCase {
     XCTAssertEqual(close.frame.minX, 342, accuracy: 3, "Close must sit where the phone's did")
     XCTAssertEqual(close.frame.width, 44, accuracy: 3, "Close must be the phone's 44 points")
     XCTAssertEqual(close.frame.midY, field.frame.midY, accuracy: 2, "Close must be centred on the field")
-    field.typeText("Scroll Diag")
+    typeChecked(field, "Scroll Diag")
     shot("search-field-typed")
     close.tap()
     XCTAssertTrue(field.waitForNonExistence(timeout: 5), "Close must take the field away")
@@ -1251,7 +1356,7 @@ final class LibrarySearchProbe: XCTestCase {
   func testSelectResultsAcrossFoldersAndMove() {
     let app = launch()
     guard let field = openSearch(app) else { return }
-    field.typeText("Scroll Diag 1")
+    typeChecked(field, "Scroll Diag 1")
     let names = ["Scroll Diag 10 of 12", "Scroll Diag 11 of 12", "Scroll Diag 12 of 12"]
     for name in names { XCTAssertTrue(app.buttons[name + ", Library"].waitForExistence(timeout: 5), "\(name) must be at the root") }
     // Put one of them in another Folder through its own Move.
@@ -1423,7 +1528,7 @@ final class LibrarySearchProbe: XCTestCase {
     let app = launch()
     app.typeKey("f", modifierFlags: .command)
     guard let field = waitForSearchField(app, timeout: 10) else { return }
-    field.typeText("Scroll Diag 1")
+    typeChecked(field, "Scroll Diag 1")
     XCTAssertTrue(app.buttons["Scroll Diag 10 of 12, Library"].waitForExistence(timeout: 5))
     putKeyboardAway(app)
     app.buttons["Library actions"].tap()
@@ -1446,7 +1551,7 @@ final class LibrarySearchProbe: XCTestCase {
   func testDeleteSelectedResult() {
     let app = launch()
     guard let field = openSearch(app) else { return }
-    field.typeText("Scroll Diag 01")
+    typeChecked(field, "Scroll Diag 01")
     XCTAssertTrue(app.buttons["Scroll Diag 01 of 12, Library"].waitForExistence(timeout: 5), "Restage Scroll Diag 01 at the root")
     putKeyboardAway(app)
     app.buttons["Library actions"].tap()

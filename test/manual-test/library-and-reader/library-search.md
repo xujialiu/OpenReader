@@ -128,14 +128,18 @@ simulator to repair a probe query.
 
 `1.0.4 (27)-beta4-debug`, the e318a75 native build kept (JS only: Metro served the new bundle, Settings read the new line).
 
-- **A search field that has the cursor puts every drawer under the keyboard.** The Library actions drawer and a result's actions
-  drawer open as half sheets whose rows from y 560 down are covered by the keyboard (top y 590): Select, Move to…, Download and
+- **(Fixed in `1.0.4 (25)-beta5`: the page blurs the field when any drawer opens, and the red test below passes.) A search field that
+  has the cursor put every drawer under the keyboard.** The Library actions drawer and a result's actions
+  drawer opened as half sheets whose rows from y 560 down were covered by the keyboard (top y 590): Select, Move to…, Download and
   Delete cannot be pressed, and React Native's `keyboardShouldPersistTaps: "never"` makes the first press on a row (Rename, which
   shows) only put the keyboard away. `testActionsDrawersAreReachableWithTheKeyboardUp` is red for it (frames in the failure text).
-  Every probe about what a drawer's rows DO calls `putKeyboardAway` (the keyboard's own Search key) first; the clear button then
-  exists only after `field.tap()` again.
-- **Typing and pressing in the probes.** `typeChecked` reads the field back and types again once (`typeText("A Short")` left
-  "AShort", `typeText("Scroll Diag")` left "SDiag"); a results swipe starts above the keyboard (XCTest's `swipeUp` starts at 80 %
+  On a build without the fix every probe about what a drawer's rows DO needs `putKeyboardAway` (the keyboard's own Search key)
+  first: it is opt-in now (`TEST_RUNNER_OPENREADER_PUT_KEYBOARD_AWAY=1`), so the flows go straight from the focused field. The clear
+  button exists only while the field is being edited (`field.tap()` again after a drawer).
+- **Typing and pressing in the probes.** `typeChecked` (every query typed into the field goes through it) reads the field back and
+  types again once (`typeText("A Short")` left "AShort" twice, `typeText("Scroll Diag")` left "SDiag", `typeText("Scroll Diag 1")` left
+  "Sl Dia", `typeText("Diag 12")` left "D2": five in about 55 first typings, none in 30 queries typed into an open field,
+  `testTypingSpeedDropRate`); a results swipe starts above the keyboard (XCTest's `swipeUp` starts at 80 %
   of the list's height, under it); Rename's Save is pressed three seconds after typing, when the alert has stopped sliding up (the
   frame XCTest reads lags it: Save at y 482, then y 335); `testStageRenameAlertTypedAndWait` is the staging that showed it, with
   another tool pressing Save. In a selection the rows are checkboxes: look for them by label among all elements, not among buttons.
@@ -151,6 +155,11 @@ simulator to repair a probe query.
 - **More probes:** `testMatchingRules` (case, fragment, order, Folder names, path line, order of results), `testLockedFieldAndCloseDoNothing`
   (touches on the greyed field and Close), `LibraryTwoFingerProbe.testSweepFromBlankSpaceBelowShortList`.
 - `restore-trial.sh` with `SCROLL_FIRST=1` (and `DRAG_DY=200` for a mid position) is the owner's order, scroll then `…`.
+
+Round 3 on `1.0.4 (25)-beta5`: `drawers-over-focused-search.sh SIMULATOR_UDID OUTPUT_DIR` stages a focused search with
+`testStageFocusedSearchAndWait` and drives the drawers with AXe touch pairs (a result's `…` then one touch on `Move to…`, `Select`
+and `Delete`, the bar's `…` then `Create folder` and `Select`, a drawer closed without choosing, `…` > Search on an open search), a
+screenshot per step. `testDrawerBlursTheFieldAndSearchKeepsItsQuery` is the XCTest form, with the long presses and a Folder's actions.
 
 ## Keyboard and coverage limits
 
