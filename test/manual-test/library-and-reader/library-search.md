@@ -124,6 +124,34 @@ simulator to repair a probe query.
   `testSettingsRoundTripKeepsTheListWhereItWas` covers Settings and
   `testCancelRestoresTheBottomOfTheList` the 34 pt shortfall at the very bottom (-264 came back as -230).
 
+## Round 2 on `1.0.4 (25)-beta4` (2026-11-01): what the probes need, and what reaches the app
+
+`1.0.4 (27)-beta4-debug`, the e318a75 native build kept (JS only: Metro served the new bundle, Settings read the new line).
+
+- **A search field that has the cursor puts every drawer under the keyboard.** The Library actions drawer and a result's actions
+  drawer open as half sheets whose rows from y 560 down are covered by the keyboard (top y 590): Select, Move to…, Download and
+  Delete cannot be pressed, and React Native's `keyboardShouldPersistTaps: "never"` makes the first press on a row (Rename, which
+  shows) only put the keyboard away. `testActionsDrawersAreReachableWithTheKeyboardUp` is red for it (frames in the failure text).
+  Every probe about what a drawer's rows DO calls `putKeyboardAway` (the keyboard's own Search key) first; the clear button then
+  exists only after `field.tap()` again.
+- **Typing and pressing in the probes.** `typeChecked` reads the field back and types again once (`typeText("A Short")` left
+  "AShort", `typeText("Scroll Diag")` left "SDiag"); a results swipe starts above the keyboard (XCTest's `swipeUp` starts at 80 %
+  of the list's height, under it); Rename's Save is pressed three seconds after typing, when the alert has stopped sliding up (the
+  frame XCTest reads lags it: Save at y 482, then y 335); `testStageRenameAlertTypedAndWait` is the staging that showed it, with
+  another tool pressing Save. In a selection the rows are checkboxes: look for them by label among all elements, not among buttons.
+  A rename is stored in `Documents/display-names.json`, which a copy of `library.json` does not bring back.
+- **Keys.** XCTest's `typeKey` (Command-F, Escape) reaches nothing: `testHardwareCmdFAndEscape`, `testEscapeEndsSelectionThenSearch` and
+  `testSelectionBlocksCmdF` fail, and `testModalBlocksCmdF` passes without having tested anything. AXe's keyboard stopped
+  delivering during the run (typed text and `key` lost, touches fine). `orca computer hotkey|press-key` into the Device Hub window
+  that shows the simulator did reach it: `keys-trial.sh SIMULATOR_UDID DEVICE_HUB_PID WINDOW_ID` prints the page after each key
+  (open, refocus, Escape's order, Command-F while selecting, a drawer, an alert, Settings, the Reader, a Folder page), and
+  `testStageSelectedResultsAndWait` holds three selected results for it (the hybrid pattern: XCTest stages and waits for the
+  search to be closed from outside). These are synthetic macOS key events, not a physical keyboard. `orca computer type-text`
+  garbled its text ("Diag 1" became "a"), so type with XCTest.
+- **More probes:** `testMatchingRules` (case, fragment, order, Folder names, path line, order of results), `testLockedFieldAndCloseDoNothing`
+  (touches on the greyed field and Close), `LibraryTwoFingerProbe.testSweepFromBlankSpaceBelowShortList`.
+- `restore-trial.sh` with `SCROLL_FIRST=1` (and `DRAG_DY=200` for a mid position) is the owner's order, scroll then `…`.
+
 ## Keyboard and coverage limits
 
 Command-F and Escape now reach the page through the navigation controller and the

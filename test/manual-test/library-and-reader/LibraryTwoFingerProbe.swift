@@ -156,6 +156,13 @@ final class LibraryTwoFingerProbe: XCTestCase {
     XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
     let field = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue == %@", "Search Library")).firstMatch
     XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Scroll Diag")
+    // XCTest's typeText left "SDiag" here once (and "AShort" for "A Short" in LibrarySearchProbe, #339 verification):
+    // read the field back, and type again after clearing when it does not match.
+    if field.value as? String != "Scroll Diag" {
+      print("[diag] typeText('Scroll Diag') left '\(field.value as? String ?? "?")'; clearing and typing again")
+      if app.buttons["Clear text"].exists { app.buttons["Clear text"].tap() }
+      field.typeText("Scroll Diag")
+    }
     let firstResult = app.buttons["Scroll Diag 12 of 12, Library"]
     XCTAssertTrue(firstResult.waitForExistence(timeout: 5))
     // Results sit under the field, which sits under the title bar.
@@ -177,6 +184,52 @@ final class LibraryTwoFingerProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Close"].isEnabled)
     app.buttons["Close"].tap()
     XCTAssertTrue(field.waitForNonExistence(timeout: 5), "Close must take the field away")
+  }
+
+  /// #339: the list's content no longer grows to the viewport, so the blank space under a SHORT list must still begin a
+  /// two-finger sweep. Inside `Search Folder` (one Document) the pair starts 300 pt under the row, in blank space, and
+  /// moves up onto the row; the row must be the one selected. Then the same pair from the blank space of a one-result
+  /// search (the field up, the keyboard away). Needs the staged Library (the Folder with the short test).
+  func testSweepFromBlankSpaceBelowShortList() {
+    app.terminate(); app.launchArguments = []; app.launch()
+    let folder = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Folder, Search Folder,")).firstMatch
+    XCTAssertTrue(folder.waitForExistence(timeout: 15), "Search Folder must be at the root")
+    folder.tap()
+    XCTAssertTrue(app.navigationBars["Search Folder"].waitForExistence(timeout: 5))
+    let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND NOT label BEGINSWITH %@", "A Short Test of Reading Aloud", "Actions for")).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 5), "the Folder's one Document must be on show")
+    let x = app.frame.midX
+    let blank = row.frame.maxY + 300
+    XCTAssertGreaterThan(app.frame.maxY - blank, 120, "the start must be on the screen, under the row")
+    Fingers.play(Fingers.pair(Fingers.line(CGPoint(x: x, y: blank), CGPoint(x: x, y: row.frame.midY), start: 0.1, seconds: 0.8), lift: 1.1),
+      name: "sweep-from-blank-below-the-row", in: self)
+    XCTAssertTrue(waitCount(1), "A sweep that starts in the blank space under a short list must select the row it reaches")
+    capture("sweep-from-blank-in-folder")
+    cancelSelection()
+    // The same from the blank space of a short list of results.
+    app.navigationBars.firstMatch.buttons.firstMatch.tap()
+    XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 5))
+    app.buttons["Library actions"].tap()
+    let search = app.buttons["Search"]
+    XCTAssertTrue(search.waitForExistence(timeout: 5)); sleep(1); search.tap()
+    let field = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue == %@", "Search Library")).firstMatch
+    XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Diag 12")
+    if field.value as? String != "Diag 12" {
+      if app.buttons["Clear text"].exists { app.buttons["Clear text"].tap() }
+      field.typeText("Diag 12")
+    }
+    let result = app.buttons["Scroll Diag 12 of 12, Library"]
+    XCTAssertTrue(result.waitForExistence(timeout: 5))
+    let key = app.keyboards.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "Search", "search")).firstMatch
+    if key.exists { key.tap() }
+    XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+    let blankResults = result.frame.maxY + 300
+    Fingers.play(Fingers.pair(Fingers.line(CGPoint(x: x, y: blankResults), CGPoint(x: x, y: result.frame.midY), start: 0.1, seconds: 0.8), lift: 1.1),
+      name: "sweep-from-blank-below-the-result", in: self)
+    XCTAssertTrue(waitCount(1), "The same from the blank space under a short list of results")
+    capture("sweep-from-blank-in-results")
+    cancelSelection()
+    app.buttons["Close"].tap()
   }
 
   /// Record this gesture to inspect the native back-menu WHILE held. Releasing
