@@ -144,7 +144,7 @@ describe('a selection of search results, Documents from any Folders (#339)', () 
   });
   it('deletes Documents from several levels under one lock', async () => {
     const { store, documents } = results();
-    const remove = vi.fn(async () => { expect(store.getSnapshot().busy).toBe(true); });
+    const remove = vi.fn(async (_id: string) => { expect(store.getSnapshot().busy).toBe(true); });
     const complete = vi.fn();
     await store.deleteEntries([document('inside'), document('deep')], documents, remove, complete, 'results');
     expect(remove.mock.calls.map(([id]) => id)).toEqual(['inside', 'deep']);
