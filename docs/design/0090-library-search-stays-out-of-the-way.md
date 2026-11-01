@@ -62,6 +62,9 @@ and each moved result shows its new Folder path.
 
 ## Returning, clearing and cancelling
 
+Pressing `…` or Settings leaves the list where it is, so search can remember
+where browsing was. Both are the phone's own title-bar buttons.
+
 Search is a temporary view, not a change to the Folder being browsed. Opening
 a result opens its Document. Returning from that Document restores the query
 and the result-list position without automatically reopening the keyboard.
@@ -171,6 +174,14 @@ Opening the Move page where search began lets a search made inside a Folder
 gather its results there in one step. Starting at the Library root was turned
 down. Ending search after a move was turned down too, so that more of the
 same results can be moved without typing the query again.
+
+`…` and Settings were drawn by the app. Pressing one also counted as a touch on
+the title bar, which the phone answers by taking the list back to its top, so
+a scrolled Library jumped to its top and Close could not return to where
+browsing had been. They became the phone's own buttons: `…` is a few points
+smaller and Settings shows the phone's own sliders symbol. Turning off the
+phone's return to the top for the Library list was turned down: it would also
+stop a tap on the status bar from taking a long Library back to its top.
 
 Returning to results instead of the opened Document's Folder lets the owner
 try another match without entering the query again. Cancelling restores the

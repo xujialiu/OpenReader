@@ -462,3 +462,8 @@ not proof that a button received it.
   indexes change after every state change, so query again before each press. The Device Hub's Appearance pane has a VoiceOver switch,
   which is a device-wide setting and was not touched. A press this way is not VoiceOver, Voice Control or Switch Control, and the
   result says only that the press arrived with a touch.
+
+## AXe typing and touching, again (#339 verification, 2026-11-01, AXe 1.8.0, iOS 27.0)
+
+- **`axe type` drops repeated identical characters.** Symptom: `axe type "zzzz"` into the Search field left `z`, the tree read `TextField | Search Library | z`, and `No documents found` still appeared. A second try typed `zqxj` whole, so nothing else was wrong. Cause: the HID key presses of one repeated key arrive as one (the same loss as the batch backspaces under #210). Only `zzzz` was measured to collapse (`zqxj` and `Short` typed whole); read the field back after any query with a doubled letter, or type with XCTest's `typeText`.
+- **`ax.py touch LABEL` finds buttons only.** Symptom: `no element 'Library'` for the title, which the tree lists as `Heading | Library`. Fix: `axe touch -x X -y Y --down --up --delay 0.2 --udid UDID` at the heading's centre; and remember a touch on the title bar scrolls the list to its top ([verification-runs.md](verification-runs.md), #339).

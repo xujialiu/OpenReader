@@ -81,6 +81,41 @@ simulator to repair a probe query.
   the finger remains DOWN, releasing away afterwards. A press-and-release can
   select an ancestor before the next assertion and is not a menu snapshot.
 
+## Staging, restoring by touch and scanning a recording (#339 verification, 2026-11-01)
+
+`1.0.4 (27)-beta3-debug`, iPhone 17 (iOS 27.0), the first native build of the app's own field and the
+`open-reader-library-keys` module (prebuild 2 s, `pod install` 18 s, clean `xcodebuild` 171 s with
+`-jobs 6`, guarded: 191 s). The device still held #338's Library (16 Flick Folders, `Scroll Diag … of
+14`), whose names the probes do not match: `Scroll Diag 1` finds eight documents there (five of 14 and three of 12), not three.
+
+- `stage-search-fixtures.sh SIMULATOR_UDID OUTPUT_DIR` generates the 12 `Scroll Diag … of 12` books and the
+  short test, and adds them through the harness (13 entries; it never deletes). Empty a Library left by
+  another run first, through the app: `…` > Select > Select all > Delete selected > Delete (the alert reads
+  "This will delete 15 documents and 16 folders…"). Then make `Search Folder` with
+  `testStageFolderAndMoveFixture`. Back `Documents` up with `cp -Rp` once staged: the delete cases consume
+  `Scroll Diag 01 of 12`.
+- `restore-trial.sh SIMULATOR_UDID LABEL SWIPES [TYPED]` is the real-touch form of
+  `testCancelRestoresNonzeroBrowse`, with the position made after `…` is pressed (its header says why).
+- `field-scan.py VIDEO TEMPLATE_PNG` looks for the field in every frame of a `simctl io recordVideo`
+  recording, after cutting the magnifier and the xmark out of the `search-field-open-empty` screenshot.
+  Use it, with `record-probe.sh`, for any claim that something does not appear: `testPullAndFlickToTopShowNoField`
+  samples every 50 ms and cannot see a frame. The first run scanned 861 frames of the pull and flick tests
+  (highest glyph scores 0.26 and 0.30 against 0.8 or more in the three runs that open search on purpose),
+  and 497 frames of AXe pulls and drags (0.26, 0.24).
+- The app's field as drawn on this device, from the open-empty screenshot (3x): capsule x 15.7 to 329.7, y
+  118 to 162 (the phone's: 16 to 331, 117 to 161); magnifier from x 29; placeholder from x 58; Close circle
+  x 338.7 to 386, y 116.7 to 163.3, so 46.5 across against the phone's 44, with its right edge on the margin
+  (the phone's Close starts at 342). The accessibility frames say the same: input `{{58, 118}, {264.7,
+  44}}`, Close `{{339.3, 117}, {46, 46}}`. Inside the probe's 3 pt, but not the phone's numbers.
+- Pressing `…` or Settings (React Native views in the title bar) sends the list to its top, as a touch on
+  the bar's empty area does (270, 84 and 201, 84 on the 402 pt screen), which is how iOS's tap-the-bar-to-
+  scroll-to-top behaves: inferred from that match, the call itself was not caught (conditional breakpoints
+  on `-[UIScrollView setContentOffset:]` and `…animated:` never fired). A bar item UIKit draws itself
+  (Select all, Cancel while selecting), a row's actions and the Move drawer do not. So `…` > Search loses a
+  scrolled position before Search starts, and `testCancelRestoresNonzeroBrowse` fails (464 against 72,
+  twice). Bar touches made by tooling scroll the list too: do not touch the bar to "wake" a screen
+  mid-measurement.
+
 ## Keyboard and coverage limits
 
 Command-F and Escape now reach the page through the navigation controller and the
