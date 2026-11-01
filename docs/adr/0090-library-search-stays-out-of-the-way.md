@@ -2,355 +2,235 @@
 status: accepted
 ---
 
-# Library Search uses the native stack's search controller
+# Library Search draws its own field and keeps its keys on the page
 
-Issue #332; the product contract is [design 0090](../design/0090-library-search-stays-out-of-the-way.md).
-The existing Library/Folder native-stack page owns its search, not a new route,
-a Drawer or a persisted index. `libraryRows` filters the already-loaded entries
-by their current names and preserves their existing order. Empty input projects
-the original Folder's immediate children instead. No document is opened to
-search its name, and no persisted format changes.
+Issues #332 and #339; the product contract is
+[design 0090](../design/0090-library-search-stays-out-of-the-way.md). The
+existing Library/Folder native-stack page owns its search, not a new route, a
+Drawer or a persisted index. `libraryRows` filters the already-loaded entries by
+their current names and preserves their existing order. Empty input projects the
+original Folder's immediate children instead. No document is opened to search
+its name, and no persisted format changes.
 
-## Native field and transient state
+#332 built search on the native stack's search controller, hidden above the list
+and revealed by a pull. #339 removed it: the pull, the hidden field and the
+native patching that held them up. What follows is what is there now; the
+record of the native field, and why it was given up, is the last section.
 
-The [Expo SDK 57 screens reference](https://docs.expo.dev/versions/v57.0.0/sdk/screens/)
-identifies `react-native-screens` as the native-stack primitives. The installed
-4.26.2 `SearchBarProps` and [React Navigation's search options](https://reactnavigation.org/docs/native-stack-navigator/#headersearchbaroptions)
-provide the field and its imperative focus, blur, set-text and cancel commands.
-`placement: 'stacked'` avoids the integrated standing search button;
-`allowToolbarIntegration: false` keeps it out of the bottom toolbar.
-`hideWhenScrolling` is true outside search. The list uses automatic content
-insets, as the navigator requires. Text and action colours follow the app's
-existing palette and accent; UIKit draws the search control. The content
-container grows to the viewport so empty space under a short/empty list
-remains inside the scrolling content's touch ancestry. Without that fill, the
-one-row iPad list accepted a row-origin pull but never began dragging from
-blank space, despite alwaysBounceVertical being enabled.
+## No search controller in the title bar
 
-UIKit's automatic stacked presentation omitted the external cancel control
-on iPad even while input was focused, and explicitly setting showsCancelButton
-did not make it appear there. RNSSearchBar owns cancel visibility; on iPad its
-bar subclass supplies a sibling UIKit UIButton with the system xmark image and
-glass configuration (standard tinted configuration before iOS 26), reserving
-space beside the native text field. Its frame is derived from bar bounds,
-never repeatedly subtracted from the already-sized field. It uses the same
-cancelSearch route, not a separate query lifecycle. iPhone retains UIKit's
-built-in control. An active search keeps Close when the keyboard is dismissed
-or a result is visited; it is not conditional on nonempty text.
+The Library and Folder pages never set `headerSearchBarOptions`. With no search
+bar and no large title, React Navigation 7.19.2 computes the header as not
+translucent (`useHeaderConfigProps.tsx`, `translucent = headerBackground != null ||
+headerTransparent || ((hasHeaderSearchBar || headerLargeTitleEnabled) && …)`), and
+react-native-screens then excludes the top edge from the page's extended layout
+(`RNSScreenStackHeaderConfig.mm`, `edgesForExtendedLayout`). The page starts
+under the bar, so UIKit adds no top inset of its own to the list. That is the
+same layout every other page has, and the one the Library had during selection
+under #332. The bar's background was already the opaque page colour. Read from
+the source, not yet measured on a device. The same file notes an iOS 26
+landscape bug with that edge for an opaque header and works around it with a
+safe-area view; whether that leaves a top inset UIKit applies to the list
+without reporting it, in landscape, is not measured either.
 
-`useLibrarySearch` owns the query and navigation lifetime. On iOS the native
-search control owns the browsing and result scroll positions, captured before
-focus or Reader navigation changes the view. These are page-local, never route
-parameters or stored data.
-Focus begins search, but blur only dismisses input: opening an action Drawer or
-hiding the keyboard must not drop results. A result marks its Document Id
-before navigation, so only that Reader round trip retains search. Other
-navigation, including an external Reader open, ends it. Navigation-state
-changes are observed even while the Library is blurred, so leaving the retained
-Reader for another page cannot leave an abandoned query waiting behind it.
+## The field
 
-Native snapshots store the logical content position: `contentOffset.y` plus
-`adjustedContentInset.top`. Restoration reads the current adjusted inset,
-clamps the logical target to the current content range and sets `UIScrollView`
-directly. JavaScript keeps only a pending slot (`browse`, `closed-browse`, `results` or `top`)
-and retries that semantic request when content size changes, because the first
-request may still meet the old, shorter result list. A manual drag or a new
-search action retires the request. Native scroll changes while the Reader is
-in front do not replace the saved result snapshot.
+`LibrarySearchField` is rendered by the page above the list, inside the
+Library's column, only while search is open, and goes with it. It copies the
+phone's own stacked field as measured on iPhone 17 (iOS 27.0; notes 2026-11-01):
+a 44-point capsule from x 16, its top 1 point below the bar, 15 points above the
+list; the magnifying glass 14 points in and 16 across; the words in Body from x
+58; a 44-point round Close 10 points to the right and 16 from the edge.
 
-Cancellation is idempotent. `RNSSearchBar.cancelSearch` emits Cancel and then
-an empty text change. A second cancellation must not overwrite the original
-browsing offset with the result-list offset, and the empty change must not
-reopen the search. The original hook regression first failed with a 720-point
-browsing offset restored as zero, then passed with repeated cancellation
-keeping 720 (request 670 with its doubled 50-point inset). That coordinate test
-now covers the non-iOS fallback; the iOS regression instead requires one native
-browse capture and native restoration, never the clamping RN scroll command.
+- **The text is a React Native `TextInput`**, with the phone's own clear button
+  (`clearButtonMode="while-editing"`), the Search return key, no
+  autocorrection, spelling or capitalisation, and the placeholder colours
+  measured on the phone's glass (`#979797`, `#9f9ea5`; `INK.searchPrompt`).
+- **The capsule's glass and Close are the phone's**, through `@expo/ui`: a
+  SwiftUI `Capsule` with `glassEffect` (`foregroundStyle` clear, so only the
+  glass shows) behind the text, and a `Button` labelled `Close` with the `xmark`
+  symbol, `labelStyle('iconOnly')`, `buttonStyle('glass')`, a circular border
+  shape and `controlSize('large')`. Before iOS 26 the capsule is a quaternary
+  fill and the button `bordered`, as `LibrarySelectionAction` falls back.
+  Whether `controlSize('large')` draws Close at exactly 44 points is not
+  measured; `testSearchShowsFieldWithKeyboardWhereThePhoneDrewIt` checks it.
+- **The magnifying glass is the app's `Icon`** (`search`, a 20-point box, stroke
+  2.2 of its 24 units): the measured glyph is 16 points across and about 1.7
+  thick.
+- **Locked while selecting**: `editable={false}`, the capsule at half opacity,
+  Close disabled through SwiftUI's `disabled`, and the page blurs the field when
+  selection begins (a two-finger sweep can begin it while the keyboard is up).
 
-A deliberate pull at list top now previews input and commits only at full
-clarity. The page subscribes to the already-associated `RCTEnhancedScrollView`
-through its documented `delegateSplitter` API, preserving React Native's own
-delegates. Begin/scroll/end callbacks observe actual content movement; no
-competing recognizer or replacement scroll delegate is installed. Only
-movement beyond the adjusted top creates a preview. Progress itself uses
-finger travel in fixed window coordinates, not the content displacement:
-UIKit changes offsets/insets while expanding the header. The threshold is
-at least the bar's full native fitting height, never its fraction-of-a-point
-bounds during the first reveal frame. A live failure read found a threshold
-of 1 with only 2.3 points of finger travel, which committed a short pull.
-Multi-touch invalidates entry.
+**The keyboard comes with the field and cannot race it.** The input is mounted
+with `autoFocus`. React Native 0.86.3's Fabric `RCTTextInputComponentView`
+acts on it in `didMoveToWindow`, once per mounted view (`_didMoveToWindow`,
+reset only by recycling): the field becomes first responder when it is in the
+window and not before. So `start()` only sets state; nothing calls `focus()` on
+a ref that may not exist yet. On a search already open, `start()` calls
+`focus()` on the existing field. Returning from a result's Reader moves the
+same mounted view back into the window, which `_didMoveToWindow` stops from
+focusing again. The Library actions Drawer still defers Search to its native
+dismissal callback, so the field never appears under a sheet that is still
+covering the page.
 
-`RNSSearchBar` drives a paused UIKit `UIViewPropertyAnimator` over a
-`UIVisualEffectView`, from material blur at progress zero to no blur at one.
-The effect stays within the native text field, using its bounds and capsule
-geometry; UIKit still draws the real field and its dynamic appearance. During
-preview the bar is noninteractive and its accessibility subtree is hidden.
-Reaching full progress removes the preview and cancels the now-completed
-native scrolling gesture before scheduling focus on the next main-loop turn.
-Otherwise `keyboardDismissMode=on-drag` dismisses the newly focused keyboard
-on the next movement while the finger remains down. The page/controller/scroll
-identity and modal/selection scope are checked again. UIKit activation supplies keyboard input and external Close while the
-query is still empty.
+## Transient state and positions
 
-Releasing or cancelling short uses the existing closed-position transaction
-BEFORE removing the effect, preventing a clear-field flash or half-open rest.
-A newly started gesture supersedes an older queued cancellation. Binding
-changes and deallocation remove the additive delegate and clean up effects
-and interaction flags.
-An end-drag notification does not always end movement: a measured flick
-reports `willDecelerate=YES` at the original offset, and content displacement
-arrives afterwards. An untouched candidate remains eligible through that
-remaining motion, ending at `scrollViewDidEndDecelerating`. A visible partial
-preview is instead abandoned on release, so inertia cannot finish a preview
-the person stopped short. Programmatic scrolling outside an eligible gesture
-never creates entry. Visual and threshold behavior require recorded gesture
-evidence, not just final frames.
+`useLibrarySearch` owns `{ active, query }`, page-local: never route parameters
+or stored data. `start` opens, `exit` (Close, Escape, leaving the page) ends,
+`change` filters. A result marks its Document Id before navigation, so only
+that Reader round trip keeps search; any other navigation, an external Reader
+open included, ends it. Navigation-state changes are observed while the Library
+is blurred, so leaving the retained Reader for another page cannot leave a query
+waiting behind it.
 
-The first pan-target implementation regressed basic browsing: it created a
-preview on ANY drag at top, then restored logical zero whenever that drag did
-not commit. A real two-direction test stayed at y=296; removing ONLY that
-handler at runtime restored y=296 → -30.33 → 296 under the same stimulus.
-This is an application regression, not an input-path blocker. Eligibility now
-creates no effect and arms no restoration. An ordinary scroll is untouched;
-only a confirmed downward preview may be cancelled, and a reversed preview
-that becomes forward browsing preserves the current logical position. The
-original zero-translation pan trace is not evidence that the input was bad.
+Positions are the list's own: `contentOffset.y + contentInset.top` from
+`onScroll`, restored with `FlatList.scrollToOffset(position − inset)`. Opening
+search saves the browsing position; opening a result saves the result position;
+Close and an emptied query restore browsing, a new query asks for the top, and
+returning from the Reader restores the results. A request is retried when the
+content size changes (the first may meet the old, shorter list) and after each
+commit, and is retired when reached or when a finger drags. Scroll events while
+the Reader is in front are ignored. Under #332 this JavaScript path was wrong on
+iOS because UIKit added a 116-point top inset that React Native's event does not
+report (history below); with the bar opaque there is no such inset to miss.
 
-Close keeps using `closed-browse`: hide the field and keyboard and restore the
-original position. Empty Close is a cancellation too. A later layout must not
-focus again; only another deliberate pull or explicit Search entry does that.
+The content container no longer grows to the viewport. That fill existed so a
+pull could start in the blank space under a short list; the two-finger sweep's
+gesture covers the whole column without it.
 
-The Library actions Drawer defers Search until its native dismissal callback,
-as it already defers the document picker. Focusing before dismissal risks
-handing first responder to a surface still covered by the Drawer. Import and
-Create folder retain their leading positions; Search precedes Select. Search
-omits Select from the Library, Document and Folder actions and disables the
-two-finger sweep. Selection removes the native search controller altogether.
+## Selecting results
 
-## Single-pointer scrolling and two-pointer selection
+A selection is of the rows on show. `SelectionScope` (`src/core/folders.ts`)
+says where they came from: `folder`, a Folder's own rows, all of one level
+(#128); `results`, search results, Documents only, from any level. The query is
+locked while selecting, so the scope cannot change under a selection.
 
-The Library's native-scroll gesture waits for the two-finger sweep to fail,
-so the sweep keeps priority. The installed immediate pan (`minPointers(2)`,
-`minDistance(0)`) did not fail a moving single finger until touch-up. A short
-pull could consequently navigate into the row under the finger instead of
-remaining on the original page. Removing the wait in a diagnostic changes
-this behavior but would discard the required two-finger priority.
+- `selectionPlan` refuses a Folder, a missing Document or a duplicate in a
+  `results` selection, and skips the same-level check.
+- `moveSelection` with `results` leaves the Documents already in the destination
+  where they are, still counting their names for #227, and refuses only when
+  every selected Document is already there. The whole move is built in memory
+  and written once, as before.
+- `moveChoice` with `results` enables Move wherever at least one selected
+  Document is not already. The Move page opens at `from`, the Folder search
+  began in.
+- `deleteEntries` with `results` deletes under the same single lock.
 
-`react-native-gesture-handler+2.32.0.patch` therefore fails only an immediate
-multi-pointer candidate still missing its required fingers after movement
-reaches ten points. A pair already down follows the existing activation path.
-The Library's real two-pointer control selects exactly three traversed
-entries; the same two-pointer track while searching leaves the query intact
-and enters no selection. The native gesture explicitly uses `runOnJS(true)`:
-the app has no Reanimated module to receive those events. The Download
-verification follow-up is separate (#334): its old coordinate filter started
-outside the list, so its failures did not establish a selection defect.
+`…` > Select, a result's own Select and the two-finger sweep all work over
+results. After Move or Delete the selection ends and search stays.
 
-## The narrow native patch
+## Command-F and Escape
 
-`patches/react-native-screens+4.26.2.patch` retains the existing Folder back-menu
-fix and adds the Library keyboard/focus behavior at the native boundary:
+The commands stay at the boundary #332 found for them: `RNSNavigationController`
+adds the top page's commands to its own `keyCommands` and forwards their
+actions to that page. It is on every responder path of the stack: a focused
+field's, and none (#332 measured the page itself missing from a title-bar
+field's chain; the app's field is inside the page, so the page is on its chain
+now, but the navigation controller also serves the case with no first
+responder).
 
-- `RNSScreen.viewDidLayoutSubviews` explicitly associates the Library's actual
-  `UIScrollView` with the top bar through `setContentScrollView:forEdge:` when
-  a search controller is present. It uses the normal lookup first, then a
-  breadth-first search of this page, excluding header and nested-screen
-  branches. The cached association changes only when the scroll view changes;
-  removing search restores UIKit's default lookup. Initial presentation and
-  the end of input use one no-animation layout transaction: preserve the
-  logical list offset, trigger native collapse using the search bar's measured
-  height, finish layout, then restore that offset against the final adjusted
-  inset. The per-controller guard prevents collapsing later deliberate pulls;
-  active input rearms it so cancellation returns to ordinary hidden search.
-- `RNSNavigationController.keyCommands` adds the top page's Library commands
-  to its inherited commands. `RNSScreen.openReaderLibraryKeyCommands` supplies
-  them only when the visible page has a search controller and no other modal
-  presentation. Reader and Settings have no search controller. Escape is
-  omitted during marked-text composition; its action rechecks that condition
-  as well, in case UIKit cached commands before composition began.
-- Command-F activates and focuses that controller; Escape calls its search-bar
-  delegate's cancellation path, so the normal JavaScript cancellation runs.
-- `RNSSearchBar.focus` activates the controller before requesting first
-  responder, including when its stacked field has scrolled out of view.
-- Autocorrection and spelling substitution are disabled for name input.
+What changed is how the page knows what applies. `RNSScreen` looks in its own
+view tree for a key target: a view answering `openReaderLibraryKeys` and
+`openReaderPerformLibraryKey:`. That view is `LibraryKeys`, from the app's local
+Expo module `modules/open-reader-library-keys`; the page's JavaScript sets its
+`find` and `escape` props and receives `onKey`. The patch knows nothing else
+about search. `RNSScreen` offers the commands only:
 
-Registering on the page itself was insufficient: a focused field's measured
-responder chain is `UISearchBarTextField → … → UISearchBar → UINavigationBar
-→ … → RNSNavigationController → … → UIWindow`, with no `RNSScreen` in it.
-The page could report Escape as registered while the key did nothing. The
-search bar's own `_performCancelAction:` Escape command had priority 0; the
-Library Escape command retains priority over system behavior. Registration
-therefore belongs on the navigation controller shared by both responder paths,
-with actions forwarded to the current page and its existing scope checks.
-Moving registration onto that chain alone did not fix focused Escape: the
-native check confirmed the navigation controller's priority-1 command and
-valid page gate, but search stayed active. This rules out absent registration;
-it does not trace which UIKit handler consumes the event.
+- when it is the navigation controller's top page and in a window;
+- when nothing is presented over it or its ancestors (an actions Drawer, an
+  alert);
+- when no first responder in its view tree has marked text (a Bopomofo
+  composition keeps Escape and Command-F for itself);
+- and checks all three again, plus the target's current keys, when a command
+  fires, since UIKit can cache commands.
 
-The search bar now replaces its own unmodified Escape command with the same
-scoped Library command. `RNSOpenReaderSearchController` lazily returns an
-`RNSOpenReaderSearchBar`; this is Apple's documented
-[`UISearchController.searchBar` customization point](https://developer.apple.com/documentation/uikit/uisearchcontroller/searchbar).
-The subclass changes only keyboard registration/forwarding, not rendering,
-the text field, touch handling or scroll behavior. Non-Escape commands remain
-inherited; when the page gate or marked-text condition disallows cancellation,
-UIKit's commands remain intact. Dispatch verifies the bar still belongs to the
-current search controller and reuses the page's cancellation guard. The
-navigation-controller commands remain for list focus. No private selector is
-implemented and no existing UIKit object has its runtime class changed. This
-closer-responder routing was subsequently verified through physical-keyboard
-Escape; the synthesized path has the limitation below.
+Command-F opens search or returns the cursor to its field, never while
+selecting; Escape ends selection first, then closes search. The page's
+JavaScript also withholds `find` while a Drawer, picker or deletion is busy. A
+`test/app/library-keys-native.test.ts` tripwire holds the two selector names,
+the scope checks and the absence of the old search-bar code in the patch.
 
-The closer command also failed the synthesized-Escape checkpoint. A corrected
-same-process trace proves CmdF reaches both find handlers, both command getters
-are consulted, and none of the cancel/blur/end-editing handlers run in that
-sequence. It does not establish which subsystem consumes Escape. Independent
-HID input failed its printable-key delivery control; GUI key input was refused
-for lack of window focus. Do not infer a UIKit text-input fault or add deeper
-interception from those observations. Physical-keyboard Escape was subsequently verified manually to close search
-on beta9. The synthesized-key failure remains a test-path discrepancy, not an
-established app defect, and does not justify deeper keyboard interception.
-IME/scoping and other unmeasured checks still need their own evidence.
+Rejected: a process-wide key listener, which could take keys from the Reader or
+a modal; a prop on the screen itself, which needs codegen changes inside
+react-native-screens; a view that makes itself first responder to receive
+commands, which would compete with the text field and VoiceOver for it
+(inferred, not tried).
 
-A process-wide key listener was rejected because it could intercept Reader or
-modal actions. A separate native search module would duplicate the controller
-already owned by the stack and make its scroll/header integration our own.
-The cost of using the existing boundary is another native patch to check at a
-screens upgrade. `patch-package` must continue to apply both this change and
-#317's back-menu change, and the keyboard/focus checks must run against a new
-native build, not just a Metro refresh.
+## The patches
 
-## Collapse association
+`patches/react-native-screens+4.26.2.patch` went from 1090 lines to 235: the
+key commands above and #317's back-button names. It was regenerated from the
+pristine 4.26.2 tarball (`npm pack`, compared file by file before editing) and
+checked by applying it to a fresh copy, which then matched the edited package
+exactly. A native build is needed for it and for the new module: a Metro
+refresh does not change either.
 
-The first native check found a standing search field, including in an empty
-Library. In the expanded state, the navigation bar was 114 points tall and the
-field occupied `(16, 117, 370, 44)` on the tested iPhone. A later diagnostic
-with 13 Documents moved the list to offset 400 through its own scroll API:
-rows moved, but the field and bar stayed expanded. Synthetic scroll gestures
-in that diagnostic did not move the list, so they are not evidence of native
-collapse. These observations support a missing scroll/header association;
-they do not establish behavior at every possible offset or on another device.
-
-The classic stack's scroll-view lookup is insufficient here. UIKit's public
-[`setContentScrollView(_:for:)`](https://developer.apple.com/documentation/uikit/uiviewcontroller/setcontentscrollview(_:for:))
-exists specifically to designate the scroll view bars observe when the view
-hierarchy heuristic is insufficient. The installed screens package already
-uses it in its newer stack and tab implementations, not in this classic stack.
-The first binding attempt used only the classic screen's existing
-`tryFindDescendantScrollView`; native behavior stayed unchanged. LLDB then
-showed all three pointers nil: that lookup, the patch's cached view and
-`contentScrollViewForEdge:Top`. It was not evidence that UIKit ignored a valid
-binding. The actual hierarchy was `RNSScreenContentWrapper` →
-`RNSSafeAreaViewComponentView`, with an empty background view as its first
-child, and a sibling wrapper containing `RCTScrollViewComponentView`. The
-first-child search stopped at the background; the iOS 26 fallback checked only
-immediate children, missing the wrapped list. The actual list had offset
-`(0, -176)`, adjusted top inset 176 and content height 1116.
-
-The search-only breadth-first fallback finds the wrapped list without changing
-the generic lookup used elsewhere. The next native run confirmed that cached,
-fallback and observed pointers name the same actual list, with a collapsed
-54-point navigation bar. But the added initial scroll shifted content another
-60 points: offset -56 with adjusted top inset 116 put the first row at y 68,
-under the bar ending at y 116. A diagnostic changing only the offset to -116
-left the bar collapsed and the first row fully visible; both native geometry
-and the screenshot confirmed it. This was a runtime experiment, not evidence
-that a fresh launch was fixed.
-
-Removing the collapse trigger returned the standing field on a fresh launch,
-with the correct binding intact. The complete native operation was then tested
-on that cold expanded state in one no-animation transaction: preserve logical
-offset zero, move by the measured 60-point search-bar height, force bar/view
-layout, then restore logical zero against the final adjusted inset. Readback
-was `-176 / inset 176 / bar 114` before, `-56 / inset 116 / bar 54` after
-collapse, and `-116 / inset 116 / bar 54` after restoration. The later screenshot
-kept the field hidden and the first row fully visible. The patch now performs
-that complete operation rather than keeping only its first half or removing
-it altogether. This runtime experiment was diagnostic only; fresh-launch,
-pull and cancellation were verified later on the built implementation.
-
-## Native scroll-position commands
-
-An intermediate native checkpoint passed cold hidden search, an unclipped
-first row, the then-agreed pull reveal without keyboard, and menu-driven input.
-Cancellation hid the field but left raw offset zero with adjusted top inset
-116, putting the first row at y 12 instead of 128. The pull contract was later
-revised to enter input; the coordinate failure motivated the commands below.
-
-Two React Native Fabric source facts explain why the former JavaScript
-conversion was insufficient. `_scrollViewMetrics` reports `contentInset`, not
-`adjustedContentInset`: the event carries the explicit zero inset, not UIKit's
-116-point top adjustment. The native `scrollTo` command also computes its
-minimum allowed offset from that explicit inset and, unless overflow is
-enabled, clamps a negative offset to zero. The host hook doubles supplied an
-inset and accepted negative requests, so their passing coordinate assertions
-did not exercise this native boundary.
-
-The confirmed correction keeps page-local search lifecycle in JavaScript but
-captures/restores positions at the native search control. The patch adds
-`captureScrollPosition('browse' | 'results')` and
-`restoreScrollPosition('browse' | 'closed-browse' | 'results' | 'top')` to the source/public ref,
-runtime distributions and Fabric command schema. `RNSSearchBar` keeps two
-logical positions and a weak `owningScreen`, assigned while the header attaches
-its search controller. It acts only while that page still owns this controller,
-and obtains its real list through `contentScrollViewForEdge:Top`.
-
-Capture is sent before focus or result navigation. Clearing input restores
-`browse` while keeping input available; cancellation requests `closed-browse`,
-which restores the same position AND hidden presentation in one native
-transaction. Returning from the result Reader restores `results`, and a
-changed query requests `top`. Native focus also captures before activating UIKit (Command-F
-uses that same entry); the browse capture is idempotent until cancellation,
-so the later focus callback or refocusing input cannot replace the original
-position. Cancellation rearms capture while keeping the saved value for the
-queued restoration. iOS scroll-event metrics are deliberately ignored, and that
-path never calls `FlatList.scrollToOffset`. Android retains the prior list
-fallback; its generated command interface has iOS-only no-op implementations
-which the fallback never invokes. Android code generation is checked, not
-claimed as an Android device run.
-
-This extends the existing screens boundary rather than changing React Native's
-global event semantics or estimating a delayed header height. Adding Fabric
-commands requires code generation and a new native build; reloading Metro
-alone is insufficient. Host tests exercise the real patched ref's forwarding
-and the hook's capture/restore order, including the misleading zero-inset event.
-The subsequent built-app checks establish exact nonzero position restoration;
-the host tests alone cannot establish that boundary.
-
-The first native-command check restored the correct logical position but left
-the search field expanded: saved browse zero, raw offset -176, adjusted top
-176, header height 114, with `active=0`, `hides=1` and the collapse guard nil.
-That held state does not establish the exact event ordering; it does establish
-that correct coordinates alone do not guarantee hidden presentation, and that
-waiting for another screen-layout callback is insufficient.
-
-`RNSScreen.openReaderRestoreLibraryPosition:closed:` now owns the combined
-operation for both initial collapse and explicit restoration. It sets position,
-finishes layout, enforces the requested collapsed presentation, then restores
-against the final inset/content range. The explicit closed request does not
-rely on another layout callback to start that operation. It does nothing while
-another page is on top; focus can retry it when the Library returns. A queued
-closed restore is ignored after a new native browse capture, so it cannot
-close newly reopened input. Clear and result-return requests do not force
-collapse. Native checks verify repeated empty/typed cancellation and the
-result-Reader round trip with the same row identity and position.
+`react-native-gesture-handler+2.32.0.patch` stays. It fails an immediate
+two-pointer candidate still missing its fingers after ten points of movement, so
+a one-finger drag is not held up waiting for the sweep: written for a short pull
+landing as a tap on the row under it, it applies to any short drag.
 
 ## Verification boundary
 
-The host tests exercise matching, whole-Library scope, identity/order, current
-names after changes, real page/action wiring, deferred Drawer focus, empty
-results, selection exclusion, cancellation and navigation/scroll lifetime.
-Native views are doubles there: these tests do not prove UIKit placement,
-keyboard events, first-responder transitions, scroll restoration on the device
-or appearance. Final native checks cover ordinary scrolling, short/full pull
-with original-page preservation, keyboard and immediate Close, repeated entry,
-nonzero cancellation, result return and selection isolation. Embedded Release
-checks cover cold presentation and the primary pull/Close flow. iPad evidence
-covers one-row and empty-Folder blank-area pulls and its explicit native Close.
+Host tests: the cross-Folder rules (`test/core/library-selection.test.ts`,
+`folders.test.ts`), the search state (`use-library-search.test.ts`: open, a
+second open, close and its retried restore, explicit inset, clearing, the Reader
+round trip, ending on other navigation, no history), the real page with its
+Drawer, field, keys, selection over results and Move
+(`library-search-screen.test.ts`), and the key-target contract. Native views are
+doubles there: they prove no UIKit placement, glass, first responder, keyboard,
+key delivery or scroll position. Those are `LibrarySearchProbe`'s and
+`LibraryTwoFingerProbe.testSweepSelectsSearchResults`'s, listed in
+`test/manual-test/library-and-reader/library-search.md`; at this commit they
+typecheck against XCTest and have not run.
 
-Actual Bopomofo composition has a marked range and omits the Library Escape
-command; physical Escape during composition is not claimed tested. Physical
-Escape without composition was verified manually; the synthesized discrepancy
-is retained. Debug tests do not substitute for Release tests, and the separate
-short-threshold case was not repeated in the final Release run. Download probe
-correction is deferred to #334, not silently counted as an application pass.
+## History: the title bar's field (#332 to #338)
+
+The full record as it stood is this file at 63eb484. The measured facts that
+decided #339:
+
+- **A hidden stacked field needed the list bound to the bar by hand.** The
+  first build showed a standing field at `{{16, 117}, {370, 44}}` with the first
+  row pushed to y 188. The classic stack's scroll-view lookup returned nil (LLDB:
+  the lookup, the cached view and `contentScrollViewForEdge:Top` all nil): the
+  list sat under `RNSScreenContentWrapper` → `RNSSafeAreaViewComponentView`, behind
+  an empty background view, in a sibling wrapper, and the first-child search
+  stopped at the background. A breadth-first fallback and
+  `setContentScrollView:forEdge:` bound it.
+- **Collapsing it took a no-animation transaction.** Readback on a cold launch:
+  offset −176, adjusted inset 176, bar 114 points before; −56 / 116 / 54 after
+  collapsing by the bar's measured 60 points; −116 / 116 / 54 after restoring
+  logical zero against the final inset. Keeping only the collapse left the first
+  row at y 68 under a bar ending at 116.
+- **React Native could not restore positions under that bar.** Fabric's scroll
+  event reports `contentInset`, not `adjustedContentInset`: an explicit 0 while
+  UIKit added 116. Its `scrollTo` clamps a negative offset to that explicit
+  inset. Close restored raw offset zero and put the first row at y 12 instead of
+  128, so positions moved into native commands on the search bar.
+- **The pull was hard to tell from scrolling.** A threshold read during the
+  first reveal frame was 1 point, and 2.3 points of finger travel committed a
+  pull. An early handler restored logical zero after any uncommitted drag and
+  broke ordinary scrolling (y 296 stayed at 296; removing only that handler at
+  runtime gave 296 → −30.33 → 296).
+- **UIKit expands a `hidesSearchBarWhenScrolling` field whenever the bound
+  list passes its top, momentum included** (#338): the bar went from 4.3 to 54
+  points and the inset from 116 to 170 on a flick nobody pulled. Detaching the
+  list for the coast fixed the flick; a finger catching the bounce then needed
+  its own handling twice, and a pull catching the bounce still stepped the list
+  to its top in one frame (#338's F2, never decided).
+- **Escape had to be registered on the navigation controller**: a focused
+  title-bar field's responder chain was `UISearchBarTextField → … → UISearchBar →
+  UINavigationBar → … → RNSNavigationController → … → UIWindow`, with no
+  `RNSScreen` in it, and the search bar's own Escape (`_performCancelAction:`, at
+  priority 0) had to be replaced through a `UISearchController.searchBar`
+  subclass. A synthesized Escape never closed it; a physical one did.
+- **iPad's stacked presentation drew no external cancel control** even with
+  `showsCancelButton`, so the patch added its own xmark button.
+- **Attaching the field only while searching was not safer**: the installed
+  react-native-screens warns in `RNSScreenStackHeaderConfig.mm` that changing
+  the search bar's configuration on iOS 26 can leave a stacked root-screen field
+  not showing, and attaching it flips the header's translucency, which re-lays
+  out the list.
+
+Every one of these was the title bar's search controller meeting a list it did
+not own. A field in the page has none of them.
