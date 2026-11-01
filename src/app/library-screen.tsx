@@ -173,29 +173,40 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
   }, [focused, busy, problem, shown, browsed, folder, library]);
   const title = selecting ? `${selectedCount} selected` : folder === null ? 'Library' : currentFolder?.name;
   useLayoutEffect(() => {
+    const allLabel = selectedCount === rows.length && rows.length > 0 ? 'Deselect all' : 'Select all';
+    const actionsLabel = picking ? 'Adding…' : 'Library actions';
+    const actionsDisabled = picking || busy || working || library.loading || !!problem;
+    const openActions = () => { importLocation.current = folder; setAdding(true); };
+    const openSettings = () => navigation.navigate('Settings');
     navigation.setOptions({
       ...(title === undefined ? {} : { title }),
       // Select all stands where the back arrow was, so leaving waits for Cancel, as in Files.
       gestureEnabled: !selecting,
-      // Native bar items size their own labels at accessibility text sizes; custom RN text can outgrow UIKit's bar.
-      unstable_headerLeftItems: selecting ? () => [{ type: 'button',
-        label: selectedCount === rows.length && rows.length > 0 ? 'Deselect all' : 'Select all',
+      // Every button in this bar is one the phone draws (#339, ADR 0090). A press on a
+      // React Native view in the bar is also a touch on the bar, which UIKit answers by
+      // scrolling the list to its top: a scrolled Library jumped there whenever `…` or
+      // Settings was pressed, so search could not return to where browsing was.
+      // Native items also size their own labels at accessibility text sizes, where
+      // custom RN text can outgrow UIKit's bar. `headerLeft`/`headerRight` are the
+      // same buttons for a platform without native items.
+      unstable_headerLeftItems: selecting ? () => [{ type: 'button', label: allLabel,
         onPress: () => selectionRef.current.selectAll(), disabled: selectionLocked || !rows.length, tintColor: INK.text,
-      }] : undefined,
-      unstable_headerRightItems: selecting ? () => [{ type: 'button', label: 'Cancel',
-        onPress: () => selectionRef.current.cancel(), disabled: selectionLocked, tintColor: INK.text,
-      }] : undefined,
-      headerLeft: () => selecting
-        ? <HeaderButton label={selectedCount === rows.length && rows.length > 0 ? 'Deselect all' : 'Select all'} onPress={() => selectionRef.current.selectAll()} disabled={selectionLocked || !rows.length} />
+      }]
         // Inside a Folder the phone's own back arrow, which goes back as the swipe does (#317).
         : folder !== null ? undefined
-        : <HeaderButton icon="settings" label="Settings" onPress={() => navigation.navigate('Settings')} />,
+        : () => [{ type: 'button', label: 'Settings', icon: { type: 'sfSymbol', name: 'slider.horizontal.3' },
+          onPress: openSettings, tintColor: INK.text }],
+      unstable_headerRightItems: selecting ? () => [{ type: 'button', label: 'Cancel',
+        onPress: () => selectionRef.current.cancel(), disabled: selectionLocked, tintColor: INK.text,
+      }] : () => [{ type: 'button', label: actionsLabel, icon: { type: 'sfSymbol', name: 'ellipsis' },
+        onPress: openActions, disabled: actionsDisabled, tintColor: INK.text }],
+      headerLeft: () => selecting
+        ? <HeaderButton label={allLabel} onPress={() => selectionRef.current.selectAll()} disabled={selectionLocked || !rows.length} />
+        : folder !== null ? undefined
+        : <HeaderButton icon="settings" label="Settings" onPress={openSettings} />,
       headerRight: () => selecting
         ? <HeaderButton label="Cancel" onPress={() => selectionRef.current.cancel()} disabled={selectionLocked} />
-        : <HeaderButton icon="more" label={picking ? 'Adding…' : 'Library actions'} onPress={() => {
-        importLocation.current = folder;
-        setAdding(true);
-      }} disabled={picking || busy || working || library.loading || !!problem} />,
+        : <HeaderButton icon="more" label={actionsLabel} onPress={openActions} disabled={actionsDisabled} />,
     });
   }, [navigation, folder, title, picking, busy, library, problem, selecting, selectedCount, working, selectionLocked, rows.length]);
 
@@ -224,11 +235,17 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
       onScroll={(event) => { sweep.list.onScroll(event); search.onScroll(event); }}
       onScrollBeginDrag={search.onScrollBeginDrag}
       onContentSizeChange={(width, height) => { sweep.list.onContentSizeChange(width, height); search.onContentSizeChange(); }}
-      contentInsetAdjustmentBehavior="automatic"
+      // The room under the home indicator is the content's own rather than UIKit's
+      // adjusted inset (#339, ADR 0090): a list position is restored with React
+      // Native's scroll-to-offset, which stops short of the bottom by any inset UIKit
+      // adds itself, 34 pt on an iPhone, where a finger reaches it. The title bar is
+      // opaque, so nothing above the list asks for an inset.
+      contentInsetAdjustmentBehavior="never"
+      scrollIndicatorInsets={{ bottom: insets.bottom }}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       style={styles.list}
-      contentContainerStyle={{ paddingTop: 12, paddingBottom: (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
+      contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + (held ? READING_BUTTON_ROOM : 12) + (selection.active ? actionBottom + actionHeight + 12 : 0) }}
       data={rows}
       keyExtractor={(row) => targetKey(rowTarget(row))}
       renderItem={({ item }) => item.kind === 'folder'

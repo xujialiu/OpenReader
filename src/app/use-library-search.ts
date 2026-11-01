@@ -12,9 +12,10 @@ import { libraryQuery, type LibraryRow } from './library-search';
  * goes into route parameters or storage. A result-to-Reader round trip is the
  * only navigation that keeps the search.
  *
- * List positions are the list's own, measured from the top of its content:
- * the title bar no longer carries a search field, so it is opaque and UIKit
- * adds no inset of its own above the list (ADR 0090).
+ * List positions are the list's own, measured from the top of its content.
+ * The list takes no inset from UIKit (`contentInsetAdjustmentBehavior` never,
+ * ADR 0090): the title bar is opaque, and the room under the home indicator is
+ * part of the content, so a restore reaches every offset a finger reaches.
  */
 export function useLibrarySearch(navigation: ScreenProps<'Library' | 'Folder'>['navigation'], routeKey: string) {
   const [state, setState] = useState({ active: false, query: '' });

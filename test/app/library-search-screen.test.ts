@@ -1,4 +1,4 @@
-import { createElement, type ReactElement, type ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { asDocumentId, type LibraryEntry } from '../../src/core/document';
@@ -68,7 +68,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-async function open() {
+type NativeItem = { type: string; label: string; icon?: { type: string; name: string }; disabled?: boolean; onPress(): void };
+
+async function open(at: string | null = 'inner') {
   let options: Record<string, unknown> = {};
   const visit = vi.fn();
   const moveEntries = vi.fn();
@@ -77,7 +79,7 @@ async function open() {
     isFocused: () => true, getState: () => ({ index: 0, routes: [{ key: 'folder', name: 'Folder' }] }),
     addListener: () => () => {}, navigate: vi.fn(), push: vi.fn(),
   };
-  const props = { navigation, route: { key: 'folder', name: 'Folder', params: { id: 'inner' } } } as unknown as ScreenProps<'Library' | 'Folder'>;
+  const props = { navigation, route: at === null ? { key: 'folder', name: 'Library' } : { key: 'folder', name: 'Folder', params: { id: at } } } as unknown as ScreenProps<'Library' | 'Folder'>;
   const populate = () => {
     shell.current = { settings: { enabledProviders: [] }, sync: { poke: vi.fn() }, library: {
       entries, folderSnapshot: { tree, busy: false, problem: null }, loading: false, note: null,
@@ -93,12 +95,14 @@ async function open() {
   const row = (text: string) => nodes('DrawerRow').find((node) => node.findAll((child) => String(child.type) === 'DrawerRowText' && child.props.children === text).length)!;
   const field = () => nodes('LibrarySearchField')[0] as ReturnType<typeof nodes>[number] | undefined;
   const keys = () => nodes('LibraryKeys')[0];
+  /** The bar's native items, which iOS draws in place of `headerLeft`/`headerRight` (#339). */
+  const items = (side: 'left' | 'right') => (options[side === 'left' ? 'unstable_headerLeftItems' : 'unstable_headerRightItems'] as
+    (() => NativeItem[]) | undefined)?.() ?? [];
   return {
-    navigation, visit, moveEntries, nodes, drawer, row, field, keys,
+    navigation, visit, moveEntries, nodes, drawer, row, field, keys, items,
     options: () => options,
     async menu() {
-      const button = (options.headerRight as () => ReactElement<{ onPress(): void }>)();
-      await act(async () => button.props.onPress());
+      await act(async () => items('right')[0].onPress());
     },
     /** The Library actions' Search, after the drawer's native dismissal. */
     async search() {
@@ -118,6 +122,31 @@ async function open() {
 }
 
 describe('Library Search through the real page and actions Drawer (#332, #339)', () => {
+  it('draws `…` as a native bar item, so pressing it never reaches the list\'s scroll-to-top', async () => {
+    const page = await open();
+    // A Folder page: the phone's back arrow on the left, `…` on the right.
+    expect(page.items('left')).toEqual([]);
+    expect(page.items('right')).toMatchObject([{ type: 'button', label: 'Library actions', icon: { type: 'sfSymbol', name: 'ellipsis' }, disabled: false }]);
+    await page.select();
+    expect(page.items('left')).toMatchObject([{ label: 'Select all' }]);
+    expect(page.items('right')).toMatchObject([{ label: 'Cancel' }]);
+    await page.close();
+  });
+  it('draws Settings at the Library root as a native bar item too', async () => {
+    const page = await open(null);
+    const [settings] = page.items('left');
+    expect(settings).toMatchObject({ type: 'button', label: 'Settings', icon: { type: 'sfSymbol', name: 'slider.horizontal.3' } });
+    await act(async () => settings.onPress());
+    expect(page.navigation.navigate).toHaveBeenCalledWith('Settings');
+    await page.close();
+  });
+  it('takes no inset from UIKit, so a restored position can reach the bottom a finger reaches', async () => {
+    const page = await open();
+    const list = page.nodes('FlatList')[0];
+    expect(list.props.contentInsetAdjustmentBehavior).toBe('never');
+    expect(list.props.scrollIndicatorInsets).toEqual({ bottom: 0 });
+    await page.close();
+  });
   it('shows no field and sets nothing on the title bar until Search is chosen', async () => {
     const page = await open();
     expect(page.field()).toBeUndefined();
@@ -186,8 +215,7 @@ describe('Library Search through the real page and actions Drawer (#332, #339)',
     await page.search(); await page.type('body');
     await page.select();
     expect(page.field()!.props).toMatchObject({ query: 'body', locked: true });
-    const left = (page.options().headerLeft as () => ReactElement<{ onPress(): void }>)();
-    await act(async () => left.props.onPress());
+    await act(async () => page.items('left')[0].onPress());
     expect(page.options().title).toBe('2 selected');
     const move = page.nodes('LibrarySelectionAction').find((node) => node.props.action === 'Move')!;
     await act(async () => move.props.onPress());
@@ -210,8 +238,7 @@ describe('Library Search through the real page and actions Drawer (#332, #339)',
     const page = await open();
     await page.search();
     await page.select();
-    const left = (page.options().headerLeft as () => ReactElement<{ onPress(): void }>)();
-    await act(async () => left.props.onPress());
+    await act(async () => page.items('left')[0].onPress());
     expect(page.options().title).toBe('1 selected');
     expect(page.field()!.props.locked).toBe(true);
     await page.close();
