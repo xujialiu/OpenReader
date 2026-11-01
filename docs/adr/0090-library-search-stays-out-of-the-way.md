@@ -25,13 +25,14 @@ translucent (`useHeaderConfigProps.tsx`, `translucent = headerBackground != null
 headerTransparent || ((hasHeaderSearchBar || headerLargeTitleEnabled) && …)`), and
 react-native-screens then excludes the top edge from the page's extended layout
 (`RNSScreenStackHeaderConfig.mm`, `edgesForExtendedLayout`). The page starts
-under the bar, so UIKit adds no top inset of its own to the list. That is the
-same layout every other page has, and the one the Library had during selection
-under #332. The bar's background was already the opaque page colour. Read from
-the source, not yet measured on a device. The same file notes an iOS 26
-landscape bug with that edge for an opaque header and works around it with a
-safe-area view; whether that leaves a top inset UIKit applies to the list
-without reporting it, in landscape, is not measured either.
+under the bar. That is the same layout every other page has, and the one the
+Library had during selection under #332. The bar's background was already the
+opaque page colour. Measured on the first native run (`1.0.4 (27)-beta3-debug`,
+iPhone 17, iOS 27.0): the bar `{{0, 62}, {402, 54}}`, the list from y 116, its
+first row at 128. The same file notes an iOS 26 landscape bug with that edge for
+an opaque header and works around it with a safe-area view; the list takes no
+inset from UIKit at all (below), so whatever that leaves, the list does not
+apply it.
 
 ## The field
 
@@ -93,6 +94,46 @@ commit, and is retired when reached or when a finger drags. Scroll events while
 the Reader is in front are ignored. Under #332 this JavaScript path was wrong on
 iOS because UIKit added a 116-point top inset that React Native's event does not
 report (history below); with the bar opaque there is no such inset to miss.
+
+## The title bar's buttons and the list's insets
+
+Every button in the Library's title bar is a native bar item
+(`unstable_headerLeftItems` / `unstable_headerRightItems`): `…` with the SF
+Symbol `ellipsis`, Settings at the root with `slider.horizontal.3` (the three
+sliders the app's own `settings` glyph draws), and Select all and Cancel while
+selecting. `headerLeft`/`headerRight` keep the same buttons as React Native
+views for a platform without native items; on iOS the items win.
+
+The `…` and Settings were React Native views in the bar until `1.0.4 (25)-beta4`.
+A press on one was also a touch on the bar, and UIKit answered it by scrolling
+the list to its top, so `…` > Search noted the top as the browsing position and
+Close could not return (`testCancelRestoresNonzeroBrowse`: 464 against 72,
+twice). Measured on `1.0.4 (27)-beta3-debug`, iPhone 17, iOS 27.0, with real AXe
+touch pairs (0.2 s) from a middle of a 13-row list: the React Native `…` moved
+the list to its top 6 of 6 for `ios-tester` and 1 of 1 again; with the list's
+`scrollsToTop` off (a temporary edit) 3 of 3 presses left it in place and Close
+returned exactly (58 → 58, −12 → −12); with `…` as a native item (a temporary
+edit) 3 of 3 left it and Close returned exactly (58, −12, −82). An instantaneous
+`axe tap` on the bar's empty area did not move the list where a 0.2 s touch on
+the button did. Conditional breakpoints on `-[UIScrollView setContentOffset:]`
+never fired, so the UIKit call is inferred from these controls, not caught.
+Turning `scrollsToTop` off was rejected (design 0090): it also ends the
+status-bar tap to the top. A 0.2 s AXe touch on the status bar did not reach the
+app, so that gesture is unmeasured here.
+
+The list takes no inset from UIKit (`contentInsetAdjustmentBehavior="never"`)
+and carries the bottom safe-area room in its own content padding, with
+`scrollIndicatorInsets` to match. Before, UIKit added the home indicator's 34
+points as an adjusted inset, and React Native 0.86.3's Fabric
+`scrollTo:y:animated:` clamps a requested offset to `contentSize.height −
+bounds.height + contentInset.bottom + max(contentInset.top, 0)`
+(`RCTScrollViewComponentView.mm`, `scrollTo:y:animated:`), the explicit inset
+only, unless `scrollToOverflowEnabled`. A restore near the bottom therefore came
+back up to 34 points short: −264 as −230 here, 392 as 358 for `ios-tester`.
+`scrollToOverflowEnabled` was not used: it lifts the clamp entirely, and a
+restore into a list that has since grown shorter would rest past its end. The
+two-finger sweep's own edge scroll clamps to `content − viewport` and now
+reaches the same bottom.
 
 The content container no longer grows to the viewport. That fill existed so a
 pull could start in the blank space under a short list; the two-finger sweep's
@@ -181,8 +222,12 @@ Drawer, field, keys, selection over results and Move
 doubles there: they prove no UIKit placement, glass, first responder, keyboard,
 key delivery or scroll position. Those are `LibrarySearchProbe`'s and
 `LibraryTwoFingerProbe.testSweepSelectsSearchResults`'s, listed in
-`test/manual-test/library-and-reader/library-search.md`; at this commit they
-typecheck against XCTest and have not run.
+`test/manual-test/library-and-reader/library-search.md`. The first native run
+(`1.0.4 (27)-beta3-debug`) passed the cold, pull and flick, focus and frame
+checks and failed the Close restore, which led to the section above;
+`testSettingsRoundTripKeepsTheListWhereItWas` and
+`testCancelRestoresTheBottomOfTheList` were added for it and typecheck against
+XCTest without having run.
 
 ## History: the title bar's field (#332 to #338)
 
