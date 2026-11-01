@@ -61,6 +61,13 @@ list; the magnifying glass 14 points in and 16 across; the words in Body from x
 - **Locked while selecting**: `editable={false}`, the capsule at half opacity,
   Close disabled through SwiftUI's `disabled`, and the page blurs the field when
   selection begins (a two-finger sweep can begin it while the keyboard is up).
+- **A drawer puts the keyboard away**: the page blurs the field whenever the
+  Library actions, a Document's or a Folder's actions open. Measured on
+  `1.0.4 (27)-beta4-debug` (iPhone 17, iOS 27.0): with the field focused, a
+  drawer rose to its half height under the keyboard (keyboard top y 590, the
+  drawer's `Move to…` row at y 560 with 30 points showing; `Select`, `Download`
+  and `Delete` not hittable, two real touches on `Move to…` opening nothing),
+  and the first press on a row above the keyboard only dismissed the keyboard.
 
 **The keyboard comes with the field and cannot race it.** The input is mounted
 with `autoFocus`. React Native 0.86.3's Fabric `RCTTextInputComponentView`

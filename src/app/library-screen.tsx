@@ -101,8 +101,12 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
     scope: folder ?? 'root', bottomInset: actionBottom + actionHeight + 12,
   }, selection.sweepTo);
   // Selecting locks search's query: the keyboard goes and the field greys (design 0090).
+  // A drawer opened from the bar or a row puts the keyboard away too: it rises to its
+  // half height under the keyboard, which would cover its lower rows (Select, Move,
+  // Delete) and take the first press on a row above it (#339).
   const searchField = search.field;
-  useEffect(() => { if (selecting) searchField.current?.blur(); }, [selecting, searchField]);
+  const drawerOpen = adding || !!actions || folderActions !== null;
+  useEffect(() => { if (selecting || drawerOpen) searchField.current?.blur(); }, [selecting, drawerOpen, searchField]);
   /** Command-F opens search or returns to its field, never while selecting; Escape ends selection first, then search. */
   const pressKey = ({ nativeEvent: { key } }: { nativeEvent: { key: LibraryKey } }) => {
     const now = selectionRef.current;

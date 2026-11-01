@@ -198,6 +198,19 @@ describe('Library Search through the real page and actions Drawer (#332, #339)',
     expect(page.field()).toBeDefined();
     await page.close();
   });
+  it('puts the keyboard away when a drawer opens over search, from the bar or from a result', async () => {
+    const page = await open();
+    await page.search(); await page.type('body');
+    const blur = vi.fn();
+    page.field()!.props.field.current = { blur, focus: vi.fn() };
+    await act(async () => page.nodes('DocumentRow')[0].props.onActions());
+    expect(blur).toHaveBeenCalledTimes(1);
+    await act(async () => page.nodes('ReaderActions')[0].props.onClose());
+    await page.menu();
+    expect(blur).toHaveBeenCalledTimes(2);
+    expect(page.field()!.props).toMatchObject({ query: 'body', locked: false }); // search stays open
+    await page.close();
+  });
   it('offers every selection entry over results: the actions\' Select, a result\'s own Select and the two-finger sweep', async () => {
     const page = await open();
     await page.search(); await page.type('body');
