@@ -210,6 +210,6 @@ Mac and with an external keyboard, without extending search into the reader.
 ## Design review
 
 The brief was confirmed for implementation under #332, and the removal of the
-pull, the app's own field and the selection of results under #339. This
-records product decisions, not a claim that the interactions have been
-implemented or verified on a device.
+pull, the app's own field and the selection of results under #339. Under #339
+it was implemented and checked on an iPhone simulator, and accepted. It has
+not been checked on an iPad or on a physical iPhone.
