@@ -1038,3 +1038,14 @@ simulators (iPhone 17, iPad Pro 13-inch (M5)):
 - **`snapshot_ui` timed out twice** ("Timed out creating the simulator remote
   automation session") right after the app was opened by `simctl openurl`; a
   `wait_for_ui` with `settled` a moment later succeeded and later calls worked.
+
+## The App Store screenshot script
+
+- **An iPad run of `app-store-screenshots/shoot.py shoot ipad` stopped at
+  "'Connection successful' did not appear within 20 s"** right after it
+  touched 'Enable Kokoro FastAPI' (2026-11-01, 1.0.4 (26)-free Release for
+  the simulator, iOS 27.0). Its own run had built the app and shot the iPhone
+  set a few minutes before. Cause: not established; the script deletes its
+  simulator on failure, so no screen or app log was kept. Fix: run the same
+  `shoot ipad` command once more under the guard. The single retry passed
+  with the same app.
