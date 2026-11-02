@@ -112,9 +112,10 @@ until its fade has finished.
   the app's measured 60 (1 + 44 + 15), which puts the first row where the
   phone's was.
 - **Opening**: `lift`, `grow` and `shown` spring to 1. The capsule's top stays
-  1 point under the bar and its height is `44 × grow`. Close's room,
-  `54 × grow` (44 and the 10 between), narrows it from full width, as the
-  phone's capsule starts at 370 points and narrows to 315. The magnifying glass
+  1 point under the bar and its height is `44 × grow`. Close's room, the 10
+  points between and Close as drawn (46.5 across on iPhone 17, notes
+  2026-11-01) times `grow`, narrows it from full width, as the phone's capsule
+  starts at 370 points and narrows to 315. The magnifying glass
   and the text field stay 44 points tall, centred in the capsule and clipped by
   a view with its radius; the glass itself is not clipped. Their opacity is
   `grow`: the phone's magnifier darkness tracked the bar's growth within a few

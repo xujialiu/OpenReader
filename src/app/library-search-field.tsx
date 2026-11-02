@@ -17,8 +17,9 @@ const GLASS = Number.parseInt(String(Platform.Version), 10) >= 26;
  */
 const SLOT = 60;
 const CAPSULE = 44;
-/** Close's 44 points and the 10 between it and the capsule. */
-const ROOM = 54;
+/** Close's room: the 10 points between it and the capsule, and Close as drawn (44 until it has been laid out). */
+const GAP = 10;
+const ROOM = GAP + 44;
 /**
  * The phone's stacked search field moves on one spring, fitted from its frames
  * (iOS 27.0, notes 2026-11-02): natural frequency about 18.7 rad/s, damping
@@ -73,6 +74,7 @@ export function LibrarySearchField({ open, animate, field, query, locked, onChan
   /** The whole field's opacity, which falls only on the way out. */
   const shown = useSharedValue(1);
   const close = useSharedValue(0);
+  const roomWidth = useSharedValue(ROOM);
   const was = useRef(open);
   const turn = useRef(0);
   const settled = (at: number) => { if (turn.current === at) setPresent(false); };
@@ -120,7 +122,7 @@ export function LibrarySearchField({ open, animate, field, query, locked, onChan
   const capsule = useAnimatedStyle(() => ({ height: Math.max(0, CAPSULE * grow.get()) }));
   const clip = useAnimatedStyle(() => ({ borderRadius: Math.max(0, CAPSULE * grow.get()) / 2 }));
   const contents = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, grow.get())) }));
-  const room = useAnimatedStyle(() => ({ width: Math.max(0, ROOM * grow.get()) }));
+  const room = useAnimatedStyle(() => ({ width: Math.max(0, roomWidth.get() * grow.get()) }));
   const button = useAnimatedStyle(() => ({ opacity: close.get() }));
 
   if (!open && !present) return null;
@@ -148,7 +150,7 @@ export function LibrarySearchField({ open, animate, field, query, locked, onChan
         </Animated.View>
       </Animated.View>
       <Animated.View style={[styles.room, room]} pointerEvents="box-none">
-        <Animated.View style={button}>
+        <Animated.View style={[styles.close, button]} onLayout={(event) => roomWidth.set(event.nativeEvent.layout.width)}>
           <Host matchContents colorScheme={scheme ?? undefined}>
             <Button label="Close" systemImage="xmark" onPress={onClose} modifiers={[
               labelStyle('iconOnly'), buttonStyle(GLASS ? 'glass' : 'bordered'), buttonBorderShape('circle'), controlSize('large'),
@@ -179,6 +181,8 @@ const styles = StyleSheet.create({
   field: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: MAGNIFIER.inset, paddingRight: 6 },
   magnifier: { width: MAGNIFIER.box, height: MAGNIFIER.box },
   input: { ...TEXT.body, color: INK.text, flex: 1, alignSelf: 'stretch', marginLeft: 10, paddingVertical: 0 },
-  room: { height: CAPSULE, alignItems: 'flex-end', justifyContent: 'center', overflow: 'visible' },
+  room: { height: CAPSULE, overflow: 'visible' },
+  // Close at the room's right end, which is the margin: the room opens from nothing as the capsule grows.
+  close: { position: 'absolute', top: 0, bottom: 0, right: 0, paddingLeft: GAP, justifyContent: 'center' },
   locked: { opacity: 0.5 },
 });
