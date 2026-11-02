@@ -2,7 +2,7 @@
 
 ## What is settled
 
-Issues #332 and #339. Library Search finds Documents already in the Library by their
+Issues #332, #339 and #341. Library Search finds Documents already in the Library by their
 current displayed names. It does not search the text inside Documents or look
 for files elsewhere on the device. A renamed Document is found by the name the
 Library now shows, not a separate original file name.
@@ -15,15 +15,27 @@ shown, and no field waits hidden above the list: pulling down at the top of
 the list only bounces. Search opens from the Library's top-right `…`, or with
 Command-F on a hardware keyboard. Choosing Search shows the field with the
 keyboard open, without a second tap on the field or a return to the top of a
-long list. The close control beside the field is available as soon as search
-opens, even before any text is entered.
+long list. The close control beside the field appears as soon as the field
+has settled, before any text is entered.
 
 While search is open the field stands under the page's title, above the list,
 and does not scroll away with the results. The app draws it, copying the
 phone's own search field as measured from the phone: the magnifying glass,
 the `Search Library` placeholder, the clear button inside the field and the
-close control beside it. The field appears and goes at once, with no animation
-of its own; only the keyboard rises and falls as the phone moves it.
+close control beside it. Its motion copies the phone's own too, as measured
+from the phone. On opening, the field grows down from under the title on a
+spring with a slight overshoot, pushing the list down with it, and settles in
+about half a second; the magnifying glass and the placeholder fade in as it
+grows, and the close control appears once it has settled. On closing,
+wherever the list is, the field and its close control fade where they stand
+while the list rises back over them on the same spring. The keyboard rises
+and falls as the phone moves it, on its own timing. A close during the
+opening, or a Search during the closing, turns the field back from where it
+is. With Reduce Motion on, all of this is the same, as it is on the phone.
+Only the field and the top of the list move: the rows changing between
+results and the Folder's list, the return to the browsing position, the
+greyed field while selecting, and coming back from a result's Document all
+happen at once.
 
 Results update as the owner types. A name matches when it contains the typed
 text as a continuous fragment, ignoring letter case. For example, `body`
@@ -132,9 +144,27 @@ until it is measured again. A field that takes over the title bar while
 searching was not offered, since it would cover Select all and Cancel while
 results are selected.
 
-Animating the field in and out was turned down. It would have to keep time
-with the keyboard and with the list's return to its place, the kind of timing
-that made the pull unreliable.
+The field first appeared and went at once (#339), because animating it
+seemed to need the same timing with the keyboard and the list that made the
+pull unreliable. In use it read as a glitch: the rows the owner was looking at
+leapt down or up with nothing to follow, beside a keyboard that slid. Under
+#341 the field moves. The timing turned out not to be shared: the phone's own
+field and keyboard each move on their own, a few hundredths of a second
+apart, and the list follows the field, not the keyboard. The cost is the same
+as for the field's look: the motion is followed by hand, so when a new system
+changes it, this one stays as it was until it is measured again.
+
+On the phone, closing search at the top of a list leaves the field standing
+until the list is scrolled. Here a closed search leaves no field, so the field
+leaves the way the phone takes it away further down a list, everywhere.
+Keeping it until a scroll was turned down, since it would bring back the
+standing field and the scroll-linked hiding that #339 removed. Playing the
+opening backwards was turned down too: the phone has no such motion.
+
+Fading the rows between results and the Folder's list was turned down: the
+phone changes a list's rows at once, and a second motion would have to keep
+time with the first. Appearing at once under Reduce Motion was turned down
+because the phone itself keeps its motion there.
 
 Searching only the current Folder was turned down because finding a Document
 should not require remembering which Folder contains it. Returning Folders as
@@ -211,5 +241,7 @@ Mac and with an external keyboard, without extending search into the reader.
 
 The brief was confirmed for implementation under #332, and the removal of the
 pull, the app's own field and the selection of results under #339. Under #339
-it was implemented and checked on an iPhone simulator, and accepted. It has
-not been checked on an iPad or on a physical iPhone.
+it was implemented and checked on an iPhone simulator, and accepted. The
+field's motion was agreed under #341, from the phone's own motion measured on
+an iPhone simulator. None of it has been checked on an iPad or on a physical
+iPhone.
