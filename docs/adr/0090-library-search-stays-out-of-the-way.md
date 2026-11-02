@@ -120,8 +120,9 @@ until its fade has finished.
   time, 64 ms, so it did not finish at once), and Close, whose delay counts
   wall time, appeared at the second. With `autoFocus` off the same open ran at
   16.7 ms frames throughout. So the opening waits for the text input's
-  `onFocus`, which arrives after that hold (48 to 216 ms after the field's
-  commit in four runs, the springs starting within a frame or two), and opens
+  `onFocus`, which arrives after that hold (48, 126 and 216 ms after the
+  field's commit in three runs, 743 ms in one just after a Fast Refresh, the
+  springs starting within a frame or two of it), and opens
   anyway after 600 ms (`FOCUS_WAIT`) if it never comes. The closing waits the
   same way for `onBlur` when the field has the keyboard (`isFocused()`), at
   most 150 ms (`BLUR_WAIT`); started together with the blur, its first frame
