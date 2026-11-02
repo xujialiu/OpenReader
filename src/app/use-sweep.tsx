@@ -41,7 +41,7 @@ export interface SelectableRows {
 class SweepController<T> {
   private rows: SelectableRows = { ids: [], values: [], selected: new Set() };
   private select: (next: Set<string>) => void = () => {};
-  private flatList: Pick<FlatList<T>, 'scrollToOffset'> | null = null;
+  private flatList: Pick<FlatList<T>, 'scrollToOffset'> & Partial<Pick<FlatList<T>, 'getNativeScrollRef'>> | null = null;
   private readonly extents = new Map<string, Extent>();
   private scrolled = 0;
   private viewport = 0;
@@ -64,11 +64,23 @@ class SweepController<T> {
   private readonly Cell = recordingCell<T>(this.extents, () => this.touch());
 
   readonly list = {
-    ref: (list: Pick<FlatList<T>, 'scrollToOffset'> | null) => { this.flatList = list; },
+    ref: (list: Pick<FlatList<T>, 'scrollToOffset'> & Partial<Pick<FlatList<T>, 'getNativeScrollRef'>> | null) => { this.flatList = list; },
     CellRendererComponent: this.Cell,
     scrollEventThrottle: 16,
     onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => { this.scrolled = event.nativeEvent.contentOffset.y; },
-    onLayout: (event: LayoutChangeEvent) => { this.viewport = event.nativeEvent.layout.height; },
+    /**
+     * The list's own frame only (#342). VirtualizedList hands its `onLayout`
+     * the layout of the empty line too (`_onLayoutEmpty`): after a search with
+     * no results, the 72 points of `No documents found` stood for the list,
+     * whose own frame then did not change when rows came back, and a sweep
+     * anywhere below 48 points scrolled the list by itself. The list's own
+     * layout is the one whose `currentTarget` is its native scroll view.
+     */
+    onLayout: (event: LayoutChangeEvent) => {
+      const own = this.flatList?.getNativeScrollRef?.();
+      if (own && event.currentTarget !== own) return;
+      this.viewport = event.nativeEvent.layout.height;
+    },
     onContentSizeChange: (_width: number, height: number) => { this.content = height; },
   };
 

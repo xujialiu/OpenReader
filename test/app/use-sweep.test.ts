@@ -104,6 +104,30 @@ it('starts edge scrolling above floating actions and releases its timer on unmou
   await h.close();
   expect(vi.getTimerCount()).toBe(0);
 });
+it('keeps the list\'s own height when an empty line\'s layout reaches it, so a sweep mid-list does not scroll by itself (#342)', async () => {
+  vi.useFakeTimers();
+  const h = await mount();
+  const scrollToOffset = vi.fn();
+  const scroll = {}; const empty = {};
+  h.sweep.list.ref({ scrollToOffset, getNativeScrollRef: () => scroll } as never);
+  const from = (target: object, y: number, height: number) => ({ ...layout(y, height), currentTarget: target }) as unknown as LayoutChangeEvent;
+  // Rows; then a query with no results, whose empty line VirtualizedList hands the list's onLayout
+  // (`_onLayoutEmpty`); then rows again, which change no frame and send no layout of the list's own.
+  h.sweep.list.onLayout(from(scroll, 0, 300));
+  h.sweep.list.onContentSizeChange(300, 900);
+  h.sweep.list.onLayout(from(empty, 12, 72));
+  handlers.start({ y: 150 }); handlers.update({ y: 170 });
+  vi.advanceTimersByTime(160);
+  expect(scrollToOffset).not.toHaveBeenCalled();
+  handlers.end();
+  // The list's own frame still counts: a later height of its own moves the bottom band.
+  h.sweep.list.onLayout(from(scroll, 0, 180));
+  handlers.start({ y: 150 }); handlers.update({ y: 170 });
+  vi.advanceTimersByTime(32);
+  expect(scrollToOffset).toHaveBeenCalled();
+  handlers.end();
+  await h.close();
+});
 it('drops the press that ends a sweep\'s own touch, before or after the pan finalizes and however late (#335)', async () => {
   vi.useFakeTimers();
   const h = await mount();
