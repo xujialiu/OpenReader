@@ -14,9 +14,14 @@
 # and reached nothing).
 #
 # key           Cmd+F, Escape, ...: `orca computer hotkey` (a chord) or `press-key`, with `--no-screenshot` and without
-#               `--restore-window`. It returns after 1.1 to 1.4 s and the app acts 0.6 to 0.9 s after the call began; two calls
-#               started together are served one after the other, so two keys cannot be made to fall 0.3 s apart.
-#               A key event puts the device into the hardware-keyboard state: from then on a focused field shows no software keyboard.
+#               `--restore-window`. It returns after 0.7 to 1.4 s and the app acts 0.7 s after the call began (0.68 to 1.09 s); two
+#               calls started together are served one after the other, so two keys cannot be made to fall 0.3 s apart.
+#               Keys reach the device only while the window's focus is on the device screen: when one answers `ok` and does
+#               nothing, click the device's status bar (`orca computer click --app pid:PID --window-id WIN --x 668 --y 110` in the
+#               1318 x 870 main window, x 105, y 96 in the compact device window) and try again; a Cmd+F that missed is the Device
+#               Hub's own Find and leaves the sidebar's Search field focused (pitfalls/mcp.md, 2026-11-02 retest).
+#               A key event may put the device into the hardware-keyboard state (a focused field then shows no software keyboard);
+#               in the retest's Device Hub process it did not.
 # switch        AXPress on the inspector switch that follows the text NAME. Element indexes move with what the app lists above the
 #               inspector (two more while the search field is open), so the index is looked up every time, never kept.
 # toggle-keyboard  Device > Keyboard > Toggle Software Keyboard, the only way back to the software keyboard. The menu item is enabled
