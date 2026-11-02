@@ -243,5 +243,7 @@ The brief was confirmed for implementation under #332, and the removal of the
 pull, the app's own field and the selection of results under #339. Under #339
 it was implemented and checked on an iPhone simulator, and accepted. The
 field's motion was agreed under #341, from the phone's own motion measured on
-an iPhone simulator. None of it has been checked on an iPad or on a physical
-iPhone.
+an iPhone simulator, then implemented, checked on an iPhone simulator against
+those measurements, and accepted. None of it has been checked on an iPad or on
+a physical iPhone, nor with a hardware keyboard that keeps the on-screen
+keyboard away.
