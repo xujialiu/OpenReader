@@ -419,3 +419,12 @@ The record is `notes/NOTES_2026-11-02.md`, the tester's entry; the tools are [`k
 - **The Mac's load decides how well a recording fits.** At a load average of about 19 (Spotlight's `mds_stores` at 60 %) the recorder gave 20 to 23 frames a second and fits had 1 to 1.5 pt rms; at 3 to 6 it gave 25 to 33 and 0.2 to 0.5 once duplicates were dropped. Read `uptime` and `top -l 2 -n 5` before timing anything.
 - **The simulator's volume was back at 60 at 17:03 after `set` at 15:54, with no boot** (`audiosettings.plist` rewritten 16:46:43; nothing was played). The rule above again: `silence.sh check` in front of every probe run, `set` and relaunch when it reads 60.
 - **The Debug app with Reduce Motion on prints Reanimated's warning at every launch and LogBox shows its toast `Open debugger to view warnings.` over the list's bottom** (`WARN [Reanimated] Reduced motion setting is enabled on this device …`, dev only; every animation of the field passes `ReduceMotion.Never`, and the motion was the same). It covers the Library's last rows in screenshots and recordings; dismiss it or read the state from the tree.
+
+## Reaching the no-keyboard state again (#341 fix, 2026-11-02 18:45 to 19:05, iOS 27.0, Device Hub of Xcode 27.0.0)
+
+The record is `notes/NOTES_2026-11-02.md`, 19:09.
+
+- **Device > Keyboard > Toggle Software Keyboard hides the keyboard only while the field keeps its focus.** Symptom: `device-hub.sh … toggle-keyboard` with Library Search open read `no keyboard 0.013`; Close, then `…` > Search, read `keyboard visible 0.492` three times of three, so a run of 12 opens meant to be keyboard-free had the keyboard in every one. The Keyboard menu holds nothing else. Fix: read `device-hub.sh … keyboard UDID` during each open, not once before a run.
+- **The hardware-keyboard state did not come back on demand.** An `axe type "q"` into the field, a Device Hub Escape (which also reached nothing: the field stayed open) and an inspector click (`switch "Reduce Motion"`) each left the next open with `keyboard visible 0.492`. For a frame log without the software keyboard a temporary `showSoftInputOnFocus={false}` on the field gives a focused field and `no keyboard 0.013`; say in the record that it is a stand-in.
+- **Metro for the Debug app needs `EXPO_PUBLIC_OPENREADER_VARIANT=debug`.** Started without it, the app's red screen read `openreader-variant:formal: native variant 'debug' does not match the bundle` and every probe failed at `list must exist` ([install-on-simulator.md](../../../docs/install-on-simulator.md) has the command).
+
