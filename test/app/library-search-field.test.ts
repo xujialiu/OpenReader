@@ -10,14 +10,13 @@ import { LibrarySearchField } from '../../src/app/library-search-field';
  * at render, from the values as they stand; the motion itself is the phone's
  * to show, measured natively (#341).
  */
-type Motion = { kind: 'spring' | 'timing'; to: number; config?: Record<string, unknown>; delay?: number; done?: (finished: boolean) => void };
+type Motion = { kind: 'spring' | 'delay'; to: number; config?: Record<string, unknown>; delay?: number; done?: (finished: boolean) => void };
 const motion = vi.hoisted(() => ({ values: [] as { name: string; now: number; running: Motion | null }[] }));
 vi.mock('react-native-reanimated', async () => {
   const { createElement: element, useState } = await import('react');
   const View = ({ children, ...props }: Record<string, unknown> & { children?: ReactNode }) => element('AnimatedView', props, children);
   return {
     default: { View },
-    ReduceMotion: { Never: 'never', System: 'system' },
     useSharedValue: (initial: number) => useState(() => {
       const value = { name: `v${motion.values.length}`, now: initial, running: null as Motion | null,
         get: () => value.now,
@@ -28,12 +27,14 @@ vi.mock('react-native-reanimated', async () => {
       return value;
     })[0],
     useAnimatedStyle: (style: () => unknown) => style(),
-    withSpring: (to: number, config: Record<string, unknown>, done?: (finished: boolean) => void): Motion => ({ kind: 'spring', to, config, done }),
-    withTiming: (to: number, config: Record<string, unknown>): Motion => ({ kind: 'timing', to, config }),
-    withDelay: (delay: number, inner: Motion, reduceMotion: string): Motion => ({ ...inner, delay, config: { ...inner.config, delayReduceMotion: reduceMotion } }),
     cancelAnimation: (value: { running: Motion | null }) => { const was = value.running; value.running = null; was?.done?.(false); },
   };
 });
+// The phone's spring and the motion's own clock are `held-spring.test.ts`'s; here only what is asked of them.
+vi.mock('../../src/app/held-spring', () => ({
+  withHeldSpring: (to: number, done?: (finished: boolean) => void): Motion => ({ kind: 'spring', to, done }),
+  withHeldDelay: (delay: number, to: number): Motion => ({ kind: 'delay', to, delay }),
+}));
 vi.mock('react-native-worklets', () => ({ scheduleOnRN: (callback: (...args: unknown[]) => void, ...args: unknown[]) => callback(...args) }));
 const hosts = vi.hoisted(() => async (...names: string[]) => {
   const { createElement: element } = await import('react');
@@ -91,7 +92,7 @@ describe('the Library Search field moves as the phone\'s own does (#341)', () =>
     const page = await mount();
     expect(page.drawn()).toBe(false);
   });
-  it('waits for the keyboard, then opens on the phone\'s spring with Reduce Motion ignored, and shows Close once it has settled', async () => {
+  it('waits for the keyboard, then opens on the phone\'s spring, and shows Close once 350 ms of the motion have run', async () => {
     const page = await mount();
     await page.open();
     expect(page.drawn()).toBe(true);
@@ -101,9 +102,8 @@ describe('the Library Search field moves as the phone\'s own does (#341)', () =>
     // The list's room starts at nothing.
     expect(page.slot().props.style).toContainEqual({ height: 0, marginBottom: 0 });
     await page.focused();
-    const spring = { mass: 1, stiffness: 350, damping: 30, reduceMotion: 'never' };
-    for (const index of [lift, grow, shown]) expect(page.value(index).running).toMatchObject({ kind: 'spring', to: 1, config: spring });
-    expect(page.value(close).running).toMatchObject({ kind: 'timing', to: 1, delay: 350, config: { duration: 0, reduceMotion: 'never', delayReduceMotion: 'never' } });
+    for (const index of [lift, grow, shown]) expect(page.value(index).running).toMatchObject({ kind: 'spring', to: 1 });
+    expect(page.value(close).running).toMatchObject({ kind: 'delay', to: 1, delay: 350 });
   });
   it('opens all the same when the field never reports its focus', async () => {
     vi.useFakeTimers();

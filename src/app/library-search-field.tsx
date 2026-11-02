@@ -2,9 +2,10 @@ import { Button, Capsule, Host } from '@expo/ui/swift-ui';
 import { accessibilityLabel, buttonBorderShape, buttonStyle, controlSize, disabled as nativeDisabled, foregroundStyle, glassEffect, labelStyle } from '@expo/ui/swift-ui/modifiers';
 import { useContext, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { cancelAnimation, ReduceMotion, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { INK, SchemeContext, useAccent } from './controls';
+import { withHeldDelay, withHeldSpring } from './held-spring';
 import { Icon } from './icon';
 import { TEXT } from './text-styles';
 
@@ -21,14 +22,10 @@ const CAPSULE = 44;
 const GAP = 10;
 const ROOM = GAP + 44;
 /**
- * The phone's stacked search field moves on one spring, fitted from its frames
- * (iOS 27.0, notes 2026-11-02): natural frequency about 18.7 rad/s, damping
- * ratio about 0.8, so a 0.75-point overshoot of its 54. The list moves on the
- * same spring, and so does the field's fade on the way out. Reduce Motion
- * changes nothing on the phone, so it changes nothing here.
+ * Everything moves on the phone's own spring (`withHeldSpring`): the field, the
+ * list's top edge, and the field's fade on the way out. Close arrives whole when
+ * the field has settled, about 0.35 s of the motion after it begins.
  */
-const SPRING = { mass: 1, stiffness: 350, damping: 30, reduceMotion: ReduceMotion.Never };
-/** Close arrives whole when the field has settled: about 0.35 s after the motion begins. */
 const CLOSE_AFTER = 350;
 /**
  * The motion waits for the keyboard: taking it holds the UI thread (about
@@ -96,15 +93,16 @@ export function LibrarySearchField({ open, animate, field, query, locked, onChan
     if (!waiting || waiting.at !== turn.current || waiting.to !== to) return;
     pending.current = null;
     if (to === 'open') {
-      lift.set(withSpring(1, SPRING));
-      grow.set(withSpring(1, SPRING));
-      shown.set(withSpring(1, SPRING));
-      if (close.get() < 1) close.set(withDelay(CLOSE_AFTER, withTiming(1, { duration: 0, reduceMotion: ReduceMotion.Never }), ReduceMotion.Never));
+      lift.set(withHeldSpring(1));
+      grow.set(withHeldSpring(1));
+      shown.set(withHeldSpring(1));
+      if (close.get() < 1) close.set(withHeldDelay(CLOSE_AFTER, 1));
       return;
     }
     const at = waiting.at;
-    shown.set(withSpring(0, SPRING));
-    lift.set(withSpring(0, SPRING, (finished) => {
+    shown.set(withHeldSpring(0));
+    lift.set(withHeldSpring(0, (finished) => {
+      'worklet';
       if (finished) scheduleOnRN(settled, at);
     }));
   };
