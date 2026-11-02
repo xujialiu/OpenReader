@@ -1,4 +1,4 @@
-# Library Search verification (#332, #339)
+# Library Search verification (#332, #339, #341)
 
 Contract: [design 0090](../../../docs/design/0090-library-search-stays-out-of-the-way.md).
 Use `LibrarySearchProbe.swift` through the [guarded runner](../kit/ios-verification.md).
@@ -187,3 +187,38 @@ Search Inner with the named LibrarySearchProbe method first.
 
 A missing Select action, a no-op key or a static screenshot alone is never proof
 of the corresponding interaction.
+
+## The field's motion (#341)
+
+The field grows in on `…` > Search and fades out on Close (ADR 0090, "Motion"), on a spring of mass 1, stiffness 350,
+damping 30, starting when the field reports its focus or blur. To check it:
+
+- **The curve**: record a cycle from the top of the list (`simctl io recordVideo --codec=h264`, `…` at 364, 84, Search
+  at 201, 635 once the Library actions have risen, Close at 362, 139) and run `search-motion.py VIDEO --band 200 420`.
+  Expect the open and the close to fit a natural frequency of about 18.7 rad/s and a damping ratio of about 0.80
+  (measured 18.97 / 0.808 and 18.55 / 0.802 on `iPhone 17 animation`), a peak of 61 points, and no step larger than the
+  spring's own between two frames except on the first open after a launch (below).
+- **Mid-list**: the rows move down 60 points and back. Read two rows' frames from `ax.py UDID tree` before, during and
+  after (measured 157 → 217 → 157); the script's band cannot tell an 84-point row from a 60-point shift there.
+- **Frames as the UI thread drew them**: a temporary `useFrameCallback` in `library-search-field.tsx` logging
+  `frame.timestamp`, `timeSincePreviousFrame` and the four values to Metro shows every frame of a motion. Remove it
+  before committing. With the springs started on the field's mount instead of its focus, the frames after the open came
+  247 and 300 ms apart while the keyboard was taken, and the list jumped to 0.78 of its way.
+- **The first open after a launch** still loses about 50 ms at its start (16 points in the first moving frame, against
+  2.7 on later opens): the keyboard's first appearance in the process keeps the UI thread past the field's focus event.
+- **Escape and Command-F could not be sent** on 2026-11-02: `axe key 41` and `axe key-combo --modifiers 227 --key 9`
+  reached nothing, and `orca computer` keys to the Device Hub window reported success without reaching the app (and
+  refused with `--restore-window`). The close during the opening and the opening during the fade were driven by
+  temporary timers in the code instead (`onClose` 150 ms after the opening began; `search.start` 150 ms after Close),
+  which take the same path as the keys: the opening held at 0.55 through the keyboard's return, then sprang back to 1;
+  the close (on a build that let the opening run on until the blur) turned at 0.61 and faded from there with Close never shown.
+- **`testSweepSelectsSearchResults` fails whenever XCTest's `typeText` mistypes the query** (`S Diag`, `Sl Diag`,
+  `Sll Diag`; 4 of 6 runs, all four failures, neither pass): the mistyped query has no results, the empty state's
+  layout reaches the sweep as the list's height (VirtualizedList passes `ListEmptyComponent`'s `onLayout` to the list's
+  own, `_onLayoutEmpty`), the sweep reads a 72-point list and scrolls by itself, and the results sweep selects 9. An app
+  defect from #339's code, not the motion's; the two runs without the mistyping passed. Fixed under #342: the sweep keeps
+  only layouts whose `currentTarget` is the list's native scroll view, and the probe now types `zqxj` first on purpose.
+- **The probe shows #342 only once the field has settled.** Typed while the opening's last layouts were still arriving
+  (697.7 and 698 after the empty line's 72), the no-results query passed twice with the fix taken out: a layout of the
+  list's own after the empty line's put the height back. The probe waits 1.5 s after the field appears; with that wait
+  it failed 2 of 2 with the fix out and passed 4 of 4 with it in (2026-11-02, `iPhone 17 animation`).

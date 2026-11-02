@@ -136,7 +136,8 @@ final class LibraryTwoFingerProbe: XCTestCase {
   /// #339: the two-finger sweep selects search results as it selects a
   /// Folder's rows. A browse control first, then the same track over results
   /// must select exactly the three traversed results, lock the field with its
-  /// query, and offer Move. No seeding.
+  /// query, and offer Move. #342: a query with no results comes first, so the
+  /// sweep must not take the empty line for the list. No seeding.
   func testSweepSelectsSearchResults() {
     app.terminate(); app.launchArguments = []; app.launch()
     let actions = app.buttons["Library actions"]
@@ -155,7 +156,16 @@ final class LibraryTwoFingerProbe: XCTestCase {
     let search = app.buttons["Search"]
     XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
     let field = app.descendants(matching: .any).matching(NSPredicate(format: "placeholderValue == %@", "Search Library")).firstMatch
-    XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Scroll Diag")
+    XCTAssertTrue(field.waitForExistence(timeout: 5))
+    // #342: a query with no results first, on purpose. Its empty line's layout reached the sweep as the list's
+    // height (72 pt), and the results sweep below then scrolled the list by itself and selected nine. Typed once
+    // the field's motion (#341) has settled: a layout of the list's own that arrives after the empty line's puts
+    // the right height back and hides the fault (two passes with the fix off, 2026-11-02).
+    Thread.sleep(forTimeInterval: 1.5)
+    field.typeText("zqxj")
+    XCTAssertTrue(app.staticTexts["No documents found"].waitForExistence(timeout: 5), "A query with no results must show the empty line")
+    if app.buttons["Clear text"].exists { app.buttons["Clear text"].tap() }
+    field.typeText("Scroll Diag")
     // XCTest's typeText left "SDiag" here once (and "AShort" for "A Short" in LibrarySearchProbe, #339 verification):
     // read the field back, and type again after clearing when it does not match.
     if field.value as? String != "Scroll Diag" {
