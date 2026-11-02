@@ -211,7 +211,7 @@ damping 30, starting when the field reports its focus or blur. To check it:
   refused with `--restore-window`). The close during the opening and the opening during the fade were driven by
   temporary timers in the code instead (`onClose` 150 ms after the opening began; `search.start` 150 ms after Close),
   which take the same path as the keys: the opening held at 0.55 through the keyboard's return, then sprang back to 1;
-  the close held at 0.61, then faded from there with Close never shown.
+  the close (on a build that let the opening run on until the blur) turned at 0.61 and faded from there with Close never shown.
 - **`testSweepSelectsSearchResults` fails whenever XCTest's `typeText` mistypes the query** (`S Diag`, `Sl Diag`,
   `Sll Diag`; 4 of 6 runs, all four failures, neither pass): the mistyped query has no results, the empty state's
   layout reaches the sweep as the list's height (VirtualizedList passes `ListEmptyComponent`'s `onLayout` to the list's
