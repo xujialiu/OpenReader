@@ -4,7 +4,7 @@ status: accepted
 
 # Library Search draws its own field and keeps its keys on the page
 
-Issues #332 and #339; the product contract is
+Issues #332, #339 and #341; the product contract is
 [design 0090](../design/0090-library-search-stays-out-of-the-way.md). The
 existing Library/Folder native-stack page owns its search, not a new route, a
 Drawer or a persisted index. `libraryRows` filters the already-loaded entries by
@@ -37,7 +37,8 @@ apply it.
 ## The field
 
 `LibrarySearchField` is rendered by the page above the list, inside the
-Library's column, only while search is open, and goes with it. It copies the
+Library's column, while search is open and while it fades out after (Motion,
+below). It copies the
 phone's own stacked field as measured on iPhone 17 (iOS 27.0; notes 2026-11-01):
 a 44-point capsule from x 16, its top 1 point below the bar, 15 points above the
 list; the magnifying glass 14 points in and 16 across; the words in Body from x
@@ -75,11 +76,87 @@ acts on it in `didMoveToWindow`, once per mounted view (`_didMoveToWindow`,
 reset only by recycling): the field becomes first responder when it is in the
 window and not before. So `start()` only sets state; nothing calls `focus()` on
 a ref that may not exist yet. On a search already open, `start()` calls
-`focus()` on the existing field. Returning from a result's Reader moves the
+`focus()` on the existing field; on a field still fading out, the field focuses
+itself as it turns back (Motion, below), and it blurs the moment search ends,
+since it stays mounted to fade. Returning from a result's Reader moves the
 same mounted view back into the window, which `_didMoveToWindow` stops from
 focusing again. The Library actions Drawer still defers Search to its native
 dismissal callback, so the field never appears under a sheet that is still
 covering the page.
+
+### Motion
+
+The field moves as the phone's stacked search field does (#341), measured on
+iPhone 17 (iOS 27.0) from a UIKit test app with the search controller #332
+used; the frames and fits are in `notes/NOTES_2026-11-02.md`. The animation is
+`react-native-reanimated` 4.5.1, Expo SDK 57's version, running on the UI
+thread; `react-native-worklets` 0.10.1 was already a dependency and
+babel-preset-expo adds its plugin by itself. `active` stays `useLibrarySearch`'s;
+whether the field is drawn is the field's own (`present`), from the opening
+until its fade has finished.
+
+- **One spring**: mass 1, stiffness 350, damping 30 (`SPRING`). That is the fit
+  of the phone's frames, natural frequency 18.5 to 18.9 rad/s and damping ratio
+  0.80 to 0.81, with an error of 0.16 to 0.23 points over three opens and three
+  closes. UIKit's bar, field and list animations are not in any layer's
+  `animationKeys()`, so the parameters are fitted, not read. Reanimated's
+  default, `ReduceMotion.System`, would jump to the end under Reduce Motion;
+  the phone changes nothing then (measured), so every animation here passes
+  `ReduceMotion.Never`.
+- **The slot**: a view above the list, `60 × lift` points tall, with
+  `marginBottom` taking `lift` below zero so the list overshoots on the way out
+  as the phone's does (0.74 points). The list is its flex sibling, so the
+  list's top edge moves with the slot and its bottom stays where it is, as
+  UIKit's list did under the growing bar. List positions are offsets into the
+  content and do not move. The phone's bar grows by 54 points; the slot keeps
+  the app's measured 60 (1 + 44 + 15), which puts the first row where the
+  phone's was.
+- **Opening**: `lift`, `grow` and `shown` spring to 1. The capsule's top stays
+  1 point under the bar and its height is `44 × grow`. Close's room,
+  `54 × grow` (44 and the 10 between), narrows it from full width, as the
+  phone's capsule starts at 370 points and narrows to 315. The magnifying glass
+  and the text field stay 44 points tall, centred in the capsule and clipped by
+  a view with its radius; the glass itself is not clipped. Their opacity is
+  `grow`: the phone's magnifier darkness tracked the bar's growth within a few
+  hundredths at every sampled frame (0.335 against 0.374, 0.593 against 0.613,
+  0.787 against 0.79, 0.914 against 0.909). Close is hidden until 350 ms after
+  the opening (`CLOSE_AFTER`), then shown at once: the phone's appeared whole at
+  +408 to 430 ms, its motion starting at about +65.
+- **Closing**: the field blurs at once, so the keyboard starts down first (the
+  phone's led by about 20 ms). `lift` and `shown` spring to 0 on the same
+  spring. The phone's whole field faded as `1 − x(t)` of the very spring its
+  list followed: 0.87, 0.49, 0.20 and 0 at 32, 82, 132 and 232 ms after the
+  motion began, against 0.871, 0.490, 0.200 and −0.004 computed. `grow` stays
+  where it is, so the field neither slides nor shrinks. The slot sits above the
+  list (`zIndex`), so the fading field is drawn over the rows coming up under
+  it, as the phone's title bar was: its mid-list close shows the faint field
+  over the rows. The slot ignores touches while closing. The field unmounts
+  when `lift`'s spring finishes; a turn counter drops a finish that a newer
+  opening has overtaken.
+- **At the top of the list the phone keeps its field** after Close, standing
+  until the list is scrolled. Design 0090 has no standing field, so the app
+  closes everywhere as the phone does mid-list (decided under #341).
+- **Turning back**: each value is animated from where it stands, and
+  Reanimated's spring starts from the running one's velocity, so an Escape
+  during the opening and a Command-F during the fade turn back from there. A
+  field still fading is the same mounted view, which `autoFocus` does not act
+  on again, so an opening during the fade focuses it explicitly. Close keeps
+  its state if it had appeared, and stays hidden if the opening never reached
+  it.
+- **No motion**: an exit while the page is not in front sets every value at its
+  end and unmounts at once. The page passes `animate={navigation.isFocused()}`,
+  which is false when the exit renders for every exit caused by leaving the
+  page. Returning from a result's Reader keeps the field as it stands, and the
+  locked greying is the static half opacity it was.
+- **Rejected**: React Native's `Animated` with the native driver animates
+  transforms and opacity only, so the list would be translated over a frame
+  extended past the screen's bottom and the field would slide rather than
+  grow. A JavaScript-driven `Animated` height runs on the JavaScript thread,
+  which is busiest at exactly these moments: the field's mount and focus, the
+  rows switching and the restore on Close. `LayoutAnimation` applies one
+  duration-based spring to every changed view alike, with no separate fade and
+  no late Close. A SwiftUI animation inside the field's host grows the capsule
+  natively but cannot move the list.
 
 ## Transient state and positions
 
@@ -225,7 +302,11 @@ Host tests: the cross-Folder rules (`test/core/library-selection.test.ts`,
 second open, close and its retried restore, explicit inset, clearing, the Reader
 round trip, ending on other navigation, no history), the real page with its
 Drawer, field, keys, selection over results and Move
-(`library-search-screen.test.ts`), and the key-target contract. Native views are
+(`library-search-screen.test.ts`), the field's motion against a Reanimated
+double that records each value's spring and finishes it on demand
+(`library-search-field.test.ts`: the spring and Reduce Motion, the delayed
+Close, the fade and unmount, a close before Close appears, a reopening during
+the fade, the instant close off-screen), and the key-target contract. Native views are
 doubles there: they prove no UIKit placement, glass, first responder, keyboard,
 key delivery or scroll position. Those are `LibrarySearchProbe`'s and
 `LibraryTwoFingerProbe.testSweepSelectsSearchResults`'s, listed in
