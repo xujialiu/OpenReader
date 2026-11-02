@@ -44,6 +44,9 @@ What every area uses:
 - `alert-input.py`: checked clear/type/readback for one native name-alert field;
   [input-integrity recipe](../library-and-reader/input-integrity.md) gives its
   invocation, artifact contract and separate submit/persistence assertions.
+- `device-hub.sh`: what only the Device Hub window can do for a simulated app: Mac key events (`key Cmd+F`), the software keyboard's visibility
+  (`keyboard`, `toggle-keyboard`) and the Accessibility inspector's switches (`switch "Reduce Motion"`); the caveats are in its header and
+  [pitfalls/mcp.md](../pitfalls/mcp.md), 2026-11-02.
 - `ax.py`: the accessibility tree through AXe, and real touches on what it
   lists, the phone's own alert and the rows of a long list included (below).
 - `probes/touch-record-arm.js` and `probes/touch-record-read.js`: arm and read a recorder in the

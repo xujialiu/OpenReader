@@ -410,12 +410,17 @@ final class LibraryTwoFingerProbe: XCTestCase {
   /// the real Create folder alert and XCTest's own `typeText` (the AXe-based `name-save.py` lost its typed text on iOS 27.0,
   /// pitfalls/typing-environment.md). Does nothing when the Folder is already there; leaves the alert's name readback and the
   /// new row in the artifacts. Never deletes or renames anything.
-  func testCreateTapCheckFolderFixture() {
+  func testCreateTapCheckFolderFixture() { createRootFolder("TapCheck") }
+
+  /// The same fixture step for the root Folder `Scratch`, which every `launchAtRoot` test waits for as the first row it names.
+  func testCreateScratchFolderFixture() { createRootFolder("Scratch") }
+
+  func createRootFolder(_ name: String) {
     let port = ProcessInfo.processInfo.environment["OPENREADER_METRO_PORT"] ?? "8082"
-    let existing = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Folder, TapCheck'")).firstMatch
+    let existing = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Folder, \(name)")).firstMatch
     app.terminate(); app.launchArguments = ["-RCT_jsLocation", "localhost:\(port)"]; app.launch()
     guard app.buttons["Library actions"].waitForExistence(timeout: 20) else { return XCTFail("the Library did not open") }
-    if existing.waitForExistence(timeout: 3) { print("TAPCHECK fixture: Folder TapCheck already exists"); return }
+    if existing.waitForExistence(timeout: 3) { print("FOLDER fixture: Folder \(name) already exists"); return }
     app.buttons["Library actions"].tap()
     let create = app.buttons["Create folder"]
     XCTAssertTrue(create.waitForExistence(timeout: 5), "the Library actions menu has no Create folder")
@@ -423,16 +428,16 @@ final class LibraryTwoFingerProbe: XCTestCase {
     let field = app.textFields["Name"]
     XCTAssertTrue(field.waitForExistence(timeout: 8), "the Create folder alert has no Name field")
     field.tap()
-    field.typeText("TapCheck")
+    field.typeText(name)
     let read = field.value as? String ?? "?"
-    print("TAPCHECK fixture: Create folder field reads \(read)")
-    XCTAssertEqual(read, "TapCheck", "native readback of the typed name")
+    print("FOLDER fixture: Create folder field reads \(read)")
+    XCTAssertEqual(read, name, "native readback of the typed name")
     capture("create-folder-typed")
-    guard read == "TapCheck" else { return }
+    guard read == name else { return }
     app.buttons["Create"].tap()
-    let row = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Folder, TapCheck'")).firstMatch
-    XCTAssertTrue(row.waitForExistence(timeout: 8), "the Library has no Folder TapCheck row after Create")
-    print("TAPCHECK fixture: created row \(row.label)")
+    let row = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Folder, \(name)")).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 8), "the Library has no Folder \(name) row after Create")
+    print("FOLDER fixture: created row \(row.label)")
     capture("create-folder-created")
   }
 

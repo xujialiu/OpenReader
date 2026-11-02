@@ -9,7 +9,7 @@ TEST_RUNNER_OPENREADER_METRO_PORT=8082 \
   -maximum-test-execution-time-allowance 60
 ```
 
-The Debug app must be installed, its Metro running, and the simulator volume zero. Seed the Library root with ten rows, first a Folder named Scratch. These probes currently use default text size on the iPhone 17 Pro Max's 440×956-point display: 84-point rows beginning at y=128. They do not import or delete content. Adapt coordinates for other devices rather than assuming the same geometry. Each method relaunches, pinning the app to `OPENREADER_METRO_PORT` from the test runner (default 8082), and requires the normal Library and its first row to be hittable.
+The Debug app must be installed, its Metro running, and the simulator volume zero. Seed the Library root with ten rows, first a Folder named Scratch (`testCreateScratchFolderFixture` makes it through the real Create folder alert, as `testCreateTapCheckFolderFixture` makes `TapCheck`; both do nothing when the Folder exists). These probes currently use default text size on the iPhone 17 Pro Max's 440×956-point display: 84-point rows beginning at y=128. They do not import or delete content. Adapt coordinates for other devices rather than assuming the same geometry. Each method relaunches, pinning the app to `OPENREADER_METRO_PORT` from the test runner (default 8082), and requires the normal Library and its first row to be hittable.
 
 ## Checks
 
