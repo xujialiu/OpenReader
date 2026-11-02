@@ -216,4 +216,9 @@ damping 30, starting when the field reports its focus or blur. To check it:
   `Sll Diag`; 4 of 6 runs, all four failures, neither pass): the mistyped query has no results, the empty state's
   layout reaches the sweep as the list's height (VirtualizedList passes `ListEmptyComponent`'s `onLayout` to the list's
   own, `_onLayoutEmpty`), the sweep reads a 72-point list and scrolls by itself, and the results sweep selects 9. An app
-  defect from #339's code, not the motion's; the two runs without the mistyping passed.
+  defect from #339's code, not the motion's; the two runs without the mistyping passed. Fixed under #342: the sweep keeps
+  only layouts whose `currentTarget` is the list's native scroll view, and the probe now types `zqxj` first on purpose.
+- **The probe shows #342 only once the field has settled.** Typed while the opening's last layouts were still arriving
+  (697.7 and 698 after the empty line's 72), the no-results query passed twice with the fix taken out: a layout of the
+  list's own after the empty line's put the height back. The probe waits 1.5 s after the field appears; with that wait
+  it failed 2 of 2 with the fix out and passed 4 of 4 with it in (2026-11-02, `iPhone 17 animation`).
