@@ -30,6 +30,14 @@ const ROOM = GAP + 44;
 const SPRING = { mass: 1, stiffness: 350, damping: 30, reduceMotion: ReduceMotion.Never };
 /** Close arrives whole when the field has settled: about 0.35 s after the motion begins. */
 const CLOSE_AFTER = 350;
+/**
+ * The motion waits for the keyboard: taking it holds the UI thread (about
+ * 300 ms on the iPhone 17 simulator, iOS 27.0, notes 2026-11-02) and giving it
+ * up holds it for a frame or two. A field that never reports its focus opens
+ * after `FOCUS_WAIT`, one that never reports its blur closes after `BLUR_WAIT`.
+ */
+const FOCUS_WAIT = 600;
+const BLUR_WAIT = 150;
 
 /**
  * Library Search's field, drawn by the app under the page's title while search
@@ -56,7 +64,11 @@ const CLOSE_AFTER = 350;
  * keyboard as it appears (`autoFocus`, which the text input acts on when it
  * reaches the window, so it cannot run before the field exists), gives it up
  * the moment `open` ends, and takes it again only when it opens while still
- * fading. While results are selected it is `locked`: greyed, with the query
+ * fading. Taking or giving up the keyboard holds the UI thread, and a spring
+ * already running there would jump by all the time it was owed when the thread
+ * came back; so each motion starts when the field reports its focus or its
+ * blur, after that hold, as the phone's own starts once the work in front of
+ * it is done. While results are selected it is `locked`: greyed, with the query
  * showing and neither the field nor the close control answering.
  */
 export function LibrarySearchField({ open, animate, field, query, locked, onChangeText, onClose, style }: {
@@ -77,6 +89,25 @@ export function LibrarySearchField({ open, animate, field, query, locked, onChan
   const roomWidth = useSharedValue(ROOM);
   const was = useRef(open);
   const turn = useRef(0);
+  /** The motion that waits for the field's focus or blur. */
+  const pending = useRef<{ at: number; to: 'open' | 'close' } | null>(null);
+  const go = (to: 'open' | 'close') => {
+    const waiting = pending.current;
+    if (!waiting || waiting.at !== turn.current || waiting.to !== to) return;
+    pending.current = null;
+    if (to === 'open') {
+      lift.set(withSpring(1, SPRING));
+      grow.set(withSpring(1, SPRING));
+      shown.set(withSpring(1, SPRING));
+      if (close.get() < 1) close.set(withDelay(CLOSE_AFTER, withTiming(1, { duration: 0, reduceMotion: ReduceMotion.Never }), ReduceMotion.Never));
+      return;
+    }
+    const at = waiting.at;
+    shown.set(withSpring(0, SPRING));
+    lift.set(withSpring(0, SPRING, (finished) => {
+      if (finished) scheduleOnRN(settled, at);
+    }));
+  };
   const settled = (at: number) => { if (turn.current === at) setPresent(false); };
 
   useLayoutEffect(() => {
@@ -87,27 +118,33 @@ export function LibrarySearchField({ open, animate, field, query, locked, onChan
       // Still drawn: the same mounted view, fading, which autoFocus does not act on again.
       const reopening = present;
       setPresent(true); // eslint-disable-line react-hooks/set-state-in-effect
-      lift.set(withSpring(1, SPRING));
-      grow.set(withSpring(1, SPRING));
-      shown.set(withSpring(1, SPRING));
-      if (close.get() < 1) close.set(withDelay(CLOSE_AFTER, withTiming(1, { duration: 0, reduceMotion: ReduceMotion.Never }), ReduceMotion.Never));
-      if (reopening) field.current?.focus();
-      return;
+      pending.current = { at, to: 'open' };
+      if (reopening) {
+        // The fade stops where it is and turns back once the field has the keyboard again.
+        cancelAnimation(lift); cancelAnimation(shown);
+        field.current?.focus();
+      }
+      const fallback = setTimeout(() => go('open'), FOCUS_WAIT);
+      return () => clearTimeout(fallback);
     }
-    field.current?.blur();
     // A close before Close has appeared keeps it hidden.
     cancelAnimation(close);
     if (!animate) {
+      pending.current = null;
+      field.current?.blur();
       cancelAnimation(lift); cancelAnimation(grow); cancelAnimation(shown);
       lift.set(0); grow.set(0); shown.set(1); close.set(0);
       setPresent(false);
       return;
     }
-    shown.set(withSpring(0, SPRING));
-    lift.set(withSpring(0, SPRING, (finished) => {
-      if (finished) scheduleOnRN(settled, at);
-    }));
-    // `field`, the shared values and `settled` keep their identity; only the transitions matter here.
+    pending.current = { at, to: 'close' };
+    if (!field.current?.isFocused()) { go('close'); return; }
+    // An opening still under way stops where it is and turns back once the keyboard has gone.
+    cancelAnimation(lift); cancelAnimation(shown);
+    field.current.blur();
+    const fallback = setTimeout(() => go('close'), BLUR_WAIT);
+    return () => clearTimeout(fallback);
+    // `field`, the shared values and `go` keep their identity or read refs; only the transitions matter here.
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Once the field has gone, the next opening starts from nothing. */
@@ -144,7 +181,8 @@ export function LibrarySearchField({ open, animate, field, query, locked, onChan
               autoFocus placeholder="Search Library" placeholderTextColor={INK.searchPrompt} selectionColor={accent.reading}
               accessibilityLabel="Search Library" testID="library-search-field"
               autoCapitalize="none" autoCorrect={false} spellCheck={false} clearButtonMode="while-editing"
-              returnKeyType="search" enablesReturnKeyAutomatically onSubmitEditing={() => field.current?.blur()} />
+              returnKeyType="search" enablesReturnKeyAutomatically onSubmitEditing={() => field.current?.blur()}
+              onFocus={() => go('open')} onBlur={() => go('close')} />
           </Pressable>
         </Animated.View>
         </Animated.View>

@@ -111,6 +111,24 @@ until its fade has finished.
   content and do not move. The phone's bar grows by 54 points; the slot keeps
   the app's measured 60 (1 + 44 + 15), which puts the first row where the
   phone's was.
+- **The keyboard first**: taking the keyboard holds the UI thread, and
+  Reanimated drives its springs from that thread frame by frame. Measured on
+  the session's iPhone 17 simulator (iOS 27.0, a frame callback logging the
+  values, a temporary build): with the springs started as the field mounted,
+  the frames after the open came 247 and then 300 ms apart, `lift` went from 0
+  to 0.374 and then to 0.785 between two frames (Reanimated caps each step's
+  time, 64 ms, so it did not finish at once), and Close, whose delay counts
+  wall time, appeared at the second. With `autoFocus` off the same open ran at
+  16.7 ms frames throughout. So the opening waits for the text input's
+  `onFocus`, which arrives after that hold (48 to 216 ms after the field's
+  commit in four runs, the springs starting within a frame or two), and opens
+  anyway after 600 ms (`FOCUS_WAIT`) if it never comes. The closing waits the
+  same way for `onBlur` when the field has the keyboard (`isFocused()`), at
+  most 150 ms (`BLUR_WAIT`); started together with the blur, its first frame
+  came 33 to 40 ms after the one before. The phone's own animation starts
+  once the work in front of it is done; its list started 25 ms after its
+  keyboard on a close. With both waits every logged frame of an open and a
+  close was 16.7 ms apart.
 - **Opening**: `lift`, `grow` and `shown` spring to 1. The capsule's top stays
   1 point under the bar and its height is `44 × grow`. Close's room, the 10
   points between and Close as drawn (46.5 across on iPhone 17, notes
@@ -137,13 +155,14 @@ until its fade has finished.
 - **At the top of the list the phone keeps its field** after Close, standing
   until the list is scrolled. Design 0090 has no standing field, so the app
   closes everywhere as the phone does mid-list (decided under #341).
-- **Turning back**: each value is animated from where it stands, and
-  Reanimated's spring starts from the running one's velocity, so an Escape
-  during the opening and a Command-F during the fade turn back from there. A
-  field still fading is the same mounted view, which `autoFocus` does not act
-  on again, so an opening during the fade focuses it explicitly. Close keeps
-  its state if it had appeared, and stays hidden if the opening never reached
-  it.
+- **Turning back**: an Escape during the opening stops `lift` and `shown`
+  where they are while the keyboard goes, then springs them to 0 from there;
+  a Command-F during the fade does the same while the keyboard comes back,
+  then springs them to 1. A field still fading is the same mounted view, which
+  `autoFocus` does not act on again, so an opening during the fade focuses it
+  explicitly. Close keeps its state if it had appeared, and stays hidden if
+  the opening never reached it. `grow` is never stopped: an opening cut short
+  goes on growing while it fades.
 - **No motion**: an exit while the page is not in front sets every value at its
   end and unmounts at once. The page passes `animate={navigation.isFocused()}`,
   which is false when the exit renders for every exit caused by leaving the
