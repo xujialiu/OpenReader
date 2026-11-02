@@ -227,9 +227,8 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
     <LibraryKeys style={styles.keys} onKey={pressKey}
       find={focused && !selecting && !busy && !picking && !adding && !actions && !folderActions && !library.loading && !problem}
       escape={focused && (selecting ? !selectionLocked : search.active)} />
-    {search.active ? <View style={styles.column}>
-      <LibrarySearchField field={search.field} query={search.query} locked={selecting} onChangeText={search.change} onClose={search.exit} />
-    </View> : null}
+    <LibrarySearchField style={styles.column} open={search.active} animate={navigation.isFocused()} field={search.field} query={search.query}
+      locked={selecting} onChangeText={search.change} onClose={search.exit} />
     <GestureDetector gesture={sweep.gesture}>
     <View style={[styles.list, styles.column]} collapsable={false}>
     <GestureDetector gesture={sweep.nativeGesture}>

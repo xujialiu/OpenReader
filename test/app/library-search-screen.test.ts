@@ -93,7 +93,8 @@ async function open(at: string | null = 'inner') {
   const nodes = (type: string) => view.root.findAll((node) => node.type === type);
   const drawer = (title = 'Library actions') => nodes('Drawer').find((node) => node.props.title === title)!;
   const row = (text: string) => nodes('DrawerRow').find((node) => node.findAll((child) => String(child.type) === 'DrawerRowText' && child.props.children === text).length)!;
-  const field = () => nodes('LibrarySearchField')[0] as ReturnType<typeof nodes>[number] | undefined;
+  /** The field while search is open. It stays drawn, closed, while it fades out (#341). */
+  const field = () => nodes('LibrarySearchField').find((node) => node.props.open) as ReturnType<typeof nodes>[number] | undefined;
   const keys = () => nodes('LibraryKeys')[0];
   /** The bar's native items, which iOS draws in place of `headerLeft`/`headerRight` (#339). */
   const items = (side: 'left' | 'right') => (options[side === 'left' ? 'unstable_headerLeftItems' : 'unstable_headerRightItems'] as
@@ -184,6 +185,18 @@ describe('Library Search through the real page and actions Drawer (#332, #339)',
     await act(async () => page.field()!.props.onClose());
     expect(page.field()).toBeUndefined();
     expect(page.nodes('DocumentRow').map((node) => node.props.title)).toEqual(['三体']);
+    await page.close();
+  });
+  it('closing hands the field its fade while the page is in front, and takes it away at once when it is not (#341)', async () => {
+    const page = await open();
+    await page.search(); await page.type('body');
+    await act(async () => page.field()!.props.onClose());
+    expect(page.nodes('LibrarySearchField').map((node) => node.props)).toMatchObject([{ open: false, animate: true, query: '' }]);
+    await page.key('find');
+    expect(page.field()!.props).toMatchObject({ open: true, query: '' });
+    page.navigation.isFocused = () => false;
+    await page.key('escape');
+    expect(page.nodes('LibrarySearchField').map((node) => node.props)).toMatchObject([{ open: false, animate: false }]);
     await page.close();
   });
   it('no matches shows only the no-results state, while clearing the query restores the original list', async () => {
