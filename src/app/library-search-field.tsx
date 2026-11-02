@@ -151,8 +151,9 @@ export function LibrarySearchField({ open, animate, field, query, locked, onChan
     grow.set(0); close.set(0); shown.set(1);
   }, [open, present, grow, close, shown]);
 
-  // The overshoot below zero on the way out lifts the list a fraction of a point past its place, as the phone's does.
-  const slot = useAnimatedStyle(() => ({ height: Math.max(0, SLOT * lift.get()), marginBottom: Math.min(0, SLOT * lift.get()) }));
+  // The closing overshoot stops at the list's place. Taller than its own room by even that fraction of a
+  // point, the list at its very bottom has its offset clamped and keeps it: Close came back 1 pt short.
+  const slot = useAnimatedStyle(() => ({ height: Math.max(0, SLOT * lift.get()) }));
   const whole = useAnimatedStyle(() => ({ opacity: shown.get() }));
   const capsule = useAnimatedStyle(() => ({ height: Math.max(0, CAPSULE * grow.get()) }));
   const clip = useAnimatedStyle(() => ({ borderRadius: Math.max(0, CAPSULE * grow.get()) / 2 }));

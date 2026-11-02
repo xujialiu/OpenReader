@@ -100,7 +100,7 @@ describe('the Library Search field moves as the phone\'s own does (#341)', () =>
     expect(page.field.focus).not.toHaveBeenCalled();
     expect(moving(page)).toEqual([null, null, null, null]);
     // The list's room starts at nothing.
-    expect(page.slot().props.style).toContainEqual({ height: 0, marginBottom: 0 });
+    expect(page.slot().props.style).toContainEqual({ height: 0 });
     await page.focused();
     for (const index of [lift, grow, shown]) expect(page.value(index).running).toMatchObject({ kind: 'spring', to: 1 });
     expect(page.value(close).running).toMatchObject({ kind: 'delay', to: 1, delay: 350 });
@@ -169,6 +169,16 @@ describe('the Library Search field moves as the phone\'s own does (#341)', () =>
     fade.done?.(true);
     await page.settle();
     expect(page.drawn()).toBe(true);
+  });
+  it('never makes the list taller than its own room: the closing overshoot stops at the list\'s place', async () => {
+    // A list taller than its room, even by the overshoot's fraction of a point, has its scroll
+    // offset clamped at the very bottom and keeps it: Close came back 1 pt short (#341, notes 2026-11-02).
+    const page = await mount();
+    await page.open(); await page.focused(); await page.settle();
+    await page.close(); await page.blurred();
+    page.value(lift).now = -0.0124;
+    await page.open(); // any render reads the styles again
+    expect(page.slot().props.style).toContainEqual({ height: 0 });
   });
   it('a close while the page is not in front takes the field away at once', async () => {
     const page = await mount();
