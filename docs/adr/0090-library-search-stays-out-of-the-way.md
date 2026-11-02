@@ -95,22 +95,45 @@ babel-preset-expo adds its plugin by itself. `active` stays `useLibrarySearch`'s
 whether the field is drawn is the field's own (`present`), from the opening
 until its fade has finished.
 
-- **One spring**: mass 1, stiffness 350, damping 30 (`SPRING`). That is the fit
-  of the phone's frames, natural frequency 18.5 to 18.9 rad/s and damping ratio
-  0.80 to 0.81, with an error of 0.16 to 0.23 points over three opens and three
-  closes. UIKit's bar, field and list animations are not in any layer's
-  `animationKeys()`, so the parameters are fitted, not read. Reanimated's
-  default, `ReduceMotion.System`, would jump to the end under Reduce Motion;
-  the phone changes nothing then (measured), so every animation here passes
-  `ReduceMotion.Never`.
-- **The slot**: a view above the list, `60 × lift` points tall, with
-  `marginBottom` taking `lift` below zero so the list overshoots on the way out
-  as the phone's does (0.74 points). The list is its flex sibling, so the
+- **One spring**: mass 1, stiffness 350, damping 30 (`src/app/held-spring.ts`).
+  That is the fit of the phone's frames, natural frequency 18.5 to 18.9 rad/s
+  and damping ratio 0.80 to 0.81, with an error of 0.16 to 0.23 points over
+  three opens and three closes. UIKit's bar, field and list animations are not
+  in any layer's `animationKeys()`, so the parameters are fitted, not read.
+- **One frame of motion per frame** (`withHeldSpring`, `withHeldDelay`, custom
+  animations through Reanimated's `defineAnimation`): each UI frame moves the
+  spring by the time since the last frame, but never by more than a 60 Hz
+  frame, the damped spring's exact solution over that step from its position
+  and velocity. Reanimated's own `withSpring` takes up to 64 ms in one frame
+  (`spring.ts`, `Math.min(…, 64)`), so a hold of the UI thread came back as a
+  jump: `ios-tester` logged 19 of 39 opens of `1.0.4 (30)-beta1-debug` with
+  `lift` 0.30 to 0.41 within their first two frames, three of them 0.374, a
+  64 ms step of this spring, where a spring from rest has 0.02 to 0.1 and then
+  0.13 to 0.25. A hold now delays the motion and skips none of it. A display
+  faster than 60 Hz has shorter frames, which pass whole. Close's delay counts
+  the same clock, so it stays in step with the field. Reanimated's default
+  reduce-motion handling jumps an animation to its end under Reduce Motion;
+  the phone changes nothing then (measured), so these animations set
+  `reduceMotion: false`. In development Reanimated also warns about Reduce
+  Motion as it loads, and LogBox put that warning over the list's bottom;
+  `src/app/reduced-motion-warning.ts`, imported by `index.ts` before the app,
+  silences that one warning with the `LogBox.ignoreLogs` line Reanimated's
+  troubleshooting page gives.
+- **The slot**: a view above the list, `60 × lift` points tall and never less
+  than nothing. The list is its flex sibling, so the
   list's top edge moves with the slot and its bottom stays where it is, as
   UIKit's list did under the growing bar. List positions are offsets into the
   content and do not move. The phone's bar grows by 54 points; the slot keeps
   the app's measured 60 (1 + 44 + 15), which puts the first row where the
-  phone's was.
+  phone's was. The closing overshoot stops at the list's place, where the
+  phone's list rises 0.74 points past it: with a `marginBottom` taking `lift`
+  below zero the list grew past its own room by up to a point, and at its very
+  bottom the scroll view clamped its offset each frame and kept it (logged:
+  restored to 644 in a 1402-point content, then 643.67, 643.33 and 643 as the
+  list measured 758.33, 758.67 and 759 against its 758), so Close came back
+  1 point short every time (`bottom-restore: … @744.0 -> @745.0`; the
+  `nonzero-browse` case, `@72.0 -> restored @73.0`, was the same: its one fast
+  swipe carries the 13-row list to its bottom).
 - **The keyboard first**: taking the keyboard holds the UI thread, and
   Reanimated drives its springs from that thread frame by frame. Measured on
   the session's iPhone 17 simulator (iOS 27.0, a frame callback logging the
@@ -129,7 +152,14 @@ until its fade has finished.
   came 33 to 40 ms after the one before. The phone's own animation starts
   once the work in front of it is done; its list started 25 ms after its
   keyboard on a close. With both waits every logged frame of an open and a
-  close was 16.7 ms apart.
+  close was 16.7 ms apart. That was not every open: holds also came after
+  `onFocus`, and only the one-frame step above made them harmless. With it,
+  the session's simulator logged 33 opens with the software keyboard, first
+  two frames at most 0.041 and 0.139 though 41 to 57 ms often passed before the
+  first, and 13 with a focused field and no software keyboard
+  (`showSoftInputOnFocus={false}`, a temporary build; the device's
+  hardware-keyboard state could not be produced that day) at most 0.032 and
+  0.124.
 - **Opening**: `lift`, `grow` and `shown` spring to 1. The capsule's top stays
   1 point under the bar and its height is `44 × grow`. Close's room, the 10
   points between and Close as drawn (46.5 across on iPhone 17, notes
@@ -139,9 +169,9 @@ until its fade has finished.
   a view with its radius; the glass itself is not clipped. Their opacity is
   `grow`: the phone's magnifier darkness tracked the bar's growth within a few
   hundredths at every sampled frame (0.335 against 0.374, 0.593 against 0.613,
-  0.787 against 0.79, 0.914 against 0.909). Close is hidden until 350 ms after
-  the opening (`CLOSE_AFTER`), then shown at once: the phone's appeared whole at
-  +408 to 430 ms, its motion starting at about +65.
+  0.787 against 0.79, 0.914 against 0.909). Close is hidden until 350 ms of the
+  motion (`CLOSE_AFTER`, `withHeldDelay`), then shown at once: the phone's
+  appeared whole at +408 to 430 ms, its motion starting at about +65.
 - **Closing**: the field blurs at once, so the keyboard starts down first (the
   phone's led by about 20 ms). `lift` and `shown` spring to 0 on the same
   spring. The phone's whole field faded as `1 − x(t)` of the very spring its
@@ -159,7 +189,11 @@ until its fade has finished.
 - **Turning back**: an Escape during the opening stops `lift` and `shown`
   where they are while the keyboard goes, then springs them to 0 from there;
   a Command-F during the fade does the same while the keyboard comes back,
-  then springs them to 1. A field still fading is the same mounted view, which
+  then springs them to 1. With the one-frame step, timers on the same code
+  paths (Close's `exit` 130 ms into an opening; `start` 160 ms into a fade)
+  turned the motion back at `lift` 0.521, 0.871 and 0.906, and at 0.023, 0.033
+  and 0.026, with no frame gap over 28 ms where `ios-tester` had held 50 to
+  105 ms. A field still fading is the same mounted view, which
   `autoFocus` does not act on again, so an opening during the fade focuses it
   explicitly. Close keeps its state if it had appeared, and stays hidden if
   the opening never reached it. `grow` is never stopped: an opening cut short
@@ -177,7 +211,12 @@ until its fade has finished.
   rows switching and the restore on Close. `LayoutAnimation` applies one
   duration-based spring to every changed view alike, with no separate fade and
   no late Close. A SwiftUI animation inside the field's host grows the capsule
-  natively but cannot move the list.
+  natively but cannot move the list. Reanimated's `withSpring` driven by a
+  frame callback with a clamped clock would have run a callback in every frame
+  of search; a custom animation runs only while it moves. Restoring the
+  position again once the closing spring settles would have kept the
+  overshoot at the cost of a point's jump at its end; the overshoot it saves
+  is under a point.
 
 ## Transient state and positions
 

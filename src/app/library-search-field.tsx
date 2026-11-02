@@ -61,12 +61,13 @@ const BLUR_WAIT = 150;
  * keyboard as it appears (`autoFocus`, which the text input acts on when it
  * reaches the window, so it cannot run before the field exists), gives it up
  * the moment `open` ends, and takes it again only when it opens while still
- * fading. Taking or giving up the keyboard holds the UI thread, and a spring
- * already running there would jump by all the time it was owed when the thread
- * came back; so each motion starts when the field reports its focus or its
- * blur, after that hold, as the phone's own starts once the work in front of
- * it is done. While results are selected it is `locked`: greyed, with the query
- * showing and neither the field nor the close control answering.
+ * fading. Taking or giving up the keyboard holds the UI thread. Each motion
+ * starts when the field reports its focus or its blur, after most of that hold,
+ * as the phone's own starts once the work in front of it is done; and every
+ * frame moves the motion by one frame at most (`withHeldSpring`), so a hold
+ * that comes later delays it rather than jumping it. While results are
+ * selected it is `locked`: greyed, with the query showing and neither the
+ * field nor the close control answering.
  */
 export function LibrarySearchField({ open, animate, field, query, locked, onChangeText, onClose, style }: {
   open: boolean; animate: boolean; field: RefObject<TextInput | null>; query: string; locked: boolean;
