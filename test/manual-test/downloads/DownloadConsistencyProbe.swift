@@ -133,6 +133,17 @@ final class DownloadConsistencyProbe: XCTestCase {
     app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
   }
 
+  /// A row's checked label: `, downloaded` with an optional `, being read`
+  /// infix when the reader stands on that chapter behind the drawer.
+  func rowIsChecked(_ label: String, _ app: XCUIApplication) -> Bool {
+    rowElement(label + ", downloaded", app).exists || rowElement(label + ", being read, downloaded", app).exists
+  }
+
+  func rowIsListed(_ label: String, _ app: XCUIApplication) -> Bool {
+    rowElement(label, app).exists || rowElement(label + ", being read", app).exists
+      || rowElement(label + ", downloaded", app).exists || rowElement(label + ", being read, downloaded", app).exists
+  }
+
   /// Diagnostic: prints the resolved parameters and every environment key the
   /// runner sees, so the plist channel and its staleness can be checked before
   /// the assertions. Not a claim.
@@ -190,11 +201,11 @@ final class DownloadConsistencyProbe: XCTestCase {
     XCTAssertFalse(app.buttons["Pause all"].exists, "A finished download must not offer Pause all")
     XCTAssertFalse(app.staticTexts["Needs attention"].exists, "A finished download must not read Needs attention")
     for row in requiredEnv("CHECK").split(separator: ",").map(String.init) where !row.isEmpty {
-      XCTAssertTrue(rowElement(row + ", downloaded", app).waitForExistence(timeout: 10), "\(row) has no downloaded check")
+      XCTAssertTrue(until(10) { self.rowIsChecked(row, app) }, "\(row) has no downloaded check")
     }
     for row in requiredEnv("NOCHECK").split(separator: ",").map(String.init) where !row.isEmpty {
-      XCTAssertFalse(rowElement(row + ", downloaded", app).exists, "\(row) must not carry a downloaded check")
-      XCTAssertTrue(rowElement(row, app).exists, "\(row) vanished from the list entirely")
+      XCTAssertFalse(self.rowIsChecked(row, app), "\(row) must not carry a downloaded check")
+      XCTAssertTrue(self.rowIsListed(row, app), "\(row) vanished from the list entirely")
     }
     capture("settled-\(book)", app)
   }
@@ -214,7 +225,7 @@ final class DownloadConsistencyProbe: XCTestCase {
     XCTAssertFalse(app.buttons["Resume all"].exists, "#171: the finished download must not offer Resume all")
     XCTAssertFalse(app.buttons["Pause all"].exists)
     for row in requiredEnv("CHECK").split(separator: ",").map(String.init) where !row.isEmpty {
-      XCTAssertTrue(rowElement(row + ", downloaded", app).waitForExistence(timeout: 10), "\(row) has no downloaded check")
+      XCTAssertTrue(until(10) { self.rowIsChecked(row, app) }, "\(row) has no downloaded check")
     }
     XCTAssertFalse(app.staticTexts["Needs attention"].exists)
     capture("self-finished-\(book)", app)
@@ -231,9 +242,9 @@ final class DownloadConsistencyProbe: XCTestCase {
     let done = requiredEnv("DONE")
     XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 60), "The paused download does not offer Resume all")
     XCTAssertFalse(app.buttons["Pause all"].exists, "A paused download must not offer Pause all")
-    XCTAssertTrue(rowElement(done + ", downloaded", app).waitForExistence(timeout: 10), "\(done) should carry its check")
-    XCTAssertTrue(rowElement(part, app).exists, "\(part) is not listed")
-    XCTAssertFalse(rowElement(part + ", downloaded", app).exists, "\(part) must not carry a check while paused incomplete")
+    XCTAssertTrue(until(10) { self.rowIsChecked(done, app) }, "\(done) should carry its check")
+    XCTAssertTrue(rowIsListed(part, app), "\(part) is not listed")
+    XCTAssertFalse(rowIsChecked(part, app), "\(part) must not carry a check while paused incomplete")
     capture("paused-control-\(book)", app)
   }
 
@@ -278,7 +289,7 @@ final class DownloadConsistencyProbe: XCTestCase {
     if back.waitForExistence(timeout: 5) { back.tap() }
     XCTAssertTrue(app.staticTexts[count].waitForExistence(timeout: 30), "\(count) never appeared after the delete")
     XCTAssertFalse(app.buttons["Resume all"].exists, "#277: a download whose remaining chapters are complete must not offer Resume all")
-    XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", part)).firstMatch.exists, "\(part) must be gone from the list")
+    XCTAssertFalse(rowIsListed(part, app), "\(part) must be gone from the list")
     capture("after-delete-\(book)", app)
   }
 
