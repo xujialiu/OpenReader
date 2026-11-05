@@ -203,6 +203,10 @@ final class DownloadConsistencyProbe: XCTestCase {
     XCTAssertFalse(app.buttons["Resume all"].exists, "A finished download must not offer Resume all")
     XCTAssertFalse(app.buttons["Pause all"].exists, "A finished download must not offer Pause all")
     XCTAssertFalse(app.staticTexts["Needs attention"].exists, "A finished download must not read Needs attention")
+    // #278: a completed line the drawer must not draw any more.
+    for line in (env("NOLINE") ?? "").split(separator: "|").map(String.init) where !line.isEmpty {
+      XCTAssertFalse(app.staticTexts[String(line)].exists, "The line '\(line)' must not be drawn")
+    }
     for row in (env("CHECK") ?? "").split(separator: ",").map(String.init) where !row.isEmpty {
       XCTAssertTrue(until(10) { self.rowIsChecked(row, app) }, "\(row) has no downloaded check")
     }
