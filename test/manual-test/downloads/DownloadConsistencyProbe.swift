@@ -504,6 +504,39 @@ final class DownloadConsistencyProbe: XCTestCase {
     capture("row-paused-\(book)", app)
   }
 
+  /// Stages the drawer and the selection WITHOUT starting the download, so
+  /// the shell can install its in-heap fault injection between this method
+  /// and `testStartDownloadAssertBlocked` (a failed run terminates the app,
+  /// which drops any in-heap state).
+  func testStageSelection() throws {
+    let app = XCUIApplication(bundleIdentifier: bundle)
+    app.activate()
+    openDownloadDrawer(app, book: requiredEnv("BOOK"))
+    let select = app.buttons["Select all"]
+    XCTAssertTrue(select.waitForExistence(timeout: 5), "Select all not found")
+    select.tap()
+    let start = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected ('")).firstMatch
+    XCTAssertTrue(start.waitForExistence(timeout: 5), "Download selected not found")
+    XCTAssertTrue(start.isEnabled, "Download selected is disabled - nothing was selectable")
+    capture("staged-\(requiredEnv("BOOK"))", app)
+  }
+
+  /// Taps the staged Download selected and waits for the blocked state the
+  /// shell's injected store-read failure produces: Needs attention with no
+  /// ring. The injection must already be installed in the running app.
+  func testStartDownloadAssertBlocked() throws {
+    let app = XCUIApplication(bundleIdentifier: bundle)
+    app.activate()
+    let start = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected ('")).firstMatch
+    XCTAssertTrue(start.waitForExistence(timeout: 10), "The staged Download selected button is gone")
+    XCTAssertTrue(start.isEnabled, "Download selected is disabled")
+    start.tap()
+    XCTAssertTrue(app.staticTexts["Needs attention"].waitForExistence(timeout: 20),
+                  "The download never reached Needs attention under the injected read failure")
+    XCTAssertFalse(app.buttons["Pause download"].exists, "A blocked task must not show a running ring")
+    capture("blocked-\(requiredEnv("BOOK"))", app)
+  }
+
   /// #171: starts the whole-book download and taps Pause all while the last
   /// replies are held at the controlled server (the fake answers after
   /// OPENREADER_FAKE_TTS_DELAY_MS; this book's Sentences at once is staged

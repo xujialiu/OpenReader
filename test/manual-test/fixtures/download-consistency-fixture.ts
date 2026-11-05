@@ -126,6 +126,11 @@ const SOLO = [
   'Passengers learned the pattern and stood up before the second ring.',
   'The mill stopped working years ago but the bell still slowed for it.',
 ];
+const FAULTED = [
+  'The ferry schedule was written in chalk and argued over daily.',
+  'One crossing left when the tide said so, timetable or not.',
+  'Passengers planned their days around the captain, not the board.',
+];
 const BLOCKED = [
   'The night porter logged every visitor in a ledger bound in gray canvas.',
   'One entry read only gone fishing and was never explained to anybody.',
@@ -201,6 +206,12 @@ const BOOKS: readonly Book[] = [
     title: 'Solo Fixture',
     uid: 'urn:openreader:solo-fixture',
     spine: [{ id: 'solo', title: 'Solo Chapter', sentences: SOLO }],
+  },
+  {
+    file: 'Faulted Read Fixture.epub',
+    title: 'Faulted Read Fixture',
+    uid: 'urn:openreader:faulted-read-fixture',
+    spine: [{ id: 'solo', title: 'Faulted Read Chapter', sentences: FAULTED }],
   },
   {
     file: 'Blocked Read Fixture.epub',
