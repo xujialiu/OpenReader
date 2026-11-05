@@ -113,8 +113,11 @@ const EMPTY_CHAPTER = [
   'Visitors signed a single ledger and were trusted to find the rooms.',
   'One case held a sled with its harness still buckled.',
 ];
+// The angle brackets are XML-escaped so the sentence stays text; with strip
+// on, its Speech Text (and so its saved audio's key) drops them, which is the
+// rekey #278 turns on.
 const BRACKETED = [
-  'The plaque beside the gate named <Seven eta> as the founding hour.',
+  'The plaque beside the gate named &lt;Seven eta&gt; as the founding hour.',
   'Nobody who visited the yard could read the plaque from where they stood.',
   'The caretaker recited it from memory and refused to explain the hours.',
 ];
@@ -181,6 +184,12 @@ const BOOKS: readonly Book[] = [
     title: 'Bracket Fixture',
     uid: 'urn:openreader:bracket-fixture',
     spine: [{ id: 'bracket', title: 'Bracket Chapter', sentences: BRACKETED }],
+  },
+  {
+    file: 'Bracket Sentence Fixture.epub',
+    title: 'Bracket Sentence Fixture',
+    uid: 'urn:openreader:bracket-sentence-fixture',
+    spine: [{ id: 'bracket', title: 'Bracket Sentence Chapter', sentences: BRACKETED }],
   },
   {
     file: 'Solo Fixture.epub',
