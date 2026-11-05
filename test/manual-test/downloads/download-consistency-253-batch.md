@@ -3,7 +3,7 @@
 Real-touch verification of the Download recovery/completion-consistency batch on
 a session-owned simulator, against the kit's fake Kokoro. The dated
 measurements, the per-run result table and the corrections discovered during
-the runs live in [notes/NOTES_2026-11-06.md](../../notes/NOTES_2026-11-06.md);
+the runs live in [notes/NOTES_2026-11-06.md](../../../notes/NOTES_2026-11-06.md);
 this recipe holds what a rerun needs.
 
 ## Preconditions
@@ -47,9 +47,11 @@ this recipe holds what a rerun needs.
   re-download right after a delete re-saves every clip with zero provider
   requests. Terminate and relaunch the app between a delete and any download
   whose request count is evidence.
-- **Fixture sentences are unique across books by design** so a download cannot
-  be answered by another book's saved clips; do not reuse sentence text when
-  adding books.
+- **Use a fresh Document identity for a consumed scenario.** The generator stamps
+  new EPUB metadata so a regenerated file has a new content hash. Saved Clips
+  and the runtime cache are Document-scoped; repeated text within one Document
+  can still share a Clip. Verify actual requests instead of assuming a new
+  filename or a delete emptied the cache.
 
 ## Scenarios, parameters, assertions, limits
 
@@ -156,7 +158,7 @@ scheduler boundary is host-covered.
    the fake gains exactly the chapter's texts.
 
 A missing required parameter is a negative control: the run must fail in
-`setUp` **before any touch** (the executed log shows the assertion and zero
+the parameter check **before any touch** (the executed log shows the assertion and zero
 `Tap` lines).
 
 ## What this recipe cannot show

@@ -1,9 +1,8 @@
 /**
- * Six small public-text books for the Download-consistency batch's native
- * verification (#253, #171, #277, #172, #278). Every sentence is unique
- * across all books, so no Utterance of one download can be answered by a
- * saved Clip of another (the shared-sentence case is unit-tested, not staged
- * here by accident).
+ * Small public-text books for the Download-consistency batch's native
+ * verification (#253, #171, #277, #172, #278). Fresh metadata gives each run
+ * a new Document identity. Clips are Document-scoped; repeated text within
+ * one Document may still share a Clip (covered separately by host tests).
  *
  * - `Download Consistency Fixture` — chapters one/two/three (3 sentences
  *   each) and four (5 sentences), for the pause-held-final-replies check
