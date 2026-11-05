@@ -126,6 +126,28 @@ const SOLO = [
   'Passengers learned the pattern and stood up before the second ring.',
   'The mill stopped working years ago but the bell still slowed for it.',
 ];
+const HR1 = [
+  'The wharf clock ran seven minutes fast and everyone knew by how much.',
+  'Ferries waited for its chime because the harbour bell had cracked years ago.',
+  'A boy repainted the clock face once and was made to sand it off again.',
+];
+const HR2 = [
+  'The smokehouse tied its doors shut with twine whenever the wind turned.',
+  'Herring smoked on Tuesdays and the whole lane smelled of it by Thursday.',
+  'Cats from three streets kept a dignified watch over the Tuesday crates.',
+];
+const HR3 = [
+  'The tugboat pilot named eachbuoy after a relative who had annoyed her.',
+  'Her log book recorded fog in pencil and complaints in ink.',
+  'Every apprentice learned the channel by running it blindfolded at dawn.',
+];
+const HR4 = [
+  'The cannery whistle blew eleven times when the last boat docked.',
+  'Workers counted the blasts and left their benches without being told.',
+  'The eleventh blast was also the signal for the foreman to open the ledgers.',
+  'Pay was counted out in coin and checked twice against the tally books.',
+  'Anyone shortchanged walked straight to the office and was paid before dark.',
+];
 const FAULTED = [
   'The ferry schedule was written in chalk and argued over daily.',
   'One crossing left when the tide said so, timetable or not.',
@@ -206,6 +228,17 @@ const BOOKS: readonly Book[] = [
     title: 'Solo Fixture',
     uid: 'urn:openreader:solo-fixture',
     spine: [{ id: 'solo', title: 'Solo Chapter', sentences: SOLO }],
+  },
+  {
+    file: 'Held Reply Fixture.epub',
+    title: 'Held Reply Fixture',
+    uid: 'urn:openreader:held-reply-fixture',
+    spine: [
+      { id: 'one', title: 'Held Reply One', sentences: HR1 },
+      { id: 'two', title: 'Held Reply Two', sentences: HR2 },
+      { id: 'three', title: 'Held Reply Three', sentences: HR3 },
+      { id: 'four', title: 'Held Reply Four', sentences: HR4 },
+    ],
   },
   {
     file: 'Faulted Read Fixture.epub',
