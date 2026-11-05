@@ -62,6 +62,28 @@ it('counts only the chapters in the download, whatever else of the document is s
     .toMatchObject({ subtitle: '0 of 1 chapter', completed: 0, total: 1000 });
 });
 
+it.each(['downloading', 'done'] as const)('excludes inspected empty parts from a %s Download total (#172)', (state) => {
+  const withCover: NarrationPlan = { ...plan, chapters: [...plan.chapters,
+    { id: 'cover', title: 'Cover', depth: 0, parent: null, prepared: true, texts: [], textCount: 0 },
+  ] };
+  expect(continuedShown([entry(download({ state, chapters: ['cover', 'a'] }), [{ id: 'a', count: 10, complete: true }], withCover)]))
+    .toMatchObject({ subtitle: '1 of 1 chapter', completed: 1000, total: 1000 });
+  // Unknown/unprepared parts still count: not inspected is not empty.
+  expect(continuedShown([entry(download({ chapters: ['cover', 'a', 'c', 'missing'] }), [{ id: 'a', count: 10, complete: true }], withCover)]))
+    .toMatchObject({ subtitle: '1 of 3 chapters', total: 3000 });
+});
+
+it('finishes the progress bar when every selected part was inspected and empty (#172)', () => {
+  const empty: NarrationPlan = { version: 2, chapters: [{ id: 'cover', title: 'Cover', depth: 0, parent: null, prepared: true, texts: [] }] };
+  expect(continuedShown([entry(download({ state: 'done', chapters: ['cover'] }), [], empty)]))
+    .toMatchObject({ subtitle: '0 of 0 chapters', completed: 1000, total: 1000 });
+});
+
+it('does not exclude selected chapters when the plan is unavailable (#172)', () => {
+  expect(continuedShown([entry(download({ chapters: ['a'] }), [], null)]))
+    .toMatchObject({ subtitle: '0 of 1 chapter', completed: 0, total: 1000 });
+});
+
 /** Chapters a to f, each of ten texts, prepared. */
 const six: NarrationPlan = {
   version: 2,
