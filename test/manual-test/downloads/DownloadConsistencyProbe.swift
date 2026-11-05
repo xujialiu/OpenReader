@@ -112,22 +112,33 @@ final class DownloadConsistencyProbe: XCTestCase {
         Thread.sleep(forTimeInterval: 0.8)
       }
     }
-    // Bring the reader of `book` up (its row opens it) unless it already is.
-    if !app.buttons["More actions"].exists {
-      var backs = 0
-      while backs < 4 && !app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", book + ",")).firstMatch.exists {
-        let back = app.navigationBars.buttons.element(boundBy: 0)
-        guard back.exists else { break }
-        back.tap()
-        backs += 1
-        Thread.sleep(forTimeInterval: 0.6)
-      }
+    // Bring the reader of `book` up: whatever screen remains (a wrong book's
+    // reader, the Library), navigate by what each screen alone answers — a
+    // hittable Library row opens the reader, a navigation back pops one level
+    // — until the reader shows this book's title beside its More actions.
+    var legs = 0
+    while legs < 5 {
+      if app.staticTexts[book].exists, app.buttons["More actions"].exists { break }
       let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", book + ",")).firstMatch
+      let back = app.navigationBars.buttons.element(boundBy: 0)
+      if row.exists && row.isHittable {
+        row.tap()
+      } else if back.exists && back.isHittable {
+        back.tap()
+      } else {
+        break
+      }
+      legs += 1
+      Thread.sleep(forTimeInterval: 0.8)
+    }
+    let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", book + ",")).firstMatch
+    if !app.buttons["More actions"].exists {
       XCTAssertTrue(row.waitForExistence(timeout: 10), "Library row for \(book) not found")
       row.tap()
       if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
     }
     XCTAssertTrue(app.buttons["More actions"].waitForExistence(timeout: 10), "More actions not found for \(book)")
+    XCTAssertTrue(app.staticTexts[book].waitForExistence(timeout: 5), "The open reader belongs to another Document")
     app.buttons["More actions"].tap()
     // The actions menu must be this Document's: its heading names the book.
     XCTAssertTrue(app.staticTexts[book].waitForExistence(timeout: 8), "The actions menu belongs to another Document")
