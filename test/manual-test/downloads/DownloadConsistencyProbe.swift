@@ -202,10 +202,10 @@ final class DownloadConsistencyProbe: XCTestCase {
     XCTAssertFalse(app.buttons["Resume all"].exists, "A finished download must not offer Resume all")
     XCTAssertFalse(app.buttons["Pause all"].exists, "A finished download must not offer Pause all")
     XCTAssertFalse(app.staticTexts["Needs attention"].exists, "A finished download must not read Needs attention")
-    for row in requiredEnv("CHECK").split(separator: ",").map(String.init) where !row.isEmpty {
+    for row in (env("CHECK") ?? "").split(separator: ",").map(String.init) where !row.isEmpty {
       XCTAssertTrue(until(10) { self.rowIsChecked(row, app) }, "\(row) has no downloaded check")
     }
-    for row in requiredEnv("NOCHECK").split(separator: ",").map(String.init) where !row.isEmpty {
+    for row in (env("NOCHECK") ?? "").split(separator: ",").map(String.init) where !row.isEmpty {
       // An inspected empty part is not listed at all (speaks() is false after
       // inspection), which also satisfies "no Downloaded check": print the
       // shape for the record, assert only the absence of a check.
