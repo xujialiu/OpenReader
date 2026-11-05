@@ -149,7 +149,7 @@ final class DownloadConsistencyProbe: XCTestCase {
   func testOpenDownloadDrawer() throws {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
-    openDownloadDrawer(app, book: requiredEnv("DC_BOOK"))
+    openDownloadDrawer(app, book: requiredEnv("BOOK"))
   }
 
   /// Opens the drawer of TEST_RUNNER_DC_BOOK, Select all, Download selected.
@@ -157,14 +157,14 @@ final class DownloadConsistencyProbe: XCTestCase {
   func testSelectAllAndStart() throws {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
-    openDownloadDrawer(app, book: requiredEnv("DC_BOOK"))
+    openDownloadDrawer(app, book: requiredEnv("BOOK"))
     selectAllAndStart(app)
     XCTAssertTrue(until(20) {
       app.buttons["Pause all"].exists
         || app.buttons.matching(NSPredicate(format: "label == 'Pause download'")).firstMatch.exists
         || app.staticTexts["Needs attention"].exists
     }, "The download never showed Pause all, a running ring, or Needs attention")
-    capture("started-\(requiredEnv("DC_BOOK"))", app)
+    capture("started-\(requiredEnv("BOOK"))", app)
   }
 
   /// Waits for TEST_RUNNER_DC_COUNT (e.g. `2 chapters downloaded`), then
@@ -175,8 +175,8 @@ final class DownloadConsistencyProbe: XCTestCase {
   func testWatchSettled() throws {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
-    let count = requiredEnv("DC_COUNT")
-    let book = requiredEnv("DC_BOOK")
+    let count = requiredEnv("COUNT")
+    let book = requiredEnv("BOOK")
     if !app.staticTexts[count].exists {
       openDownloadDrawer(app, book: book)
     }
@@ -184,10 +184,10 @@ final class DownloadConsistencyProbe: XCTestCase {
     XCTAssertFalse(app.buttons["Resume all"].exists, "A finished download must not offer Resume all")
     XCTAssertFalse(app.buttons["Pause all"].exists, "A finished download must not offer Pause all")
     XCTAssertFalse(app.staticTexts["Needs attention"].exists, "A finished download must not read Needs attention")
-    for row in requiredEnv("DC_CHECK").split(separator: ",").map(String.init) where !row.isEmpty {
+    for row in requiredEnv("CHECK").split(separator: ",").map(String.init) where !row.isEmpty {
       XCTAssertTrue(rowElement(row + ", downloaded", app).waitForExistence(timeout: 10), "\(row) has no downloaded check")
     }
-    for row in requiredEnv("DC_NOCHECK").split(separator: ",").map(String.init) where !row.isEmpty {
+    for row in requiredEnv("NOCHECK").split(separator: ",").map(String.init) where !row.isEmpty {
       XCTAssertFalse(rowElement(row + ", downloaded", app).exists, "\(row) must not carry a downloaded check")
       XCTAssertTrue(rowElement(row, app).exists, "\(row) vanished from the list entirely")
     }
@@ -202,13 +202,13 @@ final class DownloadConsistencyProbe: XCTestCase {
   func testWatchSelfFinish() throws {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
-    let book = requiredEnv("DC_BOOK")
-    let count = requiredEnv("DC_COUNT")
-    XCTAssertEqual(requiredEnv("DC_SELF"), "yes")
+    let book = requiredEnv("BOOK")
+    let count = requiredEnv("COUNT")
+    XCTAssertEqual(requiredEnv("SELF"), "yes")
     XCTAssertTrue(app.staticTexts[count].waitForExistence(timeout: 90), "\(count) never appeared for \(book) after the held pause")
     XCTAssertFalse(app.buttons["Resume all"].exists, "#171: the finished download must not offer Resume all")
     XCTAssertFalse(app.buttons["Pause all"].exists)
-    for row in requiredEnv("DC_CHECK").split(separator: ",").map(String.init) where !row.isEmpty {
+    for row in requiredEnv("CHECK").split(separator: ",").map(String.init) where !row.isEmpty {
       XCTAssertTrue(rowElement(row + ", downloaded", app).waitForExistence(timeout: 10), "\(row) has no downloaded check")
     }
     XCTAssertFalse(app.staticTexts["Needs attention"].exists)
@@ -221,9 +221,9 @@ final class DownloadConsistencyProbe: XCTestCase {
   func testWatchPausedControl() throws {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
-    let book = requiredEnv("DC_BOOK")
-    let part = requiredEnv("DC_PART")
-    let done = requiredEnv("DC_DONE")
+    let book = requiredEnv("BOOK")
+    let part = requiredEnv("PART")
+    let done = requiredEnv("DONE")
     XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 60), "The paused download does not offer Resume all")
     XCTAssertFalse(app.buttons["Pause all"].exists, "A paused download must not offer Pause all")
     XCTAssertTrue(rowElement(done + ", downloaded", app).waitForExistence(timeout: 10), "\(done) should carry its check")
@@ -239,9 +239,9 @@ final class DownloadConsistencyProbe: XCTestCase {
   func testManageDeleteSelected() throws {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
-    let book = requiredEnv("DC_BOOK")
-    let part = requiredEnv("DC_PART")
-    let count = requiredEnv("DC_COUNT")
+    let book = requiredEnv("BOOK")
+    let part = requiredEnv("PART")
+    let count = requiredEnv("COUNT")
     openDownloadDrawer(app, book: book)
     XCTAssertTrue(app.buttons["Manage downloads"].waitForExistence(timeout: 5), "Manage downloads not offered")
     app.buttons["Manage downloads"].tap()
@@ -284,7 +284,7 @@ final class DownloadConsistencyProbe: XCTestCase {
   func testToggleStripBrackets() throws {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
-    let wanted = requiredEnv("DC_STRIP") == "on"
+    let wanted = requiredEnv("STRIP") == "on"
     var backs = 0
     while backs < 4 && !app.buttons["Settings"].exists {
       let back = app.navigationBars.buttons.element(boundBy: 0)
@@ -305,7 +305,7 @@ final class DownloadConsistencyProbe: XCTestCase {
       row.tap()
       XCTAssertTrue(until(5) { (row.value as? String == "1") == wanted }, "The brackets switch did not change")
     }
-    capture("brackets-\(requiredEnv("DC_STRIP"))", app)
+    capture("brackets-\(requiredEnv("STRIP"))", app)
     // Back out to the Library: General's back, then Settings' back.
     app.navigationBars.buttons.element(boundBy: 0).tap()
     Thread.sleep(forTimeInterval: 0.6)
@@ -321,16 +321,16 @@ final class DownloadConsistencyProbe: XCTestCase {
   func testAssertTaskLine() throws {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
-    let line = requiredEnv("DC_LINE")
+    let line = requiredEnv("LINE")
     if !app.staticTexts[line].exists {
-      openDownloadDrawer(app, book: requiredEnv("DC_BOOK"))
+      openDownloadDrawer(app, book: requiredEnv("BOOK"))
     }
     XCTAssertTrue(app.staticTexts[line].waitForExistence(timeout: 10), "The line '\(line)' was not found in the drawer")
-    if let error = env("DC_ERROR"), !error.isEmpty {
+    if let error = env("ERROR"), !error.isEmpty {
       XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", error)).firstMatch.exists,
                     "The error text '\(error)' was not shown")
     }
-    let resume = requiredEnv("DC_RESUME")
+    let resume = requiredEnv("RESUME")
     XCTAssertEqual(app.buttons["Resume all"].exists, resume == "yes", "Resume all presence is \(app.buttons["Resume all"].exists), wanted \(resume)")
     // A blocked task must not show any writing: no running ring anywhere.
     if line == "Needs attention" {
@@ -344,14 +344,14 @@ final class DownloadConsistencyProbe: XCTestCase {
   func testTapResumeAll() throws {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
-    let then = requiredEnv("DC_THEN")
+    let then = requiredEnv("THEN")
     let resume = app.buttons["Resume all"]
     XCTAssertTrue(resume.waitForExistence(timeout: 10), "Resume all was not offered")
     resume.tap()
     if then == "blocked" {
       XCTAssertTrue(app.staticTexts["Needs attention"].waitForExistence(timeout: 30), "Resume all did not leave the task blocked again")
     } else {
-      let count = requiredEnv("DC_COUNT")
+      let count = requiredEnv("COUNT")
       XCTAssertTrue(app.staticTexts[count].waitForExistence(timeout: 90), "\(count) never appeared after Resume all")
       XCTAssertFalse(app.buttons["Resume all"].exists)
     }
@@ -371,6 +371,6 @@ final class DownloadConsistencyProbe: XCTestCase {
     XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Library'")).firstMatch.waitForExistence(timeout: 20)
       || app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Actions for '")).firstMatch.waitForExistence(timeout: 20)
       || app.buttons["Settings"].waitForExistence(timeout: 20), "The app did not come back to a Library screen")
-    openDownloadDrawer(app, book: requiredEnv("DC_BOOK"))
+    openDownloadDrawer(app, book: requiredEnv("BOOK"))
   }
 }
