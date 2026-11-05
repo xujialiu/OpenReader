@@ -385,6 +385,36 @@ final class DownloadConsistencyProbe: XCTestCase {
     capture("after-resume-\(then)", app)
   }
 
+  /// Re-download: opens TEST_RUNNER_BOOK's drawer, touches the TEST_RUNNER_ROW
+  /// chapter's checkbox row, then Download selected. Consent must already be
+  /// answered; the started download is left to settle (the caller watches the
+  /// count with testWatchSettled).
+  func testRedownloadChapter() throws {
+    let app = XCUIApplication(bundleIdentifier: bundle)
+    app.activate()
+    let book = requiredEnv("BOOK")
+    let row = requiredEnv("ROW")
+    openDownloadDrawer(app, book: book)
+    let rowBox = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label == %@ OR label == %@ OR label == %@ OR label == %@",
+                  row, row + ", being read", row + ", downloaded", row + ", being read, downloaded")).firstMatch
+    XCTAssertTrue(rowBox.waitForExistence(timeout: 10), "\(row) is not listed")
+    rowBox.tap()
+    let start = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected ('")).firstMatch
+    XCTAssertTrue(start.waitForExistence(timeout: 5), "Download selected not found")
+    XCTAssertTrue(start.isEnabled, "Download selected is disabled")
+    capture("redownload-selected-\(book)", app)
+    start.tap()
+    XCTAssertTrue(until(30) {
+      app.alerts.firstMatch.exists
+        || app.buttons["Pause all"].exists
+        || app.staticTexts["Needs attention"].exists
+        || app.buttons["Resume all"].exists
+        || app.staticTexts["Retry failed"].exists
+    }, "The re-download never started (no Pause all, Resume all, or Needs attention)")
+    capture("redownload-started-\(book)", app)
+  }
+
   /// Restarts the app cold (terminate + launch, no launch argument: the
   /// container plist carries the Metro port) and reopens TEST_RUNNER_DC_BOOK's
   /// Download drawer. What is asserted afterwards is the caller's job via
