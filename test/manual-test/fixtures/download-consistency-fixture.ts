@@ -9,7 +9,7 @@
  *   each) and four (5 sentences), for the pause-held-final-replies check
  *   (#171): four is the last chapter written, and its tail is where Pause all
  *   lands while replies are out.
- * - `Manage Delete Fixture` — alpha/gamma (3 sentences each) and beta
+ * - `Manage Deletion Fixture` — alpha/gamma (3 sentences each) and beta
  *   (5 sentences), for Delete selected on a partly saved paused chapter
  *   (#277): beta is the chapter paused mid-write.
  * - `Empty Parts Fixture` — an empty cover page and one chapter, for the
@@ -152,9 +152,9 @@ const BOOKS: readonly Book[] = [
     ],
   },
   {
-    file: 'Manage Delete Fixture.epub',
-    title: 'Manage Delete Fixture',
-    uid: 'urn:openreader:manage-delete-fixture',
+    file: 'Manage Deletion Fixture.epub',
+    title: 'Manage Deletion Fixture',
+    uid: 'urn:openreader:manage-deletion-fixture',
     spine: [
       { id: 'alpha', title: 'Manage Alpha', sentences: ALPHA },
       { id: 'beta', title: 'Manage Beta', sentences: BETA },
