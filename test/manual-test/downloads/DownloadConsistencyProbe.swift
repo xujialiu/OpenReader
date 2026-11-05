@@ -22,6 +22,17 @@ import XCTest
 final class DownloadConsistencyProbe: XCTestCase {
   let bundle = "top.xujialiu.openreader"
 
+  override func setUpWithError() throws {
+    continueAfterFailure = false
+    print("DC-CODE-V4")
+    XCTAssertEqual(requiredEnv("PROBE_VERSION"), "dc4", "Wrong test configuration revision")
+    let token = requiredEnv("VERIFY_TOKEN")
+    print("DC-VERIFY-TOKEN=\(token)")
+    let params = (Bundle(for: Self.self).infoDictionary ?? [:]).filter { $0.key.hasPrefix("DC") }
+    let data = try JSONSerialization.data(withJSONObject: params, options: [.sortedKeys])
+    print("DC-PARAMS=" + String(decoding: data, as: UTF8.self))
+  }
+
   // MARK: helpers
 
   func capture(_ name: String, _ app: XCUIApplication) {
@@ -73,6 +84,20 @@ final class DownloadConsistencyProbe: XCTestCase {
   /// reader is open), open the book's actions drawer, press Download, wait for
   /// the drawer's plan and rows. Leaves the Download drawer open.
   func openDownloadDrawer(_ app: XCUIApplication, book: String) {
+    // A preceding successful method deliberately leaves its drawer open.
+    // Walk that drawer back to its named menu instead of tapping the covered
+    // Library/Reader controls that remain in the accessibility tree.
+    if app.buttons["Back from Manage"].exists { app.buttons["Back from Manage"].tap() }
+    if app.buttons["Back from Download"].exists {
+      app.buttons["Back from Download"].tap()
+      XCTAssertTrue(app.staticTexts[book].waitForExistence(timeout: 5), "The open drawer belongs to another Document; restage the Library")
+      let download = app.buttons["Download"]
+      XCTAssertTrue(download.waitForExistence(timeout: 5))
+      download.tap()
+      XCTAssertTrue(app.buttons["Back from Download"].waitForExistence(timeout: 5))
+      capture("drawer-reopened-\(book)", app)
+      return
+    }
     var backs = 0
     while backs < 4 && !app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", book + ",")).firstMatch.exists {
       let back = app.navigationBars.buttons.element(boundBy: 0)
@@ -280,18 +305,16 @@ final class DownloadConsistencyProbe: XCTestCase {
     let partRow = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", part)).firstMatch
     XCTAssertTrue(partRow.waitForExistence(timeout: 10), "\(part) is not listed in Manage")
     // A selectable partly saved paused chapter: its row is a checkbox, checked state off.
-    let checkboxes = app.descendants(matching: .any).matching(NSPredicate(format: "accessibilityRole == 'checkbox'"))
-    var found = false
-    for n in 0..<checkboxes.count {
-      let box = checkboxes.element(boundBy: n)
-      if abs(box.frame.minY - partRow.frame.minY) < 22 && box.frame.minX < partRow.frame.minX {
-        XCTAssertEqual(box.value as? String, "0", "\(part)'s checkbox should start unchecked")
-        box.tap()
-        found = true
-        break
-      }
-    }
-    XCTAssertTrue(found, "\(part) has no checkbox in Manage — a partly saved paused chapter must be selectable")
+    // React Native exposes the accessible row itself, not a separate checkbox
+    // child or an XCTest property named accessibilityRole.
+    let before = partRow.value as? String ?? ""
+    XCTAssertTrue(before == "0" || before.contains("unchecked"), "\(part) is not an unchecked selectable row: \(before)")
+    XCTAssertTrue(partRow.isEnabled)
+    partRow.tap()
+    XCTAssertTrue(until(5) {
+      let value = partRow.value as? String ?? ""
+      return value == "1" || (value.contains("checked") && !value.contains("unchecked"))
+    }, "\(part)'s checkbox did not become checked")
     capture("manage-selected-\(book)", app)
     let del = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Delete selected ('")).firstMatch
     XCTAssertTrue(del.waitForExistence(timeout: 5), "Delete selected not enabled")
@@ -300,12 +323,14 @@ final class DownloadConsistencyProbe: XCTestCase {
     XCTAssertTrue(alertDelete.waitForExistence(timeout: 5), "The delete confirmation alert did not appear")
     capture("delete-confirm-\(book)", app)
     alertDelete.tap()
-    // Back from Manage to the plain Download view.
+    XCTAssertTrue(until(10) { !self.rowIsListed(part, app) }, "\(part) must leave Manage after deletion")
+    // The plain Download list retains the chapter, now without saved audio.
     let back = app.buttons["Back from Manage"]
-    if back.waitForExistence(timeout: 5) { back.tap() }
+    XCTAssertTrue(back.waitForExistence(timeout: 5))
+    back.tap()
     XCTAssertTrue(app.staticTexts[count].waitForExistence(timeout: 30), "\(count) never appeared after the delete")
     XCTAssertFalse(app.buttons["Resume all"].exists, "#277: a download whose remaining chapters are complete must not offer Resume all")
-    XCTAssertFalse(rowIsListed(part, app), "\(part) must be gone from the list")
+    XCTAssertFalse(rowIsChecked(part, app), "\(part) must have no Downloaded check")
     capture("after-delete-\(book)", app)
   }
 
@@ -354,10 +379,11 @@ final class DownloadConsistencyProbe: XCTestCase {
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
     let line = requiredEnv("LINE")
-    if !app.staticTexts[line].exists {
+    let status = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", line)).firstMatch
+    if !status.exists {
       openDownloadDrawer(app, book: requiredEnv("BOOK"))
     }
-    XCTAssertTrue(app.staticTexts[line].waitForExistence(timeout: 10), "The line '\(line)' was not found in the drawer")
+    XCTAssertTrue(status.waitForExistence(timeout: 10), "The line '\(line)' was not found in the drawer")
     if let error = env("ERROR"), !error.isEmpty {
       XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", error)).firstMatch.exists,
                     "The error text '\(error)' was not shown")
