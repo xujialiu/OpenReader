@@ -1,5 +1,6 @@
 import { SynthesisError } from '../core/providers/errors';
 import type { Chapter, DownloadTask, NarrationPlan } from './model';
+import { finishSelection, selectionComplete } from './completion';
 
 export interface SchedulerDeps {
   tasks(): DownloadTask[];
@@ -64,6 +65,7 @@ export function createScheduler(deps: SchedulerDeps) {
   let running = false;
   const active = (task: DownloadTask) => deps.tasks().includes(task) && ['downloading', 'preparing'].includes(task.state);
   const foreground = () => deps.foreground?.() ?? true;
+  const manuallyPaused = (task: DownloadTask) => task.state === 'paused';
   /** Preparations asked for and not yet settled, one per chapter, whoever asked. */
   const preparations = new Map<string, Promise<Chapter>>();
   /** Settles when the last preparation asked for has; the next starts only then. */
@@ -242,6 +244,7 @@ export function createScheduler(deps: SchedulerDeps) {
   async function write(task: DownloadTask, walk: Pass): Promise<{ plan: NarrationPlan | null; away: boolean }> {
     const { finished } = walk;
     const begun: Begun[] = [];
+    const flights = new Set<Promise<void>>();
     let out = 0;
     let plan: NarrationPlan | null = null;
     // Set inside the callbacks below, so declared through `as` rather than narrowed to null here.
@@ -274,7 +277,7 @@ export function createScheduler(deps: SchedulerDeps) {
     }
     function launch(b: Begun, text: string) {
       out++; b.out++;
-      void (async () => {
+      const flight = (async () => {
         try {
           if (await deps.exists(task, text)) return;
           // A text not sent leaves its chapter unfinished in this pass.
@@ -291,6 +294,8 @@ export function createScheduler(deps: SchedulerDeps) {
         } catch (error) { fail(b, error); }
         finally { out--; b.out--; poke(); }
       })();
+      flights.add(flight);
+      void flight.then(() => { flights.delete(flight); });
     }
     /** The next text to send, from the chapters begun in the order they were begun. */
     function take(): { b: Begun; text: string } | null {
@@ -394,7 +399,13 @@ export function createScheduler(deps: SchedulerDeps) {
         }
         await new Promise<void>((resolve) => { wake = resolve; });
       }
-    } finally { nudge = null; }
+    } finally {
+      nudge = null;
+      // A failure while saving a chapter's error can escape settle() with
+      // another chapter still out. It must not overlap a subsequent pass.
+      await beginning;
+      await Promise.all(flights);
+    }
     return { plan, away };
   }
   async function run() {
@@ -409,36 +420,57 @@ export function createScheduler(deps: SchedulerDeps) {
         const task = deps.tasks().find((t) => t.state === 'queued');
         if (!task) break;
         if (!deps.connected()) { task.state = 'waiting'; await deps.changed(); continue; }
-        const plan = await deps.plan(task.document);
-        if (!deps.tasks().includes(task) || task.state !== 'queued') continue;
-        if (!deps.allowed()) break;
-        if (!plan) { task.state = 'blocked'; task.error = 'Reopen Download to prepare the chapter list.'; await deps.changed(); continue; }
-        // A restored task still names the chapters it was on; nothing is being written until one is begun below.
-        task.state = 'downloading'; task.error = null; task.writing = []; await deps.changed();
-        // Complete before this pass, or finished in it: a prepared chapter with no
-        // text is finished without ever counting as complete (ADR 0027), so it is
-        // remembered here rather than chosen again.
-        const finished = new Set(await deps.completed?.(task));
-        pass = { task, finished, prepared: new Set(), failures: new Map() };
-        let last: NarrationPlan | null = plan;
-        let away = false;
-        try { ({ plan: last, away } = await write(task, pass)); }
-        finally { task.writing = []; }
-        if (active(task)) {
-          // Sets, because a whole long book can be one task.
-          const chosen = new Set(task.chapters.filter((id) => !task.recheckHeld?.includes(id)));
-          const failed = new Set(task.failed);
-          const paused = new Set(task.paused);
-          /** A chapter still to write that the owner paused: then the task is paused, not done. */
-          const pausedLeft = last?.chapters.some(({ id }) => chosen.has(id) && !finished.has(id) && !failed.has(id) && paused.has(id));
-          if (!deps.allowed()) task.state = 'interrupted';
-          else if (away) { task.state = 'interrupted'; task.error = null; }
-          else task.state = pausedLeft ? 'paused' : 'done';
+        try {
+          const plan = await deps.plan(task.document);
+          if (!deps.tasks().includes(task) || task.state !== 'queued') continue;
+          if (!deps.allowed()) break;
+          if (!plan) { task.state = 'blocked'; task.error = 'Reopen Download to prepare the chapter list.'; await deps.changed(); continue; }
+          // A restored task still names the chapters it was on; nothing is being written until one is begun below.
+          task.state = 'downloading'; task.error = null; task.writing = []; await deps.changed();
+          // Complete before this pass, or finished in it: a prepared chapter with no
+          // text is finished without ever counting as complete (ADR 0027), so it is
+          // remembered here rather than chosen again.
+          const finished = new Set(await deps.completed?.(task));
+          pass = { task, finished, prepared: new Set(), failures: new Map() };
+          let last: NarrationPlan | null = plan;
+          let away = false;
+          try { ({ plan: last, away } = await write(task, pass)); }
+          finally { task.writing = []; }
+          // A pause can land after the final requests went out. Shared saved
+          // texts may not have been checked by this pass at all (#171).
+          if (manuallyPaused(task) || task.paused?.length) {
+            for (const id of await deps.completed?.(task) ?? []) finished.add(id);
+          }
+          if (deps.tasks().includes(task) && (active(task) || manuallyPaused(task)) && selectionComplete(task, last, finished)) {
+            finishSelection(task);
+          } else if (active(task)) {
+            // Sets, because a whole long book can be one task.
+            const chosen = new Set(task.chapters.filter((id) => !task.recheckHeld?.includes(id)));
+            const failed = new Set(task.failed);
+            const paused = new Set(task.paused);
+            /** A chapter still to write that the owner paused: then the task is paused, not done. */
+            const pausedLeft = last?.chapters.some(({ id }) => chosen.has(id) && !finished.has(id) && !failed.has(id) && paused.has(id));
+            if (!deps.allowed()) task.state = 'interrupted';
+            else if (away) { task.state = 'interrupted'; task.error = null; }
+            else task.state = pausedLeft ? 'paused' : 'done';
+          }
+          await deps.changed();
+        } catch (error) {
+          // Every store boundary belongs to this pass, including the initial
+          // plan/progress read. Never leave a phantom downloading task (#253).
+          // A manual pause or a deletion during the read still wins.
+          if (deps.tasks().includes(task) && ['queued', 'preparing', 'downloading', 'blocked'].includes(task.state)) {
+            task.state = 'blocked';
+            task.error = error instanceof Error ? error.message : String(error);
+            task.writing = [];
+            await deps.changed();
+          }
+        } finally {
+          task.writing = [];
+          pass = null;
+          // Persisting the stopped state withdraws any preparation ahead.
+          await ahead;
         }
-        await deps.changed();
-        // A preparation ahead still out is withdrawn by the runtime once the task no longer runs.
-        pass = null;
-        await ahead;
       }
     } finally { running = false; pass = null; }
   }

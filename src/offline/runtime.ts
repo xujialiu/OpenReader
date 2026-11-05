@@ -43,6 +43,7 @@ import {
 } from "./model";
 import { createScheduler, PreparationInterrupted } from "./scheduler";
 import * as pausing from "./pausing";
+import { finishSelection, selectionComplete } from './completion';
 import {
   continuedShown,
   createContinuedProcessing,
@@ -1067,6 +1068,7 @@ export function startDownloads(): () => void {
       tasks = await (await offlineRepository()).tasks();
       for (const document of new Set(tasks.map((t) => t.document))) await refreshRecheckHolds(document);
       tasks.forEach((task) => {
+        task.writing = []; // No request survives a fresh runtime.
         registerVoice(task.voice);
         // Settings may have changed before async task loading finished.
         if (task.voice.provider === 'fish' && task.state !== 'done' &&
@@ -1094,6 +1096,8 @@ export function startDownloads(): () => void {
       preparationCurrent = true;
       if (downloadWatchers > 0) rechecks.start();
       emit();
+      // A stopped task's unavailable metadata cannot hold all Downloads at launch.
+      void reconcileStoppedDownloads().catch(reportStore);
       // Only a Download still permitted to go on may start away (#77).
       continueAway();
       kick();
@@ -1342,6 +1346,33 @@ export function toggleChapter(task: DownloadTask, chapter: string): void {
   }
   fire(persist().then(kick));
 }
+/** Reconcile only stopped work, never queue or synthesize. A task/settings
+ * change during either read invalidates the answer; a later lifecycle/settle
+ * boundary can check it again. Unknown or genuinely partial chapters stay put. */
+async function reconcileStoppedDownloads(document?: string): Promise<void> {
+  await keying;
+  const repository = await offlineRepository();
+  let changed = false;
+  for (const task of [...tasks]) {
+    if (document !== undefined && task.document !== document) continue;
+    if (!['paused', 'blocked'].includes(task.state) || task.writing?.length) continue;
+    const state = task.state;
+    const chapters = task.chapters;
+    const paused = task.paused;
+    const failed = task.failed;
+    const held = task.recheckHeld;
+    const configured = settings;
+    const plan = await repository.plan(task.document);
+    const complete = new Set((await repository.progress(task.document, task.voice)).filter((p) => p.complete).map((p) => p.id));
+    if (!tasks.includes(task) || task.state !== state || task.chapters !== chapters || task.paused !== paused ||
+      task.failed !== failed || task.recheckHeld !== held || task.writing?.length || settings !== configured) continue;
+    if (!selectionComplete(task, plan, complete)) continue;
+    finishSelection(task);
+    changed = true;
+  }
+  if (changed) await persist();
+}
+
 export async function deleteDownloaded(
   document: string,
   voice: OfflineVoice,
@@ -1378,6 +1409,7 @@ export async function deleteDownloaded(
   ).deleteChapters(document, voice, chapters, [...remaining], () =>
     refresh(document),
   );
+  await reconcileStoppedDownloads(document);
 }
 /**
  * Everything saved for `document` in one Voice and, for Fish Audio, one Model,
