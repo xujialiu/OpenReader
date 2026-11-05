@@ -29,7 +29,61 @@ multitasking in [Running your iOS apps in macOS](https://developer.apple.com/doc
 The exact Expo configuration is documented in
 [SDK 57 app configuration](https://docs.expo.dev/versions/v57.0.0/config/app/).
 
-## Limit the viewport, not the Document's body
+## Reader-width revision (#344): implemented, runtime verification pending
+
+Remove the automatic reader-only 800-point cap and restore Margins to the
+inset from the available reading window, rather than from a narrower centered
+viewport. The independent Library, Settings and Player limits remain. Do not
+introduce another reading-width control. Margins is now a percentage in [0,25],
+per side, of the current available reading-window width. Persist one chosen
+percentage per device across orientation and window-size changes, without
+syncing it. This supersedes the initially discussed one-point step/range and
+eliminates the smaller-window overflow branch; the saved percentage stays
+valid at every width. Preserve EPUB internal indents.
+
+Press-and-hold repeats slowly at first and then faster; release, cancellation,
+Drawer closure and endpoints stop repetition, and release adds no extra step.
+Only Margins gains this behavior, not Font Size. Every tap/repeat changes one
+percentage point and the displayed value includes `%`. New installations use
+5 percent. Acceleration changes repetition cadence, not the step size.
+
+Migrate existing point-valued choices once, when the first post-update reader
+has a measured available window width: round `100 * oldPoints / windowWidth`
+to the nearest whole percentage and persist the converted choice. Exclude the
+removed outer-column whitespace from this conversion. For example, 8 points
+at width 1180 becomes 1 percent. Storage must distinguish old point values
+from new percentages, including overlapping numeric values; later launches
+and size changes must not convert a percentage again. No conversion can use
+an unmeasured width or the removed 800-point cap.
+
+Scope is confirmed. `src/renderer/margins.ts` owns validation, stepping, CSS
+units and conversion. `appearance.marginsUnit` explicitly distinguishes
+`points` from `percent` without changing the settings envelope or provider
+enablement. `ReadingView` converts pending points only when shown with a
+positive measured width, through the shell's existing atomic settings path.
+Other writes preserve pending point values. The native reader cap is removed;
+Library/Settings/Player caps remain. Body padding uses a validated percentage
+of the iframe width; transitional point choices retain px until conversion.
+
+`use-step-repeat.ts` repeats only the Margins stepper: first repeat after
+400 ms, 200 ms cadence until 1200 ms held, then 75 ms cadence, always one
+percentage point. It uses current committed props rather than a captured
+initial value, cancels on press-out/inactivity/unmount and app backgrounding,
+and suppresses the release click after a repeat. These are initial cadence
+values for native acceptance, not platform measurements. Font Size remains
+tap-only. Host tests cover the public storage/CSS/controls and the real
+ReadingView measurement boundary. Runtime verification remains pending.
+
+The diagnosis on the running iPad Air separates the two spaces: a 1180-point
+landscape window contains an 800-point native Reader, WebView viewport and
+iframe. Margins is 8 in storage and live props. Computed body side padding is
+8, body side margins are zero, and Chapter I paragraphs start at x=8 with width
+784 and no side margin or maximum width. The window-edge inset is therefore
+(1180 - 800) / 2 + 8 = 198 points. This is the trial's cap, not a stale resize or
+an ineffective CSS rule. The existing resize-continuity requirements below
+remain in force when the viewport begins using the full available width.
+
+## Earlier trial: limit the viewport, not the Document's body
 
 `src/app/layout-widths.ts` holds the initial point limits: reader and Library
 800, Settings 680, Player 600. Every surface remains full-width below its

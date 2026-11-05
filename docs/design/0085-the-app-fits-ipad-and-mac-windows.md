@@ -50,7 +50,46 @@ remembers, none of which is necessary to enlarge the page.
   separate app windows as part of this change. The benefit of doing so is
   deferred rather than bundled into support for a larger page.
 
-## A wider window, not larger letters
+## Revision: Margins controls the available reading window
+
+The revised direction removes the automatic narrow reading column. A wider
+window gives the text more room, and Margins controls the space at both sides
+rather than the space inside a second, invisible page. Font Size does not grow
+with the window. The Player, Library and Settings keep their separate widths.
+
+The trade-off is longer lines in wide windows. Keeping a narrow default with
+another width control was not selected: it would leave two controls deciding
+what looks like the same margin. Margins is a percentage from zero to 25,
+applied separately to each side of the available reading window. At the upper
+limit, half of the window remains for the Document. The same chosen percentage
+is kept across orientations and window sizes on a device, without syncing it
+to another device; the actual space grows and shrinks with the window. This
+replaces the initially discussed fixed distances and removes the need to clamp
+a saved choice when the window narrows.
+
+Holding a Margins button repeats slowly at first and faster after holding it
+longer. Releasing or cancelling the gesture, closing the Drawer or reaching
+an endpoint stops it; release adds no extra step. Font Size controls are not
+changed. The Document's internal indents and centred content remain intact.
+Each tap changes one percentage point, shown with a percent sign. Holding a
+button increases the repetition speed, not the size of each step. A new
+installation starts at five percent.
+
+An existing fixed-distance choice is converted once, using the available
+reading-window width when a Document is first opened after the update, rounded
+to the nearest whole percentage. Only the chosen distance is converted, not
+the automatic outer whitespace being removed. The converted percentage is
+then kept across later rotations, resizing and launches. This preserves the
+old choice as closely as whole percentages allow, rather than treating an old
+number as a percentage or resetting every installation to the new default.
+
+The scope is confirmed and implemented for simulator acceptance. Runtime
+verification remains pending; this is not yet a verified delivery.
+
+## Earlier trial: a wider window, not larger letters
+
+The following reading-width policy describes the earlier trial, superseded by
+the revised direction above. The separate control and list widths still stand.
 
 The reading page has a maximum width and is centred in a wide window. A narrow
 window uses the space available; a wide one gains whitespace outside the page

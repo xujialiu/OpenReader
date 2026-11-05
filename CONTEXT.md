@@ -299,11 +299,9 @@ the document's, so body text is the same size in every document.
 _Avoid_: scale, zoom, text size, percentage
 
 **Margins**:
-The empty space between a document's text and the left and right edges of its
-reading page, always the same on both sides. A wide window can have additional
-space outside that page. Margins are the owner's and never the document's; an
-indent a document sets inside its own text, for a quotation or a list, comes
-on top of them.
+The owner's chosen share of the available reading window's width left empty
+on each side of a document's body text, equal on both sides. A document's
+internal indents, such as quotations and lists, come on top of it.
 _Avoid_: padding, gutter, side space, inset, page margin
 
 **Text Alignment**:

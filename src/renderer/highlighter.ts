@@ -99,12 +99,15 @@
  */
 
 import { isPixelSize, PLAIN_BODY_TEXT_SIZE } from './body-text';
-import { BAKED_LINE_POSITION, BAKED_SCROLLING, GLIDE_SOURCE } from './glide';
-import type { HighlightMessage } from './messages';
-import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, PROBLEM_MESSAGE, RENDERER_MESSAGE, TAP_MESSAGE, SELECTION_MESSAGE } from './messages';
 import { EPUB_GUARDS_SOURCE } from './epub-guards';
-import { DEFAULT_HIGHLIGHT_COLOURS, readHighlightColours, rgba, type HighlightColours } from './highlight-colours';
+import { BAKED_LINE_POSITION, BAKED_SCROLLING, GLIDE_SOURCE } from './glide';
+import { DEFAULT_HIGHLIGHT_COLOURS, type HighlightColours, readHighlightColours, rgba } from './highlight-colours';
+import { DEFAULT_MARGIN, type MarginSetting, marginCssValue } from './margins';
+import type { HighlightMessage } from './messages';
+import { BLOCKS_MESSAGE, DOCUMENT_MESSAGE, FOLLOWING_STATE_MESSAGE, PROBLEM_MESSAGE, RENDERER_MESSAGE, SELECTION_MESSAGE, TAP_MESSAGE } from './messages';
 import { RENDERER_LOG_SOURCE } from './renderer-log';
+
+export { MARGINS, type Margin, stepMargins } from './margins';
 
 /** The two Highlight Levels of ADR 0005, as CSS custom highlight names. The word rides on top of the Utterance. */
 export const UTTERANCE_HIGHLIGHT = 'openreader-utterance';
@@ -200,26 +203,6 @@ export function stepFontSize(size: FontSize, direction: 1 | -1): FontSize | null
 }
 
 /**
- * The **Margins** the Margins row steps through (CONTEXT.md, #84): the empty
- * space between the text and each side of the screen, in CSS pixels, which are
- * points on the phone. Four at a time from 8 to 48.
- *
- * Not below 8: at 0 or 4 the letters meet the edge of the glass, and a case's
- * lip covers them. The same number on every screen, where the renderer's own
- * margin it replaces was a twelfth of the width (about 33.5 on a 402-point
- * phone): the owner chose points over a share of the screen.
- */
-export const MARGINS = [8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48] as const;
-
-/** One of `MARGINS`. */
-export type Margin = (typeof MARGINS)[number];
-
-/** The margin one tap away, or null where the ladder ends in that direction. */
-export function stepMargins(margins: Margin, direction: 1 | -1): Margin | null {
-  return MARGINS[MARGINS.indexOf(margins) + direction] ?? null;
-}
-
-/**
  * The two **Text Alignments** (CONTEXT.md), in the order the Appearance menu
  * offers them: lines flush with the left margin only, or with both (ADR 0034).
  *
@@ -273,24 +256,17 @@ export const OWN_ALIGNMENTS = ['center', 'right', 'end', '-webkit-center', '-web
  * the sentence being read and the word being spoken are marked in, the same
  * under either theme (`highlight-colours.ts`).
  */
-export interface Appearance {
+export interface Appearance extends MarginSetting {
   font: ReadingFont | null;
   size: FontSize;
-  margins: Margin;
   textAlignment: TextAlignment;
   highlight: HighlightColours;
 }
 
-/**
- * 26px, the Document's own font, 24-point Margins and justified body text,
- * which is what a Document is read as until the owner says otherwise. The
- * owner chose 26 and 24 on 2026-10-01, from reading at them on the iPhone; the
- * first defaults were 16 and 16, the size every Document already set and the
- * phone's own distance from the edge to its back button. A size or margin
- * already saved is kept: these are only what a new install, or a settings file
- * without them, starts at. The Highlight Colours start on Blue (owner's Q4).
- */
-export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 24, margins: 28, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS };
+/** New installations: original font, 24-point text, 5% per-side Margins,
+ * justified body text and Blue highlights. Saved point margins migrate only
+ * after the first visible reader supplies its actual width (#344). */
+export const DEFAULT_APPEARANCE: Appearance = { font: null, size: 24, margins: DEFAULT_MARGIN, marginsUnit: 'percent', textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS };
 
 /** A quarter to four times, whatever the two numbers were: a measurement gone wrong must not make a book unreadable. */
 const MIN_PERCENT = 25;
@@ -378,10 +354,10 @@ export function appearanceCss(appearance: Appearance, bodyTextSize?: number | nu
   css += BODY_TEXT + ' { text-align: ' + align + ' !important; }\n';
   // A number from the ladder or the default, so a settings file cannot put
   // anything else into the rule.
-  const margins = MARGINS.find((one) => one === appearance.margins) ?? DEFAULT_APPEARANCE.margins;
+  const margins = marginCssValue(appearance);
   css +=
     'body { margin-left: 0 !important; margin-right: 0 !important; ' +
-    'padding-left: ' + margins + 'px !important; padding-right: ' + margins + 'px !important; }\n';
+    'padding-left: ' + margins + ' !important; padding-right: ' + margins + ' !important; }\n';
   return css;
 }
 

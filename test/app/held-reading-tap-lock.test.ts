@@ -259,6 +259,40 @@ describe('the Tap Lock, for one visit to the reader (#336)', () => {
   });
 });
 
+describe('the measured reading viewport (#344)', () => {
+  it('uses the full viewport and converts legacy margins once at the actual first width', async () => {
+    const original = world.shell;
+    const shell = { ...(original as { settings: AppSettings }),
+      settings: { ...SETTINGS, appearance: { ...SETTINGS.appearance, margins: 8, marginsUnit: 'points' as const } },
+      setSettings: vi.fn((next: AppSettings | ((was: AppSettings) => AppSettings)) => {
+        world.shell = { ...shell, settings: typeof next === 'function' ? next((world.shell as { settings: AppSettings }).settings) : next };
+      }),
+    };
+    world.shell = shell;
+    const tree = await open();
+    try {
+      const viewport = () => tree.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function')[0];
+      expect(viewport().props.style.maxWidth).toBeUndefined();
+      expect(shell.setSettings).not.toHaveBeenCalled();
+      const layout = async (width: number) => {
+        await act(async () => viewport().props.onLayout({ nativeEvent: { layout: { width, height: 788 } } }));
+        await act(async () => tree.update(createElement(ReadingHost, null, createElement(Reader))));
+      };
+      await layout(0);
+      expect(shell.setSettings).not.toHaveBeenCalled();
+      await layout(1180);
+      expect((world.shell as { settings: AppSettings }).settings.appearance).toMatchObject({ margins: 1, marginsUnit: 'percent' });
+      await layout(820);
+      await layout(375);
+      expect(shell.setSettings).toHaveBeenCalledTimes(1);
+      expect(held()).toMatchObject({ id: DOCUMENT, playing: false });
+    } finally {
+      await act(async () => tree.unmount());
+      world.shell = original;
+    }
+  });
+});
+
 describe('the Tap Lock is not a setting (#336)', () => {
   it('has no place in the settings, so nothing carries it to the next launch', () => {
     expect(Object.keys(DEFAULT_SETTINGS)).not.toContain('tapLock');

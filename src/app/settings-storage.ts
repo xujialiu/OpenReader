@@ -1,11 +1,12 @@
-import { parseLookupSettings } from '../translation/settings';
 /** Local persistence only; this is not the shared sync format. Secrets never enter it. */
 import { File, Paths } from 'expo-file-system';
 import { offlineNative } from '../../modules/open-reader-offline';
-import { FONT_SIZES, MARGINS, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type Margin, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
 import { readHighlightColours } from '../renderer/highlight-colours';
+import { FONT_SIZES, READING_FONTS, TEXT_ALIGNMENTS, type FontSize, type ReadingFont, type TextAlignment } from '../renderer/highlighter';
+import { readMarginSetting } from '../renderer/margins';
+import { parseLookupSettings } from '../translation/settings';
 import { CONSENT_KEY } from './consent';
-import { DEFAULT_SETTINGS, DRAWER_HEIGHTS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLINGS, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE, type AppSettings, type Scrolling } from './settings';
+import { type AppSettings, DEFAULT_SETTINGS, DRAWER_HEIGHTS, isProviderId, LINE_POSITIONS, PARAGRAPH_PAUSES_MS, SCROLLINGS, type Scrolling, SENTENCE_PAUSES_MS, SENTENCES_AT_ONCE } from './settings';
 
 const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -33,11 +34,6 @@ function readFont(value: unknown): AppSettings['appearance']['font'] {
  */
 function readSize(value: unknown): FontSize {
   return FONT_SIZES.find((size) => size === value) ?? DEFAULT_SETTINGS.appearance.size;
-}
-
-/** A margin on the ladder, or 16: a file written before #84 has none, and reads as a new install does. */
-function readMargins(value: unknown): Margin {
-  return MARGINS.find((margins) => margins === value) ?? DEFAULT_SETTINGS.appearance.margins;
 }
 
 /** One of the two, or Justify: a file written before ADR 0034 has none, and reads as a new install does. */
@@ -112,7 +108,7 @@ export function parseSettings(value: unknown): AppSettings {
     appearance: {
       font: readFont(appearance.font),
       size: readSize(appearance.size),
-      margins: readMargins(appearance.margins),
+      ...readMarginSetting(appearance.margins, appearance.marginsUnit),
       textAlignment: readTextAlignment(appearance.textAlignment),
       // Blue for a file written before #118, and each level's colour and
       // opacity read on their own, so a half-written one keeps what it has.
@@ -132,7 +128,9 @@ export function readSettings(): AppSettings {
   return file.exists ? parseSettings(JSON.parse(file.textSync())) : DEFAULT_SETTINGS;
 }
 export function writeSettings(settings: AppSettings): void {
-  const clean = parseSettings({ version: 1, settings });
+  const clean = parseSettings({ version: 1, settings: { ...settings,
+    appearance: { ...settings.appearance, marginsUnit: settings.appearance.marginsUnit ?? 'percent' },
+  } });
   // File.write truncates before a failed write; moveSync(overwrite) deletes the
   // destination first. Neither preserves the last saved settings on failure (#186).
   if (!offlineNative) throw new Error('Atomic settings storage is unavailable.');

@@ -23,9 +23,9 @@ const aligned = (value: 'start' | 'justify') =>
   '{ text-align: ' + value + ' !important; }\n';
 
 /** The one Margins rule, as `appearanceCss` writes it, for the value given. */
-const margined = (points: number) =>
+const margined = (percent: number) =>
   'body { margin-left: 0 !important; margin-right: 0 !important; ' +
-  'padding-left: ' + points + 'px !important; padding-right: ' + points + 'px !important; }\n';
+  'padding-left: ' + percent + '% !important; padding-right: ' + percent + '% !important; }\n';
 
 /**
  * **Font Size** (CONTEXT.md): how big the body text of every Document is shown,
@@ -62,18 +62,14 @@ describe('Font Size', () => {
  * a stylesheet the owner's choices build.
  */
 describe('Appearance as a stylesheet', () => {
-  it('starts every Document at 24 with 28-point Margins and its body text justified, and states each like any other choice', () => {
-    // 24 and 28 are the owner's defaults (2026-10-02); the first
-    // defaults were 16 and 16. A Document whose body text is 16px is shown at
-    // 150%. The font still starts on the Document's own; the alignment does
-    // not (ADR 0034) — the owner reads justified text unless they say otherwise.
-    // Nor do the Margins (#84).
-    expect(DEFAULT_APPEARANCE).toEqual({ font: null, size: 24, margins: 28, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
+  it('starts every Document at 24 with 5% Margins and justified body text', () => {
+    // The font still starts on the Document's own; size/alignment/margins do not.
+    expect(DEFAULT_APPEARANCE).toEqual({ font: null, size: 24, margins: 5, marginsUnit: 'percent', textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
     expect(appearanceCss(DEFAULT_APPEARANCE, 16)).toBe(
       'html, body, body * { -webkit-text-size-adjust: 150% !important; }\n' +
         'html, body, body * { text-size-adjust: 150% !important; }\n' +
         aligned('justify') +
-        margined(28),
+        margined(5),
     );
   });
 
@@ -87,7 +83,7 @@ describe('Appearance as a stylesheet', () => {
       'html, body, body * { -webkit-text-size-adjust: 150% !important; }\n' +
         'html, body, body * { text-size-adjust: 150% !important; }\n' +
         aligned('justify') +
-        margined(28),
+        margined(5),
     );
     // A Document that sets its body text at 12px is brought to the owner's 16,
     // rather than kept smaller than every other Document.
@@ -262,18 +258,16 @@ describe('Text Alignment', () => {
  * side of the screen, the owner's and never the Document's (#84, ADR 0056).
  */
 describe('Margins', () => {
-  it('offers 8 to 48 points, four at a time', () => {
-    // The owner's ladder (#84). Not below 8: at 0 or 4 the letters meet the
-    // edge of the glass.
-    expect(MARGINS).toEqual([8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]);
+  it('offers 0 to 25 percent, one percentage point at a time', () => {
+    expect(MARGINS).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]);
   });
 
   it('moves one step per tap and stops at either end', () => {
-    expect(stepMargins(16, 1)).toBe(20);
-    expect(stepMargins(16, -1)).toBe(12);
+    expect(stepMargins(16, 1)).toBe(17);
+    expect(stepMargins(16, -1)).toBe(15);
     // Null is a button with nowhere to go, which the sheet shows as disabled.
-    expect(stepMargins(48, 1)).toBeNull();
-    expect(stepMargins(8, -1)).toBeNull();
+    expect(stepMargins(25, 1)).toBeNull();
+    expect(stepMargins(0, -1)).toBeNull();
   });
 
   it('sets the same padding on both sides of the body, and clears the body\'s own side margins', () => {
@@ -294,12 +288,12 @@ describe('Margins', () => {
     expect(rule?.startsWith('body { ')).toBe(true);
   });
 
-  it('reads Margins it does not know as the default, 28, rather than writing them into a rule', () => {
+  it('reads Margins it does not know as the default, 5%, rather than writing them into a rule', () => {
     // A number on the ladder is all that can reach the stylesheet. The cast is
     // what a settings file from another build would do.
-    for (const margins of [0, 4, 15, 50, -8, Number.NaN, '16', '8px; } body { display: none } p {', null, undefined] as never[]) {
+    for (const margins of [26, 48, 15.5, 50, -8, Number.NaN, '16', '8px; } body { display: none } p {', null, undefined] as never[]) {
       const css = appearanceCss({ ...DEFAULT_APPEARANCE, margins }, 16);
-      expect(css).toContain(margined(28));
+      expect(css).toContain(margined(5));
       expect(css).not.toContain('display');
       expect(css.match(/padding-left/g)).toHaveLength(1);
     }

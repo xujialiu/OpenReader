@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { READING_FONTS, stepFontSize, stepMargins, TEXT_ALIGNMENTS, type Appearance, type TextAlignment } from '../renderer/highlighter';
-import { INK, useAccent, type Choice } from './controls';
+import { type Appearance, READING_FONTS, stepFontSize, stepMargins, TEXT_ALIGNMENTS, type TextAlignment } from '../renderer/highlighter';
+import { type Choice, INK, useAccent } from './controls';
 import { Drawer, DrawerChevron, DrawerMenuRow, DrawerRow, DrawerRowText, DrawerRowValue, DrawerScroll, useDrawerColours } from './drawer';
 import { drawerRowText } from './drawer-list';
 import { HighlightPage } from './highlight-section';
 import { Icon } from './icon';
+import { useStepRepeat } from './use-step-repeat';
 
 /** What "follow the document" is called where the owner reads it: the book's own, not "the document font". */
 export const ORIGINAL_FONT = 'Original Book Font';
@@ -32,7 +33,7 @@ const STEPPER = { height: 32, half: 47 } as const;
  * and plus. The number is the one thing about it the page behind cannot show —
  * how far a tap moved it (#17) — and a button goes grey where the ladder ends.
  */
-function StepperRow<T extends number>({ label, name, value, step, onStep }: {
+function StepperRow<T extends number>({ label, name, value, step, onStep, suffix = '', repeat = false, active = true }: {
   /** The row's name, as the owner reads it. */
   label: string;
   /** The same, in the words VoiceOver puts after Decrease and Increase. */
@@ -40,19 +41,22 @@ function StepperRow<T extends number>({ label, name, value, step, onStep }: {
   value: T;
   step(value: T, direction: 1 | -1): T | null;
   onStep(next: T): void;
+  suffix?: string;
+  repeat?: boolean;
+  active?: boolean;
 }) {
   const colours = useDrawerColours();
+  const events = useStepRepeat(value, step, onStep, repeat, active);
   const button = (direction: 1 | -1) => {
-    const next = step(value, direction);
-    const disabled = next === null;
+    const disabled = !active || step(value, direction) === null;
     return <Pressable accessibilityRole="button" accessibilityLabel={`${direction < 0 ? 'Decrease' : 'Increase'} ${name}`}
       accessibilityState={{ disabled }} disabled={disabled} hitSlop={{ top: 6, bottom: 6 }} style={[styles.step, disabled && styles.ended]}
-      onPress={() => { if (next !== null) onStep(next); }}>
+      {...events(direction)}>
       <Icon name={direction < 0 ? 'minus' : 'plus'} color={INK.text} size={22} />
     </Pressable>;
   };
   return <DrawerRow accessory={<View style={[styles.stepper, { backgroundColor: colours.button }]}>
-    {button(-1)}<Text style={styles.number}>{value}</Text>{button(1)}
+    {button(-1)}<Text style={styles.number}>{suffix ? `${value}${suffix}` : value}</Text>{button(1)}
   </View>}>
     <DrawerRowText>{label}</DrawerRowText>
   </DrawerRow>;
@@ -65,8 +69,8 @@ function StepperRow<T extends number>({ label, name, value, step, onStep }: {
  * Highlight opens its own page, like Font (#122), instead of crowding the
  * list with its preview and editor.
  */
-export function AppearanceControls({ appearance, onChange, onFonts, onHighlight }: {
-  appearance: Appearance; onChange(next: Appearance): void; onFonts(): void; onHighlight(): void;
+export function AppearanceControls({ appearance, onChange, onFonts, onHighlight, active = true }: {
+  appearance: Appearance; onChange(next: Appearance): void; onFonts(): void; onHighlight(): void; active?: boolean;
 }) {
   const chosen = READING_FONTS.find((font) => font.id === appearance.font)?.label ?? ORIGINAL_FONT;
   return <DrawerScroll>
@@ -78,7 +82,8 @@ export function AppearanceControls({ appearance, onChange, onFonts, onHighlight 
       onStep={(size) => onChange({ ...appearance, size })} />
     {/* Above Alignment, where the owner put it (#84). */}
     <StepperRow label="Margins" name="margins" value={appearance.margins} step={stepMargins}
-      onStep={(margins) => onChange({ ...appearance, margins })} />
+      suffix={appearance.marginsUnit === 'points' ? ' pt' : '%'} repeat active={active && appearance.marginsUnit !== 'points'}
+      onStep={(margins) => onChange({ ...appearance, margins, marginsUnit: 'percent' })} />
     {/* The system's own menu (ADR 0035), in the drawer's menu row, which is set in to its words so the drawer stays on screen while the menu is open (#117). */}
     <DrawerMenuRow label="Alignment" choices={ALIGNMENT_CHOICES} chosen={appearance.textAlignment}
       onChoose={(textAlignment) => onChange({ ...appearance, textAlignment })} />
@@ -121,7 +126,7 @@ export function AppearanceSheet(props: { visible: boolean; onClose(): void; docu
     onClose={() => { setPage('appearance'); props.onClose(); }} onBack={page !== 'appearance' ? () => setPage('appearance') : undefined}>
     {page === 'fonts' ? <FontList appearance={props.appearance} onChange={props.onChange} />
       : page === 'highlight' ? <HighlightPage appearance={props.appearance} onChange={props.onChange} />
-      : <AppearanceControls {...props} onFonts={() => setPage('fonts')} onHighlight={() => setPage('highlight')} />}
+      : <AppearanceControls {...props} active={props.visible} onFonts={() => setPage('fonts')} onHighlight={() => setPage('highlight')} />}
   </Drawer>;
 }
 

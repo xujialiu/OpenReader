@@ -228,7 +228,7 @@ export interface AppSettings {
    * The size goes one step further and is never the book's at all (ADR 0030):
    * two books typeset differently read at the same size. So does the Text
    * Alignment (ADR 0034): body text is justified until the owner picks Left.
-   * So do the Margins (ADR 0056): 16 points a side in every book.
+   * So do the Margins (ADR 0085): a chosen percentage per side in every book.
    * The font still starts on each book's own, so a face the owner liked needs
    * no putting back.
    */
@@ -482,9 +482,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   local: { engine: LOCAL_ENGINES[0].id, baseURL: LOCAL_ENGINES[0].defaultBaseURL },
   voice: '',
   rate: 1.5,
-  // 26px with 24-point Margins, the owner's choice of 2026-10-01, and each
-  // Document's own font until the owner picks one (`highlighter.ts`'s
-  // `DEFAULT_APPEARANCE`, ADR 0030).
+  // 24-point text, 5% Margins and each Document's own font until another
+  // face is chosen. Existing point-valued margins migrate on the first reader.
   appearance: DEFAULT_APPEARANCE,
   // Follow the system, which is the only default that is not a guess about the
   // room the owner is in.

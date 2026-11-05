@@ -12,9 +12,17 @@ installs; the message, the one `<style>` element and the re-centre stand, and AD
 ## Large-window amendment (#319)
 
 [ADR 0085](0085-the-app-fits-ipad-and-mac-windows.md) caps and centres the
-reader's native viewport. The body-padding rule below is unchanged, but
-Margins now measures the inset within that reading page, not all whitespace
-to the window edge. No new body `max-width` rule or settings migration is added.
+reader's native viewport. The body-padding rule below is unchanged.
+In that implemented trial, Margins measures the inset within that reading
+page, not all whitespace to the window edge. No new body `max-width` rule or
+settings migration is added. The agreed reader-width revision in ADR 0085
+(#344) restores the available-window meaning by removing the native cap;
+the scope is implemented and awaits runtime verification. That revision replaces
+the fixed 8–48 point ladder below with a per-side percentage from 0 to 25 of
+the available reading-window width, one-percentage-point steps and accelerating
+press-and-hold repetition. ADR 0085 records the settled 5-percent default and
+one-time migration using the first post-update reading window. The rule and
+fixed-distance setting described below document the earlier implementation.
 
 ## Where the side space came from
 

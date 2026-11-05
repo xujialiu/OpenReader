@@ -25,11 +25,11 @@ that names the script or probe you are about to run.
   `fixtures/pause-gap-fixture.ts`, `pause-gap.cjs`.
 - [line-position.md](line-position.md) (#71): General's Line position row, its
   menu, and its value across a relaunch. `LinePositionProbe.swift`.
-- [margins.md](margins.md) (#84, ADR 0056): the Margins row between Font Size
-  and Alignment — the ladder by real touches, both disabled ends, the page's
-  text edges at 8/16/32/48 in both themes via `kit/ink.py`, persistence across
-  a relaunch, and the re-centre that keeps the highlighted sentence at the
-  Line Position.
+- [margins.md](margins.md) (#344, ADR 0085): 0%–25% per-side Margins,
+  taps and accelerating holds, both disabled endpoints and cancellation,
+  full-width geometry through rotation/resizing, one-time migration from old
+  point values, and Browsing/Following continuity. `margins-probe.js` measures
+  the EPUB's boxes; the earlier fixed-point evidence is retained separately.
 - [highlight-palette.md](highlight-palette.md) (#122): Highlight's own page —
   the pinned sample, presets, Sentence | Word and the embedded native colour
   palette — by real touches and AXe coordinates, with the no-loop drag, the

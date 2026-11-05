@@ -34,7 +34,7 @@ describe('local settings persistence', () => {
   });
   it('roundtrips enablement, voice history, sources and appearance across reloads', () => {
     const settings = selectVoice({ ...DEFAULT_SETTINGS, enabledProviders: ['fish', 'azure'], azure: { region: 'East Asia' },
-      appearance: { font: 'helvetica', size: 20, margins: 28, textAlignment: 'left', highlight: HIGHLIGHT_PRESETS.amber }, fish: { ...DEFAULT_SETTINGS.fish, includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
+      appearance: { font: 'helvetica', size: 20, margins: 5, marginsUnit: 'percent', textAlignment: 'left', highlight: HIGHLIGHT_PRESETS.amber }, fish: { ...DEFAULT_SETTINGS.fish, includeOfficial: false, includeOwn: true, includeManual: true, voices: 'model-id' } }, 'fish', 'en/model-id');
     writeSettings(settings);
     expect(readSettings()).toEqual(settings);
   });
@@ -123,8 +123,8 @@ describe('local settings persistence', () => {
     expect(read).toEqual({ 'openai-official': 1, compatible: 1, azure: 1, speechify: 1, fish: 5, local: 1 });
     expect(SENTENCES_AT_ONCE).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
-  it('starts with 24-point text and 28-point Margins, without changing saved choices', () => {
-    expect(readSettings().appearance).toMatchObject({ size: 24, margins: 28 });
+  it('starts with 24-point text and 5% Margins, without changing saved choices', () => {
+    expect(readSettings().appearance).toMatchObject({ size: 24, margins: 5, marginsUnit: 'percent' });
     const settings = { ...DEFAULT_SETTINGS, appearance: { ...DEFAULT_SETTINGS.appearance, size: 26 as const, margins: 24 as const } };
     writeSettings(settings);
     expect(readSettings().appearance).toEqual(settings.appearance);
@@ -133,9 +133,9 @@ describe('local settings persistence', () => {
     // The app has not been released, so a percentage saved by the previous build is
     // not converted: it is dropped and the owner starts at the default, 24 (#17).
     expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', size: 20 } } }).appearance)
-      .toEqual({ font: 'georgia', size: 20, margins: 28, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
+      .toEqual({ font: 'georgia', size: 20, margins: 5, marginsUnit: 'percent', textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
     expect(parseSettings({ version: 1, settings: { appearance: { font: 'georgia', scale: 150 } } }).appearance)
-      .toEqual({ font: 'georgia', size: 24, margins: 28, textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
+      .toEqual({ font: 'georgia', size: 24, margins: 5, marginsUnit: 'percent', textAlignment: 'justify', highlight: DEFAULT_HIGHLIGHT_COLOURS });
     for (const size of [25, 17.5, '18', 0, -1, null]) {
       expect(parseSettings({ version: 1, settings: { appearance: { size } } }).appearance.size).toBe(24);
     }
@@ -153,17 +153,16 @@ describe('local settings persistence', () => {
     }
     expect(parseSettings({}).appearance.textAlignment).toBe('justify');
   });
-  it('keeps Margins on the ladder and reads anything else, or nothing, as 28', () => {
-    // A settings file written before #84 has no Margins in it, and is read the
-    // way a new install starts. Nothing is migrated, since the app has not been
-    // released.
+  it('keeps legacy point choices explicitly marked until a reader measures their conversion', () => {
     for (const margins of [8, 16, 24, 28, 36, 48]) {
-      expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance.margins).toBe(margins);
+      expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance)
+        .toMatchObject({ margins, marginsUnit: 'points' });
     }
     for (const margins of [undefined, null, 0, 4, 18, 52, '16', 16.5, true]) {
-      expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance.margins).toBe(28);
+      expect(parseSettings({ version: 1, settings: { appearance: { margins } } }).appearance)
+        .toMatchObject({ margins: 5, marginsUnit: 'percent' });
     }
-    expect(parseSettings({}).appearance.margins).toBe(28);
+    expect(parseSettings({}).appearance.margins).toBe(5);
   });
   it('keeps the Highlight Colours with the Appearance, Blue for a file written before #118', () => {
     expect(parseSettings({ version: 1, settings: {} }).appearance.highlight).toEqual(DEFAULT_HIGHLIGHT_COLOURS);

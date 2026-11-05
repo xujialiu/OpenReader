@@ -1,5 +1,6 @@
-import { useLookup } from './use-lookup';
 import { LookupDrawer } from './lookup-drawer';
+import { useLookup } from './use-lookup';
+
 /**
  * The reader screen: the document, and the player floating over it.
  *
@@ -38,42 +39,40 @@ import { LookupDrawer } from './lookup-drawer';
  * way to clear it.
  */
 
-// WALKTHROUGH-HARNESS
-import { hlog, probeScript, statusLine, useHarnessCommands, type HarnessCommand } from './walkthrough-harness';
 
 import { Reader, useReader } from '@epubjs-react-native/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-
-import { readLocator, type ReadingPlace, type ReadingPosition } from '../core/document';
+import { AppState, type LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { type ReadingPlace, type ReadingPosition, readLocator } from '../core/document';
 import { anchoredStart, contentsOf, currentRow, type NavigationEntry, type ReadingSpineItem } from '../core/document/contents';
+import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
 import { cutText, debugLog } from '../debug/debug-log';
 import { onDebugNote } from '../debug/debug-note';
 import { DEBUG_MODE } from '../debug/mode';
 import { chapterOf, useNowPlaying } from '../now-playing';
-import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
-
+import type { OfflineVoice } from '../offline/model';
+import { withFishModel } from '../offline/narration-voice';
+import { chapterProgress, hasSavedVoice, inventoryError, inventoryReady, planOf, releaseProgress, requestInventory, requestProgress, useDownloads } from '../offline/runtime';
+import { resolveMargins } from '../renderer/margins';
 import { ContentsSheet } from './contents-sheet';
-import { downloadedRows } from './download-rows';
 import { INK } from './controls';
 import type { OpenDocument } from './document';
 import { useDocumentCover } from './document-cover';
+import { downloadedRows } from './download-rows';
 import { Player } from './player';
-import { LAYOUT_WIDTH } from './layout-widths';
 import { useReaderFileSystem } from './reader-file-system';
 import { useShell } from './routes';
+import { type AppSettings, NO_PROVIDER_SENTENCE, PROVIDER_LABELS, readiness, readinessNote } from './settings';
 import { TEXT } from './text-styles';
-import { NO_PROVIDER_SENTENCE, PROVIDER_LABELS, readiness, readinessNote, type AppSettings } from './settings';
 import type { SecretPresence } from './use-provider-secrets';
-import { useReading, type ReadingStatus } from './use-reading';
+import { type ReadingStatus, useReading } from './use-reading';
 import { useSleepTimer } from './use-sleep-timer';
 import { useVoiceLists } from './use-voices';
-import { voiceInList } from './voices';
 import { knownVoice } from './voice-catalog';
 import { VoiceSheet } from './voice-sheet';
-import { withFishModel } from '../offline/narration-voice';
-import { chapterProgress, hasSavedVoice, inventoryReady, inventoryError, planOf, releaseProgress, requestInventory, requestProgress, useDownloads } from '../offline/runtime';
-import type { OfflineVoice } from '../offline/model';
+import { voiceInList } from './voices';
+// WALKTHROUGH-HARNESS
+import { type HarnessCommand, hlog, probeScript, statusLine, useHarnessCommands } from './walkthrough-harness';
 
 /**
  * How often a Reading Position is written to the Library while the reading is
@@ -338,6 +337,16 @@ export function ReadingView({
     if (width < 1 || height < 1) return;
     setSize((was) => (was && was.width === width && was.height === height ? was : { width, height }));
   }, []);
+  // A library/settings save has no reading width. Only a visible, measured
+  // page can convert the old point choice; future resizes keep its percentage.
+  const width = size?.width ?? 0;
+  useEffect(() => {
+    if (!shown || width <= 0 || settings.appearance.marginsUnit !== 'points') return;
+    setSettings((was) => {
+      const appearance = resolveMargins(was.appearance, width);
+      return appearance === was.appearance ? was : { ...was, appearance };
+    });
+  }, [shown, width, settings.appearance.marginsUnit, setSettings]);
 
   /**
    * The page, and how many times it has been opened again (#120).
@@ -949,9 +958,9 @@ function Waiting({ words }: { words: string }) {
 }
 
 const styles = StyleSheet.create({
-  // Cap the measured viewport, not an EPUB's body: publisher tables/images and
-  // our existing Margins then share the same page width (#319).
-  document: { backgroundColor: INK.page, flex: 1, width: '100%', maxWidth: LAYOUT_WIDTH.reader, alignSelf: 'center' },
+  // #344: Margins is a share of this whole measured viewport. Only controls
+  // and lists retain width caps; the reader has no extra outer whitespace.
+  document: { backgroundColor: INK.page, flex: 1, width: '100%' },
   screen: { backgroundColor: INK.page, flex: 1 },
   waiting: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 32 },
   waitingWords: { ...TEXT.subhead, color: INK.quiet },

@@ -28,8 +28,17 @@ _Changed on 2026-10-02: the owner chose 28 for a new install, replacing the
 _Revised for the large-screen adaptation in
 [decision 0085](0085-the-app-fits-ipad-and-mac-windows.md): Margins is now the
 inset within a centred reading page. A wide window may have extra space
-outside that page. The screen-edge meaning and unlimited tablet line length
-below describe the earlier choice, not the new one._
+outside that page. The later revision in decision 0085 restores the
+available-window meaning by removing that automatic narrow page. That direction
+is implemented and awaiting simulator acceptance. That revision replaces the earlier fixed
+distance with a percentage from zero to 25, applied on each side of the
+available reading window. One percentage is kept across orientations and
+window sizes on each device. Each step changes one percentage point; holding
+a button repeats slowly, then faster. Decision 0085 records the five-percent
+default and one-time conversion of existing choices using the first reading
+window after the update. Runtime verification remains pending.
+The fixed-distance arguments below describe the earlier
+choice, not this revision._
 
 The old strip was a share of the screen's width, so it grew on a bigger
 screen. The Margins are a number of points instead, and 16 is 16 on a phone and
