@@ -39,6 +39,32 @@ continuity; those gates are below.
 Open More actions → Appearance. Use real touches for both buttons, not only
 harness settings patches. Save the displayed percentage and resulting layout.
 
+`MarginsHoldProbe.swift` drives the stepper with real XCTest touches and is
+the working pattern for the tap, hold, cancel and close checks. It attaches to
+the already-running app (`XCUIApplication(bundleIdentifier:)`, the #311
+pattern), never launches it, and writes timestamp marks with milliseconds to
+`TEST_RUNNER_OPENREADER_PROBE_MARKS` (falling back to a temp directory) so an
+external script can measure the hold cadence: every step persists synchronously
+to `settings.json` (shell's `setSettings`), so a 30 ms poller of that file's
+mtime and `appearance.margins` is the write series. First repeat ~400 ms, then
+~200 ms gaps to ~1.2 s held, then ~75 ms gaps; release adds no write.
+
+```sh
+export TEST_RUNNER_OPENREADER_PROBE_MARKS=/tmp/THIS-RUN/probe-marks
+bash test/manual-test/kit/run-probe.sh MarginsHoldProbe SIMULATOR_UDID OUTPUT_DIR \
+  -only-testing:MarginsHoldProbe/test02HoldRepeatsThenReleaseAddsNoStep
+```
+
+A watcher script closes the drawer mid-hold for `test04`; both closing routes
+tried so far failed to prove the close (see
+[../pitfalls/verification-runs.md](../pitfalls/verification-runs.md), Verifying
+#344): a harness `appearsheet off` landed at the 25 % endpoint (cutoff
+confounded), and a concurrent AXe tap on the Close button's fresh coordinates
+did not close the drawer at all while XCUITest held the first touch. The
+close/cancel claims therefore stay unverified on-device; the cadence, release,
+endpoints, tap-one-point and Font-Size-tap-only claims passed (run 1
+test01/02/05/06 plus run 3 test02, `1.0.4 (30)-beta5-debug`).
+
 - A short press changes exactly one percentage point.
 - Hold long enough to see slow repeats followed by faster ones; values remain
   consecutive whole percentages. Capture intermediate values, not just an end.
