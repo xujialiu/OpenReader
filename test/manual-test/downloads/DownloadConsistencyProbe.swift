@@ -251,6 +251,9 @@ final class DownloadConsistencyProbe: XCTestCase {
     let book = requiredEnv("BOOK")
     let part = requiredEnv("PART")
     let done = env("DONE") ?? ""
+    if !app.buttons["Resume all"].exists {
+      openDownloadDrawer(app, book: book)
+    }
     XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 60), "The paused download does not offer Resume all")
     XCTAssertFalse(app.buttons["Pause all"].exists, "A paused download must not offer Pause all")
     if !done.isEmpty {
