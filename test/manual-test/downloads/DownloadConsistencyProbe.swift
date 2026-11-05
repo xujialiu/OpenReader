@@ -490,6 +490,36 @@ final class DownloadConsistencyProbe: XCTestCase {
     capture("row-paused-\(book)", app)
   }
 
+  /// #171: starts the whole-book download and taps Pause all while the last
+  /// replies are held at the controlled server (the fake answers after
+  /// OPENREADER_FAKE_TTS_DELAY_MS; this book's Sentences at once is staged
+  /// high, so every remaining text is already out when the pause lands).
+  /// Asserts Resume all while held, then a self-finish without any resume
+  /// tap: COUNT appears, no Resume all, every CHECK row carries its check.
+  func test171PauseAllDuringFinalReplies() throws {
+    let app = XCUIApplication(bundleIdentifier: bundle)
+    app.activate()
+    let book = requiredEnv("BOOK")
+    let count = requiredEnv("COUNT")
+    let delay = Double(requiredEnv("PAUSE_AFTER_S")) ?? 30
+    openDownloadDrawer(app, book: book)
+    selectAllAndStart(app)
+    XCTAssertTrue(app.buttons["Pause all"].waitForExistence(timeout: 10), "Pause all never appeared")
+    Thread.sleep(forTimeInterval: delay)
+    capture("171-before-pause-\(book)", app)
+    XCTAssertTrue(app.buttons["Pause all"].exists, "The download settled before the timed pause; retune PAUSE_AFTER_S")
+    app.buttons["Pause all"].tap()
+    XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 10), "The pause during held replies did not leave the task paused")
+    capture("171-held-paused-\(book)", app)
+    XCTAssertTrue(app.staticTexts[count].waitForExistence(timeout: 120), "\(count) never appeared after the held replies returned")
+    XCTAssertFalse(app.buttons["Resume all"].exists, "#171: the finished download must not offer Resume all")
+    XCTAssertFalse(app.staticTexts["Needs attention"].exists)
+    for row in requiredEnv("CHECK").split(separator: ",").map(String.init) where !row.isEmpty {
+      XCTAssertTrue(until(10) { self.rowIsChecked(row, app) }, "\(row) has no downloaded check")
+    }
+    capture("171-self-finished-\(book)", app)
+  }
+
   /// Restarts the app cold (terminate + launch, no launch argument: the
   /// container plist carries the Metro port) and reopens TEST_RUNNER_DC_BOOK's
   /// Download drawer. What is asserted afterwards is the caller's job via
