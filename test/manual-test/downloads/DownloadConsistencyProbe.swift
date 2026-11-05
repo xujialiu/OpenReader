@@ -442,7 +442,8 @@ final class DownloadConsistencyProbe: XCTestCase {
       return ringElement != nil && ringElement?.label == "Pause download"
     }, "\(row)'s running ring never appeared")
     capture("ring-before-pause-\(book)", app)
-    ringElement!.tap()
+    guard let ring = ringElement else { return }
+    ring.tap()
     XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 20), "Pausing the row did not pause the download")
     capture("row-paused-\(book)", app)
   }
