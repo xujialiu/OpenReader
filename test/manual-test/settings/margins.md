@@ -55,15 +55,20 @@ bash test/manual-test/kit/run-probe.sh MarginsHoldProbe SIMULATOR_UDID OUTPUT_DI
   -only-testing:MarginsHoldProbe/test02HoldRepeatsThenReleaseAddsNoStep
 ```
 
-A watcher script closes the drawer mid-hold for `test04`; both closing routes
-tried so far failed to prove the close (see
-[../pitfalls/verification-runs.md](../pitfalls/verification-runs.md), Verifying
-#344): a harness `appearsheet off` landed at the 25 % endpoint (cutoff
-confounded), and a concurrent AXe tap on the Close button's fresh coordinates
-did not close the drawer at all while XCUITest held the first touch. The
-close/cancel claims therefore stay unverified on-device; the cadence, release,
-endpoints, tap-one-point and Font-Size-tap-only claims passed (run 1
-test01/02/05/06 plus run 3 test02, `1.0.4 (30)-beta5-debug`).
+The corrected `test03` uses a fast, short drag out of the button, then the
+same drag with a longer dwell as a positive hold control. The corrected
+`test04` opens standalone Appearance explicitly, observes two persisted
+repeats during a real held touch, and closes that surface through its harness
+handler. It requires actual disappearance and a stable mid-range value.
+Pass `TEST_RUNNER_OPENREADER_PROBE_DATA` as the explicit target app's data
+container. This is **handler-assisted closure**, not concurrent two-finger
+native input. No external close watcher is needed. Use
+`-collect-test-diagnostics never` to avoid post-failure diagnostic stalls.
+
+The earlier ambiguous target, slow cancellation drag, endpoint-confounded
+close and undelivered concurrent AXe close remain failed evidence in the
+pitfalls/engineering log. The corrected pair passed two native tests with
+zero failures; do not infer that every earlier result was valid.
 
 - A short press changes exactly one percentage point.
 - Hold long enough to see slow repeats followed by faster ones; values remain
@@ -72,7 +77,9 @@ test01/02/05/06 plus run 3 test02, `1.0.4 (30)-beta5-debug`).
 - Reach 0% and 25%; the outward button is disabled and the inward one works.
 - Cancel a press before repetition, leave Appearance during repetition and
   close its Drawer during repetition. No timer may continue changing settings.
-- The number, percent sign and buttons fit at larger Dynamic Type.
+- Check number/percent/button fit at larger Dynamic Type. The highest sizes
+  expose the existing fixed-height clipping in both steppers (#347); report
+  that separately rather than calling those sizes passed.
 - Font Size still changes only on an ordinary tap, not through held repeats.
 
 ## Geometry, rotation and window size
@@ -108,7 +115,39 @@ confuse a constant-width rotation with a real width-changing reflow.
 
 The controls and page must also work in dark mode and in a phone-sized viewport.
 A handler-assisted geometry setting is staging, not proof that the native
-stepper or rotation input worked.
+stepper or rotation input worked. `margins-geometry.py` turns the box checks
+into a bounded assertion and saves its result/screenshot:
+
+```sh
+python3 test/manual-test/settings/margins-geometry.py SIMULATOR_UDID /tmp/THIS-RUN/landscape-5 \
+  --width 1180 --percent 5 --set
+```
+
+Omit `--set` when verifying persistence after a native rotation or resize.
+For the uncapped exact-CFI driver, pass `--wide-width 820` on an 11-inch iPad
+in portrait (1180 in landscape), and the actual `--narrow-width`. The system
+may need more than one return-handle drag; `--wide` accepts successive groups
+of four coordinates. Inspect the real window instead of assuming one drag
+maximized it.
+
+After the explicit local-provider/Consent control, the bounded live test is:
+
+```sh
+python3 test/manual-test/settings/margins-following.py SIMULATOR_UDID /tmp/THIS-RUN/following \
+  --metro http://127.0.0.1:PORT --axe /path/to/axe \
+  --before-width 820 --after-width 375 --percent 5 --seconds 8 \
+  --drag X Y TO_X TO_Y
+```
+
+Run inside the shared guard. The eight seconds cover two seconds of established
+Following, one native one-second drag, and several seconds for subsequent cues.
+The test sets only the simulator volume, runs bounded Play with a pause
+watchdog/finally, checks monotone cue progression and visible highlight/geometry
+at both widths, then clears its recorder. It does not configure providers,
+answer Consent, restore changed test settings or certify exact Line Position
+or long-duration timing. Summarize frames inside the WebView: the Debug Log
+truncates raw frame arrays at 2 KB. Preserve and re-read an existing record
+after a failed export rather than playing again just to collect the same data.
 
 ## Migration and persistence
 

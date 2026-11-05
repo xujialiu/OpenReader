@@ -142,40 +142,70 @@ final class MarginsHoldProbe: XCTestCase {
     XCTAssertEqual(start, 10)
     let increase = app.buttons["Increase margins"]
     mark("cancel-begin", "start=10")
-    // Coordinate-to-coordinate drag: from the button to a point over the
-    // sheet's header (no button there). The label queries match two AX
-    // elements each, and an element target over a button would tap on release.
+    // Exit the button and retention area within the 400ms hold threshold.
+    // The old 0.25s + default-velocity drag repeated legitimately before exit.
     let grip = increase.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-    let header = app.coordinate(withNormalizedOffset: CGVector(dx: 0.49, dy: 0.53))
-    grip.press(forDuration: 0.25, thenDragTo: header)
+    let outside = grip.withOffset(CGVector(dx: -140, dy: 0))
+    grip.press(forDuration: 0.01, thenDragTo: outside, withVelocity: XCUIGestureVelocity(4000), thenHoldForDuration: 0)
     mark("cancel-end", "")
     Thread.sleep(forTimeInterval: 1.2)
     let after = try XCTUnwrap(marginsValue(app), "value unreadable after cancel")
     XCTAssertEqual(after, start, "cancelled press changed the value to \(after)")
     capture("cancel-kept-\(after)", app)
+    // Same input path with a longer dwell is a positive control for a hold.
+    grip.press(forDuration: 0.65, thenDragTo: outside, withVelocity: XCUIGestureVelocity(4000), thenHoldForDuration: 0)
+    let heldValue = try XCTUnwrap(marginsValue(app))
+    XCTAssertGreaterThan(heldValue, start, "long-dwell control did not repeat")
+    Thread.sleep(forTimeInterval: 1.2)
+    XCTAssertEqual(marginsValue(app), heldValue, "repetition continued outside the button")
   }
 
-  /// The Appearance drawer closing in the middle of a held repeat must stop
-  /// the repeats. The phase script's watcher taps the sheet's own Close button
-  /// through AXe about 0.5 s after this mark, while the touch is still down;
-  /// it records the close method it used. This test then requires the drawer
-  /// actually gone after release, the value stable, and reopening showing the
-  /// same number. The cadence/cutoff numbers are the poller's, not this test's.
+  /// A real hold with handler-assisted close of STANDALONE Appearance,
+  /// whose visible prop the harness controls. Not a concurrent native Close
+  /// touch test. Close after two persisted repeats, require disappearance and
+  /// a stable mid-range value rather than confusing cutoff with the endpoint.
   func test04CloseDrawerDuringRepetitionStopsIt() throws {
     let app = XCUIApplication(bundleIdentifier: "top.xujialiu.openreader")
     app.activate()
-    ensureAppearanceOpen(app)
-    let start = try XCTUnwrap(walkTo(app, 6), "could not walk to 6")
+    let env = ProcessInfo.processInfo.environment
+    let data = try XCTUnwrap(env["OPENREADER_PROBE_DATA"] ?? env["TEST_RUNNER_OPENREADER_PROBE_DATA"], "Pass the selected app data container")
+    let documents = URL(fileURLWithPath: data).appendingPathComponent("Documents")
+    func command(_ on: Bool) throws {
+      let json = try JSONSerialization.data(withJSONObject: ["seq": Int(Date().timeIntervalSince1970 * 1000), "do": "appearsheet", "on": on])
+      try json.write(to: documents.appendingPathComponent("harness.json"), options: .atomic)
+    }
+    if app.buttons["Close Appearance"].exists { app.buttons["Close Appearance"].tap(); Thread.sleep(forTimeInterval: 1) }
+    try command(true)
+    XCTAssertTrue(app.buttons["Close Appearance"].waitForExistence(timeout: 5))
+    let start = walkTo(app, 6)
     XCTAssertEqual(start, 6)
+    let closed = expectation(description: "close requested after two repeats")
+    DispatchQueue.global().async {
+      let deadline = Date().addingTimeInterval(8)
+      while Date() < deadline {
+        if let bytes = try? Data(contentsOf: documents.appendingPathComponent("settings.json")),
+           let root = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+           let settings = root["settings"] as? [String: Any],
+           let appearance = settings["appearance"] as? [String: Any],
+           let value = appearance["margins"] as? Int, value >= 8 {
+          do { try command(false); closed.fulfill() } catch { XCTFail("close command failed: \(error)") }
+          return
+        }
+        Thread.sleep(forTimeInterval: 0.02)
+      }
+      XCTFail("No repeated settings writes to trigger the close")
+    }
     let increase = app.buttons["Increase margins"]
-    mark("close-begin", "start=6")
-    increase.press(forDuration: 4.0)
+    mark("close-begin", "start=6 handler-assisted standalone close")
+    increase.press(forDuration: 2.0)
+    wait(for: [closed], timeout: 9)
     mark("close-end", "")
     // The drawer must actually have closed under the held finger.
     let gone = !app.buttons["Close Appearance"].waitForExistence(timeout: 2)
     XCTAssertTrue(gone, "the Appearance drawer did not close during the held repeat")
     Thread.sleep(forTimeInterval: 1.2)
-    ensureAppearanceOpen(app)
+    try command(true)
+    XCTAssertTrue(app.buttons["Close Appearance"].waitForExistence(timeout: 5))
     let after = try XCTUnwrap(marginsValue(app), "value unreadable after close-hold")
     XCTAssertGreaterThan(after, start, "no repeats were measured before the close")
     XCTAssertLessThan(after, 25, "the hold reached the 25% endpoint before the close: cutoff confounded")
@@ -184,6 +214,8 @@ final class MarginsHoldProbe: XCTestCase {
     XCTAssertEqual(settled, after, "repeats continued after the drawer closed: \(after) -> \(settled)")
     capture("close-mid-hold-stable-\(settled)", app)
     walkTo(app, 1)
+    app.buttons["Close Appearance"].tap()
+    try? FileManager.default.removeItem(at: documents.appendingPathComponent("harness.json"))
   }
 
   /// 0% and 25% disable the outward button and leave the inward one working.

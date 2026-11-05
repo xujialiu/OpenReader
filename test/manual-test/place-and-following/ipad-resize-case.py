@@ -26,9 +26,14 @@ def main():
     parser.add_argument("--section", type=int, required=True)
     parser.add_argument("--axe", type=Path, required=True)
     parser.add_argument("--metro", required=True)
+    parser.add_argument("--wide-width", type=int, default=800, help="Expected wide reading width; legacy capped runs default to 800")
+    parser.add_argument("--narrow-width", type=int, default=375)
     parser.add_argument("--narrow", nargs=4, type=int, required=True, metavar=("X", "Y", "TO_X", "TO_Y"))
-    parser.add_argument("--wide", nargs=4, type=int, required=True, metavar=("X", "Y", "TO_X", "TO_Y"))
+    parser.add_argument("--wide", nargs='+', type=int, required=True, metavar="POINT",
+                        help="One or more X Y TO_X TO_Y handle drags to restore the wide window")
     args = parser.parse_args()
+    if not args.wide or len(args.wide) % 4:
+        parser.error('--wide requires complete groups of X Y TO_X TO_Y')
     if not args.cfi.startswith("epubcfi(") or args.section < 0:
         parser.error("Use an EPUB CFI and nonnegative section index")
     args.output.mkdir(parents=True, exist_ok=False)
@@ -90,9 +95,11 @@ def main():
             raise AssertionError("Same character is not at the upper visible edge: " + json.dumps(result))
 
     def drag(label, points):
-        run(str(args.axe), "drag", "--udid", args.device, "--start-x", str(points[0]), "--start-y", str(points[1]),
-            "--end-x", str(points[2]), "--end-y", str(points[3]), "--duration", "1")
-        time.sleep(3)  # Do not measure the native animation; the assertions decide.
+        for offset in range(0, len(points), 4):
+            x, y, to_x, to_y = points[offset:offset + 4]
+            run(str(args.axe), "drag", "--udid", args.device, "--start-x", str(x), "--start-y", str(y),
+                "--end-x", str(to_x), "--end-y", str(to_y), "--duration", "1")
+            time.sleep(3)  # Do not measure the native animation; the assertions decide.
         return measure(label)
 
     try:
@@ -110,14 +117,14 @@ def main():
               "c.locationOf(window.__openReaderResizeProbe.cfi).top-rendition.manager.container.getBoundingClientRect().top; " +
               "rendition.manager.scrollBy(0,y-54,false); window.__openReaderHighlighter({kind:'browse'}); return {preparedY:y};")
         time.sleep(1)
-        at_top(measure("before-wide"), 800)
-        at_top(drag("narrow", args.narrow), 375)
-        at_top(drag("wide", args.wide), 800)
+        at_top(measure("before-wide"), args.wide_width)
+        at_top(drag("narrow", args.narrow), args.narrow_width)
+        at_top(drag("wide", args.wide), args.wide_width)
         paused()
         if position_hash() != before:
             raise AssertionError("Paused Browsing changed a saved Reading Position")
         records.append({"savedPositionUnchanged": True, "playing": False})
-        print("PASS: exact CFI at the upper edge through native 800/375/800 widths; positions unchanged, paused.")
+        print(f"PASS: exact CFI at the upper edge through native {args.wide_width}/{args.narrow_width}/{args.wide_width} widths; positions unchanged, paused.")
     finally:
         (args.output / "records.json").write_text(json.dumps(records, indent=2))
 

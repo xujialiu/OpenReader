@@ -57,7 +57,10 @@ only as long as its named check needs; pause before inspecting results.
 
 `ipad-resize-case.py` stages a chosen CFI with the app's Browsing message, then
 uses native AXe handle drags and measures that same character before, narrow
-and wide. It asserts stage/iframe widths800/375/800, an upper-edge position
+and wide. By default it asserts the historical capped stage/iframe widths
+800/375/800; pass `--wide-width` and `--narrow-width` for uncapped #344 runs.
+`--wide` accepts one or more groups of four coordinates when the system needs
+multiple handle drags to return to the original size. It checks an upper-edge position
 within two line heights below the 54-point header, unchanged saved Reading
 Positions and a paused Reading before/after. It never starts audio. Initial
 page placement is a handler-assisted fixture; window changes are real native
