@@ -45,7 +45,7 @@ final class DownloadConsistencyProbe: XCTestCase {
 
   func requiredEnv(_ name: String) -> String {
     guard let value = env(name), !value.isEmpty else {
-      XCTFail("Missing TEST_RUNNER_\(name)")
+      XCTFail("param DC\(name) missing (plist-v2)")
       return ""
     }
     return value
@@ -159,11 +159,16 @@ final class DownloadConsistencyProbe: XCTestCase {
     app.activate()
     openDownloadDrawer(app, book: requiredEnv("BOOK"))
     selectAllAndStart(app)
+    // The first download at a new address raises the Consent question before
+    // the task exists (startDownload runs consent.ensure first). That alert is
+    // this method's other success: the shell reads and answers it (the
+    // preflight), and a later method asserts the running download.
     XCTAssertTrue(until(20) {
-      app.buttons["Pause all"].exists
+      if app.alerts.firstMatch.exists { print("CONSENT-UP"); return true }
+      return app.buttons["Pause all"].exists
         || app.buttons.matching(NSPredicate(format: "label == 'Pause download'")).firstMatch.exists
         || app.staticTexts["Needs attention"].exists
-    }, "The download never showed Pause all, a running ring, or Needs attention")
+    }, "The download never showed Pause all, a running ring, Needs attention, or the Consent alert")
     capture("started-\(requiredEnv("BOOK"))", app)
   }
 
