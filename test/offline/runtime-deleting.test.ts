@@ -306,6 +306,137 @@ it('deletes a shared line only once every chapter that uses it has been deleted'
   expect(await shown()).toEqual({ counts: { one: 0, two: 0, three: 0 }, downloaded: [], manage: [], files: 0 });
 });
 
+it('leaves a failed progress read visibly blocked and resumes once without repeating audio (#253)', async () => {
+  await open([{ id: 'one', texts: ['Saved after retry.'] }]);
+  const repository = mock.repository as OfflineRepository;
+  const progress = repository.progress.bind(repository);
+  let refuse = true;
+  const read = vi.spyOn(repository, 'progress').mockImplementation(async (...args) => {
+    if (refuse && runtime.downloadTasks('book')[0]?.state === 'downloading') throw new Error('Transient progress read failure');
+    return progress(...args);
+  });
+  try {
+    runtime.enqueue('book', voice, ['one']);
+    const task = runtime.downloadTasks('book')[0];
+    await vi.waitFor(() => expect(task).toMatchObject({ state: 'blocked', error: 'Transient progress read failure', writing: [] }));
+    expect(mock.asked).toEqual([]);
+    refuse = false;
+    runtime.requestProgress('book', voice);
+    await settle();
+    expect(task.state).toBe('blocked'); // Store recovery is not a new paid request.
+    runtime.toggleTask(task);
+    await vi.waitFor(() => expect(task.state).toBe('done'));
+    expect(mock.asked).toEqual(['Saved after retry.']);
+    expect((await shown()).downloaded).toEqual(['one']);
+  } finally { read.mockRestore(); }
+});
+
+it.each(['ring', 'all'] as const)('finishes when the final replies complete a Download paused by %s (#171)', async (pause) => {
+  await open([{ id: 'one', texts: lines('One', 3) }]);
+  mock.hold = true;
+  runtime.enqueue('book', voice, ['one']);
+  await vi.waitFor(() => expect(mock.held.size).toBe(3));
+  const task = runtime.downloadTasks('book')[0];
+  if (pause === 'ring') runtime.toggleChapter(task, 'one');
+  else runtime.toggleTask(task);
+  answerAll();
+  await vi.waitFor(() => expect(task.state).toBe('done'));
+  expect((await shown()).downloaded).toEqual(['one']);
+  expect((await (mock.repository as OfflineRepository).tasks())[0].state).toBe('done');
+  expect(mock.asked).toHaveLength(3);
+});
+
+it('counts already saved shared sentences when a chapter is paused before checking them (#171)', async () => {
+  await open([
+    { id: 'zero', texts: ['Shared A.', 'Shared B.'] },
+    { id: 'one', texts: [...lines('One', 3), 'Shared A.', 'Shared B.'] },
+    { id: 'two', texts: ['Last.'] },
+  ]);
+  runtime.enqueue('book', voice, ['zero']);
+  await vi.waitFor(() => expect(runtime.downloadTasks('book')[0].state).toBe('done'));
+  mock.hold = true;
+  runtime.enqueue('book', voice, ['one', 'two']);
+  await vi.waitFor(() => expect(mock.held.size).toBe(3));
+  const task = runtime.downloadTasks('book')[0];
+  runtime.toggleChapter(task, 'one');
+  expect(task.state).toBe('downloading'); // two is not paused
+  mock.hold = false;
+  answerAll();
+  await vi.waitFor(() => expect(task.state).toBe('done'));
+  expect((await shown()).downloaded).toEqual(['zero', 'one', 'two']);
+  expect(mock.asked).toHaveLength(6); // shared sentences were not bought twice
+});
+
+it('finishes and saves a Download after deleting its only unfinished, selectable chapter (#277)', async () => {
+  await open([{ id: 'one', texts: ['Saved.'] }, { id: 'two', texts: lines('Two', 8) }]);
+  runtime.enqueue('book', voice, ['one']);
+  await vi.waitFor(() => expect(runtime.downloadTasks('book')[0].state).toBe('done'));
+  mock.hold = true;
+  runtime.enqueue('book', voice, ['two']);
+  await answerUntil(async () => (await savedOf('two')) >= 1);
+  const task = runtime.downloadTasks('book')[0];
+  runtime.toggleChapter(task, 'two');
+  answerAll();
+  await settle();
+  const before = await shown();
+  expect(before.downloaded).toEqual(['one']);
+  expect(before.manage).toEqual(['one', 'two']);
+  expect(task.state).toBe('paused');
+  const asked = [...mock.asked];
+  await runtime.deleteDownloaded('book', voice, ['two']);
+  expect(task).toMatchObject({ state: 'done', chapters: ['one'], paused: [], error: null });
+  expect((await (mock.repository as OfflineRepository).tasks())[0].state).toBe('done');
+  expect(mock.asked).toEqual(asked);
+});
+
+it.each(['paused', 'blocked'] as const)('repairs a restored %s Download with nothing unfinished, without synthesis (#171, #277)', async (state) => {
+  await open([{ id: 'one', texts: ['Saved.'] }], async (repository, catalog) => {
+    await repository.saveClip('book', voice, 'Saved.', { audio: 'encoded', bytes: new Uint8Array([1, 2, 3]), mediaType: 'audio/mp4' }, () => true);
+    await catalog.saveTasks([{ id: 'old', document: 'book', voice, chapters: ['one'], state, paused: ['one'], failed: [], error: state === 'blocked' ? 'Old failure' : null }]);
+  });
+  await vi.waitFor(() => expect(runtime.downloadTasks('book')[0]).toMatchObject({ state: 'done', paused: [], error: null }));
+  expect((await (mock.repository as OfflineRepository).tasks())[0].state).toBe('done');
+  expect(mock.asked).toEqual([]);
+});
+
+it.each(['paused', 'blocked'] as const)('keeps restored genuinely incomplete %s work stopped without a request', async (state) => {
+  await open([{ id: 'one', texts: ['Saved.', 'Missing.'] }], async (repository, catalog) => {
+    await repository.saveClip('book', voice, 'Saved.', { audio: 'encoded', bytes: new Uint8Array([1, 2, 3]), mediaType: 'audio/mp4' }, () => true);
+    await catalog.saveTasks([{ id: 'old', document: 'book', voice, chapters: ['one'], state, paused: ['one'], failed: [], error: state === 'blocked' ? 'A real failure' : null }]);
+  });
+  expect((await shown()).downloaded).toEqual([]);
+  expect(runtime.downloadTasks('book')[0].state).toBe(state);
+  expect(mock.asked).toEqual([]);
+});
+
+it('does not finish a newer selection with a stopped-task read started before it (#277)', async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await open([{ id: 'one', texts: ['Saved.'] }, { id: 'two', texts: ['New.'] }], async (repository, catalog) => {
+    await repository.saveClip('book', voice, 'Saved.', { audio: 'encoded', bytes: new Uint8Array([1, 2, 3]), mediaType: 'audio/mp4' }, () => true);
+    await catalog.saveTasks([{ id: 'old', document: 'book', voice, chapters: ['one'], state: 'paused', paused: ['one'], failed: [], error: null }]);
+    const plan = repository.plan.bind(repository);
+    // Hold only the startup reconciliation's read. requestPlan still resolves.
+    vi.spyOn(repository, 'plan').mockImplementationOnce(async (document) => {
+      const snapshot = await plan(document);
+      await held;
+      return snapshot;
+    });
+  });
+  mock.hold = true;
+  await runtime.enqueue('book', voice, ['two']);
+  await vi.waitFor(() => expect(mock.held.size).toBe(1));
+  const task = runtime.downloadTasks('book')[0];
+  runtime.toggleChapter(task, 'two');
+  release();
+  await settle();
+  expect(task.state).toBe('paused');
+  expect(task.chapters).toEqual(['one', 'two']);
+  answerAll();
+  await vi.waitFor(() => expect(task.state).toBe('done'));
+  expect(mock.asked).toEqual(['New.']);
+});
+
 /** #306: Delete all current voice audio, which takes one Voice's audio and leaves the rest. */
 const other = { provider: 'speechify' as const, voice: 'en-US/kristy', label: 'Kristy' };
 /** Rows and files of every clip one Voice has in the book. */

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import type { ReadingSpineItem } from '../core/document/contents';
-import { chapterTextCount, descendants, fullyPrepared, speaks, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
+import { chapterTextCount, descendants, speaks, type Chapter, type DownloadTask, type OfflineVoice, type TaskState } from '../offline/model';
 import * as downloads from '../offline/runtime';
 import { inFishModel, withFishModel } from '../offline/narration-voice';
 import { useShell } from './routes';
@@ -26,7 +26,7 @@ const STATE_LINE: Partial<Record<TaskState, string>> = {
 };
 /** The two deletes share a row: each takes the row's height, and a little either side, to be pressed. */
 const DELETE_SLOP = { top: DRAWER.row.padding, bottom: DRAWER.row.padding, left: 8, right: 8 };
-const stateLine = (task: DownloadTask) => task.state === 'done' ? task.failed.length ? chapterCount(task.failed.length, 'failed') : 'Selected chapters downloaded' : STATE_LINE[task.state];
+const stateLine = (task: DownloadTask) => task.state === 'done' ? chapterCount(task.failed.length, 'failed') : STATE_LINE[task.state];
 
 /**
  * **Download**, and **Manage**, two pages of a Document's actions drawer
@@ -137,9 +137,7 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
   useEffect(() => { onSelectAll({ label: allLabel, onPress: pressAll, disabled: noneEligible }); }, [allLabel, noneEligible, pressAll, onSelectAll]);
   useEffect(() => () => onSelectAll(null), [onSelectAll]);
 
-  const full = chapters.filter(speaks).length;
   const completed = [...progress.values()].filter((p) => p.complete).length;
-  const whole = !!plan && fullyPrepared(plan) && full > 0 && completed === full;
   const state = downloads.indexingState(document);
   // Switch voice's menu (#329): every Voice with saved audio here, in the Model shown, the one shown among them.
   const shownKey = voiceKey(choice);
@@ -154,7 +152,9 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
   };
   // Nothing saved for any voice and nothing under way: there is nothing to manage, so Manage is not offered (#37).
   const manageable = downloads.occupied(document) > 0 || downloads.downloadTasks(document).some((t) => inFishModel(t.voice, settings.fish.model) && t.state !== 'done');
-  const status = task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length && (whole || !!task.recheckHeld?.length)) ? task : null;
+  // Counts and checks describe today's saved audio. A past completed pass
+  // says nothing about coverage after a settings change or Recheck (#278).
+  const status = task && task.chapters.length > 0 && !manage && !(task.state === 'done' && !task.failed.length) ? task : null;
   const act = () => {
     try {
       if (manage) Alert.alert('Delete downloaded audio?', 'The document and reading position will be kept.', [

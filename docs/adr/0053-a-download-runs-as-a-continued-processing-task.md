@@ -387,6 +387,12 @@ native module and the catalogue passed in. It is tested in
   finishes when it resumes; it is lost only if the phone ends the suspended
   app first, and the next launch then restores the download as going on.
 
+## Amendment (#172): inspected empty parts are not chapters to download
+
+`continuedShown` excludes selected parts whose prepared plan proves they have no text. A missing plan entry or an unprepared part still counts: neither proves emptiness. This is independent of the existing paused, failed and Recheck-held rules. A finished selection of one speakable chapter and a cover now reports one of one, not one of two; no empty part acquires a Downloaded check. When every selected part proved empty and every task finished successfully, the subtitle has zero chapters and the positive minimum required for native progress is filled. An absent batch, a paused batch or held missing audio does not become a completed empty selection.
+
+The host tests exercise the real progress calculation for completed, running, unprepared, missing-plan and all-empty selections. They establish the values passed to native code, not how long iOS keeps or draws the completed Live Activity.
+
 ## What the owner's iPhone showed, and what is not yet known
 
 The first run on the owner's iPhone 16 Pro (iOS 27.0, 24A437), Release

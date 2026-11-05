@@ -57,7 +57,7 @@ const settings: AppSettings = {
   sentencesAtOnce: { ...DEFAULT_SENTENCES_AT_ONCE, speechify: 1 },
 };
 const voice = { provider: 'speechify' as const, voice: 'en-US/george', label: 'George' };
-const chapter: Chapter = { id: 'a', title: 'A', depth: 0, parent: null, section: 0, texts: [], textCount: 0, textsLoaded: false, prepared: true };
+const chapter: Chapter = { id: 'a', title: 'A', depth: 0, parent: null, section: 0, texts: [], textCount: 1, textsLoaded: false, prepared: true };
 const NOW = Date.UTC(2026, 9, 9, 12);
 
 /** A launch with one download left going on, and an App Store whose first read takes a moment. */

@@ -1,6 +1,7 @@
 import type { ChapterProgress } from './catalog';
 import { chapterTextCount, type DownloadTask, type NarrationPlan } from './model';
 import { GOES_ON } from './pausing';
+import { emptyChapters } from './completion';
 
 /**
  * A download away from the screen (ADR 0053, #77).
@@ -76,11 +77,14 @@ export function continuedShown(batch: readonly ContinuedDownload[]): ContinuedSh
   let total = 0;
   let done = 0;
   let part = 0;
+  let finishedEmpty = batch.length > 0;
   for (const { task, progress, plan } of batch) {
     const saved = new Map(progress.map((chapter) => [chapter.id, chapter]));
     const complete = (id: string) => !!saved.get(id)?.complete;
     const paused = new Set(batchGoesOn ? task.paused : []);
-    const counted = task.chapters.filter((id) => !task.recheckHeld?.includes(id) && (complete(id) || !paused.has(id)));
+    const empty = emptyChapters(plan);
+    if (task.state !== 'done' || task.failed.length || !task.chapters.length || task.chapters.some((id) => !empty.has(id))) finishedEmpty = false;
+    const counted = task.chapters.filter((id) => !empty.has(id) && !task.recheckHeld?.includes(id) && (complete(id) || !paused.has(id)));
     if (!counted.length) continue;
     if (!documents.includes(task.document)) documents.push(task.document);
     total += counted.length;
@@ -96,7 +100,8 @@ export function continuedShown(batch: readonly ContinuedDownload[]): ContinuedSh
   return {
     title: `Downloading ${documents.length} ${documents.length === 1 ? 'book' : 'books'}`,
     subtitle: `${done} of ${total} ${total === 1 ? 'chapter' : 'chapters'}`,
-    completed: Math.floor((done + part) * UNITS),
+    // NSProgress needs a positive total even when the selection proved empty.
+    completed: finishedEmpty ? UNITS : Math.floor((done + part) * UNITS),
     total: Math.max(total, 1) * UNITS,
     documents,
   };
