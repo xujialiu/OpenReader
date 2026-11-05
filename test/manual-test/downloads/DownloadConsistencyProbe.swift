@@ -417,6 +417,36 @@ final class DownloadConsistencyProbe: XCTestCase {
     capture("redownload-started-\(book)", app)
   }
 
+  /// Selects TEST_RUNNER_ROW, starts the download, and taps that row's ring
+  /// the moment it appears, pausing the chapter part-saved. All real touches
+  /// in one process, so no cross-process timing is involved. Waits for the
+  /// paused shape (Resume all) and captures it.
+  func testStartAndPauseRow() throws {
+    let app = XCUIApplication(bundleIdentifier: bundle)
+    app.activate()
+    let book = requiredEnv("BOOK")
+    let row = requiredEnv("ROW")
+    openDownloadDrawer(app, book: book)
+    let rowBox = app.descendants(matching: .any).matching(
+      NSPredicate(format: "label == %@ OR label == %@ OR label == %@ OR label == %@",
+                  row, row + ", being read", row + ", downloaded", row + ", being read, downloaded")).firstMatch
+    XCTAssertTrue(rowBox.waitForExistence(timeout: 10), "\(row) is not listed")
+    rowBox.tap()
+    let start = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Download selected ('")).firstMatch
+    XCTAssertTrue(start.waitForExistence(timeout: 5), "Download selected not found")
+    start.tap()
+    // The ring appears when the chapter begins; tap it at once.
+    var ringElement: XCUIElement?
+    XCTAssertTrue(until(30) {
+      ringElement = self.ring(beside: row, app)
+      return ringElement != nil && ringElement?.label == "Pause download"
+    }, "\(row)'s running ring never appeared")
+    capture("ring-before-pause-\(book)", app)
+    ringElement!.tap()
+    XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 20), "Pausing the row did not pause the download")
+    capture("row-paused-\(book)", app)
+  }
+
   /// Restarts the app cold (terminate + launch, no launch argument: the
   /// container plist carries the Metro port) and reopens TEST_RUNNER_DC_BOOK's
   /// Download drawer. What is asserted afterwards is the caller's job via
