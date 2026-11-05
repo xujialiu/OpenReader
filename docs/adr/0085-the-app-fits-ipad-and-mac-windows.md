@@ -29,7 +29,7 @@ multitasking in [Running your iOS apps in macOS](https://developer.apple.com/doc
 The exact Expo configuration is documented in
 [SDK 57 app configuration](https://docs.expo.dev/versions/v57.0.0/config/app/).
 
-## Reader-width revision (#344): implemented, runtime verification pending
+## Reader-width revision (#344): implemented and verified
 
 Remove the automatic reader-only 800-point cap and restore Margins to the
 inset from the available reading window, rather than from a narrower centered
@@ -72,7 +72,17 @@ initial value, cancels on press-out/inactivity/unmount and app backgrounding,
 and suppresses the release click after a repeat. These are initial cadence
 values for native acceptance, not platform measurements. Font Size remains
 tap-only. Host tests cover the public storage/CSS/controls and the real
-ReadingView measurement boundary. Runtime verification remains pending.
+ReadingView measurement boundary. Native acceptance covers legacy conversion,
+percentage geometry at landscape/portrait/narrow widths, real taps and held
+input, handler-assisted closure during a hold, and same-character Browsing
+through native width changes. Bounded local-speech evidence covers monotone cue
+progression and visible highlights after resizing, not long-duration timing or
+an exact Line Position tolerance. Independent ios-tester repeated the corrected
+cancellation/closure tests; the parent additionally verified actual taps and
+native Close in a 375-point window on the main-integrated tree. The pre-existing
+highest-accessibility-size clipping in both steppers is tracked separately in
+#347, not counted as passed. See the issue and engineering record for raw
+results and the failed test choreographies that were replaced.
 
 The diagnosis on the running iPad Air separates the two spaces: a 1180-point
 landscape window contains an 800-point native Reader, WebView viewport and

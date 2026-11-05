@@ -105,6 +105,8 @@ final class MarginsHoldProbe: XCTestCase {
     increase.tap()
     XCTAssertTrue(waitForValue(app, 10), "Increase must return to the start value")
     capture("tap-one-point-at-10", app)
+    app.buttons["Close Appearance"].tap()
+    XCTAssertFalse(app.buttons["Close Appearance"].waitForExistence(timeout: 2), "native Close did not dismiss Appearance")
   }
 
   /// A held Increase repeats one point at a time; the phase script's poller

@@ -83,8 +83,10 @@ then kept across later rotations, resizing and launches. This preserves the
 old choice as closely as whole percentages allow, rather than treating an old
 number as a percentage or resetting every installation to the new default.
 
-The scope is confirmed and implemented for simulator acceptance. Runtime
-verification remains pending; this is not yet a verified delivery.
+The revised behavior is implemented and verified on iPad, including rotation,
+a narrow window, held adjustments and keeping the passage in view. The
+highest accessibility text sizes still expose clipping in both existing
+steppers; that separate accessibility limitation is not resolved here.
 
 ## Earlier trial: a wider window, not larger letters
 

@@ -17,7 +17,7 @@ In that implemented trial, Margins measures the inset within that reading
 page, not all whitespace to the window edge. No new body `max-width` rule or
 settings migration is added. The agreed reader-width revision in ADR 0085
 (#344) restores the available-window meaning by removing the native cap;
-the scope is implemented and awaits runtime verification. That revision replaces
+the scope is implemented and verified with the limits recorded there. That revision replaces
 the fixed 8–48 point ladder below with a per-side percentage from 0 to 25 of
 the available reading-window width, one-percentage-point steps and accelerating
 press-and-hold repetition. ADR 0085 records the settled 5-percent default and

@@ -30,14 +30,14 @@ _Revised for the large-screen adaptation in
 inset within a centred reading page. A wide window may have extra space
 outside that page. The later revision in decision 0085 restores the
 available-window meaning by removing that automatic narrow page. That direction
-is implemented and awaiting simulator acceptance. That revision replaces the earlier fixed
+is implemented and verified on iPad. That revision replaces the earlier fixed
 distance with a percentage from zero to 25, applied on each side of the
 available reading window. One percentage is kept across orientations and
 window sizes on each device. Each step changes one percentage point; holding
 a button repeats slowly, then faster. Decision 0085 records the five-percent
 default and one-time conversion of existing choices using the first reading
-window after the update. Runtime verification remains pending.
-The fixed-distance arguments below describe the earlier
+window after the update. The highest accessibility text sizes remain a
+separate limitation. The fixed-distance arguments below describe the earlier
 choice, not this revision._
 
 The old strip was a share of the screen's width, so it grew on a bigger
