@@ -531,7 +531,8 @@ final class DownloadConsistencyProbe: XCTestCase {
     XCTAssertTrue(start.waitForExistence(timeout: 10), "The staged Download selected button is gone")
     XCTAssertTrue(start.isEnabled, "Download selected is disabled")
     start.tap()
-    XCTAssertTrue(app.staticTexts["Needs attention"].waitForExistence(timeout: 20),
+    // The status line's label combines the state words and the error text.
+    XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Needs attention'")).firstMatch.waitForExistence(timeout: 20),
                   "The download never reached Needs attention under the injected read failure")
     XCTAssertFalse(app.buttons["Pause download"].exists, "A blocked task must not show a running ring")
     capture("blocked-\(requiredEnv("BOOK"))", app)
