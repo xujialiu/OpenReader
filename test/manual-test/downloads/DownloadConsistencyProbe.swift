@@ -191,6 +191,7 @@ final class DownloadConsistencyProbe: XCTestCase {
   /// that must NOT carry `, downloaded` (comma-separated); TEST_RUNNER_DC_CHECK
   /// names rows that must.
   func testWatchSettled() throws {
+    print("DC-SETTLED-V3")
     let app = XCUIApplication(bundleIdentifier: bundle)
     app.activate()
     let count = requiredEnv("COUNT")
