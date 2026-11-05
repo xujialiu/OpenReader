@@ -90,13 +90,18 @@ final class DownloadConsistencyProbe: XCTestCase {
     if app.buttons["Back from Manage"].exists { app.buttons["Back from Manage"].tap() }
     if app.buttons["Back from Download"].exists {
       app.buttons["Back from Download"].tap()
-      XCTAssertTrue(app.staticTexts[book].waitForExistence(timeout: 5), "The open drawer belongs to another Document; restage the Library")
-      let download = app.buttons["Download"]
-      XCTAssertTrue(download.waitForExistence(timeout: 5))
-      download.tap()
-      XCTAssertTrue(app.buttons["Back from Download"].waitForExistence(timeout: 5))
-      capture("drawer-reopened-\(book)", app)
-      return
+      // The back should reveal the named actions menu; its Download row is the
+      // one marker that cannot also match the reader's content heading behind
+      // the sheet. If it is not there, fall through to the from-scratch walk
+      // below rather than asserting against the wrong screen.
+      if app.buttons["Download"].waitForExistence(timeout: 8) {
+        let download = app.buttons["Download"]
+        download.tap()
+        XCTAssertTrue(app.buttons["Back from Download"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[book].waitForExistence(timeout: 5), "The reopened drawer belongs to another Document")
+        capture("drawer-reopened-\(book)", app)
+        return
+      }
     }
     var backs = 0
     while backs < 4 && !app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", book + ",")).firstMatch.exists {
