@@ -437,11 +437,19 @@ final class DownloadConsistencyProbe: XCTestCase {
     start.tap()
     // The ring appears when the chapter begins; tap it at once.
     var ringElement: XCUIElement?
-    XCTAssertTrue(until(30) {
+    var polls = 0
+    let found = until(30) {
+      polls += 1
       ringElement = self.ring(beside: row, app)
+      if polls % 20 == 0 {
+        let rings = app.buttons.matching(NSPredicate(format: "label == 'Pause download' OR label == 'Resume download'"))
+        print("RING-POLL \(polls): rings=\(rings.count) labels=\(rings.allElementsBoundByIndex.map(\.label))")
+        capture("ring-wait-\(polls)-\(book)", app)
+      }
       return ringElement != nil && ringElement?.label == "Pause download"
-    }, "\(row)'s running ring never appeared")
-    capture("ring-before-pause-\(book)", app)
+    }
+    capture("ring-after-\(book)", app)
+    XCTAssertTrue(found, "\(row)'s running ring never appeared (\(polls) polls)")
     guard let ring = ringElement else { return }
     ring.tap()
     XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 20), "Pausing the row did not pause the download")
