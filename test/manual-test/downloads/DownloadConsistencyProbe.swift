@@ -176,10 +176,12 @@ final class DownloadConsistencyProbe: XCTestCase {
     // preflight), and a later method asserts the running download.
     XCTAssertTrue(until(20) {
       if app.alerts.firstMatch.exists { print("CONSENT-UP"); return true }
+      // A download over only empty parts settles inside this window.
+      if let count = env("COUNT"), !count.isEmpty, app.staticTexts[count].exists { print("ALREADY-SETTLED"); return true }
       return app.buttons["Pause all"].exists
         || app.buttons.matching(NSPredicate(format: "label == 'Pause download'")).firstMatch.exists
         || app.staticTexts["Needs attention"].exists
-    }, "The download never showed Pause all, a running ring, Needs attention, or the Consent alert")
+    }, "The download never showed Pause all, a running ring, Needs attention, the Consent alert, or its settled count")
     capture("started-\(requiredEnv("BOOK"))", app)
   }
 
