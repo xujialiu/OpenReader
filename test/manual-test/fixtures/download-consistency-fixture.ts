@@ -126,6 +126,11 @@ const SOLO = [
   'Passengers learned the pattern and stood up before the second ring.',
   'The mill stopped working years ago but the bell still slowed for it.',
 ];
+const BLOCKED = [
+  'The night porter logged every visitor in a ledger bound in gray canvas.',
+  'One entry read only gone fishing and was never explained to anybody.',
+  'The ledger survived three renovations and one small fire unharmed.',
+];
 const C1 = [
   'The night ferry ran without lights, guided by the second bell of the harbour.',
   'Passengers paid with coins dropped into a coffee tin bolted by the rail.',
@@ -196,6 +201,12 @@ const BOOKS: readonly Book[] = [
     title: 'Solo Fixture',
     uid: 'urn:openreader:solo-fixture',
     spine: [{ id: 'solo', title: 'Solo Chapter', sentences: SOLO }],
+  },
+  {
+    file: 'Blocked Read Fixture.epub',
+    title: 'Blocked Read Fixture',
+    uid: 'urn:openreader:blocked-read-fixture',
+    spine: [{ id: 'solo', title: 'Blocked Read Chapter', sentences: BLOCKED }],
   },
   {
     file: 'Pause Control Fixture.epub',

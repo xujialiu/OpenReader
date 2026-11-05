@@ -85,40 +85,52 @@ final class DownloadConsistencyProbe: XCTestCase {
   /// the drawer's plan and rows. Leaves the Download drawer open.
   func openDownloadDrawer(_ app: XCUIApplication, book: String) {
     // A preceding successful method deliberately leaves its drawer open.
-    // Walk that drawer back to its named menu instead of tapping the covered
-    // Library/Reader controls that remain in the accessibility tree.
+    // Walk that drawer back to its named menu and reopen it only when the menu
+    // is this Document's; otherwise dismiss it and re-read the screen.
     if app.buttons["Back from Manage"].exists { app.buttons["Back from Manage"].tap() }
     if app.buttons["Back from Download"].exists {
       app.buttons["Back from Download"].tap()
-      // The back should reveal the named actions menu: the menu carries both
-      // the Document's title and its Download row, neither of which the reader
-      // behind the sheet or the reopened drawer itself can match. Only when
-      // both are there is the reopen idempotent; otherwise fall through to the
-      // from-scratch walk below, which re-reads the screen it acts on.
+      // The menu carries the Document's title and its Download row; neither
+      // the reader behind the sheet nor the reopened drawer itself can match
+      // both.
       let title = app.staticTexts[book].waitForExistence(timeout: 5)
       let download = app.buttons["Download"].waitForExistence(timeout: 5)
       if title, download {
         app.buttons["Download"].tap()
         XCTAssertTrue(app.buttons["Back from Download"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts[book].waitForExistence(timeout: 3), "The reopened drawer belongs to another Document")
         capture("drawer-reopened-\(book)", app)
         return
       }
+      // Another Document's menu: close it by its grabber drag (a tap lands on
+      // the reader behind it), then start over from whatever remains.
+      let grabber = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Sheet Grabber'")).firstMatch
+      if grabber.exists {
+        let width = app.frame.maxX, height = app.frame.maxY
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: grabber.frame.midX / width, dy: grabber.frame.midY / height))
+        let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: grabber.frame.midX / width, dy: 0.95))
+        top.press(forDuration: 0.1, thenDragTo: bottom)
+        Thread.sleep(forTimeInterval: 0.8)
+      }
     }
-    var backs = 0
-    while backs < 4 && !app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", book + ",")).firstMatch.exists {
-      let back = app.navigationBars.buttons.element(boundBy: 0)
-      guard back.exists else { break }
-      back.tap()
-      backs += 1
-      Thread.sleep(forTimeInterval: 0.6)
+    // Bring the reader of `book` up (its row opens it) unless it already is.
+    if !app.buttons["More actions"].exists {
+      var backs = 0
+      while backs < 4 && !app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", book + ",")).firstMatch.exists {
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        guard back.exists else { break }
+        back.tap()
+        backs += 1
+        Thread.sleep(forTimeInterval: 0.6)
+      }
+      let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", book + ",")).firstMatch
+      XCTAssertTrue(row.waitForExistence(timeout: 10), "Library row for \(book) not found")
+      row.tap()
+      if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
     }
-    let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", book + ",")).firstMatch
-    XCTAssertTrue(row.waitForExistence(timeout: 10), "Library row for \(book) not found")
-    row.tap()
-    if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
     XCTAssertTrue(app.buttons["More actions"].waitForExistence(timeout: 10), "More actions not found for \(book)")
     app.buttons["More actions"].tap()
+    // The actions menu must be this Document's: its heading names the book.
+    XCTAssertTrue(app.staticTexts[book].waitForExistence(timeout: 8), "The actions menu belongs to another Document")
     let download = app.buttons["Download"]
     XCTAssertTrue(download.waitForExistence(timeout: 5), "Download action not offered for \(book)")
     download.tap()
