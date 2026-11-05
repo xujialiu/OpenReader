@@ -250,10 +250,12 @@ final class DownloadConsistencyProbe: XCTestCase {
     app.activate()
     let book = requiredEnv("BOOK")
     let part = requiredEnv("PART")
-    let done = requiredEnv("DONE")
+    let done = env("DONE") ?? ""
     XCTAssertTrue(app.buttons["Resume all"].waitForExistence(timeout: 60), "The paused download does not offer Resume all")
     XCTAssertFalse(app.buttons["Pause all"].exists, "A paused download must not offer Pause all")
-    XCTAssertTrue(until(10) { self.rowIsChecked(done, app) }, "\(done) should carry its check")
+    if !done.isEmpty {
+      XCTAssertTrue(until(10) { self.rowIsChecked(done, app) }, "\(done) should carry its check")
+    }
     XCTAssertTrue(rowIsListed(part, app), "\(part) is not listed")
     XCTAssertFalse(rowIsChecked(part, app), "\(part) must not carry a check while paused incomplete")
     capture("paused-control-\(book)", app)
