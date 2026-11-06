@@ -24,12 +24,12 @@ final class DuoDrawerProbe: XCTestCase {
     element.waitForExistence(timeout: timeout)
   }
 
+  /// Strict precondition: attach to the RUNNING app only. A missing reader is a
+  /// failed precondition (BLOCKED), never relaunch-and-continue — a launch here
+  /// would reset drawer/reading state and forge continuity evidence.
   private func ensureReaderOpen() {
-    if waitElement(app.buttons["Play"], timeout: 6) { return }
-    // one fallback: the runner may have to bring the app up itself
-    app.launch()
-    XCTAssertTrue(waitElement(app.buttons["Play"], timeout: 20),
-                  "Play button not found even after the runner launched the app")
+    XCTAssertTrue(waitElement(app.buttons["Play"], timeout: 8),
+                  "PRECONDITION FAILED: reader not open (no Play button); not launching")
   }
 
   private func shoot(_ name: String) {
@@ -76,7 +76,7 @@ final class DuoDrawerProbe: XCTestCase {
     shoot(tc + "-drawer-closed")
   }
 
-  // ---- Contents drawer at the current pose -----------------------------------
+  // ---- Contents drawer at the current pose, closed again ---------------------
   func testOpenContentsCurrentPose() {
     ensureReaderOpen()
     shoot("no-drawer-before")
@@ -84,13 +84,30 @@ final class DuoDrawerProbe: XCTestCase {
     XCTAssertTrue(assertDrawerOpen("contents"))
     XCTAssertTrue(waitElement(app.buttons["The First Chapter"]), "Contents row 'The First Chapter' missing")
     XCTAssertTrue(app.buttons["The Second Chapter"].exists, "Contents row 'The Second Chapter' missing")
-    // leave the drawer open when asked via the environment (pose-change continuity)
-    if ProcessInfo.processInfo.environment["DUO_LEAVE_DRAWER"] == "1" {
-      print("PROBE-DRAWER-LEFT-OPEN contents")
-      return
-    }
-    drag(fromX: 190, fromY: 430, toX: 190, toY: 650)
+    let grabber = app.buttons["Sheet Grabber"]
+    let frame = grabber.frame
+    XCTAssertTrue(frame.width > 1 && frame.height > 1, "grabber frame invalid: \(frame)")
+    let s = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+    let endY = min(frame.maxY + 320, app.frame.maxY - 12)
+    s.withOffset(CGVector(dx: frame.midX, dy: frame.midY))
+      .press(forDuration: 0.12, thenDragTo: s.withOffset(CGVector(dx: frame.midX, dy: endY)))
     assertDrawerGone("contents")
+  }
+
+  // ---- Contents drawer opened and LEFT OPEN for an external pose change ------
+  // The choreography continues OUTSIDE this process: the caller records the app
+  // PID, performs the pose change, then inspects (testDrawerStateAfterPoseChange
+  // or the no-fold control). This method only proves the open state and ends.
+  func testOpenContentsAndLeaveOpen() {
+    ensureReaderOpen()
+    shoot("no-drawer-before-leave-open")
+    app.buttons["Contents"].firstMatch.tap()
+    XCTAssertTrue(assertDrawerOpen("contents-leave-open"))
+    XCTAssertTrue(waitElement(app.buttons["The First Chapter"]), "Contents row 'The First Chapter' missing")
+    XCTAssertTrue(app.buttons["The Second Chapter"].exists, "Contents row 'The Second Chapter' missing")
+    let grabber = app.buttons["Sheet Grabber"]
+    let detent = grabber.value as? String ?? "nil"
+    print("PROBE-DRAWER-LEFT-OPEN rows=2 grabber=\(grabber.exists) detent=\(detent)")
   }
 
   // ---- More actions -> Appearance page, stepper round trip, close ------------
@@ -162,23 +179,35 @@ final class DuoDrawerProbe: XCTestCase {
     assertDrawerGone("contents-expand-dismiss")
   }
 
-  // ---- drawer state read after an external pose change (no tap here) ---------
+  // ---- drawer state read after an EXTERNAL pose change or no-fold control ----
+  // Read-only inspection: presence, detent (only when present), rows. A missing
+  // drawer fails here — in the fold run that is the continuity assertion, in the
+  // no-fold control a failure means probe-teardown/environment disappearance.
   func testDrawerStateAfterPoseChange() {
+    ensureReaderOpen()
     let grabber = app.buttons["Sheet Grabber"]
-    let present = grabber.exists
-    print("PROBE-DRAWER-AFTER-FOLD present=\(present) value=\(grabber.value as? String ?? "nil")")
+    let present = grabber.waitForExistence(timeout: 4)
+    let detent = present ? (grabber.value as? String ?? "nil") : "unread-no-grabber"
+    print("PROBE-DRAWER-AFTER-FOLD present=\(present) detent=\(detent)")
     shoot("after-pose-change")
-    if present {
-      XCTAssertTrue(waitElement(app.buttons["The First Chapter"], timeout: 4),
-                    "drawer open after fold but Contents rows missing")
-      // close it for the hand-over unless asked to keep it
-      if ProcessInfo.processInfo.environment["DUO_LEAVE_DRAWER"] != "1" {
-        let frame = grabber.frame
-        drag(fromX: frame.midX, fromY: frame.midY, toX: frame.midX, toY: frame.maxY + 320)
-        assertDrawerGone("after-fold")
-      }
-    } else {
-      XCTFail("drawer did not survive the fold (no Sheet Grabber in the tree)")
-    }
+    XCTAssertTrue(present, "no Sheet Grabber in the tree (drawer gone)")
+    XCTAssertTrue(waitElement(app.buttons["The First Chapter"], timeout: 4),
+                  "drawer open but Contents rows missing")
+    // leave it open: the caller decides the next step (further poses, or close)
+    print("PROBE-DRAWER-STILL-OPEN detent=\(detent)")
+  }
+
+  // ---- close a drawer left open (frame-derived drag; inspection separate) ----
+  func testCloseLeftOpenDrawer() {
+    ensureReaderOpen()
+    let grabber = app.buttons["Sheet Grabber"]
+    XCTAssertTrue(grabber.waitForExistence(timeout: 6), "no open drawer to close")
+    let frame = grabber.frame
+    XCTAssertTrue(frame.width > 1 && frame.height > 1, "grabber frame invalid: \(frame)")
+    let s = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+    let endY = min(frame.maxY + 320, app.frame.maxY - 12)
+    s.withOffset(CGVector(dx: frame.midX, dy: frame.midY))
+      .press(forDuration: 0.12, thenDragTo: s.withOffset(CGVector(dx: frame.midX, dy: endY)))
+    assertDrawerGone("close-left-open")
   }
 }
