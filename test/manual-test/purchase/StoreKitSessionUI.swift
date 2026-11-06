@@ -26,12 +26,16 @@ final class StoreKitSessionUI: XCTestCase {
   private var mode: String { ProcessInfo.processInfo.environment["PROBE_MODE"] ?? "" }
   private var expectedTx: String { ProcessInfo.processInfo.environment["EXPECTED_TX"] ?? "" }
 
-  /// Fail closed on missing/invalid mode: an all-skipped run must not read as
-  /// a pass (XCTSkip would exit 0).
+  /// Fail closed on a MISSING/INVALID mode (every test fails; the run cannot
+  /// exit 0). A VALID mode that simply names a different phase skips the
+  /// non-applicable tests — the wrapper's validator then requires the
+  /// requested phase's own methods to have run and passed.
   private func require(_ wanted: String) throws {
     guard mode == wanted else {
-      XCTFail("PROBE_MODE is \(mode.isEmpty ? "MISSING" : mode); this test requires \(wanted)")
-      return
+      if mode != "establish" && mode != "verify" {
+        XCTFail("PROBE_MODE is \(mode.isEmpty ? "MISSING" : mode); this test requires \(wanted)")
+      }
+      throw XCTSkip("probe mode is \(mode.isEmpty ? "MISSING" : mode); this test runs in \(wanted) mode only")
     }
   }
 

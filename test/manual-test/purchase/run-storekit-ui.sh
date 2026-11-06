@@ -35,6 +35,15 @@ if ! grep -q "<EnvironmentVariable key=\"PROBE_MODE\" value=\"$mode\"/>" "$schem
   exit 2
 fi
 
+# The validator compares the kept ledger against the establish ledger recorded
+# in the scheme (verify mode requires it; establish ignores it).
+export EXPECTED_TX
+EXPECTED_TX=$(grep -o 'EXPECTED_TX" value="[^"]*"' "$scheme" | head -1 | sed -E 's/.*value="([^"]*)".*/\1/')
+if [ "$mode" = verify ] && [ -z "$EXPECTED_TX" ]; then
+  echo "BLOCKED: verify run needs a nonempty EXPECTED_TX in the scheme (set-scheme-env.rb first)" >&2
+  exit 2
+fi
+
 # Release configuration: the app embeds its bundle, so no Metro is needed and
 # no stale/plist RCT_jsLocation can redirect it (a Debug-config test build with
 # an empty generated RCTMetroPort mis-attached to another tree's Metro and fed
