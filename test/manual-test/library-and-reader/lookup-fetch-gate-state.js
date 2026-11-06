@@ -1,1 +1,1 @@
-(() => { const g = globalThis.__hopeGate; if (!g) return 'gate absent'; return JSON.stringify({ installed: !!g.installed, count: g.count, waiting: g.waiting, aborted: g.aborted }); })()
+(() => { const g = globalThis.__hopeGate; if (!g) return { installed: false }; return { now: Date.now(), installed: g.installed, count: g.count, waiting: g.waiting, aborted: g.aborted, requests: g.requests }; })()

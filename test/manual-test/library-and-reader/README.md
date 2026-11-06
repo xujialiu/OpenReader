@@ -754,17 +754,41 @@ counts it, calls the **original fetch once**, awaits the real response, and
 holds its delivery on an explicit Promise until `gate-release.js` runs; the
 abort signal is tracked (`aborted`) and rejects the held work without masking
 cancellation; `gate-restore.js` puts the original fetch back. Read state with
-`gate-state.js` (`{installed, count, waiting, aborted}`). Label the held state
+`gate-state.js` (`{now, installed, count, waiting, aborted, requests}`). Each
+request records `startedAt`, `heldAt`, `releasedAt` and `abortedAt` in the app's
+clock. A release reports how many responses were actually delivered; an already
+aborted promise cannot be reported as released. Label the held state
 as **not a real network delay** — the response has arrived; only its delivery
 is held.
 
-Choreography (measured 2026-11-07): normal-request control first (D1 record),
-install the gate, real 2 s long-press at the `lookup-word-frame.js` point
-(closed pose — inner-pose long-presses do not select), wait for
-`count=1 waiting=true`, fold, read state again, `release`, require the
-definition in the same drawer. Everything — install, release, restore — must
-finish inside the 15-second timeout, so script the fold and release back-to-back
-(orchestration overhead ate both in-run windows on 2026-11-07; the
-pending-survives-the-fold half was measured, the release-inside-window half
-needs a tighter harness). Never combine with `watchfetch`/`breakfetch` (they
-replace global fetch and would stack wrappers).
+Establish a normal-request control, calibrated word point, permitted recipient
+and owned Device Hub identity before the timed sequence. The coordinator
+`pending-lookup-fold.cjs` installs the gate itself, retains one CDP connection,
+and writes `OUTPUT.ready`. Start the attach-only native long-press probe only
+after that receipt. Run both as joined children of one foreground script under
+`ios_guard.py`; the coordinator must run **alongside** the probe, not after
+`run-probe.sh` returns. XCTest result collection can consume the entire request
+deadline after the actual long press has already started it.
+
+```sh
+node test/manual-test/library-and-reader/pending-lookup-fold.cjs \
+  "OWNED_DEVICE_NAME" http://127.0.0.1:METRO_PORT \
+  /tmp/ATTEMPT/verified-fold.sh /tmp/ATTEMPT/pending-result.json
+```
+
+The caller supplies a bounded `verified-fold.sh` that checks the selected owned
+window and performs one real closed-to-inner system pose action. It does not
+launch the app or inject dimensions. The coordinator watches for a real held
+response, refuses an already-aborted or too-old control, performs that action,
+requires an actual app-window dimension change, and releases before twelve
+seconds from the request start. It records both app-clock timestamps and window
+measurements; it restores the original fetch even on a failed control. Use a
+new output path for every attempt and preserve failures.
+
+A successful coordinator result proves only timely response delivery across the
+verified window change. The caller must still assert the selected text and
+actual definition in the same native Drawer, with no duplicate request. Native
+selection, task state and result visibility are separate observations. Never
+combine the gate with `watchfetch`/`breakfetch`: they replace global fetch and
+would stack wrappers. A timeout before the fold is an invalid control, never a
+fold-induced application defect.

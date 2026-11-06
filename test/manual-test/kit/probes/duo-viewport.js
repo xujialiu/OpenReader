@@ -7,7 +7,7 @@
 // answer lands in the Debug Log as a `[probe]` line — kept under the log's
 // 2,000-character budget — and on Metro's log. It reads sizes only; it
 // touches nothing.
-/* global rendition, visualViewport */
+/* global rendition */
 // eslint-disable-next-line no-unused-vars
 function probe() {
   const w = window;

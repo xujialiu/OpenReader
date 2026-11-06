@@ -1,1 +1,1 @@
-(() => { const g = globalThis.__hopeGate; if (!g) return 'gate absent'; g.release(); return 'released'; })()
+(() => { const g = globalThis.__hopeGate; if (!g) throw new Error('Lookup gate absent'); const released = g.release(); return { now: Date.now(), released, count: g.count, aborted: g.aborted, requests: g.requests }; })()
