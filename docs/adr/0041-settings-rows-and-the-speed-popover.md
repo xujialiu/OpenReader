@@ -62,6 +62,17 @@ with `hitSlop` 4, and a 17 pt number. While it is open, an absolutely filled
 closes it. The label is 15 pt. The speed's `Sheet` is gone. `Speed`'s timers,
 range and handlers are those of ADR 0020, unchanged.
 
+### Side-safe-area placement (#346; native verification pending)
+
+The default `top` attachment and `bottom` arrow remain for windows without
+horizontal safe insets. With a side reservation, `SpeedBubble` instead requests
+`leading` attachment and a `trailing` arrow, toward the interior of the Player,
+using Expo UI's existing native Popover props. Content width is capped against
+window width minus both horizontal insets and the existing 48-point allowance.
+The stepper, trigger and dismissal behavior stay unchanged. Component tests
+check the props and usable-width cap; only native frame/screenshot and real
+Slower/Faster checks can establish that the system actually contains the bubble.
+
 ## The facts it was built on
 
 - **iOS 27.0's own Settings**, measured in pixels on the iPhone 17 simulator

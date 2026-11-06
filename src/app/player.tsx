@@ -51,7 +51,7 @@
 
 import { Host, Popover, RNHostView } from '@expo/ui/swift-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
+import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MAX_STEPPER_RATE, MIN_STEPPER_RATE, snapRate, stepRate } from '../playback';
@@ -501,10 +501,13 @@ function SpeedBubble({ rate, onRate, open, onOpen, width, height }: {
 }) {
   const shown = snapRate(rate).toFixed(2);
   const { width: windowWidth, fontScale } = useWindowDimensions();
-  const bubbleWidth = Math.min(windowWidth - 48, Math.max(196, Math.ceil(64 * fontScale + 132)));
+  const insets = useSafeAreaInsets();
+  const beside = insets.left > 0 || insets.right > 0;
+  const bubbleWidth = Math.max(0, Math.min(windowWidth - insets.left - insets.right - 48, Math.max(196, Math.ceil(64 * fontScale + 132))));
   return (
     <Host style={{ width, height }}>
-      <Popover isPresented={open} onIsPresentedChange={onOpen} attachmentAnchor="top" arrowEdge="bottom">
+      <Popover isPresented={open} onIsPresentedChange={onOpen}
+        attachmentAnchor={beside ? 'leading' : 'top'} arrowEdge={beside ? 'trailing' : 'bottom'}>
         <Popover.Trigger>
           <RNHostView>
             <Pressable accessibilityRole="button" accessibilityLabel={`Playback speed, ${shown} times`}

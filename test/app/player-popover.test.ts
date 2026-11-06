@@ -80,6 +80,28 @@ describe('the capped Player measures its own width (#319)', () => {
 });
 
 describe('player speed popover geometry (#124)', () => {
+  it.each([[0, 84], [84, 0], [20, 44]])('opens toward the Player interior with left=%s right=%s (#346)', async (left, right) => {
+    Object.assign(insets, { left, right });
+    const p = await player();
+    try {
+      await p.toggle();
+      const bubble = p.root().findAll((node) => String(node.type) === 'Popover')[0];
+      expect(bubble.props).toMatchObject({ attachmentAnchor: 'leading', arrowEdge: 'trailing' });
+      // At large text size its width is limited by the usable area, not the
+      // full display behind the system rail. Native placement is tested on iOS.
+      await p.update({ fontScale: 3.571 });
+      const content = p.root().find((node) => String(node.type) === 'View' && node.props.accessibilityLabel === 'Playback speed');
+      expect(Object.assign({}, ...content.props.style).width).toBe(390 - left - right - 48);
+    } finally { await p.unmount(); }
+  });
+
+  it('keeps the ordinary phone popover above its existing trigger', async () => {
+    const p = await player();
+    try {
+      const bubble = p.root().findAll((node) => String(node.type) === 'Popover')[0];
+      expect(bubble.props).toMatchObject({ attachmentAnchor: 'top', arrowEdge: 'bottom' });
+    } finally { await p.unmount(); }
+  });
   it('closes when system side space changes or switches sides without a window resize (#346)', async () => {
     const p = await player();
     try {
