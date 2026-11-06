@@ -792,3 +792,18 @@ selection, task state and result visibility are separate observations. Never
 combine the gate with `watchfetch`/`breakfetch`: they replace global fetch and
 would stack wrappers. A timeout before the fold is an invalid control, never a
 fold-induced application defect.
+
+Control-run notes from the first green run (2026-11-07, Duo closed 466x678,
+`1.0.4 (30)-beta11-debug`): the press probe must attach to the running app and
+take its point from a file (`LookupFoldPressProbe`), the calibrated word point
+comes from `lookup-word-frame.js` answered on the `[probe]` log line (not
+`[hx]`), and the **page's DOM selection must be verified empty before the
+calibrated press** — closing a previous lookup drawer leaves the selection
+alive and the next long-press re-selects from that anchor. Consent for
+`lookup:free-dictionary` was already stored, so the control lookup raised no
+alert. After a green fold run (`response-delivered-across-window-change`,
+held 6.54 s, released 1 count, no abort, `cleanup: restored`), the native
+drawer retained the word and the delivered definition across the fold and a
+further pose change, while the page's DOM selection read `""` — query text and
+result live in the drawer; the native DOM range itself is not preserved once
+the drawer owns the lookup.
