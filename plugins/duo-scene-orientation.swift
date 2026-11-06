@@ -59,11 +59,15 @@ class SceneDelegate: ExpoAppSceneDelegate {
 
   @available(iOS 27.0, *)
   func supportedInterfaceOrientations(for windowScene: UIWindowScene) -> UIInterfaceOrientationMask {
+    duoInterfaceOrientations(for: windowScene) ?? configuredOrientations(for: windowScene)
+  }
+
+  // The legacy Expo app-delegate path must not contradict this scene policy.
+  // Nil keeps its own original fallback/subscribers on every non-Duo path.
+  func duoInterfaceOrientations(for windowScene: UIWindowScene) -> UIInterfaceOrientationMask? {
     let fallback = configuredOrientations(for: windowScene)
     guard windowScene.traitCollection.userInterfaceIdiom == .phone,
-      hingeSession == windowScene.session.persistentIdentifier else { return fallback }
-    // Preserve the configured portrait choices. The system decides which of
-    // the offered orientations can actually be used on this display/window.
+      hingeSession == windowScene.session.persistentIdentifier else { return nil }
     return fallback.union(.landscape)
   }
 

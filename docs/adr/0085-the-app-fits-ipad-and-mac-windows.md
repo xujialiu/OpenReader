@@ -40,8 +40,11 @@ establish actual Mac runtime verification.
 The phone and tablet plist orientation arrays stay unchanged. The focused
 `with-duo-scene-orientation` config plugin extends the upstream generated
 SceneDelegate subclass; it does not reintroduce the retired scene-adoption
-plugin, edit AppDelegate or create another window/React root. It refuses an
-unexpected subclass instead of overwriting another native policy.
+plugin or create another window/React root. It refuses an unexpected subclass
+instead of overwriting another native policy. The existing Expo AppDelegate
+also implements the legacy orientation callback; a narrow owned override
+forwards only a positively identified Duo scene to the same policy, otherwise
+calling the original superclass implementation and preserving its subscribers.
 
 Built with the UIKit 27.1 SDK, the delegate attaches a public
 `UIHingeInteraction` to its phone scene's window. Only a non-null hinge update
@@ -53,7 +56,12 @@ selects a layout or the orientation exception.
 On iOS 27+, the scene-supported-orientations hook returns the existing
 per-idiom plist mask, adding landscape only for a phone scene with matching
 positive evidence. The supported-mask refresh and geometry request use public
-UIKit APIs. Ordinary phones retain their configured fallback; iPad/Mac keep
+UIKit APIs. The scene-only build reported mask30 while the root controller
+still reported6 and genuine device rotations did not change app geometry.
+The legacy callback alignment is a separate native verification step, not a
+claim that display-driven landscape placement already proved rotation. A new
+root container is deferred while the existing controller/delegate path is
+checked, avoiding unnecessary reparenting of the React view. Ordinary phones retain their configured fallback; iPad/Mac keep
 their existing tablet mask. Older runtime/build combinations use the fallback
 without hinge observation; only a fresh SDK 27.1 build can establish Duo-policy
 acceptance. Runtime geometry rejection is not a successful rotation.
@@ -64,8 +72,8 @@ The upstream scene still owns cold URL delivery and lifecycle forwarding;
 connect, active and disconnect overrides call their superclass implementations.
 
 Generation tests cover the installed Expo template, idempotence, owned-block
-updates and refusing conflicting native code, alongside unchanged plist and
-AppDelegate content. They are not native compilation or orientation evidence.
+updates and refusing conflicting native code, alongside unchanged plist masks
+and upstream AppDelegate factory/lifecycle content. They are not native compilation or orientation evidence.
 The generated file must compile and cold-start on SDK 27.1; actual scene/root
 masks and geometry must be checked on Duo and an ordinary phone on 27.1, with
 older-runtime and iPad controls. SourceKit cannot resolve the app-owned Swift

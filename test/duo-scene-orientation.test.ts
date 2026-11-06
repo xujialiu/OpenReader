@@ -5,10 +5,11 @@ import { join, resolve } from 'node:path';
 import type { ExportedConfig } from 'expo/config-plugins';
 import { describe, expect, it } from 'vitest';
 import config from '../app.config';
-import withDuoSceneOrientation, { duoSceneSource } from '../plugins/with-duo-scene-orientation';
+import withDuoSceneOrientation, { duoAppDelegateSource, duoSceneSource } from '../plugins/with-duo-scene-orientation';
 
 const policy = readFileSync(new URL('../plugins/duo-scene-orientation.swift', import.meta.url), 'utf8');
 const template = 'import Expo\n\nclass SceneDelegate: ExpoAppSceneDelegate {\n}\n';
+const appTemplate = 'internal import Expo\n\n@main\nclass AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {\n  // upstream factory/lifecycle\n}\n';
 
 describe('the Duo exception extends the upstream scene instead of broadening every phone (#346)', () => {
   it('registers the narrow policy without changing the ordinary phone or tablet configuration', () => {
@@ -45,31 +46,59 @@ describe('the Duo exception extends the upstream scene instead of broadening eve
       const native = join(directory, 'package', 'ios');
       const source = readFileSync(join(native, 'HelloWorld', 'SceneDelegate.swift'), 'utf8');
       expect(duoSceneSource(source, policy)).toContain('UIHingeInteraction');
+      const application = readFileSync(join(native, 'HelloWorld', 'AppDelegate.swift'), 'utf8');
+      const bridged = duoAppDelegateSource(application);
+      expect(duoAppDelegateSource(bridged)).toBe(bridged);
+      expect(bridged).toContain('return super.application(application, didFinishLaunchingWithOptions: launchOptions)');
+      expect(bridged).toContain('class ReactNativeDelegate: ExpoReactNativeFactoryDelegate');
       expect(readFileSync(join(native, 'HelloWorld.xcodeproj', 'project.pbxproj'), 'utf8')).toContain('SceneDelegate.swift in Sources');
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
-  it('runs the registered file mod without changing the plist masks or AppDelegate', async () => {
+  it('runs the registered file mod without changing the plist masks or upstream factory/lifecycle', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'openreader-duo-mod-'));
     try {
       mkdirSync(join(directory, 'OpenReader'));
       writeFileSync(join(directory, 'OpenReader', 'SceneDelegate.swift'), template);
-      writeFileSync(join(directory, 'OpenReader', 'AppDelegate.swift'), 'upstream factory/lifecycle');
+      writeFileSync(join(directory, 'OpenReader', 'AppDelegate.swift'), appTemplate);
       const base = { name: 'OpenReader', slug: 'openreader', ios: { infoPlist: {
         UISupportedInterfaceOrientations: ['UIInterfaceOrientationPortrait', 'UIInterfaceOrientationPortraitUpsideDown'],
         'UISupportedInterfaceOrientations~ipad': ['UIInterfaceOrientationPortrait', 'UIInterfaceOrientationLandscapeLeft'],
       } } };
       const before = JSON.stringify(base.ios);
-      const mod = (withDuoSceneOrientation(base) as ExportedConfig).mods?.ios?.dangerous;
-      if (!mod) throw new Error('Missing iOS source mod');
+      const mods = (withDuoSceneOrientation(base) as ExportedConfig).mods?.ios;
+      const mod = mods?.dangerous;
+      const applicationMod = mods?.appDelegate;
+      if (!mod || !applicationMod) throw new Error('Missing iOS source mods');
       await mod({ ...base, modRawConfig: base, modResults: {}, modRequest: {
         projectRoot: resolve('.'), platformProjectRoot: directory, projectName: 'OpenReader',
         modName: 'dangerous', platform: 'ios', introspect: false,
       } });
       expect(JSON.stringify(base.ios)).toBe(before);
-      expect(readFileSync(join(directory, 'OpenReader', 'AppDelegate.swift'), 'utf8')).toBe('upstream factory/lifecycle');
+      // AppDelegate goes through its supported mod, not a dangerous side write
+      // that a later Expo writer could overwrite.
+      expect(readFileSync(join(directory, 'OpenReader', 'AppDelegate.swift'), 'utf8')).toBe(appTemplate);
+      const application = await applicationMod({ ...base, modRawConfig: base,
+        modResults: { language: 'swift', path: join(directory, 'OpenReader', 'AppDelegate.swift'), contents: appTemplate },
+        modRequest: { projectRoot: resolve('.'), platformProjectRoot: directory, projectName: 'OpenReader',
+          modName: 'appDelegate', platform: 'ios', introspect: false },
+      });
+      expect(application.modResults.contents).toBe(duoAppDelegateSource(appTemplate));
       expect(readFileSync(join(directory, 'OpenReader', 'SceneDelegate.swift'), 'utf8')).toContain('supportedInterfaceOrientations(for windowScene:');
     } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  it('aligns the legacy callback only with positive scene evidence and preserves its other fallbacks', () => {
+    const bridged = duoAppDelegateSource(appTemplate);
+    expect(duoAppDelegateSource(bridged)).toBe(bridged);
+    expect(bridged).toContain('let scene = (window ?? self.window)?.windowScene');
+    expect(bridged).toContain('let orientations = delegate.duoInterfaceOrientations(for: scene)');
+    expect(bridged).toContain('return super.application(application, supportedInterfaceOrientationsFor: window)');
+    expect(bridged).toContain('// upstream factory/lifecycle');
+    expect(policy).toContain('hingeSession == windowScene.session.persistentIdentifier else { return nil }');
+    expect(policy).not.toMatch(/startReactNative|RCTRootView\(|UIWindow\(|rootViewController =/);
+    expect(() => duoAppDelegateSource(appTemplate.replace('// upstream factory/lifecycle', 'func application(_ app: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) {}')))
+      .toThrow(/another orientation override/);
   });
 
   it('guards the native API and requires positive scene-scoped hinge evidence', () => {
