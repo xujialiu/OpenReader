@@ -159,6 +159,11 @@ outside does nothing else: it does not also press the button it lands on. How
 the speed changes is as before: each tap changes it by 0.05, from 0.50 to 4.00
 times, holding a button keeps going, and the change is heard at once.
 
+Decision [0092](0092-duo-keeps-the-current-reading-task.md) adds a narrow exception
+to the position above the number: where the system reserves space at a side,
+the bubble may open toward the Player's interior to keep its controls usable.
+The native bubble, trigger, step size and ordinary-phone placement remain.
+
 The speed shown in the player itself is set a size larger than before, a step
 above the name of the voice beside it. It had been the smallest thing on its
 row.

@@ -5,4 +5,4 @@
  * it, and the next set advances the base by three. Native configuration and
  * Settings derive their identity from this same line.
  */
-export const APP_VERSION = '1.0.4 (28)-beta7';
+export const APP_VERSION = '1.0.4 (28)-beta8';
