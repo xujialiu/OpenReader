@@ -125,6 +125,13 @@ EXPO_PUBLIC_OPENREADER_VARIANT=debug xcodebuild \
 Wait for the command to exit with code 0 before installing. The existence of the
 product directory does not prove that this build succeeded.
 
+Keep simulator ad-hoc signing enabled. Do not add `CODE_SIGNING_ALLOWED=NO`
+to a delivery build: a linker-signed app can launch while every Keychain read
+fails with `errSecMissingEntitlement`. If signing needs to be explicit, use
+`CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO`
+for the simulator, then inspect the resulting signature. Rebuild and overlay
+the signed app; do not delete credentials or the data container to fix this.
+
 ```bash
 xcrun simctl install SIMULATOR_UDID \
   /tmp/openreader-simulator-build/Build/Products/Debug-iphonesimulator/OpenReader.app

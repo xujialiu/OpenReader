@@ -50,7 +50,7 @@ EXPO_PUBLIC_OPENREADER_VARIANT=ROLE EXPO_NO_DOTENV=1 xcodebuild \
   -workspace ios/OpenReader.xcworkspace -scheme OpenReader -configuration Release \
   -sdk iphonesimulator -destination 'id=SIMULATOR_UDID' \
   -derivedDataPath OUT/ROLE ENABLE_USER_SCRIPT_SANDBOXING=NO \
-  CODE_SIGNING_ALLOWED=NO -jobs 6 -quiet build
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO -jobs 6 -quiet build
 node --require tsx/cjs scripts/verify-build.ts \
   --app OUT/ROLE/Build/Products/Release-iphonesimulator/OpenReader.app --variant ROLE
 ```
