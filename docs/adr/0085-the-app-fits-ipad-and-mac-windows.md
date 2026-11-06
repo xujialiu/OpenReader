@@ -12,7 +12,7 @@ Dimensions are provisional, not measurements of an ideal layout.
 ## The same iOS app, one scene
 
 `app.config.ts` sets `supportsTablet: true` and `requireFullScreen: false`.
-`orientation: 'portrait'` remains unchanged. The installed Expo 57 writers
+`orientation: 'portrait'` remains unchanged. The installed Expo 58 writers
 produce device families `[1, 2]`, portrait and upside-down portrait for the
 base orientation key, and all four orientations for
 `UISupportedInterfaceOrientations~ipad`. The latter comes from Expo's
@@ -20,14 +20,20 @@ base orientation key, and all four orientations for
 `test/app-config.test.ts` runs those installed writers rather than repeating
 that mapping in an app-owned implementation.
 
-The scene plugin still declares `UIApplicationSupportsMultipleScenes: false`.
+Expo SDK 58's upstream scene manifest declares
+`UIApplicationSupportsMultipleScenes: false`; #345 retires the custom scene
+plugin after the upstream template supplies the same configuration (ADR 0018).
 Resizable is not multi-window. Nothing introduces a second Reading, another
 playback owner, a sidebar, facing pages, or a Mac Catalyst target.
 
 Apple distinguishes fixed-size iPhone apps from iPad apps supporting
 multitasking in [Running your iOS apps in macOS](https://developer.apple.com/documentation/apple-silicon/running-your-ios-apps-in-macos).
 The exact Expo configuration is documented in
-[SDK 57 app configuration](https://docs.expo.dev/versions/v57.0.0/config/app/).
+[SDK 58 app configuration](https://docs.expo.dev/versions/v58.0.0/config/app/).
+SDK 58's lack of `react-native-macos` support is not a change to this execution
+path: OpenReader remains the iOS/iPad app on Apple silicon, not a
+`react-native-macos` or Catalyst target. Configuration compatibility does not
+establish actual Mac runtime verification.
 
 ## Reader-width revision (#344): implemented and verified
 
