@@ -35,6 +35,43 @@ path: OpenReader remains the iOS/iPad app on Apple silicon, not a
 `react-native-macos` or Catalyst target. Configuration compatibility does not
 establish actual Mac runtime verification.
 
+## Duo scene orientation exception (#346): native verification pending
+
+The phone and tablet plist orientation arrays stay unchanged. The focused
+`with-duo-scene-orientation` config plugin extends the upstream generated
+SceneDelegate subclass; it does not reintroduce the retired scene-adoption
+plugin, edit AppDelegate or create another window/React root. It refuses an
+unexpected subclass instead of overwriting another native policy.
+
+Built with the UIKit 27.1 SDK, the delegate attaches a public
+`UIHingeInteraction` to its phone scene's window. Only a non-null hinge update
+records positive evidence, scoped to the scene session. Null updates during a
+hierarchy/display change do not revoke that evidence. The observation is not a
+layout input: neither angle, posture, window dimensions nor a model-name guess
+selects a layout or the orientation exception.
+
+On iOS 27+, the scene-supported-orientations hook returns the existing
+per-idiom plist mask, adding landscape only for a phone scene with matching
+positive evidence. The supported-mask refresh and geometry request use public
+UIKit APIs. Ordinary phones retain their configured fallback; iPad/Mac keep
+their existing tablet mask. Older runtime/build combinations use the fallback
+without hinge observation; only a fresh SDK 27.1 build can establish Duo-policy
+acceptance. Runtime geometry rejection is not a successful rotation.
+
+This avoids a global portrait root-controller default (which would also change
+iPad startup) and avoids treating hinge API availability as hinge hardware.
+The upstream scene still owns cold URL delivery and lifecycle forwarding;
+connect, active and disconnect overrides call their superclass implementations.
+
+Generation tests cover the installed Expo template, idempotence, owned-block
+updates and refusing conflicting native code, alongside unchanged plist and
+AppDelegate content. They are not native compilation or orientation evidence.
+The generated file must compile and cold-start on SDK 27.1; actual scene/root
+masks and geometry must be checked on Duo and an ordinary phone on 27.1, with
+older-runtime and iPad controls. SourceKit cannot resolve the app-owned Swift
+fragment's Expo base outside that generated app target; the Xcode build is the
+compilation gate.
+
 ## Reader-width revision (#344): implemented and verified
 
 Remove the automatic reader-only 800-point cap and restore Margins to the
