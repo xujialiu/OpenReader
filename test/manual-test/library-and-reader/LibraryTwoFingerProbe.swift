@@ -549,4 +549,98 @@ final class LibraryTwoFingerProbe: XCTestCase {
     let first = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Folder, Scratch'")).firstMatch
     XCTAssertTrue(first.waitForExistence(timeout: 5), "Rows are not ordinary rows after Cancel")
   }
+
+/// #345 upgrade re-check on a 402×874 device using the EXISTING root rows (no
+/// fixture creation, nothing moved or deleted): every coordinate is read from
+/// the visible rows' frames. One finger must really scroll (the first row's
+/// frame moves while the list settles) without entering selection; two fingers
+/// must select exactly the three traversed rows; an upward re-sweep starting
+/// on the checked rows must retract to exactly zero with selection mode still
+/// on; Cancel must restore normal mode.
+func testUpgradeOneFingerScrollAndTwoFingerCounts() {
+  let port = ProcessInfo.processInfo.environment["OPENREADER_METRO_PORT"] ?? "8796"
+
+  func visibleRows() -> [(label: String, frame: CGRect)] {
+    let top = app.navigationBars.firstMatch.frame.maxY
+    return app.buttons.allElementsBoundByIndex
+      .filter { $0.exists && !$0.label.hasPrefix("Actions for") && $0.frame.minY >= top && $0.frame.width > 250 && $0.frame.height > 60 && $0.frame.height < 160 }
+      .map { (label: $0.label, frame: $0.frame) }
+      .sorted { $0.frame.minY < $1.frame.minY }
+  }
+
+  func launchAtRootFresh() -> [(label: String, frame: CGRect)]? {
+    app.terminate()
+    app.launchArguments = ["-RCT_jsLocation", "localhost:\(port)"]
+    app.launch()
+    guard app.buttons["Library actions"].waitForExistence(timeout: 25) else {
+      XCTFail("upgrade: the Library did not open"); return nil
+    }
+    Thread.sleep(forTimeInterval: 1)
+    let rows = visibleRows()
+    guard rows.count >= 3, selectedCount() == nil else {
+      XCTFail("upgrade: UNVERIFIED, need three root rows in normal mode, have \(rows.map { $0.label })"); return nil
+    }
+    return rows
+  }
+
+  // (a) ONE FINGER: real scroll displacement, selection stays off.
+  guard let startRows = launchAtRootFresh() else { return }
+  let before = startRows[0].frame
+  let x = app.frame.midX
+  let navBottom = app.navigationBars.firstMatch.frame.maxY
+  let swipeFrom = CGPoint(x: x, y: max(startRows[1].frame.midY, startRows[0].frame.maxY))
+  let swipeTo = CGPoint(x: x, y: max(swipeFrom.y - 300, navBottom + 40))
+  print("PROBE-SCROLL from row0=\(before) swipe=\(swipeFrom)->\(swipeTo)")
+  Fingers.play([Fingers.finger(Fingers.line(swipeFrom, swipeTo, start: 0.2, seconds: 0.6), lift: 1.0)],
+               name: "upgrade-one-finger-scroll", in: self)
+  Thread.sleep(forTimeInterval: 1.5)
+  let scrolled = visibleRows()
+  guard let after = scrolled.first?.frame else { return XCTFail("upgrade: no rows visible after the scroll") }
+  print("PROBE-SCROLL to   row0=\(after) rows=\(scrolled.map { $0.label })")
+  XCTAssertNotEqual(Int(after.minY), Int(before.minY), "upgrade: one finger did not scroll the list (first row did not move)")
+  XCTAssertNil(selectedCount(), "upgrade: one-finger scroll entered selection mode")
+  capture("upgrade-one-finger-scroll")
+
+  // (b) TWO FINGERS over rows 0→2: exactly three selected.
+  guard let rowsForSweep = launchAtRootFresh() else { return }
+  let down = CGPoint(x: x, y: rowsForSweep[0].frame.midY)
+  let far = CGPoint(x: x, y: rowsForSweep[2].frame.midY)
+  print("PROBE-SWEEP down \(down)->\(far) rows=\(rowsForSweep.map { $0.label })")
+  Fingers.play(Fingers.pair(Fingers.line(down, far, start: 0.1, seconds: 0.8), lift: 1.1),
+               name: "upgrade-two-finger-down", in: self)
+  let added = waitCount(3, timeout: 8)
+  let addedCount = selectedCount()
+  print("PROBE-SWEEP selected after down=\(addedCount.map(String.init) ?? "none") expected=3")
+  capture("upgrade-two-finger-down")
+  XCTAssertTrue(added, "upgrade: the two-finger sweep did not select exactly 3 rows (header read \(addedCount.map(String.init) ?? "none"))")
+
+  // (c) REVERSE/RETRACT: an upward sweep starting on the checked rows retracts to zero,
+  // still inside selection mode. In selection mode the rows are labeled elements of
+  // any kind carrying a checkbox value (the Buttons become Others), so read any-kind
+  // elements shaped like rows instead of Buttons only.
+  func visibleSelectedRows() -> [(label: String, frame: CGRect)] {
+    let top = app.navigationBars.firstMatch.frame.maxY
+    return app.descendants(matching: .any).allElementsBoundByIndex
+      .filter { $0.exists && !$0.label.isEmpty && !$0.label.hasPrefix("Actions for") && $0.frame.minY >= top && $0.frame.width > 250 && $0.frame.height > 60 && $0.frame.height < 160 }
+      .map { (label: $0.label, frame: $0.frame) }
+      .sorted { $0.frame.minY < $1.frame.minY }
+  }
+  let selectedRows = visibleSelectedRows()
+  guard selectedRows.count >= 2 else { return XCTFail("upgrade: rows vanished inside selection mode (any-kind read)") }
+  let up = CGPoint(x: x, y: selectedRows[0].frame.midY)
+  let from = CGPoint(x: x, y: selectedRows[min(2, selectedRows.count - 1)].frame.midY)
+  print("PROBE-SWEEP retract \(from)->\(up)")
+  Fingers.play(Fingers.pair(Fingers.line(from, up, start: 0.1, seconds: 0.8), lift: 1.1),
+               name: "upgrade-two-finger-retract", in: self)
+  let retracted = waitCount(0, timeout: 8)
+  let retractedCount = selectedCount()
+  print("PROBE-SWEEP selected after retract=\(retractedCount.map(String.init) ?? "none") expected=0 (still in selection mode)")
+  capture("upgrade-two-finger-retract")
+  XCTAssertTrue(retracted, "upgrade: the reverse sweep did not retract the selection to exactly 0 (header read \(retractedCount.map(String.init) ?? "none"))")
+  XCTAssertNotNil(retractedCount, "upgrade: reaching zero must stay inside selection mode")
+
+  // (d) CANCEL restores normal mode.
+  cancelSelection()
+  XCTAssertTrue(selectedCount() == nil, "upgrade: Cancel left selection mode on")
+}
 }
