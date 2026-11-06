@@ -2,37 +2,40 @@ import XCTest
 import StoreKitTest
 
 /// GENUINE local StoreKit purchases for the FORMAL OpenReader app, run as a UI
-/// test target ATTACHED to the app (TEST_TARGET_NAME=OpenReader) with the
-/// scheme LaunchAction naming `storekit/OpenReader.storekit`, so xcodebuild
-/// launches the app under the activated local StoreKit test environment
-/// (WWDC2020/10659 arrangement). Measured working 2026-11-06: the Release
-/// formal app's Purchase row read 'Unlocked' from SKTestSession purchases; an
-/// UNATTACHED runner-process session did NOT govern the app (row stayed empty).
+/// test target ATTACHED to the formal app target (TEST_TARGET_NAME=OpenReader)
+/// with the shared scheme `StoreKitUI` naming `storekit/OpenReader.storekit`,
+/// so `xcodebuild test` builds the formal app and the local StoreKit test
+/// environment applies to it (the WWDC2020/10659 arrangement).
 ///
-/// Mode is FAIL-CLOSED: TEST_RUNNER_PROBE_MODE must be passed explicitly
-/// (establish|verify); without it every test skips and the run is void. xcodebuild
-/// forwards caller environment to the runner only with the TEST_RUNNER_ prefix,
-/// and whether it actually did is verified from the raw log markers, never assumed.
+/// Mode and the expected transaction ledger travel in the scheme's TestAction
+/// EnvironmentVariables, written per run by `purchase/set-scheme-env.rb`.
+/// Plain `TEST_RUNNER_`-prefixed environment did NOT reach the runner on this
+/// setup (measured 2026-11-06), so this probe reads no environment other than
+/// the scheme's `PROBE_MODE` and `EXPECTED_TX` — and a missing or invalid
+/// `PROBE_MODE` FAILS the tests (never skips: an all-skip run must not exit 0).
+///
+/// Modes: `establish` clears the session store and buys the Trial then the
+/// Unlock; `verify` buys nothing, requires nonempty `EXPECTED_TX`, and asserts
+/// both original transaction identities are still kept and the row still
+/// reads 'Unlocked'.
 final class StoreKitSessionUI: XCTestCase {
 
   static let trialProduct = "top.xujialiu.openreader.trial"
   static let unlockProduct = "top.xujialiu.openreader.unlock"
 
-  /// Mode and the expected transaction ledger arrive in the scheme's TestAction
-  /// EnvironmentVariables (set-scheme-env.rb). xcodebuild's TEST_RUNNER_ prefix
-  /// forwarding was measured NOT to reach the runner here, so plain names that
-  /// only the scheme can supply keep the arrangement deterministic and
-  /// fail-closed: no variable, no run.
   private var mode: String { ProcessInfo.processInfo.environment["PROBE_MODE"] ?? "" }
+  private var expectedTx: String { ProcessInfo.processInfo.environment["EXPECTED_TX"] ?? "" }
 
+  /// Fail closed on missing/invalid mode: an all-skipped run must not read as
+  /// a pass (XCTSkip would exit 0).
   private func require(_ wanted: String) throws {
     guard mode == wanted else {
-      print("PROBE-MODE-MISMATCH got=\(mode.isEmpty ? "MISSING" : mode) wanted=\(wanted)")
-      throw XCTSkip("probe mode got=\(mode.isEmpty ? "MISSING" : mode); this test runs in \(wanted) mode only")
+      XCTFail("PROBE_MODE is \(mode.isEmpty ? "MISSING" : mode); this test requires \(wanted)")
+      return
     }
   }
 
-  /// Stable transaction identity: product + originalTransactionIdentifier.
+  /// Stable transaction identity: product + SKTestTransaction.identifier.
   private func ledger(_ txs: [SKTestTransaction]) -> String {
     let parts = txs.map { "\($0.productIdentifier)#id\($0.identifier)#orig\($0.originalTransactionIdentifier)" }.sorted()
     return parts.joined(separator: ",")
@@ -81,6 +84,7 @@ final class StoreKitSessionUI: XCTestCase {
   @MainActor
   func test01BuyTrialAndSeeDaysLeft() throws {
     try require("establish")
+    guard mode == "establish" else { return }
     let session = try makeSession()
     session.disableDialogs = true
     session.clearTransactions()
@@ -102,6 +106,7 @@ final class StoreKitSessionUI: XCTestCase {
   @MainActor
   func test02BuyUnlockAndSeeUnlocked() throws {
     try require("establish")
+    guard mode == "establish" else { return }
     let session = try makeSession()
     session.disableDialogs = true
     try session.buyProduct(productIdentifier: Self.unlockProduct)
@@ -118,7 +123,10 @@ final class StoreKitSessionUI: XCTestCase {
   @MainActor
   func test03RetainedPurchasesWithoutANewPurchase() throws {
     try require("verify")
+    guard mode == "verify" else { return }
     print("PROBE-MODE verify")
+    // Identity retention is REQUIRED in verify mode: the ledger must be present.
+    XCTAssertTrue(!expectedTx.isEmpty, "EXPECTED_TX (the establish ledger) is required in verify mode")
     let session = try makeSession()
     let kept = session.allTransactions()
     print("PROBE-KEPT-TX \(kept.count) [\(ledger(kept))]")
@@ -126,12 +134,9 @@ final class StoreKitSessionUI: XCTestCase {
                   "The Trial transaction is no longer kept; kept: \(ledger(kept))")
     XCTAssertTrue(kept.contains { $0.productIdentifier == Self.unlockProduct },
                   "The Unlock transaction is no longer kept; kept: \(ledger(kept))")
-    // Identity-level retention when the host passed the establish ledger through.
-    if let expected = ProcessInfo.processInfo.environment["EXPECTED_TX"], !expected.isEmpty {
-      let got = Set(ledger(kept).components(separatedBy: ","))
-      let want = Set(expected.components(separatedBy: ","))
-      XCTAssertEqual(got, want, "Retained transaction identities differ from the establish ledger; got \(got), want \(want)")
-    }
+    let got = Set(ledger(kept).components(separatedBy: ","))
+    let want = Set(expectedTx.components(separatedBy: ","))
+    XCTAssertEqual(got, want, "Retained transaction identities differ from the establish ledger; got \(got), want \(want)")
     let app = XCUIApplication()
     let row = try readPurchaseRow(app)
     print("PROBE-PURCHASE-ROW-AFTER-OVERLAY \(row)")
