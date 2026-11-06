@@ -99,6 +99,36 @@ iframe. Margins is 8 in storage and live props. Computed body side padding is
 an ineffective CSS rule. The existing resize-continuity requirements below
 remain in force when the viewport begins using the full available width.
 
+## Duo side-safe-area batch (#346): implemented, native verification pending
+
+The unchanged app built with SDK 27.1 exposes a wider native window and a
+trailing safe inset than its SDK 27.0 build. The baseline WebView spans the
+whole window and the side status/back controls visibly overlap Document text.
+The first repair uses current `react-native-safe-area-context` left/right
+insets, not a device-name check or the baseline's measured 84-point value.
+
+`ReadingView` pads its measured document area horizontally. Its `onLayout`
+therefore passes the usable width to the existing Reader and Margins path;
+renderer keys, settings and playback ownership stay unchanged. Applying the
+padding inside the held view keeps the same rule while it is parked above the
+navigator rather than making the portal's two destinations disagree.
+
+The absolutely positioned Player accounts for those same insets independently:
+its room begins/ends inside them, its row layout uses the usable width before
+applying the existing cap, and its collapsed Reading Button clears the right
+inset. A side-inset change also closes the short speed popover, even when the
+window size and usable width stay unchanged but the reserved side moves.
+`ReaderTitle` subtracts the side insets from its width allowance; UIKit still
+owns placement of the navigation items. The loading/error overlay also clears
+the side insets. Top/bottom placement is not redesigned in this batch.
+
+Host component checks cover right, left, asymmetric and zero insets, changing
+insets at a fixed window size, measured width propagation without remounting
+the renderer, and unchanged Font Size/Margins. They double native layout;
+actual inset delivery through the portal, WebView/iframe widths, native title
+placement, side-control avoidance and passage continuity require fresh native
+verification. Broader Duo acceptance remains open in design 0092 and #346.
+
 ## Earlier trial: limit the viewport, not the Document's body
 
 `src/app/layout-widths.ts` holds the initial point limits: reader and Library

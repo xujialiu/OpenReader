@@ -5,6 +5,7 @@ import { Player, type PlayerProps } from '../../src/app/player';
 import { DEFAULT_SETTINGS } from '../../src/app/settings';
 
 const dimensions = vi.hoisted(() => ({ width: 390, height: 844, fontScale: 1, scale: 3 }));
+const insets = vi.hoisted(() => ({ top: 0, right: 0, bottom: 34, left: 0 }));
 vi.mock('react-native', () => ({
   View: 'View', Text: 'Text', Pressable: 'Pressable', ScrollView: 'ScrollView',
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 0.5, absoluteFill: {} },
@@ -17,7 +18,7 @@ vi.mock('@expo/ui/swift-ui', () => {
   return { Host: host('Host'), RNHostView: host('RNHostView'),
     Popover: Object.assign(host('Popover'), { Trigger: host('Trigger'), Content: host('Content') }) };
 });
-vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 34, left: 0 }) }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => insets }));
 vi.mock('../../src/playback', () => import('../../src/playback/rate'));
 vi.mock('../../src/app/controls', () => ({
   INK: {}, useBorders: () => ({ line: 'grey' }), useAccent: () => ({ following: 'orange' }),
@@ -27,7 +28,10 @@ vi.mock('../../src/app/loading-spinner', () => ({ LoadingSpinner: 'LoadingSpinne
 vi.mock('../../src/app/reading-button', () => ({ ReadingButton: 'ReadingButton', READING_BUTTON_PLACE: {} }));
 vi.mock('../../src/app/sleep-timer-button', () => ({ SleepTimerButton: 'SleepTimerButton' }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-beforeEach(() => Object.assign(dimensions, { width: 390, height: 844, fontScale: 1 }));
+beforeEach(() => {
+  Object.assign(dimensions, { width: 390, height: 844, fontScale: 1 });
+  Object.assign(insets, { top: 0, right: 0, bottom: 34, left: 0 });
+});
 
 async function player() {
   const props: PlayerProps = {
@@ -76,6 +80,22 @@ describe('the capped Player measures its own width (#319)', () => {
 });
 
 describe('player speed popover geometry (#124)', () => {
+  it('closes when system side space changes or switches sides without a window resize (#346)', async () => {
+    const p = await player();
+    try {
+      await p.toggle();
+      insets.right = 84;
+      await p.update({});
+      expect(p.open()).toBe(false);
+      await p.toggle();
+      Object.assign(insets, { left: 84, right: 0 });
+      await p.update({});
+      expect(p.open()).toBe(false);
+      await p.toggle();
+      await p.update({});
+      expect(p.open()).toBe(true);
+    } finally { await p.unmount(); }
+  });
   it('opens, stays open on unchanged dimensions, and closes via the native dismissal', async () => {
     const p = await player();
     expect(p.open()).toBe(false);
