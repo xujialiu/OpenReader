@@ -19,15 +19,16 @@
 import { Host, Menu, RNHostView, Toggle, type ToggleProps } from '@expo/ui/swift-ui';
 import { accessibilityAddTraits, accessibilityElement, accessibilityLabel, disabled as nativeDisabled, menuOrder } from '@expo/ui/swift-ui/modifiers';
 import { Children, createContext, isValidElement, useContext, useMemo, useState, type ReactNode } from 'react';
-import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import type { ColorValue } from 'react-native';
+import { DynamicColorIOS, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type ReadingAccent } from './accent';
-import { Icon, type IconName } from './icon';
-import { NameText } from './name-text';
 import { FolderArtwork } from './folder-artwork';
-import { LIBRARY_ROW, libraryRowHeight } from './library-row-layout';
-import { TEXT, TEXT_EMPHASIZED } from './text-styles';
+import { Icon, type IconName } from './icon';
 import { LAYOUT_WIDTH } from './layout-widths';
+import { LIBRARY_ROW, libraryRowHeight } from './library-row-layout';
+import { NameText } from './name-text';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
 
 /**
  * One colour that is two, resolved by iOS rather than by React (ADR 0022).
@@ -231,8 +232,9 @@ const SETTINGS = {
  * and the lowest of them (Fish Audio's own voices) sits where the keyboard rises.
  */
 export function SettingsPage({ children }: { children: ReactNode }) {
+  const insets = useSafeAreaInsets();
   return (
-    <ScrollView style={styles.settingsPage} contentContainerStyle={styles.settingsBody}
+    <ScrollView style={[styles.settingsPage, { marginLeft: insets.left, marginRight: insets.right }]} contentContainerStyle={styles.settingsBody}
       keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" automaticallyAdjustKeyboardInsets>
       {children}
     </ScrollView>

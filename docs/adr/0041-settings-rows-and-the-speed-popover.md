@@ -23,6 +23,10 @@ them.
 - `SettingsPage`: the `ScrollView` every settings screen is, in the settings page
   colour, with `keyboardShouldPersistTaps="handled"`,
   `keyboardDismissMode="interactive"` and `automaticallyAdjustKeyboardInsets`.
+  For #346 it also insets its own frame by the current horizontal safe-area
+  margins, so its existing capped content is measured inside usable space.
+  Keyboard policy, content padding and ordinary zero-side-inset layout stay
+  unchanged; the side-inset correction requires native verification.
 - `SettingsGroup`: an optional title set as written, a card, and a footer that is
   a string (drawn as a `Footnote`) or nodes. Its separators are 1 pt views laid
   absolutely over the bottom of every row but the last, inset `SETTINGS.inset`
