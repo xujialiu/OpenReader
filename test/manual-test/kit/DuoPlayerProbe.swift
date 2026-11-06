@@ -23,7 +23,30 @@ final class DuoPlayerProbe: XCTestCase {
     add(attachment)
   }
 
+  // The popover can cover the Collapse button itself. A successful rate test
+  // must not leave that overlay as an invisible precondition for the next test.
+  private func dismissSpeedBeforeControls() -> Bool {
+    let slower = app.buttons["Slower"]
+    let faster = app.buttons["Faster"]
+    if slower.exists || faster.exists {
+      // Inside the reading page, outside the bottom-anchored bubble. The old
+      // y=0.04 point was in the ordinary iPhone's system status area.
+      app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).press(forDuration: 0.15)
+      let absent = NSPredicate(format: "exists == false")
+      let waits = [XCTNSPredicateExpectation(predicate: absent, object: slower),
+                   XCTNSPredicateExpectation(predicate: absent, object: faster)]
+      guard XCTWaiter.wait(for: waits, timeout: 5) == .completed else {
+        shoot("speed-popover-dismiss-precondition-failed")
+        XCTFail("PRECONDITION FAILED: speed popover still covers Player controls")
+        return false
+      }
+    }
+    print("PROBE-POPOVER-GONE-BEFORE-CONTROLS true")
+    return true
+  }
+
   func testCollapseExpandRoundTripClosedPose() throws {
+    guard dismissSpeedBeforeControls() else { return }
     let play = app.buttons["Play"]
     guard play.waitForExistence(timeout: 8) else {
       XCTFail("PRECONDITION FAILED: reader not open (no Play button); not launching")
@@ -86,13 +109,11 @@ final class DuoPlayerProbe: XCTestCase {
     XCTAssertTrue(afterFaster.waitForExistence(timeout: 6), "speed trigger label missing after Faster")
     print("PROBE-RATE after-faster=\(afterFaster.label)")
     XCTAssertTrue(afterFaster.label.hasSuffix("1.50 times"), "rate not restored: \(afterFaster.label)")
-    // dismiss by tapping outside the bubble (nav bar title area)
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04)).tap()
-    let gone = !app.buttons["Slower"].waitForExistence(timeout: 4)
-    print("PROBE-POPOVER-DISMISSED \(gone)")
+    XCTAssertTrue(dismissSpeedBeforeControls())
   }
 
   func testCollapseExpandInnerNoSideInset() throws {
+    guard dismissSpeedBeforeControls() else { return }
     let play = app.buttons["Play"]
     guard play.waitForExistence(timeout: 8) else {
       XCTFail("PRECONDITION FAILED: reader not open (no Play button); not launching")
@@ -135,19 +156,7 @@ final class DuoPlayerProbe: XCTestCase {
       XCTFail("PRECONDITION FAILED: reader not open (no Play button); not launching")
       return
     }
-    // a popover left open by a previous run covers the head row; dismiss it first
-    if app.buttons["Slower"].exists {
-      let speed = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Playback speed, 1.'")).firstMatch
-      if speed.exists { speed.tap() }
-      if app.buttons["Slower"].waitForExistence(timeout: 3) {
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04)).tap()
-      }
-      if app.buttons["Slower"].waitForExistence(timeout: 3) {
-        speed.tap() // third path: the anchor toggle
-      }
-      XCTAssertTrue(!app.buttons["Slower"].exists, "could not dismiss the open popover")
-      print("PROBE-POPOVER-DISMISSED-BEFORE-COLLAPSE true")
-    }
+    guard dismissSpeedBeforeControls() else { return }
     let collapse = app.buttons["Collapse the player"]
     guard collapse.waitForExistence(timeout: 6) else {
       XCTFail("PRECONDITION FAILED: no Collapse button (already collapsed?)")
@@ -191,7 +200,7 @@ final class DuoPlayerProbe: XCTestCase {
     XCTAssertTrue(afterFaster.waitForExistence(timeout: 6), "trigger label missing after Faster")
     print("PROBE-RATE after-faster=\(afterFaster.label)")
     XCTAssertTrue(afterFaster.label.hasSuffix("1.50 times"), "rate not restored: \(afterFaster.label)")
-    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04)).tap()
+    XCTAssertTrue(dismissSpeedBeforeControls())
   }
 
   func testMoreActionsOpensAndClosesDrawerClosedPose() throws {
