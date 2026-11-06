@@ -11,51 +11,72 @@ import XCTest
 //   DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer \
 //     bash test/manual-test/kit/run-probe.sh DuoPoseProbe SIMULATOR_UDID OUT_DIR
 //
-// The probe's precondition checks (volume, readiness) come from run-probe.sh.
-// The interaction's handler fires when it joins a hierarchy that provides
-// hinge updates (Apple's UIHingeInteraction documentation), which is why
-// adding it to the runner's root view answers at once.
+// Test contract: a missing window or an out-of-range hinge observation is a
+// FAILURE; no hinge on the hierarchy, an old OS, or a non-finite/unknown
+// observation is a distinct XCTSkip; a real observation prints
+// `PROBE-HINGE angle=<radians> status=<rawValue>` (0 unknown, 1 closed,
+// 2 partiallyOpen, 3 fullyOpen per the SDK 27.1 UIHinge.h) and passes once.
+// The interaction is removed from the view when the test ends.
 final class DuoPoseProbe: XCTestCase {
-  func testHingeState() {
-    if #available(iOS 27.1, *) {
-      let got = expectation(description: "hinge update")
-      var line = "no hinge update within 8 s"
-      DispatchQueue.main.async {
-        let scenes = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
-        let windows = scenes.flatMap({ $0.windows })
-        guard let window = windows.first(where: { $0.isKeyWindow }) ?? windows.first else {
-          line = "runner has no window"
+  func testHingeState() throws {
+    guard #available(iOS 27.1, *) else {
+      throw XCTSkip("UIHingeInteraction needs iOS 27.1")
+    }
+    let scenes = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+    let windows = scenes.flatMap({ $0.windows })
+    guard let window = windows.first(where: { $0.isKeyWindow }) ?? windows.first else {
+      XCTFail("runner has no window to attach UIHingeInteraction to")
+      return
+    }
+    let root = window.rootViewController?.view ?? window
+    let got = expectation(description: "hinge update")
+    var observation: String?
+    var settled = false
+    var interaction: UIHingeInteraction?
+    DispatchQueue.main.async {
+      let i = UIHingeInteraction { _, update in
+        guard !settled else { return } // one observation per run
+        guard let hinge = update.hinge else {
+          observation = "hinge null (no hinge on this hierarchy/device)"
+          settled = true
           got.fulfill()
           return
         }
-        let root = window.rootViewController?.view ?? window
-        let interaction = UIHingeInteraction { _, update in
-          guard let hinge = update.hinge else {
-            line = "hinge null (no hinge on this hierarchy/device)"
-            got.fulfill()
-            return
-          }
-          let degrees = hinge.angle * 180 / Double.pi
-          line = "hinge angle=\(String(format: "%.2f", hinge.angle)) rad (\(Int(degrees.rounded())) deg) status=\(hinge.status)"
+        let status = hinge.status.rawValue
+        guard hinge.angle.isFinite, (0...3).contains(status) else {
+          observation = "invalid hinge observation angle=\(hinge.angle) status=\(status)"
+          settled = true
           got.fulfill()
+          return
         }
-        root.addInteraction(interaction)
-        // keep the interaction alive past this closure
-        objc_setAssociatedObject(window, "duoHingeProbe", interaction, .OBJC_ASSOCIATION_RETAIN)
+        observation = "hinge angle=\(String(format: "%.2f", hinge.angle)) rad status=\(status)"
+        settled = true
+        got.fulfill()
       }
-      wait(for: [got], timeout: 8)
-      print("PROBE-HINGE \(line)")
-    } else {
-      print("PROBE-HINGE UIHingeInteraction needs iOS 27.1")
+      root.addInteraction(i)
+      interaction = i
     }
+    wait(for: [got], timeout: 8)
     DispatchQueue.main.async {
-      let screens = UIScreen.screens
-      let parts = screens.map { screen in
+      if let i = interaction { root.removeInteraction(i) }
+    }
+    guard let out = observation else {
+      XCTFail("no hinge observation recorded within 8 s")
+      return
+    }
+    if out.contains("null") || out.contains("invalid") {
+      throw XCTSkip("no usable hinge provided: \(out)")
+    }
+    print("PROBE-HINGE \(out)")
+    let screensDone = expectation(description: "screen observation")
+    DispatchQueue.main.async {
+      let parts = UIScreen.screens.map { screen in
         "bounds=\(screen.bounds) native=\(screen.nativeBounds) scale=\(screen.scale)"
       }
-      print("PROBE-SCREENS count=\(screens.count) " + parts.joined(separator: " | "))
+      print("PROBE-SCREENS count=\(UIScreen.screens.count) " + parts.joined(separator: " | "))
       print("PROBE-DEVICE idiom=\(UIDevice.current.userInterfaceIdiom.rawValue) orientation=\(UIDevice.current.orientation.rawValue)")
+      screensDone.fulfill()
     }
-    Thread.sleep(forTimeInterval: 0.5)
+    wait(for: [screensDone], timeout: 5)
   }
 }
