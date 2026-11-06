@@ -98,6 +98,10 @@ and what is committed is what was measured, never their text.
 
 ## Pitfalls
 
+- **An app-only XCTest screenshot after iPad rotation can be cropped against the wrong bounds, with a black band and missing controls.** `app.frame` and renderer reflow can still be correct. Capture `XCUIScreen.main.screenshot()` rather than `app.screenshot()` for the orientation check, and honor the image's EXIF orientation when inspecting it. The full-screen control distinguishes a capture defect from an app-layout defect; keep the original cropped attachment.
+
+- **A CDP readiness check immediately after launch can say `connected: none` before the app registers with Metro.** `ios_ready.py --timeout` bounds each subprocess; it does not wait for that startup prerequisite. First wait, with a fixed deadline, for exactly the intended device/app entry in `/json/list`, then run readiness in the same attempt directory. An absent first connection is not by itself a reason to reboot the device.
+
 - **A live resize recorder's full frame array can exceed the Debug Log's 2 KB line limit.** A successful eight-second silenced run then appears to fail with an unterminated JSON string during export. Summarize the retained in-page record before posting it; do not replay audio to recover an export. `settings/margins-following.py` uses bounded summaries. On the 11-inch iPad, a native return-handle drag can also stop at width 718 rather than full 820: measure the actual native window and use its new handle for the final drag instead of diagnosing an iframe-width bug from an assumed destination.
 
 - **Deleting `harness.json` does not reset the running harness's seen sequence.** When `hx.cjs` recreates a missing file it starts again at `seq: 1`; an app that already consumed 1 ignores the new command, leaving the previous probe answer in its log. Keep increasing the sequence during a run (an explicit fresh `seq` is supported), require a newly timestamped answer, and remove the file after the final command to prevent replay on relaunch.

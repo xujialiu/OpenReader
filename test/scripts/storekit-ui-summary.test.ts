@@ -1,7 +1,7 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { expect, it } from 'vitest';
+import { join } from 'node:path';
+import { afterEach, expect, it } from 'vitest';
 
 import { validate } from '../manual-test/purchase/validate-ui-summary.js';
 
@@ -29,8 +29,18 @@ const verify = (ids: string, modeLine = 'PROBE-MODE verify') => [
   '\t Executed 3 tests, with 2 tests skipped and 0 failures (0 unexpected) in 8.5 seconds',
 ].join('\n');
 
+const directories: string[] = [];
+const originalExpected = process.env.EXPECTED_TX;
+afterEach(() => {
+  for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+  if (originalExpected === undefined) delete process.env.EXPECTED_TX;
+  else process.env.EXPECTED_TX = originalExpected;
+});
+
 function writeTmp(content: string): string {
-  const file = join(mkdtempSync(join(tmpdir(), 'ui-summary-')), 'test.log');
+  const directory = mkdtempSync(join(tmpdir(), 'ui-summary-'));
+  directories.push(directory);
+  const file = join(directory, 'test.log');
   writeFileSync(file, content);
   return file;
 }
@@ -92,6 +102,18 @@ it('verify: changed transaction identities fail', () => {
   expect(result.ok).toBe(false);
   expect(result.problems.join(' ')).toContain('differs from EXPECTED_TX');
   delete process.env.EXPECTED_TX;
+});
+
+it.each([
+  (log: string) => log.replace(/^\s*Executed .*/m, ''),
+  (log: string) => log.replace('0 failures', '1 failures'),
+  (log: string) => log.replace('Executed 3 tests', 'Executed 0 tests'),
+  (log: string) => log.replace('2 tests skipped', '1 test skipped'),
+  (log: string) => log.replace(/^Test Case .*test03.*passed.*$/m, '  123 | test03RetainedPurchasesWithoutANewPurchase passed (8.2 seconds).'),
+  (log: string) => log.replace(/^Test Case .*test01.*skipped.*$/m, ''),
+])('verify refuses a missing, inconsistent or source-echo-only execution record', (damage) => {
+  process.env.EXPECTED_TX = goodIds;
+  expect(validate('verify', writeTmp(damage(verify(goodIds)))).ok).toBe(false);
 });
 
 it('verify: all-skipped modeless run fails', () => {

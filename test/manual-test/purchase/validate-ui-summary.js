@@ -18,24 +18,29 @@ function validate(mode, logPath) {
   const raw = fs.readFileSync(logPath, 'utf8');
   const line = (re) => raw.split('\n').find((l) => re.test(l)) ?? '';
   const modeMarker = line(/^PROBE-MODE /m);
-  const skipped = (raw.match(/skipped \(/g) ?? []).length;
-  const failed = (raw.match(/ failed \(/g) ?? []).length;
-  const executed = line(/^\s*Executed .* test/);
-  const summary = line(/Executed \d+ tests?.*failures/);
+  const methods = [...raw.matchAll(/^Test Case '?-\[[^\]]+ (\w+)\]'? (passed|failed|skipped) \(/gm)];
+  const ran = (name, status) => methods.filter((match) => match[1] === name && match[2] === status).length === 1;
+  const failed = methods.filter((match) => match[2] === 'failed').length;
+  const summaries = [...raw.matchAll(/^\s*Executed (\d+) tests?, with (?:(\d+) tests? skipped and )?(\d+) failures/gm)];
+  const summary = line(/^\s*Executed \d+ tests?.*failures/);
+  if (methods.length !== 3 || summaries.length === 0 || summaries.some((match) =>
+    Number(match[1]) !== 3 || Number(match[2] ?? 0) !== (mode === 'establish' ? 1 : 2) || Number(match[3]) !== 0)) {
+    problems.push('missing or inconsistent zero-failure execution summary');
+  }
 
   if (!/^Test (Suite|Case)/m.test(raw)) problems.push('no test activity in the log');
   if (mode === 'establish') {
     if (!/^PROBE-MODE establish$/m.test(raw)) problems.push(`establish marker missing (saw: ${modeMarker || 'none'})`);
-    if (!/test01BuyTrialAndSeeDaysLeft.*passed \(/.test(raw)) problems.push('test01 did not pass');
-    if (!/test02BuyUnlockAndSeeUnlocked.*passed \(/.test(raw)) problems.push('test02 did not pass');
+    if (!ran('test01BuyTrialAndSeeDaysLeft', 'passed')) problems.push('test01 did not pass');
+    if (!ran('test02BuyUnlockAndSeeUnlocked', 'passed')) problems.push('test02 did not pass');
     if (!/^PROBE-TX-LEDGER \[.+#id\d+/m.test(raw)) problems.push('no PROBE-TX-LEDGER captured');
-    if (/test03RetainedPurchasesWithoutANewPurchase\).*passed \(/.test(raw)) problems.push('test03 ran in establish mode');
+    if (!ran('test03RetainedPurchasesWithoutANewPurchase', 'skipped')) problems.push('test03 was not skipped in establish mode');
     if (/^PROBE-KEPT-TX /m.test(raw)) problems.push('verify-only marker present in establish run');
   } else if (mode === 'verify') {
     if (!/^PROBE-MODE verify$/m.test(raw)) problems.push(`verify marker missing (saw: ${modeMarker || 'none'})`);
-    if (/test01BuyTrialAndSeeDaysLeft.*passed \(/.test(raw) || /^PROBE-TRANSACTIONS-BEFORE /m.test(raw)) problems.push('a buying test executed in verify mode');
-    if (/test02BuyUnlockAndSeeUnlocked.*passed \(/.test(raw)) problems.push('test02 executed in verify mode');
-    if (!/test03RetainedPurchasesWithoutANewPurchase.*passed \(/.test(raw)) problems.push('test03 did not pass');
+    if (!ran('test01BuyTrialAndSeeDaysLeft', 'skipped') || /^PROBE-(?:TRANSACTIONS-BEFORE|TRANSACTIONS-AFTER|TX-LEDGER) /m.test(raw)) problems.push('a buying test executed in verify mode');
+    if (!ran('test02BuyUnlockAndSeeUnlocked', 'skipped')) problems.push('test02 was not skipped in verify mode');
+    if (!ran('test03RetainedPurchasesWithoutANewPurchase', 'passed')) problems.push('test03 did not pass');
     const kept = line(/^PROBE-KEPT-TX /m);
     if (!/^PROBE-KEPT-TX (?!0\b)\d+ \[.+#id\d+.+\]$/m.test(kept)) problems.push(`kept-transaction ledger missing/empty (${kept || 'none'})`);
     const expected = process.env.EXPECTED_TX;
@@ -47,11 +52,8 @@ function validate(mode, logPath) {
   } else {
     problems.push(`unknown mode ${mode}`);
   }
-  if (skipped > 0 && /with \d+ tests? skipped/.test(summary) && /3 tests skipped/.test(summary)) {
-    problems.push('every test skipped');
-  }
-  if (failed > 0) problems.push(`${failed} failing assertions recorded`);
-  if (/Executed 0 tests/.test(executed)) problems.push('zero tests executed');
+  if (methods.length > 0 && methods.every((match) => match[2] === 'skipped')) problems.push('every test skipped');
+  if (failed > 0) problems.push(`${failed} failing tests recorded`);
   return { ok: problems.length === 0, problems, modeMarker, summary };
 }
 

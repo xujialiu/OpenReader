@@ -7,7 +7,7 @@
 # verify mode, nonzero failing runs preserved). The simulator's volume is
 # checked here because no audio may sound while formal purchase UI runs.
 #
-#   bash test/manual-test/purchase/run-storekit-ui.sh WORKTREE UDID OUTDIR [MODE]
+#   bash test/manual-test/purchase/run-storekit-ui.sh WORKTREE UDID OUTDIR MODE
 #
 # MODE (establish|verify) is written into the scheme by set-scheme-env.rb; this
 # wrapper only checks it matches. Exit status: 0 validated pass; 1 validation
@@ -15,6 +15,7 @@
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 kit="$here/../kit"
+[[ $# -eq 4 ]] || { echo 'usage: run-storekit-ui.sh WORKTREE UDID OUTDIR establish|verify' >&2; exit 2; }
 wt=$1
 simulator=$2
 output=$3
@@ -26,6 +27,7 @@ bash "$kit/silence.sh" check "$simulator"
 
 stamp=$(date +%Y%m%d-%H%M%S)
 mkdir -p "$output"
+python3 "$kit/ios_ready.py" "$simulator" "$output/readiness" --timeout 20
 dd="$output/dd-$(basename "$wt")"
 scheme="$wt/ios/OpenReader.xcodeproj/xcshareddata/xcschemes/StoreKitUI.xcscheme"
 [[ -f $scheme ]] || { echo "BLOCKED: $scheme missing (add-storekit-ui-target.rb first)" >&2; exit 2; }
@@ -38,7 +40,7 @@ fi
 # The validator compares the kept ledger against the establish ledger recorded
 # in the scheme (verify mode requires it; establish ignores it).
 export EXPECTED_TX
-EXPECTED_TX=$(grep -o 'EXPECTED_TX" value="[^"]*"' "$scheme" | head -1 | sed -E 's/.*value="([^"]*)".*/\1/')
+EXPECTED_TX=$(grep -o 'EXPECTED_TX" value="[^"]*"' "$scheme" | head -1 | sed -E 's/.*value="([^"]*)".*/\1/' || true)
 if [ "$mode" = verify ] && [ -z "$EXPECTED_TX" ]; then
   echo "BLOCKED: verify run needs a nonempty EXPECTED_TX in the scheme (set-scheme-env.rb first)" >&2
   exit 2
@@ -78,10 +80,13 @@ xcrun xcresulttool get test-results summary --path "$output/result-$stamp-$mode.
 cat > "$output/check-summary-$stamp-$mode.js" <<'CHECKEOF'
 const fs = require('node:fs');
 const d = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-if (!['Passed', 'Failed'].includes(d.result)) { console.error('xcresult not completed'); process.exit(1); }
-if (Number(d.failedTests || 0) !== 0) { console.error('failed tests present'); process.exit(1); }
+const establish = process.argv[3] === 'establish';
+if (d.result !== 'Passed' || d.failedTests !== 0 ||
+    d.passedTests !== (establish ? 2 : 1) || d.skippedTests !== (establish ? 1 : 2)) {
+  console.error('xcresult is not a complete passing result for the requested phase'); process.exit(1);
+}
 CHECKEOF
-if ! node "$output/check-summary-$stamp-$mode.js" "$output/xcresult-summary-$stamp-$mode.json"; then
+if ! node "$output/check-summary-$stamp-$mode.js" "$output/xcresult-summary-$stamp-$mode.json" "$mode"; then
   echo "VALIDATE FAIL: completed xcresult summary check failed" >&2
   exit 1
 fi

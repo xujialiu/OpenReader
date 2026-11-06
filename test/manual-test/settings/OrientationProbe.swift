@@ -16,7 +16,7 @@ final class OrientationProbe: XCTestCase {
     sleep(3)
     let landscape = app.frame
     print("PROBE-FRAME-LANDSCAPE \(Int(landscape.width))x\(Int(landscape.height))")
-    let attachment = XCTAttachment(screenshot: app.screenshot())
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     attachment.lifetime = .keepAlways
     attachment.name = "landscape"
     add(attachment)
@@ -33,9 +33,9 @@ final class OrientationProbe: XCTestCase {
 /// host stages the walkthrough harness's `open` command before this run, so
 /// the single launch below mounts the Reader; the test never terminates or
 /// relaunches away from it. Real XCUIDevice rotation input; the reader's
-/// WKWebView frame is measured in both orientations (the iframe fills it),
-/// its rendered text count is printed, and screenshots are kept. The Reading
-/// Position comparison happens host-side from the persisted store.
+/// app frame is measured in both orientations; renderer logs and whole-screen
+/// captures establish the content separately. App-only captures can be cropped
+/// against the wrong rotated bounds. The Reading Position comparison is host-side.
 final class OrientationDocumentProbe: XCTestCase {
 
   /// The Reader screen's own controls: the Library back button and the `…`
@@ -71,7 +71,7 @@ final class OrientationDocumentProbe: XCTestCase {
     Thread.sleep(forTimeInterval: 2)
     let portrait = app.frame
     print("PROBE-DOC-PORTRAIT frame=\(Int(portrait.width))x\(Int(portrait.height))")
-    let shotPortrait = XCTAttachment(screenshot: app.screenshot())
+    let shotPortrait = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     shotPortrait.lifetime = .keepAlways
     shotPortrait.name = "doc-portrait"
     add(shotPortrait)
@@ -81,7 +81,7 @@ final class OrientationDocumentProbe: XCTestCase {
     XCTAssertTrue(readerReady(app), "the Reader did not survive landscape rotation")
     let landscape = app.frame
     print("PROBE-DOC-LANDSCAPE frame=\(Int(landscape.width))x\(Int(landscape.height))")
-    let shotLandscape = XCTAttachment(screenshot: app.screenshot())
+    let shotLandscape = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     shotLandscape.lifetime = .keepAlways
     shotLandscape.name = "doc-landscape"
     add(shotLandscape)
@@ -97,7 +97,7 @@ final class OrientationDocumentProbe: XCTestCase {
 
   @MainActor
   private func shoot(_ app: XCUIApplication, name: String) {
-    let attachment = XCTAttachment(screenshot: app.screenshot())
+    let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     attachment.lifetime = .keepAlways
     attachment.name = name
     add(attachment)
