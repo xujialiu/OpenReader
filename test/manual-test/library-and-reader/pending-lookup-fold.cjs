@@ -87,10 +87,10 @@ const dimensionsExpression = `(() => {
     if (!held) throw new Error('No real held lookup response within the control budget');
     report.beforeFold = held;
     const requestedAt = held.requests[0].startedAt;
-    if (held.now - requestedAt > 7000) throw new Error('Held response arrived too late for a valid fold/release control');
+    if (held.now - requestedAt > 2500) throw new Error('Held response arrived too late for a valid fold/release control');
     report.events.push({ action: 'fold-start', at: Date.now() });
     // One actual system action, under the caller's shared admission guard.
-    await run('bash', [path.resolve(foldScript)], { timeout: 4000, maxBuffer: 1024 * 1024 });
+    await run('bash', [path.resolve(foldScript)], { timeout: 6500, maxBuffer: 1024 * 1024 });
     report.events.push({ action: 'fold-command-complete', at: Date.now() });
     const geometryDeadline = Date.now() + 2000;
     while (Date.now() < geometryDeadline) {
@@ -103,10 +103,11 @@ const dimensionsExpression = `(() => {
     }
     await delay(200); // let the layout's React effects run, without waiting on XCTest export
     report.afterFold = await evaluate(stateExpression);
+    // Check timing FIRST: a late abort must never be called a fold defect.
+    if (report.afterFold.now - requestedAt >= 12000) throw new Error('Invalid control: exceeded the pre-timeout release budget');
     if (report.afterFold.aborted || report.afterFold.count !== 1 || !report.afterFold.waiting) {
-      throw new Error(`Held response did not survive the verified geometry change: ${JSON.stringify(report.afterFold)}`);
+      throw new Error(`Held response changed during a timely geometry control; cause requires audit: ${JSON.stringify(report.afterFold)}`);
     }
-    if (report.afterFold.now - requestedAt >= 12000) throw new Error('Control exceeded its pre-timeout release budget');
     report.release = await evaluate(fs.readFileSync(path.join(__dirname, 'lookup-fetch-gate-release.js'), 'utf8'));
     if (report.release.released !== 1 || report.release.aborted) throw new Error('The response was not released successfully');
     await delay(500);
