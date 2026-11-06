@@ -3,38 +3,38 @@
  * Folder it is in (#317). Immediate child folders, then Documents in their
  * existing recency order (#121).
  */
+
+import { useIsFocused } from '@react-navigation/native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useIsFocused } from '@react-navigation/native';
 import { GestureDetector } from 'react-native-gesture-handler';
-
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { type LibraryKey, LibraryKeys } from '../../modules/open-reader-library-keys';
 import { asDocumentId, type LibraryEntry } from '../core/document';
-import { directFolderCounts, folderAt, folderPath, folderSubtree, targetKey, type FolderId, type LibraryTarget } from '../core/folders';
+import { directFolderCounts, type FolderId, folderAt, folderPath, folderSubtree, type LibraryTarget, targetKey } from '../core/folders';
+import { formatBytes, occupied, removeDownloads, requestInventory } from '../offline/runtime';
 import { DocumentRow, FolderRow, HeaderButton, INK, Note } from './controls';
 import { pickDocument } from './document';
 import { useDocumentCover } from './document-cover';
-import { AddDrawer, confirmFolderDeletion, FolderActions, useMovePage } from './folder-actions';
 import { Drawer } from './drawer';
-import { useLibrarySelection } from './use-library-selection';
-import { libraryQuery, libraryRows, type LibraryRow as Row } from './library-search';
-import { useLibrarySearch } from './use-library-search';
-import { LibrarySearchField } from './library-search-field';
-import { LibraryKeys, type LibraryKey } from '../../modules/open-reader-library-keys';
-import { LibrarySelectionAction } from './library-selection-actions';
-import { useRowSweep } from './use-sweep';
+import { AddDrawer, confirmFolderDeletion, FolderActions, useMovePage } from './folder-actions';
 import { importDocument } from './import-document';
+import { LAYOUT_WIDTH } from './layout-widths';
 import { documentFile } from './library';
 import { folderSummary } from './library-row-layout';
-import type { ScreenProps } from './routes';
-import { useShell } from './routes';
-import { NO_PROVIDER_SENTENCE } from './settings';
+import { libraryQuery, libraryRows, type LibraryRow as Row } from './library-search';
+import { LibrarySearchField } from './library-search-field';
+import { LibrarySelectionAction } from './library-selection-actions';
 import { ReaderActions } from './reader-actions';
 import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
 import { useHeldReading } from './reading-host';
+import type { ScreenProps } from './routes';
+import { useShell } from './routes';
+import { NO_PROVIDER_SENTENCE } from './settings';
 import { TEXT_EMPHASIZED } from './text-styles';
-import { LAYOUT_WIDTH } from './layout-widths';
-import { formatBytes, occupied, removeDownloads, requestInventory } from '../offline/runtime';
+import { useLibrarySearch } from './use-library-search';
+import { useLibrarySelection } from './use-library-selection';
+import { useRowSweep } from './use-sweep';
 
 const QUOTATION = 90;
 function progressOf(entry: LibraryEntry, present: boolean): string {
@@ -223,7 +223,7 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
     return found;
   }, [library.entries]);
   const counts = useMemo(() => directFolderCounts(tree, library.entries.map((entry) => entry.id)), [tree, library.entries]);
-  return <View style={styles.screen}>
+  return <View style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]}>
     <LibraryKeys style={styles.keys} onKey={pressKey}
       find={focused && !selecting && !busy && !picking && !adding && !actions && !folderActions && !library.loading && !problem}
       escape={focused && (selecting ? !selectionLocked : search.active)} />
@@ -277,12 +277,14 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
     </GestureDetector>
     </View>
     </GestureDetector>
-    {selection.active ? <View pointerEvents="box-none" style={[styles.selectionActions, { bottom: actionBottom }]}
+    {selection.active ? <View pointerEvents="box-none" style={[styles.selectionRoom, { bottom: actionBottom, left: insets.left, right: insets.right }]}>
+    <View pointerEvents="box-none" style={styles.selectionActions}
       onLayout={(event) => setActionHeight(event.nativeEvent.layout.height)}>
       <LibrarySelectionAction action="Move" disabled={!selection.selected.length || selectionLocked || !!problem} onPress={() => { move.restart(); selection.openMove(); }} />
       <LibrarySelectionAction action="Delete" disabled={!selection.selected.length || selectionLocked || !!problem} working={selection.working} onPress={selection.deleteSelected} />
+    </View>
     </View> : null}
-    {held ? <View style={[styles.reading, selection.active && { bottom: actionBottom + actionHeight + 12 }]} pointerEvents="box-none">
+    {held ? <View style={[styles.reading, { right: READING_BUTTON_PLACE.right + insets.right }, selection.active && { bottom: actionBottom + actionHeight + 12 }]} pointerEvents="box-none">
       <ReadingButton playing={held.playing} buffering={held.buffering} label="Return to the reading"
         onPress={() => navigation.navigate('Reader', { id: held.id })} />
     </View> : null}
@@ -308,7 +310,8 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   keys: { position: 'absolute', width: 0, height: 0 },
   column: { width: '100%', maxWidth: LAYOUT_WIDTH.library, alignSelf: 'center' },
-  selectionActions: { position: 'absolute', width: '100%', maxWidth: LAYOUT_WIDTH.library, alignSelf: 'center', paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  selectionRoom: { position: 'absolute' },
+  selectionActions: { width: '100%', maxWidth: LAYOUT_WIDTH.library, alignSelf: 'center', paddingHorizontal: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   reading: { alignItems: 'flex-end', ...READING_BUTTON_PLACE },
   banner: { paddingHorizontal: 16, paddingTop: 12 },
   message: { flexDirection: 'row', alignItems: 'flex-start' },

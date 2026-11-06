@@ -15,9 +15,10 @@ vi.mock('@expo/ui/swift-ui', () => {
   const host = (name: string) => function Native({ children, ...props }: Record<string, unknown> & { children?: ReactNode }) {
     return createElement(name, props, children);
   };
-  return { Host: host('Host'), RNHostView: host('RNHostView'),
+  return { Host: host('Host'), Group: host('Group'), RNHostView: host('RNHostView'),
     Popover: Object.assign(host('Popover'), { Trigger: host('Trigger'), Content: host('Content') }) };
 });
+vi.mock('@expo/ui/swift-ui/modifiers', () => ({ frame: (value: unknown) => ({ frame: value }) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => insets }));
 vi.mock('../../src/playback', () => import('../../src/playback/rate'));
 vi.mock('../../src/app/controls', () => ({
@@ -91,7 +92,24 @@ describe('player speed popover geometry (#124)', () => {
       // full display behind the system rail. Native placement is tested on iOS.
       await p.update({ fontScale: 3.571 });
       const content = p.root().find((node) => String(node.type) === 'View' && node.props.accessibilityLabel === 'Playback speed');
-      expect(Object.assign({}, ...content.props.style).width).toBe(390 - left - right - 48);
+      expect(Object.assign({}, ...content.props.style).width).toBe('100%');
+      const size = p.root().findAll((node) => String(node.type) === 'Group')[0].props.modifiers[0].frame;
+      expect(size).toEqual({ minWidth: 0, idealWidth: 390 - left - right - 48, maxWidth: 390 - left - right - 48 });
+    } finally { await p.unmount(); }
+  });
+
+  it('lets the native popover constrain the content width instead of overflowing it at large text (#346)', async () => {
+    insets.right = 84;
+    const p = await player();
+    try {
+      await p.update({ width: 466, fontScale: 2.65 });
+      const content = p.root().findAll((node) => String(node.type) === 'Content')[0];
+      const host = content.findAll((node) => String(node.type) === 'RNHostView')[0];
+      expect(host.props.matchContents).toEqual({ vertical: true });
+      const body = host.find((node) => String(node.type) === 'View' && node.props.accessibilityLabel === 'Playback speed');
+      expect(Object.assign({}, ...body.props.style).width).toBe('100%');
+      const preferred = content.findAll((node) => String(node.type) === 'Group')[0].props.modifiers[0].frame;
+      expect(preferred).toEqual({ minWidth: 0, idealWidth: 302, maxWidth: 302 });
     } finally { await p.unmount(); }
   });
 

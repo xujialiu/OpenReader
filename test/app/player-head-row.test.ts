@@ -25,12 +25,12 @@ vi.mock('@expo/ui/swift-ui', () => {
     return createElement(name, props, children);
   };
   return {
-    Host: host('Host'), RNHostView: host('RNHostView'), Menu: ({ label, children, ...props }: Record<string, unknown> & { label?: ReactNode; children?: ReactNode }) => createElement('Menu', props, label, children), Toggle: host('Toggle'), Button: host('Button'), Divider: host('Divider'),
+    Host: host('Host'), Group: host('Group'), RNHostView: host('RNHostView'), Menu: ({ label, children, ...props }: Record<string, unknown> & { label?: ReactNode; children?: ReactNode }) => createElement('Menu', props, label, children), Toggle: host('Toggle'), Button: host('Button'), Divider: host('Divider'),
     Popover: Object.assign(host('Popover'), { Trigger: host('Trigger'), Content: host('Content') }),
   };
 });
 vi.mock('@expo/ui/swift-ui/modifiers', () => Object.fromEntries(
-  ['menuOrder', 'accessibilityElement', 'accessibilityLabel', 'accessibilityAddTraits'].map((name) => [name, (value: unknown) => ({ name, value })]),
+  ['menuOrder', 'accessibilityElement', 'accessibilityLabel', 'accessibilityAddTraits', 'frame'].map((name) => [name, (value: unknown) => ({ name, value })]),
 ));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => insets }));
 vi.mock('../../src/playback', () => import('../../src/playback/rate'));

@@ -49,7 +49,8 @@
  * Transport icons share their visual language with Zotero-TTS (design 0026).
  */
 
-import { Host, Popover, RNHostView } from '@expo/ui/swift-ui';
+import { Group, Host, Popover, RNHostView } from '@expo/ui/swift-ui';
+import { frame } from '@expo/ui/swift-ui/modifiers';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -517,11 +518,16 @@ function SpeedBubble({ rate, onRate, open, onOpen, width, height }: {
           </RNHostView>
         </Popover.Trigger>
         <Popover.Content>
-          <RNHostView matchContents>
-            <View style={[styles.bubble, { width: bubbleWidth }]} accessibilityLabel="Playback speed">
-              <Speed rate={rate} onRate={onRate} />
-            </View>
-          </RNHostView>
+          <Group modifiers={beside ? [frame({ minWidth: 0, idealWidth: bubbleWidth, maxWidth: bubbleWidth })] : []}>
+            {/* UIKit can grant less width beside the trigger than requested.
+                Take that width back from SwiftUI; only the wrapping height is
+                content-sized. A fixed RN width would overflow its native host. */}
+            <RNHostView matchContents={beside ? { vertical: true } : true}>
+              <View style={[styles.bubble, { width: beside ? '100%' : bubbleWidth }]} accessibilityLabel="Playback speed">
+                <Speed rate={rate} onRate={onRate} />
+              </View>
+            </RNHostView>
+          </Group>
         </Popover.Content>
       </Popover>
     </Host>

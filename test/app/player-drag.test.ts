@@ -28,9 +28,10 @@ vi.mock('@expo/ui/swift-ui', () => {
   const host = (name: string) => function Native({ children, ...props }: Record<string, unknown> & { children?: ReactNode }) {
     return createElement(name, props, children);
   };
-  return { Host: host('Host'), RNHostView: host('RNHostView'),
+  return { Host: host('Host'), Group: host('Group'), RNHostView: host('RNHostView'),
     Popover: Object.assign(host('Popover'), { Trigger: host('Trigger'), Content: host('Content') }) };
 });
+vi.mock('@expo/ui/swift-ui/modifiers', () => ({ frame: (value: unknown) => ({ frame: value }) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 34, left: 0 }) }));
 vi.mock('../../src/playback', () => import('../../src/playback/rate'));
 vi.mock('../../src/app/controls', () => ({
