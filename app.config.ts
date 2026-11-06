@@ -216,7 +216,9 @@ const config: ExpoConfig = {
   plugins: [
     'expo-sqlite',
     ['./plugins/with-release-variant.ts', { variant: BUILD.variant }],
-    // SDK 58 generates the single-scene lifecycle (ADR 0018); no custom scene plugin.
+    // SDK 58 owns the scene lifecycle (ADR 0018). This extends only its scene's
+    // orientation policy after positive hinge evidence; ordinary masks stay put.
+    './plugins/with-duo-scene-orientation.ts',
 
     /**
      * ADR 0019. Declares that this app opens EPUBs, which is what puts it in
