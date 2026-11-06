@@ -378,6 +378,21 @@ final class DuoLibraryProbe: XCTestCase {
     XCTAssertTrue(ok, "PRECONDITION FAILED: neither Library nor Reader on screen; not launching")
   }
 
+  /// Precondition-free single-point tap for non-continuity navigation (e.g.
+  /// Settings screens). The caller owns the app-state assertions.
+  func testTapPointFree() {
+    let tapsRaw = ProcessInfo.processInfo.environment["DUO_TAPS"] ?? "[]"
+    guard let data = tapsRaw.data(using: .utf8),
+          let taps = try? JSONSerialization.jsonObject(with: data) as? [[CGFloat]], taps.count >= 1 else {
+      XCTFail("PRECONDITION FAILED: DUO_TAPS must be [[x,y]]")
+      return
+    }
+    let s = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+    s.withOffset(CGVector(dx: taps[0][0], dy: taps[0][1])).tap()
+    sleep(2)
+    print("PROBE-TAP-POINT-FREE done at \(taps[0])")
+  }
+
   func testCancelSelection() {
     ensureLibrary()
     let cancel = app.buttons["Cancel"]
