@@ -69,9 +69,18 @@ horizontal safe insets. With a side reservation, `SpeedBubble` instead requests
 `leading` attachment and a `trailing` arrow, toward the interior of the Player,
 using Expo UI's existing native Popover props. Content width is capped against
 window width minus both horizontal insets and the existing 48-point allowance.
+At large accessibility text sizes, UIKit can grant less width beside the trigger
+than the requested content width. A fixed-width RN child with `matchContents`
+on both axes then overflows the narrower native content view. The side-inset
+branch now uses a flexible SwiftUI `frame` (zero minimum, requested ideal and
+maximum width) around `RNHostView matchContents={{ vertical: true }}`. Its RN
+child fills the granted width and the existing wrapping stepper determines the
+height. The zero-side-inset branch retains the earlier sizing behavior.
+
 The stepper, trigger and dismissal behavior stay unchanged. Component tests
-check the props and usable-width cap; only native frame/screenshot and real
-Slower/Faster checks can establish that the system actually contains the bubble.
+check the sizing contract and usable-width cap; only native frame/screenshot
+and real Slower/Faster checks can establish that both the chrome and content
+stay visible at ordinary and accessible sizes.
 
 ## The facts it was built on
 

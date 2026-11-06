@@ -1,13 +1,14 @@
 import { createElement, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LibraryScreen } from '../../src/app/library-screen';
+import type { ScreenProps } from '../../src/app/routes';
 import { asDocumentId, type LibraryEntry } from '../../src/core/document';
 import type { FolderTree } from '../../src/core/folders';
-import type { ScreenProps } from '../../src/app/routes';
-import { LibraryScreen } from '../../src/app/library-screen';
 
 const shell = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 const sweeping = vi.hoisted(() => ({ enabled: false, refuse: false }));
+const insets = vi.hoisted(() => ({ top: 0, bottom: 0, left: 0, right: 0 }));
 const hosts = vi.hoisted(() => async (...names: string[]) => {
   const { createElement: element } = await import('react');
   return Object.fromEntries(names.map((name) => [name, ({ children, ...props }: Record<string, unknown> & { children?: ReactNode }) => element(name, props, children)]));
@@ -23,7 +24,7 @@ vi.mock('react-native', async () => {
   };
 });
 vi.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
-vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ bottom: 0 }) }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => insets }));
 vi.mock('react-native-gesture-handler', () => hosts('GestureDetector'));
 vi.mock('../../src/app/routes', () => ({ useShell: () => shell.current }));
 vi.mock('../../src/app/controls', async () => ({ ...await hosts('DocumentRow', 'FolderRow', 'HeaderButton', 'Note'), INK: {}, useAccent: () => ({ reading: '#345678' }) }));
@@ -60,6 +61,7 @@ let entries: LibraryEntry[];
 let tree: FolderTree;
 beforeEach(() => {
   sweeping.refuse = false;
+  Object.assign(insets, { top: 0, bottom: 0, left: 0, right: 0 });
   vi.stubGlobal('requestAnimationFrame', () => 1); vi.stubGlobal('cancelAnimationFrame', vi.fn());
   entries = [entry('3', 'Three Body Problem'), entry('2', '三体'), entry('1', 'Three Body Problem')];
   tree = { version: 1, current: 'inner', folders: [
@@ -123,6 +125,27 @@ async function open(at: string | null = 'inner') {
 }
 
 describe('Library Search through the real page and actions Drawer (#332, #339)', () => {
+  it('keeps the list, search and selected actions inside live horizontal safe areas (#346)', async () => {
+    const page = await open();
+    try {
+      await page.search();
+      await page.type('body');
+      await page.select();
+      // Retain the same mounted search/selection through inset-only changes.
+      for (const [left, right] of [[0, 84], [84, 0], [20, 44], [0, 0]]) {
+        Object.assign(insets, { left, right });
+        await page.update();
+        const style = (value: unknown) => Object.assign({}, ...[value].flat(Infinity));
+        expect(style(page.nodes('View')[0].props.style)).toMatchObject({ paddingLeft: left, paddingRight: right });
+        const action = page.nodes('LibrarySelectionAction')[0];
+        const ancestors = [];
+        for (let node = action.parent; node; node = node.parent) ancestors.push(style(node.props.style));
+        expect(ancestors).toContainEqual(expect.objectContaining({ position: 'absolute', left, right }));
+        expect(page.field()!.props.query).toBe('body');
+        expect(page.items('right')).toMatchObject([{ label: 'Cancel' }]);
+      }
+    } finally { await page.close(); }
+  });
   it('draws `…` as a native bar item, so pressing it never reaches the list\'s scroll-to-top', async () => {
     const page = await open();
     // A Folder page: the phone's back arrow on the left, `…` on the right.
