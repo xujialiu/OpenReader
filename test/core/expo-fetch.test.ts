@@ -5,8 +5,8 @@ import { pin } from '../structural';
 /** Native code cannot execute in Vitest. Pin each terminal-state branch, not a
  * whole-file match that the other reader could satisfy. Device tests exercise
  * real URLSession failures before and during consumption (#203). */
-const source = readFileSync('node_modules/expo/ios/Fetch/ExpoFetchModule.swift', 'utf8');
-it('compiles the patched Expo pod instead of substituting an unpatched prebuilt framework', () => {
+const source = readFileSync('node_modules/expo/ios/Expo/Fetch/ExpoFetchModule.swift', 'utf8');
+it('compiles the inspected Expo source rather than substituting a prebuilt framework', () => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   expect(pkg.expo?.autolinking?.ios?.buildFromSource).toContain('expo');
 });

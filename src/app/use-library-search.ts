@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { FlatList, NativeScrollEvent, NativeSyntheticEvent, TextInput } from 'react-native';
+import type { FlatList, NativeScrollEvent, NativeSyntheticEvent, TextInputInstance } from 'react-native';
 import type { DocumentId } from '../core/document';
 import type { ScreenProps } from './routes';
 import { libraryQuery, type LibraryRow } from './library-search';
@@ -19,7 +19,7 @@ import { libraryQuery, type LibraryRow } from './library-search';
  */
 export function useLibrarySearch(navigation: ScreenProps<'Library' | 'Folder'>['navigation'], routeKey: string) {
   const [state, setState] = useState({ active: false, query: '' });
-  const field = useRef<TextInput>(null);
+  const field = useRef<TextInputInstance>(null);
   const list = useRef<Pick<FlatList<LibraryRow>, 'scrollToOffset'>>(null);
   const live = useRef({
     active: false, query: '', y: 0, inset: 0, browseY: 0, resultY: 0,

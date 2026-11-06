@@ -837,7 +837,7 @@ export function ReadingView({
   const watched = useRef({ line: '', ticks: 0 });
   useEffect(() => {
     const timer = setInterval(() => {
-      const line = statusLine(status, AppState.currentState);
+      const line = statusLine(status, AppState.currentState ?? 'unknown');
       watched.current.ticks += 1;
       if (line === watched.current.line && watched.current.ticks % 10 !== 0) return;
       watched.current.line = line;
@@ -855,7 +855,7 @@ export function ReadingView({
   useEffect(() => {
     if (!DEBUG_MODE) return undefined;
     return onDebugNote((time) => {
-      hlog(statusLine(status, AppState.currentState));
+      hlog(statusLine(status, AppState.currentState ?? 'unknown'));
       snapshot(`Debug Note ${time}`);
     });
   }, [status, snapshot]);

@@ -86,7 +86,7 @@ function lockScreen(): typeof NowPlayingModule {
   if (Platform.OS !== 'ios') {
     /**
      * Android is deliberately not built, and this throws rather than doing
-     * nothing, in the house style of `plugins/with-ui-scene-lifecycle.ts`: the
+     * nothing, following the fail-closed rule recorded in ADR 0018: the
      * symptom of a silent no-op here is a lock screen with no controls on it,
      * which no log line reports and which looks exactly like a lock screen that
      * is merely broken.

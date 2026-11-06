@@ -153,7 +153,7 @@ export async function identifyFile(source: File): Promise<AddedDocument> {
         size: source.size,
         read: (offset, length) => {
           handle.offset = offset;
-          return handle.readBytes(length);
+          return handle.readBytesSync(length);
         },
       },
       'epub',

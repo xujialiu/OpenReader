@@ -4,7 +4,7 @@ import { pin } from '../structural';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const swift = read('../../modules/open-reader-library-keys/ios/OpenReaderLibraryKeysModule.swift').replace(/\/\/[^\n]*/g, '');
-const patch = read('../../patches/react-native-screens+4.26.2.patch');
+const patch = read('../../patches/react-native-screens+4.30.1.patch');
 const added = patch.split('\n').filter((line) => line.startsWith('+') && !line.startsWith('+++')).map((line) => line.slice(1)).join('\n');
 
 // The key target is found by selector, so its two Objective-C names are the

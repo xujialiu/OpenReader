@@ -42,7 +42,7 @@ Reading 220,092 bytes instead of 34,453,009 is the entire point, and a function
 taking the whole file's `Uint8Array` would have thrown that away one line before
 it was called. `zip.ts` says why this shape and not the three others considered.
 
-It is synchronous because `FileHandle.readBytes` is, and a test implements it
+It is synchronous because `FileHandle.readBytesSync` is, and a test implements it
 over a `Uint8Array` in four lines (`bytesAsArchive`), so the range arithmetic the
 device runs is the range arithmetic the tests run.
 
@@ -52,7 +52,7 @@ No end-of-central-directory record; ZIP64, in the end record or in a member's
 size; a split archive; a directory that does not end where the end record says;
 a member record with no header, or one that runs past the directory; a count that
 does not match the records; a NUL in a member name; **a reader that returns fewer
-bytes than it was asked for** — `readBytes` is `read(upToCount:)` and is
+bytes than it was asked for** — `readBytesSync` is `read(upToCount:)` and is
 documented to.
 
 None of them falls back to hashing the file. ADR 0004: "a silent fallback would

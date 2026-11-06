@@ -92,7 +92,9 @@ Xcode Debug/Release optimization does not change the selected role.
 ## First installation or native changes: build a Debug simulator app
 
 Read the [Expo SDK 57 documentation](https://docs.expo.dev/versions/v57.0.0/)
-first.
+required by `AGENTS.md` and the [SDK 58 documentation](https://docs.expo.dev/versions/v58.0.0/)
+for the installed dependency set. SDK 58 generates the single-scene lifecycle;
+do not restore the retired custom scene plugin.
 Install the repository dependencies. Run the following only when the native
 directory does not exist or the relevant configuration needs to be regenerated:
 

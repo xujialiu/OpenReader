@@ -71,7 +71,7 @@ vi.mock('expo-file-system', () => {
     textSync() {
       return world.files.get(this.uri) ?? '';
     }
-    write(text: string, options?: { append?: boolean }) {
+    writeSync(text: string, options?: { append?: boolean }) {
       world.files.set(this.uri, (options?.append ? (world.files.get(this.uri) ?? '') : '') + text);
     }
     delete() {

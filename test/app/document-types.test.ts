@@ -13,8 +13,8 @@ import withEpubDocumentTypes from '../../plugins/with-epub-document-types';
  * TypeScript against a plain object, so unlike the rest of `src/app/` it can be
  * run here at all.
  *
- * Both refusals are tested as well as both writes. They are the house style of
- * `plugins/with-ui-scene-lifecycle.ts` — every edit fails the prebuild if what
+ * Both refusals are tested as well as both writes. They follow ADR 0018's
+ * fail-closed config-plugin rule — every edit fails the prebuild if what
  * it expects is not there — and a refusal nobody has watched fire is a comment.
  */
 

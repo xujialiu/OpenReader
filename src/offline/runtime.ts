@@ -1465,7 +1465,7 @@ async function loadPlan(
               size: file.size,
               read: (offset, length) => {
                 handle.offset = offset;
-                return handle.readBytes(length);
+                return handle.readBytesSync(length);
               },
             }),
           );

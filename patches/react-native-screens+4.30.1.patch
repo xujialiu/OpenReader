@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.h b/node_modules/react-native-screens/ios/RNSScreen.h
-index b1f482c..b4c2734 100644
+index fd9ecff..ea7e26b 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.h
 +++ b/node_modules/react-native-screens/ios/RNSScreen.h
 @@ -54,6 +54,13 @@ NS_ASSUME_NONNULL_BEGIN
@@ -17,10 +17,10 @@ index b1f482c..b4c2734 100644
  @end
  
 diff --git a/node_modules/react-native-screens/ios/RNSScreen.mm b/node_modules/react-native-screens/ios/RNSScreen.mm
-index 9b66012..0148c87 100644
+index 049fd22..68606a5 100644
 --- a/node_modules/react-native-screens/ios/RNSScreen.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreen.mm
-@@ -1404,8 +1404,22 @@ + (void)load
+@@ -1452,8 +1452,22 @@ + (void)load
  
  #pragma mark - RNSScreen
  
@@ -41,9 +41,9 @@ index 9b66012..0148c87 100644
 +  __weak UIView *_openReaderLibraryKeyTarget;
 +#endif
    CGRect _lastViewFrame;
-   RNSScreenView *_initialView;
    UIView *_fakeView;
-@@ -1433,6 +1447,100 @@ - (instancetype)initWithView:(UIView *)view
+   CADisplayLink *_animationTimer;
+@@ -1481,6 +1495,100 @@ - (instancetype)initWithView:(UIView *)view
    return self;
  }
  
@@ -145,11 +145,11 @@ index 9b66012..0148c87 100644
  - (void)viewWillAppear:(BOOL)animated
  {
 diff --git a/node_modules/react-native-screens/ios/RNSScreenStack.mm b/node_modules/react-native-screens/ios/RNSScreenStack.mm
-index 192f5d2..3cac22e 100644
+index 5da1196..11ecdc0 100644
 --- a/node_modules/react-native-screens/ios/RNSScreenStack.mm
 +++ b/node_modules/react-native-screens/ios/RNSScreenStack.mm
-@@ -41,6 +41,33 @@ @interface RNSScreenStackView () <UINavigationControllerDelegate,
- @implementation RNSNavigationController
+@@ -64,6 +64,33 @@ - (instancetype)init
+ }
  
  #if !TARGET_OS_TV
 +// OpenReader (#332, #339): this controller is on the responder path of
@@ -182,7 +182,7 @@ index 192f5d2..3cac22e 100644
  - (UIViewController *)childViewControllerForStatusBarStyle
  {
    return [self topViewController];
-@@ -574,6 +601,39 @@ - (void)setModalViewControllers:(NSArray<UIViewController *> *)controllers
+@@ -662,6 +689,39 @@ - (void)setModalViewControllers:(NSArray<UIViewController *> *)controllers
    finish();
  }
  
@@ -222,7 +222,7 @@ index 192f5d2..3cac22e 100644
  - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
  {
    // when there is no change we return immediately
-@@ -669,7 +729,10 @@ - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
+@@ -757,7 +817,10 @@ - (void)setPushViewControllers:(NSArray<UIViewController *> *)controllers
    } else {
      // change wasn't on the top of the stack. We don't need animation.
      [_controller setViewControllers:controllers animated:NO];

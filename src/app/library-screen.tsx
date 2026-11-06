@@ -268,8 +268,8 @@ export function LibraryScreen({ navigation, route }: ScreenProps<'Library' | 'Fo
           {library.dismissNote ? <HeaderButton icon="close" label="Dismiss Library message" onPress={library.dismissNote} /> : null}
         </View> : null}
         {busy && !selection.working ? <Note>Deleting folder…</Note> : null}
-      </View> : null}
-      ListEmptyComponent={library.loading ? null : <View style={styles.empty}>
+      </View> : undefined}
+      ListEmptyComponent={library.loading ? undefined : <View style={styles.empty}>
         <Text style={styles.emptyTitle}>{searching ? 'No documents found' : folder !== null ? 'No documents or folders yet' : 'Library is empty'}</Text>
         {!searching && settings.enabledProviders.length === 0 ? <Note attention>{NO_PROVIDER_SENTENCE}</Note> : null}
       </View>}

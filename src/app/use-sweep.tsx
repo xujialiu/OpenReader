@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { View, type CellRendererProps, type FlatList, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { useEffect, useState, type ComponentProps } from 'react';
+import { View, type FlatList, type FlatListProps, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
 import type { Chapter } from '../offline/model';
 import { beginSweep, edgeSpeed, rowAt, rowChapters, sweepTo, type Extent, type Sweep } from './range-selection';
@@ -177,7 +177,7 @@ class SweepController<T> {
  * controller learns that a finger came down (`guard`).
  */
 function recordingCell<T>(extents: Map<string, Extent>, touched: () => void) {
-  return function RecordingCell({ item: _item, onLayout, cellKey, index: _index, ...cell }: CellRendererProps<T>) {
+  return function RecordingCell({ item: _item, onLayout, cellKey, index: _index, ...cell }: ComponentProps<NonNullable<FlatListProps<T>['CellRendererComponent']>>) {
     useEffect(() => () => { extents.delete(cellKey); }, [cellKey]);
     return <View {...cell} onTouchStart={touched} onLayout={(event: LayoutChangeEvent) => {
       extents.set(cellKey, { top: event.nativeEvent.layout.y, height: event.nativeEvent.layout.height });

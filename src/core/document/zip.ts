@@ -23,7 +23,7 @@
  * `FileHandle` — and a test implements it over a `Uint8Array` in four lines, so
  * the range arithmetic the device runs is the range arithmetic the tests run.
  *
- * It is **synchronous** because `FileHandle.readBytes` is
+ * It is **synchronous** because `FileHandle.readBytesSync` is
  * (`expo-file-system/ios/FileSystemFileHandle.swift`, `read(upToCount:)`), and
  * making it a promise would make naming a Document a promise for no reason —
  * the same argument `sha256.ts` gives for not wanting `crypto.subtle`.

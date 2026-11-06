@@ -2,15 +2,22 @@
 status: accepted
 ---
 
-# UIScene adoption is a config plugin of ours
+# UIScene adoption follows the upstream template
 
-iOS 27 asserts at launch unless the app adopts the scene-based life cycle. Expo
-SDK 57.0.24's prebuild template does not adopt it, so a freshly prebuilt
-OpenReader builds, installs, and is killed before it runs.
-`plugins/with-ui-scene-lifecycle.ts` adopts it, in three edits to the generated
-project.
+For #345, Expo SDK 58 supplies the single-scene manifest, factory-provider
+conformance and compiled `SceneDelegate.swift` that the custom plugin supplied
+on SDK 57. The custom plugin and its config entry are retired; keeping them
+would deliberately fail prebuild on the upstream manifest. Multiple scenes
+remain disabled. The template regression check covers all three pieces,
+including the Sources build-phase entry; generated-project inspection and
+native launch, import and lifecycle checks remain separate verification gates.
 
-## What is actually missing upstream
+The account below records why SDK 57.0.24 needed the plugin. It is not a claim
+that the same gap remains in SDK 58, or that native SDK 58 verification has
+already passed. Keeping the failure mechanisms here explains why a manifest
+alone is not sufficient.
+
+## What was missing in SDK 57.0.24
 
 Expo has already written the difficult part. The Expo pod ships
 `ExpoAppSceneDelegate`, which builds the `UIWindow` from the connecting
@@ -87,9 +94,10 @@ other signal at all. There is no JavaScript stack, no Metro output and no Expo
 error — the entire evidence is one symbol name in frame 0 of a crash report, and
 a macOS "quit unexpectedly" dialog. Against a failure that invisible, a build
 that stops is the only message that arrives. The cost is a broken build on the
-day Expo fixes this upstream, and on that day the correct action is to delete
-this plugin, its line in app.config.ts and this ADR — which is what the error
-text says.
+day Expo fixes this upstream, and on that day the correct action is to retire
+this plugin and its line in app.config.ts. The original error also instructed
+deletion of this ADR; the migration retains the historical failure evidence
+and replaces its current decision instead.
 
 **Both halves of edit 3 are required and only one of them is visible.** A
 `SceneDelegate.swift` written to disk but not added to the target's Sources build
@@ -105,10 +113,11 @@ path-resolved plugin through plain `require`, so `app.config.ts` opens with
 plugin outside `npm run typecheck` — cheaper, but this file's failure mode is a
 launch-time crash with no message, which is the last place to give up a compiler.
 
-**test/app-config.test.ts asserts the plugin is still listed.** It is one line
-in a config, it is not exercised by anything that runs under Node, and removing
-it breaks the app completely at a moment — a native build — far from where the
-line was deleted.
+**The original config test asserted the plugin was listed.** On SDK 58,
+`test/app-config.test.ts` instead checks the installed upstream template's
+single-scene manifest, factory conformance, scene delegate and Sources entry,
+and that the conflicting custom plugin is absent. Native execution is still
+not established by a Node test.
 
 ## Verified
 

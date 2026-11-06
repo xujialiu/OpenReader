@@ -198,7 +198,7 @@ describe('readCentralDirectory', () => {
   });
 
   /**
-   * `FileHandle.readBytes` is `read(upToCount:)`
+   * `FileHandle.readBytesSync` is `read(upToCount:)`
    * (`expo-file-system/ios/FileSystemFileHandle.swift`), which is documented to
    * return fewer bytes than asked. A short read quietly digested would name the
    * book something else, so the length of every range is checked.

@@ -23,7 +23,7 @@ vi.mock('expo-file-system', () => ({
       if (disk.readFailure && this.uri.endsWith('/library.json')) throw new Error('Read refused');
       return disk.files.get(this.uri);
     }
-    write(text: string) { disk.files.set(this.uri, text); }
+    writeSync(text: string) { disk.files.set(this.uri, text); }
   },
 }));
 vi.mock('../../modules/open-reader-offline', () => ({ offlineNative: {

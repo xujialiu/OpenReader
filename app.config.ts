@@ -1,8 +1,8 @@
 /**
  * Registers the TypeScript loader that Expo uses to require the local config
- * plugin below. Expo reads this file itself, but a plugin it resolves from a
+ * plugins below. Expo reads this file itself, but a plugin it resolves from a
  * path is loaded through plain `require`, which cannot read `.ts` — so without
- * this line `./plugins/with-ui-scene-lifecycle.ts` is simply not found.
+ * this line local TypeScript config plugins cannot be loaded.
  *
  * It must stay above every other import: the loader has to be registered before
  * anything tries to resolve a TypeScript file through it — and `./app-name`
@@ -45,7 +45,7 @@ const BUILD = buildIdentity(APP_VERSION, resolveBuildVariant({
 /**
  * ADR 0001, "The deployment target is iOS 17.2, not the platform minimum".
  *
- * Expo SDK 57 will run on 16.4; this is higher on purpose. The CSS Custom
+ * Expo SDK 58 will run on 16.4; this is higher on purpose. The CSS Custom
  * Highlight API, which ADR 0005 uses to highlight a word without touching the
  * DOM, arrived in Safari 17.2. Under a 16.4 floor it would need a fallback
  * that wraps each word in an element — the per-word DOM mutation ADR 0005
@@ -108,7 +108,7 @@ const config: ExpoConfig = {
     /**
      * #319, ADR 0085. iPhone stays portrait; Expo's tablet configuration adds
      * all four iPad orientations independently. Multitasking also permits a
-     * resizable iPad-app window on Apple silicon Macs. The scene plugin still
+     * resizable iPad-app window on Apple silicon Macs. Expo's scene manifest still
      * declares one scene: a resizable window is not multiple app windows.
      */
     supportsTablet: true,
@@ -216,26 +216,7 @@ const config: ExpoConfig = {
   plugins: [
     'expo-sqlite',
     ['./plugins/with-release-variant.ts', { variant: BUILD.variant }],
-    /**
-     * ADR 0018. Adopts the UIScene life cycle, without which iOS 27 kills the
-     * app at launch before any JavaScript runs — every other entry in this list
-     * is moot until this one has run. Expo SDK 57.0.24 ships the scene delegate
-     * in its own pod and wires it up nowhere; the plugin is three edits to the
-     * generated project that do that.
-     *
-     * It takes no options on purpose. There is one correct way to adopt the
-     * scene life cycle and nothing here a reader should be choosing between.
-     *
-     * Delete this line and the plugin together once Expo's prebuild template
-     * adopts the scene life cycle itself. Nothing has to be remembered for that
-     * to happen: each of the plugin's three edits asserts that the generated
-     * project still looks the way it expects and **fails the prebuild** when it
-     * does not, so the day Expo changes the template is the day the build stops
-     * and says so. A warning would have been the wrong tool — a prebuild prints
-     * hundreds of lines, and the failure being guarded against is a launch-time
-     * crash whose entire signal is one symbol name in a crash report.
-     */
-    './plugins/with-ui-scene-lifecycle.ts',
+    // SDK 58 generates the single-scene lifecycle (ADR 0018); no custom scene plugin.
 
     /**
      * ADR 0019. Declares that this app opens EPUBs, which is what puts it in
@@ -245,7 +226,7 @@ const config: ExpoConfig = {
      *
      * Two Info.plist keys and no options: there is one correct declaration for a
      * type the system already knows, and nothing here a reader should be
-     * choosing between. Like the plugin above, each edit **fails the prebuild**
+     * choosing between. Each edit **fails the prebuild**
      * if something else has written the key, because the symptom of getting it
      * wrong is the app being absent from a list, which no log line reports.
      */

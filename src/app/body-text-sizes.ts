@@ -49,7 +49,7 @@ export function writeBodyTextSize(id: DocumentId, px: number): void {
   const value = JSON.stringify({ version: 1, sizes: { ...readAll(), [id]: px } });
   try {
     if (offlineNative) offlineNative.writeJson(file().uri, value);
-    else file().write(value);
+    else file().writeSync(value);
   } catch {
     // Not kept, and counted again on the next open: see the failure policy above.
   }

@@ -1,7 +1,7 @@
 import { Button, Capsule, Host } from '@expo/ui/swift-ui';
 import { accessibilityLabel, buttonBorderShape, buttonStyle, controlSize, disabled as nativeDisabled, foregroundStyle, glassEffect, labelStyle } from '@expo/ui/swift-ui/modifiers';
 import { useContext, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { Platform, Pressable, StyleSheet, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, TextInput, View, type StyleProp, type TextInputInstance, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { INK, SchemeContext, useAccent } from './controls';
@@ -70,7 +70,7 @@ const BLUR_WAIT = 150;
  * field nor the close control answering.
  */
 export function LibrarySearchField({ open, animate, field, query, locked, onChangeText, onClose, style }: {
-  open: boolean; animate: boolean; field: RefObject<TextInput | null>; query: string; locked: boolean;
+  open: boolean; animate: boolean; field: RefObject<TextInputInstance | null>; query: string; locked: boolean;
   onChangeText(text: string): void; onClose(): void; style?: StyleProp<ViewStyle>;
 }) {
   const scheme = useContext(SchemeContext);

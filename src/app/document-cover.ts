@@ -23,11 +23,11 @@ function coverOf(entry: Pick<LibraryEntry, 'id' | 'format'>): string | null {
   try {
     const cover = readDocumentCover({ size: file.size, read: (offset, length) => {
       handle.offset = offset;
-      return handle.readBytes(length);
+      return handle.readBytesSync(length);
     } });
     if (!cover) { remembered.set(entry.id, null); return null; }
     const target = new File(dir, `${entry.id}.${cover.extension}`);
-    target.write(cover.bytes);
+    target.writeSync(cover.bytes);
     remembered.set(entry.id, target.uri);
     return target.uri;
   } finally { handle.close(); }

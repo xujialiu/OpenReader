@@ -18,7 +18,7 @@ vi.mock('expo-file-system', () => ({ Paths: { document: 'test' }, File: class {
   constructor(_d: string, private name: string) {}
   get exists() { return disk.has(this.name); }
   textSync() { return disk.get(this.name); }
-  write(v: string) { disk.set(this.name, v); }
+  writeSync(v: string) { disk.set(this.name, v); }
 } }));
 vi.mock('../../src/app/routes', () => ({ useShell: () => ({ secretsWritten: 0 }) }));
 vi.mock('../../src/keys/store', () => ({

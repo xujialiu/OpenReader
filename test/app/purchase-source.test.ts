@@ -21,7 +21,7 @@ vi.mock('expo-file-system', () => {
     constructor(directory: { path: string }, name: string) { this.path = `${directory.path}/${name}`; }
     get exists() { return phone.files.has(this.path); }
     textSync() { return phone.files.get(this.path)!; }
-    write(text: string) { phone.files.set(this.path, text); }
+    writeSync(text: string) { phone.files.set(this.path, text); }
   }
   return { Directory, File, Paths: { document: { parentDirectory: new Directory('Container') } } };
 });

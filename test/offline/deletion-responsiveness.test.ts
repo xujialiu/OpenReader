@@ -14,7 +14,7 @@ vi.mock('expo-file-system', () => {
     constructor(...parts: ({ uri: string } | string)[]) { fake.made++; this.uri = uriOf(parts); }
     get exists() { fake.exists++; return fake.files.has(this.uri); }
     get size() { return fake.files.get(this.uri)?.length ?? 0; }
-    write(value: string | Uint8Array) { fake.files.set(this.uri, typeof value === 'string' ? new TextEncoder().encode(value) : value); }
+    writeSync(value: string | Uint8Array) { fake.files.set(this.uri, typeof value === 'string' ? new TextEncoder().encode(value) : value); }
     async text() { return new TextDecoder().decode(fake.files.get(this.uri)); }
     async bytes() { return fake.files.get(this.uri); }
     delete() { fake.deleted++; fake.files.delete(this.uri); }

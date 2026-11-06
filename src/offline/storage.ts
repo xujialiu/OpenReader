@@ -20,7 +20,7 @@ export function writeJson(file: File, value: unknown): void {
     return;
   }
   const temp = new File(`${file.uri}.pending`);
-  temp.write(JSON.stringify(value));
+  temp.writeSync(JSON.stringify(value));
   temp.moveSync(file, { overwrite: true });
 }
 interface ClipMeta {
@@ -52,9 +52,9 @@ export async function saveClip(
   const raw = audioFile(address, "pending.pcm");
   try {
     if (clip.audio === "pcm" && offlineNative) {
-      raw.write(bytes);
+      raw.writeSync(bytes);
       await offlineNative.compress(raw.uri, temp.uri, clip.sampleRate);
-    } else temp.write(clip.audio === "pcm" ? gzipSync(bytes) : bytes);
+    } else temp.writeSync(clip.audio === "pcm" ? gzipSync(bytes) : bytes);
     if (!stillWanted()) return false;
     temp.moveSync(target, { overwrite: true });
     writeJson(metadataFile(address), {

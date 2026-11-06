@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { NativeScrollEvent, NativeSyntheticEvent, TextInput } from 'react-native';
+import type { NativeScrollEvent, NativeSyntheticEvent, TextInputInstance } from 'react-native';
 import { asDocumentId } from '../../src/core/document';
 import type { ScreenProps } from '../../src/app/routes';
 import { useLibrarySearch } from '../../src/app/use-library-search';
@@ -42,7 +42,7 @@ async function open() {
   function Probe() {
     search = useLibrarySearch(navigation, 'library');
     // The page draws the field only while search is open; the hook is handed its ref.
-    search.field.current = search.active ? field as unknown as TextInput : null;
+    search.field.current = search.active ? field as unknown as TextInputInstance : null;
     return null;
   }
   await act(async () => { view = create(createElement(Probe)); });

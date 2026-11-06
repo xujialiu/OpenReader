@@ -219,7 +219,7 @@ describe("the reader's answer to a Debug Note (#305)", () => {
     const view = code('reading-view.tsx');
     pin(view, 'if (!DEBUG_MODE) return undefined;', 'reading-view.tsx Debug Note guard');
     pin(view, 'onDebugNote((time) => {', 'reading-view.tsx onDebugNote');
-    pin(view, 'hlog(statusLine(status, AppState.currentState));', 'reading-view.tsx Debug Note status line');
+    pin(view, "hlog(statusLine(status, AppState.currentState ?? 'unknown'));", 'reading-view.tsx Debug Note status line');
     pin(view, 'snapshot(`Debug Note ${time}`);', 'reading-view.tsx Debug Note snapshot');
   });
 });

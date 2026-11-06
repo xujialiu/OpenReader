@@ -173,6 +173,8 @@ export const VENDORED = [
  * same licence and copyright holder.
  */
 export const MISSING_LICENSE_FILES = [
+  { match: /^metro-runtime$/, from: { cache: 'metro-runtime.txt', url: 'https://raw.githubusercontent.com/react/metro/v0.87.3/LICENSE' },
+    note: 'The npm package ships no licence file. This is the MIT licence of the Metro repository at v0.87.3.' },
   { match: /^@react-native\//, from: { package: 'react-native' },
     note: 'This package ships no licence file. It is part of React Native, under React Native\'s MIT licence, which follows.' },
   { match: /^@expo\/ui$/, from: { package: 'expo' },

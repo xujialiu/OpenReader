@@ -25,5 +25,5 @@ export function forgetDisplayName(id: string): void {
 function write(names: Record<string, string>): void {
   const value = JSON.stringify({ version: 1, names });
   if (offlineNative) offlineNative.writeJson(file().uri, value);
-  else file().write(value);
+  else file().writeSync(value);
 }

@@ -25,8 +25,8 @@
  *   is not an assertion. This is the one the old shape could not say, and saying
  *   it at the moment the marker is written is the whole point: a future author
  *   who reaches for an ambiguous marker gets a failure naming both lines rather
- *   than a green run over a hole. `plugins/with-ui-scene-lifecycle.ts` throws
- *   rather than warning for the same reason.
+ *   than a green run over a hole. The config-plugin rule in ADR 0018 rejects
+ *   an unexpected generated template rather than warning for the same reason.
  *
  * Both refusals are exercised in `test/structural.test.ts`, because a guard
  * nobody has watched fire is a comment.

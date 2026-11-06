@@ -11,7 +11,7 @@ vi.mock('expo-file-system', () => {
     constructor(...parts: ({ uri: string } | string)[]) { this.uri = uriOf(parts); }
     get exists() { return fake.files.has(this.uri); }
     get size() { return fake.files.get(this.uri)?.length ?? 0; }
-    write(value: string | Uint8Array) { fake.files.set(this.uri, typeof value === 'string' ? new TextEncoder().encode(value) : value); }
+    writeSync(value: string | Uint8Array) { fake.files.set(this.uri, typeof value === 'string' ? new TextEncoder().encode(value) : value); }
     textSync() { return new TextDecoder().decode(fake.files.get(this.uri)); }
     async text() {return this.textSync();}
     async bytes() { return fake.files.get(this.uri); }
@@ -21,7 +21,7 @@ vi.mock('expo-file-system', () => {
       if (!bytes) throw new Error(`Nothing to move at ${this.uri}`);
       fake.files.set(target.uri, bytes); fake.files.delete(this.uri); this.uri = target.uri;
     }
-    // As installed (57.0.7): the native move runs off the JS thread, so until the promise settles nothing has moved (#15).
+    // Async moves do not finish before their promise settles (#15); publication uses moveSync.
     move(target: File) { return new Promise((resolve) => setTimeout(resolve)).then(() => this.moveSync(target)); }
   }
   class Directory {
@@ -48,7 +48,11 @@ const clip: SynthesisResult = { audio: 'pcm', samples: new Uint8Array([0, 1, 0, 
 beforeEach(() => {
   fake.files.clear();
   fake.hasNative = true;
-  fake.compress.mockReset().mockImplementation(async (_input: string, output: string) => fake.files.set(output, new Uint8Array([7, 8, 9])));
+  fake.compress.mockReset().mockImplementation(async (input: string, output: string) => {
+    // SDK 58 write() is async: compression must never see a pending PCM write.
+    expect(fake.files.get(input)).toEqual(clip.samples);
+    fake.files.set(output, new Uint8Array([7, 8, 9]));
+  });
 });
 it('commits audio before metadata and does not delete the target when the move rewrites its URI', async () => {
   await audioFiles.write('book', voice, 'Hi', clip,()=>true);

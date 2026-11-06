@@ -1,7 +1,7 @@
 import { createElement, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { TextInput } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { LibrarySearchField } from '../../src/app/library-search-field';
 
 /**
@@ -56,7 +56,7 @@ async function mount() {
   motion.values.length = 0;
   let focused = false;
   const input = { focus: vi.fn(), blur: vi.fn(), isFocused: () => focused };
-  const field = { current: null as TextInput | null };
+  const field = { current: null as TextInputInstance | null };
   const props = { open: false, animate: true, field, query: '', locked: false, onChangeText: vi.fn(), onClose: vi.fn() };
   let view!: ReactTestRenderer;
   // The page's ref is the drawn text input's, and empty while none is drawn.

@@ -25,7 +25,7 @@ vi.mock('expo-file-system', () => {
     get exists() { return disk.files.has(this.uri); }
     textSync() { return disk.files.get(this.uri); }
     async base64() { return disk.files.get(this.uri); }
-    write(text: string) { disk.files.set(this.uri, text); }
+    writeSync(text: string) { disk.files.set(this.uri, text); }
     delete() { disk.files.delete(this.uri); }
     copySync(to: File, options?: { overwrite?: boolean }) {
       if (options?.overwrite) disk.files.delete(to.uri);

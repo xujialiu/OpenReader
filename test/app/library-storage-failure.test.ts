@@ -17,7 +17,7 @@ vi.mock('expo-file-system', () => ({
     constructor(directory: string, name: string) { this.uri = `${directory}/${name}`; }
     get exists() { return disk.files.has(this.uri); }
     textSync() { return disk.files.get(this.uri); }
-    write(text: string) {
+    writeSync(text: string) {
       if (disk.failure) {
         disk.files.set(this.uri, disk.failure === 'empty' ? '' : text.slice(0, 30));
         throw new Error('No space left on device');

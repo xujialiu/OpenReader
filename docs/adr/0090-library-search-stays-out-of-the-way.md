@@ -343,6 +343,13 @@ commands, which would compete with the text field and VoiceOver for it
 
 ## The patches
 
+For #345, the same added native code is carried by
+`patches/react-native-screens+4.30.1.patch` and
+`patches/react-native-gesture-handler+3.3.0.patch`. No keyboard, back-menu or
+single-finger-release hunk is dropped. The account below describes their
+original implementation; the SDK upgrade requires its own native regression
+evidence rather than inheriting those earlier results.
+
 `patches/react-native-screens+4.26.2.patch` went from 1090 lines to 235: the
 key commands above and #317's back-button names. It was regenerated from the
 pristine 4.26.2 tarball (`npm pack`, compared file by file before editing) and

@@ -154,7 +154,7 @@ function removeLeftoverDebugLog(): void {
 /** `version.txt` in the folder, read and written once at launch. */
 function versionFile(folder: Directory): DebugLogVersion {
   const file = new File(folder, DEBUG_LOG_VERSION_FILE);
-  return { read: () => (file.exists ? file.textSync() : null), write: (version) => file.write(version) };
+  return { read: () => (file.exists ? file.textSync() : null), write: (version) => file.writeSync(version) };
 }
 
 /** The folder as the writer sees it; each call is one synchronous file operation, made only at a flush. */
@@ -162,7 +162,7 @@ function folderFiles(folder: Directory): DebugLogFiles {
   return {
     list: () => folder.list().flatMap((one) => (one instanceof File ? [one.name] : [])),
     size: (name) => new File(folder, name).size,
-    append: (name, text) => new File(folder, name).write(text, { append: true }),
+    append: (name, text) => new File(folder, name).writeSync(text, { append: true }),
     remove: (name) => new File(folder, name).delete(),
   };
 }

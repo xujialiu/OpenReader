@@ -11,7 +11,7 @@ vi.mock('expo-file-system', () => ({
     constructor(_directory: string, name: string) { this.uri = name; }
     get exists() { return disk.files.has(this.uri); }
     textSync() { return disk.files.get(this.uri)!; }
-    write(text: string) { disk.files.set(this.uri, text); }
+    writeSync(text: string) { disk.files.set(this.uri, text); }
   },
 }));
 vi.mock('../../modules/open-reader-offline', () => ({ offlineNative: null }));

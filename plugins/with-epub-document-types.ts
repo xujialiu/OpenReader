@@ -32,7 +32,7 @@ import { withInfoPlist, type ConfigPlugin } from 'expo/config-plugins';
  *
  * ## Both edits fail the prebuild if something else has written the key
  *
- * The house style of `plugins/with-ui-scene-lifecycle.ts`, for the same reason.
+ * The fail-closed config-plugin rule recorded in ADR 0018, for the same reason.
  * A prebuild prints hundreds of lines, so a warning is not a signal; and the way
  * this fails is that a book the owner taps in Files opens in some other app, or
  * in none, with nothing anywhere saying why. Nothing is merged and nothing is

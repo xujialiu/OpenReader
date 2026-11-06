@@ -1,8 +1,8 @@
 diff --git a/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m b/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m
-index 361bf4b..468dbc7 100644
+index e67d02c..05549ac 100644
 --- a/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m
 +++ b/node_modules/react-native-gesture-handler/apple/Handlers/RNPanHandler.m
-@@ -286,6 +286,16 @@ - (BOOL)shouldFailUnderCustomCriteria
+@@ -327,6 +327,16 @@ - (BOOL)shouldFailUnderCustomCriteria
    CGPoint trans = [self translationInView:self.view.window.contentView];
  #else
    CGPoint trans = [self translationInView:self.view.window];

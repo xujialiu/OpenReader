@@ -9,7 +9,7 @@ calls "the better-built half".
 
 The iOS half is written. **The Android half is not, and this directory throws
 rather than doing nothing there** — `lockScreen()` refuses on any platform that
-is not iOS, in the house style of `plugins/with-ui-scene-lifecycle.ts`. The
+is not iOS, following the fail-closed rule recorded in ADR 0018. The
 machine this was built on has no Android device and no emulator, so a path
 written here would be a path that has never run; and the symptom of a silent
 no-op is a lock screen with no controls on it, which no log line reports and

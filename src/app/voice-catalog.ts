@@ -65,6 +65,6 @@ export function rememberVoices(settings: AppSettings, provider: ProviderId, voic
   const merged = new Map((names[nameKey] ?? []).map((voice) => [voice.id, voice]));
   for (const voice of clean) merged.set(voice.id, voice);
   names = { ...names, [nameKey]: [...merged.values()] };
-  try { file().write(JSON.stringify(names)); } catch { /* The session still knows the name. */ }
+  try { file().writeSync(JSON.stringify(names)); } catch { /* The session still knows the name. */ }
   for (const listener of listeners) listener();
 }

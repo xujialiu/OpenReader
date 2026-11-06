@@ -12,7 +12,7 @@ vi.mock('expo-file-system', () => ({ Paths: { document: 'test' }, File: class {
   constructor(_directory: string, private name: string) {}
   get exists() { return disk.has(this.name); }
   textSync() { return disk.get(this.name); }
-  write(value: string) { disk.set(this.name, value); }
+  writeSync(value: string) { disk.set(this.name, value); }
 } }));
 vi.mock('../../src/keys/store', () => ({
   readProviderKey: async () => ({ outcome: 'missing' }),

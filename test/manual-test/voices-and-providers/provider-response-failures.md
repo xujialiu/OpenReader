@@ -52,8 +52,9 @@ python3 test/manual-test/kit/ios_guard.py run --timeout 120 -- \
   http://127.0.0.1:METRO_PORT http://127.0.0.1:SERVER_PORT
 ```
 
-Use the rebuilt app with the patched Expo source compiled, not a stale binary
-reloaded from Metro. Confirm that the returned response is Expo's FetchResponse;
+Use the rebuilt app with the inspected Expo source compiled, not a stale binary
+reloaded from Metro. SDK 58 supplies the error guards upstream; the same runtime
+checks remain required when retiring the earlier patch. Confirm that the returned response is Expo's FetchResponse;
 the global `Response` constructor alone does not identify what native fetch
 returns. Record response arrival, reader invocation and rejection times. Test
 text/bytes/JSON consumption both immediately and after the cut, cancellation of

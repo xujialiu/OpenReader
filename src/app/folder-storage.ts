@@ -10,7 +10,7 @@ export function openFolderStore() {
     },
     write: (text) => {
       const pending = new File(Paths.document, 'library-folders.pending.json');
-      pending.write(text);
+      pending.writeSync(text);
       pending.moveSync(new File(Paths.document, 'library-folders.json'), { overwrite: true });
     },
     id: () => `folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,

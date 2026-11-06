@@ -5,7 +5,7 @@
  * `jszip.min.js`, `epub.min.js` and the `index.html` it builds around the book —
  * and then loads that HTML into the WebView. The package publishes a companion
  * module for this, and it is written against the *legacy* `expo-file-system`
- * API; SDK 57's is `File`/`Directory`/`Paths`. Twenty lines here rather than a
+ * API; the current SDK uses `File`/`Directory`/`Paths`. Twenty lines here rather than a
  * dependency whose whole content is the same twenty lines against the API this
  * project does not use.
  *
@@ -78,7 +78,7 @@ export function useReaderFileSystem(name = RENDERER_DIRECTORY): ReaderFileSystem
   }, []);
 
   const writeAsStringAsync = useCallback(async (uri: string, contents: string, options?: { encoding?: 'utf8' | 'base64' }) => {
-    new File(uri).write(contents, { encoding: options?.encoding ?? 'utf8' });
+    new File(uri).writeSync(contents, { encoding: options?.encoding ?? 'utf8' });
   }, []);
 
   const deleteAsync = useCallback(async (uri: string) => {

@@ -42,11 +42,13 @@ it('checks the source inventory as well as purchase strings', () => {
   expect(() => inspectBundle(APP_VERSION, 'free', bundle, [])).toThrow(/no modules/);
 });
 
-it('executes the bundle-check CLI through a symlink and returns a nonempty result or a nonzero failure', () => {
+it.each(['flat', 'indexed'])('executes the bundle-check CLI with a %s map through a symlink and fails closed', (format) => {
   const dir = temporary();
   const bundle = path.join(dir, 'main.jsbundle');
   writeFileSync(bundle, `${APP_VERSION} openreader-variant:free`);
-  writeFileSync(`${bundle}.map`, JSON.stringify({ sources: ['/src/app/purchase-free.ts'] }));
+  const flat = { version: 3, sources: ['/src/app/purchase-free.ts'] };
+  const map = format === 'flat' ? flat : { version: 3, sections: [{ offset: { line: 0, column: 0 }, map: flat }] };
+  writeFileSync(`${bundle}.map`, JSON.stringify(map));
   const entry = path.join(dir, 'check-bundle.ts');
   symlinkSync(path.join(root, 'scripts/verify-bundle.ts'), entry);
   const args = ['--require', 'tsx/cjs', entry, '--bundle', bundle, '--variant', 'free'];

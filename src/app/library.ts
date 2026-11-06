@@ -269,7 +269,7 @@ function identifyStored(entry: LibraryEntry): DocumentId | null {
       size: file.size,
       read: (offset, length) => {
         handle.offset = offset;
-        return handle.readBytes(length);
+        return handle.readBytesSync(length);
       },
     });
   } catch {
@@ -347,7 +347,7 @@ export function migrateDocumentIds(loaded: LoadedLibrary): IdMigration {
 /** Last, and only after the Library has been written: this file is what says the work does not have to be done again. */
 function writeIdRule(rule: File): void {
   try {
-    rule.write(DOCUMENT_ID_RULE);
+    rule.writeSync(DOCUMENT_ID_RULE);
   } catch {
     // Not worth a sentence to the owner. The cost of failing to record it is that
     // the next launch reads the shelf's files again and finds nothing to do.
@@ -391,7 +391,7 @@ export function thisDevice(): string {
   }
   const kind = Platform.OS === 'ios' ? (Platform.isPad ? 'iPad' : 'iPhone') : Platform.OS === 'android' ? 'Android' : 'device';
   const made = `${kind}-${(Math.random().toString(36).slice(2, 10) + '00000000').slice(0, 8)}`;
-  file.write(made);
+  file.writeSync(made);
   return made;
 }
 

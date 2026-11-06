@@ -26,7 +26,7 @@ function readRecord(): unknown {
 function writeRecord(value: unknown): void {
   try {
     folder().create({ intermediates: true, idempotent: true });
-    new File(folder(), RECORD).write(JSON.stringify(value));
+    new File(folder(), RECORD).writeSync(JSON.stringify(value));
   } catch (problem) {
     debugLog('purchase', `${RECORD} could not be written: ${String(problem)}`);
   }

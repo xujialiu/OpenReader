@@ -10,14 +10,16 @@ Clip. A failed Voice listing is not evidence that the server publishes no list.
 
 ## The native read must finish
 
-In the installed Expo 57.0.24 iOS implementation, `text()` and `arrayBuffer()`
+In the original Expo 57.0.24 iOS implementation, `text()` and `arrayBuffer()`
 wait only for `bodyCompleted`. A lost transfer or cancellation instead enters
 `errorReceived`, so either reader can remain pending until the application's
 outer deadline. `json()` uses `text()` and inherits that behavior.
 
-`patches/expo+57.0.24.patch` makes both buffered readers wait for either terminal
+The Expo 57.0.24 patch made both buffered readers wait for either terminal
 state and reject with the recorded native error before touching the buffer on
-failure. This also covers an error already received when the reader is called:
+failure. Expo 58.0.23 supplies those guards upstream in
+`ios/Expo/Fetch/ExpoFetchModule.swift`, so #345 removes the redundant patch and
+keeps the per-reader source tests against the new path. This also covers an error already received when the reader is called:
 `NativeResponse.waitFor` checks the current state before registering a listener.
 The patch does not change the streaming API or install a global fetch wrapper.
 
@@ -25,8 +27,11 @@ The app's `expo.autolinking.ios.buildFromSource` includes `expo`. Without that
 setting, a precompiled Expo framework can bypass the patched Swift source.
 Autolinking's installed Apple resolver exports this setting, and its CocoaPods
 integration matches the npm package name as well as the pod name. Keep the
-setting and patch together; when updating Expo, verify both buffered readers
-against a cut connection before removing them.
+source-build setting during the SDK 58 migration so the inspected source is
+the source compiled. The patch is now upstream-equivalent, but both buffered
+readers still require cut-connection verification, including consumption after
+failure; source equivalence is not native execution evidence. Removing the
+source-build setting is not part of this migration.
 
 A stream-only workaround was rejected: an error before native streaming starts
 has another state path and must not be assumed to emit the streaming error event.

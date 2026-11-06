@@ -9,7 +9,7 @@ vi.mock('expo-file-system', () => ({ Paths: { document: 'test' }, File: class {
   get uri() { return this.name; }
   get exists() { return disk.has(this.name); }
   textSync() { return disk.get(this.name); }
-  write(value: string) { disk.set(this.name, value); }
+  writeSync(value: string) { disk.set(this.name, value); }
 } }));
 vi.mock('../../modules/open-reader-offline', () => ({ offlineNative: {
   writeJson: (uri: string, text: string) => { disk.set(uri, text); },

@@ -9,7 +9,7 @@ vi.mock('expo-file-system', () => ({ Paths: { document: 'test' }, File: class {
   get exists() { return disk.files.has(this.name); }
   get uri() { return 'file:///test/' + this.name; }
   textSync() { return disk.files.get(this.name); }
-  write(value: string) {
+  writeSync(value: string) {
     if (disk.refuse) throw new Error('No space left on device');
     disk.files.set(this.name, value);
   }

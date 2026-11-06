@@ -265,19 +265,28 @@ describe('ADR 0080: a server of the owner\'s is reached over http:// by any name
 });
 
 describe('ADR 0018: the app adopts the UIScene life cycle', () => {
-  it('keeps the scene plugin in the config', () => {
-    // Without it iOS 27 kills the app at launch, before any JavaScript, with no
-    // error beyond a crash report naming
-    // _UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption. Nothing
-    // else in this suite runs against a native build, so this line disappearing
-    // would next be noticed by a person watching an app fail to open.
-    expect(plugin('./plugins/with-ui-scene-lifecycle.ts')).toEqual({});
+  it('uses the upstream single-scene template, without the conflicting custom plugin (#345)', () => {
+    expect(config.plugins).not.toContain('./plugins/with-ui-scene-lifecycle.ts');
+    const dir = mkdtempSync(join(tmpdir(), 'openreader-scenes-'));
+    try {
+      execFileSync('tar', ['-xzf', new URL('../node_modules/expo/template.tgz', import.meta.url).pathname, '-C', dir]);
+      const native = join(dir, 'package/ios');
+      const plist = readFileSync(join(native, 'HelloWorld/Info.plist'), 'utf8');
+      expect(plist).toMatch(/<key>UIApplicationSupportsMultipleScenes<\/key>\s*<false\/>/);
+      expect(plist).toContain('$(PRODUCT_MODULE_NAME).SceneDelegate');
+      const delegate = readFileSync(join(native, 'HelloWorld/AppDelegate.swift'), 'utf8');
+      expect(delegate).toContain('ExpoReactNativeFactoryProvider');
+      expect(delegate).not.toMatch(/window\s*=\s*UIWindow|factory\.startReactNative\(/);
+      expect(readFileSync(join(native, 'HelloWorld/SceneDelegate.swift'), 'utf8')).toContain('class SceneDelegate: ExpoAppSceneDelegate');
+      expect(readFileSync(join(native, 'HelloWorld.xcodeproj/project.pbxproj'), 'utf8')).toContain('SceneDelegate.swift in Sources');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
-  it('keeps the TypeScript loader that lets Expo require either plugin', () => {
-    // Expo reads app.config.ts itself, but loads a path-resolved plugin through
-    // plain `require`, which cannot read .ts. Dropping `tsx` turns the line
-    // above into a plugin that is silently not found.
+  it('keeps the TypeScript loader that lets Expo require the remaining local plugins', () => {
+    // Expo reads app.config.ts itself, but loads path-resolved plugins and local
+    // config dependencies through Node. The other TypeScript plugins still need it.
     const dependencies = { ...manifest.dependencies, ...manifest.devDependencies } as Record<string, string>;
     expect(dependencies['tsx']).toBeDefined();
   });
@@ -306,13 +315,16 @@ describe('ADR 0019: four screens, and a book can arrive from another app', () =>
     expect(dependencies['react-native-safe-area-context']).toBeDefined();
   });
 
-  it('pins the two native packages to the versions this SDK expects, not to npm latest', () => {
+  it('uses the SDK compatibility map for every direct dependency it covers, not npm latest (#345)', () => {
     // Read from the installed Expo's own bundledNativeModules.json rather than
     // written down here, so this asserts the rule ("whatever the SDK expects")
     // and not a number that would have to be edited on every upgrade.
     const expected = require('expo/bundledNativeModules.json') as Record<string, string>;
-    expect(dependencies['react-native-screens']).toBe(expected['react-native-screens']);
-    expect(dependencies['react-native-safe-area-context']).toBe(expected['react-native-safe-area-context']);
+    for (const [name, version] of Object.entries(dependencies)) {
+      if (expected[name]) expect(version, name).toBe(expected[name]);
+    }
+    expect(manifest.devDependencies['react-test-renderer']).toBe(manifest.dependencies.react);
+    expect(manifest.dependencies['react-native-audio-api']).toBe('0.13.5');
   });
 });
 

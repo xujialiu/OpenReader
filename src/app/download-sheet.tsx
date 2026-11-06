@@ -292,7 +292,7 @@ export function DownloadContent({ document, title, voice, place, manage, onManag
     </View> : <GestureDetector gesture={sweep.gesture}>
       <DrawerList {...sweepList} listRef={sweepRef} data={visible} openAt={hereIndex > 0 ? hereIndex : null} style={styles.list}
         keyExtractor={(c) => c.id} renderItem={({ item }) => chapterRow(item)}
-        ListEmptyComponent={!manage ? <Text style={[styles.secondary, styles.empty]}>No readable text in this document.</Text> : null} />
+        ListEmptyComponent={!manage ? <Text style={[styles.secondary, styles.empty]}>No readable text in this document.</Text> : undefined} />
     </GestureDetector>}
     {manage && downloads.occupied(document) > 0 ? <DrawerRow>
       <View style={styles.deletes}>

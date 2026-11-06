@@ -37,6 +37,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { bundleSources } from '../build/source-map.mjs';
 import { MISSING_LICENSE_FILES, VENDORED } from './vendored.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -95,7 +96,7 @@ function bundledPackages() {
     execFileSync('npx', ['expo', 'export:embed', '--platform', 'ios', '--dev', 'false', '--entry-file', 'index.ts',
       '--bundle-output', join(scratch, 'main.jsbundle'), '--sourcemap-output', join(scratch, 'main.map'),
       '--assets-dest', join(scratch, 'assets')], { cwd: ROOT, env: environment, stdio: ['ignore', 'ignore', 'inherit'] });
-    const { sources } = JSON.parse(readFileSync(join(scratch, 'main.map'), 'utf8'));
+    const sources = bundleSources(JSON.parse(readFileSync(join(scratch, 'main.map'), 'utf8')));
     return new Set(sources.map(packageRoot).filter(Boolean));
   } finally {
     rmSync(scratch, { recursive: true, force: true });
