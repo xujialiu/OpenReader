@@ -161,6 +161,39 @@ final class DuoPlayerProbe: XCTestCase {
     XCTAssertTrue(app.buttons["Collapse the player"].waitForExistence(timeout: 8), "player did not expand again")
   }
 
+  /// Real XCTest Slower/Faster taps with label round-trip assertion (delivery-guaranteed path).
+  func testSlowerFasterRateRoundTrip() throws {
+    let play = app.buttons["Play"]
+    guard play.waitForExistence(timeout: 8) else {
+      XCTFail("PRECONDITION FAILED: reader not open (no Play button); not launching")
+      return
+    }
+    let speed = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Playback speed, 1.'")).firstMatch
+    guard speed.waitForExistence(timeout: 8) else {
+      XCTFail("PRECONDITION FAILED: speed trigger missing")
+      return
+    }
+    speed.tap()
+    let slower = app.buttons["Slower"]
+    XCTAssertTrue(slower.waitForExistence(timeout: 8), "popover did not open")
+    slower.tap()
+    let afterSlower = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Playback speed, 1.'")).firstMatch
+    XCTAssertTrue(afterSlower.waitForExistence(timeout: 6), "trigger label missing after Slower")
+    print("PROBE-RATE after-slower=\(afterSlower.label)")
+    XCTAssertFalse(afterSlower.label.hasSuffix("1.50 times"), "Slower tap did not change the rate (label \(afterSlower.label))")
+    let faster = app.buttons["Faster"]
+    guard faster.waitForExistence(timeout: 4) else {
+      XCTFail("popover closed after Slower; cannot restore")
+      return
+    }
+    faster.tap()
+    let afterFaster = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Playback speed, 1.'")).firstMatch
+    XCTAssertTrue(afterFaster.waitForExistence(timeout: 6), "trigger label missing after Faster")
+    print("PROBE-RATE after-faster=\(afterFaster.label)")
+    XCTAssertTrue(afterFaster.label.hasSuffix("1.50 times"), "rate not restored: \(afterFaster.label)")
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04)).tap()
+  }
+
   func testMoreActionsOpensAndClosesDrawerClosedPose() throws {
     let play = app.buttons["Play"]
     guard play.waitForExistence(timeout: 8) else {

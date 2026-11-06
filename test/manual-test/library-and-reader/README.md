@@ -733,3 +733,38 @@ shorter than the viewport no offset is reachable.
 On this device's AXe/mobilebuildmcp bridge, synthetic swipes are eaten exactly
 like the taps recorded for 2026-10-28; scroll-collapse checks must either use
 the CDP drive above or a fresh device that accepts synthetic touches.
+
+## Pending-lookup continuity: a held-response gate (#346, 2026-11-07)
+
+The app's own lookup timeout is **15 seconds** — any hold longer than that
+fails the lookup honestly ("The service took too long. Try again."), which is
+not a fold effect. To hold a real response in flight across a fold and still
+release it inside that window, install a test-only fetch wrapper in the app's
+Hermes runtime over CDP **before** the lookup (the four
+`lookup-fetch-gate-*.js` scripts here; `cdp.cjs --eval`, `OPENREADER_METRO`
+set):
+
+```sh
+OPENREADER_METRO=http://127.0.0.1:8346 node test/manual-test/kit/cdp.cjs \
+  --eval test/manual-test/library-and-reader/lookup-fetch-gate-install.js
+```
+
+The wrapper intercepts only `…/entries/en/hope` (the synthetic fixture word),
+counts it, calls the **original fetch once**, awaits the real response, and
+holds its delivery on an explicit Promise until `gate-release.js` runs; the
+abort signal is tracked (`aborted`) and rejects the held work without masking
+cancellation; `gate-restore.js` puts the original fetch back. Read state with
+`gate-state.js` (`{installed, count, waiting, aborted}`). Label the held state
+as **not a real network delay** — the response has arrived; only its delivery
+is held.
+
+Choreography (measured 2026-11-07): normal-request control first (D1 record),
+install the gate, real 2 s long-press at the `lookup-word-frame.js` point
+(closed pose — inner-pose long-presses do not select), wait for
+`count=1 waiting=true`, fold, read state again, `release`, require the
+definition in the same drawer. Everything — install, release, restore — must
+finish inside the 15-second timeout, so script the fold and release back-to-back
+(orchestration overhead ate both in-run windows on 2026-11-07; the
+pending-survives-the-fold half was measured, the release-inside-window half
+needs a tighter harness). Never combine with `watchfetch`/`breakfetch` (they
+replace global fetch and would stack wrappers).

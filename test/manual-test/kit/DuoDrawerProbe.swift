@@ -155,6 +155,20 @@ final class DuoDrawerProbe: XCTestCase {
     assertDrawerGone(tag + "-dismiss")
   }
 
+  // ---- C6: no-drawer vs just-opened-Appearance screenshots (undimming gate) --
+  func testAppearanceNoDrawerVsJustOpen() {
+    ensureReaderOpen()
+    shoot("c6-no-drawer")
+    XCTAssertTrue(waitElement(app.buttons["More actions"]), "More actions missing")
+    app.buttons["More actions"].firstMatch.tap()
+    XCTAssertTrue(assertDrawerOpen("c6-actions"))
+    XCTAssertTrue(waitElement(app.buttons["Appearance"]), "Appearance row missing")
+    app.buttons["Appearance"].firstMatch.tap()
+    XCTAssertTrue(waitElement(app.buttons["Back from Appearance"], timeout: 8), "Appearance page did not open")
+    shoot("c6-just-opened-appearance")
+    print("PROBE-C6 appearance page open, both screenshots attached")
+  }
+
   // ---- one native expand then dismiss on the Contents drawer -----------------
   func testContentsExpandDismiss() {
     XCTAssertTrue(waitElement(app.buttons["Contents"]), "Contents button not found")
