@@ -17,6 +17,12 @@ The iPhone stays in portrait. The iPad supports portrait and landscape, and the
 window sizes the system allows. On Mac, the owner can drag the window larger
 or smaller above a usable minimum size; that minimum is still to be settled.
 
+Decision [0092](0092-duo-keeps-the-current-reading-task.md) agrees a Duo-specific
+exception: both displays follow the orientations and windows the system
+permits, without deliberately broadening ordinary iPhone orientation settings.
+That exception is an agreed requirement pending implementation and verification,
+not evidence that the existing portrait configuration provides it.
+
 There is one OpenReader window. It can sit beside another app, but this work
 does not add a second OpenReader window or a command to open one. The existing
 rule of at most one Reading at a time remains unchanged.
