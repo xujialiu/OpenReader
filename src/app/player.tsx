@@ -58,15 +58,15 @@ import { MAX_STEPPER_RATE, MIN_STEPPER_RATE, snapRate, stepRate } from '../playb
 
 import { INK, useAccent, useBorders } from './controls';
 import { Icon, type IconName } from './icon';
-import { PROVIDER_LABELS, type AppSettings } from './settings';
-import type { SkipTarget } from './use-reading';
-import { LoadingSpinner } from './loading-spinner';
-import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
-import { TEXT, TEXT_EMPHASIZED } from './text-styles';
-import { CARD_PADDING, CARD_RADIUS_BOTTOM, CARD_RADIUS_TOP, cardWidth, playerBottomGap, playerLayout } from './player-layout';
 import { LAYOUT_WIDTH } from './layout-widths';
+import { LoadingSpinner } from './loading-spinner';
+import { CARD_PADDING, CARD_RADIUS_BOTTOM, CARD_RADIUS_TOP, cardWidth, playerBottomGap, playerLayout } from './player-layout';
+import { READING_BUTTON_PLACE, ReadingButton } from './reading-button';
+import { type AppSettings, PROVIDER_LABELS } from './settings';
 import type { SleepChoice } from './sleep-timer';
 import { SleepTimerButton } from './sleep-timer-button';
+import { TEXT, TEXT_EMPHASIZED } from './text-styles';
+import type { SkipTarget } from './use-reading';
 import type { SleepTimerState } from './use-sleep-timer';
 
 /**
@@ -239,19 +239,21 @@ export function Player({
   onSleep,
 }: PlayerProps) {
   const { width, height, fontScale } = useWindowDimensions();
-  // The row must fit the card, not the wider window around it (#319, #325).
-  const card = cardWidth(width, LAYOUT_WIDTH.player);
+  const insets = useSafeAreaInsets();
+  // The row must fit the usable card, not the window behind system side bars.
+  const card = cardWidth(width - insets.left - insets.right, LAYOUT_WIDTH.player);
   const layout = playerLayout(card, fontScale);
-  const bottomGap = playerBottomGap(useSafeAreaInsets().bottom);
+  const bottomGap = playerBottomGap(insets.bottom);
   /** How far a head-row control's 44-point touch area reaches past its drawn row, above and below. */
   const headReach = (layout.headEnd - layout.headHeight) / 2;
   const [speedOpen, setSpeedOpen] = useState(false);
-  const [speedGeometry, setSpeedGeometry] = useState({ fontScale, width, height });
+  const geometry = `${fontScale}:${width}:${height}:${insets.left}:${insets.right}:${bottomGap}`;
+  const [speedGeometry, setSpeedGeometry] = useState(geometry);
   // Close before children commit against a moved popover anchor, not in an
   // effect after that commit. Remembering the dimensions also keeps it closed
   // when the owner returns to the previous text size or width (#124).
-  if (speedGeometry.fontScale !== fontScale || speedGeometry.width !== width || speedGeometry.height !== height) {
-    setSpeedGeometry({ fontScale, width, height });
+  if (speedGeometry !== geometry) {
+    setSpeedGeometry(geometry);
     setSpeedOpen(false);
   }
   const closeSpeed = useCallback(() => setSpeedOpen(false), []);
@@ -305,7 +307,7 @@ export function Player({
       // `box-none` so the strip the button sits in does not eat taps on the text
       // beside it: with the controls hidden, tapping the page is the reading
       // position moving, and a band of dead page would be a puzzle.
-      <View style={styles.collapsed} pointerEvents="box-none" onLayout={measure}>
+      <View style={[styles.collapsed, { right: READING_BUTTON_PLACE.right + insets.right }]} pointerEvents="box-none" onLayout={measure}>
         <ReadingButton playing={playing} buffering={buffering} label="Show the player" onPress={() => onCollapsed(false)} />
       </View>
     );
@@ -315,7 +317,7 @@ export function Player({
     // The room the open player may take, from the bottom of the navigation bar
     // to the bottom of the screen (#312); it sits at the bottom of it and grows
     // upwards. `box-none`, so the part it does not cover is still the page.
-    <View style={[styles.room, { top: barHeight }]} pointerEvents="box-none">
+    <View style={[styles.room, { top: barHeight, left: insets.left, right: insets.right }]} pointerEvents="box-none">
     <View style={[styles.player, { borderColor: borders.line, width: card, marginBottom: bottomGap }]} onLayout={measure}>
       {/* Remounted on a text-size change (ADR 0061), and nothing else is. */}
       <View key={fontScale} style={styles.rows}>

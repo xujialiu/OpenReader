@@ -3,8 +3,8 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Player, type PlayerProps } from '../../src/app/player';
-import { SleepTimerButton } from '../../src/app/sleep-timer-button';
 import { DEFAULT_SETTINGS } from '../../src/app/settings';
+import { SleepTimerButton } from '../../src/app/sleep-timer-button';
 import type { SleepTimerState } from '../../src/app/use-sleep-timer';
 
 /**
@@ -14,6 +14,7 @@ import type { SleepTimerState } from '../../src/app/use-sleep-timer';
  */
 
 const dimensions = vi.hoisted(() => ({ width: 402, height: 874, fontScale: 1, scale: 3 }));
+const insets = vi.hoisted(() => ({ top: 0, right: 0, bottom: 34, left: 0 }));
 vi.mock('react-native', () => ({
   View: 'View', Text: 'Text', Pressable: 'Pressable', ScrollView: 'ScrollView',
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 0.5, absoluteFill: {} },
@@ -31,16 +32,21 @@ vi.mock('@expo/ui/swift-ui', () => {
 vi.mock('@expo/ui/swift-ui/modifiers', () => Object.fromEntries(
   ['menuOrder', 'accessibilityElement', 'accessibilityLabel', 'accessibilityAddTraits'].map((name) => [name, (value: unknown) => ({ name, value })]),
 ));
-vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 34, left: 0 }) }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => insets }));
 vi.mock('../../src/playback', () => import('../../src/playback/rate'));
 vi.mock('../../src/app/controls', () => ({
   INK: { text: 'ink' }, useBorders: () => ({ line: 'grey' }), useAccent: () => ({ following: 'orange', reading: 'blue' }),
 }));
 vi.mock('../../src/app/icon', () => ({ Icon: 'Icon' }));
 vi.mock('../../src/app/loading-spinner', () => ({ LoadingSpinner: 'LoadingSpinner' }));
-vi.mock('../../src/app/reading-button', () => ({ ReadingButton: 'ReadingButton', READING_BUTTON_PLACE: {} }));
+vi.mock('../../src/app/reading-button', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/app/reading-button')>(), ReadingButton: 'ReadingButton',
+}));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-beforeEach(() => Object.assign(dimensions, { width: 402, fontScale: 1 }));
+beforeEach(() => {
+  Object.assign(dimensions, { width: 402, height: 874, fontScale: 1 });
+  Object.assign(insets, { top: 0, right: 0, bottom: 34, left: 0 });
+});
 
 const OFF: SleepTimerState = { choice: null, left: 0, since: null, expired: false };
 
@@ -55,7 +61,7 @@ async function player(overrides: Partial<PlayerProps> = {}) {
   };
   let view!: ReactTestRenderer;
   await act(async () => { view = create(createElement(Player, props)); });
-  return { root: view.root, props };
+  return { root: view.root, props, view };
 }
 
 const style = (node: ReactTestInstance) => Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean));
@@ -70,6 +76,31 @@ function rows(root: ReactTestInstance): string[][] {
       .flatMap((child) => (String(child.type) === 'View' && style(child).flexDirection === 'row'
         ? child.children.filter((inner): inner is ReactTestInstance => typeof inner !== 'string').map(name) : [name(child)])));
 }
+
+describe('the Player stays beside system controls (#346)', () => {
+  it.each([[0, 84], [84, 0], [20, 44], [0, 0]])('uses the usable width and origin with left=%s right=%s', async (left, right) => {
+    dimensions.width = 466;
+    Object.assign(insets, { left, right });
+    const { root, view } = await player();
+    try {
+      const room = root.find((node) => String(node.type) === 'View' && style(node).justifyContent === 'flex-end');
+      expect(style(room)).toMatchObject({ left, right });
+      const card = root.find((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+      expect(style(card).width).toBe(466 - left - right - 24);
+      // A narrower safe area must use the split controls, not the full-window layout.
+      expect(rows(root).length).toBe(466 - left - right < 390 ? 3 : 2);
+    } finally { await act(async () => view.unmount()); }
+  });
+
+  it('keeps the collapsed Reading Button inside the trailing safe area', async () => {
+    insets.right = 84;
+    const { root, view } = await player({ collapsed: true });
+    try {
+      const button = root.find((node) => String(node.type) === 'ReadingButton');
+      expect(style(button.parent!)).toMatchObject({ right: 100, bottom: 28 });
+    } finally { await act(async () => view.unmount()); }
+  });
+});
 
 describe('the head row (#325, after Speechify\'s card)', () => {
   it('holds the Tap Lock beside A and the Sleep Timer beside the collapse arrow, over the transport, in two rows', async () => {

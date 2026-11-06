@@ -33,17 +33,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PortalHost } from 'react-native-teleport';
 
 import { DEBUG_MODE } from '../debug/mode';
-
-// WALKTHROUGH-HARNESS
-import { useHarnessCommands, type HarnessCommand } from './walkthrough-harness';
-
 import { AppearanceSheet } from './appearance-sheet';
+import { HeaderButton, INK, Note } from './controls';
 import { ReaderActions } from './reader-actions';
 import { ReaderTitle } from './reader-title';
-import { HeaderButton, INK, Note } from './controls';
 import { readerSlot, useHeldReading } from './reading-host';
-import { useShell, type ScreenProps } from './routes';
+import { type ScreenProps, useShell } from './routes';
 import { TEXT } from './text-styles';
+// WALKTHROUGH-HARNESS
+import { type HarnessCommand, useHarnessCommands } from './walkthrough-harness';
 
 export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
   const { id } = route.params;
@@ -131,7 +129,7 @@ export function ReaderScreen({ route, navigation }: ScreenProps<'Reader'>) {
       {/* Where the page is moved to while this screen shows it (`reading-host.tsx`). */}
       <PortalHost name={readerSlot(id)} style={styles.slot} />
       {waiting ? (
-        <View style={[StyleSheet.absoluteFill, styles.waiting]}>
+        <View style={[StyleSheet.absoluteFill, styles.waiting, { marginLeft: insets.left, marginRight: insets.right }]}>
           <Text style={styles.waitingWords}>{entry && !mine?.note ? `Reading ${title}…` : `${title} would not open.`}</Text>
           {entry ? null : (
             <Note attention>

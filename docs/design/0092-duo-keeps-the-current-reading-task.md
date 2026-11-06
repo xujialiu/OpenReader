@@ -6,7 +6,7 @@ Issue #346 starts with basic compatibility on Duo's outer and inner displays and
 
 The existing reading, listening and lookup experience comes first. A necessary visible change returns for a decision with the specific problem it solves. Ordinary iPhone, iPad and Mac behavior must not be silently redesigned.
 
-These are agreed requirements, not implemented or verified behavior. The scope and first-stage native investigation are confirmed. Production implementation remains gated on review of fresh evidence and agreement on any necessary visible changes.
+These are agreed requirements, not implemented or verified behavior. The scope and first-stage native investigation are confirmed. The first production batch below is approved from limited fresh evidence. Further production changes remain gated on review of evidence and agreement on any necessary visible changes.
 
 ## The current task survives a layout change
 
@@ -55,3 +55,13 @@ The first stage is a bounded native investigation of the current app on a new, i
 The result must distinguish passed behavior, observed failures and untested cases. Any necessary visible changes return with that evidence for a decision before production implementation. Minimal reversible diagnostic instrumentation is permitted; it does not authorize a production layout change.
 
 This stage uses existing tools and isolated test data. It does not replace installed owner applications, upgrade the tools or operating system, change the machine's global tool selection, or publish an app. Missing tools and unresolved platform limits stop the affected checks rather than weakening acceptance.
+
+## First repair batch: keep text and controls clear of the system
+
+The first approved repair addresses system controls covering the Document at the side of the display. The reading page, its custom title and the Player use the space actually available beside those controls, including when the occupied side changes. The collapsed Reading Button stays within that usable space too. The reserved distance follows the system rather than being fixed for one device or pose.
+
+Font Size stays unchanged. Margins remains the chosen percentage of the usable reading area's width, equally on each side within that area. The Player retains its separate width limit. Ordinary devices without a side reservation keep their existing layout; this batch does not change navigation, the orientation policy or the meaning of any setting.
+
+The trade-off is less room for text and controls when the system occupies a side. Letting text run underneath those controls, or leaving a fixed blank strip even when it is not needed, was not selected.
+
+This is a narrow repair, not acceptance of complete Duo support. The apparent Drawer-dismissal fault was not established by its test and is not part of the repair. Unverified Drawer, lookup, editing, selection, Following and timer continuity remain acceptance gates. This batch requires host checks, fresh native verification and acceptance before the next batch or closure of the issue.

@@ -31,7 +31,8 @@
  * because the title's own box shrinks to its words.
  */
 
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { INK } from './controls';
 import { NameText } from './name-text';
@@ -42,7 +43,8 @@ export const TITLE_SIDE = 81;
 
 export function ReaderTitle({ title }: { title: string }) {
   const { width, fontScale } = useWindowDimensions();
-  const room = Math.max(0, width - 2 * TITLE_SIDE);
+  const insets = useSafeAreaInsets();
+  const room = Math.max(0, width - insets.left - insets.right - 2 * TITLE_SIDE);
   return (
     <View>
       <NameText name={title} lines={2} width={room} accessibilityRole="header" allowFontScaling={false}

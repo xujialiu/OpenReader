@@ -1,11 +1,10 @@
 import { createElement, useEffect } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { type ReadingHandle, ReadingHost, useHeldReading } from '../../src/app/reading-host';
+import { type AppSettings, DEFAULT_SETTINGS } from '../../src/app/settings';
 import type { DocumentId, LibraryEntry } from '../../src/core/document';
 import type { ReportedBlock } from '../../src/renderer/messages';
-import { ReadingHost, useHeldReading, type ReadingHandle } from '../../src/app/reading-host';
-import { DEFAULT_SETTINGS, type AppSettings } from '../../src/app/settings';
 
 /**
  * **The Tap Lock ends with the visit to the reader (#336).** Turned on in the
@@ -30,16 +29,23 @@ const world = vi.hoisted(() => ({
   told: [] as boolean[],
   /** The Debug Log's lines, `[category] message`. */
   log: [] as string[],
+  renderer: null as null | { width: number; height: number },
+  rendererMounts: 0,
 }));
+const insets = vi.hoisted(() => ({ top: 62, bottom: 34, left: 0, right: 0 }));
 
 vi.mock('react-native', () => ({
   AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) }, Platform: { OS: 'ios' },
   StyleSheet: { create: <T,>(styles: T) => styles }, Text: 'Text', View: 'View', useColorScheme: () => 'light',
 }));
-vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 62, bottom: 34, left: 0, right: 0 }) }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => insets }));
 vi.mock('react-native-teleport', () => ({ Portal: ({ children }: { children: unknown }) => children, PortalHost: () => null }));
 vi.mock('@epubjs-react-native/core', () => ({
-  Reader: () => null,
+  Reader: (props: { width: number; height: number }) => {
+    world.renderer = props;
+    useEffect(() => { world.rendererMounts++; }, []);
+    return null;
+  },
   useReader: () => ({ getMeta: () => ({}), toc: [], injectJavascript() {}, currentLocation: null }),
 }));
 vi.mock('../../src/app/routes', () => ({ useShell: () => world.shell }));
@@ -181,7 +187,11 @@ const lockLines = () => world.log.filter((line) => line.includes('tap lock'));
 /** What the page was told, each change once: the doubled bridge is a new object every render, so the view tells it again. */
 const told = () => world.told.filter((on, at) => at === 0 || on !== world.told[at - 1]);
 
-beforeEach(() => { world.page = null; world.player = null; world.told = []; world.log = []; });
+beforeEach(() => {
+  world.page = null; world.player = null; world.told = []; world.log = [];
+  world.renderer = null; world.rendererMounts = 0;
+  Object.assign(insets, { top: 62, bottom: 34, left: 0, right: 0 });
+});
 
 describe('the Tap Lock, for one visit to the reader (#336)', () => {
   it('starts off, and the button turns it on and off, telling the page and the Debug Log', async () => {
@@ -260,6 +270,29 @@ describe('the Tap Lock, for one visit to the reader (#336)', () => {
 });
 
 describe('the measured reading viewport (#344)', () => {
+  it('keeps the measured page inside changing side safe areas without remounting the Reading (#346)', async () => {
+    const tree = await open();
+    try {
+      const viewport = () => tree.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function')[0];
+      const page = () => tree.root.find((node) => String(node.type) === 'View' && typeof node.props.onTouchEnd === 'function');
+      await press(true);
+      // Native layout is doubled: after checking the actual boundary's padding,
+      // deliver its resulting content width through the real measurement path.
+      for (const [left, right] of [[0, 84], [84, 0], [20, 44], [0, 0]]) {
+        Object.assign(insets, { left, right });
+        await act(async () => tree.update(createElement(ReadingHost, null, createElement(Reader))));
+        const style = Object.assign({}, ...[page().props.style].flat(Infinity));
+        expect(style).toMatchObject({ paddingLeft: left, paddingRight: right });
+        await act(async () => viewport().props.onLayout({ nativeEvent: { layout: { width: 466 - left - right, height: 662 } } }));
+        expect(world.renderer).toMatchObject({ width: 466 - left - right, height: 662 });
+        expect(world.rendererMounts).toBe(1);
+        expect(held()).toMatchObject({ id: DOCUMENT, playing: false });
+        expect(world.player!.tapLock).toBe(true);
+        expect((world.shell as { settings: AppSettings }).settings.appearance).toEqual(SETTINGS.appearance);
+      }
+    } finally { await act(async () => tree.unmount()); }
+  });
+
   it('uses the full viewport and converts legacy margins once at the actual first width', async () => {
     const original = world.shell;
     const shell = { ...(original as { settings: AppSettings }),

@@ -43,6 +43,7 @@ import { useLookup } from './use-lookup';
 import { Reader, useReader } from '@epubjs-react-native/core';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, type LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type ReadingPlace, type ReadingPosition, readLocator } from '../core/document';
 import { anchoredStart, contentsOf, currentRow, type NavigationEntry, type ReadingSpineItem } from '../core/document/contents';
 import { MULTILINGUAL, type ProviderId } from '../core/providers/types';
@@ -266,6 +267,7 @@ export function ReadingView({
    */
   // WALKTHROUGH-HARNESS: `injectJavascript` is the harness's only probe into the WebView.
   const { getMeta, toc, injectJavascript, currentLocation } = useReader();
+  const insets = useSafeAreaInsets();
   /**
    * `readLocator` rather than reaching into the position: a `Locator` is opaque
    * by construction (ADR 0007) and this is its one door — it hands back the CFI
@@ -862,7 +864,11 @@ export function ReadingView({
 
 
   return (
-    <View style={styles.screen} onTouchEnd={reading.bridge.releaseSelection} onTouchCancel={reading.bridge.releaseSelection}>
+    // Inset the measured viewport, not just the EPUB's text. Its tables, images
+    // and percentage Margins then share the actual usable reading width (#346).
+    // The absolutely positioned Player applies the same side insets itself.
+    <View style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]}
+      onTouchEnd={reading.bridge.releaseSelection} onTouchCancel={reading.bridge.releaseSelection}>
       <View style={styles.document} onLayout={measure}>
         {size ? (
           <Reader
