@@ -276,6 +276,45 @@ final class DuoPlayer348Probe: XCTestCase {
     XCTAssertTrue(dismissSpeed())
   }
 
+  /// Parent-audit correction (2026-11-07): the a5 map tested only AXtop-1 and
+  /// AXbottom+1, which under a centred-44 hypothesis (AXtop-0.833..AXbottom+0.833)
+  /// fall just OUTSIDE the target — it brackets the height only below 44.33.
+  /// This map samples the 3x pixel grid at AXtop-2/3, AXtop-4/3, AXbottom+2/3,
+  /// AXbottom+4/3 and an inside control, with the discriminators repeated, to
+  /// separate the 42.33 AX frame from a 44.0 target. Frames are read live; all
+  /// taps are at the frame's midX.
+  func testSpeedTriggerFineEdgeMap() throws {
+    _ = require("Play", message: "reader not open")
+    guard dismissSpeed() else { return }
+    let speed = speedTrigger()
+    guard speed.waitForExistence(timeout: 8) else {
+      return XCTFail("PRECONDITION FAILED: speed trigger missing")
+    }
+    let frame = speed.frame
+    print("PROBE-348 fine speed-ax-frame \(frame)")
+    let coordinate = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+    func probeTap(_ dy: CGFloat, _ name: String) -> Bool {
+      guard dismissSpeed() else { return false }
+      let point = coordinate.withOffset(CGVector(dx: frame.midX, dy: dy))
+      point.tap()
+      let opened = app.buttons["Slower"].waitForExistence(timeout: 5)
+      print("PROBE-348 fine \(name) dy=\(dy) opened=\(opened)")
+      return opened
+    }
+    let inside = probeTap(frame.maxY - 2.0, "inside-control")
+    XCTAssertTrue(inside, "inside control (maxY-2) did not open; map invalid")
+    let belowTwoThirds = probeTap(frame.maxY + 2.0 / 3.0, "below+2/3")
+    let aboveTwoThirds = probeTap(frame.minY - 2.0 / 3.0, "above-2/3")
+    let belowFourThirds = probeTap(frame.maxY + 4.0 / 3.0, "below+4/3")
+    let aboveFourThirds = probeTap(frame.minY - 4.0 / 3.0, "above-4/3")
+    let belowRep = probeTap(frame.maxY + 2.0 / 3.0, "below+2/3-rep")
+    let aboveRep = probeTap(frame.minY - 2.0 / 3.0, "above-2/3-rep")
+    let insideRep = probeTap(frame.maxY - 2.0, "inside-control-rep")
+    print("PROBE-348 fine summary inside=\(inside) below+2/3=\(belowTwoThirds) above-2/3=\(aboveTwoThirds) "
+          + "below+4/3=\(belowFourThirds) above-4/3=\(aboveFourThirds) reps below=\(belowRep) above=\(aboveRep) inside=\(insideRep)")
+    XCTAssertTrue(dismissSpeed())
+  }
+
   /// Chooses 5 Minutes through the SwiftUI menu and reports the countdown
   /// label. Leaves the timer RUNNING; the fold continuity check needs it.
   func testSleepTimerChooseFiveMinutes() throws {
