@@ -73,7 +73,7 @@ The Library and its Search, selection actions and return-to-Reading button also 
 ## Remaining work after the scoped delivery
 
 - #348: folding makes the expanded Player grow from two rows to four and take too much reading space.
-- #349: automatic rotation with the device has not passed.
+- #349: automatic rotation and the reading page's rearrangement now have simulator verification on both displays; this does not establish all the other continuity requirements.
 - #350: the selected passage's visible marking and adjustable handles after folding need verification.
 - #351: the final result of a lookup that finishes across a fold needs visible confirmation.
 - #352: actual split-window resizing and task continuity need verification.

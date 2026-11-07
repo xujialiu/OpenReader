@@ -52,7 +52,11 @@ restore the prior frontmost app with a cleanup trap.
 Start physically upright, with the **target's** UIDevice orientation equal to
 1. The unfolded inner window can be landscape at that same physical direction.
 The driver uses the display's measured initial axis rather than applying the
-outer phone's portrait assumption to the inner display.
+outer phone's portrait assumption to the inner display. After an app relaunch,
+the target can report UIDevice0/unknown while its scene/window remain correct.
+That is not an accepted starting direction: establish a real input event before
+rotation acceptance. A passive final geometry/delivery read is a separate check
+and must not be presented as another rotation test.
 
 ## Run one guarded round-trip
 
@@ -95,6 +99,26 @@ single in-flight sample is not the final app verdict. Reader additionally
 requires viewport, stage and **every displayed iframe** to match the native
 window minus the current side safe areas. A persistent iframe mismatch fails,
 even when the window, viewport and stage all look correct.
+
+## Real controls after rotation
+
+The four-direction geometry matrix does not prove taps or drawer dismissal.
+For a paused inner Reader, run the existing `DuoPlayerProbe` explicit
+collapse/show method, then `DuoDrawerCloseProbe/testMoreActionsDrawerStagedDismiss`
+through the guarded runner. The latter taps More actions, asserts the grabber,
+and drags from an element-anchored coordinate. On this pose XCUITest's
+`app.frame` can stay portrait-shaped while native window and element frames
+are landscape; app-anchored drag coordinates can misaim. Keep failed logs
+and inspect each raw XCTest method and its actual `Executed … failures` lines.
+Do not infer success from the diagnostic print following an assertion.
+
+`DuoSettingsVersionProbe/testVersionLineVisible` enters Settings with native
+button taps and derives the exact Debug version from `app-version.ts`.
+`DuoBannerDismissProbe` distinguishes an already absent banner from a delivered
+dismissal; its absent-banner success is not evidence that the tapping branch
+ran. Capture every screen when the app uses the inner display, since
+`XCUIScreen.main` may be the outer one. The final active-display screenshot
+must show clean controls, separately from earlier captures with a Debug banner.
 
 ## Bounded inner-display resize stress (#359)
 

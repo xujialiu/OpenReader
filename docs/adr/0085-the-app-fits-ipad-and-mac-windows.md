@@ -97,9 +97,13 @@ unchanged shell's window/root466-by678 to678-by466, and the inner951-by669
 to669-by951. `duo-rotation.py` retains target-native state, active-display
 captures and explicit LLDB detachment. Masks, forced geometry, fold-driven
 aspect changes and XCUIDevice's getter alone remain insufficient evidence.
-Outer Library/Reader and inner Library/Reader have parent round-trip evidence;
-the inner renderer width race discovered there is #359, below. Independent
-final verification remains pending, not implied by these parent measurements.
+Outer Library/Reader and inner Library/Reader have independent beta15
+round-trip evidence, with active-display rendering and all displayed iframe
+widths measured. The inner renderer width race discovered there is #359,
+below. The original outer-open to inner-rotation scenario and eight real-input
+stress bursts pass after its correction. Saved settings/positions remain
+unchanged; no playing-audio or physical-Duo claim follows from these paused
+checks.
 On that same shell with beta14 JavaScript, iPhone27.0 retains its402-by874
 portrait app frame; iPad26.5 changes820-by1180 to1180-by820 and back. Both also
 pass the corrected paused Player collapse/show control. Ordinary iPhone27.1
@@ -242,8 +246,14 @@ a single view sufficient to fail. The unguarded control reproduces the stale
 cases pass. Geometry, text mapping, CSS arithmetic and replacement-view
 creation are explicit doubles, not a simulated full browser. Real-input stress
 and active-display rendering remain separate runtime gates. Beta15 parent
-checks pass eight inner stress cycles plus the original Reader and Library
-round-trips; final independent verification is still pending.
+and independent checks pass eight inner stress cycles plus the original Reader
+and Library round-trips. Independent ordinary iPad verification measures
+820↔1180 viewport/stage/iframe widths; ordinary iPhones on27.0 and26.5 retain
+402-point reading widths and portrait app frames under the XCTest landscape
+attempt. These are scoped simulator regressions, not Mac/physical-device or
+sample/word-timing certification. Failed tool attempts remain in the record.
+The final app is left paused with clean controls and the version line verified
+through native Settings navigation.
 
 ## Earlier trial: limit the viewport, not the Document's body
 
