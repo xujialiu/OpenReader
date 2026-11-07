@@ -8,6 +8,8 @@ measurements require the admitted tester lane and parent review.
 - [Duo acceptance controls](duo-acceptance.md) (#350–#354): visible selection
   and handles, held lookup results, system windows, audio/Following and
   Appearance preview, with separate native evidence requirements.
+- [Duo selection-paint oracle](duo-selection-paint.md) (#350): fixture-local
+  HOST pixel controls and the remaining fresh native capture/offset handoff gate.
 - [Diagnostic controls](diagnostics.md) (#357/#358): crash-attribution evidence
   and bounded, read-only simulator-volume observation; neither supplies a
   native crash reproduction nor continuing-silence acceptance.
