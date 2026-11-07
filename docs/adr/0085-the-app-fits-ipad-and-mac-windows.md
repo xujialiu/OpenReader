@@ -35,7 +35,7 @@ path: OpenReader remains the iOS/iPad app on Apple silicon, not a
 `react-native-macos` or Catalyst target. Configuration compatibility does not
 establish actual Mac runtime verification.
 
-## Duo scene orientation exception (#346): native verification pending
+## Duo scene orientation exception (#346): compiled; automatic rotation not established
 
 The phone and tablet plist orientation arrays stay unchanged. The focused
 `with-duo-scene-orientation` config plugin extends the upstream generated
@@ -85,11 +85,19 @@ updates and refusing conflicting native code, alongside unchanged plist masks
 and upstream AppDelegate factory/lifecycle content. They also check retention
 of the original native controller/view and the same mask provider at both
 policy layers. They are not native compilation or orientation evidence.
-The generated file must compile and cold-start on SDK 27.1; actual scene/root
-masks and geometry must be checked on Duo and an ordinary phone on 27.1, with
-older-runtime and iPad controls. SourceKit cannot resolve the app-owned Swift
-fragment's Expo base outside that generated app target; the Xcode build is the
-compilation gate.
+The generated file compiled and cold-started with SDK 27.1. The beta13 native
+shell aligns the confirmed Duo scene/root masks at30, and public single-mask
+geometry requests rotate the outer Reader. An activated, foreground-asserted
+XCUIDevice control still leaves its app frame unchanged: automatic device-event
+rotation has not passed, and the container must not be described as fixing it.
+On that same shell with beta14 JavaScript, iPhone27.0 retains its402-by874
+portrait app frame; iPad26.5 changes820-by1180 to1180-by820 and back. Both also
+pass the corrected paused Player collapse/show control. Ordinary iPhone27.1
+pairings were refused, so that runtime-specific comparison remains absent.
+Actual split-window behavior, Mac runtime and physical Duo remain unverified.
+SourceKit cannot resolve the app-owned Swift fragment's Expo base outside the
+generated app target; the successful Xcode build, not a standalone source scan,
+is the compilation evidence.
 
 ## Reader-width revision (#344): implemented and verified
 
@@ -155,7 +163,7 @@ iframe. Margins is 8 in storage and live props. Computed body side padding is
 an ineffective CSS rule. The existing resize-continuity requirements below
 remain in force when the viewport begins using the full available width.
 
-## Duo side-safe-area batch (#346): implemented, native verification pending
+## Duo side-safe-area batch (#346): implemented, scoped native verification
 
 The unchanged app built with SDK 27.1 exposes a wider native window and a
 trailing safe inset than its SDK 27.0 build. The baseline WebView spans the
@@ -180,10 +188,16 @@ the side insets. Top/bottom placement is not redesigned in this batch.
 
 Host component checks cover right, left, asymmetric and zero insets, changing
 insets at a fixed window size, measured width propagation without remounting
-the renderer, and unchanged Font Size/Margins. They double native layout;
-actual inset delivery through the portal, WebView/iframe widths, native title
-placement, side-control avoidance and passage continuity require fresh native
-verification. Broader Duo acceptance remains open in design 0092 and #346.
+the renderer, and unchanged Font Size/Margins. They double native layout.
+Fresh SDK27.1 simulator evidence measures a466-point outer window with an84-point
+right inset and a382-point WebView/DOM viewport, unchanged five-percent body
+padding, text/Player controls clear of the rail, and a retained representative
+Browsing anchor. The native popover correction, Library and Settings avoidance
+are covered separately; ordinary iPhone27.0 and iPad26.5 retain usable Reader,
+Library and Settings rendering and functioning collapse/show controls. An inset
+switch at a fixed window size is host coverage, not an exercised native control.
+These observations are not exhaustive pose, split-window, word-timing or
+Following acceptance. Broader Duo acceptance remains open in design0092/#346.
 
 ## Earlier trial: limit the viewport, not the Document's body
 

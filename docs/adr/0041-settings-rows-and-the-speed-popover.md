@@ -26,7 +26,8 @@ them.
   For #346 it also insets its own frame by the current horizontal safe-area
   margins, so its existing capped content is measured inside usable space.
   Keyboard policy, content padding and ordinary zero-side-inset layout stay
-  unchanged; the side-inset correction requires native verification.
+  unchanged. Scoped Duo side-avoidance and ordinary iPhone/iPad rendering
+  checks passed; this is not exhaustive verification of every settings page.
 - `SettingsGroup`: an optional title set as written, a card, and a footer that is
   a string (drawn as a `Footnote`) or nodes. Its separators are 1 pt views laid
   absolutely over the bottom of every row but the last, inset `SETTINGS.inset`
@@ -66,7 +67,7 @@ with `hitSlop` 4, and a 17 pt number. While it is open, an absolutely filled
 closes it. The label is 15 pt. The speed's `Sheet` is gone. `Speed`'s timers,
 range and handlers are those of ADR 0020, unchanged.
 
-### Side-safe-area placement (#346; native verification pending)
+### Side-safe-area placement (#346; scoped native verification)
 
 The default `top` attachment and `bottom` arrow remain for windows without
 horizontal safe insets. With a side reservation, `SpeedBubble` instead requests
@@ -82,9 +83,10 @@ child fills the granted width and the existing wrapping stepper determines the
 height. The zero-side-inset branch retains the earlier sizing behavior.
 
 The stepper, trigger and dismissal behavior stay unchanged. Component tests
-check the sizing contract and usable-width cap; only native frame/screenshot
-and real Slower/Faster checks can establish that both the chrome and content
-stay visible at ordinary and accessible sizes.
+check the sizing contract and usable-width cap. Native frame/screenshot
+checks and real Slower/Faster round trips establish fitting chrome/content at
+the default and three tested accessibility sizes on the Duo. This is scoped
+popover evidence, not acceptance of all text sizes, poses or Duo behavior.
 
 ## The facts it was built on
 

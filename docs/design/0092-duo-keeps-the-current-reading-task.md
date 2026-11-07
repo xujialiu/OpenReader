@@ -6,7 +6,7 @@ Issue #346 starts with basic compatibility on Duo's outer and inner displays and
 
 The existing reading, listening and lookup experience comes first. A necessary visible change returns for a decision with the specific problem it solves. Ordinary iPhone, iPad and Mac behavior must not be silently redesigned.
 
-These are agreed requirements, not implemented or verified behavior. The scope and first-stage native investigation are confirmed. The first production batch below is approved from limited fresh evidence. Further production changes remain gated on review of evidence and agreement on any necessary visible changes.
+These requirements remain the acceptance boundary. The side-space and selection-continuity repairs are implemented and have simulator evidence, but complete Duo support is not accepted. Automatic rotation with the device and the full range of permitted window changes remain unresolved. Implementation and corrective checks lead to one final acceptance; a passed repair does not waive an unmet requirement.
 
 ## The current task survives a layout change
 
