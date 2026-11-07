@@ -31,6 +31,10 @@ BUNDLE = 'top.xujialiu.openreader'
 TITLE = 'Word Boundaries for Lookup'
 URL = 'https://www.youdao.com/w/Even/'
 SERVICE = 'Youdao'
+# Real native resizing, not a synthetic geometry mutation. A 64-point change
+# is materially larger than the glyph crop; 100 was arbitrary and rejected
+# a repeatedly measured 90-point OS-delivered width change on this Mac.
+MIN_WIDTH_CHANGE = 64
 
 def require(ok, why):
     if not ok:
@@ -142,7 +146,7 @@ def assert_pair(pair, now=None):
         require(all(c['range'][f] == baseline['range'][f] for f in ['text', 'cfi', 'section', 'start', 'end', 'anchor', 'focus']),
                 'Changed range/CFI/direction')
     require(control['window'] == baseline['window'], 'Positive control includes a resize')
-    minimum = 1 if kind == 'host-replay' else 100
+    minimum = 1 if kind == 'host-replay' else MIN_WIDTH_CHANGE
     require(after['window']['width'] <= baseline['window']['width'] - minimum, 'No delivered native width shrink')
     measurements = [validate_checkpoint(c, cal, time.time() if now is None else now, kind) for c in checkpoints]
     for m, g in measurements:
@@ -167,20 +171,61 @@ def child(argv, seconds=8):
     p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     try:
         out, err = p.communicate(timeout=seconds)
-    except BaseException:
-        os.killpg(p.pid, signal.SIGTERM)
+    except BaseException as error:
         try:
-            p.communicate(timeout=.5)
+            os.killpg(p.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            out, err = p.communicate(timeout=.5)
         except subprocess.TimeoutExpired:
-            os.killpg(p.pid, signal.SIGKILL)
-            p.communicate()
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            out, err = p.communicate()
+        record_child_failure(argv, p.returncode, 'timeout/cancel after ~' + str(seconds) + 's',
+                             out.decode(errors='replace'), err.decode(errors='replace'))
+        if isinstance(error, subprocess.TimeoutExpired):
+            # Do not leak full argv or container paths in the public signal;
+            # the private attempt log retains the exact argv and raw output.
+            raise subprocess.TimeoutExpired(Path(argv[0]).name, seconds) from None
         raise
     try:
         os.killpg(p.pid, signal.SIGTERM)  # Any remaining children in this owned group.
     except ProcessLookupError:
         pass
-    require(p.returncode == 0, 'Child failed: ' + Path(argv[0]).name + ' (raw output withheld; no app verdict)')
+    if p.returncode != 0:
+        out_text, err_text = out.decode(errors='replace'), err.decode(errors='replace')
+        record_child_failure(argv, p.returncode, None, out_text, err_text)
+        # Report-level signal is compact and redacted; the raw bytes stay in
+        # the attempt's private failure log for the parent's audit.
+        require(False, 'Child failed: {} (status {}): {}'.format(
+            Path(argv[0]).name, p.returncode, redact_signal(err_text or out_text)))
     return out.decode()
+
+
+FAILURE_LOG = None
+FAILURE_BYTES = 4000
+
+
+def record_child_failure(argv, status, note, out_text, err_text):
+    """Retain the raw tool output privately under the attempt (JSONL), bounded."""
+    if not FAILURE_LOG:
+        return
+    entry = {'at': time.time(), 'tool': Path(argv[0]).name, 'argv': [str(a) for a in argv],
+             'status': status, 'note': note,
+             'stdout': (out_text or '')[-FAILURE_BYTES:], 'stderr': (err_text or '')[-FAILURE_BYTES:]}
+    with open(FAILURE_LOG, 'a') as f:
+        f.write(json.dumps(entry) + '\n')
+
+
+def redact_signal(text, keep=240):
+    """One compact, whitespace-flattened line; container/home paths are cut."""
+    flat = ' '.join(str(text).split())
+    for secret in (str(Path.home()), '/Users/xujialiu/Library/Containers/top.xujialiu.openreader'):
+        flat = flat.replace(secret, '~')
+    return flat[:keep]
 
 
 # This reads only the approved fixture in the already open WebView. It changes no
@@ -206,6 +251,16 @@ for (const view of rendition.manager.views._views) {
 if (!fixture || ranges.length > 1) throw Error('Fixture not ready');
 return JSON.stringify({marker:MARKER,at:Date.now(),ranges});
 '''
+
+
+ASK_SECONDS = 8
+DRAG_SECONDS = 30  # compatibility bound for host fake-driver timeout
+# Per-child bound for an Orca capture or one focused-window read. A capture
+# consists of three serial children, so do not give the last one a leftover
+# fraction of a phase deadline. The final screenshot has its own full budget.
+STATE_SECONDS = 12
+AX_SETTLE_SECONDS = 8
+AX_SAMPLE_SECONDS = 2  # live focused-window reads 0.355–0.819s, 2026-11-08
 
 
 class Sender:
@@ -258,7 +313,11 @@ class Sender:
     def ask(self, command, pattern):
         offset = len(self.text()); sent = time.time()
         self.put(command)
-        deadline = time.monotonic() + 4
+        # Measured on the admitted Mac runtime (2026-11-08, #355): the reader
+        # WebView probe round trip took ~1.8-4.1 s, so the simulator kit's 4 s
+        # fresh-answer deadline refused real, fresh answers. Bounded at 8 s;
+        # freshness still requires a timestamped answer at or after the send.
+        deadline = time.monotonic() + ASK_SECONDS
         while time.monotonic() < deadline:
             text = self.text()
             require(len(text) >= offset, 'Debug Log truncated')
@@ -272,7 +331,7 @@ class Sender:
                         self.put({'do': 'noop'})
                         return match
             time.sleep(.05)
-        raise ValueError('No fresh matching harness answer within poll + 2s Debug Log flush budget')
+        raise ValueError('No fresh matching harness answer within the bounded ' + str(ASK_SECONDS) + 's Mac ask budget')
 
     def probe(self):
         marker = 'mac-paint-' + uuid.uuid4().hex
@@ -300,11 +359,26 @@ class Sender:
 def native_focus(pid, seconds=8):
     # Read-only targeted System Events; no process-name lookup, activate, AXPress,
     # debugger or custom CGEvent helper. Unsupported attributes fail BLOCKED.
+    # Key-window identity uses the process's AXFocusedWindow attribute: on the
+    # #355 Mac runtime (Designed-for-iPad app, observed 2026-11-08) every
+    # window's own AXFocused attribute stays false even while the app is active
+    # and its window is main/key, so the focused window is the one whose element
+    # position/size/title uniquely matches AXFocusedWindow among the process's
+    # own windows. The attribute and the unique match stay required, not assumed.
     script = '''ObjC.import('AppKit');
 const pid = PID; const app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
-const p = Application('System Events').applicationProcesses.whose({unixId:pid})();
-if (p.length !== 1) throw Error('PID unavailable');
-const ws = p[0].windows().filter(w => w.attributes.byName('AXFocused').value() === true);
+const proc = Application('System Events').applicationProcesses.whose({unixId:pid})();
+if (proc.length !== 1) throw Error('PID unavailable');
+let focused = null;
+try { focused = proc[0].attributes.byName('AXFocusedWindow').value(); } catch (e) { focused = null; }
+if (!focused) throw Error('No unique focused window');
+const fp = [...focused.position()], fs = [...focused.size()];
+const ft = focused.attributes.byName('AXTitle').value();
+const ws = proc[0].windows().filter(w => {
+  const p = [...w.position()], s = [...w.size()];
+  return p[0] === fp[0] && p[1] === fp[1] && s[0] === fs[0] && s[1] === fs[1]
+    && w.attributes.byName('AXTitle').value() === ft;
+});
 if (ws.length !== 1) throw Error('No unique focused window');
 JSON.stringify({frontmost:Boolean(app.isActive), path:ObjC.unwrap(app.bundleURL.path),
  keyWindow:true, bounds:[...ws[0].position(),...ws[0].size()]});'''.replace('PID', str(pid))
@@ -314,6 +388,10 @@ JSON.stringify({frontmost:Boolean(app.isActive), path:ObjC.unwrap(app.bundleURL.
 class NativeLoop:
     def __init__(self, case, out, case_path):
         self.case, self.out = case, out
+        # Bounded private failure log for this attempt only (raw child
+        # stdout/stderr; never published, redacted signal in raised errors).
+        global FAILURE_LOG
+        FAILURE_LOG = str(Path(out) / 'child-failures.jsonl')
         require(case['authorized'] is True and 0 <= time.time() - case['preparedAt'] <= 300,
                 'Need a fresh admitted case (five minutes), not the old PID/selection')
         expected_container = (Path.home() / 'Library/Containers' / BUNDLE / 'Data').resolve()
@@ -345,7 +423,7 @@ class NativeLoop:
 
     def state(self, name, command='get-app-state', extra=(), deadline=None):
         def budget():
-            remaining = 8 if deadline is None else min(8, deadline - time.monotonic())
+            remaining = STATE_SECONDS if deadline is None else min(STATE_SECONDS, deadline - time.monotonic())
             require(remaining > 0, 'Native measurement deadline exhausted')
             return remaining
         self.calls += 1
@@ -415,24 +493,67 @@ class NativeLoop:
         save(self.out / (role + '.json'), record)
         return record
 
+    def deliver_drag(self, w, target, name):
+        c = self.case
+        before = native_focus(c['pid'], STATE_SECONDS)
+        require(before['frontmost'] and before['keyWindow'] and before['path'] == str(Path(c['app']).resolve())
+                and before['bounds'] == [w['x'], w['y'], w['width'], w['height']]
+                and before['bounds'] == self.window, 'Drag needs the measured active key window')
+        args = ['--from-x', w['width'] - 3, '--from-y', w['height'] - 3,
+                '--to-x', target - 3, '--to-y', w['height'] - 3]
+        started = time.time()
+        raw = json.loads(child([c['orca'], 'computer', 'drag', '--app', 'pid:' + str(c['pid']),
+                                '--window-id', str(c['windowId']), *map(str, args), '--no-screenshot',
+                                '--full-tree', '--json'], STATE_SECONDS))
+        require(raw.get('ok') is True, 'Orca refused drag')
+        snap = raw['result']['snapshot']; action = raw['result']['action']; after = native_focus(c['pid'], STATE_SECONDS)
+        # A native resize can still be in flight when Orca returns its action
+        # snapshot. Retain both measured observations, but do not require them
+        # to match until the separate stable, fresh full capture below.
+        save(self.out / (name + '-input.json'), dict(command='drag', arguments=args, startedAt=started,
+             endedAt=time.time(), action=action, beforeFocus=before, afterFocus=after,
+             actionWindow=snap['window'], capture='not requested during transition'))
+        require(snap['app']['pid'] == c['pid'] and snap['app']['bundleId'] == BUNDLE
+                and snap['window']['id'] == c['windowId'] and snap['coordinateSpace'] == 'window'
+                and action['targetWindowId'] == c['windowId'] and action['delivery'] in ['background', 'foreground'],
+                'Drag receipt did not identify the selected window')
+        require(after['frontmost'] and after['keyWindow'] and after['path'] == str(Path(c['app']).resolve()),
+                'Lost active key window after drag delivery')
+
     def drag(self, state, target, name):
         w = state['window']
-        # Official window-local OS edge input; measured bounds, not DOM points.
-        deadline = time.monotonic() + 8
-        result, _ = self.state(name, 'drag', ['--from-x', w['width'] - 3, '--from-y', w['height'] - 3,
-                                             '--to-x', target - 3, '--to-y', w['height'] - 3], deadline)
-        previous = None; stable_since = time.monotonic()
-        while time.monotonic() < deadline:
-            size = (result['window']['width'], result['window']['height'])
-            if size != previous:
-                stable_since = time.monotonic(); previous = size
-            elif time.monotonic() - stable_since >= .5 and abs(size[0] - w['width']) >= 100:
-                require((size[0] - w['width']) * (target - w['width']) > 0 and size[1] == w['height'],
-                        'No delivered width-only change in the requested direction')
-                return result
+        # Official window-local OS edge input; retain the actual action and
+        # poll ONLY the focused-window AX bounds. The previous loop spent its
+        # deadline doing entire screenshot RPCs, leaving 0.12–0.4s to children.
+        # A requested destination or action success is not delivered evidence.
+        self.deliver_drag(w, target, name)
+        deadline = time.monotonic() + AX_SETTLE_SECONDS
+        previous = None; stable_since = None; samples = []
+        while deadline - time.monotonic() >= AX_SAMPLE_SECONDS:
+            started = time.monotonic()
+            focus = native_focus(self.case['pid'], AX_SAMPLE_SECONDS)
+            now = time.monotonic()
+            samples.append(dict(at=time.time(), seconds=now-started, **focus))
+            save(self.out / (name + '-ax-settle.json'), samples)
+            require(focus['frontmost'] and focus['keyWindow']
+                    and focus['path'] == str(Path(self.case['app']).resolve()), 'Lost active key window while settling')
+            bounds = focus['bounds']
+            require(len(bounds) == 4 and bounds[0] == w['x'] and bounds[1] == w['y']
+                    and bounds[3] == w['height'], 'Resize changed origin or height')
+            if bounds != previous:
+                stable_since = now; previous = bounds
+            elif now - stable_since >= .5 and abs(bounds[2] - w['width']) >= MIN_WIDTH_CHANGE:
+                require((bounds[2] - w['width']) * (target - w['width']) > 0,
+                        'No delivered width change in the requested direction')
+                # Fresh full screenshot + identity checks, separately bounded;
+                # it must agree with the last settled AX sample exactly.
+                final, _ = self.state(name + '-settled')
+                fw = final['window']
+                require([fw['x'], fw['y'], fw['width'], fw['height']] == bounds,
+                        'Final native capture disagrees with settled AX bounds')
+                return final
             time.sleep(.15)
-            result, _ = self.state(name + '-settle-' + str(self.calls), deadline=deadline)
-        raise ValueError('No measured delivered/settled OS width change within eight seconds')
+        raise ValueError('No measured delivered/settled OS width change within eight-second AX settle budget')
 
     def run(self, reset=False):
         try:
@@ -451,7 +572,7 @@ class NativeLoop:
                 require(not self.sender.probe(), 'Native Escape did not clear selection; reset BLOCKED')
                 self.sender.paused()
                 return {'status': 'NATIVE_RESET_ONLY', 'limit': 'Run the paint assertion next; reset is not bug evidence.'}, 0
-            require(state['window']['width'] - self.case['afterWidth'] >= 100 and not staged_ranges
+            require(state['window']['width'] - self.case['afterWidth'] >= MIN_WIDTH_CHANGE and not staged_ranges
                     and 'Close Lookup' not in tree, 'Need wide staged fixture with empty selection; run reset first')
             self.log_start = len(self.sender.text())
             self.watching = True
