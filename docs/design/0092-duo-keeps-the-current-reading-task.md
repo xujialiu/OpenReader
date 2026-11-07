@@ -84,7 +84,6 @@ Relevant iPad use remains a completion gate for this repair. A blocked simulator
 
 ## Remaining work after the scoped delivery
 
-- #348: folding makes the expanded Player grow from two rows to four and take too much reading space.
 - #349: automatic rotation and the reading page's rearrangement now have simulator verification on both displays; this does not establish all the other continuity requirements.
 - #350: the selected passage's visible marking and adjustable handles after folding need verification.
 - #351: the final result of a lookup that finishes across a fold needs visible confirmation.
@@ -95,4 +94,4 @@ Relevant iPad use remains a completion gate for this repair. A blocked simulator
 - #356: physical Duo coverage remains separate and is not a condition for closing the simulator repair batch.
 - #360: the expanded reading page is reported to leave a large empty area on the right; its cause and any correction remain unestablished.
 
-The new compact-Player issue does not revive the deferred Companion or two-column redesign. Its requirement is to keep reading space useful while preserving readable, reachable controls.
+The compact-Player repair in #348 is delivered separately from these remaining gates. It does not revive the deferred Companion or two-column redesign: it keeps reading space useful while preserving readable, reachable controls.
