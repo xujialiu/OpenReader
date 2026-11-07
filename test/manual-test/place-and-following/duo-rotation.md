@@ -180,3 +180,35 @@ window/root failures, both display axes, stale iframe widths and missing LLDB
 detachment. They do not stand in for native runs. Current native measurements
 and remaining failures belong in the engineering log and issue, not in a PASS
 claim inferred from these tests.
+
+## Real fold-pose transitions (#348)
+
+`duo-fold.py` drives the Device Hub's fold-pose buttons (not Rotate) for paired
+outer↔inner transitions judged by the target's own window width: folded 466,
+fully open 951. It runs under the same admission rules as `duo-rotation.py`,
+with the app visible, paused and served by the Metro whose readiness it checks
+first. Every click is foreground-calibrated fresh (see pitfalls/mcp.md: the hub
+must be frontmost, and a failed dispatch may still have delivered).
+
+```sh
+python3 test/manual-test/place-and-following/duo-fold.py SIMULATOR_UDID OUT_DIR \
+  --hub-pid HUB_PID --window-id WINDOW_ID --closed X Y --open X Y \
+  --metro http://127.0.0.1:METRO_PORT --reader --sequence open,closed \
+  --negative X Y --start-width 466
+```
+
+The pose points are the CURRENT hub window's, in window points (screenshot px
+÷ scale); re-derive them every run. `--sequence` is a comma list of `open` /
+`closed` targets, each clicked once with a bounded settle loop that retains
+every native sample; the first input's `--start-width` pins the actual starting
+pose. The native read reports every scene and window (`FOLD348` lines, ObjC++
+through `owned-lldb.sh`, explicit detach) because a fold can leave more than
+one scene; the driver selects the foreground-active scene's key window. The
+negative control clicks an empty hub point and must not change the app.
+`--reader` also records the page's viewport/stage/iframe widths and requires
+speech to stay paused and saved Reading Positions to be unchanged. Exit 1 is a
+delivered input with a wrong measured response; 69 is a missing
+precondition/tool result. Player-row measurement during each pose is
+`DuoPlayer348Probe` (`testFoldedTwoRowGeometry`, run serially between driver
+runs — never overlapping LLDB), which also covers the drawers, the speed
+popover round trip, collapse/show, skips and Tap Lock while paused.
