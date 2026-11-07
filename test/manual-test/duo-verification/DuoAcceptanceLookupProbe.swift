@@ -48,8 +48,12 @@ final class DuoAcceptanceLookupProbe: XCTestCase {
     let c = try config()
     let excerpt = try XCTUnwrap(c.definitionExcerpt)
     XCTAssertGreaterThanOrEqual(excerpt.count, 20, "A query or part-of-speech label is not a definition")
-    let query = app.staticTexts[c.query]
-    let definition = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", excerpt)).firstMatch
+    // The Drawer exposes duplicate AX entries at identical frames. Bind one
+    // element so ambiguity cannot fail query resolution before the actual
+    // visibility check; calibration logs retain the duplicate-frame evidence.
+    let query = app.staticTexts.matching(identifier: c.query).element(boundBy: 0)
+    let definition = app.staticTexts
+      .matching(NSPredicate(format: "label CONTAINS %@", excerpt)).element(boundBy: 0)
     XCTAssertTrue(query.waitForExistence(timeout: 5), "Held query not shown")
     XCTAssertTrue(definition.waitForExistence(timeout: 5), "Actual parsed definition missing from native text")
     XCTAssertTrue(query.isHittable, "Query is not in the exposed Drawer")
