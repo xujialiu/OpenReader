@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import type { ExportedConfig } from 'expo/config-plugins';
 import { describe, expect, it } from 'vitest';
 import config from '../app.config';
-import withDuoSceneOrientation, { duoAppDelegateSource, duoSceneSource } from '../plugins/with-duo-scene-orientation';
+import withDuoSceneOrientation, { duoSceneSource, withoutLegacyDuoOrientation } from '../plugins/with-duo-scene-orientation';
 
 const policy = readFileSync(new URL('../plugins/duo-scene-orientation.swift', import.meta.url), 'utf8');
 const template = 'import Expo\n\nclass SceneDelegate: ExpoAppSceneDelegate {\n}\n';
@@ -47,10 +47,9 @@ describe('the Duo exception extends the upstream scene instead of broadening eve
       const source = readFileSync(join(native, 'HelloWorld', 'SceneDelegate.swift'), 'utf8');
       expect(duoSceneSource(source, policy)).toContain('UIHingeInteraction');
       const application = readFileSync(join(native, 'HelloWorld', 'AppDelegate.swift'), 'utf8');
-      const bridged = duoAppDelegateSource(application);
-      expect(duoAppDelegateSource(bridged)).toBe(bridged);
-      expect(bridged).toContain('return super.application(application, didFinishLaunchingWithOptions: launchOptions)');
-      expect(bridged).toContain('class ReactNativeDelegate: ExpoReactNativeFactoryDelegate');
+      expect(withoutLegacyDuoOrientation(application)).toBe(application);
+      expect(application).toContain('return super.application(application, didFinishLaunchingWithOptions: launchOptions)');
+      expect(application).toContain('class ReactNativeDelegate: ExpoReactNativeFactoryDelegate');
       expect(readFileSync(join(native, 'HelloWorld.xcodeproj', 'project.pbxproj'), 'utf8')).toContain('SceneDelegate.swift in Sources');
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
@@ -83,22 +82,33 @@ describe('the Duo exception extends the upstream scene instead of broadening eve
         modRequest: { projectRoot: resolve('.'), platformProjectRoot: directory, projectName: 'OpenReader',
           modName: 'appDelegate', platform: 'ios', introspect: false },
       });
-      expect(application.modResults.contents).toBe(duoAppDelegateSource(appTemplate));
+      expect(application.modResults.contents).toBe(appTemplate);
       expect(readFileSync(join(directory, 'OpenReader', 'SceneDelegate.swift'), 'utf8')).toContain('supportedInterfaceOrientations(for windowScene:');
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
-  it('aligns the legacy callback only with positive scene evidence and preserves its other fallbacks', () => {
-    const bridged = duoAppDelegateSource(appTemplate);
-    expect(duoAppDelegateSource(bridged)).toBe(bridged);
-    expect(bridged).toContain('let scene = (window ?? self.window)?.windowScene');
-    expect(bridged).toContain('let orientations = delegate.duoInterfaceOrientations(for: scene)');
-    expect(bridged).toContain('return super.application(application, supportedInterfaceOrientationsFor: window)');
-    expect(bridged).toContain('// upstream factory/lifecycle');
-    expect(policy).toContain('hingeSession == windowScene.session.persistentIdentifier else { return nil }');
-    expect(policy).not.toMatch(/startReactNative|RCTRootView\(|UIWindow\(|rootViewController =/);
-    expect(() => duoAppDelegateSource(appTemplate.replace('// upstream factory/lifecycle', 'func application(_ app: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) {}')))
-      .toThrow(/another orientation override/);
+  it('removes only the owned legacy-callback experiment on non-clean prebuilds', () => {
+    const owned = '  // openreader-duo-application:start\n  func oldExperiment() {}\n  // openreader-duo-application:end\n';
+    const previous = appTemplate.replace('  // upstream factory/lifecycle', `${owned}  // upstream factory/lifecycle`);
+    expect(withoutLegacyDuoOrientation(previous)).toBe(appTemplate);
+    expect(withoutLegacyDuoOrientation(withoutLegacyDuoOrientation(previous))).toBe(appTemplate);
+    expect(() => withoutLegacyDuoOrientation(`${appTemplate}// openreader-duo-application:start`)).toThrow(/inconsistent owned/);
+  });
+
+  it('uses the same positive scene policy at the root without creating another React view', () => {
+    const refresh = policy.slice(policy.indexOf('private func refreshOrientations'), policy.indexOf('private func configuredOrientations'));
+    expect(refresh).toContain('guard duoInterfaceOrientations(for: scene) != nil');
+    expect(refresh).toContain('if !(content is DuoOrientationContainer)');
+    expect(refresh).toContain('DuoOrientationContainer(content: content)');
+    expect(refresh).toContain('[weak self, weak scene, weak content]');
+    expect(policy).toContain('addChild(content)');
+    expect(policy).toContain('view.addSubview(hosted)');
+    expect(policy).toContain('content.didMove(toParent: self)');
+    expect(policy).toContain('supportedInterfaceOrientations: UIInterfaceOrientationMask { orientations() }');
+    expect(policy).toContain('childForStatusBarStyle: UIViewController? { content }');
+    expect(policy).toContain('childForHomeIndicatorAutoHidden: UIViewController? { content }');
+    expect(policy).toContain('let tablet = UIDevice.current.userInterfaceIdiom == .pad');
+    expect(policy).not.toMatch(/startReactNative|RCTRootView\(|UIWindow\(/);
   });
 
   it('guards the native API and requires positive scene-scoped hinge evidence', () => {
