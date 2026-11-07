@@ -149,6 +149,58 @@ or long-duration timing. Summarize frames inside the WebView: the Debug Log
 truncates raw frame arrays at 2 KB. Preserve and re-read an existing record
 after a failed export rather than playing again just to collect the same data.
 
+## Visible whitespace versus the paragraph boundary (#360)
+
+A short line's end is not the text-column boundary. A one-line paragraph is
+also its own last line; ordinary Justify does not stretch it to both edges.
+Use `whitespace-probe.js` alongside `margins-probe.js` when the reported empty
+area is beside text rather than an obviously narrow viewport:
+
+```sh
+node test/manual-test/kit/hx.cjs SIMULATOR_UDID \
+  "$(node -p 'JSON.stringify({seq: Date.now()})')" \
+  --code-file test/manual-test/settings/whitespace-probe.js
+```
+
+Run inside the admitted phase with a Document open and paused. Require a fresh
+`[probe]` reply in that device's Debug Log, not an old Metro line. The explicit
+epoch-millisecond sequence avoids restarting at 1 after earlier harness cleanup.
+Remove the final `harness.json` after collecting the answer so relaunch cannot
+replay it. The probe only reads; it neither changes the text nor starts audio.
+
+It reports viewport/stage sizes, iframe-width extrema across all displayed
+views, body padding/margins, visible paragraph edges and the rightmost visible
+text rectangle with its paragraph box. Detailed summaries stop at three views;
+`omittedViews` makes that limit explicit. Text rectangles are not necessarily
+lines: inline elements can contribute several rectangles on one line. It
+returns no book text. Header/Player occlusion, native side insets and a reading
+policy verdict are deliberately not inferred from these DOM measurements.
+Capture the active display and pair the answer with current native window and
+safe-area measurements using the serial owned-LLDB path in
+[the Duo geometry recipe](../place-and-following/duo-rotation.md).
+
+For a native window width W, safe insets L/R and Margins m, the usable width is
+W - L - R and ordinary body padding per side is (W - L - R) * m / 100. Add L
+and `iframeLeft` to an iframe's paragraph/text coordinates before comparing
+with the native window edges. Separate required safe space, chosen Margins,
+publisher indents and unused last-line width. An arbitrary left/right visual
+imbalance threshold detects an appearance; it is not a correctness rule.
+
+Keep the original Document and settings as the reproduction. A diagnostic
+long-paragraph control can distinguish unused line endings from a restricted
+column, but changing text in the running page is not an app fix or a preserved
+EPUB. Discard such edits by relaunching before final verification; confirm the
+original settings and saved Reading Positions are unchanged. Do not remove
+safe-area protection, merge paragraphs or stretch last lines merely to make a
+short fixture fill the width.
+
+`npx vitest run test/scripts/whitespace-probe.test.ts` checks the collector's
+geometry/filtering, private-text omission and bounded output with DOM doubles.
+It does not establish WebKit layout, a device reflow, or the absence of every
+possible whitespace defect. Actual #360 original/control measurements are in
+the engineering log and issue; existing formatting is retained without an app
+change for that measured case.
+
 ## Migration and persistence
 
 Back up the selected simulator's settings before staging, preserving unrelated
