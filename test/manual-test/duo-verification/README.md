@@ -13,6 +13,9 @@ measurements require the admitted tester lane and parent review.
   native crash reproduction nor continuing-silence acceptance.
 - [Mac runtime gates](platforms.md) (#355): authorized current-app launch,
   resizing and interaction checks, not an installation or passed-run record.
+- [Mac selection-paint feedback](mac-selection-paint.md) (#355): fixture-local
+  native resize driver and pixel assertion; host replay qualifies the tool,
+  not the application's native red/green result.
 
 #356 is cancelled and closed as not planned; no physical-Duo coverage is
 claimed here. Use the [manual-test index](../README.md) and [shared kit](../kit/README.md)
