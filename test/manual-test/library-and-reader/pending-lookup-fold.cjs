@@ -80,6 +80,7 @@ const dimensionsExpression = `(() => {
     let held;
     while (Date.now() < waitUntil) {
       const state = await evaluate(stateExpression);
+      report.lastControlState = state;
       if (state.count > 1 || state.aborted) throw new Error(`Invalid pre-fold control: ${JSON.stringify(state)}`);
       if (state.count === 1 && state.waiting) { held = state; break; }
       await delay(40);

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 const directory = new URL('../manual-test/library-and-reader/', import.meta.url);
 const source = readFileSync(new URL('lookup-fetch-gate-install.js', directory), 'utf8');
 const url = 'https://api.dictionaryapi.dev/api/v2/entries/en/hope';
-type RecordState = { state: string; startedAt: number; heldAt: number | null; releasedAt: number | null; abortedAt: number | null };
+type RecordState = { url: string; state: string; startedAt: number; heldAt: number | null; releasedAt: number | null; abortedAt: number | null };
 type Gate = { count: number; waiting: boolean; aborted: boolean; requests: RecordState[]; release(): number; restore(): void };
 function setup() {
   const response = { ok: true };
@@ -54,9 +54,24 @@ describe('the pending-lookup diagnostic does not misdate aborts or pretend to re
     gate.restore();
   });
 
-  it('passes other URLs through and restores a held response without leaking a pending promise', async () => {
+  it('counts another selected word and any unexpected changed-word request, not only hope', async () => {
+    const { runtime, gate, response } = setup();
+    const even = url.replace('/hope', '/even');
+    const first = runtime.fetch(even);
+    await flush();
+    expect(gate).toMatchObject({ count: 1, waiting: true, aborted: false });
+    expect(gate.requests[0]).toMatchObject({ url: even, state: 'held' });
+    const second = runtime.fetch(url);
+    await flush();
+    expect(gate.count).toBe(2);
+    expect(gate.requests.map(request => request.url)).toEqual([even, url]);
+    gate.restore();
+    expect(await Promise.all([first, second])).toEqual([response, response]);
+  });
+
+  it('passes unrelated URLs through and restores a held response without leaking a pending promise', async () => {
     const { runtime, original, response, gate } = setup();
-    expect(await runtime.fetch('https://api.dictionaryapi.dev/api/v2/entries/en/other')).toBe(response);
+    expect(await runtime.fetch('https://example.test/unrelated')).toBe(response);
     expect(gate.count).toBe(0);
     const pending = runtime.fetch(url);
     await flush();

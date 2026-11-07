@@ -734,7 +734,7 @@ On this device's AXe/mobilebuildmcp bridge, synthetic swipes are eaten exactly
 like the taps recorded for 2026-10-28; scroll-collapse checks must either use
 the CDP drive above or a fresh device that accepts synthetic touches.
 
-## Pending-lookup continuity: a held-response gate (#346, 2026-11-07)
+## Pending-lookup continuity: a held-response gate (#346)
 
 The app's own lookup timeout is **15 seconds** — any hold longer than that
 fails the lookup honestly ("The service took too long. Try again."), which is
@@ -749,13 +749,13 @@ OPENREADER_METRO=http://127.0.0.1:8346 node test/manual-test/kit/cdp.cjs \
   --eval test/manual-test/library-and-reader/lookup-fetch-gate-install.js
 ```
 
-The wrapper intercepts only `…/entries/en/hope` (the synthetic fixture word),
-counts it, calls the **original fetch once**, awaits the real response, and
+The wrapper intercepts every English entry request to `api.dictionaryapi.dev`,
+records its URL, calls the **original fetch once per request**, awaits the real response, and
 holds its delivery on an explicit Promise until `gate-release.js` runs; the
 abort signal is tracked (`aborted`) and rejects the held work without masking
 cancellation; `gate-restore.js` puts the original fetch back. Read state with
 `gate-state.js` (`{now, installed, count, waiting, aborted, requests}`). Each
-request records `startedAt`, `heldAt`, `releasedAt` and `abortedAt` in the app's
+request records its `url` plus `startedAt`, `heldAt`, `releasedAt` and `abortedAt` in the app's
 clock. A release reports how many responses were actually delivered; an already
 aborted promise cannot be reported as released. Label the held state
 as **not a real network delay** — the response has arrived; only its delivery
@@ -783,7 +783,11 @@ response, refuses an already-aborted or too-old control, performs that action,
 requires an actual app-window dimension change, and releases before twelve
 seconds from the request start. It records both app-clock timestamps and window
 measurements; it restores the original fetch even on a failed control. Use a
-new output path for every attempt and preserve failures.
+new output path for every attempt and preserve failures. Never delete an old
+output to bypass the coordinator's overwrite refusal. The caller must propagate
+its nonzero exit, not end with an unconditional success. A failed wait retains
+`lastControlState`; the coordinator's top-level `startedAt` is its own start,
+not proof that an app request started.
 
 A successful coordinator result proves only timely response delivery across the
 verified window change. The caller must still assert the selected text and
@@ -793,17 +797,18 @@ combine the gate with `watchfetch`/`breakfetch`: they replace global fetch and
 would stack wrappers. A timeout before the fold is an invalid control, never a
 fold-induced application defect.
 
-Control-run notes from the first green run (2026-11-07, Duo closed 466x678,
-`1.0.4 (30)-beta11-debug`): the press probe must attach to the running app and
-take its point from a file (`LookupFoldPressProbe`), the calibrated word point
-comes from `lookup-word-frame.js` answered on the `[probe]` log line (not
-`[hx]`), and the **page's DOM selection must be verified empty before the
-calibrated press** — closing a previous lookup drawer leaves the selection
-alive and the next long-press re-selects from that anchor. Consent for
-`lookup:free-dictionary` was already stored, so the control lookup raised no
-alert. After a green fold run (`response-delivered-across-window-change`,
-held 6.54 s, released 1 count, no abort, `cleanup: restored`), the native
-drawer retained the word and the delivered definition across the fold and a
-further pose change, while the page's DOM selection read `""` — query text and
-result live in the drawer; the native DOM range itself is not preserved once
-the drawer owns the lookup.
+The press probe attaches to the running app and takes its point from a file
+(`LookupFoldPressProbe`). Calibration from `lookup-word-frame.js` is answered
+on the `[probe]` log line, not `[hx]`. Before a new control, **assert the old
+Drawer is closed and the DOM selection is empty**; a completed drag command
+alone does not establish either. An open Drawer changes the hit-test mapping.
+If its drag-close channel fails, use reliable native navigation away from and
+back to the held Reader, then recheck both preconditions and recalibrate.
+
+The initially selected fixture word need not be `hope`: correlate the recorded
+request URL with the actual before/after selected word and delivered definition.
+Counting all requests to this service also catches an unintended change to a
+different word after reflow; a hope-only predicate would silently miss it. The
+renderer retains the exact range across redisplay; verify its boundaries with
+`lookup-dom-range.js`, and label visual highlight/handle evidence separately.
+Historical run measurements belong in `notes/`, not a current behavior claim.

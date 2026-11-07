@@ -21,9 +21,12 @@
   const refresh = () => { gate.waiting = gate.requests.some((request) => request.state === 'held'); };
   function intercepted(input, init) {
     const url = typeof input === 'string' ? input : String(input?.url ?? input);
-    if (url !== 'https://api.dictionaryapi.dev/api/v2/entries/en/hope') return original(input, init);
+    // Count every request to this service, including an unintended changed
+    // word after reflow. A hardcoded hope-only gate misses both that defect
+    // and a valid native press that selects another fixture word.
+    if (!/^https:\/\/api\.dictionaryapi\.dev\/api\/v2\/entries\/en\/[^/?#]+$/.test(url)) return original(input, init);
     gate.count++;
-    const record = { state: 'requested', startedAt: Date.now(), heldAt: null, releasedAt: null, abortedAt: null };
+    const record = { url, state: 'requested', startedAt: Date.now(), heldAt: null, releasedAt: null, abortedAt: null };
     gate.requests.push(record);
     return new Promise((resolve, reject) => {
       let settled = false;
