@@ -40,10 +40,15 @@ stack observation, not a causal conclusion.
 
 Both historical rotation scripts suppress debugger output/errors, omit `set -e`
 and finish with `exit 0`. A guard's `passed` is therefore not a checked native
-result. The issue reports overlapping timed-out AX/LLDB work, but a complete
-wall/monotonic-timestamped attach/expression/timeout/detach and AX begin/end
-transcript is **missing from the retained nearby files**. Do not replace that
-missing trace with file mtimes or assert the script text was delivered exactly.
+result. Recovered original harness records establish serial rotation-batch
+execution and returned output, not every native substep's delivery. The crash
+capture falls inside the second batch, which defines no AX tree read. Its
+`Debugger request timed out` / `Debugger disconnected before completion: 1006`
+messages come from [`cdp.cjs`](../kit/cdp.cjs), not a measured LLDB attach
+failure. Native LLDB output/status was discarded, so actual detachment,
+individual AX boundaries, lingering callback overlap and the trap's lock owner
+remain unestablished. Do not reconstruct those missing native facts from batch
+wall times, file mtimes, script intent or the helper's CDP timeout.
 
 ### Diagnosis stop rule
 
