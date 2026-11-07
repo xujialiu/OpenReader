@@ -18,8 +18,9 @@
 # NSStringFromCGRect) and presented-sheet frames with selected/largest-undimmed
 # detent identifiers. Limits: reads the app process only (never the runner);
 # regions/edges are whatever the RUNTIME publishes to this app — a 27.0-built
-# app can receive none even on a 27.1 runtime (compile-SDK gating, measured
-# 2026-11-06); the script pauses the app briefly and detaches; a guard exit 0
+# app can receive none even on a 27.1 runtime (toolchain/SDK-dependent behavior;
+# internal compatibility gating was not independently established). The script
+# pauses the app briefly and detaches; a guard exit 0
 # proves the commands ran, not that any gesture worked.
 
 expr -l objc++ -- @import UIKit;

@@ -798,7 +798,12 @@ would stack wrappers. A timeout before the fold is an invalid control, never a
 fold-induced application defect.
 
 The press probe attaches to the running app and takes its point from a file
-(`LookupFoldPressProbe`). Calibration from `lookup-word-frame.js` is answered
+(`LookupFoldPressProbe`). Supply four numbers, `X Y WINDOW_WIDTH WINDOW_HEIGHT`,
+through `PRESS_POINT_FILE`; when runner environment forwarding is unavailable,
+write `/tmp/openreader-lookup-SIMULATOR_UDID.point` using the uppercase UUID.
+The probe refuses missing input, a dead/background target, out-of-window points,
+or geometry different from the calibration. Remove the point file afterwards.
+Calibration from `lookup-word-frame.js` is answered
 on the `[probe]` log line, not `[hx]`. Before a new control, **assert the old
 Drawer is closed and the DOM selection is empty**; a completed drag command
 alone does not establish either. An open Drawer changes the hit-test mapping.
