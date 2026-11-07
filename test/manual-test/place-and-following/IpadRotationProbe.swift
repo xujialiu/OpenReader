@@ -39,4 +39,13 @@ final class IpadRotationProbe: XCTestCase {
         shot("after-portrait")
         XCTAssertEqual(XCUIDevice.shared.orientation, .portrait, "the system rotation did not take")
     }
+
+    func testRotateToLandscapeRight() {
+        print("[rotation] before \(XCUIDevice.shared.orientation.rawValue), screen \(UIScreen.main.bounds)")
+        XCUIDevice.shared.orientation = .landscapeRight
+        sleep(4)
+        print("[rotation] after \(XCUIDevice.shared.orientation.rawValue), screen \(UIScreen.main.bounds)")
+        shot("after-landscape-right")
+        XCTAssertEqual(XCUIDevice.shared.orientation, .landscapeRight, "the system rotation did not take")
+    }
 }

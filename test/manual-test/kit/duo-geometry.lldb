@@ -1,0 +1,31 @@
+# Read-only typed Duo geometry inspection (issue #346 checkpoint B A/B control).
+#
+# Runs through the owned-lldb path under the shared guard, with the task-local
+# Xcode 27.1 DEVELOPER_DIR (the reserved-region/verticalBarEdge/hinge APIs are
+# iOS 27.1+ and must compile against the 27.1 SDK):
+#
+#   env DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer \
+#     python3 test/manual-test/kit/ios_guard.py run --wait 60 --timeout 150 \
+#       --record OUT/geo-TAG-guard.json -- \
+#       bash test/manual-test/kit/owned-lldb.sh SIMULATOR_UDID test/manual-test/kit/duo-geometry.lldb
+#
+# Prints two JSON arrays: (1) UIWindow/RNCWKWebView and every view with
+# reserved regions or Bar/Screen in its class name — bounds, frameInWindow,
+# safeInsets, size classes, verticalBarEdge (0 unspecified/1 leading/2 trailing),
+# hidden/alpha, windowScene.interfaceOrientation (1 portrait/2 up/3 left/4 right),
+# division/occlusion counts and each region frame in owner and window space with
+# margins and active flag; (2) the status-bar manager frame (typed via
+# NSStringFromCGRect) and presented-sheet frames with selected/largest-undimmed
+# detent identifiers. Limits: reads the app process only (never the runner);
+# regions/edges are whatever the RUNTIME publishes to this app — a 27.0-built
+# app can receive none even on a 27.1 runtime (toolchain/SDK-dependent behavior;
+# internal compatibility gating was not independently established). The script
+# pauses the app briefly and detaches; a guard exit 0
+# proves the commands ran, not that any gesture worked.
+
+expr -l objc++ -- @import UIKit;
+expr -l objc++ -- @import WebKit;
+expr -l objc++ -O -- ({ NSMutableArray *out = [NSMutableArray new]; for (UIScene *s in UIApplication.sharedApplication.connectedScenes) { if (![s isKindOfClass:UIWindowScene.class]) continue; for (UIWindow *w in ((UIWindowScene *)s).windows) { NSMutableArray *q = [NSMutableArray arrayWithObject:w]; while (q.count) { UIView *v=q.firstObject; [q removeObjectAtIndex:0]; [q addObjectsFromArray:v.subviews]; NSString *name=NSStringFromClass(v.class); NSArray *div=[v reservedRegionsOfKind:UIViewReservedRegionKind.divisionRegionKind options:1]; NSArray *occ=[v reservedRegionsOfKind:UIViewReservedRegionKind.occlusionRegionKind options:1]; if (v==w || [v isKindOfClass:WKWebView.class] || [name containsString:@"Bar"] || [name containsString:@"Screen"] || div.count || occ.count) { [out addObject:@{ @"class":name, @"address":[NSString stringWithFormat:@"%p",v], @"bounds":NSStringFromCGRect(v.bounds), @"frameInWindow":NSStringFromCGRect([v convertRect:v.bounds toView:w]), @"safeInsets":NSStringFromUIEdgeInsets(v.safeAreaInsets), @"hSize":@(v.traitCollection.horizontalSizeClass), @"vSize":@(v.traitCollection.verticalSizeClass), @"verticalBarEdge":@(v.traitCollection.verticalBarEdge), @"hidden":@(v.hidden), @"alpha":@(v.alpha), @"divisionCount":@(div.count), @"occlusionCount":@(occ.count), @"orientation":@(w.windowScene.interfaceOrientation), @"screenBounds":NSStringFromCGRect(w.screen.bounds)}]; for (UIViewReservedRegion *r in [div arrayByAddingObjectsFromArray:occ]) [out addObject:@{ @"owner":[NSString stringWithFormat:@"%p",v], @"kind": [r.kind isEqual:UIViewReservedRegionKind.divisionRegionKind]?@"division":@"occlusion", @"frameInOwner":NSStringFromCGRect(r.frame), @"frameInWindow":NSStringFromCGRect([v convertRect:r.frame toView:w]), @"margins":NSStringFromUIEdgeInsets(r.margins), @"active":@(r.active) }]; } } } } [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:out options:2 error:nil] encoding:4]; })
+expr -l objc++ -O -- ({ NSMutableArray *out=[NSMutableArray new]; for (UIScene *s in UIApplication.sharedApplication.connectedScenes) { if (![s isKindOfClass:UIWindowScene.class]) continue; UIWindowScene *sc=(UIWindowScene *)s; for (UIWindow *w in sc.windows) { [out addObject:@{@"statusBarFrameInScreen":NSStringFromCGRect(sc.statusBarManager.statusBarFrame), @"statusBarHidden":@(sc.statusBarManager.statusBarHidden), @"statusBarFrameInWindow":NSStringFromCGRect([w convertRect:sc.statusBarManager.statusBarFrame fromCoordinateSpace:w.screen.coordinateSpace])}]; NSMutableArray *q=[NSMutableArray array]; if (w.rootViewController) [q addObject:w.rootViewController]; while (q.count) { UIViewController *vc=q.firstObject; [q removeObjectAtIndex:0]; [q addObjectsFromArray:vc.childViewControllers]; if (vc.presentedViewController) [q addObject:vc.presentedViewController]; UISheetPresentationController *sp=vc.sheetPresentationController; if (sp) [out addObject:@{@"controller":NSStringFromClass(vc.class), @"viewFrameInWindow":NSStringFromCGRect([vc.view convertRect:vc.view.bounds toView:w]), @"presentedFrameInWindow":NSStringFromCGRect([sp.presentedView convertRect:sp.presentedView.bounds toView:w]), @"selectedDetent":sp.selectedDetentIdentifier?:@"nil", @"largestUndimmed":sp.largestUndimmedDetentIdentifier?:@"nil"}]; } } } [[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:out options:0 error:nil] encoding:4]; })
+process detach
+quit

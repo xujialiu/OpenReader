@@ -733,3 +733,87 @@ shorter than the viewport no offset is reachable.
 On this device's AXe/mobilebuildmcp bridge, synthetic swipes are eaten exactly
 like the taps recorded for 2026-10-28; scroll-collapse checks must either use
 the CDP drive above or a fresh device that accepts synthetic touches.
+
+## Pending-lookup continuity: a held-response gate (#346)
+
+The app's own lookup timeout is **15 seconds** — any hold longer than that
+fails the lookup honestly ("The service took too long. Try again."), which is
+not a fold effect. To hold a real response in flight across a fold and still
+release it inside that window, install a test-only fetch wrapper in the app's
+Hermes runtime over CDP **before** the lookup (the four
+`lookup-fetch-gate-*.js` scripts here; `cdp.cjs --eval`, `OPENREADER_METRO`
+set):
+
+```sh
+OPENREADER_METRO=http://127.0.0.1:8346 node test/manual-test/kit/cdp.cjs \
+  --eval test/manual-test/library-and-reader/lookup-fetch-gate-install.js
+```
+
+The wrapper intercepts every English entry request to `api.dictionaryapi.dev`,
+records its URL, calls the **original fetch once per request**, awaits the real response, and
+holds its delivery on an explicit Promise until `gate-release.js` runs; the
+abort signal is tracked (`aborted`) and rejects the held work without masking
+cancellation; `gate-restore.js` puts the original fetch back. Read state with
+`gate-state.js` (`{now, installed, count, waiting, aborted, requests}`). Each
+request records its `url` plus `startedAt`, `heldAt`, `releasedAt` and `abortedAt` in the app's
+clock. A release reports how many responses were actually delivered; an already
+aborted promise cannot be reported as released. Label the held state
+as **not a real network delay** — the response has arrived; only its delivery
+is held.
+
+Establish a normal-request control, calibrated word point, permitted recipient
+and owned Device Hub identity before the timed sequence. The coordinator
+`pending-lookup-fold.cjs` installs the gate itself, retains one CDP connection,
+and writes `OUTPUT.ready`. Start the attach-only native long-press probe only
+after that receipt. Run both as joined children of one foreground script under
+`ios_guard.py`; the coordinator must run **alongside** the probe, not after
+`run-probe.sh` returns. XCTest result collection can consume the entire request
+deadline after the actual long press has already started it.
+
+```sh
+node test/manual-test/library-and-reader/pending-lookup-fold.cjs \
+  "OWNED_DEVICE_NAME" http://127.0.0.1:METRO_PORT \
+  /tmp/ATTEMPT/verified-fold.sh /tmp/ATTEMPT/pending-result.json
+```
+
+The caller supplies a bounded `verified-fold.sh` that checks the selected owned
+window and performs one real closed-to-inner system pose action. It does not
+launch the app or inject dimensions. The coordinator watches for a real held
+response, refuses an already-aborted or too-old control, performs that action,
+requires an actual app-window dimension change, and releases before twelve
+seconds from the request start. It records both app-clock timestamps and window
+measurements; it restores the original fetch even on a failed control. Use a
+new output path for every attempt and preserve failures. Never delete an old
+output to bypass the coordinator's overwrite refusal. The caller must propagate
+its nonzero exit, not end with an unconditional success. A failed wait retains
+`lastControlState`; the coordinator's top-level `startedAt` is its own start,
+not proof that an app request started.
+
+A successful coordinator result proves only timely response delivery across the
+verified window change. The caller must still assert the selected text and
+actual definition in the same native Drawer, with no duplicate request. Native
+selection, task state and result visibility are separate observations. Never
+combine the gate with `watchfetch`/`breakfetch`: they replace global fetch and
+would stack wrappers. A timeout before the fold is an invalid control, never a
+fold-induced application defect.
+
+The press probe attaches to the running app and takes its point from a file
+(`LookupFoldPressProbe`). Supply four numbers, `X Y WINDOW_WIDTH WINDOW_HEIGHT`,
+through `PRESS_POINT_FILE`; when runner environment forwarding is unavailable,
+write `/tmp/openreader-lookup-SIMULATOR_UDID.point` using the uppercase UUID.
+The probe refuses missing input, a dead/background target, out-of-window points,
+or geometry different from the calibration. Remove the point file afterwards.
+Calibration from `lookup-word-frame.js` is answered
+on the `[probe]` log line, not `[hx]`. Before a new control, **assert the old
+Drawer is closed and the DOM selection is empty**; a completed drag command
+alone does not establish either. An open Drawer changes the hit-test mapping.
+If its drag-close channel fails, use reliable native navigation away from and
+back to the held Reader, then recheck both preconditions and recalibrate.
+
+The initially selected fixture word need not be `hope`: correlate the recorded
+request URL with the actual before/after selected word and delivered definition.
+Counting all requests to this service also catches an unintended change to a
+different word after reflow; a hope-only predicate would silently miss it. The
+renderer retains the exact range across redisplay; verify its boundaries with
+`lookup-dom-range.js`, and label visual highlight/handle evidence separately.
+Historical run measurements belong in `notes/`, not a current behavior claim.
