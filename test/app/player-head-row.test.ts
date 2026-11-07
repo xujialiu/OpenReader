@@ -70,8 +70,10 @@ const name = (node: ReactTestInstance) => String(node.props.accessibilityLabel ?
 
 /** The rows of controls, top to bottom, each as the names of what is in it, a side of the head row flattened. */
 function rows(root: ReactTestInstance): string[][] {
-  return root.findAll((node) => String(node.type) === 'View' && style(node).flexDirection === 'row' && style(node).justifyContent === 'space-between'
-    && node.parent !== null && style(node.parent).gap === 4)
+  const controls = root.find((node) => String(node.type) === 'View' && style(node).flexShrink === 0
+    && style(node).gap === 4 && typeof node.props.onLayout === 'function');
+  // Include the standalone Voice row too, not just horizontal flex rows (#348).
+  return controls.children.filter((child): child is ReactTestInstance => typeof child !== 'string')
     .map((row) => row.children.filter((child): child is ReactTestInstance => typeof child !== 'string')
       .flatMap((child) => (String(child.type) === 'View' && style(child).flexDirection === 'row'
         ? child.children.filter((inner): inner is ReactTestInstance => typeof inner !== 'string').map(name) : [name(child)])));
@@ -86,9 +88,10 @@ describe('the Player stays beside system controls (#346)', () => {
       const room = root.find((node) => String(node.type) === 'View' && style(node).justifyContent === 'flex-end');
       expect(style(room)).toMatchObject({ left, right });
       const card = root.find((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
-      expect(style(card).width).toBe(466 - left - right - 24);
-      // A narrower safe area must use the split controls, not the full-window layout.
-      expect(rows(root).length).toBe(466 - left - right < 390 ? 3 : 2);
+      // At usable382, give back only enough decorative clearance to fit the
+      // seven controls and their gaps, including the doubled native border.
+      expect(style(card).width).toBe(466 - left - right === 382 ? 367 : 466 - left - right - 24);
+      expect(rows(root)).toHaveLength(2);
     } finally { await act(async () => view.unmount()); }
   });
 
@@ -97,18 +100,55 @@ describe('the Player stays beside system controls (#346)', () => {
     const { root, view } = await player({ collapsed: true });
     try {
       const button = root.find((node) => String(node.type) === 'ReadingButton');
-      expect(style(button.parent!)).toMatchObject({ right: 100, bottom: 28 });
+      if (!button.parent) throw new Error('The Reading Button has no placement container');
+      expect(style(button.parent)).toMatchObject({ right: 100, bottom: 28 });
     } finally { await act(async () => view.unmount()); }
   });
 });
 
 describe('the head row (#325, after Speechify\'s card)', () => {
+  it('keeps every direct entry point in two complete rows beside Duo system controls (#348)', async () => {
+    dimensions.width = 466;
+    insets.right = 84;
+    const { root, view } = await player();
+    try {
+      const all = rows(root);
+      expect(all).toHaveLength(2);
+      expect(all[0]).toEqual(['FollowingMark', 'TapLockButton', 'View', 'SleepTimerButton', 'Collapse the player']);
+      expect(all[1]).toEqual(['Contents', 'Transport', 'Transport', 'Transport', 'Transport', 'Transport', 'SpeedBubble']);
+      expect(root.findAll((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Choose a Voice')).toHaveLength(1);
+    } finally { await act(async () => view.unmount()); }
+  });
+
   it('holds the Tap Lock beside A and the Sleep Timer beside the collapse arrow, over the transport, in two rows', async () => {
     const { root } = await player();
     const all = rows(root);
     expect(all.length).toBe(2);
     expect(all[0].map((one) => one.replace(/^Following the reading$/, 'A'))).toEqual(['FollowingMark', 'TapLockButton', 'View', 'SleepTimerButton', 'Collapse the player']);
     expect(all[1][0]).toBe('Contents');
+  });
+
+  it('adds only the Contents/speed row when the transport alone is crowded (#348)', async () => {
+    dimensions.width = 375;
+    const { root, view } = await player();
+    try {
+      const all = rows(root);
+      expect(all).toHaveLength(3);
+      expect(all[0]).toEqual(['FollowingMark', 'TapLockButton', 'View', 'SleepTimerButton', 'Collapse the player']);
+      expect(all[1]).toEqual(['Transport', 'Transport', 'Transport', 'Transport', 'Transport']);
+      expect(all[2]).toEqual(['Contents', 'SpeedBubble']);
+    } finally { await act(async () => view.unmount()); }
+  });
+
+  it('lets the head sides wrap rather than overlap in a very narrow accessibility layout (#348)', async () => {
+    Object.assign(dimensions, { width: 320, fontScale: 3.571 });
+    const { root, view } = await player();
+    try {
+      const controls = root.find((node) => String(node.type) === 'View' && style(node).flexShrink === 0 && style(node).gap === 4);
+      const head = controls.children.filter((child): child is ReactTestInstance => typeof child !== 'string')[0];
+      expect(style(head).flexWrap).toBe('wrap');
+      expect(root.findByType(SleepTimerButton).props).toMatchObject({ width: 69, height: 105 });
+    } finally { await act(async () => view.unmount()); }
   });
 
   it('keeps them in the head row when the Voice name and Contents and the speed get rows of their own', async () => {
@@ -121,11 +161,76 @@ describe('the head row (#325, after Speechify\'s card)', () => {
     expect(root.findByType(SleepTimerButton).props.width).toBeGreaterThan(44);
   });
 
+  it('preserves direct controls and state through compact, three-row and accessibility layouts (#348)', async () => {
+    Object.assign(dimensions, { width: 466 });
+    insets.right = 84;
+    const sleep: SleepTimerState = { choice: 30, left: 29 * 60_000 + 41_000, since: null, expired: false };
+    const p = await player({ tapLock: true, sleep, following: false });
+    try {
+      for (const [width, fontScale, left, right, count] of [
+        [466, 1, 0, 84, 2], [951, 1, 0, 84, 2], [459, 1, 0, 84, 3],
+        [466, 3.571, 0, 84, 4], [466, 3.571, 84, 0, 4], [466, 1, 84, 0, 2],
+      ]) {
+        Object.assign(dimensions, { width, fontScale });
+        Object.assign(insets, { left, right });
+        await act(async () => p.view.update(createElement(Player, p.props)));
+        expect(rows(p.root)).toHaveLength(count);
+        expect(p.root.findByType(SleepTimerButton).props.sleep).toEqual(sleep);
+        const labels = p.root.findAll((node) => String(node.type) === 'Pressable').map((node) => node.props.accessibilityLabel);
+        expect(labels).toEqual(expect.arrayContaining(['Unlock Taps', 'Return to the reading', 'Choose a Voice', 'Play',
+          'Previous paragraph', 'Previous sentence', 'Next sentence', 'Next paragraph', 'Contents', 'Collapse the player']));
+        expect(labels.filter((label) => String(label).startsWith('Playback speed,'))).toHaveLength(1);
+      }
+      for (const callback of [p.props.onPlay, p.props.onPause, p.props.onSkip, p.props.onRate, p.props.onSleep, p.props.onTapLock, p.props.onCollapsed, p.props.onReturn]) {
+        expect(callback).not.toHaveBeenCalled();
+      }
+    } finally { await act(async () => p.view.unmount()); }
+  });
+
+  it('keeps a long Voice label complete and scalable in the narrower head (#348)', async () => {
+    Object.assign(dimensions, { width: 466 });
+    insets.right = 84;
+    const label = 'A very long Voice name — 中文 العربية — with its regional description';
+    const p = await player({ settings: { ...DEFAULT_SETTINGS, voice: 'fixture-voice' }, voiceInUse: { label, locale: 'en' } });
+    try {
+      const voice = p.root.find((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Choose a Voice');
+      const text = voice.find((node) => String(node.type) === 'Text');
+      expect(text.props.children).toBe(label);
+      expect(text.props.numberOfLines).toBeUndefined();
+      expect(text.props.allowFontScaling).not.toBe(false);
+      expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+      expect(Object.assign({}, ...voice.props.style({ pressed: false })).minHeight).toBeGreaterThanOrEqual(44);
+    } finally { await act(async () => p.view.unmount()); }
+  });
+
+  it('forwards measured compact and taller control heights rather than a stale row-count estimate (#348)', async () => {
+    dimensions.width = 466;
+    insets.right = 84;
+    const p = await player();
+    try {
+      const measured = () => p.root.findAll((node) => String(node.type) === 'View' && typeof node.props.onLayout === 'function');
+      // Explicit native-layout doubles: these verify the public callbacks,
+      // not Yoga's computed height or native Voice wrapping.
+      const [card, controls] = measured();
+      await act(async () => {
+        card.props.onLayout({ nativeEvent: { layout: { height: 103 } } });
+        controls.props.onLayout({ nativeEvent: { layout: { height: 88 } } });
+      });
+      expect(p.props.onHeight).toHaveBeenLastCalledWith(123);
+      expect(p.props.onOpenHeight).toHaveBeenLastCalledWith(123);
+      dimensions.fontScale = 3.571;
+      await act(async () => p.view.update(createElement(Player, p.props)));
+      await act(async () => measured()[1].props.onLayout({ nativeEvent: { layout: { height: 400 } } }));
+      expect(p.props.onOpenHeight).toHaveBeenLastCalledWith(435);
+    } finally { await act(async () => p.view.unmount()); }
+  });
+
   it('takes 32 points of the column, its controls keeping 44-point touch areas (#325)', async () => {
     const { root } = await player();
     let head: ReactTestInstance | null = root.find((node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === 'Collapse the player');
     while (head && !(String(head.type) === 'View' && style(head).justifyContent === 'space-between')) head = head.parent;
-    expect(style(head!)).toMatchObject({ marginVertical: -6 });
+    if (!head) throw new Error('The collapse control has no head row');
+    expect(style(head)).toMatchObject({ marginVertical: -6 });
     expect(root.findByType(SleepTimerButton).props).toMatchObject({ height: 44, width: 48 });
   });
 

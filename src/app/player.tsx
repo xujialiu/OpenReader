@@ -33,8 +33,9 @@
  *   Collapsed to the Reading Button, neither is shown, because collapsed the
  *   page only follows.
  * - **It is a card that floats clear of the home bar** (#325, #326, after the
- *   owner's reference, Speechify): `CARD_MARGIN` in from the sides, its bottom
- *   edge `playerBottomGap` above the bottom of the window, rounded on all four
+ *   owner's reference, Speechify): normally `CARD_MARGIN` in from the usable
+ *   sides, with bounded clearance reduction to recover a compact row (#348).
+ *   Its bottom edge is `playerBottomGap` above the window bottom, rounded on all four
  *   corners, so nothing of it lies over the phone's home bar and no control's
  *   touch area reaches it. Two rows at the default size: the head, with the
  *   Tap Lock beside A or M and the Sleep Timer beside the collapse arrow, and
@@ -242,8 +243,8 @@ export function Player({
   const { width, height, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // The row must fit the usable card, not the window behind system side bars.
-  const card = cardWidth(width - insets.left - insets.right, LAYOUT_WIDTH.player);
-  const layout = playerLayout(card, fontScale);
+  const card = cardWidth(width - insets.left - insets.right, LAYOUT_WIDTH.player, fontScale, StyleSheet.hairlineWidth);
+  const layout = playerLayout(card, fontScale, StyleSheet.hairlineWidth);
   const bottomGap = playerBottomGap(insets.bottom);
   /** How far a head-row control's 44-point touch area reaches past its drawn row, above and below. */
   const headReach = (layout.headEnd - layout.headHeight) / 2;
@@ -296,9 +297,8 @@ export function Player({
   const voice = <View style={styles.voiceSlot}>
     <Pressable accessibilityRole="button" accessibilityLabel="Choose a Voice" onPress={onVoices}
       style={({ pressed }) => [styles.voice, { minHeight: layout.headEnd }, pressed && styles.pressed]}>
-      {/* Wraps rather than being cut short (#101): between the head row's two
-          sides it has 158 points on a 390-point phone, and a longer name
-          makes the card a line taller. */}
+      {/* Wraps rather than being cut short (#101). A longer name can make
+          the head taller; only an independently crowded head moves it (#348). */}
       <Text style={styles.voiceLabel}>{voiceLine(settings, voiceInUse)}</Text>
     </Pressable>
   </View>;
@@ -337,7 +337,7 @@ export function Player({
       <View style={styles.controls} onLayout={measureControls}>
         {/* 44 points tall, for the touch areas, and drawn as 32: the row
             reaches past its place above and below (#325). */}
-        <View style={[styles.head, { marginVertical: -headReach }]}>
+        <View style={[styles.head, { marginVertical: -headReach, flexWrap: layout.splitVoice ? 'wrap' : 'nowrap' }]}>
           {/* A or M with the Tap Lock, and opposite them the Sleep Timer with
               the collapse arrow: two sides of one width, so the name is centred
               on the whole player (#70, #325). */}
@@ -346,11 +346,11 @@ export function Player({
             {/* As wide as the Sleep Timer while the name sits between them;
                 its icon alone once the name has a row of its own, so both
                 sides fit at the largest text size on an iPhone SE. */}
-            <TapLockButton on={tapLock} onPress={() => onTapLock(!tapLock)} width={layout.split ? 44 : layout.sideWidth} height={layout.headEnd} />
+            <TapLockButton on={tapLock} onPress={() => onTapLock(!tapLock)} width={layout.splitVoice ? 44 : layout.sideWidth} height={layout.headEnd} />
           </View>
           {/* Only the name opens the Voices: its button hugs the text, and a tap
               beside it lands on this plain box and does nothing. */}
-          {!layout.split ? voice : null}
+          {!layout.splitVoice ? voice : null}
           <View style={styles.headSide}>
             <SleepTimerButton sleep={sleep} chapterOffered={chapterOffered} onSleep={onSleep}
               width={layout.sideWidth} height={layout.headEnd} />
@@ -360,10 +360,10 @@ export function Player({
             </Pressable>
           </View>
         </View>
-        {layout.split ? <View style={{ marginVertical: -headReach }}>{voice}</View> : null}
+        {layout.splitVoice ? <View style={{ marginVertical: -headReach }}>{voice}</View> : null}
 
         <View style={styles.transport}>
-          {!layout.split ? <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
+          {!layout.splitTransport ? <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
             style={({ pressed }) => [styles.footTap, { width: layout.endWidth }, pressed && styles.pressed]}>
             <Icon name="contents" color={INK.text} />
           </Pressable> : null}
@@ -372,10 +372,10 @@ export function Player({
           <Transport loading={buffering} icon={playing ? 'pause' : 'play'} label={playing ? 'Pause' : 'Play'} primary onPress={toggle} disabled={!enabled} />
           <Transport icon="next" label="Next sentence" onPress={() => onSkip('next-sentence')} disabled={!enabled} />
           <Transport icon="nextParagraph" label="Next paragraph" onPress={() => onSkip('next-paragraph')} disabled={!enabled} />
-          {!layout.split ? <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen}
+          {!layout.splitTransport ? <SpeedBubble rate={settings.rate} onRate={onRate} open={speedOpen} onOpen={setSpeedOpen}
             width={layout.endWidth} height={layout.rateHeight} /> : null}
         </View>
-        {layout.split ? <View style={styles.transport}>
+        {layout.splitTransport ? <View style={styles.transport}>
           <Pressable accessibilityRole="button" accessibilityLabel="Contents" onPress={onContents}
             style={({ pressed }) => [styles.footTap, pressed && styles.pressed]}>
             <Icon name="contents" color={INK.text} />

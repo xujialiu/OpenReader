@@ -70,6 +70,14 @@ The speed popover is included in safe-area avoidance. It keeps the existing nati
 
 The Library and its Search, selection actions and return-to-Reading button also stay beside the system's reserved side area. Settings uses that same usable area for its existing cards and fields. Navigation, selection, keyboard and editing behavior is unchanged; this extends the same avoidance rule, not a new Library or Settings layout.
 
+## The expanded Player gives space back to the Document
+
+The compact-Player repair keeps every existing operation directly reachable. When there is nearly enough width for two rows, the card's own side clearance gives way before another row is added. The card still floats clear of the system's reserved areas. The Document's Font Size and Margins do not change.
+
+The Voice and the playback controls respond to crowding independently. Moving Contents and speed to another row does not, by itself, move the Voice out of the top row too. A narrower window can therefore use three rows instead of four. A long Voice name or larger accessibility text can still make the Player taller; complete, readable labels and usable touch targets take priority over an invariant row count.
+
+Windows that already have enough room keep their existing arrangement. This is a local adaptation of the current Player, not a new folded mode, an overflow menu, or a return to the deferred large-screen redesign. The ordinary-text target is two rows on the outer Duo display; actual fold transitions, occupied height and touch usability require native verification before the repair is called complete.
+
 ## Remaining work after the scoped delivery
 
 - #348: folding makes the expanded Player grow from two rows to four and take too much reading space.

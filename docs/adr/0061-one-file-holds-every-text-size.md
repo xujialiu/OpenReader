@@ -142,8 +142,9 @@ full-width label's size.
 
 `playerLayout` grows the speed target with fontScale and keeps the compact
 transport's two ends equal. When those ends and the five transport controls
-cannot fit, Contents and speed take another row and the Voice gets the full
-width. A/M sizes to its letters. The Player grows with its content and never
+cannot fit, Contents and speed take another row. The Voice now moves only
+when its own head is crowded, independently of the transport (#348, below).
+A/M sizes to its letters. The Player grows with its content and never
 scrolls as a whole; past the navigation bar only its notes scroll (#312,
 below). Only the player's content boundary remounts on a text-size change; the
 Reading and document remain mounted. The player remains an absolute overlay.
@@ -195,7 +196,7 @@ A Player that may reach the bar can cover the whole page while a note is shown,
 and a Player with a note does not collapse (#67). The 75 % cap had the same
 kind of cost, smaller.
 
-### Six gaps of at least 3 points (#218)
+### Six gaps of at least 3 points (#218; historical dimensions)
 
 `playerLayout` keeps the transport on one row while its seven controls fit
 with six gaps of at least 3 points between them:
@@ -218,3 +219,13 @@ at xLarge (fontScale 1.118), 414 at xxLarge (1.235), 428 and 430 at xxxLarge
 space between them does. `test/app/player-layout.test.ts` pins 390 on one row
 and 375 split at fontScale 1, and checks the 3-point gaps across its sweep of
 widths and sizes.
+
+### A transport shortage does not spend two rows (#348)
+
+The current floating card has 12-point side clearance, 8-point horizontal padding and 52-point transport ends at ordinary text size. Previously recorded Duo outer geometry is a 466-point window minus an 84-point side inset: 382 usable points, a 358-point card and 342 nominal content points before its borders. Seven targets and six 3-point gaps need 350. The single transport-fit predicate therefore moved both Voice and Contents/speed into their own rows, matching the reported four-row shape. This arithmetic is not a fresh paired measurement of the supplied screenshot.
+
+`cardWidth` starts with the existing clearance and 600-point cap. Only if widening can recover the compact transport does it return the smallest whole-point width that fits the targets, six 3-point gaps, padding and both native hairline borders. Clearance never drops below 6 points per usable side, and the cap never grows. If even that cannot recover the row, the usual clearance stays. With half-point borders the 382-point usable case becomes a 367-point card, leaving 7.5 points per side and 350 actual content points. A 390-point phone also stays compact after border accounting; already-roomy windows retain their card geometry. No Document or system-safe-area width is borrowed.
+
+`splitTransport` controls only Contents/speed. `splitVoice` independently reserves equal head sides, two 4-point gaps and at least one scaled transport-end width for the Voice label. The full label still wraps and follows system text scaling. Thus an ordinary 375-point usable window keeps Voice in the head and uses three structural rows; at maximum accessibility scale on the Duo outer width the Voice still receives its own row. Head sides may themselves wrap in extremely narrow accessibility layouts instead of overlapping. These are content-sized arrangements, not promises of exactly two, three or four rendered text lines.
+
+`Player` passes the same current border width into card selection and row fitting. Its measured `onHeight` and `onOpenHeight` callbacks remain the renderer's occlusion and Line Position inputs; no estimated height, remount of the Reading or change to Font Size/Margins is introduced. Tests include the previously omitted standalone Voice row, exact compact boundaries, cap/clearance/target/gap invariants, independent head/transport choices, side switches, long-label scaling and measured-height callback propagation. React Native/SwiftUI layout and supplied height events are explicit host doubles. Native fold, touch, text and occupied-height verification remains pending until recorded separately; passing these tests alone does not establish it.
