@@ -9,10 +9,10 @@ conformance and compiled `SceneDelegate.swift` that the custom plugin supplied
 on SDK 57. The custom plugin and its config entry are retired; keeping them
 would deliberately fail prebuild on the upstream manifest. Multiple scenes
 remain disabled. Issue #346 adds a narrow orientation-policy extension to the
-upstream SceneDelegate after positive hinge evidence, with its legacy
-AppDelegate orientation callback aligned to that scene policy (ADR 0085).
-It does not replace Expo's scene construction or revive this retired adoption
-plugin.
+upstream SceneDelegate after positive hinge evidence, with a Duo-only native
+root container reading that same policy (ADR 0085). The original Expo
+controller and React view are retained. It does not replace Expo's scene
+construction or revive this retired adoption plugin.
 The template regression check covers all three pieces,
 including the Sources build-phase entry; generated-project inspection and
 native launch, import and lifecycle checks remain separate verification gates.

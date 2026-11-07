@@ -41,10 +41,10 @@ The phone and tablet plist orientation arrays stay unchanged. The focused
 `with-duo-scene-orientation` config plugin extends the upstream generated
 SceneDelegate subclass; it does not reintroduce the retired scene-adoption
 plugin or create another window/React root. It refuses an unexpected subclass
-instead of overwriting another native policy. The existing Expo AppDelegate
-also implements the legacy orientation callback; a narrow owned override
-forwards only a positively identified Duo scene to the same policy, otherwise
-calling the original superclass implementation and preserving its subscribers.
+instead of overwriting another native policy. Fresh AppDelegate factory and
+lifecycle code stays untouched. A cleanup-only AppDelegate mod removes the
+owned legacy-callback experiment from non-clean prebuilds; forwarding through
+that callback did not establish device-driven rotation.
 
 Built with the UIKit 27.1 SDK, the delegate attaches a public
 `UIHingeInteraction` to its phone scene's window. Only a non-null hinge update
@@ -56,13 +56,22 @@ selects a layout or the orientation exception.
 On iOS 27+, the scene-supported-orientations hook returns the existing
 per-idiom plist mask, adding landscape only for a phone scene with matching
 positive evidence. The supported-mask refresh and geometry request use public
-UIKit APIs. The scene-only build reported mask30 while the root controller
-still reported6 and genuine device rotations did not change app geometry.
-The legacy callback alignment is a separate native verification step, not a
-claim that display-driven landscape placement already proved rotation. A new
-root container is deferred while the existing controller/delegate path is
-checked, avoiding unnecessary reparenting of the React view. Ordinary phones retain their configured fallback; iPad/Mac keep
-their existing tablet mask. Older runtime/build combinations use the fallback
+UIKit APIs. A public single-landscape request succeeded with scene mask30 and
+root mask6, but device-driven rotation did not. That proves a geometry request
+is permitted, not that automatic rotation follows the declared capability.
+
+For a confirmed Duo only, a native containment controller now gives the root
+the same scene policy instead of the old portrait fallback. It retains the
+original Expo controller and its exact React view as one child, pins that view
+to its bounds (not another inset guide), and forwards status-bar,
+home-indicator and system-gesture preferences. It does not create another
+React root or change ordinary-device controller containment. Stale hinge
+callbacks from a different scene/window are ignored.
+
+Fallback selection matches Expo's existing device-idiom logic: the iPad key
+when that device idiom applies, then the base key and platform default if a
+key is absent or empty. No separate Mac policy is invented. Ordinary phones,
+iPad and Mac retain that fallback. Older runtime/build combinations use it
 without hinge observation; only a fresh SDK 27.1 build can establish Duo-policy
 acceptance. Runtime geometry rejection is not a successful rotation.
 
@@ -73,7 +82,9 @@ connect, active and disconnect overrides call their superclass implementations.
 
 Generation tests cover the installed Expo template, idempotence, owned-block
 updates and refusing conflicting native code, alongside unchanged plist masks
-and upstream AppDelegate factory/lifecycle content. They are not native compilation or orientation evidence.
+and upstream AppDelegate factory/lifecycle content. They also check retention
+of the original native controller/view and the same mask provider at both
+policy layers. They are not native compilation or orientation evidence.
 The generated file must compile and cold-start on SDK 27.1; actual scene/root
 masks and geometry must be checked on Duo and an ordinary phone on 27.1, with
 older-runtime and iPad controls. SourceKit cannot resolve the app-owned Swift
