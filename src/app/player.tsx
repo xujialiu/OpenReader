@@ -506,7 +506,10 @@ function SpeedBubble({ rate, onRate, open, onOpen, width, height }: {
   const beside = insets.left > 0 || insets.right > 0;
   const bubbleWidth = Math.max(0, Math.min(windowWidth - insets.left - insets.right - 48, Math.max(196, Math.ceil(64 * fontScale + 132))));
   return (
-    <Host style={{ width, height }}>
+    // The Player already places the card clear of system controls/home bar.
+    // A second SwiftUI bottom inset clipped this 44-point Host to 42.33 on
+    // the folded Duo (both old/new triggers ended at its safe edge, y644).
+    <Host style={{ width, height }} ignoreSafeArea="container">
       <Popover isPresented={open} onIsPresentedChange={onOpen}
         attachmentAnchor={beside ? 'leading' : 'top'} arrowEdge={beside ? 'trailing' : 'bottom'}>
         <Popover.Trigger>

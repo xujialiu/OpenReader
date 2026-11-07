@@ -80,6 +80,27 @@ describe('the capped Player measures its own width (#319)', () => {
   });
 });
 
+describe('the speed trigger keeps its full reserved touch area (#348)', () => {
+  it.each([{ width: 390, fontScale: 1, right: 0 }, { width: 466, fontScale: 1, right: 84 },
+    { width: 466, fontScale: 2.65, right: 84 }])('does not inset the Player-owned Host again at %j', async ({ right, ...size }) => {
+    Object.assign(dimensions, size);
+    insets.right = right;
+    const p = await player();
+    try {
+      const trigger = p.root().find((node) => String(node.type) === 'Pressable'
+        && String(node.props.accessibilityLabel).startsWith('Playback speed,'));
+      let host = trigger.parent;
+      while (host && String(host.type) !== 'Host') host = host.parent;
+      if (!host) throw new Error('The speed trigger has no native Host');
+      // Structural guard only: native real-edge taps verify the actual target.
+      // The Player already avoids system controls and places the whole card.
+      expect(host.props.ignoreSafeArea).toBe('container');
+      expect(host.props.style.height).toBeGreaterThanOrEqual(44);
+      expect(host.props.style.width).toBeGreaterThanOrEqual(44);
+    } finally { await p.unmount(); }
+  });
+});
+
 describe('player speed popover geometry (#124)', () => {
   it.each([[0, 84], [84, 0], [20, 44]])('opens toward the Player interior with left=%s right=%s (#346)', async (left, right) => {
     Object.assign(insets, { left, right });

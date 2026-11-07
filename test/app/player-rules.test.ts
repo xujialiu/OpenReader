@@ -490,7 +490,7 @@ describe('Play is in the middle of the player (#115)', () => {
     pin(player, '{ width: layout.endWidth }', 'player.tsx');
     // The speed, in either layout.
     expect(player.match(/width=\{layout.endWidth\} height=\{layout.rateHeight\}/g)).toHaveLength(2);
-    pin(player, '<Host style={{ width, height }}>', 'player.tsx');
+    pin(player, '<Host style={{ width, height }} ignoreSafeArea="container">', 'player.tsx');
 
     const row = within(player, '<View style={styles.transport}>', '<SpeedBubble');
     const [before, after] = row.split(' primary ');

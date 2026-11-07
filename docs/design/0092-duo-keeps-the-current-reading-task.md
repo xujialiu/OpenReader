@@ -78,6 +78,10 @@ The Voice and the playback controls respond to crowding independently. Moving Co
 
 Windows that already have enough room keep their existing arrangement. This is a local adaptation of the current Player, not a new folded mode, an overflow menu, or a return to the deferred large-screen redesign. The ordinary-text target is two rows on the outer Duo display; actual fold transitions, occupied height and touch usability require native verification before the repair is called complete.
 
+The speed button must respond across its full button-sized area, not just the smaller number it draws. Completing that touch area must not enlarge the Player or undo the compact arrangement. A reserved space that looks large enough is not a substitute for a real press succeeding there.
+
+Relevant iPad use remains a completion gate for this repair. A blocked simulator is recorded as untested, not as a passed regression. A bounded follow-up checks only the missing coverage rather than repeating completed work; if its permitted recovery does not restore a usable environment, the remaining gate returns for a decision.
+
 ## Remaining work after the scoped delivery
 
 - #348: folding makes the expanded Player grow from two rows to four and take too much reading space.
