@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -110,6 +111,17 @@ class MacSelectionPaintOracleTest(unittest.TestCase):
             native[role]['kind'] = 'native'
         with self.assertRaisesRegex(ValueError, 'Stale native capture'):
             LOOP.assert_pair(native, now=1000)
+
+    def test_real_90_point_shrink_is_qualified_but_63_points_is_not(self):
+        # Live handoff delivered 892→802 with a genuine edge drag. The old
+        # >=100 guard rejected it despite stable range and registered glyphs.
+        fixture_image(self.after, 520, painted=False)
+        self.pair['after'] = checkpoint(self.after, 'after', 102, 520, self.cal)
+        result, code = LOOP.assert_pair(self.pair)
+        self.assertEqual((result['status'], code), ('HOST_SYNTHETIC_PAINT_LOST', 1))
+        self.pair['after']['window']['width'] = 287
+        with self.assertRaisesRegex(ValueError, 'No delivered native width shrink'):
+            LOOP.assert_pair(self.pair)
 
     def test_missing_positive_occlusion_and_wrong_glyph_registration_block(self):
         fixture_image(self.control, painted=False)
@@ -293,8 +305,10 @@ class MacSelectionPaintFakeDriverTest(unittest.TestCase):
     def driver(self, extra=None, mode='run', output='out'):
         env = dict(os.environ, HOME=str(self.home), FAKE_ROOT=str(self.root), PATH=str(self.tools))
         env.update(extra or {})
+        # The no-resize case runs the whole measured drag budget, so the bound
+        # must exceed DRAG_SECONDS, not the old simulator-calibrated 30 s.
         return subprocess.run([sys.executable, str(SCRIPT), mode, str(self.case_path), str(self.root / output)],
-                              env=env, text=True, capture_output=True, timeout=30)
+                              env=env, text=True, capture_output=True, timeout=LOOP.DRAG_SECONDS + 20)
 
     def test_fake_native_protocol_exits_red_and_cleans_commands_and_wrapper(self):
         result = self.driver()
@@ -355,6 +369,147 @@ class MacSelectionPaintFakeDriverTest(unittest.TestCase):
             self.log.write_text(self.log.read_text() + '2000-01-01 00:00:00.000 +00:00 [probe] STALE\n')
         with patch.object(sender, 'put', side_effect=stale_put), self.assertRaisesRegex(ValueError, 'No fresh matching'):
             sender.ask({'do': 'js'}, r'\[probe\] STALE')
+
+
+class FastAXSettleTest(unittest.TestCase):
+    """Isolated fake bounds: a fast AX sample never replaces the final image."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='mac-paint-settle-')
+        self.addCleanup(self.temp.cleanup)
+        self.loop = LOOP.NativeLoop.__new__(LOOP.NativeLoop)
+        self.loop.out = Path(self.temp.name)
+        self.loop.case = {'pid': 222, 'app': '/fake/OpenReader.app'}
+        self.start = {'window': dict(x=10, y=20, width=350, height=200)}
+        self.focus = dict(frontmost=True, keyWindow=True, path='/fake/OpenReader.app', bounds=[10, 20, 260, 200])
+
+    def state(self, name, command='get-app-state', extra=()):
+        self.calls.append((name, command))
+        w = dict(x=10, y=20, width=self.final_width, height=200)
+        return ({'window': w}, '')
+
+    def run_drag(self):
+        def deliver(w, target, name):
+            self.calls.append((name, 'drag'))
+        with patch.object(self.loop, 'state', side_effect=self.state), \
+             patch.object(self.loop, 'deliver_drag', side_effect=deliver), \
+             patch.object(LOOP, 'native_focus', return_value=self.focus):
+            return self.loop.drag(self.start, 250, 'shrink')
+
+    def test_drag_action_snapshot_may_precede_ax_resize_but_is_not_final_evidence(self):
+        self.loop.case.update(orca='/fake/orca', windowId=99)
+        self.loop.window = [10, 20, 350, 200]
+        before = dict(self.focus, bounds=[10, 20, 350, 200])
+        raw = dict(ok=True, result=dict(
+            snapshot=dict(app=dict(pid=222, bundleId=LOOP.BUNDLE), coordinateSpace='window',
+                          window=dict(id=99, x=10, y=20, width=350, height=200)),
+            action=dict(targetWindowId=99, delivery='background')))
+        with patch.object(LOOP, 'native_focus', side_effect=[before, self.focus]), \
+             patch.object(LOOP, 'child', return_value=json.dumps(raw)) as child:
+            self.loop.deliver_drag(self.start['window'], 250, 'transition')
+        receipt = LOOP.load(self.loop.out / 'transition-input.json')
+        self.assertEqual(receipt['actionWindow']['width'], 350)
+        self.assertEqual(receipt['afterFocus']['bounds'][2], 260)
+        self.assertIn('--no-screenshot', child.call_args.args[0])
+        self.assertEqual(receipt['capture'], 'not requested during transition')
+
+    def test_fast_samples_are_retained_and_fresh_full_capture_agrees(self):
+        self.calls = []; self.final_width = 260
+        final = self.run_drag()
+        self.assertEqual(final['window']['width'], 260)
+        self.assertEqual(self.calls, [('shrink', 'drag'), ('shrink-settled', 'get-app-state')])
+        samples = LOOP.load(self.loop.out / 'shrink-ax-settle.json')
+        self.assertGreaterEqual(len(samples), 2)
+        self.assertTrue(all(s['bounds'] == [10, 20, 260, 200] for s in samples))
+        self.assertGreaterEqual(samples[-1]['at'] - samples[0]['at'], .5)
+
+    def test_final_capture_disagreement_blocks(self):
+        self.calls = []; self.final_width = 259
+        with self.assertRaisesRegex(ValueError, 'capture disagrees'):
+            self.run_drag()
+
+    def test_unfocused_or_wrong_height_samples_block(self):
+        self.calls = []; self.final_width = 260
+        self.focus['frontmost'] = False
+        with self.assertRaisesRegex(ValueError, 'active key window'):
+            self.run_drag()
+        self.focus['frontmost'] = True; self.focus['bounds'][3] = 201
+        with self.assertRaisesRegex(ValueError, 'origin or height'):
+            self.run_drag()
+
+
+class NativeFocusKeyWindowTest(unittest.TestCase):
+    """Live qualification (2026-11-08, #355 Mac runtime): the app's per-window
+    AXFocused attribute stays false while the app is active and its window is
+    main, so the helper must identify the key window through the process's own
+    AXFocusedWindow attribute with exactly one unique window match."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='mac-paint-focus-')
+        self.addCleanup(self.temp.cleanup)
+        self.tools = Path(self.temp.name) / 'tools'
+        self.tools.mkdir()
+        self.tool = self.tools / 'osascript'
+
+    def run_helper(self, body):
+        self.tool.write_text('#!/bin/sh\n' + body)
+        self.tool.chmod(0o700)
+        env = dict(os.environ, PATH=str(self.tools) + os.pathsep + os.environ.get('PATH', ''))
+        with patch.dict(os.environ, env):
+            return LOOP.native_focus(222)
+
+    def test_helper_uses_the_focused_window_attribute_not_the_dead_per_window_one(self):
+        text = SCRIPT.read_text()
+        self.assertIn("byName('AXFocusedWindow')", text)
+        self.assertNotIn("byName('AXFocused').value() === true", text)
+
+    def test_helper_reports_the_matched_key_window_contract(self):
+        payload = dict(frontmost=True, keyWindow=True, path='/x/OpenReader.app', bounds=[1, 2, 3, 4])
+        self.assertEqual(self.run_helper("echo '" + json.dumps(payload) + "'"), payload)
+
+    def test_unavailable_attribute_is_a_helper_failure_not_a_pass(self):
+        with self.assertRaisesRegex(ValueError, 'osascript'):
+            self.run_helper("echo 'No unique focused window' >&2; exit 3")
+
+    def test_ask_budget_covers_the_measured_mac_webview_round_trip(self):
+        # Live measurement 2026-11-08: probe answers took ~1.8-4.1 s; the old
+        # 4 s deadline refused fresh answers, so the budget is pinned at 8 s.
+        self.assertEqual(LOOP.ASK_SECONDS, 8)
+
+    def test_drag_budget_covers_the_measured_mac_drag_round_trip(self):
+        # A former full drag state() round trip took ~7.6 s and exhausted the
+        # shared 8 s settle deadline. Delivery now has its own 12 s child
+        # bound; focused-window settle has a separate 8 s budget. DRAG_SECONDS
+        # is only the compatibility bound used by the fake-driver test.
+        self.assertEqual(LOOP.DRAG_SECONDS, 30)
+        self.assertEqual(LOOP.STATE_SECONDS, 12)
+        self.assertEqual(LOOP.AX_SETTLE_SECONDS, 8)
+
+    def test_failed_child_output_is_retained_privately_and_redacted_in_errors(self):
+        # Parent audit 2026-11-08 (#357 lesson): a failed helper boundary must
+        # not discard the tool's raw stdout/stderr. The raw bytes go to the
+        # attempt's private JSONL log; the raised signal stays compact.
+        log = Path(self.temp.name) / 'child-failures.jsonl'
+        env = dict(os.environ, PATH=str(self.tools) + os.pathsep + os.environ.get('PATH', ''))
+        private_path = str(Path.home() / 'private')
+        with patch.dict(os.environ, env), patch.object(LOOP, 'FAILURE_LOG', str(log)):
+            with self.assertRaisesRegex(ValueError, r'osascript \(status 3\)') as raised:
+                self.run_helper('printf %s ' + shlex.quote('home ' + private_path + ' detail') + ' >&2; exit 3')
+        entry = json.loads(log.read_text().splitlines()[-1])
+        self.assertEqual(entry['tool'], 'osascript')
+        self.assertEqual(entry['status'], 3)
+        self.assertIn(private_path + ' detail', entry['stderr'])
+        self.assertNotIn(private_path, str(raised.exception))  # redacted signal only
+        self.assertIn('~/private detail', str(raised.exception))
+
+    def test_timeout_retains_partial_child_output_and_sanitizes_exception(self):
+        log = Path(self.temp.name) / 'timeout.jsonl'
+        with patch.object(LOOP, 'FAILURE_LOG', str(log)):
+            with self.assertRaises(subprocess.TimeoutExpired) as raised:
+                LOOP.child([sys.executable, '-c', 'import sys,time;print("partial",flush=True);time.sleep(3)'], .25)
+        entry = json.loads(log.read_text())
+        self.assertIn('partial', entry['stdout'])
+        self.assertIsNotNone(entry['status'])
+        self.assertNotIn('import sys', str(raised.exception))
 
 
 if __name__ == '__main__':
