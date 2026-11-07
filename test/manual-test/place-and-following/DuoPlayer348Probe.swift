@@ -315,6 +315,49 @@ final class DuoPlayer348Probe: XCTestCase {
     XCTAssertTrue(dismissSpeed())
   }
 
+  /// The reusable minimum-touch contract for the speed trigger (RED on
+  /// 1.0.4 (30)-beta16 by design, per the parent's checkpoint): (1) the
+  /// accessible/target frame itself must be at least 44 points in both
+  /// dimensions — a frame-size check, distinct from any tap; (2) real taps
+  /// one 3x physical pixel (1/3 pt) inside BOTH edges of the centred
+  /// 44-point span about the frame centre must open the popover, each after
+  /// a verified dismissal, with a mid-control positive check. Do not weaken
+  /// these to match the measured 42.33 frame.
+  func testSpeedTriggerMinimumTouchRegion() throws {
+    _ = require("Play", message: "reader not open")
+    guard dismissSpeed() else { return }
+    let speed = speedTrigger()
+    guard speed.waitForExistence(timeout: 8) else {
+      return XCTFail("PRECONDITION FAILED: speed trigger missing")
+    }
+    let frame = speed.frame
+    print("PROBE-348 min-region ax-frame \(frame)")
+    XCTAssertGreaterThanOrEqual(min(frame.width, frame.height), 44,
+        "AX check: speed trigger accessible frame \(frame) is below the 44-point minimum "
+      + "touch target (RED expected on beta16: the activator measured <=43.67 high)")
+    let centre = frame.midY
+    let pixel = 1.0 / 3.0
+    let coordinate = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+    func tapOpens(_ dy: CGFloat, _ name: String) -> Bool {
+      guard dismissSpeed() else { return false }
+      coordinate.withOffset(CGVector(dx: frame.midX, dy: dy)).tap()
+      let opened = app.buttons["Slower"].waitForExistence(timeout: 5)
+      print("PROBE-348 min-region \(name) dy=\(dy) opened=\(opened)")
+      return opened
+    }
+    let mid = tapOpens(centre, "mid-control")
+    XCTAssertTrue(mid, "positive control: a tap at the frame centre did not open the popover; the map is invalid")
+    let topEdge = tapOpens(centre - 22 + pixel, "top-edge-centred44")
+    XCTAssertTrue(topEdge,
+        "Tap check: a real tap at \(centre - 22 + pixel) (one 3x pixel inside the top edge of the "
+      + "centred 44-point region) did not open the popover — the actual touch target does not reach it")
+    let bottomEdge = tapOpens(centre + 22 - pixel, "bottom-edge-centred44")
+    XCTAssertTrue(bottomEdge,
+        "Tap check: a real tap at \(centre + 22 - pixel) (one 3x pixel inside the bottom edge of the "
+      + "centred 44-point region) did not open the popover — the actual touch target does not reach it")
+    XCTAssertTrue(dismissSpeed())
+  }
+
   /// Chooses 5 Minutes through the SwiftUI menu and reports the countdown
   /// label. Leaves the timer RUNNING; the fold continuity check needs it.
   func testSleepTimerChooseFiveMinutes() throws {
