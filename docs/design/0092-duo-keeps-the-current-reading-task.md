@@ -81,5 +81,6 @@ The Library and its Search, selection actions and return-to-Reading button also 
 - #354: undimmed Appearance preview needs a controlled before-and-after comparison.
 - #355: the current changes need actual Mac regression coverage.
 - #356: physical Duo coverage remains separate and is not a condition for closing the simulator repair batch.
+- #360: the expanded reading page is reported to leave a large empty area on the right; its cause and any correction remain unestablished.
 
 The new compact-Player issue does not revive the deferred Companion or two-column redesign. Its requirement is to keep reading space useful while preserving readable, reachable controls.
