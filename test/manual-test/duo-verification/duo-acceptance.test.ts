@@ -23,43 +23,59 @@ const parsedControl = () => ({
 });
 
 describe('DuoAcceptanceSelection direction receipt', () => {
-  it('distinguishes reversed cross-node selections with equal endpoint offsets', () => {
-    const startNode = { nodeType: 3, textContent: 'one ' };
-    const endNode = { nodeType: 3, textContent: 'two ' };
-    const range = {
-      startContainer: startNode, startOffset: 1, endContainer: endNode, endOffset: 1,
-      collapsed: false,
-      toString: () => startNode.textContent.slice(1) + endNode.textContent.slice(0, 1),
-      getClientRects: () => [{ left: 10, top: 20, width: 30, height: 16 }],
-    };
-    const selection = {
-      anchorNode: startNode, anchorOffset: 1, focusNode: endNode, focusOffset: 1,
-      isCollapsed: false, rangeCount: 1,
-      getRangeAt: (index: number) => { expect(index).toBe(0); return range; },
-    };
-    const window = { innerWidth: 382, innerHeight: 678, getSelection: () => selection };
-    const context = vm.createContext({ window, Date: { now: () => 1234 },
-      rendition: { manager: { views: { _views: [{
-        displayed: true, section: { index: 0 },
-        iframe: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
-        contents: { document: { defaultView: window }, window,
-          cfiFromRange: (selected: unknown) => {
-            expect(selected).toBe(range);
-            return 'epubcfi(/6/2!/4/2,/1:1,/3:1)';
+  for (const { name, sameNode, endOffset, text, cfi } of [
+    { name: 'distinguishes reversed cross-node selections with equal endpoint offsets',
+      sameNode: false, endOffset: 1, text: 'ne t', cfi: 'epubcfi(/6/2!/4/2,/1:1,/3:1)' },
+    { name: 'captures forward and backward same-node selections',
+      sameNode: true, endOffset: 3, text: 'ne', cfi: 'epubcfi(/6/2!/4/2,/1:1,/1:3)' },
+  ]) {
+    it(name, () => {
+      const startNode = { nodeType: 3, textContent: 'one ' };
+      const endNode = sameNode ? startNode : { nodeType: 3, textContent: 'two ' };
+      const range = {
+        startContainer: startNode, startOffset: 1, endContainer: endNode, endOffset,
+        collapsed: false,
+        toString: () => sameNode ? startNode.textContent.slice(1, endOffset)
+          : startNode.textContent.slice(1) + endNode.textContent.slice(0, endOffset),
+        getClientRects: () => [{ left: 10, top: 20, width: 30, height: 16 }],
+      };
+      const selection = {
+        anchorNode: startNode, anchorOffset: 1, focusNode: endNode, focusOffset: endOffset,
+        isCollapsed: false, rangeCount: 1,
+        getRangeAt: (index: number) => { expect(index).toBe(0); return range; },
+      };
+      const window = { innerWidth: 382, innerHeight: 678, getSelection: () => selection };
+      const context = vm.createContext({ window, Date: { now: () => 1234 },
+        rendition: { manager: { views: { _views: [{
+          displayed: true, section: { index: 0 },
+          iframe: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
+          contents: { document: { defaultView: window }, window,
+            cfiFromRange: (selected: unknown) => {
+              expect(selected).toBe(range);
+              return cfi;
+            },
           },
-        },
-      }] } } },
-    });
-    vm.runInContext(source('DuoAcceptanceSelection.js'), context);
-    const forward = JSON.parse(vm.runInContext('probe()', context));
-    selection.anchorNode = endNode;
-    selection.focusNode = startNode;
-    const reverse = JSON.parse(vm.runInContext('probe()', context));
+        }] } } },
+      });
+      vm.runInContext(source('DuoAcceptanceSelection.js'), context);
+      const forward = JSON.parse(vm.runInContext('probe()', context));
+      selection.anchorNode = endNode;
+      selection.anchorOffset = endOffset;
+      selection.focusNode = startNode;
+      selection.focusOffset = 1;
+      const reverse = JSON.parse(vm.runInContext('probe()', context));
 
-    expect(startNode).not.toBe(endNode);
-    expect(forward.ranges[0]).toMatchObject({ text: 'ne t', start: 1, end: 1, anchor: 1, focus: 1 });
-    expect(forward).not.toEqual(reverse);
-  });
+      expect(startNode === endNode).toBe(sameNode);
+      expect(forward).toEqual({ at: 1234, viewport: [382, 678], ranges: [{
+        section: 0, text, cfi, start: 1, end: endOffset, anchor: 1, focus: endOffset,
+        backward: false, rects: [[10, 20, 30, 16]], rectCount: 1,
+      }] });
+      expect(forward).not.toEqual(reverse);
+      expect(reverse).toEqual({ ...forward, ranges: [{
+        ...forward.ranges[0], anchor: endOffset, focus: 1, backward: true,
+      }] });
+    });
+  }
 });
 
 describe('duo-lookup-receipt evidence gate', () => {

@@ -10,8 +10,12 @@ What every area uses:
   (below).
 - `project.rb`: generates the disposable XCTest project `run-probe.sh` and the
   area scripts build, finding a probe by its file name.
-- `silence.sh`: the simulator's own volume, set to zero and checked (the top
-  README).
+- [`silence.sh`](silence.sh): one simulator's volume plist, set to zero and
+  checked ([manual-test index](../README.md#silence-the-simulator-never-the-mac)).
+- [`silence-observe.py`](silence-observe.py): bounded, read-only volume-plist
+  samples with raw receipts; [diagnostic controls](../duo-verification/diagnostics.md#read-only-observer-and-host-checks)
+  give the invocation and limits. It neither changes volume nor proves
+  continuing native silence.
 - `lock-device.sh` with `DeviceLockProbe.swift`: the simulator's lock button,
   Home, and the lock screen's own Play and Pause (`downloads/download-away.md`,
   `downloads/download-beside-reading.md`).
