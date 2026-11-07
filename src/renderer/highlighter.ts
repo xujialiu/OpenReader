@@ -710,6 +710,11 @@ ${constants}
   var lookupKeepBrowsing = false;
   var beforeLookupBrowsing = false;
   var selectionDoc = null;
+  // The lookup's range belongs to its task, not an iframe resize destroys.
+  // Ephemeral only: this is not a Reading Position and never crosses the bridge.
+  var lookupSelection = null;
+  var lookupResize = null;
+  var restoredSelection = null;
   var selectionTimer = null;
   var selectionTouching = false;
   var suppressTapUntil = 0;
@@ -744,23 +749,91 @@ ${constants}
     setBrowsing(true);
     halt();
   }
+  function rememberLookupSelection(doc, text, multipleWords) {
+    lookupSelection = null;
+    var selection = doc.getSelection();
+    if (!selection || !selection.rangeCount) return;
+    var contents = rendition.getContents().find(function (item) { return item.document === doc; });
+    if (!contents) return;
+    try {
+      var range = selection.getRangeAt(0);
+      lookupSelection = {
+        section: contents.sectionIndex, cfi: contents.cfiFromRange(range),
+        text: text.slice(0, 5001), multipleWords: multipleWords,
+        backward: selection.anchorNode === range.endContainer && selection.anchorOffset === range.endOffset
+      };
+    } catch (error) {
+      report('could not capture the lookup selection: ' + error);
+    }
+  }
+  function postSelection(text, multipleWords, selecting) {
+    suppressTapUntil = Date.now() + 700;
+    post({ type: SELECTION, text: text.slice(0, 5001), multipleWords: multipleWords, selecting: selecting });
+  }
   function emitSelection(doc, selecting) {
     if (!lookupEnabled) return;
     var text = selected(doc);
     if (!text) return;
     holdForLookup();
     selectionDoc = doc;
-    suppressTapUntil = Date.now() + 700;
-    post({ type: SELECTION, text: text.slice(0, 5001), multipleWords: multipleLookupWords(text), selecting: selecting });
+    var multipleWords = multipleLookupWords(text);
+    rememberLookupSelection(doc, text, multipleWords);
+    postSelection(text, multipleWords, selecting);
+  }
+  // The original finger release can settle while its document is gone. Finish
+  // that same selection, not a new request caused by restoring its geometry.
+  function finishSelection() {
+    selectionTimer = null;
+    if (!lookupEnabled || !lookupHeld) return;
+    if (lookupSelection) postSelection(lookupSelection.text, lookupSelection.multipleWords, false);
+    else if (selectionDoc) emitSelection(selectionDoc, false);
+  }
+  function isRestoredSelection(doc) {
+    if (!restoredSelection || restoredSelection.document !== doc) return false;
+    var selection = doc.getSelection();
+    if (!selection || !selection.rangeCount) return false;
+    var contents = rendition.getContents().find(function (item) { return item.document === doc; });
+    try {
+      return contents && contents.cfiFromRange(selection.getRangeAt(0)) === restoredSelection.cfi;
+    } catch (_) {
+      // A guard must never swallow a genuine new selection it cannot identify.
+      return false;
+    }
+  }
+  function restoreLookupSelection(resize) {
+    if (!resize || lookupResize !== resize || !lookupHeld || lookupSelection !== resize.selection) return;
+    lookupResize = null;
+    var saved = resize.selection;
+    var contents = rendition.getContents().find(function (item) { return item.sectionIndex === saved.section; });
+    // Never display the selected section instead of the owner's Browsing
+    // passage. An offscreen section can legitimately have been trimmed (#193).
+    if (!contents) return;
+    try {
+      var range = contents.range(saved.cfi);
+      if (!range || range.collapsed || contents.cfiFromRange(range) !== saved.cfi) throw new Error('lookup range did not round-trip');
+      var selection = contents.document.getSelection();
+      if (!selection) return;
+      selectionDoc = contents.document;
+      // Set the guard BEFORE changing Selection: an event can be queued or
+      // delivered immediately. Match the CFI, not merely repeated word text.
+      restoredSelection = { document: selectionDoc, cfi: saved.cfi };
+      selection.setBaseAndExtent(
+        saved.backward ? range.endContainer : range.startContainer, saved.backward ? range.endOffset : range.startOffset,
+        saved.backward ? range.startContainer : range.endContainer, saved.backward ? range.startOffset : range.endOffset
+      );
+    } catch (error) {
+      report('could not restore the lookup selection: ' + error);
+    }
   }
   function selectionChanged(event) {
     if (!lookupEnabled) return;
     var doc = event.currentTarget;
     var text = selected(doc);
-    if (!text) return;
+    if (!text || isRestoredSelection(doc)) return;
+    restoredSelection = null;
     clearTimeout(selectionTimer);
     emitSelection(doc, true);
-    if (!selectionTouching) selectionTimer = setTimeout(function () { emitSelection(doc, false); }, 180);
+    if (!selectionTouching) selectionTimer = setTimeout(finishSelection, 180);
   }
   function selectionStarted() {
     selectionTouching = true;
@@ -771,10 +844,13 @@ ${constants}
     if (!lookupEnabled) return;
     var doc = event.currentTarget;
     clearTimeout(selectionTimer);
-    if (selected(doc)) selectionTimer = setTimeout(function () { emitSelection(doc, false); }, 180);
+    if (selected(doc) || lookupSelection) selectionTimer = setTimeout(finishSelection, 180);
   }
   function closeLookup(resumeFollow) {
     clearTimeout(selectionTimer);
+    lookupSelection = null;
+    lookupResize = null;
+    restoredSelection = null;
     if (!lookupHeld) return;
     lookupHeld = false;
     setBrowsing(beforeLookupBrowsing);
@@ -3093,6 +3169,7 @@ ${EPUB_GUARDS_SOURCE}
     if (!manager || manager.openreaderKeepsResizePlace) return;
     var resize = manager.resize;
     manager.resize = function (width, height, target) {
+      lookupResize = lookupHeld && lookupSelection ? { selection: lookupSelection } : null;
       if (target) resizeAnchor = null;
       else if (resizeAnchor && (browsing || !state || !state.follow)) {
         target = resizeAnchor.cfi;
@@ -3200,7 +3277,9 @@ ${EPUB_GUARDS_SOURCE}
     if (!resizedPage) return;
     resizedPage = false;
     var anchor = resizeAnchor;
+    var selection = lookupResize;
     window.requestAnimationFrame(function () {
+      restoreLookupSelection(selection);
       if (anchor) restoreResizeAnchor(anchor, SETTLE_FRAMES, 0);
       else settle(SETTLE_FRAMES, 0);
     });
@@ -3298,7 +3377,7 @@ ${EPUB_GUARDS_SOURCE}
       if (message.selectionReleased && lookupEnabled) {
         selectionTouching = false;
         clearTimeout(selectionTimer);
-        if (selectionDoc) selectionTimer = setTimeout(function () { emitSelection(selectionDoc, false); }, 180);
+        if (selectionDoc) selectionTimer = setTimeout(finishSelection, 180);
       }
       if (message.releaseBrowsing && !lookupHeld) lookupKeepBrowsing = false;
       if (typeof message.enabled === 'boolean') lookupEnabled = message.enabled;
