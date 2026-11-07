@@ -3316,6 +3316,7 @@ ${EPUB_GUARDS_SOURCE}
   landBelowBar(rendition.manager);
   locateInWholeView(rendition.manager);
   keepPlaceOnResize(rendition.manager);
+  readLocationWithoutReflow(rendition.manager);
   settleRemovedViews(rendition.manager);
   tickWithoutFrames(rendition.manager && rendition.manager.q);
   tickWithoutFrames(rendition.q);

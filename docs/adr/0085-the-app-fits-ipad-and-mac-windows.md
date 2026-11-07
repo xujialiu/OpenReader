@@ -35,7 +35,7 @@ path: OpenReader remains the iOS/iPad app on Apple silicon, not a
 `react-native-macos` or Catalyst target. Configuration compatibility does not
 establish actual Mac runtime verification.
 
-## Duo scene orientation exception (#346): compiled; automatic rotation not established
+## Duo scene orientation exception (#346, #349): real-input rotation observed
 
 The phone and tablet plist orientation arrays stay unchanged. The focused
 `with-duo-scene-orientation` config plugin extends the upstream generated
@@ -88,8 +88,18 @@ policy layers. They are not native compilation or orientation evidence.
 The generated file compiled and cold-started with SDK 27.1. The beta13 native
 shell aligns the confirmed Duo scene/root masks at30, and public single-mask
 geometry requests rotate the outer Reader. An activated, foreground-asserted
-XCUIDevice control still leaves its app frame unchanged: automatic device-event
-rotation has not passed, and the container must not be described as fixing it.
+XCUIDevice control still leaves its app frame unchanged. Follow-up #349
+separates that test input from actual target-device delivery: the same getter
+changes without a target orientation notification in an all-orientations
+public-UIKit control. It is not an OpenReader-specific rotation veto.
+The real Device Hub Rotate control delivers target events and rotates the
+unchanged shell's window/root466-by678 to678-by466, and the inner951-by669
+to669-by951. `duo-rotation.py` retains target-native state, active-display
+captures and explicit LLDB detachment. Masks, forced geometry, fold-driven
+aspect changes and XCUIDevice's getter alone remain insufficient evidence.
+Outer Library/Reader and inner Library/Reader have parent round-trip evidence;
+the inner renderer width race discovered there is #359, below. Independent
+final verification remains pending, not implied by these parent measurements.
 On that same shell with beta14 JavaScript, iPhone27.0 retains its402-by874
 portrait app frame; iPad26.5 changes820-by1180 to1180-by820 and back. Both also
 pass the corrected paused Player collapse/show control. Ordinary iPhone27.1
@@ -203,6 +213,37 @@ in #353, and Mac/physical-Duo coverage in #355/#356. Design0092 retains the
 behavioral requirements. The unattributed inspection-time crash and recurring
 simulator-volume resets are separately tracked in #357 and #358, not silently
 counted as application fixes.
+
+## Location reads do not consume the native resize (#359)
+
+The side-effect-free capture in `keepPlaceOnResize` is not enough: epub.js's
+own `reportLocation` schedules a frame that calls `manager.currentLocation`.
+If native geometry changes before that frame and before the resize observer,
+the getter's `updateLayout` changes `_stageSize` from951 to867 without updating
+the iframe's locked width. The resize observer then sees867 already cached and
+skips clear/redisplay. In the actual failure, stage/layout/viewSettings all
+report867, both queues are empty, and connected live DOM iframes retain951px
+styles,951 client/rect widths and951 locks. This is not stale-view measurement
+or a failure of automatic window rotation. The reverse585-to669 mismatch was
+also observed.
+
+`readLocationWithoutReflow` adapts only non-paginated location reads, returning
+the existing `scrolledLocation` mapping and storing it in the same manager
+location field. The original paginated getter remains the fallback. Native
+resize still owns layout, clear and redisplay; no delay, forced reflow, React
+identity change or Reading restart is introduced. The adapter installs once
+beside the resize and queue adapters in the actual highlighter program.
+
+`test/renderer/resize-width.test.ts` executes the installed location-report,
+getter, layout/resize and iframe size/lock/expand/reframe methods. It places a
+location frame between the real DOM-width change and observer delivery, with
+a single view sufficient to fail. The unguarded control reproduces the stale
+951 lock against867 layout, and guarded shrink/grow and repeated multi-view
+cases pass. Geometry, text mapping, CSS arithmetic and replacement-view
+creation are explicit doubles, not a simulated full browser. Real-input stress
+and active-display rendering remain separate runtime gates. Beta15 parent
+checks pass eight inner stress cycles plus the original Reader and Library
+round-trips; final independent verification is still pending.
 
 ## Earlier trial: limit the viewport, not the Document's body
 

@@ -1,6 +1,6 @@
 /**
- * Two things epub.js's queues need before a reading can cross a section with the
- * app away from the screen (#112).
+ * Adapters for epub.js's queues and location reads (#112, #359).
+ * The queue failures were found crossing a section with the app away.
  *
  * Reproduced on the simulator with the #113 Debug Log (the issue's comments):
  *
@@ -32,8 +32,15 @@
  *   frame and a `FRAMELESS_MS` timer. On the screen the frame comes first, as it
  *   did. Away from it, the timer runs whenever WebKit lets the page run.
  *
+ * A location read can also consume a pending native resize (#359). The real
+ * reportLocation schedules a frame whose currentLocation calls updateLayout:
+ * if the DOM already changed, _stageSize becomes 867 while iframe locks stay
+ * 951. The later resize sees 867 already cached and skips rebuilding the views.
+ * Scrolled location reads therefore map the current text without reflow;
+ * resize remains the layout owner. Paginated readers keep the original getter.
+ *
  * Source, not functions, as `glide.ts` and `renderer-log.ts` are:
- * `EPUB_GUARDS_SOURCE` is spliced into the WebView program, which installs both
+ * `EPUB_GUARDS_SOURCE` is spliced into the WebView program, which installs the
  * guards on its rendition beside `holdStill`, and the tests run the same text in
  * `node:vm`. Everything adapted is epub.js 0.3 as `@epubjs-react-native/core`
  * 1.4.8 bundles it (`lib/commonjs/epubjs.js`, read for this).
@@ -102,5 +109,19 @@ export const EPUB_GUARDS_SOURCE =
       window.setTimeout(once, FRAMELESS_MS);
     };
     queue.openreaderTicks = true;
+  }
+
+  /* Mapping a scrolled location is a read, not a second layout owner (#359).
+     Keep the resize cache untouched until resize has rebuilt the iframe locks.
+     Preserve the installed getter's location result and paginated fallback. */
+  function readLocationWithoutReflow(manager) {
+    if (!manager || manager.openreaderReadsLocation) return;
+    var currentLocation = manager.currentLocation;
+    manager.currentLocation = function () {
+      if (this.isPaginated) return currentLocation.apply(this, arguments);
+      this.location = this.scrolledLocation();
+      return this.location;
+    };
+    manager.openreaderReadsLocation = true;
   }
 `;

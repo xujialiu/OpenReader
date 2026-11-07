@@ -3,6 +3,9 @@
 Each recipe is its own file. Read the one for what you are testing, or the one
 that names the script or probe you are about to run.
 
+- [duo-rotation.md](duo-rotation.md) (#349): real Device Hub rotation, target-side
+  input/window checks, both display axes, iframe geometry and the explicit
+  XCUIDevice diagnostic that must not stand in for acceptance.
 - [ipad-window.md](ipad-window.md) (#319): real system rotation and the native
   resize handle, independent viewport/iframe geometry checks, and what each
   proves. `IpadRotationProbe.swift`, `viewport-size.js`.
