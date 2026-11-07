@@ -6,7 +6,7 @@ Issue #346 starts with basic compatibility on Duo's outer and inner displays and
 
 The existing reading, listening and lookup experience comes first. A necessary visible change returns for a decision with the specific problem it solves. Ordinary iPhone, iPad and Mac behavior must not be silently redesigned.
 
-These requirements remain the acceptance boundary. The side-space and selection-continuity repairs are implemented and have simulator evidence, but complete Duo support is not accepted. Automatic rotation with the device and the full range of permitted window changes remain unresolved. Implementation and corrective checks lead to one final acceptance; a passed repair does not waive an unmet requirement.
+These requirements remain the acceptance boundary. The side-space and selection-continuity repairs are implemented and have simulator evidence. Issue #346 is closed for that scoped delivery, with the unresolved behavior and missing verification transferred to independent issues below. Closure does not mean complete Duo support has passed or that the remaining requirements are waived.
 
 ## The current task survives a layout change
 
@@ -64,8 +64,22 @@ Font Size stays unchanged. Margins remains the chosen percentage of the usable r
 
 The trade-off is less room for text and controls when the system occupies a side. Letting text run underneath those controls, or leaving a fixed blank strip even when it is not needed, was not selected.
 
-This is a narrow repair, not acceptance of complete Duo support. The apparent Drawer-dismissal fault was not established by its test and is not part of the repair. Unverified Drawer, lookup, editing, selection, Following and timer continuity remain acceptance gates. Implementation, host checks, native verification and necessary corrective batches now proceed to one final acceptance gate. Incomplete or blocked checks remain explicit rather than being waived; the issue is not complete merely because one batch passed.
+This is a narrow repair, not acceptance of complete Duo support. The apparent Drawer-dismissal fault was not established by its test and is not part of the repair. Representative task-continuity and ordinary-device checks have passed; unverified combinations and the remaining shortcomings are tracked independently rather than keeping the completed repair batch open.
 
 The speed popover is included in safe-area avoidance. It keeps the existing native bubble, trigger and stepper behavior, but may sit beside the number toward the Player's interior instead of above it when a side is reserved by the system. Ordinary windows without a side reservation keep the existing placement. Letting the bubble extend into the reserved side strip was not selected. At larger text sizes the bubble's existing wrapping controls may take more height when there is less room beside the number; the text is not made smaller to force it into one row.
 
 The Library and its Search, selection actions and return-to-Reading button also stay beside the system's reserved side area. Settings uses that same usable area for its existing cards and fields. Navigation, selection, keyboard and editing behavior is unchanged; this extends the same avoidance rule, not a new Library or Settings layout.
+
+## Remaining work after the scoped delivery
+
+- #348: folding makes the expanded Player grow from two rows to four and take too much reading space.
+- #349: automatic rotation with the device has not passed.
+- #350: the selected passage's visible marking and adjustable handles after folding need verification.
+- #351: the final result of a lookup that finishes across a fold needs visible confirmation.
+- #352: actual split-window resizing and task continuity need verification.
+- #353: audio progression and word-level Following through display changes need complete evidence.
+- #354: undimmed Appearance preview needs a controlled before-and-after comparison.
+- #355: the current changes need actual Mac regression coverage.
+- #356: physical Duo coverage remains separate and is not a condition for closing the simulator repair batch.
+
+The new compact-Player issue does not revive the deferred Companion or two-column redesign. Its requirement is to keep reading space useful while preserving readable, reachable controls.

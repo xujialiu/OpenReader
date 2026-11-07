@@ -197,7 +197,12 @@ are covered separately; ordinary iPhone27.0 and iPad26.5 retain usable Reader,
 Library and Settings rendering and functioning collapse/show controls. An inset
 switch at a fixed window size is host coverage, not an exercised native control.
 These observations are not exhaustive pose, split-window, word-timing or
-Following acceptance. Broader Duo acceptance remains open in design0092/#346.
+Following acceptance. The scoped repair in #346 is closed; automatic rotation
+continues in #349, split-window behavior in #352, audio/Following verification
+in #353, and Mac/physical-Duo coverage in #355/#356. Design0092 retains the
+behavioral requirements. The unattributed inspection-time crash and recurring
+simulator-volume resets are separately tracked in #357 and #358, not silently
+counted as application fixes.
 
 ## Earlier trial: limit the viewport, not the Document's body
 
