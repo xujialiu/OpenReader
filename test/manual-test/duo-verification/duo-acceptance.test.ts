@@ -22,6 +22,46 @@ const parsedControl = () => ({
     requests: [{ url: 'https://api.dictionaryapi.dev/api/v2/entries/en/hope', state: 'released', startedAt: 1000, heldAt: 1100, releasedAt: 1500, abortedAt: null }] },
 });
 
+describe('DuoAcceptanceSelection direction receipt', () => {
+  it('distinguishes reversed cross-node selections with equal endpoint offsets', () => {
+    const startNode = { nodeType: 3, textContent: 'one ' };
+    const endNode = { nodeType: 3, textContent: 'two ' };
+    const range = {
+      startContainer: startNode, startOffset: 1, endContainer: endNode, endOffset: 1,
+      collapsed: false,
+      toString: () => startNode.textContent.slice(1) + endNode.textContent.slice(0, 1),
+      getClientRects: () => [{ left: 10, top: 20, width: 30, height: 16 }],
+    };
+    const selection = {
+      anchorNode: startNode, anchorOffset: 1, focusNode: endNode, focusOffset: 1,
+      isCollapsed: false, rangeCount: 1,
+      getRangeAt: (index: number) => { expect(index).toBe(0); return range; },
+    };
+    const window = { innerWidth: 382, innerHeight: 678, getSelection: () => selection };
+    const context = vm.createContext({ window, Date: { now: () => 1234 },
+      rendition: { manager: { views: { _views: [{
+        displayed: true, section: { index: 0 },
+        iframe: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
+        contents: { document: { defaultView: window }, window,
+          cfiFromRange: (selected: unknown) => {
+            expect(selected).toBe(range);
+            return 'epubcfi(/6/2!/4/2,/1:1,/3:1)';
+          },
+        },
+      }] } } },
+    });
+    vm.runInContext(source('DuoAcceptanceSelection.js'), context);
+    const forward = JSON.parse(vm.runInContext('probe()', context));
+    selection.anchorNode = endNode;
+    selection.focusNode = startNode;
+    const reverse = JSON.parse(vm.runInContext('probe()', context));
+
+    expect(startNode).not.toBe(endNode);
+    expect(forward.ranges[0]).toMatchObject({ text: 'ne t', start: 1, end: 1, anchor: 1, focus: 1 });
+    expect(forward).not.toEqual(reverse);
+  });
+});
+
 describe('duo-lookup-receipt evidence gate', () => {
   it('creates only a PARSED native-test input, with an actual definition line', () => {
     const receipt = lookupReceipt(parsedControl(), 'run-351');
