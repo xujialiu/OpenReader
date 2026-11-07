@@ -61,6 +61,7 @@ function page(patched: boolean, covered = 0) {
   rendition.manager = manager;
   const environment = vm.createContext({
     rendition, browsing: true, state: null, resizeAnchor: null, barCovered: covered,
+    lookupHeld: false, lookupSelection: null, lookupResize: null,
     report: (message: string) => { throw new Error(message); },
   });
   if (patched) {

@@ -98,7 +98,7 @@ export interface Section {
  * @param options.debugMode The program as a Debug Mode build has it, with
  * `renderer-log.ts` spliced in (ADR 0054). Absent: the plain program.
  */
-export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boolean } = {}) {
+export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boolean; resize?: (width: number, height: number, target?: string) => void } = {}) {
   const posted: any[] = [];
   /** What the program asked epub.js to display, in order. */
   const displays: unknown[] = [];
@@ -106,6 +106,8 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
   const followed: string[] = [];
   const timers: (() => void)[] = [];
   const hooks: (() => void)[] = [];
+  const frames: (() => void)[] = [];
+  const events = new Map<string, ((...args: any[]) => void)[]>();
   const contents: any[] = [];
   const queue = () => ({ enqueue: (fn: () => unknown) => Promise.resolve().then(fn), tick() {} });
   function View() {}
@@ -115,6 +117,7 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
   const manager: any = {
     container: stage, stage: { settings: { overflow: 'scroll' }, overflow() {} }, views: { last: () => null, destroy() {}, all: () => [] },
     q: queue(), View, settings: { offset: 500, axis: 'vertical' }, scrollTop: 0, trim: () => Promise.resolve(), check: () => Promise.resolve(),
+    resize(width: number, height: number, target?: string) { options.resize?.(width, height, target); },
     scrollTo(_x: number, y: number) { stage.scrollTop = y; },
     scrollBy(_x: number, y: number) { stage.scrollTop += y; },
     /* The continuous manager's two corrections that keep the text still, as
@@ -131,7 +134,9 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
     },
   };
   const rendition = {
-    manager, q: queue(), location: { start: { cfi: 'x' } }, on() {},
+    manager, q: queue(), location: { start: { cfi: 'x' } },
+    on(event: string, fn: (...args: any[]) => void) { events.set(event, [...(events.get(event) ?? []), fn]); },
+    emit(event: string, ...args: any[]) { for (const fn of events.get(event) ?? []) fn(...args); },
     display(target: unknown) { displays.push(target); return Promise.resolve(); },
     hooks: { content: { register(fn: () => void) { hooks.push(fn); } } },
     // epub.js lists the sections it has on the page: a destroyed view is not among them.
@@ -145,7 +150,7 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
   const clearTimeout = (id: number) => { if (id && timers[id - 1]) timers[id - 1] = () => {}; };
   const window: any = {
     ReactNativeWebView: { postMessage: (data: string) => posted.push(JSON.parse(data)) },
-    requestAnimationFrame: () => 1, cancelAnimationFrame() {}, setTimeout, performance: { now: () => 0 },
+    requestAnimationFrame: (fn: () => void) => frames.push(fn), cancelAnimationFrame() {}, setTimeout, performance: { now: () => 0 },
     // The Debug Mode program's watchdog (`renderer-log.ts`); it never fires here.
     setInterval: () => 0, clearInterval() {},
   };
@@ -194,7 +199,9 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
   }
 
   return {
-    posted, displays, followed, manager, stage, addSection,
+    posted, displays, followed, manager, stage, addSection, rendition,
+    flushTimers() { for (const timer of timers.splice(0)) timer(); },
+    frame() { for (const frame of frames.splice(0)) frame(); },
     send(message: object) { window.__openReaderHighlighter(message); },
     /** A Download's preparation of one section, as the hidden rendition is asked for it (`indexer.tsx`); settles once the program has posted its answer. */
     async prepare(index: number, points: unknown[] = [], token = 1): Promise<any> {
