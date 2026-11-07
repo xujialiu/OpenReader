@@ -17,6 +17,7 @@ function probe() {
       cfi: view.contents.cfiFromRange(range),
       start: range.startOffset, end: range.endOffset,
       anchor: selection.anchorOffset, focus: selection.focusOffset,
+      backward: selection.anchorNode === range.endContainer && selection.anchorOffset === range.endOffset,
       rects: rects.slice(0, 4).map(box), rectCount: rects.length,
     });
   }

@@ -88,7 +88,7 @@ node test/manual-test/kit/cdp.cjs --eval \
 Retain the tagged `[probe]` selection answer and active-display image. Make one
 actual fold with the existing verified Device Hub input. Repeat both snapshots
 and image after native reflow settles (bound it at8s, as in the existing driver).
-Require equal section, exact range CFI, direction and selected text; compare
+Require equal section, exact range CFI, direction (`backward`) and selected text; compare
 text-node offsets as corroboration. The native image must show the selected
 text painted, both handles exposed and the same lookup task. Count must remain
 N, not N+1. Do a return transition separately, also requiring unchanged count.

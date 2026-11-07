@@ -294,6 +294,7 @@ recipe goes.
 - [Sync](sync/README.md): Sync: the Sync screen, the switch, and places crossing devices (#20).
 - [Native audio queue (#63)](native-audio/README.md): Native queue position versus actual rendered audio (#63); Output-driven audio/position prototype (#63, validation only); Production output-driven queue (#63).
 - [Purchase and release copies](purchase/README.md): the formal/free/Debug artifact and UI matrix (#324), formal StoreKit testing, source/cache handoff, and separately labelled historical Trial/harness records.
+- [Duo verification preparation](duo-verification/README.md): native acceptance recipes, diagnostic evidence controls and Mac runtime gates; host tool checks are preparation, not acceptance.
 - [The kit](kit/README.md): Read the accessibility tree and touch what it lists (`ax.py`); Run an XCTest probe; Read runtime warnings or evaluate a targeted expression; Inspect, stop or briefly exercise the reading handler; Pull the Debug Log off the phone (#82, `debug-log.py`) and list its Debug Notes (#305, `debug-notes.py`); Ask the app on the phone (`phone-hx.cjs`, `debug-log-timeline.py`, `probes/`).
 
 ### Verifying #218/#197/#144 (1.0.0 (9)-beta1) on a 390-point iPhone (2026-10-17)
