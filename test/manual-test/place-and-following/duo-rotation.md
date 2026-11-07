@@ -211,4 +211,13 @@ delivered input with a wrong measured response; 69 is a missing
 precondition/tool result. Player-row measurement during each pose is
 `DuoPlayer348Probe` (`testFoldedTwoRowGeometry`, run serially between driver
 runs — never overlapping LLDB), which also covers the drawers, the speed
-popover round trip, collapse/show, skips and Tap Lock while paused.
+popover round trip, collapse/show, skips and Tap Lock while paused. If the
+driver's own LLDB sample is interrupted (EXC_BREAKPOINT after rapid attach
+cycles, `pitfalls/mcp.md`), re-read the pose with one fresh serial read and
+finish the sequence in a new driver run whose `--start-width` names the
+actually measured pose — a delivered click is not undone by the instrument
+failure. The probe's geometry methods assert the ordinary single-row
+transport; at accessibility sizes they are the wrong instrument (a raw FAIL
+there is a method mismatch, not an app defect) — record the wrapped/split
+layout with a tree dump or screenshot instead, restore the ordinary size, and
+prove the return with one ordinary-size run.
