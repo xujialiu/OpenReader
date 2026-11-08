@@ -10,6 +10,7 @@ import math
 from pathlib import Path
 import re
 import sys
+import time
 
 PHASE_FILES = {'baseline': ('press', 'press'), 'outward': ('d3', 'd3'), 'return': ('return', 'ret')}
 RANGE_KEYS = ('section', 'text', 'cfi', 'start', 'end', 'anchor', 'focus', 'backward')
@@ -195,7 +196,128 @@ def cycle_verdict(cycle, base_hash):
             'cleanupVerified': cleanup, 'valid': not uncertainties, 'uncertainties': uncertainties}
 
 
-def aggregate(cycles, maximum, kind):
+def unverified_cleanup(reason):
+    return {'verified': False, 'reason': reason}
+
+
+def live_cycle(directory, base_hash, cleanup_status=None):
+    verdicts, errors = {}, []
+    for phase in PHASE_FILES:
+        path = directory / f'verdict-{phase}.json'
+        if not path.exists():
+            continue
+        try:
+            value = read_json(path)
+            require(value['outcome'] in ('PASS', 'APP_RED', 'CONTROL_INCOMPLETE') and
+                    isinstance(value['verdict'], str), 'malformed phase verdict')
+            verdicts[phase] = value
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            errors.append(f'{phase} verdict unreadable: {error}')
+    try:
+        cleanup = read_json(directory / 'cleanup.json')
+        require(isinstance(cleanup, dict) and type(cleanup['verified']) is bool, 'malformed cleanup receipt')
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        cleanup = unverified_cleanup(f'cleanup receipt unreadable: {error}')
+    if cleanup_status not in (None, '0'):
+        cleanup = unverified_cleanup(cleanup.get('reason', 'cleanup command failed'))
+    result = cycle_verdict({'verdicts': verdicts, 'cleanup': cleanup}, base_hash)
+    # A previously qualified phase RED is independent of later ledger/cleanup damage.
+    reds = [v for v in verdicts.values() if v['outcome'] == 'APP_RED']
+    if reds:
+        result['outcome'], result['caseVerdict'] = 'APP_RED', reds[0]['verdict']
+    result['uncertainties'].extend(errors)
+    result['valid'] = not result['uncertainties']
+    return result
+
+
+def attempted_cycles(out):
+    cycles = []
+    for directory in sorted((p for p in out.glob('cycle-*') if p.is_dir()), key=lambda p: int(p.name[6:])):
+        try:
+            c = read_json(directory / 'verdict.json')
+            require(c['outcome'] in ('PASS', 'APP_RED', 'CONTROL_INCOMPLETE') and type(c['valid']) is bool and
+                    isinstance(c['caseVerdict'], str) and isinstance(c['phases'], dict) and c['phases'] and
+                    type(c['cleanupVerified']) is bool and isinstance(c['uncertainties'], list) and
+                    all(isinstance(value, str) for value in c['uncertainties']) and
+                    c['valid'] == (not c['uncertainties']) and
+                    (not c['valid'] or (c['outcome'] != 'CONTROL_INCOMPLETE' and c['cleanupVerified'] and
+                                       not c['uncertainties'])),
+                    'malformed cycle verdict')
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            c = live_cycle(directory, '')
+            c['uncertainties'].append(f'cycle aggregation receipt missing/unreadable: {error}')
+            c['valid'] = False
+        failure = directory / 'aggregation-error.txt'
+        if failure.exists():
+            c['uncertainties'].append('cycle aggregation command failed; see ' + str(failure))
+            c['valid'] = False
+            c['aggregationFailed'] = True
+        cycles.append(c)
+    return cycles
+
+
+def capture_start(directory, prefix):
+    save(Path(str(prefix) + '.capture-start.json'), {
+        'startedAtNs': time.time_ns(), 'directory': str(directory.resolve()),
+        'existing': [p.name for p in directory.iterdir()]})
+
+
+def capture_check(directory, prefix):
+    # run-probe.sh's final Artifacts receipt binds result/test/summary/export/attachments by one STAMP.
+    end = time.time_ns()
+    from PIL import Image
+    start = read_json(str(prefix) + '.capture-start.json')
+    directory = directory.resolve()
+    require(start['directory'] == str(directory) and start['startedAtNs'] <= end, 'invalid capture interval')
+    lines = Path(str(prefix) + '.capture.log').read_text().splitlines()
+    receipts = [line for line in lines if line.startswith('Artifacts: ')]
+    require(len(receipts) == 1, 'missing/ambiguous actual probe Artifacts receipt')
+    match = re.fullmatch(r'Artifacts: (.*?) \(result: (.*?), log: (.*?)\)', receipts[0])
+    require(match is not None and Path(match[1]).resolve() == directory, 'capture source directory mismatch')
+    result, log = Path(match[2]).resolve(), Path(match[3]).resolve()
+    stamp = re.fullmatch(r'test-(\d{8}-\d{6}-\d+)\.log', log.name)
+    require(stamp is not None and log.parent == directory, 'invalid invocation log stamp')
+    stamp = stamp[1]
+    require(result == directory / f'result-{stamp}.xcresult', 'mismatched invocation result/log stamps')
+    attachments = directory / f'attachments-{stamp}'
+    summary = directory / f'summary-{stamp}.json'
+    export = directory / f'export-{stamp}.log'
+    # Exported timestamps can have whole-second precision: only the lower bound is rounded down.
+    # No future tolerance is allowed. Pre-existing paths are rejected regardless of timestamps.
+    lower = start['startedAtNs'] // 1_000_000_000 * 1_000_000_000
+    candidates = [result, log, attachments, summary, export]
+    for path in candidates:
+        require(path.name not in start['existing'], 'reused invocation artifact: ' + path.name)
+        require(path.exists() and not path.is_symlink(), 'missing/linked invocation artifact: ' + str(path))
+        require(lower <= path.stat().st_mtime_ns <= end, 'stale/future invocation artifact: ' + str(path))
+    require((result / 'Info.plist').is_file(), 'missing completed result bundle')
+    passed = read_json(summary)
+    require(passed.get('result') == 'Passed' and passed.get('failedTests') == 0 and passed.get('passedTests') == 1,
+            'not one completed passing capture test')
+    text = log.read_text()
+    require(all(marker in text for marker in ('restricted-v2 owned-panels-only started',
+            'screen 0 captured', 'screen 1 captured')), 'restricted owned-screen markers missing')
+    pngs = list(attachments.rglob('*.png'))
+    require(len(pngs) == 2, 'expected exactly two owned-panel PNGs')
+    images = {}
+    files = []
+    for path in pngs:
+        require(not path.is_symlink() and path.resolve().parent == attachments, 'ambiguous PNG source')
+        modified = path.stat().st_mtime_ns
+        require(lower <= modified <= end, 'stale/future individual PNG: ' + str(path))
+        with Image.open(path) as image:
+            require(image.size in ((2006, 2852), (1398, 2034)) and image.size not in images, 'wrong/duplicate panel size')
+            images[image.size] = image.copy()
+        files.append({'path': str(path), 'mtimeNs': modified})
+    images[(2006, 2852)].transpose(Image.Transpose.ROTATE_270).save(str(prefix) + '-inner-oriented.png')
+    images[(1398, 2034)].save(str(prefix) + '-outer.png')
+    save(str(prefix) + '-capture.json', {'stamp': stamp, 'source': str(directory), 'log': str(log),
+         'result': str(result), 'attachments': str(attachments), 'startedAtNs': start['startedAtNs'],
+         'finishedAtNs': end, 'lowerTimestampBoundNs': lower, 'lowerPrecisionBoundNs': 1_000_000_000,
+         'futureToleranceNs': 0, 'pngs': files})
+
+
+def aggregate(cycles, maximum, kind, stop_at_limit=True):
     valid = red = control = 0
     paths = {}
     uncertainties = []
@@ -209,13 +331,17 @@ def aggregate(cycles, maximum, kind):
         uncertainties.extend(c['uncertainties'])
         if c['outcome'] == 'APP_RED':
             paths[c['caseVerdict']] = paths.get(c['caseVerdict'], 0) + 1
-        if any(n >= 2 for n in paths.values()):
+        if c.get('aggregationFailed'):
+            stop = 'aggregation-failure'
+        elif stop == 'aggregation-failure':
+            pass
+        elif any(n >= 2 for n in paths.values()):
             stop = 'two-reds-same-path'
         elif control >= 2:
             stop = 'control-failures'
         elif valid >= maximum:
             stop = 'max-valid-cycles-reached'
-        if stop:
+        if stop and stop_at_limit:
             break
     if not stop:
         uncertainties.append('valid cycle budget not completed')
@@ -252,10 +378,10 @@ def main(args):
             maximum = m['maxCycles']
             require(type(maximum) is int and 1 <= maximum <= 4, 'maxCycles must be 1-4')
             library_hash(m['baselineLibraryHash'])
-            require(isinstance(m['cycles'], list) and all(isinstance(c, dict) for c in m['cycles']), 'missing/malformed cycles')
+            require(isinstance(m['cycles'], list), 'missing/malformed cycles')
             # Never trust supplied verdicts in replay: derive only from retained receipts.
-            cycles = [cycle_verdict({k: v for k, v in c.items() if k != 'verdicts'}, m['baselineLibraryHash'])
-                      for c in m['cycles']]
+            cycles = (cycle_verdict({k: v for k, v in c.items() if k != 'verdicts'} if isinstance(c, dict) else {},
+                                    m['baselineLibraryHash']) for c in m['cycles'])
             summary = aggregate(cycles, maximum, 'HOST_REPLAY')
         except (OSError, ValueError, KeyError, TypeError) as error:
             summary = aggregate([], 1, 'HOST_REPLAY')
@@ -289,22 +415,26 @@ def main(args):
         result = cleanup_verdict(directory, int(args[2]), int(args[3]), args[4] == '0')
         save(directory.parent / 'cleanup.json', result)
         return 0 if result['verified'] else 2
+    if op == 'capture-start':
+        capture_start(Path(args[1]), Path(args[2]))
+        return 0
+    if op == 'capture-check':
+        try:
+            capture_check(Path(args[1]), Path(args[2]))
+            return 0
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print('CONTROL_INCOMPLETE capture: ' + str(error), file=sys.stderr)
+            return 2
     if op == 'cycle':
         directory = Path(args[1])
-        verdicts = {phase: read_json(directory / f'verdict-{phase}.json') for phase in PHASE_FILES
-                    if (directory / f'verdict-{phase}.json').exists()}
-        cleanup = read_json(directory / 'cleanup.json') if (directory / 'cleanup.json').exists() else {'verified': False}
-        if args[3] != '0':
-            cleanup = {'verified': False, 'reason': cleanup.get('reason', 'cleanup command failed')}
-        c = cycle_verdict({'verdicts': verdicts, 'cleanup': cleanup}, args[2])
+        c = live_cycle(directory, args[2], args[3])
         save(directory / 'verdict.json', c)
         print('CYCLE_RESULT ' + json.dumps(c))
         return 0
     if op == 'summary':
         out, maximum = Path(args[1]), int(args[2])
-        cycles = [read_json(p) for p in sorted(out.glob('cycle-*/verdict.json'), key=lambda p: int(p.parent.name[6:]))]
         require(args[3] in ('NATIVE', 'HOST_REPLAY'), 'invalid summary kind')
-        return emit(out, aggregate(cycles, maximum, args[3]))
+        return emit(out, aggregate(attempted_cycles(out), maximum, args[3], stop_at_limit=False))
     raise ValueError('unknown operation')
 
 

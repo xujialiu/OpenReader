@@ -172,35 +172,13 @@ WINDOW
   ceiling=$(now_ms)
   python3 "$ORACLE" cleanup "$clean" "$floor" "$ceiling" "$failed"
 }
-restricted_capture(){ # prefix — owned panels 0/1 only, oriented; marker asserted
+restricted_capture(){ # one invocation-bound result/log/export; owned panels 0/1 only
   local prefix="$RUN/cycle-$CYCLE/$1"
-  touch "$prefix.capture-start"
+  python3 "$ORACLE" capture-start "$CAPDIR" "$prefix" || return 2
   bash $KIT/run-probe.sh DuoScreenCaptureProbe "$UDID" "$CAPDIR" \
     -only-testing:DuoScreenCaptureProbe/testCaptureAllScreens -collect-test-diagnostics never \
     > "$prefix.capture.log" 2>&1 || { echo "capture probe failed"; return 1; }
-  local newest; newest=$(find "$CAPDIR" -maxdepth 1 -name 'test-*.log' -newer "$prefix.capture-start" -print | sort | tail -1)
-  [ -n "$newest" ] && grep -q "restricted-v2 owned-panels-only started" "$newest" \
-    || { echo "fresh restricted-v2 marker missing (stale binary?)"; return 1; }
-  grep -q "screen 0 captured" "$newest" && grep -q "screen 1 captured" "$newest" \
-    || { echo "owned panels 0/1 not both captured"; return 1; }
-  local atts; atts=$(find "$CAPDIR" -maxdepth 1 -type d -name 'attachments-*' -newer "$prefix.capture-start" -print | sort | tail -1)
-  local count; count=$(ls "$atts"/*.png 2>/dev/null | wc -l | tr -d ' ')
-  [ "$count" = "2" ] || { echo "expected exactly 2 owned-panel attachments, got $count"; return 1; }
-  python3 - "$atts" "$prefix" <<'PY' || { echo "owned inner/outer attachments not found"; return 1; }
-import glob, sys
-from PIL import Image
-atts, prefix = sys.argv[1], sys.argv[2]
-pngs = glob.glob(atts + "/*.png")
-inner = [p for p in pngs if Image.open(p).size == (2006, 2852)]
-outer = [p for p in pngs if Image.open(p).size == (1398, 2034)]
-if not inner or not outer:
-    raise SystemExit(1)
-Image.open(inner[0]).transpose(Image.ROTATE_270).save(prefix + "-inner-oriented.png")
-Image.open(outer[0]).save(prefix + "-outer.png")
-with open(prefix + "-capture-files.txt", "w") as f:
-    f.write("inner: " + inner[0] + "\nouter: " + outer[0] + "\n")
-PY
-  return 0
+  python3 "$ORACLE" capture-check "$CAPDIR" "$prefix"
 }
 # Measurement only. All thresholds/invariants/verdicts live in the shared oracle.
 measure_paint(){ # phase image selection receipt -> unchanged pinned wash measurement
@@ -333,10 +311,17 @@ while :; do
   run_cycle || true # verdict was retained by the shared oracle, never shell status alone
   cleanup_status=0
   cleanup_cycle > "$RUN/cycle-$CYCLE/cleanup.log" 2>&1 || cleanup_status=$?
-  python3 "$ORACLE" cycle "$RUN/cycle-$CYCLE" "$BASELIB" "$cleanup_status" | tee -a "$RUN/loop.log"
+  if ! python3 "$ORACLE" cycle "$RUN/cycle-$CYCLE" "$BASELIB" "$cleanup_status" | tee -a "$RUN/loop.log"; then
+    printf '%s\n' 'cycle aggregator failed; all attempted directories must be recovered' \
+      > "$RUN/cycle-$CYCLE/aggregation-error.txt"
+  fi
   status=0
   python3 "$ORACLE" summary "$RUN" "$MAX_CYCLES" NATIVE || status=$?
-  should_stop=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["shouldStop"])' "$RUN/summary.json")
+  should_stop=$(python3 -c 'import json,sys
+s=json.load(open(sys.argv[1]))
+assert s["attemptedCycles"] == int(sys.argv[2]) and s["exitCode"] == int(sys.argv[3])
+print(s["shouldStop"])' "$RUN/summary.json" "$CYCLE" "$status") \
+    || { note "summary aggregation failed or omitted an attempt"; exit 2; }
   [ "$should_stop" = True ] && break
   # Two total control-failed cycles stop the loop; success never resets that budget.
 done

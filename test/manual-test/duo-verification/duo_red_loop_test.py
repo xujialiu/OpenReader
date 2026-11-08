@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
+import shlex
 import unittest
 
 AREA = Path(__file__).resolve().parent
@@ -245,6 +247,164 @@ class DuoRedLoopTest(unittest.TestCase):
                 self.assertEqual(run.returncode, 2, run.stderr)
                 self.assertEqual(json.loads((directory / 'verdict-baseline.json').read_text())['outcome'],
                                  'CONTROL_INCOMPLETE')
+
+    def retained_phase_files(self, directory, index):
+        directory.mkdir(parents=True)
+        helper = AREA / 'duo-loop-verdict.py'
+        for phase, tag, paint in [('baseline', 'press', 'press'), ('outward', 'd3', 'd3'), ('return', 'return', 'ret')]:
+            if phase not in CAPTURED['cycles'][index]:
+                continue
+            p = CAPTURED['cycles'][index][phase]
+            if not p['selection']['ranges']:
+                paint = 'd3null'
+            for name, value in [(f'selection-{tag}.txt', p['selection']), (f'state-{tag}.json', p['state']),
+                                (f'paint-{paint}.json', p['paint'])]:
+                (directory / name).write_text(json.dumps(value))
+            (directory / f'library-{phase}.txt').write_text(p['libraryHash'])
+            run = subprocess.run(['python3', str(helper), 'phase', str(directory), phase,
+                                  CAPTURED['baselineLibraryHash'], str(p['after']), str(p['before'])],
+                                 capture_output=True, text=True, timeout=5)
+            self.assertEqual(run.returncode, 1 if index == 3 and phase == 'outward' else 0, run.stderr)
+
+    def test_live_cleanup_parse_failure_cannot_omit_red(self):
+        helper = AREA / 'duo-loop-verdict.py'
+        for cleanup in ['truncated', 'unreadable']:
+            with self.subTest(cleanup=cleanup), tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                first, second = out / 'cycle-1', out / 'cycle-2'
+                self.retained_phase_files(first, 3)
+                if cleanup == 'truncated':
+                    (first / 'cleanup.json').write_text('{truncated')
+                else:
+                    (first / 'cleanup.json').mkdir()
+                cycle = subprocess.run(['python3', str(helper), 'cycle', str(first), CAPTURED['baselineLibraryHash'], '2'],
+                                       capture_output=True, text=True, timeout=5)
+                self.retained_phase_files(second, 0)
+                (second / 'cleanup.json').write_text('{"verified":true}')
+                subprocess.run(['python3', str(helper), 'cycle', str(second), CAPTURED['baselineLibraryHash'], '0'],
+                               check=True, capture_output=True, timeout=5)
+                summary = subprocess.run(['python3', str(helper), 'summary', str(out), '1', 'HOST_REPLAY'],
+                                         capture_output=True, text=True, timeout=5)
+                self.assertEqual(summary.returncode, 1, summary.stdout + cycle.stderr)
+                result = json.loads((out / 'summary.json').read_text())
+                self.assertEqual((result['attemptedCycles'], result['appFailedCycles'], result['validCycles']), (2, 1, 1))
+                self.assertTrue(result['uncertainties'])
+                self.assertEqual(cycle.returncode, 0, cycle.stderr)
+
+    def test_summary_represents_attempts_without_cycle_verdict(self):
+        helper = AREA / 'duo-loop-verdict.py'
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            self.retained_phase_files(out / 'cycle-1', 3)
+            (out / 'cycle-1/cleanup.json').write_text('{"verified":true}')
+            (out / 'cycle-2').mkdir()
+            run = subprocess.run(['python3', str(helper), 'summary', str(out), '1', 'HOST_REPLAY'],
+                                 capture_output=True, text=True, timeout=5)
+            self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+            result = json.loads((out / 'summary.json').read_text())
+            self.assertEqual(result['attemptedCycles'], 2)
+            self.assertEqual(result['appFailedCycles'], 1)
+            self.assertEqual(result['validCycles'], 0)
+            self.assertTrue(result['uncertainties'])
+
+    def test_actual_live_shell_stops_on_cycle_aggregator_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            templates = root / 'templates'
+            self.retained_phase_files(templates / '1', 3)
+            self.retained_phase_files(templates / '2', 0)
+            (templates / '1/cleanup.json').write_text('{truncated')
+            (templates / '2/cleanup.json').write_text('{"verified":true}')
+            out = root / 'run'
+            out.mkdir()
+            loop = DRIVER.read_text().split('CYCLE=0\n', 1)[1]
+            script = 'set -uo pipefail\n' + '\n'.join([
+                'RUN=' + shlex.quote(str(out)), 'ORACLE=' + shlex.quote(str(AREA / 'duo-loop-verdict.py')),
+                'TEMPLATES=' + shlex.quote(str(templates)), 'MAX_CYCLES=1; CYCLE=0; PIN=HOST-NOT-NATIVE',
+                'note(){ echo "HOST SHELL SEAM: $*"; }',
+                'libhash(){ echo ' + CAPTURED['baselineLibraryHash'] + '; }',
+                'run_cycle(){ cp "$TEMPLATES/$CYCLE/"* "$RUN/cycle-$CYCLE/"; }',
+                'cleanup_cycle(){ [ "$CYCLE" != 1 ]; }',
+                'python3(){ if [ "$2" = cycle ] && [ "$CYCLE" = 1 ]; then return 77; fi; command python3 "$@"; }',
+            ]) + '\n' + loop
+            run = subprocess.run(['bash', '-c', script], capture_output=True, text=True, timeout=10)
+            self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+            result = json.loads((out / 'summary.json').read_text())
+            self.assertEqual(result['attemptedCycles'], 1)
+            self.assertEqual(result['appFailedCycles'], 1)
+            self.assertTrue(result['uncertainties'])
+            self.assertFalse((out / 'cycle-2').exists())
+
+    def test_replay_malformed_attempt_does_not_erase_prior_red(self):
+        m = copy.deepcopy(CAPTURED)
+        m['cycles'] = [m['cycles'][3], None]
+        result = self.replay(m, 1, 'APP_RED')
+        self.assertEqual((result['attemptedCycles'], result['appFailedCycles'], result['controlFailedCycles']), (2, 1, 1))
+        self.assertTrue(result['uncertainties'])
+        m['cycles'] = [CAPTURED['cycles'][0], None]
+        result = self.replay(m, 2, 'CONTROL_INCOMPLETE')
+        self.assertEqual((result['attemptedCycles'], result['validCycles']), (2, 1))
+
+    def test_restricted_capture_binds_one_invocation_and_png_clock_interval(self):
+        # HOST fake executor only; executes the real shell capture function, never a native tool.
+        from PIL import Image
+        function = DRIVER.read_text().split('restricted_capture(){', 1)[1].split('# Measurement only.', 1)[0]
+        function = 'restricted_capture(){' + function
+        for fault in ['honest', 'future-stale-pair', 'future-log', 'future-png', 'old-png',
+                      'mismatched-stamps', 'mismatched-attachments', 'stale-receipt', 'missing-receipt', 'duplicate-receipt']:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                capture, kit, out = root / 'capture', root / 'kit', root / 'run'
+                capture.mkdir(); kit.mkdir(); (out / 'cycle-1').mkdir(parents=True)
+                if fault == 'future-stale-pair':
+                    old = capture / 'attachments-99999999-old'
+                    old.mkdir()
+                    for name, size in [('outer', (1398, 2034)), ('inner', (2006, 2852))]:
+                        Image.new('RGB', size, 'blue').save(old / (name + '.png'))
+                    log = capture / 'test-99999999-old.log'
+                    log.write_text('restricted-v2 owned-panels-only started\nscreen 0 captured\nscreen 1 captured\n')
+                    for path in [log, old, *old.glob('*.png')]:
+                        os.utime(path, (time.time() + 60, time.time() + 60))
+                fake = kit / 'run-probe.sh'
+                fake.write_text("""#!/bin/bash
+python3 - "$3" "$HOST_CAPTURE_FAULT" <<'HOST'
+import os, sys, time
+from pathlib import Path
+from PIL import Image
+out, fault = Path(sys.argv[1]), sys.argv[2]
+stamp = '20261108-140000-12345'
+log = out / ('test-' + stamp + '.log')
+result = out / ('result-' + stamp + '.xcresult')
+result.mkdir(); (result / 'Info.plist').write_text('HOST ONLY')
+log.write_text('restricted-v2 owned-panels-only started\\nscreen 0 captured\\nscreen 1 captured\\n')
+(out / ('summary-' + stamp + '.json')).write_text('{"result":"Passed","failedTests":0,"passedTests":1}')
+(out / ('export-' + stamp + '.log')).write_text('HOST export complete')
+atts = out / ('attachments-' + ('different' if fault == 'mismatched-attachments' else stamp)); atts.mkdir()
+for name, size in [('outer', (1398,2034)), ('inner', (2006,2852))]:
+    path = atts / (name + '.png'); Image.new('RGB', size, 'white').save(path)
+    if fault in ['old-png','future-png']:
+        when = time.time() + (60 if fault == 'future-png' else -60); os.utime(path, (when,when))
+if fault == 'future-log':
+    when = time.time()+60; os.utime(log,(when,when))
+if fault == 'mismatched-stamps': result = out / 'result-different.xcresult'
+if fault == 'stale-receipt': log = out / 'test-old.log'; result = out / 'result-old.xcresult'
+line = f'Artifacts: {out} (result: {result}, log: {log})'
+if fault != 'missing-receipt': print(line)
+if fault == 'duplicate-receipt': print(line)
+HOST
+""")
+                script = 'set -uo pipefail\n' + '\n'.join([
+                    'RUN=' + shlex.quote(str(out)), 'CAPDIR=' + shlex.quote(str(capture)),
+                    'KIT=' + shlex.quote(str(kit)), 'ORACLE=' + shlex.quote(str(AREA / 'duo-loop-verdict.py')),
+                    'CYCLE=1; UDID=HOST-NOT-NATIVE', function, 'restricted_capture d3'])
+                env = {**os.environ, 'HOST_CAPTURE_FAULT': fault}
+                run = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=15)
+                if fault in ['honest', 'future-stale-pair']:
+                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                    with Image.open(out / 'cycle-1/d3-inner-oriented.png') as image:
+                        self.assertEqual(image.getpixel((0, 0)), (255, 255, 255), 'stale painted image substituted')
+                else:
+                    self.assertNotEqual(run.returncode, 0, fault + ': ' + run.stdout + run.stderr)
 
     def test_invalid_native_cli_arguments_are_control_errors(self):
         for args in [[], ['owned', 'metro', 'out'], ['', 'metro', 'out', 'pin', 'capture', 'press'],
