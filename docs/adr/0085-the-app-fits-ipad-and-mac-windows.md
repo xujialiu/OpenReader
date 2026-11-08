@@ -421,6 +421,34 @@ reading the owner installation. Escape/pointer input, constrained windows
 and independent final tester acceptance remain pending. Beta19 is an in-progress source change,
 not a completed delivery or a claim that #361 is resolved.
 
+### Isolated Mac and independent-verification gates (#361)
+
+The separately signed iOS-on-Mac Debug copy starts empty, uses the approved
+probe identifier/display name and passes strict signature, current-Mac profile
+and embedded-role checks. The original Mac installation/container is not a
+target. Real pointer expansion/contraction/dismissal, window-size changes,
+opening-height background interaction and visible Beta19 Settings are recorded.
+Opening and expanded JS/native-label state survive the tested Mac size changes;
+this does not establish exact outer geometry or long-list continuity.
+
+One qualified OS Escape dismisses the opening Drawer but does nothing at
+`large`. The control uses the same frontmost-process System Events key path,
+not only a background dispatch; the native Drawer remains Expanded. Removing
+the backdrop guard globally would violate the accepted no-dismissal rule.
+A local ExpoUI modifier factory is a public integration seam, but no scoped
+nonvisual command has been prototyped or proven. UIKit selector targeting,
+SwiftUI shortcut hosting/lifetime and focus/IME/menu priority remain explicit
+native-trial questions, not an assumed implementation.
+
+The independent iOS report contains useful full-window, real rotation and
+ordinary-phone evidence; its windowed rendered-row sets and inferred chrome
+are not independent visible-row/outer-frame measurements. Parent audit does
+not accept those broader windowing claims. A recurring input wedge exhausts
+the iPad attempt's one recovery, so further native input/changed-interaction
+inspection is blocked at that checkpoint. The completed raw gates are retained,
+and the tester is correcting record scope without more device work. No final
+issue closure or blanket native acceptance is claimed.
+
 The following section records the earlier implementation; its system-chosen
 placement is not acceptance of the new requirement.
 

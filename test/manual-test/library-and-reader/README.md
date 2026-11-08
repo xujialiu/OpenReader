@@ -34,6 +34,8 @@ of per-text work. The catalog tests also cover 131,686 prepared texts.
 [Drawer placement (#361)](drawer-placement.md) gives the unattended native
 large-bottom-gap reproduction, its screenshot-oracle host checks, and the
 limits and failed controls of the isolated native sizing experiments.
+[Isolated Mac verification](mac-drawer.md) covers the separately approved copy,
+real pointer/window controls and the symptom-specific system Escape loop.
 
 With the current Debug app connected to Metro and both `A Short Test of Reading
 Aloud` and `仙逆` in the Library:
