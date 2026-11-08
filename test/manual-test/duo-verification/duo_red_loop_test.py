@@ -351,7 +351,8 @@ class DuoRedLoopTest(unittest.TestCase):
         function = DRIVER.read_text().split('restricted_capture(){', 1)[1].split('# Measurement only.', 1)[0]
         function = 'restricted_capture(){' + function
         for fault in ['honest', 'future-stale-pair', 'future-log', 'future-png', 'old-png',
-                      'mismatched-stamps', 'mismatched-attachments', 'stale-receipt', 'missing-receipt', 'duplicate-receipt']:
+                      'mismatched-stamps', 'mismatched-attachments', 'stale-receipt', 'missing-receipt', 'duplicate-receipt',
+                      'preexisting-raw-aliases', 'mismatched-raw-alias-stamps', 'parent-alias-honest']:
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 capture, kit, out = root / 'capture', root / 'kit', root / 'run'
@@ -365,6 +366,14 @@ class DuoRedLoopTest(unittest.TestCase):
                     log.write_text('restricted-v2 owned-panels-only started\nscreen 0 captured\nscreen 1 captured\n')
                     for path in [log, old, *old.glob('*.png')]:
                         os.utime(path, (time.time() + 60, time.time() + 60))
+                if fault in ['preexisting-raw-aliases', 'mismatched-raw-alias-stamps']:
+                    # Advertised aliases exist BEFORE capture-start; canonical B targets do not.
+                    (capture / 'result-20261108-135959-11111.xcresult').symlink_to(
+                        capture / 'result-20261108-140000-12345.xcresult', target_is_directory=True)
+                    log_stamp = '20261108-135958-22222' if fault == 'mismatched-raw-alias-stamps' else '20261108-135959-11111'
+                    (capture / ('test-' + log_stamp + '.log')).symlink_to(capture / 'test-20261108-140000-12345.log')
+                if fault == 'parent-alias-honest':
+                    (root / 'parent-alias').symlink_to(root, target_is_directory=True)
                 fake = kit / 'run-probe.sh'
                 fake.write_text("""#!/bin/bash
 python3 - "$3" "$HOST_CAPTURE_FAULT" <<'HOST'
@@ -388,6 +397,13 @@ if fault == 'future-log':
     when = time.time()+60; os.utime(log,(when,when))
 if fault == 'mismatched-stamps': result = out / 'result-different.xcresult'
 if fault == 'stale-receipt': log = out / 'test-old.log'; result = out / 'result-old.xcresult'
+if fault in ['preexisting-raw-aliases', 'mismatched-raw-alias-stamps']:
+    result = out / 'result-20261108-135959-11111.xcresult'
+    log_stamp = '20261108-135958-22222' if fault == 'mismatched-raw-alias-stamps' else '20261108-135959-11111'
+    log = out / ('test-' + log_stamp + '.log')
+if fault == 'parent-alias-honest':
+    parent = out.parent / 'parent-alias' / out.name
+    result, log = parent / result.name, parent / log.name
 line = f'Artifacts: {out} (result: {result}, log: {log})'
 if fault != 'missing-receipt': print(line)
 if fault == 'duplicate-receipt': print(line)
@@ -399,7 +415,7 @@ HOST
                     'CYCLE=1; UDID=HOST-NOT-NATIVE', function, 'restricted_capture d3'])
                 env = {**os.environ, 'HOST_CAPTURE_FAULT': fault}
                 run = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=15)
-                if fault in ['honest', 'future-stale-pair']:
+                if fault in ['honest', 'future-stale-pair', 'parent-alias-honest']:
                     self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
                     with Image.open(out / 'cycle-1/d3-inner-oriented.png') as image:
                         self.assertEqual(image.getpixel((0, 0)), (255, 255, 255), 'stale painted image substituted')

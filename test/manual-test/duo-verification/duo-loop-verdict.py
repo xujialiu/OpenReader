@@ -274,11 +274,19 @@ def capture_check(directory, prefix):
     require(len(receipts) == 1, 'missing/ambiguous actual probe Artifacts receipt')
     match = re.fullmatch(r'Artifacts: (.*?) \(result: (.*?), log: (.*?)\)', receipts[0])
     require(match is not None and Path(match[1]).resolve() == directory, 'capture source directory mismatch')
-    result, log = Path(match[2]).resolve(), Path(match[3]).resolve()
-    stamp = re.fullmatch(r'test-(\d{8}-\d{6}-\d+)\.log', log.name)
-    require(stamp is not None and log.parent == directory, 'invalid invocation log stamp')
+    advertised_result, advertised_log = Path(match[2]), Path(match[3])
+    for path in (advertised_result, advertised_log):
+        # Parent aliases such as /tmp are legitimate; the advertised final component is not.
+        require(path.parent.resolve() == directory, 'advertised artifact source directory mismatch')
+        require(path.name not in start['existing'], 'reused advertised artifact: ' + path.name)
+        require(not path.is_symlink(), 'linked advertised artifact: ' + str(path))
+    stamp = re.fullmatch(r'test-(\d{8}-\d{6}-\d+)\.log', advertised_log.name)
+    require(stamp is not None, 'invalid advertised invocation log stamp')
     stamp = stamp[1]
-    require(result == directory / f'result-{stamp}.xcresult', 'mismatched invocation result/log stamps')
+    require(advertised_result.name == f'result-{stamp}.xcresult', 'mismatched advertised result/log stamps')
+    result, log = advertised_result.resolve(), advertised_log.resolve()
+    require(result == directory / advertised_result.name and log == directory / advertised_log.name,
+            'advertised artifact identity changed after resolution')
     attachments = directory / f'attachments-{stamp}'
     summary = directory / f'summary-{stamp}.json'
     export = directory / f'export-{stamp}.log'
