@@ -113,9 +113,23 @@ restage(){
   done
   return 1
 }
-cleanup_cycle(){ # close a presented drawer, restore traffic, verify original fetch state
+cleanup_cycle(){ # dismiss the iOS callout, close a presented drawer, restore traffic, verify original fetch
   lookup_state "$RUN/clean-state.json"
   if [ "$(state_field "$RUN/clean-state.json" "d['selection'] is not None")" = "True" ]; then
+    # The fresh press shows the iOS selection callout, which eats the sheet
+    # grabber drag; dismiss it with one tap on the empty title-right area
+    # (device pt 350,200 -> window-local (583,343); verified 12:30 cleanup).
+    WIDC="$(python3 -c "
+import json
+d=json.loads('''$(orca computer list-windows --app pid:88167 --json 2>&1)''')
+ws=[w for w in d['result']['windows'] if 'iPhone Duo duo-sim-runtime-01' in w.get('title','')]
+print(ws[0]['id'] if ws else '')
+" 2>/dev/null)"
+    if [ -n "$WIDC" ]; then
+      orca computer click --app pid:88167 --window-id "$WIDC" --x 583 --y 343 \
+        --restore-window --no-screenshot --json > "$RUN/callout-dismiss.json" 2>&1
+      sleep 1.5
+    fi
     bash $KIT/run-probe.sh DuoFrameCalibrationProbe "$UDID" "$CLOSEDIR" \
       -only-testing:DuoFrameCalibrationProbe/testCloseDrawerGrabber -collect-test-diagnostics never \
       > "$RUN/cycle-$CYCLE-drawer-close.log" 2>&1 || { echo "control-fail: drawer close"; return 1; }
@@ -182,7 +196,7 @@ PY
   mode=$(python3 -c "import json;print(json.load(open('$RUN/cycle-$CYCLE/paint-$3.json')).get('mode','ERR'))" 2>/dev/null || echo ERR)
   share=$(python3 -c "import json;print(json.load(open('$RUN/cycle-$CYCLE/paint-$3.json'))['washShare'])" 2>/dev/null || echo ERR)
   dots=$(python3 -c "import json;print(json.load(open('$RUN/cycle-$CYCLE/paint-$3.json')).get('handleClusters','n/a'))" 2>/dev/null || echo ERR)
-  echo "paint[$mode] washShare=$share dots=$dots" | tee -a "$RUN/loop.log"
+  echo "paint[$mode] washShare=$share dots=$dots" >> "$RUN/loop.log"
   if [ "$share" = "ERR" ]; then echo "BLOCKED-measure-error"; return 0; fi
   if [ "$mode" = "crop" ]; then
     if python3 -c "import sys; sys.exit(0 if float('$share')>=0.4 else 1)"; then
