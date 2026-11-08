@@ -47,3 +47,17 @@ for prerequisites and existing tools.
   fresh `cdp.cjs` connection per call, then sleeps 300ms. Neither a persistent
   connection nor a fixed 300ms sampling cadence is established. Preserve
   registration failures as controls; no new connection framework is implied.
+- **A failed aggregation command must not disappear from the cycle ledger.**
+  Truncated cleanup JSON once raised before the cycle verdict was saved, while
+  the shell ignored the pipeline failure and summary scanned only saved verdicts;
+  a later clean cycle could hide a retained RED and report PASS. Retain every
+  attempted directory, treat unreadable cleanup as uncertainty, recover qualified
+  phase REDs and stop on a checked aggregation failure. Replay likewise handles
+  malformed later entries as attempts rather than discarding earlier REDs.
+- **Newer-than-start is not invocation provenance.** Independently choosing a
+  test log and attachments by filename/mtime can select a future-dated stale
+  painted capture; a fresh directory can also contain old PNGs. Bind all artifacts
+  to the actual runner's one `Artifacts:` result/log STAMP and source directory,
+  reject pre-existing selected artifacts and future times, and check both PNGs
+  inside the disclosed capture/export interval. HOST synthetic controls qualify
+  this selection logic, never native painting or #350 acceptance.

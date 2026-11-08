@@ -46,6 +46,13 @@ app result. Replaying that evidence now exits1 without changing the record.
 
 `summary.json`, the final `loop.log` line and CLI status agree. Each cycle retains
 its original `caseVerdict`, phase verdicts, `cleanupVerified` and uncertainties.
+Unreadable/malformed cleanup receipts remain uncertain; they cannot erase a
+qualified phase RED. Live summary enumerates every attempted `cycle-*` directory,
+not just existing cycle-verdict files. Missing/damaged cycle verdicts are recovered
+from the retained phase ledger and marked incomplete. A shell aggregation-command
+failure is sticky, stops further cycles and cannot count as a completed budget.
+Replay consumes cycles incrementally: a malformed later entry is an incomplete
+attempt, never a reason to discard an independently qualified earlier RED.
 `attemptedCycles` counts attempts; `validCycles` increments only after a terminal
 qualified fold verdict **and** verified cleanup; `appFailedCycles` counts REDs
 including those with later cleanup uncertainty. Two **total** control-failed
@@ -77,9 +84,24 @@ Hub PID, geometry, pose buttons, cleanup callout coordinates and prebuilt probe
 directories are historical setup, not portable defaults; no new CDP framework
 or native-helper change was made here.
 
-The capture path still permits only owned screens0/1 and exactly two PNGs. Its
-restricted-v2 marker and both screen receipts must come from a test log newer
-than this capture's start marker; attachments must also be newly exported.
+The capture path still permits only owned screens0/1 and exactly two PNGs. The
+existing `run-probe.sh` final `Artifacts:` receipt must uniquely bind this actual
+invocation's `result-STAMP.xcresult` and `test-STAMP.log`. The summary, export log
+and attachments directory must use that **same** STAMP and source directory;
+independent latest-file searches are not used. All selected artifacts must be
+absent from the pre-invocation inventory. The selected log must contain the
+restricted-v2 marker and both screen0/1 receipts; the matching result summary
+must contain exactly one passed test and zero failures.
+
+The log/result/summary/export/attachment directory and **both individual PNGs**
+must have timestamps inside the host capture/export wrapper interval. Exported
+file timestamps may have whole-second precision: the lower bound alone is
+rounded down to the start of that second (strictly less than one second of
+lower-bound uncertainty); the upper bound is the recorded completion time,
+with **zero future tolerance**. The accepted source paths, STAMP, per-PNG times
+and explicit precision bounds are retained in `*-capture.json`. Pre-existing
+future-dated artifacts cannot substitute for the actual invocation. A mismatched
+receipt, stale/future candidate or old PNG in a fresh directory fails closed.
 Fresh selection/state timestamps are bounded by each actual checkpoint call,
 and multiple matching selection answers are rejected instead of silently
 choosing one. Input success alone cannot establish the measured pose.
