@@ -1,11 +1,24 @@
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { createProvider, type ProviderSettings } from '../../../src/core/providers/factory';
+import { loadSettings, type Pcm } from '../kit/node-kit';
 
 import {
   copyFailures, durationS, makeRedactor, negativeControls, onsetFailures, peakSample,
   sanitizeUrl, sha256Hex, timingProblems,
 } from './audio-reference';
-import type { Pcm } from '../kit/node-kit';
-import type { Timestamp } from '../../../src/core/providers/types';
+import type { Timestamp, TTSProvider } from '../../../src/core/providers/types';
+
+vi.mock('../../../src/core/providers/factory', () => ({ createProvider: vi.fn() }));
+vi.mock('../kit/node-kit', () => ({
+  loadSettings: vi.fn(),
+  QueryHeaderWebSocket: vi.fn(),
+  VOICE_MATCH: { fish: (id: string) => id === 'fixture-voice' },
+  toPcm: vi.fn(),
+}));
 
 /** A clip of tone bursts: sound exactly where the Timings say words are. */
 function burstPcm(rate: number, seconds: number, words: { start: number; end: number }[]): Pcm {
@@ -19,6 +32,89 @@ function burstPcm(rate: number, seconds: number, words: { start: number; end: nu
 }
 
 const TEXT = 'fox jumps';
+
+describe('audio-reference capture CLI', () => {
+  const sentinel = 'synthetic-353-credential-sentinel';
+  const settings: ProviderSettings = {
+    'openai-official': { apiKey: '', model: '' },
+    compatible: { baseURL: '', apiKey: '', model: '' },
+    azure: { apiKey: '', region: '' },
+    speechify: { apiKey: '' },
+    fish: { apiKey: sentinel, model: 'fixture-model' },
+    local: { engine: '', baseURL: '' },
+  };
+  const listVoices = vi.fn<TTSProvider['listVoices']>();
+  const synthesize = vi.fn<TTSProvider['synthesize']>();
+  let originalArgv: string[];
+  let outDir: string;
+
+  beforeEach(() => {
+    originalArgv = process.argv;
+    outDir = mkdtempSync(join(tmpdir(), 'openreader-audio-reference-cli-'));
+    process.argv = [process.execPath, 'audio-reference.ts', 'capture', outDir];
+    vi.resetModules();
+    vi.mocked(loadSettings).mockReset().mockReturnValue(settings);
+    listVoices.mockReset().mockResolvedValue([{ id: 'fixture-voice', label: 'Fixture voice', locale: 'en' }]);
+    synthesize.mockReset();
+    vi.mocked(createProvider).mockReset().mockReturnValue({
+      id: 'fish', capabilities: { wordTimestamps: true }, listVoices, synthesize,
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    // Capture's catch ends at exit, so returning here lets the test inspect it.
+    vi.spyOn(process, 'exit').mockReturnValue(undefined as never);
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
+    vi.restoreAllMocks();
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  async function expectPrivateCaptureFailure(): Promise<void> {
+    // Import with the real command argv: exercise its catch, printer and exit.
+    await import('./audio-reference');
+    await vi.waitFor(() => expect(process.exit).toHaveBeenCalledExactlyOnceWith(1));
+    const printed = vi.mocked(console.error).mock.calls.map((args) => args.join(' ')).join('\n');
+    expect(printed).not.toContain(sentinel);
+    expect(console.error).toHaveBeenCalledExactlyOnceWith('capture failed; error details withheld to protect credentials');
+    expect(console.log).not.toHaveBeenCalled();
+  }
+
+  it('withholds a settings error before the redactor exists, retaining capture context and exit 1', async () => {
+    vi.mocked(loadSettings).mockImplementation(() => { throw new Error(`settings parse failed near ${sentinel}`); });
+    await expectPrivateCaptureFailure();
+    expect(createProvider).not.toHaveBeenCalled();
+  });
+
+  it('withholds an untrusted voice-listing error', async () => {
+    listVoices.mockRejectedValue(new Error(`voice listing failed with ${sentinel}`));
+    await expectPrivateCaptureFailure();
+    expect(listVoices).toHaveBeenCalledOnce();
+    expect(synthesize).not.toHaveBeenCalled();
+  });
+
+  it.each([{ kind: 'server', attempts: 1 }, { kind: 'network', attempts: 2 }])(
+    'withholds an untrusted $kind synthesis error after $attempts attempt(s)',
+    async ({ kind, attempts }) => {
+      synthesize.mockRejectedValue(Object.assign(new Error(`provider failed with ${sentinel}`), { kind }));
+      await expectPrivateCaptureFailure();
+      expect(synthesize).toHaveBeenCalledTimes(attempts);
+    },
+  );
+
+  it('keeps the safe usage message and exit 2 without loading settings', async () => {
+    process.argv = [process.execPath, 'audio-reference.ts', 'capture'];
+    const exited = new Error('synthetic process exit');
+    vi.mocked(process.exit).mockImplementation(() => { throw exited; });
+    await expect(import('./audio-reference')).rejects.toBe(exited);
+    expect(console.error).toHaveBeenCalledExactlyOnceWith('usage: audio-reference.ts capture|verify OUT_DIR');
+    expect(process.exit).toHaveBeenCalledExactlyOnceWith(2);
+    expect(loadSettings).not.toHaveBeenCalled();
+    expect(createProvider).not.toHaveBeenCalled();
+    expect(console.log).not.toHaveBeenCalled();
+  });
+});
 
 describe('sanitizeUrl', () => {
   it('keeps host and path, drops query, userinfo and anything after them', () => {

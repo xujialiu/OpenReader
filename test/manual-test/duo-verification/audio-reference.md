@@ -4,8 +4,8 @@ One real Clip with real Word Timings from the owner's actually configured
 Provider, captured on the host through the app's own provider layer — the
 **network/source answer** a later **native** capture (a real Reading in the
 app) is compared against *by content*. Nothing here plays audio, touches a
-simulator, or reads a microphone: `capture` is one HTTPS request, `verify` is
-offline byte arithmetic.
+simulator, or reads a microphone: `capture` asks the Provider for one
+utterance, `verify` is offline reference-integrity checking.
 
 Not this recipe's job, and never claimed by it: the rendered Reading, the
 native observer, the highlight following at a Line Position, or App Consent —
@@ -21,20 +21,19 @@ npx tsx test/manual-test/duo-verification/audio-reference.ts verify  OUT_DIR
 
 `OUT_DIR` is created private (0700, files 0600) and stays **outside the
 repository** — it holds the owner's chosen voice and the clip named by it.
-`capture` makes exactly **one** synthesis request: one utterance ≤ 25 words of
-synthetic public fixture text (`UTTERANCE` in `audio-reference.ts` — never
-owner book text). A retry happens once, and only for a `network` kind of
-failure; a server answer is never asked again. `verify` re-reads what capture
-wrote and spends nothing.
+`capture` uses one utterance ≤ 25 words of synthetic public fixture text
+(`UTTERANCE` in `audio-reference.ts` — never owner book text): one
+`synthesize` call plus at most one helper retry for a `network`-kind failure
+(**two synthesize calls maximum**). Provider-internal retry policy and
+Voice-listing HTTP are unchanged and may add requests; this is not a global
+HTTP-request budget. `verify` re-reads what capture wrote and spends nothing.
 
-The Provider is whoever `kit/node-kit.ts`'s `loadSettings()` actually
-configures — the owner's own settings export in `~/.secrets/openreader/`,
-read through the app's `createProvider` (ADR 0013), not a copied request and
-not a parallel service. It is whatever provider both is enabled there and
-returns Word Timings over plain HTTP (ADR 0005): Fish today, model
-`s2.1-pro-free`, the owner's own reference voice. If a provider returns a clip
-without timings, that is not a Word Timings control; configure and choose
-another actually-configured timed provider rather than interpolate (ADR 0005).
+The helper uses Fish through the app's `createProvider` (ADR 0013), with
+settings from `kit/node-kit.ts`'s `loadSettings()` — the owner's own settings
+export in `~/.secrets/openreader/`, not a copied request or a parallel service.
+It takes the Model from those settings and resolves the Voice through the
+Provider's listing using `VOICE_MATCH.fish` in the shared kit. A clip without
+Word Timings is not a Word Timings control; never interpolate them (ADR 0005).
 
 ## What capture records
 
@@ -52,9 +51,11 @@ another actually-configured timed provider rather than interpolate (ADR 0005).
   fixture text carries nothing for `prepareSpeechText` to strip;
 - the text hash and everything above in `reference.json`.
 
-Nothing printed or written contains a credential: the command redacts every
-string it emits against the secret values it loaded, and the request log keeps
-URLs as host + path.
+The capture summary redacts the loaded Fish, Azure and Speechify API-key
+values of at least eight characters. Capture failures print only a fixed
+`capture failed` message and exit 1, even if settings cannot be loaded;
+untrusted error details are never echoed by the capture CLI. Request records
+omit headers and query strings; the reference files stay private.
 
 ## What verify proves
 
@@ -107,24 +108,12 @@ The reference proves the source PCM is nonzero and its Timings match the text;
 proving the rendered Reading follows them (#353) is the native observer's work,
 not done here.
 
-## Current capture
-
-`/tmp/openreader-353-source-reference-01` (0700), captured 2026-11-08 from
-`88bee0c`: Fish `s2.1-pro-free`, voice `en/179b5cc736974d96913c7849d0bb68c5`
-("jjk narrator", en), synthesis 200 in 3.9 s, one chunk; 59,976 bytes MP3
-(sha256 `aa146859…f1e92`), 24 kHz mono PCM 7.497 s (sha256
-`96ad7c90…3d3c5`), 20 Word Timings, "The" at 0.00–0.16 s through "dawn" at
-6.88–7.36 s, "12" timed at 3.52–4.08 s. `fish.freeOnly` routes the request to
-`s2.1-pro-free`; the recorded request documents the **requested free routing**
-and is not an independent billing audit. `/tmp` is ephemeral: recapture costs
-one request.
-
 ## Next stage: the actual Clip and Timings a Reading used
 
 Read-only, through seams that already exist — no new hooks, schema, or cache
 format. The rendered-waveform analyser and the test-only observer are the PCM
-implementer's lane (owned by the parent's delegate ba247…); this recipe only
-documents how to read what the app itself stored.
+implementer's lane; this recipe only documents how to read what the app itself
+stored.
 
 - **Cache lane (stored clips).** A Download saves each clip under the app's
   existing Offline Narration store, addressable without any app change:

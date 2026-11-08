@@ -25,19 +25,21 @@
  *    a rendered-continuity or waveform-alignment analyser, and it is not a
  *    detector for the live Reading's output.
  *
- * The provider chosen is the one the owner's settings actually enable with
- * Word Timings over plain HTTP (`kit/node-kit.ts`'s `loadSettings`). Credentials
- * are loaded from `~/.secrets/openreader/` in process memory only; no value is
- * printed, logged or written anywhere — every string this file prints passes
- * through the redactor built from the loaded secrets, and the recorded request
- * log keeps host + path only.
+ * Fish uses the owner's settings from `kit/node-kit.ts`'s `loadSettings`.
+ * Credentials are loaded from `~/.secrets/openreader/` in process memory.
+ * The capture summary redacts the loaded Fish, Azure and Speechify API-key
+ * values of at least eight characters; the CLI withholds untrusted capture
+ * error details even if settings fail before a redactor exists. The recorded
+ * request log keeps host + path only, never headers or query strings.
  *
  *   npx tsx test/manual-test/duo-verification/audio-reference.ts capture OUT_DIR
  *   npx tsx test/manual-test/duo-verification/audio-reference.ts verify  OUT_DIR
  *
- * `capture` makes exactly one synthesis request (one utterance, ≤ 25 words,
- * synthetic public fixture text — never owner book text) and writes the raw
- * clip, its lossless decoded PCM, the Timings and the metadata. `verify` is
+ * `capture` uses one utterance (≤ 25 words of synthetic public fixture text,
+ * never owner book text): one synthesize call plus at most one helper retry
+ * for a network-kind failure (two synthesize calls maximum). Provider-internal
+ * retries and Voice-listing HTTP may add requests. It writes the raw clip,
+ * its lossless decoded PCM, the Timings and the metadata. `verify` is
  * fully offline: hashes, nonzero PCM, Timing-to-text correspondence, onset
  * energy per word, and the four negative controls. OUT_DIR is created private
  * (0700, files 0600) and must stay outside the repository.
@@ -55,7 +57,7 @@ import { prepareSpeechText } from '../../../src/core/speech-text';
 import { pcm16ToWav } from '../../../src/core/wav';
 import { loadSettings, QueryHeaderWebSocket, toPcm, VOICE_MATCH, type Pcm } from '../kit/node-kit';
 
-/** The synthetic utterance: 20 words, one number token, no owner text. Twenty words at Natural Pace is several seconds — enough to hold a word-level reference, small enough for the single request #353's capture needs. */
+/** The synthetic utterance: 20 words, one number token, no owner text. Twenty words at Natural Pace is several seconds — enough to hold a word-level reference, small enough for #353's bounded source capture. */
 export const UTTERANCE = 'The quick brown fox jumps over the lazy dog while 12 bright lanterns float above the quiet harbor at dawn.';
 
 // ---------- hashing and redaction ----------
@@ -70,7 +72,7 @@ export function sanitizeUrl(url: string): string {
   return `${at.protocol}//${at.host}${at.pathname}`;
 }
 
-/** Wraps every string this command prints: loaded secret values (≥ 8 chars) become `<redacted>`. */
+/** Redacts loaded secret values (≥ 8 chars) in the capture success summary. */
 export function makeRedactor(secrets: readonly string[]): (text: string) => string {
   const needles = [...new Set(secrets.filter((s) => s.length >= 8))];
   return (text: string) => needles.reduce((out, s) => out.split(s).join('<redacted>'), text);
@@ -206,8 +208,8 @@ export async function capture(outDir: string): Promise<void> {
   try {
     result = await provider.synthesize(speech, { voice: voice.id, signal: AbortSignal.timeout(120_000) });
   } catch (error) {
-    // One bounded retry, and only for a network cause: never a second paid
-    // attempt after a server answer.
+    // One helper retry, only for a network-kind failure. The Provider's own
+    // internal retry policy is unchanged.
     if ((error as { kind?: string }).kind !== 'network') throw error;
     result = await provider.synthesize(speech, { voice: voice.id, signal: AbortSignal.timeout(120_000) });
   }
@@ -334,6 +336,10 @@ if (process.argv[1]?.endsWith('audio-reference.ts')) {
     console.error('usage: audio-reference.ts capture|verify OUT_DIR');
     process.exit(2);
   }
-  if (command === 'capture') void capture(out).catch((e) => { console.error(String(e)); process.exit(1); });
+  if (command === 'capture') void capture(out).catch(() => {
+    // Settings can fail before a redactor exists; never echo untrusted errors.
+    console.error('capture failed; error details withheld to protect credentials');
+    process.exit(1);
+  });
   else void verify(out).then((ok) => process.exit(ok ? 0 : 1)).catch((e) => { console.error(String(e)); process.exit(1); });
 }
