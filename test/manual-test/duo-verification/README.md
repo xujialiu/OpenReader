@@ -10,6 +10,9 @@ measurements require the admitted tester lane and parent review.
   Appearance preview, with separate native evidence requirements.
 - [Duo selection-paint oracle](duo-selection-paint.md) (#350): fixture-local
   HOST pixel controls and the remaining fresh native capture/offset handoff gate.
+- [Duo native-loop verdict repair](duo-red-loop.md) (#350): one shared asserting
+  verdict path, HOST captured-shape replay, nonzero RED/incomplete statuses and
+  the remaining native qualification gate.
 - [Diagnostic controls](diagnostics.md) (#357/#358): crash-attribution evidence
   and bounded, read-only simulator-volume observation; neither supplies a
   native crash reproduction nor continuing-silence acceptance.
@@ -22,3 +25,25 @@ measurements require the admitted tester lane and parent review.
 #356 is cancelled and closed as not planned; no physical-Duo coverage is
 claimed here. Use the [manual-test index](../README.md) and [shared kit](../kit/README.md)
 for prerequisites and existing tools.
+
+## Pitfalls
+
+- **A printed RED is not an asserting CLI.** The original #350 loop retained a
+  real fourth-cycle range/paint loss but its literal final `exit 0` made the
+  outer guard report success. Task/count/Library lines were printed rather
+  than enforced, and a baseline incremented valid cycles before fold/capture.
+  Use the [shared verdict path](duo-red-loop.md); keep old guard exit0 records
+  unchanged as tool-defect evidence. Max cycles and two same-path REDs are stop
+  reasons, not passing verdicts. HOST replay establishes nonzero capability,
+  never a new native run or an application fix.
+- **Diagnostics and cleanup selection are separate receipts.**
+  `selection-diagnostics.js` reports `DEBUG-SELECTION` instances, not `ranges`.
+  Waiting for ranges after sending only that probe can time out or accept an
+  unrelated answer. Cleanup must send the actual selection probe, validate
+  fresh complete JSON and empty ranges, attempt traffic restoration even after
+  other cleanup errors, then independently verify clean state and harness-file
+  removal. A later clean read cannot erase an earlier cycle's uncertainty.
+- **Repeated CDP calls are not single-session reuse.** The heartbeat opens one
+  fresh `cdp.cjs` connection per call, then sleeps 300ms. Neither a persistent
+  connection nor a fixed 300ms sampling cadence is established. Preserve
+  registration failures as controls; no new connection framework is implied.
