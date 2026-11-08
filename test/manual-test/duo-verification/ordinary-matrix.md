@@ -205,43 +205,76 @@ node test/manual-test/kit/hx.cjs "$UDID_PAD" '{}' \
   --code-file test/manual-test/place-and-following/viewport-size.js
 ```
 
-### P6 — #350 ordinary variant: selection preserved and painted across the real window change, no layout-only duplicate
+### P6 — #350 ordinary variant: completed selection preserved and painted across the real window change, no layout-only duplicate
 
 The Duo fold control belongs to tester 1; this ordinary case uses the P4 resize
 as the layout change and is labeled a resized-window case, not a fold result.
-Real native long press on `hope` (first occurrence) of the Word Boundaries
-fixture above the drawer's opening edge; arm the traffic counter FIRST; never
-stack it with the fetch gate or another wrapper:
+P6 is a **COMPLETED lookup**: the passthrough request counter
+([DuoAcceptanceLookupTraffic.js](DuoAcceptanceLookupTraffic.js) — it never
+withholds or replaces a response) is the ONLY observer, and the pending
+coordinator is never involved here: its initial-state check refuses an already
+armed observer, so stacking them would abort P7 and poison both cases. Order:
+verify no leftover observer/selection (cleanup guarantee), arm the counter,
+real native long press on `hope` (first occurrence) of the Word Boundaries
+fixture above the drawer's opening edge, require the normal request through
+the passthrough and the parsed visible result BEFORE the resize, then snapshot:
 
 ```sh
 node test/manual-test/kit/cdp.cjs --eval \
   test/manual-test/duo-verification/DuoAcceptanceLookupTraffic.js "$METRO"
+# real native press (calibrated ordinary input channel; see duo-acceptance
+# Phase 1 for the calibration pattern), then require the COMPLETED result:
+node test/manual-test/kit/hx.cjs "$UDID" '{}' --code-file \
+  test/manual-test/duo-verification/DuoAcceptanceSelection.js > "$OUT/sel-before.json"
+node test/manual-test/kit/cdp.cjs --eval \
+  test/manual-test/duo-verification/DuoAcceptanceLookupState.js "$METRO" \
+  > "$OUT/state-before.json"
+# real verified resize → settle ≤8 s → repeat BOTH snapshots + active-display image
+```
+
+Required: equal section/exact CFI/direction/text before and after settled
+reflow (≤8 s settle window), the traffic count unchanged across the resize (no
+layout-only request; exactly one new request only for a deliberate handle
+change), the native image showing the painted selection and both exposed
+handles, and the pixel oracle `duo-selection-paint.py` run on the fresh
+ordinary pair (its BLOCKED thresholds are kept, never relaxed). Fresh
+screenshot-scale calibration for crop/scale — the pinned A3 scales are Duo
+artifacts, not defaults.
+
+**Finally, restore and ACK the counter BEFORE P7's gate install:** evaluate an
+external file containing `globalThis.__duoAcceptanceLookupTraffic?.restore()`
+through CDP, require its exact `DuoAcceptance lookup traffic restored` answer,
+and require the next `DuoAcceptanceLookupState.js` read to show
+`traffic: null` (close the lookup for reset and assert an empty DOM
+selection). This ack is P7's admission precondition.
+
+### P7 — #351 ordinary variant: pending-to-visible with an actual native excerpt/image
+
+P7 is the **HELD lookup**: the held gate ALONE, installed by the coordinator
+itself — the passthrough counter from P6 is restored and ACKED first
+(`traffic: null` read), and must NOT be armed here. The coordinator's own
+initial-state check (`Close the old lookup and restore all fetch observers
+first` on any present selection, gate or traffic) is the contract guard that
+the P6 reset actually happened; do not bypass or pre-install anything.
+`verified-resize.sh` = the calibrated AXe resize drag with its system-input
+receipt (≤6.5 s); `assert-definition.sh` waits for the press probe's export,
+then `duo-visible-definition.sh`:
+
+```sh
 node test/manual-test/duo-verification/duo-pending-lookup.cjs "$DEVICE_NAME" \
   "$METRO" "$OUT/verified-resize.sh" "$OUT/assert-definition.sh" "$OUT/pending-01"
 ```
 
-`verified-resize.sh` = the calibrated AXe resize drag with its system-input
-receipt (≤6.5 s); `assert-definition.sh` = the phase-2 wrapper waiting for the
-press probe's export, then `duo-visible-definition.sh`. Required: equal
-section/exact CFI/direction/text before and after settled reflow (≤8 s settle
-window), the traffic count unchanged across the resize (no layout-only request;
-exactly one new request only for a deliberate handle change), the native image
-showing the painted selection and both exposed handles, and the pixel oracle
-`duo-selection-paint.py` run on the fresh ordinary pair (its BLOCKED thresholds
-are kept, never relaxed). Fresh screenshot-scale calibration for crop/scale —
-the pinned A3 scales are Duo artifacts, not defaults.
-
-### P7 — #351 ordinary variant: pending-to-visible with an actual native excerpt/image
-
-Same coordinator as P6 with the held real Free Dictionary gate: the fold/parse
-must not wait for the export; the native result assertion must. Success needs
-the parsed `LookupDrawer.result.text` derived from the actual response, the
-query and definition in hittable native Text, AND the active-display image
-showing the exact definition excerpt — not query/Copy/source/spinner alone.
-`report.json` ends `VISUAL_REVIEW_PENDING` by design: review the image and
-accept/reject explicitly. Consent for the dictionary recipient is answered once
-after reading the alert, before the first held run; a held response age ≤2.5 s
-at layout-change start, release <12 s, parsed state <15 s.
+Same coordinator as the Duo phase with the held real Free Dictionary gate: the
+fold/parse must not wait for the export; the native result assertion must.
+Success needs the parsed `LookupDrawer.result.text` derived from the actual
+response, the query and definition in hittable native Text, AND the
+active-display image showing the exact definition excerpt — not
+query/Copy/source/spinner alone. `report.json` ends `VISUAL_REVIEW_PENDING` by
+design: review the image and accept/reject explicitly. Consent for the
+dictionary recipient is answered once after reading the alert, before the
+first held run; a held response age ≤2.5 s at layout-change start, release
+<12 s, parsed state <15 s.
 
 ### P8 — #354 ordinary variant: undimmed Appearance opening + reversible font
 
