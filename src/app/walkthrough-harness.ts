@@ -16,6 +16,7 @@ import { DEBUG_MODE } from '../debug/mode';
 import { PROBE_MESSAGE } from '../renderer/messages';
 
 import type { ReadingStatus } from './use-reading';
+import { LookupResponseGate, type LookupGateAction, type LookupGateStatus } from './walkthrough-lookup-gate';
 
 export type HarnessCommand = Record<string, unknown>;
 
@@ -66,6 +67,7 @@ export function useHarnessCommands(run: (command: HarnessCommand) => void): void
   const seenRef = useRef(-1);
   useEffect(() => {
     if (!DEBUG_MODE) return;
+    harnessPollers += 1;
     const timer = setInterval(() => {
       try {
         const file = new File(Paths.document, 'harness.json');
@@ -74,13 +76,74 @@ export function useHarnessCommands(run: (command: HarnessCommand) => void): void
         const seq = Number(body.seq ?? -1);
         if (seq === seenRef.current) return;
         seenRef.current = seq;
+        if (body.do === 'lookupgate') {
+          // Shell, ReaderScreen and ReadingView poll the same file. This app-
+          // runtime command is consumed once, not once per mounted reader.
+          if (Number.isSafeInteger(seq) && seq > seenLookupGateSeq) {
+            seenLookupGateSeq = seq;
+            runLookupGateCommand(body, seq);
+          }
+          return;
+        }
         runRef.current(body);
       } catch (problem) {
         hlog(`harness threw: ${String(problem)}`);
       }
     }, 250);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      harnessPollers -= 1;
+      if (harnessPollers === 0) lookupGate?.restore('unmounted');
+    };
   }, []);
+}
+
+let harnessPollers = 0;
+let seenLookupGateSeq = -1;
+let lookupGate: LookupResponseGate | null = null;
+let gateCommand: LookupGateStatus['command'];
+
+/** Fixed, bounded test fields only. Write on each transition, not through the
+ * Debug Log's two-second batch: M7 must release inside the real 15s lookup.
+ * Readers retry a missing/partial JSON write and require the acknowledged seq.
+ */
+function writeLookupGateStatus(): void {
+  if (!DEBUG_MODE) return;
+  try {
+    const status: LookupGateStatus = { version: 1, observedAt: Date.now(), command: gateCommand, gate: lookupGate?.snapshot() ?? null };
+    new File(Paths.document, 'lookup-gate-status.json').write(JSON.stringify(status));
+  } catch {
+    lookupGate?.restore('status-write-failed');
+    hlog('lookup gate status unavailable; control cancelled');
+  }
+}
+function runLookupGateCommand(command: HarnessCommand, seq: number): void {
+  if (!DEBUG_MODE) return;
+  const action = (['hold', 'state', 'release', 'restore'] as unknown[]).includes(command.action) ? command.action as LookupGateAction : null;
+  const run = typeof command.run === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(command.run) ? command.run : null;
+  gateCommand = { seq, action, run, ok: false, error: null, released: 0 };
+  const refuse = (error: string) => { gateCommand.error = error; writeLookupGateStatus(); };
+  if (!action || !run || !Number.isSafeInteger(command.seq) ||
+      Object.keys(command).some(key => !['seq', 'do', 'action', 'run', 'service'].includes(key))) return refuse('invalid-command');
+  if (action === 'hold') {
+    if (command.service !== 'free-dictionary') return refuse('unsupported-service');
+    if (lookupGate?.snapshot().installed || globalThis.fetch !== realFetch) return refuse('fetch-observer-present');
+    lookupGate = new LookupResponseGate(run, realFetch, writeLookupGateStatus);
+  } else {
+    if (command.service !== undefined) return refuse('invalid-command');
+    if (!lookupGate || lookupGate.run !== run) return refuse('gate-run-mismatch');
+    if (action === 'release') {
+      if (!lookupGate.snapshot().installed) return refuse('gate-not-installed');
+      gateCommand.released = lookupGate.release();
+      if (!gateCommand.released) return refuse('no-held-response');
+    }
+    if (action === 'restore') {
+      lookupGate.restore('restore');
+      globalThis.fetch = realFetch;
+    }
+  }
+  gateCommand.ok = true;
+  writeLookupGateStatus();
 }
 
 /**
@@ -90,6 +153,8 @@ export function useHarnessCommands(run: (command: HarnessCommand) => void): void
  */
 const realFetch = globalThis.fetch;
 export function breakFetch(host: string, from: number): void {
+  if (!DEBUG_MODE) return;
+  if (lookupGate?.snapshot().installed) return hlog('fetch hook refused: lookup gate installed');
   let seen = 0;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
@@ -109,6 +174,8 @@ export function breakFetch(host: string, from: number): void {
   hlog(`fetch broken for ${host} from request ${from}`);
 }
 export function unbreakFetch(): void {
+  if (!DEBUG_MODE) return;
+  lookupGate?.restore('unbreakfetch');
   globalThis.fetch = realFetch;
   hlog('fetch restored');
 }
@@ -120,6 +187,8 @@ export function unbreakFetch(): void {
  * never logged, and they are where a key travels. `unbreakfetch` removes it.
  */
 export function watchFetch(host: string): void {
+  if (!DEBUG_MODE) return;
+  if (lookupGate?.snapshot().installed) return hlog('fetch hook refused: lookup gate installed');
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
     if (url.includes(host)) hlog(`fetch ${init?.method ?? 'GET'} ${url}${typeof init?.body === 'string' ? ` ${init.body.slice(0, 400)}` : ''}`);
