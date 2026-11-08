@@ -246,6 +246,13 @@ class DuoRedLoopTest(unittest.TestCase):
                 self.assertEqual(json.loads((directory / 'verdict-baseline.json').read_text())['outcome'],
                                  'CONTROL_INCOMPLETE')
 
+    def test_invalid_native_cli_arguments_are_control_errors(self):
+        for args in [[], ['owned', 'metro', 'out'], ['', 'metro', 'out', 'pin', 'capture', 'press'],
+                     ['owned', 'metro', 'out', 'pin', 'capture', 'press', '5']]:
+            with self.subTest(args=args):
+                run = subprocess.run(['bash', str(DRIVER), *args], capture_output=True, text=True, timeout=5)
+                self.assertEqual(run.returncode, 2, run.stdout + run.stderr)
+
     def test_incomplete_empty_and_invalid_manifest_are_nonzero(self):
         m = self.clean()
         del m['cycles'][0]['return']

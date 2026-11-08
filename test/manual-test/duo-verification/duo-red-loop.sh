@@ -37,6 +37,11 @@ if [ "${1:-}" = "--replay" ]; then
   [ "$#" = 3 ] || { echo 'usage: duo-red-loop.sh --replay HOST_MANIFEST NEW_OUT' >&2; exit 2; }
   exec python3 "$(dirname "$0")/duo-loop-verdict.py" replay "$2" "$3"
 fi
+[ "$#" -ge 6 ] && [ "$#" -le 7 ] \
+  || { echo 'usage: duo-red-loop.sh UDID METRO OUT PIN CAPTURE_DIR PRESS_DIR [MAX_CYCLES]' >&2; exit 2; }
+for argument in "$@"; do
+  [ -n "$argument" ] || { echo 'native loop arguments must not be empty' >&2; exit 2; }
+done
 UDID=${1:?UDID}
 METRO=${2:?METRO}
 OUT=${3:?OUT_DIR}
