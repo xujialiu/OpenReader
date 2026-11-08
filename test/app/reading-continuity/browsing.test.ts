@@ -247,7 +247,11 @@ function createPage(toApp: (message: unknown) => void, stalled: ReadonlySet<numb
     requestAnimationFrame: (run: (now: number) => void) => setTimeout(() => run(Date.now()), 16),
     cancelAnimationFrame: (id: ReturnType<typeof setTimeout>) => clearTimeout(id),
     performance: { now: () => Date.now() },
+    // Browsing does not dispatch lookup focus/input events; their cancellation
+    // semantics run against the complete program in lookup-resize.test.ts.
+    addEventListener() {},
     document: {
+      addEventListener() {},
       getElementById: () => null,
       createElement: () => {
         let child: { attached: boolean } | null = null;

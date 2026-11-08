@@ -714,6 +714,9 @@ ${constants}
   // Ephemeral only: this is not a Reading Position and never crosses the bridge.
   var lookupSelection = null;
   var lookupResize = null;
+  // Only genuine selection can grant ownership. BODY after iframe destruction
+  // is an OS/resize blur, never permission to acquire a new focus owner.
+  var lookupFocus = null;
   var restoredSelection = null;
   var selectionTimer = null;
   var selectionTouching = false;
@@ -749,8 +752,33 @@ ${constants}
     setBrowsing(true);
     halt();
   }
+  function lookupReadingFocus(doc) {
+    var active = doc.activeElement;
+    return !active || ((active === doc.body || active === doc.documentElement) && !active.isContentEditable);
+  }
+  function cancelLookupRestore() {
+    lookupResize = null;
+    lookupFocus = null;
+  }
+  function lookupFocusChanged(event) {
+    if (!lookupFocus) return;
+    var doc = event.currentTarget;
+    var target = event.target;
+    if (doc === document && (target === lookupFocus.frame || target === doc.body || target === doc.documentElement)) return;
+    if (doc === lookupFocus.document && (target === doc.body || target === doc.documentElement) && lookupReadingFocus(doc)) return;
+    cancelLookupRestore();
+  }
+  function listenForLookupInput(doc) {
+    doc.addEventListener('focusin', lookupFocusChanged, true);
+    doc.addEventListener('pointerdown', cancelLookupRestore, { capture: true, passive: true });
+    doc.addEventListener('touchstart', cancelLookupRestore, { capture: true, passive: true });
+    doc.addEventListener('wheel', cancelLookupRestore, { capture: true, passive: true });
+    doc.addEventListener('keydown', cancelLookupRestore, true);
+    doc.addEventListener('beforeinput', cancelLookupRestore, true);
+  }
   function rememberLookupSelection(doc, text, multipleWords) {
     lookupSelection = null;
+    cancelLookupRestore();
     var selection = doc.getSelection();
     if (!selection || !selection.rangeCount) return;
     var contents = rendition.getContents().find(function (item) { return item.document === doc; });
@@ -762,6 +790,13 @@ ${constants}
         text: text.slice(0, 5001), multipleWords: multipleWords,
         backward: selection.anchorNode === range.endContainer && selection.anchorOffset === range.endOffset
       };
+      // Capture while the selecting iframe still exists, not at manager.resize:
+      // the OS can already have blurred it by the time that observer runs.
+      var frame = doc.defaultView && doc.defaultView.frameElement;
+      if (frame && frame.isConnected && frame.ownerDocument === document && frame.contentDocument === doc &&
+          document.activeElement === frame && doc.hasFocus() && lookupReadingFocus(doc)) {
+        lookupFocus = { document: doc, frame: frame };
+      }
     } catch (error) {
       report('could not capture the lookup selection: ' + error);
     }
@@ -800,14 +835,60 @@ ${constants}
       return false;
     }
   }
+  function lookupFocusAvailable(doc, owner) {
+    var frame = doc.defaultView && doc.defaultView.frameElement;
+    var active = document.activeElement;
+    return lookupReadingFocus(doc) && (!active || active === document.body || active === document.documentElement ||
+      active === frame || (owner && lookupFocus === owner && active === owner.frame));
+  }
+  function visibleLookupRange(doc, frame, range) {
+    if (!frame || !frame.isConnected || frame.ownerDocument !== document || frame.contentDocument !== doc ||
+        !frame.getClientRects().length || doc.visibilityState !== 'visible') return false;
+    var style = window.getComputedStyle(frame);
+    if (style.visibility !== 'visible' || style.display === 'none') return false;
+    var stage = scroller();
+    if (!stage) return false;
+    var viewport = stage.getBoundingClientRect();
+    var bounds = frame.getBoundingClientRect();
+    var top = Math.max(bounds.top, viewport.top + barCovered);
+    var bottom = Math.min(bounds.bottom, viewport.bottom - covered);
+    var left = Math.max(bounds.left, viewport.left);
+    var right = Math.min(bounds.right, viewport.right);
+    if (right <= left || bottom <= top) return false;
+    return Array.from(range.getClientRects()).some(function (rect) {
+      return rect.width > 0 && rect.height > 0 && bounds.top + rect.top < bottom && bounds.top + rect.bottom > top &&
+        bounds.left + rect.left < right && bounds.left + rect.right > left;
+    });
+  }
+  function restoreLookupFocus(resize, doc, range) {
+    var owner = resize.focus;
+    if (!owner || lookupFocus !== owner || !lookupEnabled || !lookupHeld || lookupSelection !== resize.selection ||
+        document.visibilityState !== 'visible' || !lookupFocusAvailable(doc, owner)) return;
+    var frame = doc.defaultView && doc.defaultView.frameElement;
+    if (!visibleLookupRange(doc, frame, range)) {
+      lookupFocus = null;
+      return;
+    }
+    // Transfer only this lookup's original ownership to its replacement. The
+    // focus event must recognise the new frame; no range or scroll is changed.
+    lookupFocus = { document: doc, frame: frame };
+    if (!doc.hasFocus() || document.activeElement !== frame) frame.focus({ preventScroll: true });
+    if (!doc.hasFocus() || !lookupReadingFocus(doc)) lookupFocus = null;
+  }
   function restoreLookupSelection(resize) {
-    if (!resize || lookupResize !== resize || !lookupHeld || lookupSelection !== resize.selection) return;
+    if (!resize || lookupResize !== resize || !lookupEnabled || !lookupHeld || lookupSelection !== resize.selection) return;
     lookupResize = null;
     var saved = resize.selection;
     var contents = rendition.getContents().find(function (item) { return item.sectionIndex === saved.section; });
     // Never display the selected section instead of the owner's Browsing
     // passage. An offscreen section can legitimately have been trimmed (#193).
     if (!contents) return;
+    // Selection itself can affect editing focus. Refuse a new owner BEFORE
+    // mutating the range as well as before the conditional focus repair.
+    if (document.visibilityState !== 'visible' || !lookupFocusAvailable(contents.document, resize.focus)) {
+      lookupFocus = null;
+      return;
+    }
     try {
       var range = contents.range(saved.cfi);
       if (!range || range.collapsed || contents.cfiFromRange(range) !== saved.cfi) throw new Error('lookup range did not round-trip');
@@ -821,6 +902,7 @@ ${constants}
         saved.backward ? range.endContainer : range.startContainer, saved.backward ? range.endOffset : range.startOffset,
         saved.backward ? range.startContainer : range.endContainer, saved.backward ? range.startOffset : range.endOffset
       );
+      restoreLookupFocus(resize, selectionDoc, range);
     } catch (error) {
       report('could not restore the lookup selection: ' + error);
     }
@@ -849,7 +931,7 @@ ${constants}
   function closeLookup(resumeFollow) {
     clearTimeout(selectionTimer);
     lookupSelection = null;
-    lookupResize = null;
+    cancelLookupRestore();
     restoredSelection = null;
     if (!lookupHeld) return;
     lookupHeld = false;
@@ -1585,6 +1667,7 @@ ${constants}
     contents.document.addEventListener('click', tapped, false);
     contents.document.addEventListener('click', linkHeld, true);
     contents.document.addEventListener('selectionchange', selectionChanged);
+    listenForLookupInput(contents.document);
     contents.document.addEventListener('touchstart', selectionStarted, { passive: true });
     contents.document.addEventListener('touchend', selectionEnded, { passive: true });
     contents.document.addEventListener('touchcancel', selectionEnded, { passive: true });
@@ -3169,7 +3252,7 @@ ${EPUB_GUARDS_SOURCE}
     if (!manager || manager.openreaderKeepsResizePlace) return;
     var resize = manager.resize;
     manager.resize = function (width, height, target) {
-      lookupResize = lookupHeld && lookupSelection ? { selection: lookupSelection } : null;
+      lookupResize = lookupHeld && lookupSelection ? { selection: lookupSelection, focus: lookupFocus } : null;
       if (target) resizeAnchor = null;
       else if (resizeAnchor && (browsing || !state || !state.follow)) {
         target = resizeAnchor.cfi;
@@ -3303,6 +3386,11 @@ ${EPUB_GUARDS_SOURCE}
   /* A drag in the margins between the section documents is heard here; see
      dragged. The container is built with the manager and lives as long as it. */
   var stage = scroller();
+  listenForLookupInput(document);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') cancelLookupRestore();
+  });
+  window.addEventListener('pagehide', cancelLookupRestore);
   if (stage) stage.addEventListener('touchmove', dragged, { passive: true });
   if (stage) stage.addEventListener('touchstart', landed, { passive: true });
   if (stage) stage.addEventListener('wheel', forgetResizeAnchor, { passive: true });

@@ -75,7 +75,7 @@ function computedStyle(element: any) {
   const cssFloat = declared(element, 'float') ?? 'none';
   const position = declared(element, 'position') ?? 'static';
   if (display.startsWith('inline') && (cssFloat !== 'none' || position === 'absolute' || position === 'fixed')) display = 'block';
-  return { display, cssFloat, position, textAlign: 'start', fontSize: '16px', getPropertyValue: () => '' };
+  return { display, cssFloat, position, visibility: declared(element, 'visibility') ?? 'visible', textAlign: 'start', fontSize: '16px', getPropertyValue: () => '' };
 }
 
 interface Listener {
@@ -152,9 +152,22 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
     ReactNativeWebView: { postMessage: (data: string) => posted.push(JSON.parse(data)) },
     requestAnimationFrame: (fn: () => void) => frames.push(fn), cancelAnimationFrame() {}, setTimeout, performance: { now: () => 0 },
     // The Debug Mode program's watchdog (`renderer-log.ts`); it never fires here.
-    setInterval: () => 0, clearInterval() {},
+    setInterval: () => 0, clearInterval() {}, getComputedStyle: computedStyle,
   };
-  const top = { getElementById: () => null, createElement: () => ({ style: {}, textContent: '' }), head: { appendChild() {} } };
+  // Focus/visibility events are host doubles, not WebKit responder ownership.
+  function eventTarget() {
+    const listeners = new Map<string, ((event: any) => void)[]>();
+    return {
+      addEventListener(type: string, fn: (event: any) => void) { listeners.set(type, [...(listeners.get(type) ?? []), fn]); },
+      dispatchEvent(event: any) { for (const fn of listeners.get(event.type) ?? []) fn({ ...event, currentTarget: this }); },
+    };
+  }
+  Object.assign(window, eventTarget());
+  const top: any = {
+    ...eventTarget(), visibilityState: 'visible', body: { tagName: 'BODY' }, defaultView: window,
+    getElementById: () => null, createElement: () => ({ style: {}, textContent: '' }), head: { appendChild() {} },
+  };
+  top.activeElement = top.body;
   vm.runInContext(highlighterSource(undefined, undefined, undefined, options.debugMode ?? false), vm.createContext({ window, document: top, rendition, book, performance: window.performance, setTimeout, clearTimeout, console, Promise }));
   const follow = linkHandler();
 
@@ -199,7 +212,7 @@ export function standInPage(options: { toc?: readonly unknown[]; debugMode?: boo
   }
 
   return {
-    posted, displays, followed, manager, stage, addSection, rendition,
+    posted, displays, followed, manager, stage, addSection, rendition, document: top, window,
     flushTimers() { for (const timer of timers.splice(0)) timer(); },
     frame() { for (const frame of frames.splice(0)) frame(); },
     send(message: object) { window.__openReaderHighlighter(message); },
