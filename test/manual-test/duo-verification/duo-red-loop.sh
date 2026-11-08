@@ -69,8 +69,19 @@ hq_answer(){ # before out pattern loops
   : > "$out"
   for _ in $(seq 1 "$loops"); do
     tail -n +"$((before+1))" "$METRO_LOG" 2>/dev/null \
-      | grep "HX PROBE" | grep -v DEBUG-SELECTION | tail -1 > "$out"
-    grep -q "$pattern" "$out" 2>/dev/null && return 0
+      | grep "HX PROBE" | grep -F "$pattern" | tail -1 > "$out"
+    [ -s "$out" ] && return 0
+    sleep 0.4
+  done
+  return 1
+}
+diag_answer(){ # before out — capture the DEBUG-SELECTION diagnostics answer only
+  local before=$1 out=$2
+  : > "$out"
+  for _ in $(seq 1 25); do
+    tail -n +"$((before+1))" "$METRO_LOG" 2>/dev/null \
+      | grep "HX PROBE" | grep "DEBUG-SELECTION" | tail -1 > "$out"
+    [ -s "$out" ] && return 0
     sleep 0.4
   done
   return 1
@@ -136,7 +147,8 @@ print(ws[0]['id'] if ws else '')
     sleep 2
   fi
   local before; before=$(wc -l < "$METRO_LOG" 2>/dev/null || echo 0)
-  node $KIT/hx.cjs "$UDID" '{}' --code-file test/manual-test/duo-verification/DuoAcceptanceSelection.js >/dev/null 2>&1
+  node $KIT/hx.cjs "$UDID" '{}' --code-file "$AREA/selection-diagnostics.js" >/dev/null 2>&1
+  diag_answer "$before" "$RUN/clean-diag.txt"
   hq_answer "$before" "$RUN/clean-sel.txt" '"ranges"' || { echo "no cleanup selection answer"; return 1; }
   grep -q '"ranges":\[\]' "$RUN/clean-sel.txt" || { echo "selection not empty after cleanup: $(cat "$RUN/clean-sel.txt")"; return 1; }
   echo 'globalThis.__duoAcceptanceLookupTraffic?.restore()' > "$RUN/traffic-restore.js"
@@ -325,9 +337,9 @@ PY
     control_fail_streak=0
     valid=$((valid+1))
     before_diag=$(wc -l < "$METRO_LOG" 2>/dev/null || echo 0)
-    # baseline read-only diagnostics
+    # baseline read-only diagnostics (focus/owner/frame; answer captured alone)
     node $KIT/hx.cjs "$UDID" '{}' --code-file "$AREA/selection-diagnostics.js" >/dev/null 2>&1
-    hq_answer "$before_diag" "$RUN/cycle-$CYCLE/diag-baseline.txt" 'DEBUG-SELECTION' 25 \
+    diag_answer "$before_diag" "$RUN/cycle-$CYCLE/diag-baseline.txt" \
       || echo "baseline diagnostics unavailable (recorded)" >> "$RUN/loop.log"
     # outward fold, settle ≤8s
     if ! bash "$AREA/duo-fold-input.sh" open > "$RUN/cycle-$CYCLE/fold-open.log" 2>&1; then
@@ -348,7 +360,7 @@ PY
       libok=$([ "$(libhash)" = "$BASELIB" ] && echo same || echo CHANGED)
       if restricted_capture "d3"; then
         node $KIT/hx.cjs "$UDID" '{}' --code-file "$AREA/selection-diagnostics.js" >/dev/null 2>&1
-        hq_answer "$before_diag" "$RUN/cycle-$CYCLE/diag-d3.txt" 'DEBUG-SELECTION' 25 \
+        diag_answer "$before_diag" "$RUN/cycle-$CYCLE/diag-d3.txt" \
           || echo "D3 diagnostics unavailable (recorded)" >> "$RUN/loop.log"
         if grep -q '"ranges":\[\]' "$RUN/cycle-$CYCLE/selection-d3.txt"; then
           dom=dropped
