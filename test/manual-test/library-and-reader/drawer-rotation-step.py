@@ -93,6 +93,9 @@ def measure(out, name, metro):
     state = cdp_state(metro, out, name)
     geometry = None
     if grabber is not None:
+        # dp.measure_image separates the drawer only over the Library's pure
+        # white page; over the near-white Reader page its output is not a
+        # drawer measurement.
         geometry = dp.measure_image(out / f'{name}.png', width, height)
         (out / f'{name}-geometry.json').write_text(json.dumps(geometry, indent=2))
     record = {'window': {'x': x, 'y': y, 'width': width, 'height': height},

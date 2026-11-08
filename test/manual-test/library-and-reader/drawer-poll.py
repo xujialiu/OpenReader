@@ -5,6 +5,9 @@ Usage: drawer-poll.py SECONDS OUT.jsonl METRO DEVICE_NAME
 Writes one JSON line per sample: {t, drawers, selection, guard, detents}.
 Run it across a rotation/resize action to show the Drawer stayed presented
 (without re-presentation) while its detents re-rendered to the new window.
+This samples the JS-side fiber presentation at the poll cadence (~0.5 s plus
+CDP latency); it is a sampling bound, not native presentation-controller
+identity proof.
 """
 import importlib.util
 import json

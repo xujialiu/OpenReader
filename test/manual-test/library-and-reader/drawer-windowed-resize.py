@@ -1,20 +1,33 @@
 #!/usr/bin/env python3
-"""Windowed-desk Drawer resize verification for #361 (iPadOS 26 windowing).
+"""Windowed-desk Drawer resize driver for #361 (iPadOS 26 windowing).
 
-Written for the drawer-361-pad-01 final verification; keep as the record of
-what the windowed contract needs. Findings baked into this driver:
+HISTORICAL, RUN-SPECIFIC DIAGNOSTIC — not a generalized acceptance tool and
+not a painted-geometry oracle. It encodes the drawer-361-pad-01 session
+(UDID now required via OPENREADER_UDID; artifact dir via
+OPENREADER_DRAWER_ARTIFACTS). What a run of this driver actually establishes:
+- real handle drags changed the real window size (RN useWindowDimensions
+  followed the drags),
+- the JS-selected detent state, the tablet guard flag and the REQUESTED
+  opening ratio (= 50% of the same RN-reported height) were retained,
+- sampled JS presentation (poller, ~0.5 s cadence + CDP latency) showed no
+  gap — a sampling bound, not native controller identity,
+- row sets below are rendered/cached fiber text, lexically sorted: their
+  intersection does NOT prove visible-row continuity.
+What it does NOT measure: the drawer's actual painted height/width in the
+window, its painted bottom edge, and the actual first/last VISIBLE list
+entries. drawer_left_right's light mask cannot separate the near-white
+reader page from the drawer card; impliedChrome is derived from the
+requested detent height, not measured; painted_height() subtracts the
+fullscreen 51 pt constant and is invalid windowed. Visible-entry continuity
+across resizes remains UNVERIFIED by this driver (manual screenshot review
+of specific states is recorded in drawer-361-final-verification.md).
+Operational findings baked in (still useful):
 - AXe describe-ui and mobilebuildmcp snapshot_ui are BLIND to an app window
   while the desk (home) surface fronts it; real touches still land, and CDP
   (Metro) reads the app freely.
-- RN's useWindowDimensions reports the true windowed size, and the opening
-  detent equals exactly 50% of it at every size seen.
-- The screenshot oracle cannot separate the Drawer card from the reader's
-  near-white page; painted facts come from the native grabber pill, the
-  traffic-light dot (window top anchor, offset 31.8 pt) and RN's size.
+- RN's useWindowDimensions tracks the real windowed size across drags.
 - Sheet drags in the windowed presentation take a start about 5 pt ABOVE the
   painted pill and a slower pace; faster drags at the pill can no-op.
-- The native bottom chrome is about 51 pt fullscreen but only about 6-11 pt
-  windowed: it follows the native presentation, it is not a fixed inset.
 Real input throughout; playback stays paused. Run the steps under
 kit/ios_guard.py admission. Artifact paths are attempt-local arguments.
 """
@@ -30,10 +43,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-UDID = os.environ.get('OPENREADER_UDID', 'EF3E47DA-C530-45CC-9BC8-9B70ECCD454B')
+UDID = os.environ.get('OPENREADER_UDID')
 OUT = Path(os.environ.get('OPENREADER_DRAWER_ARTIFACTS', '/tmp/openreader-drawer361-ios-qa-01/phases'))
 ROOT = Path(__file__).resolve().parents[3]
 SCALE = 2.0
+if not UDID:
+    raise SystemExit('set OPENREADER_UDID (and OPENREADER_DEVICE) explicitly; no hard-coded device default')
 EXPECTED_CHROME = 51  # accepted native bottom inset (about 52 pt at 820x1180)
 
 spec = importlib.util.spec_from_file_location('ax', ROOT / 'test/manual-test/kit/ax.py')
@@ -207,7 +222,14 @@ def find_grabber(path, bounds, min_top_frac=0.12, min_y_px=None):
 
 
 def drawer_left_right(path, bounds, grabber_y):
-    """The drawer's painted left/right edges: light card against the page."""
+    """Light-region edges at the grabber row — NOT a Drawer-width measurement.
+
+    The >233 light mask cannot distinguish the near-white Reader page from
+    the light Drawer card, so over the reader this can span the whole window
+    (as observed: 509.5/510, 630/630.5). Only over the Library's pure-white
+    page is the separation meaningful, and even there it is not validated
+    against native chrome. OBSERVATION ONLY.
+    """
     img = np.asarray(Image.open(path).convert('RGB')).astype(int)
     x, y, w, h = bounds
     row2 = img[int((grabber_y + 6) * SCALE)]
@@ -230,14 +252,19 @@ def measure(name, note=''):
         floor = max(0.0, bounds[3] - sel['height'] - 90) / bounds[3]
     grabber = find_grabber(path, bounds, min_top_frac=0.0, min_y_px=floor * bounds[3])
     record = {'name': name, 'note': note, 'window': bounds, 'grabber': grabber,
-              'state': st, 'rnWindow': dims, 'rows': sorted(cdp(ROWS_EXPRESSION, 'r5d-rows')['rows'])}
+              'state': st, 'rnWindow': dims,
+              # Rendered/cached Chapter fibers, lexically sorted: NOT the
+              # visible rows; first/last say nothing about scroll continuity.
+              'rows': sorted(cdp(ROWS_EXPRESSION, 'r5d-rows')['rows'])}
     if grabber is not None:
         edges = drawer_left_right(path, bounds, grabber[1])
         record['drawerEdges'] = edges
         if edges:
             record['drawerWidth'] = round(edges[1] - edges[0], 1)
-        # Drawer top offset from the window top; implied painted height from
-        # the accepted chrome: height = window_h - offset(top) - chrome.
+        # Drawer top offset from the window top. impliedChrome is DERIVED:
+        # window height minus this offset minus the REQUESTED detent height
+        # (same RN hook that asks for it) — not an independently measured
+        # bottom edge. Observation only, never a painted-chrome claim.
         record['drawerTopOffset'] = round(grabber[1] - bounds[1] - 8, 1)
         record['impliedChrome'] = round(bounds[3] - record['drawerTopOffset'] - (record['state']['selection']['height'] if isinstance(record['state']['selection'], dict) and record['state']['selection'] else 0), 1)
     (OUT / f'{name}-measure.json').write_text(json.dumps(record, indent=2))
@@ -311,7 +338,10 @@ def drawer_top(record):
 
 
 def painted_height(record):
-    """Painted height from the drawer top edge to the accepted chrome bottom."""
+    """DEPRECATED/INVALID for windowed use: subtracts EXPECTED_CHROME=51, the
+    accepted FULLSCREEN value; windowed chrome is not fixed and was never
+    independently measured here. Retained only because main()'s current
+    assertions use impliedChrome instead; do not read this as painted height."""
     return record['window'][1] + record['window'][3] - EXPECTED_CHROME - drawer_top(record)
 
 
