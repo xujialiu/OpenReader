@@ -31,6 +31,10 @@ of per-text work. The catalog tests also cover 131,686 prepared texts.
 
 ## Library and reader actions drawer (long press, '...', Delete)
 
+[Drawer placement (#361)](drawer-placement.md) gives the unattended native
+large-bottom-gap reproduction, its screenshot-oracle host checks, and the
+limits and failed controls of the isolated native sizing experiments.
+
 With the current Debug app connected to Metro and both `A Short Test of Reading
 Aloud` and `仙逆` in the Library:
 

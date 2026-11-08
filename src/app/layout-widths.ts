@@ -4,4 +4,5 @@ export const LAYOUT_WIDTH = {
   library: 800,
   settings: 680,
   player: 600,
+  drawer: 580,
 } as const;

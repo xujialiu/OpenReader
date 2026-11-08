@@ -9,9 +9,10 @@
  * cannot end up a few points apart. Every drawer in the app is one of these;
  * the old `Modal` drawer, `sheet.tsx`, is gone (#117).
  *
- * #319, ADR 0085: these measured phone rules remain on iPhone. Tablet/Mac
- * sheets use a native fraction rather than the phone geometry, retain their
- * selected height through resize, and also have an explicit close control.
+ * #361, ADR 0085: these measured phone rules remain on iPhone. Tablet/Mac
+ * sheets use fitted native sizing, window-relative opening heights and a
+ * centred ideal width. Their selected height survives resizing; no header
+ * close control is added. The system still owns the card's outer placement.
  *
  * ## Two heights
  *
@@ -78,24 +79,25 @@
 
 import { BottomSheet, Group, Host, RNHostView } from '@expo/ui/swift-ui';
 import {
-  environment, ignoreSafeArea, presentationBackground, presentationBackgroundInteraction, presentationDetents,
-  presentationDragIndicator, type PresentationDetent,
+  environment, frame, ignoreSafeArea, interactiveDismissDisabled, type PresentationDetent,
+  presentationBackground, presentationBackgroundInteraction, presentationDetents, presentationDragIndicator, presentationSizing,
 } from '@expo/ui/swift-ui/modifiers';
 import {
-  createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
-  type ReactElement, type ReactNode,
+  createContext, type ReactElement, type ReactNode,
+  useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
 } from 'react';
 import {
-  FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
-  type AccessibilityRole, type AccessibilityState, type ColorValue, type FlatListProps, type StyleProp, type TextStyle,
+  type AccessibilityRole, type AccessibilityState, type ColorValue, FlatList, type FlatListProps,
+  Platform, Pressable, ScrollView, type StyleProp, StyleSheet, Text, type TextStyle, useWindowDimensions, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChoiceMenu, RowWords, Footnote, INK, PALETTE, SchemeContext, SETTINGS_SURFACE, useAccent, type Choice } from './controls';
+import { type Choice, ChoiceMenu, Footnote, INK, PALETTE, RowWords, SchemeContext, SETTINGS_SURFACE, useAccent } from './controls';
 import { drawerDetentHeight } from './drawer-height';
 import { DRAWER_LIST, drawerRowText } from './drawer-list';
 import { createDrawerTurns } from './drawer-turns';
 import { Icon, type IconName } from './icon';
+import { LAYOUT_WIDTH } from './layout-widths';
 import { LoadingSpinner } from './loading-spinner';
 import { useShell } from './routes';
 import { TEXT } from './text-styles';
@@ -275,7 +277,7 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
   title: string;
   /** A control drawn where the centred title goes, in its place: the lookup drawer's Dictionary | Translation. */
   heading?: ReactNode;
-  /** Swipe/VoiceOver dismissal, or the explicit tablet/Mac close control. */
+  /** Swipe/accessibility escape, or a dismissal requested by the caller. */
   onClose(): void;
   /** Native dismissal finished: a system picker can now be presented without racing this sheet. */
   onDismiss?(): void;
@@ -286,10 +288,11 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const tablet = Platform.OS === 'ios' && (Platform.isPad || Platform.isMacCatalyst || Platform.constants.interfaceIdiom === 'mac');
-  // #319: the phone's measured floating-card correction is not iPad geometry.
-  // A fraction remains valid while the system resizes its tablet/Mac panel.
+  // #361: a native form fraction is relative to the form, not this window.
+  // Fitted ideal geometry keeps the native card near the bottom; the detent
+  // independently requests the owner's share of the actual app window.
   const opening: PresentationDetent = tablet
-    ? { fraction: settings.drawerHeight / 100 }
+    ? { height: window.height * settings.drawerHeight / 100 }
     : { height: drawerDetentHeight(settings.drawerHeight, { width: window.width, height: window.height, bottomInset: insets.bottom }) };
   const turn = useDrawerTurn(visible, onClose);
   const [expanded, setExpanded] = useState(false);
@@ -299,6 +302,10 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
       <BottomSheet isPresented={turn.presented} onDismiss={() => { setExpanded(false); turn.dismissed(); onDismiss?.(); }}
         onIsPresentedChange={(presented) => { if (!presented) onClose(); }}>
         <Group modifiers={[
+          ...(tablet ? [frame({
+            idealWidth: Math.min(LAYOUT_WIDTH.drawer, Math.max(1, window.width - insets.left - insets.right)),
+            idealHeight: window.height,
+          })] : []),
           presentationDetents([opening, DRAWER.expanded], tablet ? {
             selection: expanded ? DRAWER.expanded : opening,
             onSelectionChange: (detent) => setExpanded(detent === DRAWER.expanded),
@@ -309,11 +316,20 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
           environment('colorScheme', colours.scheme),
           // Down to the sheet's bottom edge, under the home indicator, so a list can run on to it (`DrawerBottom`).
           ignoreSafeArea({ regions: 'container', edges: 'bottom' }),
+          ...(tablet ? [
+            presentationSizing('fitted', { fitted: { horizontal: true, vertical: true } }),
+            // Keep this modifier present from the first presentation. Adding it
+            // only after expanding can reconstruct native presentation state.
+            // At the opening height, the live background already takes touches;
+            // at large, an outside touch may contract to opening, but must
+            // not dismiss the Drawer or operate the page (#361).
+            interactiveDismissDisabled(expanded),
+          ] : []),
         ]}>
           <RNHostView>
             <View style={[styles.body, { paddingBottom: bottom }]} onAccessibilityEscape={onClose}>
               <DrawerBottom value={bottom}>
-                <DrawerTitle title={title} heading={heading} onBack={onBack} backLabel={backLabel} action={action} titleLeft={!!titleLeft} onClose={tablet ? onClose : undefined} />
+                <DrawerTitle title={title} heading={heading} onBack={onBack} backLabel={backLabel} action={action} titleLeft={!!titleLeft} />
                 {children}
               </DrawerBottom>
             </View>
@@ -324,22 +340,19 @@ export function Drawer({ visible, title, heading, onClose, onDismiss, onBack, ba
   );
 }
 
-function DrawerTitle({ title, heading, onBack, backLabel, action, titleLeft, onClose }: { title: string; heading?: ReactNode; onBack?(): void; backLabel?: string; action?: DrawerAction; titleLeft: boolean; onClose?(): void }) {
+function DrawerTitle({ title, heading, onBack, backLabel, action, titleLeft }: { title: string; heading?: ReactNode; onBack?(): void; backLabel?: string; action?: DrawerAction; titleLeft: boolean }) {
   // How far in the centred title is kept on both sides: past the wider of the two ends, so it is centred on the drawer.
   const [actionWidth, setActionWidth] = useState(0);
-  const close = onClose ? <RoundButton icon="close" label={`Close ${title}`} onPress={onClose} drawn={DRAWER.button.action} /> : null;
   if (titleLeft && action) {
     return (
       <View style={styles.header}>
-        {close}
         <Text style={[styles.title, styles.titleLeading]} accessibilityRole="header" numberOfLines={2}>{title}</Text>
         <HeaderAction action={action} />
       </View>
     );
   }
-  const right = action || (onBack && close) ? <View style={styles.headerActions} onLayout={(event) => setActionWidth(event.nativeEvent.layout.width)}>
-    {action ? <HeaderAction action={action} /> : null}
-    {onBack ? close : null}
+  const right = action ? <View style={styles.headerActions} onLayout={(event) => setActionWidth(event.nativeEvent.layout.width)}>
+    <HeaderAction action={action} />
   </View> : null;
   const clear = DRAWER.button.side + Math.max(right ? actionWidth : 0, DRAWER.button.size);
   return (
@@ -348,7 +361,7 @@ function DrawerTitle({ title, heading, onBack, backLabel, action, titleLeft, onC
       <View style={[styles.titleCentred, { left: clear, right: clear }]}>
         {heading ?? <Text style={[styles.title, styles.titleCentredText]} accessibilityRole="header" numberOfLines={1}>{title}</Text>}
       </View>
-      {onBack ? <RoundButton icon="previous" label={backLabel ?? `Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : close ?? <View />}
+      {onBack ? <RoundButton icon="previous" label={backLabel ?? `Back from ${title}`} onPress={onBack} drawn={DRAWER.button.back} /> : <View />}
       {right}
     </View>
   );

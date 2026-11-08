@@ -27,10 +27,18 @@ to go into Appearance next, would have done exactly that.
 ## Every drawer is the phone's own
 
 _[Decision 0085](0085-the-app-fits-ipad-and-mac-windows.md) keeps these phone
-interactions on iPhone, but lets iPad and Mac use the system's own panel
-presentation and adds a visible close control there. On those devices the
-opening height is a share of the panel's available space rather than the
-phone geometry below. Undimmed preview at the opening height remains required._
+interactions on iPhone. Its earlier iPad/Mac trial used the system's own panel
+position, a share of that panel's available space and a visible close control.
+The agreed revision in #361 instead requires every iPad/Mac Drawer near the
+bottom of the current app window, with no close buttons, window-relative
+Drawer Height and a centred, width-limited shape in wide windows. Undimmed,
+interactive preview at the opening height remains required. Ordinary iPhone
+behavior is unchanged. Mac must support Escape and downward grabber drag;
+the expanded Drawer dims and blocks the background. Window changes preserve
+the open Drawer, its height state and viewed content. The system-drawn
+candidate's width and bottom margin are accepted for implementation; native
+verification and Mac closing behavior remain gates. Decision 0085 records
+the agreed behavior and current acceptance scope._
 
 Every drawer in the app becomes the phone's own: Contents, Voice, Appearance and
 Fonts, a book's actions with Rename and Download, and the drawer a looked-up

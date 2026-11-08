@@ -42,6 +42,19 @@ a visible close control. The phone measurements below are not evidence of
 tablet sheet geometry. Undimmed opening-height preview is still a required
 runtime check, not inferred from the modifier's presence.
 
+The agreed product revision in #361 supersedes acceptance of system-chosen
+placement, native-panel-relative opening height and visible close controls
+on iPad/Mac. Every Drawer there must stay near the bottom of the current
+app window, without close buttons, using window-relative Drawer Height
+and a centred width cap in wide windows. Undimmed, interactive opening-height
+preview and ordinary iPhone behavior remain unchanged. Mac Escape and
+pointer grabber dismissal, expanded-height background dimming/blocking and
+preserving the open instance, state and viewed list content through window
+changes are agreed requirements. The fitted native layout, candidate width and native inset are accepted;
+Beta19 implements the shared sizing and no-Close header, with scoped opening
+checks passed but remaining native behavior and final verification pending in
+[decision 0085](../design/0085-the-app-fits-ipad-and-mac-windows.md#drawers-stay-near-the-bottom-of-the-app-window).
+
 ## What was there
 
 `src/app/sheet.tsx`'s `Sheet` is `<Modal visible transparent animationType="slide">`

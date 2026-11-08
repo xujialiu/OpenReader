@@ -278,6 +278,152 @@ The collapsed Reading Button stays at its existing window corner for this
 trial. The renderer still reserves a vertical band for the Player, not a new
 shape-aware occlusion model.
 
+## Tablet/Mac placement revision (#361): implementation in progress
+
+The [product revision](../design/0085-the-app-fits-ipad-and-mac-windows.md#drawers-stay-near-the-bottom-of-the-app-window)
+requires every iPad/Mac Drawer near the bottom of the current app window,
+allowing a small native-style gap but not the large blank region below the
+reported floating panel. There are no close buttons, not a relocated cross;
+Back, Share and other header actions remain. Touchscreen downward dismissal
+remains required. Ordinary iPhone behavior is unchanged.
+
+Drawer Height is 40–90 percent in ten-percent steps, default 50, of the
+current app window's height rather than an internal native panel's available
+height. Wide-window Drawers are horizontally centred and width-capped;
+narrow windows use their available width. Exact width awaits visual
+acceptance. Opening-height background interaction and undimmed preview
+remain required. Mac must support both physical Escape and mouse/trackpad
+downward grabber dismissal; accessibility escape alone does not meet the
+keyboard requirement. Opening-height clicks outside operate the background
+instead of dismissing the Drawer.
+
+Expansion is nearly full current-window height with the same width policy,
+and a dimmed, noninteractive background. Downward movement returns to the
+chosen opening height, then dismisses. Rotation and resizing preserve the
+open instance, expansion state and viewed list content: opening height
+recalculates against the new window, while expanded stays expanded. No
+close/reopen cycle or Reading pause/restart is allowed. A completed dismissal
+resets the next opening to the chosen Drawer Height. Constrained-window
+conflicts require a separate choice rather than an implicit exception.
+
+These are agreed requirements, not runtime findings or evidence that the
+current native presentation can satisfy them. The full product scope is
+accepted. The next authorized phase is a bounded native proof: establish a
+repeatable failing placement check, then test native sizing and input without
+replacing the owner's Mac installation or delivering a formal implementation.
+A failed native route returns for a choice; no custom fallback is selected.
+
+### Source capability inspection, not runtime verification
+
+At source revision `e27341c`, `src/app/drawer.tsx` supplies tablet/Mac
+`onClose` to `DrawerTitle`, which creates the close `RoundButton` itself.
+That cross is app-drawn, not a compulsory control added by Expo's sheet.
+The body's `onAccessibilityEscape` is an accessibility action, not evidence
+that a physical Escape key closes the Drawer.
+
+Installed `@expo/ui` 58.0.27 presents a SwiftUI `.sheet` in
+`ios/BottomSheetView.swift`. Its presentation modifiers expose detents,
+selection, background interaction, grabber visibility and
+`presentationSizing` (`automatic`, `fitted`, `form`, `page`, with fitted-axis
+options). The exposed BottomSheet props and presentation modifiers do not
+provide an explicit current-window-bottom attachment or numeric outer-chrome
+width cap. This is a bounded API observation, not proof that native
+presentation is impossible or a selection of a custom replacement. Actual
+outer geometry, undimmed background input, Escape and pointer grabber behavior
+still require native experiments on iPad and the actual iOS-on-Mac app path.
+The component tests double native UI and cannot establish those facts.
+
+### Native proof (#361): diagnosis established; candidate not accepted
+
+The isolated iPadOS 26.5 / `@expo/ui` 58.0.27 run uses the shared app Drawer,
+not a standalone approximation. On an 820-by-1180 window, repeated real
+Library actions taps produce a native `_UIFormSheetPresentationController`
+frame `{{120,585},{580,325}}`: its bottom is 910, 270 points above the window
+bottom. The painted edge includes about one point of chrome/shadow per side,
+so the screenshot oracle reports 581-by-327 and 269 points below it. Removing
+every action row leaves the same native-sized card. Expanding the 1-by-1 Host
+to its parent's full size also leaves the gap unchanged. This rules out the
+contents and that anchor size as the cause of the reported placement.
+
+An explicit 590-point detent changes height, not that bottom position.
+The current fractional detent is therefore not a promise of window-relative
+geometry: the native form's available sizing space is smaller. The outer
+native card itself is floating; this is not RN padding inside an edge-attached
+sheet. `drawer-placement.py` and its recipe retain the unattended failing
+loop, including a return to the unchanged source after diagnostics.
+
+Cold `.page` sizing, on either side of the other modifiers and with vertical
+fitting alone, instead draws an 820-by-1138 native frame starting at 42, with
+only a native large detent and no largest-undimmed identifier. The requested
+fraction still appears in JS/selection metadata, which is not evidence that
+it controls the native geometry. A bottom-gap GREEN here fails the agreed
+height/preview requirements. Unconstrained both-axis fitting yields a 100-by-65
+native card; its screenshot is outside the wide-card oracle, and separate
+owned native measurements establish the unusable result.
+
+A more promising native candidate combines both-axis fitted sizing, a
+provisional 580-point ideal content width, an ideal height matching the
+1180-point window, and explicit window-relative opening heights. Native
+fitting still chooses the outer card; no translation or hand-positioned
+card is used. At 40/50/90 percent, native opening targets are 472/590/1062;
+the painted heights are 474/592/1064, width 581 and bottom gap 51. A valid
+fitted-fraction native inspection measures 52 points below the chrome. This
+native inset and the candidate width are accepted for implementation; the
+59-point diagnostic cutoff itself is not an acceptance threshold. A later 90-percent native inspection
+returns a zero frame and is invalid, not additional geometry evidence.
+
+For that candidate, the opening background is actually white 255 and a real
+Settings touch reaches Settings behind the Drawer. A runtime header override
+removes the app cross for the candidate screenshot; it is not a source fix.
+A separate real grabber sequence passes opening → large → opening → dismissed.
+An expanded backdrop touch blocks the background action but dismisses the
+Drawer; a live interactive-dismissal-guard attempt does not retain `large`.
+Those failures remain unresolved, not waived by the pure grabber control.
+
+This is portrait iPad geometry/input evidence only. Rotation, narrow windows,
+long-list continuity, ordinary-phone regression and the actual Mac app's
+Escape/pointer behavior remain unverified. No Mac package was built, replaced
+or launched for this experiment, and no app source/version was changed.
+The candidate's native inset and width were subsequently accepted for the
+native implementation. The dated record and raw artifact inventory are in
+the engineering log; temporary runtime overrides were discarded before the
+pristine recheck.
+
+### Beta19 implementation: native opening verified; remaining gates pending
+
+The shared Drawer now requests the accepted fitted native ideal geometry,
+using the current window height and a 580-point ideal-width cap, and explicit
+window-relative opening heights. Ordinary phone sizing/modifiers remain
+unchanged. The app-drawn close control is removed; Back, Share and page
+actions remain. A tablet-only `interactiveDismissDisabled` modifier stays
+present from the first presentation and changes value with expansion state.
+This avoids the diagnostic experiment's late modifier-chain insertion.
+
+The new shared-boundary tests first fail six of eight cases against the old
+code, then all eight pass; the selected Drawer host suite totals 24 passing
+tests. TypeScript passes, ESLint has zero errors and the pre-existing unused
+`__r` warning, and source LSP import organization is applied. These are host
+checks, not native acceptance.
+
+On current source, without runtime overrides, the actual placement loop is
+GREEN at the accepted painted 51-point gap and the native tree has no Close
+control. The initial white background and real Settings/Library navigation
+also pass. Two repeated real expanded-backdrop touches neither navigate the
+background nor close the Drawer, but contract it from `large` to the explicit
+590-point opening detent. The assertion requiring it to stay `large` therefore
+fails reproducibly. That native contraction is now explicitly accepted:
+the revised check must assert return to the opening height, a retained Drawer
+and no background navigation, rather than retaining `large`. The old failed
+assertions remain in the record and are not called flaky. A separate Mac
+probe is approved with display name `OpenReader Drawer Probe` and identifier
+`top.xujialiu.openreader.drawerprobe`, starting empty without replacing or
+reading the owner installation. Escape/pointer input, constrained windows
+and independent final tester acceptance remain pending. Beta19 is an in-progress source change,
+not a completed delivery or a claim that #361 is resolved.
+
+The following section records the earlier implementation; its system-chosen
+placement is not acceptance of the new requirement.
+
 ## The phone's sheet correction is not tablet geometry
 
 The phone retains `drawerDetentHeight` and all its measured floating-card

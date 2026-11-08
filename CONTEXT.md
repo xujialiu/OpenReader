@@ -385,17 +385,15 @@ _Avoid_: clip, voice, offline narration
 
 **Drawer**:
 A temporary surface over what the owner was looking at, holding the choices
-or the list that belong to it. On a phone it rises from the bottom to the
-Drawer Height, can be pushed up for more room and dragged down to close.
-On iPad and Mac it follows the device's panel presentation and also has a
-close control. At its opening height, what it does not cover stays in view
-and in use.
+or the list that belong to it. It rises from the bottom of the current app
+window to the Drawer Height. On a touchscreen it can be pushed up for more
+room and dragged down to close. At its opening height, what it does not
+cover stays in view and in use.
 _Avoid_: sheet, bottom sheet, modal, popup, panel
 
 **Drawer Height**:
-How much space a Drawer takes when it opens: a share of the phone's screen
-height, or of the space available to the system panel on iPad and Mac. The
-same choice for every Drawer, and the owner's.
+How much space a Drawer takes when it opens: a share of the current app
+window's height. The same choice for every Drawer, and the owner's.
 _Avoid_: sheet height, detent, drawer size
 
 **Player**:

@@ -121,21 +121,78 @@ and limited to comfortable widths. They need not be as wide as the reading
 page or the Player. None of these limits prevents a narrow window from using
 all its available space.
 
-## Drawers follow the device
+## Drawers stay near the bottom of the app window
 
-The iPhone keeps its existing Drawer behavior. On iPad and Mac, Drawers prefer
-the system's presentation rather than copying every phone measurement and
-gesture. They have a visible close control that can be used with a mouse as
-well as a finger. Their opening height is the owner's chosen share of the
-space available to the system panel, not a promise about its distance from
-the bottom of the whole display.
+The revised requirement in issue #361 is agreed. Its implementation is
+under verification; agreement is not full device acceptance. Every Drawer on iPad or Mac must rise from the bottom of the
+current app window: Library and Document actions, Contents, Voice,
+Appearance, Download and Word Lookup all follow the same rule. A small gap
+in the device's own style is acceptable; a large blank region below a
+floating Drawer is not. This replaces the trial's permission for the system
+to choose an unrelated position within the window. The ordinary iPhone
+keeps its existing Drawer behavior.
 
-At the opening height, Appearance must still let the owner judge changes on
-undimmed text behind it. A system presentation that cannot provide that, or a
-usable close control, must come back to the owner for a choice; it is not
-permission to silently abandon the preview. This makes decision 0066's exact
-phone geometry and swipe-only dismissal phone-specific. It does not turn a
-Drawer into a permanent sidebar.
+At the opening height, what the Drawer does not cover stays undimmed and in
+use. Appearance must still let the owner judge changes on the text behind it,
+and a Word Lookup must leave the visible selection within reach. Correcting
+the position is not permission to turn a Drawer into a dialog that darkens
+and blocks the page.
+
+There are no close buttons anywhere on an iPad or Mac Drawer; the cross
+is removed, not moved to the other corner. A touch drag down still closes
+it. This does not remove Back, Share or other actions from the header.
+On Mac, both Escape and dragging the top grabber down with a mouse or
+trackpad must provide a way to close the Drawer. Clicking outside at the
+opening height operates the page instead of closing the Drawer.
+
+Drawer Height is the chosen share of the current app window's height,
+not the physical display or a smaller system panel within the window.
+The default remains 50 percent, with choices from 40 to 90 percent in
+ten-percent steps. The same choice applies to every Drawer.
+
+A wide-window Drawer is horizontally centred and limited to a comfortable
+width, rather than stretched across the whole display. A narrow window
+uses its available width. The accepted native candidate uses a width of about 580 points when there
+is room; a narrower window uses its available width.
+
+There are two resting heights. Dragging up expands the Drawer to nearly
+the current window's full height without abandoning the width limit.
+The remaining background is then dimmed and cannot be operated. Dragging
+down returns to Drawer Height; dragging down from there closes it.
+
+Rotation and window resizing retain the open Drawer and its current state.
+At Drawer Height, its height is recalculated from the new window. An
+expanded Drawer stays expanded. The list keeps the passage or entries
+being viewed rather than jumping back to its beginning. Resizing must not
+close and reopen the Drawer, pause or restart the Reading. Closing and
+opening again returns to the chosen Drawer Height.
+
+Keeping the device's own appearance remains the preference where it meets
+these requirements; whether it can do so has not been established. The
+native route and candidate width are accepted for implementation, with
+remaining behavior and platform verification still required. If a
+constrained window cannot accommodate the agreed behavior, that conflict
+must return for a choice rather than silently changing the height rule,
+blocking the opening-height background or adding a close button.
+
+The system-drawn candidate's width and visible space below it are accepted
+for the native route. On the tested portrait iPad the system leaves about
+52 points below it; that is an accepted native margin, not a fixed distance
+to impose on every window. The candidate retains the initial preview.
+Acceptance of this shape is not evidence that the other window and Mac
+requirements have been implemented or verified. In the native candidate,
+clicking the shaded background while fully expanded returns the Drawer to
+its opening height without operating the page or closing the Drawer. That
+native contraction is accepted; an outside click need not leave the Drawer
+fully expanded. The initial-height background remains directly usable.
+
+### Earlier trial: position chosen by the device
+
+The earlier trial let iPad and Mac use the system's own panel presentation,
+with a visible close control for a mouse as well as a finger. Its opening
+height was a share of the space available to that panel, not a promise about
+its distance from the bottom of the app window. That position policy is
+superseded by the revised requirement above.
 
 ## The same passage through a size change
 
