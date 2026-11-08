@@ -41,7 +41,7 @@ final class DuoScreenCaptureProbe: XCTestCase {
     }
     if screens.count > Self.ownedPanelIndexes.count {
       // Metadata only: note the skipped non-owned displays, never capture them.
-      let skipped = Array(Self.ownedPanelIndexes.count..<screens.count)
+      let skipped = (Self.ownedPanelIndexes.count..<screens.count)
         .map { "\($0):\(screens[$0].bounds.width)x\(screens[$0].bounds.height)" }
         .joined(separator: ",")
       print("[capture] skipped non-owned screens (metadata only, not captured): \(skipped)")
