@@ -3,7 +3,10 @@
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <condition_variable>
 #include <iostream>
+#include <memory>
+#include <mutex>
 #include <limits>
 #include <thread>
 
@@ -20,11 +23,95 @@ static void append(CaptureBuffer &buffer, const float *pcm, uint32_t frames,
   buffer.append(channels, frames, format, time, time.hostTime);
 }
 
+// HOST-only barriers fix the interleaving; no timing sleeps establish safety.
+class TestBarrier {
+ public:
+  void signal() { std::lock_guard<std::mutex> lock(mutex_); signalled_ = true; condition_.notify_one(); }
+  void wait() { std::unique_lock<std::mutex> lock(mutex_); condition_.wait(lock, [&] { return signalled_; }); }
+ private:
+  std::mutex mutex_;
+  std::condition_variable condition_;
+  bool signalled_ = false;
+};
+
+static void delayedPendingCancellation() {
+  for (bool crossDrain : {false, true}) for (bool enteredLease : {false, true}) {
+    auto description = std::make_shared<DescriptionState>(1, 5000);
+    auto lifecycle = description->lifecycle();
+    auto oldObserver = lifecycle->observe();
+    TestBarrier entered, resume;
+    std::thread oldCallback([oldObserver, enteredLease, &entered, &resume]() mutable {
+      if (enteredLease) {
+        auto callback = oldObserver->callback();
+        entered.signal(); resume.wait(); callback.cancel();
+      } else {
+        // Dispatched block is retained, but paused BEFORE its first lease call.
+        entered.signal(); resume.wait();
+        auto callback = oldObserver->callback(); callback.cancel();
+      }
+      oldObserver.reset();
+    });
+    entered.wait();
+    auto captureObserver = lifecycle->observe();
+    CaptureBuffer capture({1000, 1, false}, .010, {1, 1}, lifecycle);
+    assert(description->consume(1, 1000));
+    description->retire(); description.reset(); oldObserver.reset();
+    const float pcm[] = {.1f};
+    append(capture, pcm, 1, timeAt(100, 1000000000));
+    bool earlyCertificate = false;
+    if (crossDrain) {
+      capture.stop(); captureObserver.reset();
+      earlyCertificate = capture.quiescent();
+      assert(!earlyCertificate); // pending block still owns a counted registration
+    }
+    resume.signal(); oldCallback.join();
+    capture.stop(); captureObserver.reset();
+    assert(capture.quiescent());
+    const bool cancelled = (capture.failures() & ConfigurationChanged) != 0;
+    std::cout << "delayed pending crossDrain=" << crossDrain << " enteredLease=" << enteredLease
+              << " earlyCertificate=" << earlyCertificate << " cancellationInCapture=" << cancelled << std::endl;
+    assert(cancelled && !lifecycle->observe()); // sealed state rejects new registration
+  }
+  {
+    auto description = std::make_shared<DescriptionState>(1, 5000);
+    auto lifecycle = description->lifecycle();
+    auto pendingObserver = lifecycle->observe(), captureObserver = lifecycle->observe();
+    CaptureBuffer capture({1000, 1, false}, .010, {1, 1}, lifecycle);
+    { auto ignored = pendingObserver->callback(); } // non-target delivery does not cancel
+    assert(description->consume(1, 1000));
+    description->retire(); description.reset(); pendingObserver.reset();
+    const float pcm[] = {.1f};
+    append(capture, pcm, 1, timeAt(100, 1000000000));
+    capture.stop();
+    assert(!capture.quiescent()); // even a retained non-delivering block cannot certify retirement
+    captureObserver.reset();
+    assert(capture.quiescent() && capture.failures() == 0 && capture.frameCount() == 1 && !lifecycle->observe());
+    std::cout << "no-event handover: retirement sealed, clean certificate PASS\n";
+  }
+  {
+    auto lifecycle = std::make_shared<LifecycleCancellation>();
+    auto observer = lifecycle->observe();
+    CaptureBuffer capture({1000, 1, false}, .010, {1, 1}, lifecycle);
+    capture.stop();
+    {
+      auto callback = observer->callback();
+      observer.reset(); // callback ownership independently survives registration retirement
+      assert(!capture.quiescent());
+      callback.cancel();
+      assert(!capture.quiescent());
+    }
+    assert(capture.quiescent() && (capture.failures() & ConfigurationChanged));
+    std::cout << "entered callback outlives registration: drain waits, cancellation retained PASS\n";
+  }
+}
+
 int main() {
+  delayedPendingCancellation();
   {
     DescriptionState first(1, 5000);
     assert(first.usable(1, 1000) && !first.consume(2, 1000));
-    first.invalidate(); // lifecycle cancellation between describe and arm
+    auto observer = first.lifecycle()->observe();
+    { auto callback = observer->callback(); callback.cancel(); }
     assert(!first.consume(1, 1000));
     DescriptionState expired(2, 5000);
     assert(!expired.consume(2, 5001));

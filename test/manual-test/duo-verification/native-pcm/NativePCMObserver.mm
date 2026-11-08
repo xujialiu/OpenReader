@@ -214,11 +214,13 @@ static NSString *ORPCMHash(NSData *data) {
 }
 
 - (void)clearDescription {
-  if (_descriptionState) _descriptionState->invalidate();
-  for (id observer in @[_descriptionConfigurationObserver ?: NSNull.null, _descriptionLifecycleObserver ?: NSNull.null]) {
-    if (observer != NSNull.null) [NSNotificationCenter.defaultCenter removeObserver:observer];
-  }
-  _descriptionConfigurationObserver = nil; _descriptionLifecycleObserver = nil;
+  if (_descriptionState) _descriptionState->retire();
+  // Do not keep observer tokens in an autoreleased array across a same-turn
+  // disarm/drain; their block-owned leases must be free to retire now.
+  if (_descriptionConfigurationObserver) [NSNotificationCenter.defaultCenter removeObserver:_descriptionConfigurationObserver];
+  _descriptionConfigurationObserver = nil;
+  if (_descriptionLifecycleObserver) [NSNotificationCenter.defaultCenter removeObserver:_descriptionLifecycleObserver];
+  _descriptionLifecycleObserver = nil;
   _describedEngine = nil; _describedSource = nil; _describedFormat = nil;
   _description = nil; _descriptionToken = nil; _descriptionState.reset();
 }
@@ -232,15 +234,24 @@ static NSString *ORPCMHash(NSData *data) {
   const uint64_t deadline = mach_absolute_time() + (uint64_t)(5e9L * _timebase.denom / _timebase.numer);
   auto descriptionState = std::make_shared<DescriptionState>(++_descriptionGeneration, deadline);
   _descriptionState = descriptionState;
-  // Observe before acquiring/retaining the described objects, through capture
-  // observer handover. No event between describe and arm may be silently lost.
+  // Block-owned registrations account for dispatch before callback entry and
+  // survive ticket retirement; capture keeps the SAME cancellation state.
+  auto descriptionConfigurationLease = descriptionState->lifecycle()->observe();
+  auto descriptionLifecycleLease = descriptionState->lifecycle()->observe();
+  if (!descriptionConfigurationLease || !descriptionLifecycleLease) {
+    [self clearDescription]; return @{@"eligible": @NO, @"reason": @"notification-registration-closed"};
+  }
   _descriptionConfigurationObserver = [NSNotificationCenter.defaultCenter
       addObserverForName:AVAudioEngineConfigurationChangeNotification object:nil queue:nil
-      usingBlock:^(NSNotification *note) { descriptionState->invalidate(); }];
+      usingBlock:^(NSNotification *note) {
+        auto notification = descriptionConfigurationLease->callback();
+        notification.cancel();
+      }];
   _descriptionLifecycleObserver = [NSNotificationCenter.defaultCenter
       addObserverForName:@"OpenReaderAudioTrace" object:nil queue:nil usingBlock:^(NSNotification *note) {
+        auto notification = descriptionLifecycleLease->callback();
         NSString *event = note.userInfo[@"event"];
-        if ([event hasPrefix:@"engine."] || [event hasPrefix:@"interruption."]) descriptionState->invalidate();
+        if ([event hasPrefix:@"engine."] || [event hasPrefix:@"interruption."]) notification.cancel();
       }];
   // Strong ivars keep these precise objects alive across file commands, so a
   // retired source's address cannot be recycled into the pending description.
@@ -288,10 +299,11 @@ static NSString *ORPCMHash(NSData *data) {
     [self clearDescription]; return @{@"error": @"described-object-changed-or-non-float32-format"};
   }
   _engine = _describedEngine; _source = _describedSource; _format = _describedFormat;
+  auto lifecycle = _descriptionState->lifecycle();
   try {
     _buffer = std::make_shared<CaptureBuffer>(
         Format{_format.sampleRate, _format.channelCount, (bool)_format.interleaved}, seconds,
-        Timebase{_timebase.numer, _timebase.denom});
+        Timebase{_timebase.numer, _timebase.denom}, lifecycle);
   } catch (...) { return @{@"error": @"unsupported-format-or-preallocation-failed"}; }
   _maximumSeconds = seconds;
   _attribution = @{@"readingToken": command[@"readingToken"], @"declaration": command[@"attribution"],
@@ -302,22 +314,27 @@ static NSString *ORPCMHash(NSData *data) {
   auto storage = _buffer;
   const Format expected{_format.sampleRate, _format.channelCount, (bool)_format.interleaved};
   const AudioStreamBasicDescription expectedASBD = *_format.streamDescription;
+  auto captureConfigurationLease = lifecycle->observe();
+  auto captureLifecycleLease = lifecycle->observe();
+  if (!captureConfigurationLease || !captureLifecycleLease) {
+    _buffer->invalidate(CleanupUncertain); [self clearDescription];
+    return @{@"error": @"notification-registration-closed"};
+  }
   _configurationObserver = [NSNotificationCenter.defaultCenter
       addObserverForName:AVAudioEngineConfigurationChangeNotification object:_engine queue:nil
       usingBlock:^(NSNotification *note) {
-        auto lease = storage->callbackLease();
-        if (lease) storage->invalidate(ConfigurationChanged);
+        auto notification = captureConfigurationLease->callback();
+        notification.cancel();
       }];
   _lifecycleObserver = [NSNotificationCenter.defaultCenter
       addObserverForName:@"OpenReaderAudioTrace" object:nil queue:nil usingBlock:^(NSNotification *note) {
-        auto lease = storage->callbackLease();
-        if (!lease) return;
+        auto notification = captureLifecycleLease->callback();
         NSString *event = note.userInfo[@"event"];
         if ([event hasPrefix:@"engine."] || [event hasPrefix:@"interruption."])
-          storage->invalidate(ConfigurationChanged);
+          notification.cancel();
       }];
-  // Capture observers are active before the one-shot ticket is consumed and
-  // pending observers removed, leaving no lifecycle-observation gap.
+  // Overlap handles new delivery; shared cancellation and block-owned leases
+  // also carry already-dispatched pending callbacks through this handover.
   if (!_descriptionState->consume(_descriptionGeneration, mach_absolute_time())) {
     _buffer->invalidate(IdentityChanged); [self removeGraphObservers]; [self clearDescription];
     return @{@"error": @"description-cancelled-before-install"};
@@ -345,10 +362,10 @@ static NSString *ORPCMHash(NSData *data) {
 }
 
 - (void)removeGraphObservers {
-  for (id observer in @[_configurationObserver ?: NSNull.null, _lifecycleObserver ?: NSNull.null]) {
-    if (observer != NSNull.null) [NSNotificationCenter.defaultCenter removeObserver:observer];
-  }
-  _configurationObserver = nil; _lifecycleObserver = nil;
+  if (_configurationObserver) [NSNotificationCenter.defaultCenter removeObserver:_configurationObserver];
+  _configurationObserver = nil;
+  if (_lifecycleObserver) [NSNotificationCenter.defaultCenter removeObserver:_lifecycleObserver];
+  _lifecycleObserver = nil;
 }
 
 - (void)disarm {
@@ -371,14 +388,15 @@ static NSString *ORPCMHash(NSData *data) {
 - (NSDictionary *)drain {
   if (!_buffer || !_removed) return @{@"error": @"disarm-owned-tap-first"};
   if (_exported) return @{@"exported": @YES, @"file": @"capture.json"};
-  // Off render thread. Stopped storage never accepts a new writer, and the
-  // block owns its memory even if AVFAudio delivers a delayed stopped callback.
+  // Off render thread. quiescent also seals notification registration only
+  // after ALL block-owned observer leases and entered callbacks retire. Public
+  // observer removal alone is not proof: retained/delayed blocks time out closed.
   const double end = NSProcessInfo.processInfo.systemUptime + .25;
   while (!_buffer->quiescent() && NSProcessInfo.processInfo.systemUptime < end)
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   if (!_buffer->quiescent()) {
     _buffer->invalidate(CleanupUncertain);
-    return @{@"error": @"quiescence-timeout-storage-retained"};
+    return @{@"error": @"notification-retirement-or-copy-quiescence-timeout-storage-retained"};
   }
   NSMutableArray *records = [NSMutableArray new];
   for (uint32_t i = 0; i < _buffer->recordCount(); ++i) {
@@ -404,6 +422,7 @@ static NSString *ORPCMHash(NSData *data) {
       @"machTimebase": @{@"numer": @(_timebase.numer), @"denom": @(_timebase.denom)},
       @"attribution": _attribution ?: @{}, @"anchors": _anchors, @"volumeSamples": _volumeSamples,
       @"records": records, @"pcmSHA256": ORPCMHash(pcm), @"tapRemoved": @YES, @"quiescent": @YES,
+      @"notificationRetirement": @"all captured registration leases retired and cancellation sealed before export",
       @"coordinate": @"output frames / actual buffer sample rate; NOT content cursor or multiplied by playback rate",
       @"identityCheck": @"test-build locked retained snapshot; public source.engine/attachedNodes/format/running at 50ms polls + disarm; lifecycle/config notifications invalidate",
       @"limit": @"Pre-mixer/pre-device-gain PCM, not acoustic proof. Native no-change/mutation qualification required."};

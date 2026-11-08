@@ -123,8 +123,14 @@ generation, valid for at most five seconds and one arm. Lifecycle/configuration
 observers start before snapshot acquisition; cancellation, expiry, another
 describe or shutdown retires the ticket. Arm requires that token/generation and
 compares the actual current objects to the retained described objects, not just
-address strings. Capture observers overlap ticket consumption so no target
-lifecycle event is lost during handover. A retired source cannot be freed and
+address strings. Registration overlap alone does **not** cover a previously
+dispatched pending callback. Description and capture therefore share a separate
+`LifecycleCancellation`, independent of ticket availability/consumption. Each
+pending/capture notification block captures a counted `ObserverLease` for its
+entire block lifetime, including dispatch before its first statement. Entered
+callbacks have their own lease and signal that same cancellation state even
+after ticket retirement, capture stop or observer removal. A retired source
+cannot be freed and
 reallocated at the same address while its description retains it; an old token
 cannot arm a replacement after that retention expires.
 
@@ -137,7 +143,9 @@ unread registration UUID. The AVAudioEngine/source objects and bus format are
 retained. Public source.engine/attachedNodes/format/running checks at arm,
 50 ms polls and disarm plus existing OpenReaderAudioTrace lifecycle and Apple
 configuration notifications invalidate collection; no repeated unguarded
-library-property polling. Notifications use callback leases too. No choosing a
+library-property polling. Notification cancellation is never gated on the PCM
+buffer's accepting flag. Shared cancellation stops future copy acceptance and
+remains visible as ConfigurationChanged in capture failure bits. No choosing a
 first ambiguous dictionary element,
 node migration, mixer fallback, stop/reset or reconnect. This is pre-mixer,
 pre-device-gain output, not the final acoustic/device signal.
@@ -189,8 +197,23 @@ waveform/timestamp qualification remain necessary.
 Disarm atomically stops accepting data and attempts to remove **only a tap whose
 install succeeded**, once. Callback leases/shared ownership cover validation and
 copy work, including late callbacks. Drain waits off the render thread at most
-250 ms for quiescence. Uncertain removal/quiescence retains memory safely and
-reports incomplete; it never stops/resets the engine. No data inspection/export
+250 ms for quiescence. Quiescence also requires all pending/capture block-owned
+observer leases and entered notification callbacks to retire, then atomically
+seals further lifecycle registrations. Delayed old cancellation cannot become
+an ignored update to a retired ticket or arrive after a passing export.
+
+This relies on valid public notification-block lifetime and actual compiled
+block copy/dispose retaining those C++ captures; **native execution is NOT
+proved by the portable test**. `removeObserver:` alone is not retirement proof,
+and public API does not promise block release within 250 ms. If blocks/callbacks
+remain retained, drain fails closed with
+`notification-retirement-or-copy-quiescence-timeout-storage-retained`, marks
+CleanupUncertain, retains memory and does not export a passing capture. A later
+retry cannot erase that failure. There is no asserted guaranteed bounded public
+handover, hook, graph change or service fallback.
+
+Uncertain removal/quiescence reports incomplete; it never stops/resets the
+engine. No data inspection/export
 while a writer can mutate it. PCM/checksum/JSON encoding occurs only after stop
 and quiescence. The helper retains safe storage for its process lifetime.
 
@@ -351,7 +374,13 @@ fakes and host waveform tests. It links no Apple framework, emits no audio,
 uses no Simulator and cleans its temporary binary. The installed native `.mm`
 has **not** been compiled by those checks. The external library accessor has
 only exact-source/guard/lock-scope/unchanged-production-byte contracts checked on
-the host, not native ARC/lifecycle execution. Actual compilation/link/load,
+the host, not native ARC/lifecycle execution. Deterministic portable condition-
+variable barriers hold an old pending callback before and after lease entry
+across consume/clear/handover and disarm/drain; cancellation must reach active
+capture and drain cannot certify early. No sleeps or registration-order strings
+establish that concurrency result. No-event and retained-block positives/negative
+controls exercise sealing and refusal of new registration after drain.
+Actual compilation/link/load, notification block-copy/dispose/retirement,
 initial snapshot/ticket ownership and stale-description/lifecycle cancellation,
 actual public-getter adapter ARC/compiler/allocation/latency, returned format/time
 validity, consumed-real-Clip/Word-Timing provenance and matching at

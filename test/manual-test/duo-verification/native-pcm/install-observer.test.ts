@@ -237,7 +237,7 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
     expect(native).toContain('descriptionToken');
     expect(native).toContain('currentEngine != _describedEngine');
     expect(native).toContain('[self soleSource:currentEngine] != _describedSource');
-    expect(native).toContain('descriptionState->invalidate()');
+    expect(native).toContain('_descriptionState->retire()');
     expect(native).not.toContain('![[self describe] isEqual:description]');
     const describeSource = native.slice(native.indexOf('- (NSDictionary *)describe {'), native.indexOf('- (NSDictionary *)arm:'));
     expect(describeSource.indexOf('addObserverForName')).toBeLessThan(describeSource.indexOf('_describedEngine = [AudioEngine'));
@@ -246,6 +246,25 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
     expect(armSource.indexOf('_configurationObserver =')).toBeLessThan(armSource.indexOf('_descriptionState->consume('));
     expect(armSource.indexOf('_descriptionState->consume(')).toBeLessThan(armSource.indexOf('installTapOnBus:0'));
     expect(armSource).not.toContain('[self describe]');
+  });
+  it('keeps the tested lifecycle state and block-owned leases across pending/capture/drain', () => {
+    const native = readFileSync(join(__dirname, 'NativePCMObserver.mm'), 'utf8');
+    const portable = readFileSync(join(__dirname, 'CaptureBuffer.hpp'), 'utf8');
+    expect(native).toContain('auto lifecycle = _descriptionState->lifecycle();');
+    expect(native).toContain('Timebase{_timebase.numer, _timebase.denom}, lifecycle)');
+    for (const name of ['descriptionConfigurationLease', 'descriptionLifecycleLease', 'captureConfigurationLease', 'captureLifecycleLease']) {
+      expect(native).toContain(`${name}->callback()`);
+    }
+    expect(native.match(/notification\.cancel\(\)/g)).toHaveLength(4);
+    expect(native).not.toContain('descriptionState->invalidate()');
+    expect(native).not.toContain('storage->invalidate(ConfigurationChanged)');
+    expect(native).toContain('notification-retirement-or-copy-quiescence-timeout-storage-retained');
+    const clear = native.slice(native.indexOf('- (void)clearDescription {'), native.indexOf('- (NSDictionary *)describe {'));
+    const remove = native.slice(native.indexOf('- (void)removeGraphObservers {'), native.indexOf('- (void)disarm {'));
+    expect(clear + remove).not.toContain('@['); // no same-turn autoreleased token array holds blocks through drain
+    expect(portable).toContain('lifecycle_->seal()');
+    expect(portable).toContain('lifecycle_->cancelled() ? ConfigurationChanged');
+    expect(portable).toContain('observers_.compare_exchange_strong(expected, sealed)');
   });
   it('uses a bounded borrowed public-getter adapter, not an owning Objective-C RT temporary', () => {
     const native = readFileSync(join(__dirname, 'NativePCMObserver.mm'), 'utf8');

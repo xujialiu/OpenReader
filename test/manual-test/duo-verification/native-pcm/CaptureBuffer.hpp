@@ -7,7 +7,9 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace openreader::pcm {
@@ -48,21 +50,79 @@ enum Failure : uint32_t {
   ConfigurationChanged = 1 << 12,
 };
 
-// One bounded describe-to-arm ticket. Native code separately retains the actual
-// described objects; address strings are receipts, never object authority.
+// Cancellation survives ticket consumption and capture stop. Each native
+// notification block owns an ObserverLease for its ENTIRE lifetime, including
+// dispatch before callback entry. Removal alone is not retirement proof.
+class LifecycleCancellation : public std::enable_shared_from_this<LifecycleCancellation> {
+ public:
+  class ObserverLease;
+  class CallbackLease {
+   public:
+    ~CallbackLease() { if (entered_) owner_->callbacks_.fetch_sub(1); }
+    CallbackLease(const CallbackLease &) = delete;
+    void cancel() noexcept { if (entered_) owner_->cancelled_.store(true); }
+   private:
+    friend class ObserverLease;
+    CallbackLease(std::shared_ptr<LifecycleCancellation> owner, bool entered) noexcept
+        : owner_(std::move(owner)), entered_(entered) {
+      if (entered_) owner_->callbacks_.fetch_add(1);
+    }
+    std::shared_ptr<LifecycleCancellation> owner_;
+    bool entered_;
+  };
+  class ObserverLease {
+   public:
+    explicit ObserverLease(std::shared_ptr<LifecycleCancellation> owner) : owner_(std::move(owner)) {
+      uint32_t current = owner_->observers_.load();
+      while (!(current & sealed)) {
+        if (current == sealed - 1) break;
+        if (owner_->observers_.compare_exchange_weak(current, current + 1)) { registered_ = true; break; }
+      }
+    }
+    ~ObserverLease() { if (registered_) owner_->observers_.fetch_sub(1); }
+    ObserverLease(const ObserverLease &) = delete;
+    CallbackLease callback() noexcept { return CallbackLease(owner_, registered_); }
+   private:
+    friend class LifecycleCancellation;
+    std::shared_ptr<LifecycleCancellation> owner_;
+    bool registered_ = false;
+  };
+  std::shared_ptr<ObserverLease> observe() {
+    auto lease = std::make_shared<ObserverLease>(shared_from_this()); // off tap path
+    return lease->registered_ ? lease : nullptr;
+  }
+  bool cancelled() const noexcept { return cancelled_.load(); }
+  bool seal() noexcept {
+    uint32_t expected = 0;
+    observers_.compare_exchange_strong(expected, sealed);
+    // A callback entered before its registration retired may still be running.
+    // Once sealed, no new registration can be admitted.
+    return observers_.load() == sealed && callbacks_.load() == 0;
+  }
+ private:
+  static constexpr uint32_t sealed = uint32_t{1} << 31;
+  std::atomic<uint32_t> observers_{0}, callbacks_{0};
+  std::atomic<bool> cancelled_{false};
+};
+
+// Ticket retirement does NOT cancel its shared lifecycle. Notification leases
+// signal cancellation independently, including after retirement/consumption.
 class DescriptionState {
  public:
-  DescriptionState(uint64_t generation, uint64_t deadline) : generation_(generation), deadline_(deadline) {}
+  DescriptionState(uint64_t generation, uint64_t deadline) : generation_(generation), deadline_(deadline),
+      lifecycle_(std::make_shared<LifecycleCancellation>()) {}
   bool usable(uint64_t generation, uint64_t now) const noexcept {
-    return generation != 0 && generation == generation_ && now <= deadline_ && available_.load();
+    return generation != 0 && generation == generation_ && now <= deadline_ && available_.load() && !lifecycle_->cancelled();
   }
   bool consume(uint64_t generation, uint64_t now) noexcept {
     return usable(generation, now) && available_.exchange(false);
   }
-  void invalidate() noexcept { available_.store(false); }
+  void retire() noexcept { available_.store(false); }
+  const std::shared_ptr<LifecycleCancellation> &lifecycle() const noexcept { return lifecycle_; }
  private:
   uint64_t generation_, deadline_;
   std::atomic<bool> available_{true};
+  std::shared_ptr<LifecycleCancellation> lifecycle_;
 };
 
 class CaptureBuffer {
@@ -73,9 +133,10 @@ class CaptureBuffer {
   // speech/Word Timing acceptance tolerance. Both clocks are preserved raw.
   static constexpr double timestampToleranceFrames = 2;
 
-  CaptureBuffer(Format format, double maximumSeconds, Timebase timebase)
-      : format_(format), timebase_(timebase) {
-    if (!std::isfinite(format.sampleRate) || format.sampleRate < 1000 ||
+  CaptureBuffer(Format format, double maximumSeconds, Timebase timebase,
+                std::shared_ptr<LifecycleCancellation> lifecycle = std::make_shared<LifecycleCancellation>())
+      : format_(format), timebase_(timebase), lifecycle_(std::move(lifecycle)) {
+    if (!lifecycle_ || !std::isfinite(format.sampleRate) || format.sampleRate < 1000 ||
         format.sampleRate > 192000 || format.channels == 0 || format.channels > maxChannels ||
         !std::isfinite(maximumSeconds) || maximumSeconds <= 0 || maximumSeconds > 10 ||
         !timebase.numer || !timebase.denom)
@@ -97,7 +158,7 @@ class CaptureBuffer {
    public:
     explicit CallbackLease(CaptureBuffer &owner) noexcept : owner_(owner) {
       owner_.writers_.fetch_add(1);
-      entered_ = owner_.accepting_.load();
+      entered_ = owner_.accepting();
       if (!entered_) owner_.writers_.fetch_sub(1);
     }
     ~CallbackLease() { if (entered_) owner_.writers_.fetch_sub(1); }
@@ -111,9 +172,9 @@ class CaptureBuffer {
 
   void stop() noexcept { accepting_.store(false); }
   void invalidate(uint32_t reason) noexcept { failures_.fetch_or(reason); stop(); }
-  bool quiescent() const noexcept { return !accepting_.load() && writers_.load() == 0; }
-  bool accepting() const noexcept { return accepting_.load(); }
-  uint32_t failures() const noexcept { return failures_.load(); }
+  bool quiescent() const noexcept { return !accepting_.load() && writers_.load() == 0 && lifecycle_->seal(); }
+  bool accepting() const noexcept { return accepting_.load() && !lifecycle_->cancelled(); }
+  uint32_t failures() const noexcept { return failures_.load() | (lifecycle_->cancelled() ? ConfigurationChanged : 0U); }
   uint64_t frameCount() const noexcept { return frames_; }
   uint32_t recordCount() const noexcept { return count_; }
   const float *samples() const noexcept { return samples_.data(); }
@@ -127,7 +188,7 @@ class CaptureBuffer {
   void append(const std::array<const float *, maxChannels> &planes, uint32_t frames,
               Format actual, Timestamp time, uint64_t arrival) noexcept {
     writers_.fetch_add(1);
-    if (!accepting_.load()) { writers_.fetch_sub(1); return; }
+    if (!accepting()) { writers_.fetch_sub(1); return; }
     if (copying_.test_and_set()) {
       invalidate(ConcurrentCallback);
       writers_.fetch_sub(1);
@@ -186,6 +247,7 @@ class CaptureBuffer {
  private:
   Format format_;
   Timebase timebase_;
+  std::shared_ptr<LifecycleCancellation> lifecycle_;
   uint64_t capacity_ = 0, frames_ = 0;
   uint32_t count_ = 0;
   std::vector<float> samples_;
