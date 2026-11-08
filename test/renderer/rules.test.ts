@@ -519,7 +519,11 @@ describe('nothing that does not survive a render is remembered', () => {
     // reading is on *now*, and `attach` refuses to adopt one at all, which is what
     // keeps a dead document out of `maps` in the first place.
     const program = code('highlighter.ts');
-    expect(program).not.toContain('isConnected');
+    // Focus repair also requires the iframe ELEMENT to remain in this page.
+    // That never substitutes for a document's live browsing context (#350).
+    expect(program.replaceAll('frame.isConnected', '')).not.toContain('isConnected');
+    expect(fn(program, 'liveContents')).not.toContain('isConnected');
+    expect(fn(program, 'attach')).not.toContain('isConnected');
     pin(fn(program, 'liveContents'), 'if (!contents.document || !contents.document.defaultView) continue;', 'highlighter.ts, function liveContents');
     pin(fn(program, 'attach'), 'if (!contents || !contents.document || !contents.document.defaultView) return;', 'highlighter.ts, function attach');
   });

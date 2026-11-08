@@ -370,7 +370,7 @@ describe('lookup resize restores only originally owned iframe focus (#350, #355)
     expect(f.messages()).toHaveLength(2);
   });
 
-  it.each(['pointerdown', 'keydown', 'beforeinput'])('an intervening %s cancels a pending focus repair', (type) => {
+  it.each(['pointerdown', 'touchstart', 'wheel', 'keydown', 'beforeinput'])('an intervening %s cancels a pending focus repair', (type) => {
     const f = fixture();
     f.choose();
     f.resize();
@@ -388,7 +388,7 @@ describe('lookup resize restores only originally owned iframe focus (#350, #355)
     expect(f.complete().frame.focus).not.toHaveBeenCalled();
   });
 
-  it.each(['focusin', 'pointerdown', 'keydown', 'beforeinput'])('the section document also cancels focus on %s', (type) => {
+  it.each(['focusin', 'pointerdown', 'touchstart', 'wheel', 'keydown', 'beforeinput'])('the section document also cancels focus on %s', (type) => {
     const f = fixture();
     f.choose();
     const target = { tagName: 'INPUT', ownerDocument: f.first.doc };
