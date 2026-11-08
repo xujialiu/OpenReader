@@ -21,6 +21,26 @@ specific final-test phase.
 
 ## Phase 0 — admission, provenance, targets (all of it gated)
 
+**Admission decisions recorded from the parent (2026-11-08, binding for this
+lane):** the final merged SHA and Beta are NOT ready — HOLD all native
+build/test; never build the current Beta 17 as final; the parent will deliver
+the explicit SHA and centrally set Beta (expected 18). Device names approved
+(session-owned iPhone + iPad on the iOS 26.5 runtime) but NO creation, metadata
+write or boot until the explicit slot grant; then boot/test sequentially and
+read `memory_pressure` before EACH boot. Toolchain: per-command
+`DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer` for the
+fresh-source build, with the 26.5-runtime compatibility explicitly QUALIFIED at
+admission (build and launch one smallest probe before scheduling the matrix)
+— never a global `xcode-select`. Metro ports 8293 (phone) / 8295 (iPad) are
+approved PROPOSALS only if free at admission: re-check `lsof` and record; never
+claim an external reservation; never 8437. The P6/P7 layout control is the real
+native iPad resize, labeled **ordinary resized-window**, never a Duo fold
+result; one real Free Dictionary request plus one correct-recipient Consent
+answer is authorized for the PUBLIC fixture word; ONE owner EPUB part may be
+copied for the real-navigation case per the standing manual rules (originals
+untouched, outside Git; no private book text in reports, Git or any P7
+outbound — P7's visible-definition evidence uses the public Word fixture).
+
 One attempt directory for the whole ordinary attempt, one recorded recovery at
 most ([kit/ios-verification.md](../kit/ios-verification.md)); a failed recovery
 ends the attempt BLOCKED. Heavy work goes through `ios_guard.py run`; probes
