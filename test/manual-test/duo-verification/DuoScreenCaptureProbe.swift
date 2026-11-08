@@ -40,11 +40,10 @@ final class DuoScreenCaptureProbe: XCTestCase {
       print("[capture] screen \(index) captured")
     }
     if screens.count > Self.ownedPanelIndexes.count {
-      // Metadata only: note the skipped non-owned displays, never capture them.
-      let skipped = (Self.ownedPanelIndexes.count..<screens.count)
-        .map { "\($0):\(screens[$0].bounds.width)x\(screens[$0].bounds.height)" }
-        .joined(separator: ",")
-      print("[capture] skipped non-owned screens (metadata only, not captured): \(skipped)")
+      // Metadata only: note the skipped non-owned display indexes, never capture
+      // them or read their geometry (XCUIScreen exposes no safe bounds here).
+      let skipped = (Self.ownedPanelIndexes.count..<screens.count).map(String.init).joined(separator: ",")
+      print("[capture] skipped non-owned screens (metadata only, not captured): indexes \(skipped)")
     }
     print("[capture] restricted-v2 owned-panels-only done")
   }
