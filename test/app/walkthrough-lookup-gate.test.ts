@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -10,7 +12,7 @@ import type { ReaderBridge } from '../../src/renderer/reader-bridge';
 /** HOST ONLY: the actual file pollers, lookup hook, Consent and service parser;
  * fetch, Expo File, native AppState and renderer input are doubles, not Mac input.
  */
-const disk = vi.hoisted(() => ({ files: new Map<string, string>(), opened: [] as string[], failWrite: false }));
+const disk = vi.hoisted(() => ({ files: new Map<string, string>(), opened: [] as string[], writes: [] as string[], failWrite: false }));
 vi.mock('expo-file-system', () => ({
   Paths: { document: 'Documents' },
   File: class {
@@ -18,7 +20,10 @@ vi.mock('expo-file-system', () => ({
     constructor(directory: string, name: string) { this.path = `${directory}/${name}`; disk.opened.push(this.path); }
     get exists() { return disk.files.has(this.path); }
     textSync() { return disk.files.get(this.path)!; }
-    write(text: string) { if (disk.failWrite) throw new Error('Synthetic disk refusal'); disk.files.set(this.path, text); }
+    write(text: string) {
+      if (disk.failWrite) throw new Error('Synthetic disk refusal');
+      disk.files.set(this.path, text); disk.writes.push(text);
+    }
   },
 }));
 vi.mock('react-native', () => ({ AppState: { addEventListener: () => ({ remove() {} }) } }));
@@ -27,6 +32,8 @@ vi.mock('../../src/translation/pronunciation-audio', () => ({ playPronunciation:
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const nativeFetch = globalThis.fetch;
+// The installed React Native fetch polyfill, not Node's different null handling.
+const { Request: RuntimeRequest } = createRequire(import.meta.url)('whatwg-fetch') as { Request: typeof Request };
 const endpoint = (word: string) => `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`;
 function definition(text = 'The original response definition.') {
   return new Response(JSON.stringify([{ meanings: [{ partOfSpeech: 'noun', definitions: [{ definition: text }] }] }]), { status: 200 });
@@ -84,7 +91,7 @@ async function selected(text: string) {
 
 beforeEach(() => {
   vi.resetModules(); vi.useFakeTimers(); vi.setSystemTime(1_794_090_813_400);
-  disk.files.clear(); disk.opened = []; disk.failWrite = false;
+  disk.files.clear(); disk.opened = []; disk.writes = []; disk.failWrite = false;
   vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 afterEach(async () => {
@@ -439,21 +446,135 @@ it('honors RequestInit signal override rather than cancelling from the Requestâ€
   await command('restore');
 });
 
-it('invalidates a replaced fetch observer during state readback rather than retaining a false live control', async () => {
+it('invalidates a replaced fetch observer during state readback without overwriting the observer it no longer owns', async () => {
   const original = vi.fn<typeof fetch>(async () => definition()); globalThis.fetch = original;
   await mount(); await command('hold', { service: 'free-dictionary' });
   const pending = fetch(endpoint('hope')).catch(error => error);
   await act(async () => {});
-  globalThis.fetch = (input, init) => original(input, init);
+  const replacement: typeof fetch = (input, init) => original(input, init);
+  globalThis.fetch = replacement;
   expect((await command('state'))?.gate).toMatchObject({ installed: false, pending: 0, stoppedBy: 'observer-changed' });
-  expect((await pending).name).toBe('AbortError'); expect(globalThis.fetch).toBe(original);
+  expect((await pending).name).toBe('AbortError'); expect(globalThis.fetch).toBe(replacement);
+  await command('restore');
+  await act(async () => { tree!.unmount(); }); tree = undefined;
+  expect(globalThis.fetch).toBe(replacement); expect(vi.getTimerCount()).toBe(0);
 });
 
-it('explicit restore remains an original-fetch cleanup even after an automatic stop and a replacement observer', async () => {
+it('an inactive old gate cannot erase a newly installed hook, while legacy unbreakfetch retains its separate restore contract', async () => {
   const original = vi.fn<typeof fetch>(async () => definition()); globalThis.fetch = original;
   await mount(); await command('hold', { service: 'free-dictionary' });
   await command('restore');
-  globalThis.fetch = (input, init) => original(input, init);
+  harness.watchFetch('unrelated.invalid');
+  const replacement = globalThis.fetch;
   expect((await command('restore'))?.gate).toMatchObject({ installed: false, pending: 0 });
+  expect(globalThis.fetch).toBe(replacement);
+  harness.unbreakFetch(); expect(globalThis.fetch).toBe(original);
+});
+
+it('a new hold refuses a foreign observer instead of erasing it during the previous gate snapshot', async () => {
+  const original = vi.fn<typeof fetch>(async () => definition()); globalThis.fetch = original;
+  await mount(); await command('hold', { service: 'free-dictionary' });
+  const pending = fetch(endpoint('hope')).catch(error => error);
+  await act(async () => {});
+  const replacement: typeof fetch = (input, init) => original(input, init);
+  globalThis.fetch = replacement;
+  expect((await command('hold', { service: 'free-dictionary', run: 'next-control' }))?.command).toMatchObject({ ok: false, error: 'fetch-observer-present' });
+  expect(globalThis.fetch).toBe(replacement);
+  expect(readStatus()?.gate).toMatchObject({ run: 'host-m7', installed: false, pending: 0, stoppedBy: 'observer-changed' });
+  expect((await pending).name).toBe('AbortError');
+});
+
+it.each(['restore', 'deadline', 'unmount'] as const)('%s cleanup cancels only owned work and preserves a replacement fetch identity', async exit => {
+  const original = vi.fn<typeof fetch>(async () => definition()); globalThis.fetch = original;
+  await mount(); await command('hold', { service: 'free-dictionary' });
+  const pending = fetch(endpoint('hope')).catch(error => error);
+  await act(async () => {});
+  const replacement: typeof fetch = (input, init) => original(input, init);
+  globalThis.fetch = replacement;
+  if (exit === 'restore') await command('restore');
+  if (exit === 'deadline') await act(async () => { vi.advanceTimersByTime(12_000); });
+  if (exit === 'unmount') { await act(async () => { tree!.unmount(); }); tree = undefined; }
+  expect(globalThis.fetch).toBe(replacement);
+  expect((await pending).name).toBe('AbortError');
+  expect(original.mock.calls[0]![1]?.signal?.aborted).toBe(true);
+  expect(readStatus()?.gate).toMatchObject({ installed: false, pending: 0 });
+  await act(async () => { tree?.unmount(); }); tree = undefined;
+  expect(vi.getTimerCount()).toBe(0); expect(globalThis.fetch).toBe(replacement);
+});
+
+it('an active restore publishes both complete provisional and finalized matching receipts', async () => {
+  const original = vi.fn<typeof fetch>(async () => definition()); globalThis.fetch = original;
+  await mount(); await command('hold', { service: 'free-dictionary' });
+  disk.writes = [];
+  await command('restore');
+  const writes = disk.writes.map(text => JSON.parse(text) as LookupGateStatus);
+  expect(writes).toHaveLength(2);
+  expect(writes.map(status => status.command)).toEqual([
+    { seq, action: 'restore', run: 'host-m7', ok: false, error: null, released: 0 },
+    { seq, action: 'restore', run: 'host-m7', ok: true, error: null, released: 0 },
+  ]);
+  for (const status of writes) {
+    expect(status.observedAt).toBe(Date.now());
+    expect(status.gate).toMatchObject({ installed: false, pending: 0, stoppedBy: 'restore' });
+  }
+});
+
+it.each([
+  ['requested', undefined], ['held', undefined], ['requested', null], ['held', null],
+] as const)('%s delivery inherits the installed runtime Request signal when init.signal is %s', async (state, signal) => {
+  const network = deferred<Response>();
+  const original = vi.fn<typeof fetch>(() => network.promise); globalThis.fetch = original;
+  await mount(); await command('hold', { service: 'free-dictionary' });
+  const parent = new AbortController();
+  const input = new RuntimeRequest(endpoint('hope'), { signal: parent.signal });
+  expect(new RuntimeRequest(input, { signal }).signal).toBe(parent.signal);
+  const pending = fetch(input, { signal }).catch(error => error);
+  if (state === 'held') await act(async () => { network.resolve(definition()); });
+  await act(async () => { parent.abort(); });
+  expect(readStatus()?.gate).toMatchObject({ installed: false, pending: 0, stoppedBy: 'aborted' });
+  expect((await pending).name).toBe('AbortError');
+  expect(original.mock.calls[0]![1]?.signal?.aborted).toBe(true);
   expect(globalThis.fetch).toBe(original);
+  await act(async () => { network.resolve(definition()); });
+});
+
+it.each([undefined, null] as const)('does not start network for an already aborted runtime Request with init.signal %s', async signal => {
+  const original = vi.fn<typeof fetch>(async () => definition()); globalThis.fetch = original;
+  await mount(); await command('hold', { service: 'free-dictionary' });
+  const parent = new AbortController(); parent.abort();
+  const input = new RuntimeRequest(endpoint('hope'), { signal: parent.signal });
+  expect(new RuntimeRequest(input, { signal }).signal).toBe(parent.signal);
+  const pending = fetch(input, { signal }).catch(error => error);
+  expect(original).not.toHaveBeenCalled();
+  expect((await pending).name).toBe('AbortError');
+  expect(readStatus()?.gate).toMatchObject({ installed: false, pending: 0, stoppedBy: 'aborted' });
+});
+
+it.each([undefined, null] as const)('preserves original Response identity, read count and released stream abort with runtime init.signal %s', async signal => {
+  let response!: Response;
+  const original = vi.fn<typeof fetch>((_input, init) => {
+    const stream = new ReadableStream<Uint8Array>({ start(controller) {
+      init?.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')), { once: true });
+      controller.enqueue(new TextEncoder().encode('[{"partial":'));
+    } });
+    response = new Response(stream);
+    return Promise.resolve(response);
+  });
+  globalThis.fetch = original;
+  await mount(); await command('hold', { service: 'free-dictionary' });
+  const parent = new AbortController();
+  const input = new RuntimeRequest(endpoint('hope'), { signal: parent.signal });
+  const pending = fetch(input, { signal });
+  const json = vi.spyOn(response, 'json');
+  await act(async () => {});
+  expect(json).not.toHaveBeenCalled(); expect(response.bodyUsed).toBe(false);
+  await command('release');
+  const delivered = await pending; expect(delivered).toBe(response);
+  const body = delivered.json().catch(error => error);
+  expect(json).toHaveBeenCalledTimes(1);
+  await command('restore');
+  expect(original.mock.calls[0]![1]?.signal?.aborted).toBe(false);
+  parent.abort();
+  expect(original.mock.calls[0]![1]?.signal?.aborted).toBe(true);
+  expect((await body).name).toBe('AbortError'); expect(json).toHaveBeenCalledTimes(1);
 });

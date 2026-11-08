@@ -71,7 +71,8 @@ export class LookupResponseGate {
       };
       this.requests.push(record);
       return new Promise<Response>((resolve, reject) => {
-        const parent = init && 'signal' in init ? init.signal : typeof input === 'object' && 'signal' in input ? input.signal : undefined;
+        // The installed whatwg-fetch inherits Request.signal for undefined/null.
+        const parent = init?.signal || (typeof input === 'object' && 'signal' in input ? input.signal : undefined);
         const controller = new AbortController();
         let response: Response | undefined;
         let settled = false;
@@ -143,7 +144,7 @@ export class LookupResponseGate {
     if (!this.installed) return;
     this.installed = false; this.stoppedBy = reason;
     clearTimeout(this.expiry);
-    globalThis.fetch = this.original;
+    if (globalThis.fetch === this.wrapper) globalThis.fetch = this.original;
     for (const entry of this.pending) entry.cancel(reason === 'aborted' ? 'aborted' : reason === 'deadline' ? 'deadline' : 'cancelled');
     this.changed();
   }

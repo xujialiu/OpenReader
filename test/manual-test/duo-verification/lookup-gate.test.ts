@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import type { LookupGateSnapshot, LookupGateStatus } from '../../../src/app/walkthrough-lookup-gate';
@@ -189,4 +191,72 @@ it.each(['missing-gate', 'missing-request', 'missing-release-time'] as const)('r
   if (missing === 'missing-release-time') gate.requests[0]!.releasedAt = null;
   fs.writeFileSync(statusFile(), JSON.stringify(status));
   expect((await settle(pending)).message).toMatch(/No timely single|no matching control/);
+});
+
+it('waits for a complete provisional restore receipt, rejects explicit errors immediately and bounds unfinished acknowledgements', async () => {
+  const gate: LookupGateSnapshot = { ...emptyGate(), installed: false, stoppedBy: 'restore' };
+  let completed = false;
+  const pending = send('restore').catch(error => error).then(result => { completed = true; return result; });
+  const sent = harness().seq;
+  ack(gate, { ok: false, error: null });
+  await vi.advanceTimersByTimeAsync(80);
+  expect(completed).toBe(false); expect(harness().seq).toBe(sent);
+  ack(gate);
+  expect((await settle(pending)).command).toMatchObject({ seq: sent, ok: true, error: null });
+  expect(harness().do).toBe('noop');
+
+  const refused = send('restore').catch(error => error);
+  ack(gate, { ok: false, error: 'gate-run-mismatch' });
+  expect((await settle(refused)).message).toContain('gate-run-mismatch');
+
+  const unfinished = send('restore').catch(error => error);
+  ack(gate, { ok: false, error: null });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect((await unfinished).message).toContain('No fresh matching gate acknowledgement');
+  expect(harness().do).toBe('noop');
+  expect(fs.existsSync(path.join(documents, '.lookup-gate-sender.lock'))).toBe(false);
+});
+
+it('the real CLI reads a complete provisional restore first, then accepts final success without a refused-null exit', async () => {
+  vi.useRealTimers();
+  const observed = path.join(directory, 'provisional-read.json');
+  const preload = path.join(directory, 'observe-host-status.cjs');
+  // Observe the actual child CLI's status read. Final success is withheld until
+  // this marker proves it read the complete provisional JSON, not a partial file.
+  fs.writeFileSync(preload, `const fs = require('node:fs');
+const read = fs.readFileSync;
+fs.readFileSync = function(file, ...args) {
+  const text = read.call(this, file, ...args);
+  if (String(file) === process.env.HOST_STATUS_FILE) {
+    const status = JSON.parse(text);
+    if (status.command?.action === 'restore' && status.command.ok === false && status.command.error === null) {
+      fs.writeFileSync(process.env.HOST_PROVISIONAL_READ, JSON.stringify(status.command));
+    }
+  }
+  return text;
+};`);
+  let child!: ReturnType<typeof execFile>;
+  const finished = new Promise<{ code: number | string; stdout: string; stderr: string }>(resolve => {
+    child = execFile(process.execPath, ['--require', preload, fileURLToPath(new URL('./lookup-gate.cjs', import.meta.url)),
+      documents, sequence, String(floor), run, 'restore'], {
+      timeout: 4000,
+      env: { ...process.env, HOST_STATUS_FILE: statusFile(), HOST_PROVISIONAL_READ: observed },
+    }, (error, stdout, stderr) => resolve({ code: error ? error.code ?? 'terminated' : 0, stdout: String(stdout), stderr: String(stderr) }));
+  });
+  try {
+    await vi.waitFor(() => expect(harness().action).toBe('restore'), { timeout: 2000, interval: 10 });
+    const gate: LookupGateSnapshot = { ...emptyGate(), installed: false, stoppedBy: 'restore' };
+    const provisional = ack(gate, { ok: false, error: null });
+    await vi.waitFor(() => expect(fs.existsSync(observed)).toBe(true), { timeout: 2000, interval: 10 });
+    expect(read(observed)).toEqual(provisional.command);
+    ack(gate);
+    const result = await finished;
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout).command).toMatchObject({ seq: provisional.command.seq, action: 'restore', ok: true, error: null });
+    expect(harness().do).toBe('noop');
+    expect(fs.existsSync(path.join(documents, '.lookup-gate-sender.lock'))).toBe(false);
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill();
+    await finished;
+  }
 });

@@ -85,7 +85,9 @@ network: `heldAt` is set only after the original fetch resolves with its real
 Response. The gate does not consume, clone, replace or synthesize that Response
 or its body. Release resolves that exact object and the ordinary adapter then
 parses it. Caller-owned cancellation still reaches a streaming body after
-release; restoring the gate does not cancel an already delivered body.
+release; restoring the gate does not cancel an already delivered body. Request
+signal inheritance follows the installed fetch polyfill: undefined or null
+`init.signal` inherits the Request's signal; an actual signal overrides it.
 
 A pending caller abort cancels the whole control and restores fetch. Explicit
 restore/unbreakfetch cancel pending/held delivery with the standard AbortError
@@ -98,7 +100,11 @@ The app's actual **15 s Lookup timeout is unchanged**. The gate also expires
 unmount, overflow or status-write failure. Counts remain active after release
 until restore/expiry, so a post-resize duplicate is not silently missed. A
 replacement observer detected during a state/command read invalidates the
-control as `observer-changed`; no stacking is accepted.
+control as `observer-changed`; no stacking is accepted. Cleanup cancels owned
+pending work but restores global fetch only while it is still this gate's
+wrapper. A foreign replacement survives state, cleanup and a refused new hold;
+an inactive old gate cannot erase a newer hook. Legacy `unbreakfetch` retains
+its separate unconditional original-fetch restoration contract.
 
 ## Atomic monotone Mac sender (test files only)
 
@@ -131,7 +137,11 @@ command or waiting for a Debug Log flush. It refuses a duplicate, abort, stopped
 gate or first held response already ≥2.5 s old. Release refuses locally at
 ≥11 s to leave one poll/readback margin below the 12 s deadline; the app makes
 the authoritative timely-release check. Each sent command has a 2 s fresh-ack
-bound, not a mandatory 2 s sleep. Exit 2 is **BLOCKED**, never native PASS.
+bound, not a mandatory 2 s sleep. A complete matching receipt with
+`command.ok=false,error=null` is provisional: restore can publish its transition
+before finalizing the command. The sender keeps polling within the same bound
+until success or an explicit non-null error; explicit refusals fail immediately.
+Exit 2 is **BLOCKED**, never native PASS.
 
 Install a coordinator `finally`/EXIT cleanup **before** sending hold. It must
 always send restore and require `installed=false,pending=0`; a failed cleanup

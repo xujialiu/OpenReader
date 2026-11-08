@@ -137,10 +137,7 @@ function runLookupGateCommand(command: HarnessCommand, seq: number): void {
       gateCommand.released = lookupGate.release();
       if (!gateCommand.released) return refuse('no-held-response');
     }
-    if (action === 'restore') {
-      lookupGate.restore('restore');
-      globalThis.fetch = realFetch;
-    }
+    if (action === 'restore') lookupGate.restore('restore');
   }
   gateCommand.ok = true;
   writeLookupGateStatus();

@@ -97,7 +97,11 @@ async function sendGateCommand(documents, sequenceFile, floor, run, action) {
       const status = readStatus(documents);
       if (status?.command.seq === seq && status.command.run === run && status.command.action === action &&
           status.observedAt >= sent.sentAt && status.observedAt <= Date.now() + 1000) {
-        if (!status.command.ok) throw new Error(`Gate command refused: ${status.command.error}`);
+        if (!status.command.ok) {
+          if (status.command.error !== null) throw new Error(`Gate command refused: ${status.command.error}`);
+          await delay(40); // A complete transition receipt can precede command finalization.
+          continue;
+        }
         const gate = status.gate;
         if (!gate || gate.run !== run) throw new Error('Gate acknowledgement has no matching control');
         if (action === 'release') {
