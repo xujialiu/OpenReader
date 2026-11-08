@@ -36,6 +36,49 @@ function mustBeNew(file) {
   throw new Error('New owned external destination required');
 }
 
+function applicationSourceGroup(project, ios, name) {
+  const objects = project.hash.project.objects;
+  const projects = Object.entries(project.pbxProjectSection()).filter(([key]) => !key.endsWith('_comment'));
+  if (projects.length !== 1) throw new Error('Expected one generated project source root');
+  const settings = projects[0][1];
+  // INFOPLIST_FILE and SOURCE_ROOT are relative to this generated ios/ directory.
+  // Reject relocated roots rather than guessing a different build-time base.
+  if ([settings.projectDirPath, settings.projectRoot].some(value => !['', '.'].includes(unquote(value ?? '')))) {
+    throw new Error('Unsupported generated project source root');
+  }
+  const groups = objects.PBXGroup;
+  const main = groups[settings.mainGroup];
+  if (!Array.isArray(main?.children)) throw new Error('Missing generated main source group');
+  const id = child => typeof child === 'string' ? child : child.value;
+  // The generated app group is a direct main-group child; nested Expo provider
+  // groups may share its display name and must not win an arbitrary name lookup.
+  const candidates = main.children.map(id).filter(key => {
+    const group = groups[key];
+    return group && (unquote(group.name ?? '') === name || unquote(group.path ?? '') === name);
+  });
+  if (candidates.length !== 1) throw new Error('Expected one unambiguous generated application source group');
+  const group = candidates[0];
+  const parents = key => Object.values(groups).filter(value => Array.isArray(value?.children))
+    .flatMap(value => value.children).filter(child => id(child) === key).length;
+  if (parents(group) !== 1 || parents(settings.mainGroup) !== 0) {
+    throw new Error('Ambiguous generated source group parentage');
+  }
+  function directory(entry, parent) {
+    const tree = unquote(entry.sourceTree);
+    const relative = unquote(entry.path ?? ''); // name is only a display label
+    if (!['<group>', 'SOURCE_ROOT'].includes(tree) || path.isAbsolute(relative) || /[$\\"\u0000]/.test(relative)) {
+      throw new Error('Unsupported generated source group path/sourceTree');
+    }
+    const requested = path.resolve(tree === 'SOURCE_ROOT' ? ios : parent, relative);
+    const actual = ownedExisting(ios, requested);
+    if (actual !== requested) throw new Error('Unsupported symlinked generated source group directory');
+    return [ios, requested, actual];
+  }
+  const mainDirectory = directory(main, ios);
+  const groupDirectory = directory(groups[group], mainDirectory[1]);
+  return { group, directory: groupDirectory[1], anchors: [mainDirectory, groupDirectory] };
+}
+
 function installObserver({ snapshot, sourceRevision, receiptPath, optIn = process.env.OPENREADER_NATIVE_PCM_OBSERVER }) {
   // Absence is a strict no-op: not even mkdir/read/stat against the project.
   if (optIn === undefined || optIn === '0') return { enabled: false, modified: false };
@@ -110,17 +153,25 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
     sourceRevision, requiredSDK: 'iOS Simulator 27+', compileGate: 'TARGET_OS_SIMULATOR && DEBUG && OPENREADER_PCM_TEST_ONLY', fingerprints,
     testBuildSnapshot: { ...snapshotPatch.manifest, sourceBuildFlag, beforePodsSHA256: hash(beforePods), afterPodsSHA256: hash(afterPods) } };
   const name = unquote(target.name);
-  const group = project.findPBXGroupKey({ name }) ?? project.findPBXGroupKey({ path: name });
-  if (!group) throw new Error('Expected the generated application source group');
+  const sourceGroup = applicationSourceGroup(project, ios, name);
   const requestedParent = path.join(ios, name);
   const sourceParent = ownedExisting(ios, requestedParent);
   const destination = path.join(sourceParent, 'NativePCMObserver');
   mustBeNew(destination);
-  if (!project.addSourceFile('NativePCMObserver/NativePCMObserver.mm',
-    { target: targetID, compilerFlags: '-DOPENREADER_PCM_TEST_ONLY=1 -std=c++17' }, group) ||
-      !project.addHeaderFile('NativePCMObserver/CaptureBuffer.hpp', {}, group)) {
+  const registrations = FILES.map((file, index) => ({
+    file, copiedPath: path.relative(ios, path.join(requestedParent, 'NativePCMObserver', file)),
+    referencePath: path.relative(sourceGroup.directory, path.join(requestedParent, 'NativePCMObserver', file)),
+    lastKnownFileType: index === 0 ? 'sourcecode.cpp.objcpp' : 'sourcecode.cpp.h',
+  }));
+  const [source, header] = registrations;
+  if (!project.addSourceFile(source.referencePath,
+    { target: targetID, lastKnownFileType: source.lastKnownFileType,
+      compilerFlags: '-DOPENREADER_PCM_TEST_ONLY=1 -std=c++17' }, sourceGroup.group) ||
+      !project.addHeaderFile(header.referencePath, { lastKnownFileType: header.lastKnownFileType }, sourceGroup.group)) {
     throw new Error('Cannot register isolated observer source/header');
   }
+  build.sourceRegistration = { groupID: sourceGroup.group,
+    groupDirectory: path.relative(ios, sourceGroup.directory) || '.', sourceTree: '<group>', files: registrations };
   info.OpenReaderNativePCMObserver = build;
   const afterProject = project.writeSync();
   const afterInfo = plist.build(info);
@@ -130,7 +181,7 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
   const writeTargets = [[root, path.join(root, 'ios'), ios], [ios, requestedProject, projectFile],
     [ios, requestedInfo, infoFile], [ios, requestedPods, podsFile],
     [audioRoot, requestedHeader, headerFile], [audioRoot, requestedEngine, engineFile],
-    [ios, requestedParent, sourceParent]];
+    [ios, requestedParent, sourceParent], ...sourceGroup.anchors];
   for (const [owner, requested, expected] of writeTargets) {
     if (ownedExisting(owner, requested) !== expected) throw new Error('Changed owned external write target');
   }

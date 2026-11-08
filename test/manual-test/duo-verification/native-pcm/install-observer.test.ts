@@ -48,7 +48,27 @@ const project = `// !$*UTF8*$!
 }
 `;
 
-function fixture(variant = 'debug') {
+// Sanitized from the failed SDK58 project: display name is NOT a directory.
+// A nested generated-provider group has the same display name as the app group.
+const expo58Project = project
+  .replace('objectVersion = 46;', 'objectVersion = 54;')
+  .replaceAll('A00000000000000000000003', '13B07FAE1A68108700A75B9A')
+  .replace('children = (); name = OpenReader; path = OpenReader;',
+    'children = (F11748412D0307B40044C1D9, F11748442D0722820044C1D9,); name = OpenReader;')
+  .replace('/* End PBXFileReference section */', `
+ F11748412D0307B40044C1D9 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = OpenReader/AppDelegate.swift; sourceTree = "<group>"; };
+ F11748442D0722820044C1D9 = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "OpenReader-Bridging-Header.h"; path = "OpenReader/OpenReader-Bridging-Header.h"; sourceTree = "<group>"; };
+ /* End PBXFileReference section */`)
+  .replace('children = (13B07FAE1A68108700A75B9A,);',
+    'children = (13B07FAE1A68108700A75B9A, 5D3FCF29FAB13D96723CDA04,);')
+  .replace('/* End PBXGroup section */', `
+ 5D3FCF29FAB13D96723CDA04 = {isa = PBXGroup; children = (C465B322C47991CD753756ED,); name = ExpoModulesProviders; sourceTree = "<group>"; };
+ C465B322C47991CD753756ED = {isa = PBXGroup; children = (); name = OpenReader; sourceTree = "<group>"; };
+ /* End PBXGroup section */`)
+  .replace('mainGroup = A00000000000000000000002;',
+    'mainGroup = A00000000000000000000002; projectDirPath = ""; projectRoot = "";');
+
+function makeFixture(variant = 'debug', appProject = project) {
   const root = mkdtempSync(join(tmpdir(), 'openreader-pcm-installer-'));
   onTestFinished(() => rmSync(root, { recursive: true, force: true }));
   const snapshot = join(root, 'snapshot');
@@ -56,7 +76,9 @@ function fixture(variant = 'debug') {
     mkdirSync(dirname(join(snapshot, path)), { recursive: true });
     writeFileSync(join(snapshot, path), text);
   };
-  write('ios/OpenReader.xcodeproj/project.pbxproj', project);
+  write('ios/OpenReader.xcodeproj/project.pbxproj', appProject);
+  write('ios/OpenReader/AppDelegate.swift', '// HOST sibling fixture');
+  write('ios/OpenReader/OpenReader-Bridging-Header.h', '// HOST sibling fixture');
   const podProject = project.replaceAll('OpenReader', 'RNAudioAPI')
     .replace('/* End PBXBuildFile section */', 'A00000000000000000000010 /* AudioEngine.mm in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011; };\n /* End PBXBuildFile section */')
     .replace('/* End PBXFileReference section */', 'A00000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = audioapi/ios/system/AudioEngine.mm; sourceTree = "<group>"; };\n /* End PBXFileReference section */')
@@ -93,7 +115,149 @@ function treeHashes(root: string): Record<string, string> {
   visit(root); return result;
 }
 
-describe('install-observer opt-in isolation (HOST ONLY)', () => {
+type FileReference = { path: string; sourceTree: string; lastKnownFileType: string };
+type Group = { path?: string; sourceTree: string; children: (string | { value: string })[] };
+const unquote = (value: string) => value.replace(/^"|"$/g, '');
+
+// Independent file-resolution oracle over the serialized/reparsed PBX graph,
+// not a check that a particular path string was emitted by the installer.
+function resolvedReferences(file: string, ios: string) {
+  const parsed = xcode.project(file); parsed.parseSync();
+  const groups = parsed.hash.project.objects.PBXGroup as Record<string, Group>;
+  const refs = parsed.pbxFileReferenceSection() as Record<string, FileReference>;
+  const sourceRoot = resolve(ios, unquote(parsed.getFirstProject().firstProject.projectDirPath ?? ''));
+  const resolved: { id: string; file: string; reference: FileReference }[] = [];
+  function visit(id: string, parent: string) {
+    const group = groups[id];
+    const tree = unquote(group.sourceTree);
+    expect(['<group>', 'SOURCE_ROOT']).toContain(tree);
+    const directory = resolve(tree === 'SOURCE_ROOT' ? sourceRoot : parent, unquote(group.path ?? ''));
+    for (const child of group.children) {
+      const id = typeof child === 'string' ? child : child.value;
+      if (groups[id]) visit(id, directory);
+      else if (refs[id]) {
+        const ref = refs[id], tree = unquote(ref.sourceTree);
+        if (tree !== '<group>' && tree !== 'SOURCE_ROOT') continue;
+        resolved.push({ id, reference: ref,
+          file: resolve(tree === 'SOURCE_ROOT' ? sourceRoot : directory, unquote(ref.path)) });
+      }
+    }
+  }
+  visit(parsed.getFirstProject().firstProject.mainGroup, sourceRoot);
+  return { parsed, resolved };
+}
+
+function expectRefusalBeforeWrites(options: ReturnType<typeof makeFixture>, message: string) {
+  const root = dirname(options.snapshot), before = treeHashes(root);
+  expect(() => installObserver(options)).toThrow(message);
+  expect(treeHashes(root)).toEqual(before);
+}
+
+function expectCopiedReferences(options: ReturnType<typeof makeFixture>) {
+  const result = installObserver(options);
+  const ios = join(options.snapshot, 'ios');
+  const { parsed, resolved } = resolvedReferences(join(ios, 'OpenReader.xcodeproj/project.pbxproj'), ios);
+  const files = Object.entries(parsed.pbxBuildFileSection()).filter(([key]) => !key.endsWith('_comment')) as
+    [string, { fileRef: string; settings: { COMPILER_FLAGS: string } }][];
+  const sourcePhase = parsed.pbxSourcesBuildPhaseObj('A00000000000000000000004');
+  for (const [name, type] of [['NativePCMObserver.mm', 'sourcecode.cpp.objcpp'], ['CaptureBuffer.hpp', 'sourcecode.cpp.h']]) {
+    const matches = resolved.filter(entry => unquote(entry.reference.path).endsWith('/' + name));
+    expect(matches).toHaveLength(1);
+    const reference = matches[0];
+    expect(reference.file).toBe(join(ios, 'OpenReader/NativePCMObserver', name));
+    expect(existsSync(reference.file)).toBe(true);
+    expect(readFileSync(reference.file).equals(readFileSync(join(__dirname, name)))).toBe(true);
+    expect(reference.reference.lastKnownFileType).toBe(type);
+    expect(unquote(reference.reference.sourceTree)).toBe(result.build.sourceRegistration.sourceTree);
+    const group = parsed.hash.project.objects.PBXGroup[result.build.sourceRegistration.groupID] as Group;
+    expect(group.children.map(entry => typeof entry === 'string' ? entry : entry.value)).toContain(reference.id);
+    const registration = result.build.sourceRegistration.files.find((entry: { file: string }) => entry.file === name);
+    expect(registration).toMatchObject({ copiedPath: 'OpenReader/NativePCMObserver/' + name,
+      referencePath: unquote(reference.reference.path), lastKnownFileType: type });
+    expect(resolve(ios, result.build.sourceRegistration.groupDirectory, registration.referencePath)).toBe(reference.file);
+    const buildFiles = files.filter(([, entry]) => entry.fileRef === reference.id);
+    expect(buildFiles).toHaveLength(name.endsWith('.mm') ? 1 : 0);
+    if (name.endsWith('.mm')) {
+      expect(buildFiles[0][1].settings.COMPILER_FLAGS).toBe('"-DOPENREADER_PCM_TEST_ONLY=1 -std=c++17"');
+      expect(sourcePhase.files.map((entry: string | { value: string }) => typeof entry === 'string' ? entry : entry.value))
+        .toContain(buildFiles[0][0]);
+    }
+  }
+  expect(JSON.parse(readFileSync(options.receiptPath, 'utf8'))).toEqual(result);
+  const info = plist.parse(readFileSync(join(ios, 'OpenReader/Info.plist'), 'utf8'));
+  expect(info.OpenReaderNativePCMObserver.sourceRegistration).toEqual(result.build.sourceRegistration);
+  expect(hash(readFileSync(join(ios, 'OpenReader.xcodeproj/project.pbxproj')))).toBe(result.after.projectSHA256);
+  return resolved;
+}
+
+describe('install-observer supported group paths (HOST ONLY)', () => {
+  it.each([
+    { layout: 'quoted name and path', appProject: project
+      .replaceAll('name = OpenReader;', 'name = "OpenReader";').replace('path = OpenReader;', 'path = "OpenReader";'),
+      directories: [] },
+    { layout: 'path without display name', appProject: project.replace('name = OpenReader; path = OpenReader;', 'path = "OpenReader";'),
+      directories: [] },
+    { layout: 'path differing from display name', appProject: project.replace('path = OpenReader;', 'path = "Source Files";'),
+      directories: ['Source Files'] },
+    { layout: 'SOURCE_ROOT app group under a pathful main group', appProject: project
+      .replace('children = (A00000000000000000000003,); sourceTree = "<group>";',
+        'children = (A00000000000000000000003,); path = "Source Container"; sourceTree = "<group>";')
+      .replace('path = OpenReader; sourceTree = "<group>";', 'path = OpenReader; sourceTree = SOURCE_ROOT;'),
+      directories: ['Source Container'] },
+  ])('resolves $layout to the copied files after PBX reparse', ({ appProject, directories }) => {
+    const options = makeFixture('debug', appProject);
+    for (const directory of directories) mkdirSync(join(options.snapshot, 'ios', directory));
+    expectCopiedReferences(options);
+  });
+});
+
+describe.each([
+  { layout: 'pathful', appProject: project },
+  { layout: 'Expo58 pathless', appProject: expo58Project },
+])('install-observer opt-in isolation (HOST ONLY, $layout)', ({ appProject }) => {
+  const fixture = (variant = 'debug') => makeFixture(variant, appProject);
+  it('resolves the generated app-group references to the actual copied source/header', () => {
+    const options = fixture();
+    const resolved = expectCopiedReferences(options);
+    if (appProject === expo58Project) {
+      for (const name of ['AppDelegate.swift', 'OpenReader-Bridging-Header.h']) {
+        expect(resolved.find(entry => entry.file === join(options.snapshot, 'ios/OpenReader', name))).toBeDefined();
+      }
+    }
+  });
+  it.each([
+    ['duplicate-app-group', 'unambiguous'], ['multiple-parents', 'parentage'],
+    ['group-source-tree', 'path/sourceTree'], ['main-source-tree', 'path/sourceTree'],
+    ['absolute-group-path', 'path/sourceTree'], ['macro-group-path', 'path/sourceTree'],
+    ['relocated-source-root', 'project source root'], ['escaping-group-path', 'owned external'],
+    ['internal-group-symlink', 'symlinked generated source group'],
+  ])('rejects %s before ANY snapshot or receipt writes', (change, message) => {
+    const options = fixture();
+    const file = join(options.snapshot, 'ios/OpenReader.xcodeproj/project.pbxproj');
+    const parsed = xcode.project(file); parsed.parseSync();
+    const settings = parsed.getFirstProject().firstProject;
+    const groups = parsed.hash.project.objects.PBXGroup;
+    const main = groups[settings.mainGroup];
+    const id = appProject === project ? 'A00000000000000000000003' : '13B07FAE1A68108700A75B9A';
+    const group = groups[id];
+    if (change === 'duplicate-app-group' || change === 'multiple-parents') {
+      const other = 'A00000000000000000000099';
+      groups[other] = { isa: 'PBXGroup', name: change === 'duplicate-app-group' ? 'OpenReader' : 'Other',
+        sourceTree: '"<group>"', children: change === 'multiple-parents' ? [id] : [] };
+      main.children.push(other);
+    } else if (change === 'group-source-tree') group.sourceTree = 'SDKROOT';
+    else if (change === 'main-source-tree') main.sourceTree = 'BUILT_PRODUCTS_DIR';
+    else if (change === 'absolute-group-path') group.path = '"/tmp"';
+    else if (change === 'macro-group-path') group.path = '"$(SRCROOT)/OpenReader"';
+    else if (change === 'relocated-source-root') settings.projectDirPath = 'Elsewhere';
+    else if (change === 'escaping-group-path') group.path = '"../.."';
+    else {
+      group.path = 'GroupAlias';
+      symlinkSync(join(options.snapshot, 'ios/OpenReader'), join(options.snapshot, 'ios/GroupAlias'));
+    }
+    writeFileSync(file, parsed.writeSync());
+    expectRefusalBeforeWrites(options, message);
+  });
   it.each(['pbx', 'plist', 'source-parent'])('rejects %s symlink escape before ANY target file changes', (kind) => {
     const options = fixture();
     const root = dirname(options.snapshot), ordinary = join(root, 'ordinary-fixture');
@@ -139,7 +303,7 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
       const options = fixture(variant);
       const file = join(options.snapshot, 'ios/OpenReader.xcodeproj/project.pbxproj');
       const before = hash(readFileSync(file));
-      expect(() => installObserver(options)).toThrow('Formal/free');
+      expectRefusalBeforeWrites(options, 'Formal/free');
       expect(hash(readFileSync(file))).toBe(before);
       expect(existsSync(options.receiptPath)).toBe(false);
     }
@@ -180,12 +344,12 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
       receiptPath: '/tmp/unused-pcm-receipt', optIn: '1' })).toThrow('external source archive');
     expect(() => installObserver({ optIn: 'yes' })).toThrow('exactly 1');
     const options = fixture();
-    expect(() => installObserver({ ...options, receiptPath: join(options.snapshot, 'receipt.json') })).toThrow('external file');
+    expectRefusalBeforeWrites({ ...options, receiptPath: join(options.snapshot, 'receipt.json') }, 'external file');
     writeFileSync(join(options.snapshot, 'test/manual-test/duo-verification/native-pcm/CaptureBuffer.hpp'), 'wrong revision');
-    expect(() => installObserver(options)).toThrow('same final source revision');
+    expectRefusalBeforeWrites(options, 'same final source revision');
     const nested = fixture();
     writeFileSync(join(dirname(nested.snapshot), '.git'), 'host-only parent-checkout marker');
-    expect(() => installObserver(nested)).toThrow('external source archive');
+    expectRefusalBeforeWrites(nested, 'external source archive');
   });
   it('holds external source drift or missing Pod layout before writing source/project changes', () => {
     for (const change of ['source', 'pod-target']) {
@@ -199,7 +363,7 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
         writeFileSync(podFile, readFileSync(podFile, 'utf8').replaceAll('RNAudioAPI', 'unexpected-layout'));
       }
       const beforeEngine = hash(readFileSync(engine));
-      expect(() => installObserver(options)).toThrow(change === 'source' ? 'source/version/layout mismatch' : 'RNAudioAPI Pod target');
+      expectRefusalBeforeWrites(options, change === 'source' ? 'source/version/layout mismatch' : 'RNAudioAPI Pod target');
       expect(hash(readFileSync(engine))).toBe(beforeEngine);
       expect(hash(readFileSync(appProject))).toBe(beforeProject);
       expect(existsSync(options.receiptPath)).toBe(false);
@@ -210,7 +374,7 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
     const library = join(options.snapshot, 'node_modules/react-native-audio-api');
     rmSync(library, { recursive: true });
     symlinkSync(resolve(__dirname, '../../../../node_modules/react-native-audio-api'), library);
-    expect(() => installObserver(options)).toThrow('no shared dependency symlink');
+    expectRefusalBeforeWrites(options, 'no shared dependency symlink');
     expect(existsSync(options.receiptPath)).toBe(false);
   });
   it('adds only guarded snapshot/publication code, with retained owner + engine and unlock before return/tap', () => {
