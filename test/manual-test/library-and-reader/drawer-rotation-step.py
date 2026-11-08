@@ -108,7 +108,13 @@ def main():
     parser.add_argument('name')
     parser.add_argument('output', type=Path)
     parser.add_argument('--metro', default='http://127.0.0.1:8362')
+    parser.add_argument('--device', default=os.environ.get('OPENREADER_UDID', ''),
+                        help='explicit session-owned simulator UDID')
+    parser.add_argument('--device-name', default=os.environ.get('OPENREADER_DEVICE', ''),
+                        help='the simulator name, for the CDP device filter')
     args = parser.parse_args()
+    if not args.device or not args.device_name:
+        parser.error('--device and --device-name are required (or OPENREADER_UDID/OPENREADER_DEVICE)')
     global UDID
     UDID = args.device
     args.output.mkdir(parents=True, exist_ok=True)
