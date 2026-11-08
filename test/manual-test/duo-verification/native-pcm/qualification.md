@@ -27,9 +27,24 @@ code unless `TARGET_OS_SIMULATOR && DEBUG && OPENREADER_PCM_TEST_ONLY`; its
 A Release configuration, physical device or ordinary Debug build cannot arm it.
 Do not reuse a diagnostic native product as an ordinary app delivery.
 
-The build receipt embeds the exact source revision, tool/playback/patch/header
-hashes, compile gate and opt-in in Info.plist, and writes before/after generated
-project/plist hashes to a private file. No visible version suffix is added.
+The diagnostic installer also applies `snapshot-accessor.cjs` only to the
+external archive's exact-hash-pinned AudioEngine header/source and generated Pod
+source build entry. A test-only zeroing-weak publication at normal initialization
+allows a retained strong owner load; precise ARC lifetimes keep that owner/mutex
+alive through unlock. The accessor retains its AVAudioEngine under the library's
+**existing recursive mutex**, exits that scope, then returns.
+No naked nonatomic singleton/property acquisition, new lock, private lock
+introspection, graph mutation or render hook. ARC is a compile-time requirement.
+Only AudioEngine.mm gets the Pod test macro, additionally guarded to Simulator
+and Debug. Wrong source/version/layout, shared dependency symlink or missing
+Pod source entry fails closed. The checkout's dependency and repository patch
+stay byte-identical; never reuse a partially/fully patched diagnostic archive.
+
+The build receipt embeds the exact source revision, tool/playback hashes,
+original/patched library header/source hashes, reproducible test-patch hash,
+Pod source flags/project hashes, compile gate and opt-in in Info.plist, and
+writes before/after generated app project/plist hashes to a private file.
+No visible version suffix is added.
 The controller writes a ready receipt only for a new token and expires after
 120 seconds, including setup. One capture per launch, <=10 seconds capacity,
 <=8 seconds bracketed measurement. No persistent service, debugger or arbitrary
@@ -62,15 +77,21 @@ build. Keep ordinary and instrumented artifacts separate. The script does not
 invoke Xcode, CocoaPods or Simulator tools itself. Verify, do not infer:
 
 1. Installed Audio API is 0.13.5; actual SDK header exposes the BOOL/NSError
-   selector. The internal `AudioEngine.h` resolves through the normal installed
-   RNAudioAPI headers, and the existing class links. No fallback selector,
-   callback swizzle or production-library edit if this fails.
-2. Generated source build entry points to the copied `.mm`, with only its
+   selector. The external test-patched `AudioEngine.h` resolves through normal
+   RNAudioAPI headers; AudioEngine.mm compiles with ARC and the source-only test
+   macro; the existing class links and responds to `or_pcmTestEngineSnapshot`.
+   A missing accessor reports ineligible, never falls back to a naked load.
+   Native ARC/weak-owner lifetime, initialization/cleanup and rebuild handling
+   need actual qualification, not just host source-contract checks. No fallback
+   selector, callback swizzle or permanent production-library edit if this fails.
+2. Generated app source build entry points to the copied `.mm`, with only its
    test-only compiler flag; `.hpp` bytes match the receipt. Actual app role is
    Debug. The built app carries the exact diagnostic Info.plist receipt and
    observer class, current native/Settings version and final JS bundle.
 3. A separate fresh ordinary build from the same source, **without running the
    installer**, contains no observer class, flag, receipt or polling files.
+   Its installed dependency header/source must also keep the unmodified hashes;
+   no accessor or weak publication is added without the explicit installer.
    Host source/fixture absence checks are not Mach-O absence proof.
 4. A paused fresh diagnostic launch without `-ORNativePCMRun` creates no control
    folder. For the measurement launch use a fresh nonsecret token:
@@ -86,17 +107,23 @@ text go to Git/stdout. The observer never reads them.
 
 ## Source attribution and storage
 
-The controller reads Apple's public `attachedNodes` snapshot, not AudioEngine's
-mutable dictionaries (their private recursive mutex is not exposed). It rejects
+The controller acquires a retained engine only through the external test-build
+mutex-protected accessor, never AudioEngine's unguarded nonatomic singleton or
+property. It then reads Apple's public `attachedNodes` snapshot, not the library's
+mutable dictionaries. The library lock is released before source enumeration,
+format reads or any tap API. It rejects
 zero or multiple source nodes, and requires a fresh describe answer's exact
 engine/source identities plus `sole-current-reading-no-other-audio` declaration
 and a nonsecret Reading token. This declaration is an attribution receipt,
 **not independent proof**: the tester must establish the actual held Reading,
 its selected Provider/Voice/Clip, and absence of Pronunciation/other app audio.
 The source identity is the retained object address, **not** the library's
-unread registration UUID. Wrapper/engine/source objects and bus format are
-retained, checked at arm, 50 ms polls and disarm; configuration notification
-invalidates synchronously. No choosing a first ambiguous dictionary element,
+unread registration UUID. The AVAudioEngine/source objects and bus format are
+retained. Public source.engine/attachedNodes/format/running checks at arm,
+50 ms polls and disarm plus existing OpenReaderAudioTrace lifecycle and Apple
+configuration notifications invalidate collection; no repeated unguarded
+library-property polling. Notifications use callback leases too. No choosing a
+first ambiguous dictionary element,
 node migration, mixer fallback, stop/reset or reconnect. This is pre-mixer,
 pre-device-gain output, not the final acoustic/device signal.
 
@@ -266,14 +293,18 @@ bash test/manual-test/duo-verification/native-pcm/run-host-tests.sh
 npm run typecheck
 npx eslint test/manual-test/duo-verification/native-pcm
 node --check test/manual-test/duo-verification/native-pcm/install-observer.cjs
+node --check test/manual-test/duo-verification/native-pcm/snapshot-accessor.cjs
 bash -n test/manual-test/duo-verification/native-pcm/run-host-tests.sh
 ```
 
 The runner uses only portable C++ with ASan/UBSan (halt on failure), filesystem
 fakes and host waveform tests. It links no Apple framework, emits no audio,
 uses no Simulator and cleans its temporary binary. The installed native `.mm`
-has **not** been compiled by those checks. Actual compilation/link/load, native
-callback overhead, returned format/time validity, known-real-Clip matching at
+has **not** been compiled by those checks. The external library accessor has
+only exact-source/guard/lock-scope/unchanged-production-byte contracts checked on
+the host, not native ARC/lifecycle execution. Actual compilation/link/load,
+initial snapshot lifetime, native callback overhead, returned format/time validity,
+known-real-Clip matching at
 Sound 0 and teardown remain tester/parent review gates.
 
 In every native finally: confirm Pause, disarm/drain/shutdown, check `ownsTap=false`,

@@ -51,7 +51,6 @@ static NSString *ORPCMHash(NSData *data) {
 
 @interface ORNativePCMController : NSObject {
   std::shared_ptr<CaptureBuffer> _buffer;
-  AudioEngine *_owner;
   AVAudioEngine *_engine;
   AVAudioSourceNode *_source;
   AVAudioFormat *_format;
@@ -62,7 +61,7 @@ static NSString *ORPCMHash(NSData *data) {
   NSMutableArray *_anchors;
   NSMutableArray *_volumeSamples;
   dispatch_source_t _timer;
-  id _configurationObserver;
+  id _configurationObserver, _lifecycleObserver;
   BOOL _ownsTap, _removed, _removalAttempted, _exported, _shutdown;
   uint64_t _seen;
   double _expires, _captureExpires, _maximumSeconds;
@@ -70,6 +69,7 @@ static NSString *ORPCMHash(NSData *data) {
 }
 - (instancetype)initWithRun:(NSString *)run build:(NSDictionary *)build;
 - (void)tick;
+- (void)removeGraphObservers;
 @end
 
 @implementation ORNativePCMController
@@ -139,9 +139,7 @@ static NSString *ORPCMHash(NSData *data) {
 }
 
 - (BOOL)identityUnchanged {
-  AudioEngine *current = AudioEngine.sharedInstance;
-  return current == _owner && current.audioEngine == _engine && _source.engine == _engine &&
-      [self soleSource:_engine] == _source &&
+  return _engine.running && _source.engine == _engine && [self soleSource:_engine] == _source &&
       [[_source outputFormatForBus:0] isEqual:_format];
 }
 
@@ -161,12 +159,15 @@ static NSString *ORPCMHash(NSData *data) {
 }
 
 - (NSDictionary *)describe {
-  AudioEngine *owner = AudioEngine.sharedInstance;
-  AVAudioEngine *engine = owner.audioEngine;
+  if (![AudioEngine respondsToSelector:@selector(or_pcmTestEngineSnapshot)])
+    return @{@"eligible": @NO, @"reason": @"test-build-locked-snapshot-accessor-missing"};
+  // This retained snapshot is acquired inside the library's existing mutex;
+  // the accessor releases that mutex BEFORE any AVAudioNode/tap call here.
+  AVAudioEngine *engine = [AudioEngine or_pcmTestEngineSnapshot];
   AVAudioSourceNode *source = [self soleSource:engine];
-  if (!owner || !engine || !source || source.engine != engine)
+  if (!engine || !source || source.engine != engine)
     return @{@"eligible": @NO, @"reason": @"missing-or-ambiguous-existing-source"};
-  return @{@"eligible": @YES, @"ownerIdentity": ORPCMIdentity(owner),
+  return @{@"eligible": @YES,
       @"engineIdentity": ORPCMIdentity(engine), @"sourceIdentity": ORPCMIdentity(source),
       @"format": ORPCMFormat([source outputFormatForBus:0]), @"engineRunning": @(engine.running),
       @"outputVolume": @(AVAudioSession.sharedInstance.outputVolume)};
@@ -184,7 +185,7 @@ static NSString *ORPCMHash(NSData *data) {
       !std::isfinite(seconds) || seconds <= 0 || seconds > 10 ||
       AVAudioSession.sharedInstance.outputVolume != 0)
     return @{@"error": @"source-attribution-running-format-duration-or-volume-control"};
-  _owner = AudioEngine.sharedInstance; _engine = _owner.audioEngine;
+  _engine = [AudioEngine or_pcmTestEngineSnapshot];
   _source = [self soleSource:_engine]; _format = [_source outputFormatForBus:0];
   if (!_source || ![[self describe] isEqual:description] ||
       _format.commonFormat != AVAudioPCMFormatFloat32)
@@ -202,6 +203,20 @@ static NSString *ORPCMHash(NSData *data) {
   [self addAnchor:@"arm-before-install"];
   auto storage = _buffer;
   const Format expected{_format.sampleRate, _format.channelCount, (bool)_format.interleaved};
+  _configurationObserver = [NSNotificationCenter.defaultCenter
+      addObserverForName:AVAudioEngineConfigurationChangeNotification object:_engine queue:nil
+      usingBlock:^(NSNotification *note) {
+        auto lease = storage->callbackLease();
+        if (lease) storage->invalidate(ConfigurationChanged);
+      }];
+  _lifecycleObserver = [NSNotificationCenter.defaultCenter
+      addObserverForName:@"OpenReaderAudioTrace" object:nil queue:nil usingBlock:^(NSNotification *note) {
+        auto lease = storage->callbackLease();
+        if (!lease) return;
+        NSString *event = note.userInfo[@"event"];
+        if ([event hasPrefix:@"engine."] || [event hasPrefix:@"interruption."])
+          storage->invalidate(ConfigurationChanged);
+      }];
   NSError *error = nil;
   BOOL installed = [_source installTapOnBus:0 bufferSize:(AVAudioFrameCount)std::ceil(expected.sampleRate * .1)
       format:nil error:&error block:^(AVAudioPCMBuffer *pcm, AVAudioTime *when) {
@@ -233,19 +248,25 @@ static NSString *ORPCMHash(NSData *data) {
       }];
   if (!installed) {
     _buffer->stop();
+    [self removeGraphObservers];
     // Never remove a tap after a failed install: it may belong to somebody else.
     return @{@"error": @"public-tap-install-failed", @"errorDomain": error.domain ?: @"none",
              @"errorCode": @(error.code)};
   }
   _ownsTap = YES;
-  _configurationObserver = [NSNotificationCenter.defaultCenter
-      addObserverForName:AVAudioEngineConfigurationChangeNotification object:_engine queue:nil
-      usingBlock:^(NSNotification *note) { storage->invalidate(ConfigurationChanged); }];
   _captureExpires = NSProcessInfo.processInfo.systemUptime + seconds;
   [self addAnchor:@"arm-after-install"]; [self sampleVolume];
   if (![self identityUnchanged]) _buffer->invalidate(IdentityChanged);
-  return @{@"armed": @YES, @"format": ORPCMFormat(_format), @"maximumSeconds": @(seconds),
+  return @{@"armed": @YES, @"failureBits": @(_buffer->failures()),
+      @"format": ORPCMFormat(_format), @"maximumSeconds": @(seconds),
       @"capacityFrames": @(_buffer->capacity()), @"requestedTapFrames": @(std::ceil(expected.sampleRate * .1))};
+}
+
+- (void)removeGraphObservers {
+  for (id observer in @[_configurationObserver ?: NSNull.null, _lifecycleObserver ?: NSNull.null]) {
+    if (observer != NSNull.null) [NSNotificationCenter.defaultCenter removeObserver:observer];
+  }
+  _configurationObserver = nil; _lifecycleObserver = nil;
 }
 
 - (void)disarm {
@@ -259,9 +280,7 @@ static NSString *ORPCMHash(NSData *data) {
     @try { [_source removeTapOnBus:0]; _ownsTap = NO; }
     @catch (NSException *exception) { _buffer->invalidate(CleanupUncertain); }
   }
-  if (_configurationObserver) {
-    [NSNotificationCenter.defaultCenter removeObserver:_configurationObserver]; _configurationObserver = nil;
-  }
+  [self removeGraphObservers];
   _removed = !_ownsTap;
   [self addAnchor:@"disarm-after-remove"];
 }
@@ -303,7 +322,7 @@ static NSString *ORPCMHash(NSData *data) {
       @"attribution": _attribution ?: @{}, @"anchors": _anchors, @"volumeSamples": _volumeSamples,
       @"records": records, @"pcmSHA256": ORPCMHash(pcm), @"tapRemoved": @YES, @"quiescent": @YES,
       @"coordinate": @"output frames / actual buffer sample rate; NOT content cursor or multiplied by playback rate",
-      @"identityCheck": @"retained objects + public attachedNodes/format checked at 50ms polls and disarm; config notification invalidates",
+      @"identityCheck": @"test-build locked retained snapshot; public source.engine/attachedNodes/format/running at 50ms polls + disarm; lifecycle/config notifications invalidate",
       @"limit": @"Pre-mixer/pre-device-gain PCM, not acoustic proof. Native no-change/mutation qualification required."};
   _exported = [self writeJSON:receipt name:@"capture.json"];
   return _exported ? @{@"exported": @YES, @"file": @"capture.json", @"failureBits": @(_buffer->failures())}

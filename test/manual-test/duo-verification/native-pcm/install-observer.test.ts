@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -7,6 +7,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const { installObserver } = require('./install-observer.cjs');
+const { snapshotSources, ORIGINAL, EDITS } = require('./snapshot-accessor.cjs');
 const plist = require('@expo/plist').default;
 const xcode = require('xcode');
 const revision = '88bee0cb5f8857477fbd0f296c9d8d6b43065f65';
@@ -56,16 +57,24 @@ function fixture(variant = 'debug') {
     writeFileSync(join(snapshot, path), text);
   };
   write('ios/OpenReader.xcodeproj/project.pbxproj', project);
+  const podProject = project.replaceAll('OpenReader', 'RNAudioAPI')
+    .replace('/* End PBXBuildFile section */', 'A00000000000000000000010 /* AudioEngine.mm in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011; };\n /* End PBXBuildFile section */')
+    .replace('/* End PBXFileReference section */', 'A00000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = audioapi/ios/system/AudioEngine.mm; sourceTree = "<group>"; };\n /* End PBXFileReference section */')
+    .replace('files = ();', 'files = (A00000000000000000000010 /* AudioEngine.mm in Sources */,);');
+  write('ios/Pods/Pods.xcodeproj/project.pbxproj', podProject);
   write('ios/OpenReader/Info.plist', plist.build({ OpenReaderBuildVariant: variant,
     CFBundleShortVersionString: '1.0.4', CFBundleVersion: '32', unchanged: 'control' }));
   write('node_modules/react-native-audio-api/package.json', JSON.stringify({ version: '0.13.5' }));
   write('node_modules/expo/package.json', JSON.stringify({ version: '58.0.23' }));
   for (const path of ['src/playback/audio-graph.ts', 'patches/react-native-audio-api+0.13.5.patch',
-    'node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.h',
     'node_modules/react-native-audio-api/ios/audioapi/ios/core/NativeAudioPlayer.m']) write(path, 'host fixture: ' + path);
+  for (const extension of ['h', 'mm']) {
+    const file = `node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.${extension}`;
+    write(file, readFileSync(resolve(__dirname, '../../../..', file), 'utf8'));
+  }
   const tools = join(snapshot, 'test/manual-test/duo-verification/native-pcm');
   mkdirSync(tools, { recursive: true });
-  for (const file of ['NativePCMObserver.mm', 'CaptureBuffer.hpp', 'install-observer.cjs']) {
+  for (const file of ['NativePCMObserver.mm', 'CaptureBuffer.hpp', 'install-observer.cjs', 'snapshot-accessor.cjs']) {
     cpSync(join(__dirname, file), join(tools, file));
   }
   return { snapshot, sourceRevision: revision, receiptPath: join(root, 'receipt.json'), optIn: '1' };
@@ -105,6 +114,17 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
     expect(info).toMatchObject({ CFBundleShortVersionString: '1.0.4', CFBundleVersion: '32', unchanged: 'control',
       OpenReaderNativePCMObserver: { compileGate: 'TARGET_OS_SIMULATOR && DEBUG && OPENREADER_PCM_TEST_ONLY' } });
     expect(hash(readFileSync(graph))).toBe(before);
+    expect(result.build.testBuildSnapshot.originalSHA256).toEqual(ORIGINAL);
+    const engine = 'node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.mm';
+    const patched = readFileSync(join(options.snapshot, engine), 'utf8');
+    expect(hash(patched)).toBe(result.build.testBuildSnapshot.patchedSHA256.source);
+    expect(patched).toContain('std::scoped_lock lock(owner->_engineLock)');
+    expect(hash(readFileSync(resolve(__dirname, '../../../..', engine)))).toBe(ORIGINAL.source);
+    const pods = xcode.project(join(options.snapshot, 'ios/Pods/Pods.xcodeproj/project.pbxproj'));
+    pods.parseSync();
+    const flags = Object.entries(pods.pbxBuildFileSection()).filter(([key]) => !key.endsWith('_comment'));
+    expect(flags).toHaveLength(1);
+    expect(flags[0][1]).toMatchObject({ settings: { COMPILER_FLAGS: '"-DOPENREADER_PCM_TEST_ONLY=1"' } });
     const generated = readFileSync(join(options.snapshot, 'ios/OpenReader/NativePCMObserver/NativePCMObserver.mm'));
     expect(generated.equals(readFileSync(join(__dirname, 'NativePCMObserver.mm')))).toBe(true);
     const file = join(options.snapshot, 'ios/OpenReader.xcodeproj/project.pbxproj');
@@ -126,6 +146,49 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
     writeFileSync(join(dirname(nested.snapshot), '.git'), 'host-only parent-checkout marker');
     expect(() => installObserver(nested)).toThrow('external source archive');
   });
+  it('holds external source drift or missing Pod layout before writing source/project changes', () => {
+    for (const change of ['source', 'pod-target']) {
+      const options = fixture();
+      const engine = join(options.snapshot, 'node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.mm');
+      const appProject = join(options.snapshot, 'ios/OpenReader.xcodeproj/project.pbxproj');
+      const beforeProject = hash(readFileSync(appProject));
+      if (change === 'source') writeFileSync(engine, readFileSync(engine, 'utf8') + '\n');
+      else {
+        const podFile = join(options.snapshot, 'ios/Pods/Pods.xcodeproj/project.pbxproj');
+        writeFileSync(podFile, readFileSync(podFile, 'utf8').replaceAll('RNAudioAPI', 'unexpected-layout'));
+      }
+      const beforeEngine = hash(readFileSync(engine));
+      expect(() => installObserver(options)).toThrow(change === 'source' ? 'source/version/layout mismatch' : 'RNAudioAPI Pod target');
+      expect(hash(readFileSync(engine))).toBe(beforeEngine);
+      expect(hash(readFileSync(appProject))).toBe(beforeProject);
+      expect(existsSync(options.receiptPath)).toBe(false);
+    }
+  });
+  it('refuses shared dependency symlinks rather than patching the checkout installation', () => {
+    const options = fixture();
+    const library = join(options.snapshot, 'node_modules/react-native-audio-api');
+    rmSync(library, { recursive: true });
+    symlinkSync(resolve(__dirname, '../../../../node_modules/react-native-audio-api'), library);
+    expect(() => installObserver(options)).toThrow('no shared dependency symlink');
+    expect(existsSync(options.receiptPath)).toBe(false);
+  });
+  it('adds only guarded snapshot/publication code, with retained owner + engine and unlock before return/tap', () => {
+    const base = resolve(__dirname, '../../../../node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine');
+    const header = readFileSync(base + '.h', 'utf8');
+    const source = readFileSync(base + '.mm', 'utf8');
+    const patched = snapshotSources(header, source);
+    expect(patched.source).toContain('static __weak AudioEngine *ORPCMTestSnapshotOwner = nil');
+    expect(patched.source).toContain('__attribute__((objc_precise_lifetime)) AudioEngine *owner = ORPCMTestSnapshotOwner;');
+    expect(patched.source).toContain('__attribute__((objc_precise_lifetime)) AVAudioEngine *snapshot = nil;');
+    expect(patched.source).toMatch(/std::scoped_lock lock\(owner->_engineLock\);\s+snapshot = owner.audioEngine;\s+}\s+\/\/[^\n]+\s+return snapshot;/);
+    expect(patched.source).toContain('#if !__has_feature(objc_arc)');
+    for (const [kind, original] of [['header', header], ['source', source]] as const) {
+      let restored = patched[kind];
+      for (const [before, after] of [...EDITS[kind]].reverse()) restored = restored.replace(after, before);
+      expect(restored).toBe(original); // every production method/statement is otherwise byte-identical
+    }
+    expect(() => snapshotSources(header, source + '\n')).toThrow('source/version/layout mismatch');
+  });
   it('uses only the verified public selector, nil connected-bus format and fixed expiring command protocol', () => {
     const native = readFileSync(join(__dirname, 'NativePCMObserver.mm'), 'utf8');
     expect(native).toContain('#if TARGET_OS_SIMULATOR && DEBUG && OPENREADER_PCM_TEST_ONLY');
@@ -134,6 +197,9 @@ describe('install-observer opt-in isolation (HOST ONLY)', () => {
     expect(native).toContain('expected.sampleRate * .1');
     expect(native).toContain('systemUptime + 120');
     expect(native).toContain('if (!lease) return;');
+    expect(native).toContain('[AudioEngine or_pcmTestEngineSnapshot]');
+    expect(native).toContain('OpenReaderAudioTrace');
+    expect(native).not.toMatch(/AudioEngine\.sharedInstance|_owner|owner\.audioEngine/);
     expect(native).not.toMatch(/\b(?:NSLog|printf|eval|method_exchangeImplementations|setActive|setCategory|setVolume|startAndReturnError)\s*\(/);
     expect(native).not.toMatch(/\[\s*_engine\s+(?:stop|reset|pause|start)/);
   });

@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const xcode = require('xcode');
 const plist = require('@expo/plist').default;
+const { snapshotSources, snapshotBuildFlag } = require('./snapshot-accessor.cjs');
 
 const SCHEMA = 'OpenReaderNativePCM-v1';
 const FILES = ['NativePCMObserver.mm', 'CaptureBuffer.hpp'];
@@ -60,7 +61,8 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
   if (info.OpenReaderNativePCMObserver || beforeProject.includes(Buffer.from('NativePCMObserver'))) {
     throw new Error('Already instrumented or stale project: regenerate a fresh external snapshot');
   }
-  const audioRoot = path.join(root, 'node_modules/react-native-audio-api');
+  const audioRoot = fs.realpathSync(path.join(root, 'node_modules/react-native-audio-api'));
+  if (!inside(root, audioRoot)) throw new Error('Diagnostic snapshot must own its installed Audio API; no shared dependency symlink');
   if (JSON.parse(fs.readFileSync(path.join(audioRoot, 'package.json'))).version !== '0.13.5') {
     throw new Error('This observer must be re-reviewed against a changed Audio API version');
   }
@@ -70,18 +72,30 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
   const fingerprints = {};
   for (const file of ['src/playback/audio-graph.ts', 'patches/react-native-audio-api+0.13.5.patch',
     'node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.h',
+    'node_modules/react-native-audio-api/ios/audioapi/ios/system/AudioEngine.mm',
     'node_modules/react-native-audio-api/ios/audioapi/ios/core/NativeAudioPlayer.m']) {
     fingerprints[file] = hash(fs.readFileSync(path.join(root, file)));
   }
   const toolDirectory = path.join(root, 'test/manual-test/duo-verification/native-pcm');
-  for (const file of [...FILES, 'install-observer.cjs']) {
+  for (const file of [...FILES, 'install-observer.cjs', 'snapshot-accessor.cjs']) {
     fingerprints[file] = hash(fs.readFileSync(path.join(toolDirectory, file)));
     if (fingerprints[file] !== hash(fs.readFileSync(path.join(__dirname, file)))) {
       throw new Error('Installer and archived observer must be from the same final source revision');
     }
   }
+  const headerFile = fs.realpathSync(path.join(audioRoot, 'ios/audioapi/ios/system/AudioEngine.h'));
+  const engineFile = fs.realpathSync(path.join(audioRoot, 'ios/audioapi/ios/system/AudioEngine.mm'));
+  if (![headerFile, engineFile].every(file => inside(audioRoot, file))) throw new Error('AudioEngine sources must be owned by the external snapshot');
+  const snapshotPatch = snapshotSources(fs.readFileSync(headerFile), fs.readFileSync(engineFile));
+  const podsFile = fs.realpathSync(path.join(ios, 'Pods/Pods.xcodeproj/project.pbxproj'));
+  if (!inside(ios, podsFile)) throw new Error('External snapshot must own its generated Pods project');
+  const beforePods = fs.readFileSync(podsFile);
+  const pods = xcode.project(podsFile); pods.parseSync();
+  const sourceBuildFlag = snapshotBuildFlag(pods);
+  const afterPods = pods.writeSync();
   const build = { schema: SCHEMA, testOnly: true, variant: 'debug', optIn: 'OPENREADER_NATIVE_PCM_OBSERVER=1',
-    sourceRevision, requiredSDK: 'iOS Simulator 27+', compileGate: 'TARGET_OS_SIMULATOR && DEBUG && OPENREADER_PCM_TEST_ONLY', fingerprints };
+    sourceRevision, requiredSDK: 'iOS Simulator 27+', compileGate: 'TARGET_OS_SIMULATOR && DEBUG && OPENREADER_PCM_TEST_ONLY', fingerprints,
+    testBuildSnapshot: { ...snapshotPatch.manifest, sourceBuildFlag, beforePodsSHA256: hash(beforePods), afterPodsSHA256: hash(afterPods) } };
   const name = unquote(target.name);
   const group = project.findPBXGroupKey({ name }) ?? project.findPBXGroupKey({ path: name });
   if (!group) throw new Error('Expected the generated application source group');
@@ -98,6 +112,9 @@ function installObserver({ snapshot, sourceRevision, receiptPath, optIn = proces
   fs.mkdirSync(path.dirname(receipt), { recursive: true, mode: 0o700 });
   fs.mkdirSync(destination, { mode: 0o700 });
   for (const file of FILES) fs.copyFileSync(path.join(toolDirectory, file), path.join(destination, file), fs.constants.COPYFILE_EXCL);
+  fs.writeFileSync(headerFile, snapshotPatch.header);
+  fs.writeFileSync(engineFile, snapshotPatch.source);
+  fs.writeFileSync(podsFile, afterPods);
   fs.writeFileSync(projectFile, afterProject);
   fs.writeFileSync(infoFile, afterInfo);
   const result = { enabled: true, modified: true, build, sourceFiles: FILES,
