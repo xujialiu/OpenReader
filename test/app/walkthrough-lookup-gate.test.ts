@@ -173,7 +173,7 @@ it('only gates the exact existing service GET route, never similar hosts, other 
   for (const [input, init] of inputs) await fetch(input, init);
   expect(readStatus()?.gate?.count).toBe(0);
   expect(original).toHaveBeenCalledTimes(inputs.length);
-  inputs.forEach(([input, init], i) => expect(original.mock.calls[i]).toEqual([input, init]));
+  inputs.forEach(([input, init], i) => { expect(original.mock.calls[i]).toEqual([input, init]); });
   await command('restore');
   const status = JSON.stringify(readStatus());
   for (const forbidden of ['private', 'headers', 'body', 'authorization', 'openai', 'youdao', 'sync.invalid']) expect(status).not.toContain(forbidden);

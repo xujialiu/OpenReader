@@ -124,18 +124,21 @@ function runLookupGateCommand(command: HarnessCommand, seq: number): void {
   gateCommand = { seq, action, run, ok: false, error: null, released: 0 };
   const refuse = (error: string) => { gateCommand.error = error; writeLookupGateStatus(); };
   if (!action || !run || !Number.isSafeInteger(command.seq) ||
-      Object.keys(command).some(key => !['seq', 'do', 'action', 'run', 'service'].includes(key))) return refuse('invalid-command');
+      Object.keys(command).some(key => !['seq', 'do', 'action', 'run', 'service'].includes(key))) {
+    refuse('invalid-command');
+    return;
+  }
   if (action === 'hold') {
-    if (command.service !== 'free-dictionary') return refuse('unsupported-service');
-    if (lookupGate?.snapshot().installed || globalThis.fetch !== realFetch) return refuse('fetch-observer-present');
+    if (command.service !== 'free-dictionary') { refuse('unsupported-service'); return; }
+    if (lookupGate?.snapshot().installed || globalThis.fetch !== realFetch) { refuse('fetch-observer-present'); return; }
     lookupGate = new LookupResponseGate(run, realFetch, writeLookupGateStatus);
   } else {
-    if (command.service !== undefined) return refuse('invalid-command');
-    if (!lookupGate || lookupGate.run !== run) return refuse('gate-run-mismatch');
+    if (command.service !== undefined) { refuse('invalid-command'); return; }
+    if (!lookupGate || lookupGate.run !== run) { refuse('gate-run-mismatch'); return; }
     if (action === 'release') {
-      if (!lookupGate.snapshot().installed) return refuse('gate-not-installed');
+      if (!lookupGate.snapshot().installed) { refuse('gate-not-installed'); return; }
       gateCommand.released = lookupGate.release();
-      if (!gateCommand.released) return refuse('no-held-response');
+      if (!gateCommand.released) { refuse('no-held-response'); return; }
     }
     if (action === 'restore') lookupGate.restore('restore');
   }
@@ -151,7 +154,7 @@ function runLookupGateCommand(command: HarnessCommand, seq: number): void {
 const realFetch = globalThis.fetch;
 export function breakFetch(host: string, from: number): void {
   if (!DEBUG_MODE) return;
-  if (lookupGate?.snapshot().installed) return hlog('fetch hook refused: lookup gate installed');
+  if (lookupGate?.snapshot().installed) { hlog('fetch hook refused: lookup gate installed'); return; }
   let seen = 0;
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
@@ -185,7 +188,7 @@ export function unbreakFetch(): void {
  */
 export function watchFetch(host: string): void {
   if (!DEBUG_MODE) return;
-  if (lookupGate?.snapshot().installed) return hlog('fetch hook refused: lookup gate installed');
+  if (lookupGate?.snapshot().installed) { hlog('fetch hook refused: lookup gate installed'); return; }
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
     if (url.includes(host)) hlog(`fetch ${init?.method ?? 'GET'} ${url}${typeof init?.body === 'string' ? ` ${init.body.slice(0, 400)}` : ''}`);

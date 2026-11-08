@@ -90,7 +90,7 @@ function fixture(deferred = false) {
     },
   });
   page.manager.stage.size = (width: number, height: number) => ({ width, height });
-  page.manager.views.forEach = (fn: (view: object) => void) => liveContents().forEach((contents) => fn({ contents }));
+  page.manager.views.forEach = (fn: (view: object) => void) => liveContents().forEach((contents) => { fn({ contents }); });
   page.rendition.getContents = () => managerPrototype.getContents.call(page.manager);
   page.manager.scrolledLocation = () => page.rendition.getContents().map((c) => ({ index: c.sectionIndex, mapping: { start: 'viewport-anchor' } }));
   Object.assign(page.rendition, { located: (list: any[]) => list.length ? { start: { index: list[0].index, cfi: list[0].mapping.start } } : null });
