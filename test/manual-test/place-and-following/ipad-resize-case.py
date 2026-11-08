@@ -62,7 +62,7 @@ def main():
         token = "RESIZE319-" + uuid.uuid4().hex
         body = "return " + json.dumps(token + " ") + "+JSON.stringify((function(){" + code + "})());"
         run("node", "test/manual-test/kit/hx.cjs", args.device, json.dumps({"do": "js", "code": body}))
-        deadline = time.monotonic() + 12
+        deadline = time.monotonic() + int(os.environ.get("OPENREADER_RESIZE_PROBE_SECONDS", "30"))
         while time.monotonic() < deadline:
             for file in sorted(logs.glob("debug-log-*.txt"), reverse=True):
                 for line in reversed(file.read_text().splitlines()):
